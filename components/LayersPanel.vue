@@ -37,6 +37,36 @@ const finishEditing = () => {
 // Helper to get a name for the layer
 const getLayerName = (obj: any, index: number) => {
     if (obj.layerName) return obj.layerName; // Custom override
+    
+    // Frames should always be labeled as FRAMER by default (even if Fabric `name` says otherwise),
+    // unless the user explicitly renamed via `layerName`.
+    const isFigmaBlue = (stroke: any) => {
+      if (stroke == null) return false
+      const s = String(stroke).trim().toLowerCase()
+      if (!s) return false
+      if (s === '#0d99ff') return true
+      // rgb/rgba formats: rgb(13, 153, 255) or rgba(13,153,255,1)
+      const m = s.match(/rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)/i)
+      if (m) {
+        const r = Number(m[1]), g = Number(m[2]), b = Number(m[3])
+        return Math.abs(r - 13) <= 1 && Math.abs(g - 153) <= 1 && Math.abs(b - 255) <= 1
+      }
+      return false
+    }
+
+    const n = String(obj?.name || '').trim()
+    const isFrameLike =
+      !!obj?.isFrame ||
+      /^frame\b/i.test(n) ||
+      (obj?.type === 'rect' && (obj?.clipContent === true || obj?.clipContent === 1) && isFigmaBlue(obj?.stroke))
+
+    // CRITICAL: Always show "FRAMER" for frames, regardless of name
+    // This ensures persistence even if name gets corrupted during save/load
+    if (isFrameLike) {
+      // If user renamed via layerName, use that; otherwise show "FRAMER"
+      return obj?.layerName && obj.layerName !== 'FRAMER' ? obj.layerName : 'FRAMER'
+    }
+
     if (obj.name && obj.name !== '') return obj.name; // Fabric name property
     
     if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox') return obj.text?.substring(0, 18) || 'Texto'
@@ -45,7 +75,18 @@ const getLayerName = (obj: any, index: number) => {
         if (obj.isSmartGroup) return '📦 GRID ' + (obj.productName?.substring(0, 10) || 'SMART')
         return 'Grupo'
     }
-    if (obj.type === 'rect') return 'Retângulo'
+    // CRITICAL: Don't show "Retângulo" for frames - check again before returning
+    if (obj.type === 'rect') {
+        // Double-check if this is actually a frame (might have been missed above)
+        const checkIsFrame = !!obj?.isFrame || 
+            /^frame\b/i.test(String(obj?.name || '')) ||
+            (obj?.clipContent === true || obj?.clipContent === 1) && isFigmaBlue(obj?.stroke);
+        if (checkIsFrame) {
+            // This is a frame, should have been caught above, but return FRAMER anyway
+            return obj?.layerName && obj.layerName !== 'FRAMER' ? obj.layerName : 'FRAMER';
+        }
+        return 'Retângulo';
+    }
     if (obj.type === 'circle') return 'Círculo'
     if (obj.type === 'line') return 'Linha'
     if (obj.type === 'path') return 'Vetor' 
@@ -55,10 +96,41 @@ const getLayerName = (obj: any, index: number) => {
 
 <template>
   <div class="flex flex-col h-full bg-transparent">
+    <!-- Layers Header (Figma Style) -->
+    <div class="px-3 py-2 border-b border-white/5 shrink-0">
+      <span class="text-[10px] font-semibold uppercase text-zinc-500">Layers</span>
+    </div>
+    
     <div class="flex-1 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
       <div 
-        v-for="(obj, index) in [...objects].filter(o => o.id !== 'artboard-bg' && o.id !== 'guide-vertical' && o.id !== 'guide-horizontal').reverse()" 
-        :key="index"
+        v-for="(obj, index) in [...objects].reverse().filter((o, idx, arr) => {
+          // IMPORTANT: .reverse() ensures top layer (front) shows at top of list (like Figma)
+          // In Fabric.js, last object in array = front/top z-index
+          // Filter out artboard and guides
+          if (o.id === 'artboard-bg' || o.id === 'guide-vertical' || o.id === 'guide-horizontal') return false;
+          // Filter out objects marked as excludeFromExport (preview paths, control points, etc.)
+          if ((o as any)?.excludeFromExport) return false;
+          // Filter out editing control objects by name
+          const name = (o as any)?.name || '';
+          if (name === 'path_node' || name === 'bezier_handle' || name === 'control_point' || name === 'handle_line') return false;
+          // CRITICAL: Filter out objects with control data (parentPath or parentObj)
+          const data = (o as any)?.data;
+          if (data && (data.parentPath || data.parentObj || data.type === 'node' || data.type === 'handle_in' || data.type === 'handle_out')) return false;
+          // CRITICAL: Filter out small circles that are likely control points (radius <= 10)
+          if (o.type === 'circle' && (o as any).radius && (o as any).radius <= 10) return false;
+          // Filter out circles without _customId (orphaned control circles)
+          if (o.type === 'circle' && !(o as any)._customId) return false;
+          // Filter out lines without _customId (handle lines)
+          if (o.type === 'line' && !(o as any)._customId) return false;
+          // Filter out paths without _customId and without isVectorPath flag
+          if (o.type === 'path' && !(o as any)._customId && !(o as any).isVectorPath) return false;
+          // CRITICAL: Remove duplicates by _customId (same object appearing twice)
+          const customId = (o as any)?._customId;
+          if (!customId) return false; // Must have _customId to be valid
+          const firstIndex = arr.findIndex(item => (item as any)?._customId === customId);
+          return firstIndex === idx;
+        })" 
+        :key="(obj as any)?._customId || index"
         :class="[
             'flex items-center gap-2 px-3 py-1.5 rounded-[2px] transition-all duration-150 group cursor-default select-none border border-transparent',
             (obj as any)._customId === selectedId 

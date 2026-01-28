@@ -95,30 +95,68 @@ async function uploadToContabo(
 async function getPresignedUrl(
   key: string,
   contentType?: string,
-  operation: 'put' | 'get' = 'put'
+  operation: 'put' | 'get' = 'put',
+  retries = 2
 ): Promise<string | null> {
-  try {
-    const data = await $fetch('/api/storage/presigned', {
-      method: 'POST',
-      body: { key, contentType, operation }
-    })
-    return data.url
-  } catch (error) {
-    console.error('Error getting presigned URL:', error)
-    return null
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
+
+      try {
+        const data = await $fetch('/api/storage/presigned', {
+          method: 'POST',
+          body: { key, contentType, operation },
+          signal: controller.signal as any
+        })
+
+        clearTimeout(timeoutId)
+
+        if (!data?.url) {
+          if (attempt === retries) {
+            console.error('❌ Presigned URL API retornou resposta inválida:', data)
+            return null
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+          continue
+        }
+        return data.url
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        if (fetchError.name === 'AbortError' || fetchError.message?.includes('timeout')) {
+          if (attempt === retries) {
+            console.error('❌ Timeout ao obter presigned URL')
+            return null
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+          continue
+        }
+        throw fetchError
+      }
+    } catch (error: any) {
+      if (attempt === retries) {
+        console.error('❌ Erro ao obter presigned URL da Contabo:', error)
+        console.error('   Verifique se as variáveis de ambiente CONTABO_* estão configuradas no servidor')
+        console.error('   Erro detalhado:', error?.message || error)
+        return null
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+    }
   }
+  return null
 }
 
 export const useStorage = () => {
   const auth = useAuth()
 
   /**
-   * Salva dados JSON na Contabo Storage
+   * Salva dados JSON na Contabo Storage com retry automático (3 tentativas)
    */
   const saveCanvasData = async (
     projectId: string,
     pageId: string,
-    canvasJson: any
+    canvasJson: any,
+    retries = 3
   ): Promise<string | null> => {
     // Não executar no servidor (SSR)
     if (import.meta.server) {
@@ -135,44 +173,91 @@ export const useStorage = () => {
     saveStatus.value = 'saving'
     saveError.value = null
 
-    try {
-      // Caminho do arquivo: projects/{userId}/{projectId}/page_{pageId}.json
-      const key = `projects/${userId}/${projectId}/page_${pageId}.json`
+    // Caminho do arquivo: projects/{userId}/{projectId}/page_{pageId}.json
+    const key = `projects/${userId}/${projectId}/page_${pageId}.json`
 
-      // Converter JSON para Blob
-      const jsonString = JSON.stringify(canvasJson)
-      const blob = new Blob([jsonString], { type: 'application/json' })
+    // Converter JSON para Blob
+    const jsonString = JSON.stringify(canvasJson)
+    const blob = new Blob([jsonString], { type: 'application/json' })
 
-      // Obter presigned URL para upload
-      const presignedUrl = await getPresignedUrl(key, 'application/json', 'put')
-      if (!presignedUrl) {
-        throw new Error('Failed to get upload URL')
-      }
-
-      // Upload para Contabo
-      const response = await fetch(presignedUrl, {
-        method: 'PUT',
-        body: blob,
-        headers: {
-          'Content-Type': 'application/json'
+    // Retry logic: tenta até N vezes com backoff exponencial
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        // Obter presigned URL para upload (com retry interno)
+        const presignedUrl = await getPresignedUrl(key, 'application/json', 'put', 2)
+        if (!presignedUrl) {
+          if (attempt === retries) {
+            const errorMsg = 'Failed to get upload URL from Contabo after multiple attempts.'
+            console.error('❌', errorMsg)
+            throw new Error(errorMsg)
+          }
+          // Aguardar antes de tentar novamente (backoff exponencial)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
+          continue
         }
-      })
 
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`)
+        // Upload para Contabo com timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+
+        try {
+          const response = await fetch(presignedUrl, {
+            method: 'PUT',
+            body: blob,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            signal: controller.signal
+          })
+
+          clearTimeout(timeoutId)
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => response.statusText)
+            if (attempt === retries) {
+              const errorMsg = `Contabo upload failed (${response.status}): ${errorText}`
+              console.error('❌', errorMsg)
+              throw new Error(errorMsg)
+            }
+            // Aguardar antes de tentar novamente
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
+            continue
+          }
+
+          // Sucesso!
+          lastSavedAt.value = new Date()
+          saveStatus.value = 'saved'
+          console.log(`✅ Canvas salvo na Contabo (tentativa ${attempt}/${retries}):`, key)
+          return key
+
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId)
+          if (fetchError.name === 'AbortError') {
+            if (attempt === retries) {
+              throw new Error('Upload timeout após 30 segundos')
+            }
+            console.warn(`⚠️ Timeout na tentativa ${attempt}, tentando novamente...`)
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
+            continue
+          }
+          throw fetchError
+        }
+
+      } catch (error: any) {
+        if (attempt === retries) {
+          // Última tentativa falhou
+          console.error(`❌ Erro ao salvar na Contabo após ${retries} tentativas:`, error)
+          saveStatus.value = 'error'
+          saveError.value = error?.message || 'Erro desconhecido'
+          return null
+        }
+        // Aguardar antes de tentar novamente
+        console.warn(`⚠️ Tentativa ${attempt} falhou, tentando novamente em ${Math.pow(2, attempt)}s...`)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
       }
-
-      // Retornar a chave do arquivo (para salvar no banco)
-      lastSavedAt.value = new Date()
-      saveStatus.value = 'saved'
-
-      return key
-    } catch (error: any) {
-      console.error('Erro ao salvar na Contabo:', error)
-      saveStatus.value = 'error'
-      saveError.value = error?.message || 'Erro desconhecido'
-      return null
     }
+
+    return null
   }
 
   /**

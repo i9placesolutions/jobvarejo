@@ -20,10 +20,12 @@ export default defineNuxtConfig({
       supabaseKey: process.env.NUXT_PUBLIC_SUPABASE_KEY,
 
       // Contabo public config (needed for client-side URL construction)
+      // IMPORTANT: These must match the actual values in .env since process.env vars
+      // without NUXT_PUBLIC_ prefix are NOT exposed to the client
       contabo: {
-        endpoint: process.env.CONTABO_ENDPOINT || 'usc1.contabostorage.com',
-        bucket: process.env.CONTABO_BUCKET || 'jobupload',
-        region: process.env.CONTABO_REGION || 'us-east-1',
+        endpoint: 'usc1.contabostorage.com',
+        bucket: '475a29e42e55430abff00915da2fa4bc:jobupload',
+        region: 'default',
       }
     }
   },
@@ -37,6 +39,13 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   srcDir: '.',
   routeRules: {
+    '/editor/**': {
+      ssr: false,
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+        'Cross-Origin-Embedder-Policy': 'credentialless',
+      },
+    },
     '/**': {
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',

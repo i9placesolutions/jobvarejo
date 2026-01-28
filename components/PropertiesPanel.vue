@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { 
+import { computed, ref } from 'vue'
+import {
   AlignLeft, AlignCenter, AlignRight, 
   Bold, Italic, Underline, 
   Type, Palette, Layers, Box, 
@@ -14,8 +15,13 @@ import {
   GripVertical, // For Spacing
   Component, // For Create Component
   Sparkles,
-  LayoutGrid // For Product Zone
+  LayoutGrid, // For Product Zone
+  Eye,
+  Zap,
+  ChevronsUp,
+  ChevronsDown
 } from 'lucide-vue-next'
+import ColorPicker from './ui/ColorPicker.vue'
 import ProductZoneSettings from './ProductZoneSettings.vue'
 import type { ProductZone, GlobalStyles } from '~/types/product-zone'
 import type { LabelTemplate } from '~/types/label-template'
@@ -57,6 +63,7 @@ const canMask = computed(() => props.selectedObject && !isMultiSelect.value)
 const isComponent = computed(() => props.selectedObject?.isComponent)
 const isProductZone = computed(() => props.selectedObject?.isGridZone || props.selectedObject?.isProductZone)
 const isFrame = computed(() => props.selectedObject?.isFrame)
+const isVectorPath = computed(() => props.selectedObject?.isVectorPath || props.selectedObject?.type === 'path')
 const isRectLike = computed(() => {
   const t = String(props.selectedObject?.type || '').toLowerCase()
   return t === 'rect' || isFrame.value
@@ -95,10 +102,92 @@ const applyGlobalStyle = (prop: string) => {
 }
 
 // --- Local State for UI ---
-const activeTab = ref('design') // design | prototype
+const activeTab = computed(() => props.activeMode || 'design') // design | prototype
+const showFillColorPicker = ref(false)
+const showStrokeColorPicker = ref(false)
+const showPageColorPicker = ref(false)
+const fillColorPickerRef = ref<HTMLElement | null>(null)
+const strokeColorPickerRef = ref<HTMLElement | null>(null)
+const pageColorPickerRef = ref<HTMLElement | null>(null)
 
 // Helper to safely get value
 const getVal = (prop: string, defaultVal: any = '') => props.selectedObject ? (props.selectedObject[prop] ?? defaultVal) : defaultVal
+
+// Safe getters for Fabric.js methods
+const getScaledWidth = () => {
+  if (!props.selectedObject) return 0
+  if (typeof props.selectedObject.getScaledWidth === 'function') {
+    return props.selectedObject.getScaledWidth()
+  }
+  // Fallback for proxy objects or objects without the method
+  return props.selectedObject.width * (props.selectedObject.scaleX || 1) || 0
+}
+
+const getScaledHeight = () => {
+  if (!props.selectedObject) return 0
+  if (typeof props.selectedObject.getScaledHeight === 'function') {
+    return props.selectedObject.getScaledHeight()
+  }
+  // Fallback for proxy objects or objects without the method
+  return props.selectedObject.height * (props.selectedObject.scaleY || 1) || 0
+}
+
+// Helper functions for page color/opacity
+const getPageColorHex = () => {
+  const bg = props.pageSettings.backgroundColor || '#1e1e1e'
+  if (bg.startsWith('rgba') || bg.startsWith('rgb')) {
+    const match = bg.match(/rgba?\(([^)]+)\)/)
+    if (match) {
+      const parts = match[1].split(',').map(s => s.trim())
+      const r = parseInt(parts[0])
+      const g = parseInt(parts[1])
+      const b = parseInt(parts[2])
+      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+    }
+  }
+  return bg.startsWith('#') ? bg : `#${bg}`
+}
+
+const getPageOpacity = () => {
+  const bg = props.pageSettings.backgroundColor || '#1e1e1e'
+  if (bg.startsWith('rgba')) {
+    const match = bg.match(/rgba\(([^)]+)\)/)
+    if (match) {
+      const parts = match[1].split(',').map(s => s.trim())
+      const opacity = parseFloat(parts[3] || '1')
+      return Math.round(opacity * 100)
+    }
+  }
+  return 100
+}
+
+const handlePageColorChange = (color: string) => {
+  const opacity = getPageOpacity() / 100
+  if (color.startsWith('#')) {
+    const hex = color.replace('#', '')
+    const r = parseInt(hex.substr(0, 2), 16)
+    const g = parseInt(hex.substr(2, 2), 16)
+    const b = parseInt(hex.substr(4, 2), 16)
+    emit('update-page-settings', 'backgroundColor', `rgba(${r}, ${g}, ${b}, ${opacity})`)
+  } else {
+    emit('update-page-settings', 'backgroundColor', color)
+  }
+}
+
+const handlePageOpacityChange = (opacity: number) => {
+  const hex = getPageColorHex()
+  const hexColor = hex.replace('#', '')
+  const r = parseInt(hexColor.substr(0, 2), 16)
+  const g = parseInt(hexColor.substr(2, 2), 16)
+  const b = parseInt(hexColor.substr(4, 2), 16)
+  emit('update-page-settings', 'backgroundColor', `rgba(${r}, ${g}, ${b}, ${opacity})`)
+}
+
+const handleAddColorStyle = () => {
+  // Use selected object's fill color if available, otherwise use page background
+  const colorToAdd = props.selectedObject && getVal('fill') ? getVal('fill') : getPageColorHex()
+  emit('add-color-style', colorToAdd)
+}
 
 const isTransparentColor = (c: any) => {
   if (c == null) return true
@@ -151,13 +240,8 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 </script>
 
 <template>
-  <div v-if="selectedObject" class="h-full bg-[#1e1e1e] text-white min-h-0 flex flex-col font-sans select-none border-l border-white/5">
+  <div v-if="selectedObject" class="h-full bg-[#1a1a1a] text-white min-h-0 flex flex-col font-sans select-none border-l border-white/5">
     
-    <!-- Header (Design/Prototype) -->
-    <div class="h-10 flex items-center px-4 gap-6 bg-[#1e1e1e] shrink-0 border-b border-white/5 font-bold text-[11px] text-zinc-500">
-      <button @click="activeTab = 'design'" class="h-full border-b-2 transition-colors" :class="activeTab === 'design' ? 'border-white text-white' : 'border-transparent hover:text-zinc-300'">Design</button>
-      <button @click="activeTab = 'prototype'" class="h-full border-b-2 transition-colors" :class="activeTab === 'prototype' ? 'border-white text-white' : 'border-transparent hover:text-zinc-300'">Prototype</button>
-    </div>
 
     <!-- Scrollable Inspector -->
     <div class="flex-1 overflow-y-auto custom-scrollbar">
@@ -251,11 +335,11 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </div>
               <div class="flex items-center gap-2 group">
                   <span class="text-[10px] text-zinc-500 w-3">W</span>
-                  <input type="number" :value="Math.round(selectedObject.getScaledWidth())" @input="e => $emit('update-property', 'width', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
+                  <input type="number" :value="Math.round(getScaledWidth())" @input="e => $emit('update-property', 'width', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
               </div>
               <div class="flex items-center gap-2 group">
                   <span class="text-[10px] text-zinc-500 w-3">H</span>
-                  <input type="number" :value="Math.round(selectedObject.getScaledHeight())" @input="e => $emit('update-property', 'height', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
+                  <input type="number" :value="Math.round(getScaledHeight())" @input="e => $emit('update-property', 'height', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
               </div>
               
               <!-- Rotation & Corner Radius -->
@@ -267,6 +351,94 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                   <span class="text-[10px] text-zinc-500 w-3">R</span>
                   <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
               </div>
+          </div>
+      </div>
+
+      <!-- VECTOR PATH SECTION (Figma Style) -->
+      <div v-if="isVectorPath" class="p-4 border-b border-black/20 space-y-3">
+          <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold text-zinc-400">Vector</span>
+          </div>
+          
+          <!-- Alignment Controls -->
+          <div class="space-y-2">
+              <label class="text-[10px] text-zinc-500">Alignment</label>
+              <div class="flex items-center gap-1 flex-wrap">
+                  <button @click="$emit('update-property', 'textAlign', 'left')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Align Left"><AlignLeft class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('update-property', 'textAlign', 'center')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Align Center"><AlignCenter class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('update-property', 'textAlign', 'right')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Align Right"><AlignRight class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('action', 'align-top')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Align Top"><ChevronsUp class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('action', 'align-middle')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Align Middle"><Minus class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('action', 'align-bottom')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Align Bottom"><ChevronsDown class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('action', 'distribute-h')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Distribute Horizontal"><ArrowRightFromLine class="w-3.5 h-3.5" /></button>
+              </div>
+          </div>
+          
+          <!-- Position Controls -->
+          <div class="space-y-2">
+              <label class="text-[10px] text-zinc-500">Position</label>
+              <div class="grid grid-cols-2 gap-2">
+                  <div class="flex items-center gap-1.5">
+                      <span class="text-[10px] text-zinc-500">X</span>
+                      <input type="number" :value="Math.round(getVal('left', 0))" @input="e => $emit('update-property', 'left', Number((e.target as any).value))" class="flex-1 bg-[#1e1e1e] text-xs text-white rounded border border-black px-2 h-7 focus:outline-none" />
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                      <span class="text-[10px] text-zinc-500">Y</span>
+                      <input type="number" :value="Math.round(getVal('top', 0))" @input="e => $emit('update-property', 'top', Number((e.target as any).value))" class="flex-1 bg-[#1e1e1e] text-xs text-white rounded border border-black px-2 h-7 focus:outline-none" />
+                  </div>
+              </div>
+          </div>
+          
+          <!-- Point Type Conversion -->
+          <div class="space-y-2">
+              <label class="text-[10px] text-zinc-500">Point Type</label>
+              <div class="flex items-center gap-1">
+                  <button @click="$emit('action', 'convert-to-smooth')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Convert to Smooth (S)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                  </button>
+                  <button @click="$emit('action', 'convert-to-corner')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Convert to Corner (C)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                  </button>
+              </div>
+          </div>
+          
+          <!-- Mirroring Controls -->
+          <div class="space-y-2">
+              <label class="text-[10px] text-zinc-500">Mirroring</label>
+              <div class="flex items-center gap-1">
+                  <button @click="$emit('action', 'mirror-handles')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Mirror Handles (M)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                  </button>
+                  <button @click="$emit('action', 'reset-handles')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Reset Handles">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                  </button>
+                  <button @click="$emit('action', 'smooth-handles')" class="w-7 h-7 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Smooth Handles (S)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                  </button>
+              </div>
+          </div>
+          
+          <!-- Corner Radius (for closed paths) -->
+          <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                  <label class="text-[10px] text-zinc-500">Corner radius</label>
+                  <button class="w-5 h-5 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Independent Corners">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                      </svg>
+                  </button>
+              </div>
+              <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="w-full bg-[#1e1e1e] text-xs text-white rounded border border-black px-2 h-7 focus:outline-none" />
           </div>
       </div>
 
@@ -377,13 +549,38 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
           
           <div class="flex items-center gap-2 group" :class="!fillEnabled ? 'opacity-50 pointer-events-none' : ''">
-              <div class="w-4 h-4 border border-zinc-600 rounded bg-white relative overflow-hidden shrink-0">
-                  <input type="color" :value="getVal('fill', '#000000')" @input="e => $emit('update-property', 'fill', (e.target as any).value)" class="absolute -top-2 -left-2 w-10 h-10 cursor-pointer opacity-0" />
-                  <div class="w-full h-full" :style="{backgroundColor: getVal('fill', '#000000')}"></div>
+              <div 
+                ref="fillColorPickerRef"
+                class="relative"
+              >
+                <div 
+                  class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                  :style="{ backgroundColor: getVal('fill', '#000000') }"
+                  @click="showFillColorPicker = true"
+                ></div>
+                <ColorPicker
+                  :show="showFillColorPicker"
+                  :model-value="getVal('fill', '#000000')"
+                  :trigger-element="fillColorPickerRef"
+                  @update:show="showFillColorPicker = $event"
+                  @update:model-value="(val: string) => $emit('update-property', 'fill', val)"
+                />
               </div>
-              <input type="text" :value="getVal('fill', '#000000').toString().toUpperCase()" @change="e => $emit('update-property', 'fill', (e.target as any).value)" class="bg-transparent text-xs text-white w-16 focus:outline-none uppercase" />
-              <span class="text-[10px] text-zinc-500">100%</span>
-              <button class="ml-auto opacity-0 group-hover:opacity-100 hover:text-white text-zinc-500"><Minus class="w-3 h-3" /></button>
+              <input 
+                type="text" 
+                :value="getVal('fill', '#000000').toString().replace('#', '').toUpperCase()" 
+                @change="e => $emit('update-property', 'fill', '#' + (e.target as any).value.replace('#', ''))" 
+                class="flex-1 h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-2 font-mono focus:outline-none focus:border-violet-500/50 uppercase" 
+                placeholder="1E1E1E"
+                maxlength="6"
+              />
+              <input 
+                type="text" 
+                value="100" 
+                class="w-14 h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-2 text-center focus:outline-none focus:border-violet-500/50" 
+              />
+              <span class="text-xs text-zinc-400">%</span>
+              <button class="ml-auto opacity-0 group-hover:opacity-100 hover:text-white text-zinc-500 w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-all"><Minus class="w-3 h-3" /></button>
           </div>
           
           <!-- Gradient Quick Action -->
@@ -466,17 +663,60 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
           
           <div class="flex items-center gap-2 group" :class="!strokeEnabled ? 'opacity-50 pointer-events-none' : ''">
-              <div class="w-4 h-4 border border-zinc-600 rounded relative overflow-hidden shrink-0">
-                   <input type="color" :value="getVal('stroke', '#000000')" @input="e => $emit('update-property', 'stroke', (e.target as any).value)" class="absolute -top-2 -left-2 w-10 h-10 cursor-pointer opacity-0" />
-                   <div class="w-full h-full border-2 border-white" :style="{borderColor: getVal('stroke', '#000000')}"></div>
+              <div 
+                ref="strokeColorPickerRef"
+                class="relative"
+              >
+                <div 
+                  class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                  :style="{ backgroundColor: getVal('stroke', '#000000') || '#000000' }"
+                  @click="showStrokeColorPicker = true"
+                ></div>
+                <ColorPicker
+                  :show="showStrokeColorPicker"
+                  :model-value="getVal('stroke', '#000000') || '#000000'"
+                  :trigger-element="strokeColorPickerRef"
+                  @update:show="showStrokeColorPicker = $event"
+                  @update:model-value="(val: string) => $emit('update-property', 'stroke', val)"
+                />
               </div>
-              <input type="text" :value="getVal('stroke', '').toString().toUpperCase() || 'NONE'" class="bg-transparent text-xs text-white w-16 focus:outline-none uppercase" />
+              <input 
+                type="text" 
+                :value="(getVal('stroke', '') || '#000000').toString().replace('#', '').toUpperCase()" 
+                @change="e => $emit('update-property', 'stroke', '#' + (e.target as any).value.replace('#', ''))" 
+                class="flex-1 h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-2 font-mono focus:outline-none focus:border-violet-500/50 uppercase" 
+                placeholder="1E1E1E"
+                maxlength="6"
+              />
               
-              <input type="number" :value="getVal('strokeWidth', 0)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="bg-[#1e1e1e] w-8 h-6 text-xs text-right text-white focus:outline-none border border-black rounded px-1" />
+              <input type="number" :value="getVal('strokeWidth', 0)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="w-14 h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-2 text-center focus:outline-none focus:border-violet-500/50" />
           </div>
           
           <!-- Stroke Options -->
           <div class="space-y-2 pt-1" v-if="strokeEnabled && getVal('strokeWidth', 0) > 0">
+               <!-- Position (Inside/Center/Outside) - Only for vector paths -->
+               <div v-if="isVectorPath" class="space-y-1">
+                   <label class="text-[10px] text-zinc-500">Position</label>
+                   <select :value="getVal('strokePosition', 'center')" @change="e => $emit('update-property', 'strokePosition', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-[10px] text-white rounded border border-black h-6 px-2 focus:outline-none">
+                       <option value="inside">Inside</option>
+                       <option value="center">Center</option>
+                       <option value="outside">Outside</option>
+                   </select>
+               </div>
+               
+               <!-- Weight -->
+               <div v-if="isVectorPath" class="space-y-1">
+                   <label class="text-[10px] text-zinc-500">Weight</label>
+                   <div class="flex items-center gap-2">
+                       <input type="number" :value="getVal('strokeWidth', 1)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="flex-1 bg-[#1e1e1e] text-xs text-white rounded border border-black px-2 h-7 focus:outline-none" />
+                       <button class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Stroke Weight">
+                           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                           </svg>
+                       </button>
+                   </div>
+               </div>
+               
                <div class="grid grid-cols-2 gap-2">
                     <select :value="getVal('strokeLineCap', 'butt')" @change="e => $emit('update-property', 'strokeLineCap', (e.target as any).value)" class="bg-[#1e1e1e] text-[10px] text-white rounded border border-black h-6 px-1">
                         <option value="butt">Cap: Butt</option>
@@ -489,11 +729,30 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                         <option value="bevel">Join: Bevel</option>
                     </select>
                </div>
-               <div class="flex justify-between items-center">
-                   <button class="text-[10px] text-zinc-400 hover:text-white" @click="$emit('update-property', 'strokeDashArray', null)">Solid</button>
-                   <button class="text-[10px] text-zinc-400 hover:text-white" @click="$emit('update-property', 'strokeDashArray', [12, 8])">Dashed</button>
-                   <button class="text-[10px] text-zinc-400 hover:text-white" @click="$emit('update-property', 'strokeDashArray', [2, 6])">Dotted</button>
+               
+               <!-- Miter Limit (only for miter join) -->
+               <div v-if="getVal('strokeLineJoin', 'miter') === 'miter'" class="space-y-1">
+                   <label class="text-[10px] text-zinc-500">Miter Limit</label>
+                   <input type="number" :value="getVal('strokeMiterLimit', 4)" @input="e => $emit('update-property', 'strokeMiterLimit', Number((e.target as any).value))" class="w-full bg-[#1e1e1e] text-xs text-white rounded border border-black px-2 h-7 focus:outline-none" min="1" max="100" step="0.1" />
                </div>
+               
+               <!-- Dash Pattern -->
+               <div class="space-y-1">
+                   <label class="text-[10px] text-zinc-500">Dash Pattern</label>
+                   <div class="flex justify-between items-center">
+                       <button class="text-[10px] px-2 py-1 rounded hover:bg-white/10 transition-colors" :class="!getVal('strokeDashArray') ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-400 hover:text-white'" @click="$emit('update-property', 'strokeDashArray', null)">Solid</button>
+                       <button class="text-[10px] px-2 py-1 rounded hover:bg-white/10 transition-colors" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([12, 8]) ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-400 hover:text-white'" @click="$emit('update-property', 'strokeDashArray', [12, 8])">Dashed</button>
+                       <button class="text-[10px] px-2 py-1 rounded hover:bg-white/10 transition-colors" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([2, 6]) ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-400 hover:text-white'" @click="$emit('update-property', 'strokeDashArray', [2, 6])">Dotted</button>
+                   </div>
+               </div>
+               
+               <!-- Advanced Stroke Settings Button -->
+               <button class="w-full flex items-center justify-between px-2 py-1.5 bg-[#1e1e1e] border border-black rounded hover:bg-white/5 transition-colors text-[10px] text-zinc-400 hover:text-white">
+                   <span>Advanced</span>
+                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                   </svg>
+               </button>
           </div>
       </div>
 
@@ -635,35 +894,230 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 
       </div> <!-- End Design Tab -->
 
+      <!-- Prototype Tab -->
+      <div v-if="activeTab === 'prototype'" class="flex-1 overflow-y-auto">
+        <!-- Interactions Section -->
+        <div v-if="selectedObject" class="p-4 border-b border-black/20 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-bold text-zinc-400">Interactions</span>
+            <button
+              @click="$emit('add-interaction')"
+              class="w-6 h-6 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all"
+              title="Add Interaction"
+            >
+              <Plus class="w-3 h-3 text-zinc-400" />
+            </button>
+          </div>
+          
+          <!-- Interaction List -->
+          <div v-if="getVal('interactionDestination')" class="space-y-2">
+            <div class="flex items-center justify-between p-2 bg-[#2a2a2a] rounded border border-white/10">
+              <div class="flex items-center gap-2">
+                <ArrowRightFromLine class="w-3 h-3 text-violet-400" />
+                <span class="text-xs text-white">Navigate to Page</span>
+              </div>
+              <select
+                :value="getVal('interactionDestination')"
+                @change="e => $emit('update-property', 'interactionDestination', (e.target as any).value)"
+                class="bg-[#1a1a1a] border border-white/10 rounded text-xs text-white px-2 py-1 focus:outline-none"
+              >
+                <option value="">None</option>
+                <option v-for="(page, idx) in targetPages" :key="idx" :value="idx">{{ page.name }}</option>
+              </select>
+            </div>
+          </div>
+          
+          <div v-else class="text-center py-8 text-zinc-500 text-xs">
+            No interactions added
+          </div>
+        </div>
+
+        <!-- Animation Section -->
+        <div v-if="selectedObject" class="p-4 border-b border-black/20 space-y-3">
+          <span class="text-[11px] font-bold text-zinc-400">Animation</span>
+          
+          <div class="space-y-2">
+            <label class="text-[10px] text-zinc-500">Type</label>
+            <select
+              :value="getVal('animationType', 'none')"
+              @change="e => $emit('update-property', 'animationType', (e.target as any).value)"
+              class="w-full bg-[#1e1e1e] text-xs text-white rounded border border-black px-2 h-7 focus:outline-none"
+            >
+              <option value="none">None</option>
+              <option value="fade">Fade</option>
+              <option value="slide">Slide</option>
+              <option value="scale">Scale</option>
+            </select>
+          </div>
+          
+          <div v-if="getVal('animationType') !== 'none'" class="space-y-2">
+            <label class="text-[10px] text-zinc-500">Duration (ms)</label>
+            <input
+              type="number"
+              :value="getVal('animationDuration', 300)"
+              @input="e => $emit('update-property', 'animationDuration', Number((e.target as any).value))"
+              class="w-full bg-[#1e1e1e] border border-black rounded px-2 h-7 text-xs text-white focus:outline-none"
+              min="0"
+              max="5000"
+            />
+          </div>
+        </div>
+      </div> <!-- End Prototype Tab -->
+
     </div>
   </div>
 
-  <!-- Empty State -->
-  <div v-else class="h-full bg-[#1e1e1e] text-white flex flex-col font-sans border-l border-white/5">
-      <div class="h-10 border-b border-white/5 flex items-center px-4">
-          <span class="text-[11px] font-bold text-zinc-500">Page Settings</span>
-      </div>
-      <div class="p-4 space-y-6">
-          <div class="space-y-2">
-             <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Background</label>
-             <div class="flex items-center gap-2 group">
-                 <div class="w-4 h-4 border border-zinc-600 rounded relative overflow-hidden shrink-0">
-                     <input 
-                        type="color" 
-                        :value="pageSettings.backgroundColor" 
-                        @input="e => $emit('update-page-settings', 'backgroundColor', (e.target as any).value)" 
-                        class="absolute -top-2 -left-2 w-10 h-10 cursor-pointer opacity-0" 
-                     />
-                     <div class="w-full h-full" :style="{backgroundColor: pageSettings.backgroundColor}"></div>
-                 </div>
-                 <input 
-                    type="text" 
-                    :value="pageSettings.backgroundColor.toUpperCase()" 
-                    @change="e => $emit('update-page-settings', 'backgroundColor', (e.target as any).value)"
-                    class="bg-transparent text-xs text-white w-20 focus:outline-none uppercase font-mono" 
-                 />
-             </div>
+  <!-- Empty State (Figma Style) -->
+  <div v-else class="h-full bg-[#1a1a1a] text-white flex flex-col font-sans border-l border-white/5 overflow-y-auto">
+      <!-- Page Section (Figma Style) -->
+      <div class="border-b border-white/5">
+        <div class="px-3 py-2.5">
+          <span class="text-xs font-semibold text-white">Page</span>
+        </div>
+        
+        <!-- Page Properties Row (Figma Style) -->
+        <div class="px-3 pb-3 overflow-visible">
+          <div class="flex items-center gap-1.5 min-w-0 overflow-visible">
+            <!-- Color Swatch -->
+            <div 
+              ref="pageColorPickerRef"
+              class="relative flex-shrink-0"
+            >
+              <div 
+                class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                :style="{ backgroundColor: getPageColorHex() }"
+                @click="showPageColorPicker = true"
+              ></div>
+              <ColorPicker
+                :show="showPageColorPicker"
+                :model-value="getPageColorHex()"
+                :trigger-element="pageColorPickerRef"
+                @update:show="showPageColorPicker = $event"
+                @update:model-value="(val: string) => handlePageColorChange(val)"
+              />
+            </div>
+            
+            <!-- Color Hex Input -->
+            <input 
+              type="text" 
+              :value="getPageColorHex().replace('#', '').toUpperCase()" 
+              @change="e => {
+                const hex = '#' + (e.target as any).value.replace('#', '');
+                handlePageColorChange(hex);
+              }"
+              class="flex-1 min-w-[60px] h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-2 font-mono focus:outline-none focus:border-violet-500/50 uppercase"
+              placeholder="1E1E1E"
+              maxlength="6"
+            />
+            
+            <!-- Opacity Input -->
+            <input 
+              type="number" 
+              :value="getPageOpacity()" 
+              @input="e => {
+                const opacity = Number((e.target as any).value) / 100;
+                handlePageOpacityChange(opacity);
+              }"
+              class="w-9 h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-1 text-center focus:outline-none focus:border-violet-500/50"
+              min="0"
+              max="100"
+            />
+            
+            <span class="text-xs text-zinc-400 flex-shrink-0">%</span>
+            
+            <!-- Eye Icon (Visibility) -->
+            <button class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center transition-all flex-shrink-0 ml-auto" title="Toggle Page Visibility">
+              <Eye class="w-3.5 h-3.5 text-zinc-400" />
+            </button>
           </div>
+        </div>
+      </div>
+      
+      <!-- Variables Section (Figma Style) -->
+      <div class="border-b border-white/5">
+        <div class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors">
+          <div class="flex items-center gap-2">
+            <!-- Variables Icon (two circles with lines) -->
+            <svg class="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 16 16">
+              <circle cx="4" cy="4" r="1.5" stroke="currentColor" stroke-width="1"/>
+              <circle cx="12" cy="4" r="1.5" stroke="currentColor" stroke-width="1"/>
+              <line x1="4" y1="6" x2="4" y2="10" stroke="currentColor" stroke-width="1"/>
+              <line x1="12" y1="6" x2="12" y2="10" stroke="currentColor" stroke-width="1"/>
+              <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1"/>
+            </svg>
+            <span class="text-xs font-semibold text-white">Variables</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Styles Section (Figma Style) -->
+      <div class="border-b border-white/5">
+        <div class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors">
+          <span class="text-xs font-semibold text-white">Styles</span>
+          <button 
+            @click="handleAddColorStyle"
+            class="w-5 h-5 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
+            title="Add Color Style"
+          >
+            <Plus class="w-3.5 h-3.5 text-zinc-400" />
+          </button>
+        </div>
+        <div v-if="colorStyles && colorStyles.length > 0" class="px-3 pb-2 flex flex-wrap gap-1.5">
+          <button
+            v-for="style in colorStyles"
+            :key="style.id"
+            @click="$emit('apply-color-style', style.id)"
+            class="w-5 h-5 rounded border border-white/10 hover:border-white/30 transition-all relative flex-shrink-0"
+            :style="{ backgroundColor: style.value }"
+            :title="style.name || style.value"
+          >
+            <span v-if="getPageColorHex() === style.value || (props.selectedObject && getVal('fill') === style.value)" class="absolute inset-0 border-2 border-white rounded"></span>
+          </button>
+        </div>
+        <div v-else class="px-3 pb-2 text-[10px] text-zinc-500">
+          No styles yet. Click + to add.
+        </div>
+      </div>
+      
+      <!-- Export Section (Figma Style) -->
+      <div class="border-b border-white/5">
+        <div class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors">
+          <span class="text-xs font-semibold text-white">Export</span>
+          <button 
+            @click="$emit('action', 'export-png')"
+            class="w-5 h-5 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all"
+            title="Export Page"
+          >
+            <Plus class="w-3.5 h-3.5 text-zinc-400" />
+          </button>
+        </div>
+        <div class="px-3 pb-2 space-y-1">
+          <button
+            @click="$emit('action', 'export-png')"
+            class="w-full text-left px-2 py-1.5 text-[10px] text-zinc-400 hover:text-white hover:bg-white/5 rounded transition-all"
+          >
+            Export as PNG
+          </button>
+          <button
+            @click="$emit('action', 'export-svg')"
+            class="w-full text-left px-2 py-1.5 text-[10px] text-zinc-400 hover:text-white hover:bg-white/5 rounded transition-all"
+          >
+            Export as SVG
+          </button>
+          <button
+            @click="$emit('action', 'export-jpg')"
+            class="w-full text-left px-2 py-1.5 text-[10px] text-zinc-400 hover:text-white hover:bg-white/5 rounded transition-all"
+          >
+            Export as JPG
+          </button>
+        </div>
+      </div>
+      
+      <!-- Help Button (Bottom Right) -->
+      <div class="mt-auto p-3 flex justify-end">
+        <button class="w-7 h-7 hover:bg-white/10 rounded-full flex items-center justify-center transition-all">
+          <span class="text-xs text-white font-semibold">?</span>
+        </button>
       </div>
   </div>
 </template>

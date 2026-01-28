@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useProject } from '~/composables/useProject'
-import { Search, Plus, FileText, Copy, Trash2, Box } from 'lucide-vue-next'
+import { Search, Plus, FileText, Copy, Trash2, Box, ChevronDown, Menu } from 'lucide-vue-next'
 import AssetsPanel from './AssetsPanel.vue'
 
 const { project, activePage, switchPage, addPage, duplicatePage, deletePage } = useProject()
 
 const emit = defineEmits<{
     (e: 'insert-asset', asset: any): void
+    (e: 'open-menu'): void
 }>()
 
 
@@ -21,41 +22,62 @@ const createPage = (preset: string) => {
 </script>
 
 <template>
-  <aside class="w-[240px] border-r border-white/5 bg-[#1e1e1e] flex flex-col shrink-0 z-10 text-white h-full select-none">
-       <!-- Header / Tabs -->
-       <div class="h-10 border-b border-white/5 flex items-center px-2 gap-1 text-[11px] font-medium text-zinc-500 shrink-0">
+  <aside class="w-[240px] border-r border-white/5 bg-[#1a1a1a] flex flex-col shrink-0 z-10 text-white h-full select-none">
+       <!-- Top: Menu, File Name & Tabs (Figma Style) -->
+       <div class="border-b border-white/5 shrink-0">
+         <!-- Menu & File Name -->
+         <div class="h-10 px-3 flex items-center gap-2 border-b border-white/5">
+           <!-- Menu Icon -->
+           <button 
+             @click="$emit('open-menu')"
+             class="w-7 h-7 hover:bg-white/10 rounded-lg flex items-center justify-center cursor-pointer transition-colors flex-shrink-0"
+             title="Menu"
+           >
+             <Menu class="w-4 h-4 text-zinc-400" />
+           </button>
+           
+           <!-- File Name -->
+           <div class="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer group hover:bg-white/5 rounded-lg px-2 py-1.5 transition-all">
+             <span class="text-xs font-medium text-white truncate">{{ project.name || 'Untitled' }}</span>
+             <ChevronDown class="w-3.5 h-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+           </div>
+           
+           <div class="flex items-center gap-1">
+             <span class="text-[10px] text-blue-400 font-medium px-1.5 py-0.5 rounded bg-blue-500/10">Free</span>
+             <button class="w-6 h-6 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all">
+               <Search class="w-3.5 h-3.5 text-zinc-400" />
+             </button>
+           </div>
+         </div>
+         
+         <!-- File / Assets Tabs -->
+         <div class="h-9 flex items-center px-2 gap-1 text-[11px] font-medium shrink-0">
             <button 
                 @click="activeTab = 'layers'"
-                class="h-full px-3 border-b-2 transition-colors hover:text-zinc-300"
-                :class="activeTab === 'layers' ? 'border-white text-white' : 'border-transparent'"
+                class="h-full px-3 border-b-2 transition-colors rounded-t-md"
+                :class="activeTab === 'layers' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'"
             >
-                Layers
-            </button>
-            <button 
-                @click="activeTab = 'pages'"
-                class="h-full px-3 border-b-2 transition-colors hover:text-zinc-300"
-                :class="activeTab === 'pages' ? 'border-white text-white' : 'border-transparent'"
-            >
-                Pages
+                File
             </button>
             <button 
                 @click="activeTab = 'assets'"
-                class="h-full px-3 border-b-2 transition-colors hover:text-zinc-300"
-                :class="activeTab === 'assets' ? 'border-white text-white' : 'border-transparent'"
+                class="h-full px-3 border-b-2 transition-colors rounded-t-md"
+                :class="activeTab === 'assets' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'"
             >
                 Assets
             </button>
        </div>
+       </div>
        
-       <!-- Search -->
-       <div class="p-2 border-b border-black/20 shrink-0">
+       <!-- Search (only when Assets tab is active) -->
+       <div v-if="activeTab === 'assets'" class="p-2 border-b border-white/5 shrink-0">
            <div class="relative">
                <Search class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
                <input 
                    v-model="sidebarSearch"
                    type="text" 
                    placeholder="Search" 
-                   class="w-full h-7 bg-[#1e1e1e] border border-zinc-700 rounded text-[11px] text-white pl-7 focus:outline-none focus:border-zinc-500 placeholder:text-zinc-600 font-medium" 
+                   class="w-full h-8 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white pl-8 pr-3 focus:outline-none focus:border-violet-500/50 placeholder:text-zinc-500 transition-all" 
                />
            </div>
        </div>
@@ -63,41 +85,41 @@ const createPage = (preset: string) => {
        <!-- Content Area -->
        <div class="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0 relative">
            
-           <!-- TAB: PAGES -->
-           <div v-if="activeTab === 'pages'" class="flex flex-col h-full animate-in fade-in duration-200">
-               <div class="p-2 flex items-center justify-between border-b border-white/5">
-                   <span class="text-[10px] font-black uppercase text-zinc-500 pl-2">Project Pages</span>
-                   <button @click.stop="createPage('story')" class="p-1 hover:bg-white/10 rounded text-zinc-400 hover:text-white" title="Nova Página">
-                       <Plus class="w-3.5 h-3.5" />
+           <!-- TAB: FILE (Pages + Layers) -->
+           <div v-if="activeTab === 'layers'" class="flex flex-col h-full animate-in fade-in duration-200">
+               <!-- Pages Section -->
+               <div class="shrink-0">
+                 <div class="px-3 py-2 flex items-center justify-between border-b border-white/5">
+                   <span class="text-[10px] font-semibold uppercase text-zinc-500">Pages</span>
+                   <button @click.stop="createPage('story')" class="w-5 h-5 hover:bg-white/10 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Nova Página">
+                     <Plus class="w-3.5 h-3.5" />
                    </button>
-               </div>
-               
-               <div class="flex-1 overflow-y-auto">
+                 </div>
+                 
+                 <div class="px-1 py-1">
                    <div 
-                        v-for="(page, index) in project.pages" 
-                        :key="page.id"
-                        class="flex items-center h-8 px-4 gap-3 cursor-pointer group transition-colors relative"
-                        :class="index === project.activePageIndex ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-zinc-400'"
-                        @click="switchPage(index)"
+                     v-for="(page, index) in project.pages" 
+                     :key="page.id"
+                     class="flex items-center h-8 px-2 gap-2 cursor-pointer group transition-all rounded-lg"
+                     :class="index === project.activePageIndex ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-zinc-400'"
+                     @click="switchPage(index)"
                    >
-                       <FileText class="w-3.5 h-3.5 opacity-70 shrink-0" />
-                       <span class="text-[11px] font-medium truncate flex-1">{{ page.name }}</span>
-                       
-                       <!-- Actions (Hover) -->
-                       <div class="hidden group-hover:flex items-center gap-1 ml-auto bg-[#2c2c2c] shadow-sm rounded px-1 absolute right-2 border border-zinc-700">
-                           <button @click.stop="duplicatePage(index)" title="Duplicar" class="p-1 hover:text-white text-zinc-400 hover:bg-white/10 rounded"><Copy class="w-3 h-3" /></button>
-                           <button @click.stop="deletePage(index)" title="Excluir" class="p-1 hover:text-red-400 text-zinc-400 hover:bg-white/10 rounded"><Trash2 class="w-3 h-3" /></button>
-                       </div>
-
-                       <div v-if="index === project.activePageIndex" class="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]"></div>
+                     <FileText class="w-3.5 h-3.5 opacity-70 shrink-0" />
+                     <span class="text-xs font-medium truncate flex-1">{{ page.name }}</span>
+                     
+                     <!-- Actions (Hover) -->
+                     <div class="hidden group-hover:flex items-center gap-0.5 ml-auto">
+                       <button @click.stop="duplicatePage(index)" title="Duplicar" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all"><Copy class="w-3 h-3" /></button>
+                       <button @click.stop="deletePage(index)" title="Excluir" class="w-6 h-6 hover:bg-red-500/10 rounded flex items-center justify-center text-zinc-400 hover:text-red-400 transition-all"><Trash2 class="w-3 h-3" /></button>
+                     </div>
                    </div>
+                 </div>
                </div>
-           </div>
 
-           <!-- TAB: LAYERS -->
-           <div v-else-if="activeTab === 'layers'" class="flex flex-col h-full animate-in fade-in duration-200">
-               <!-- Pass Props/Events to Existing LayersPanel via Slot -->
-               <slot name="layers-panel"></slot>
+               <!-- Layers Section -->
+               <div class="flex-1 min-h-0 flex flex-col border-t border-white/5">
+                 <slot name="layers-panel"></slot>
+               </div>
            </div>
 
            <!-- TAB: ASSETS -->

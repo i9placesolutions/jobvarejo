@@ -92,7 +92,8 @@ export const useFolder = () => {
       if (error) throw error
 
       if (data) {
-        folders.value.push(data)
+        // Add to array and trigger reactivity
+        folders.value = [...folders.value, data]
         // Auto-expand parent if creating nested folder
         if (parentId) {
           expandedFolders.value.add(parentId)

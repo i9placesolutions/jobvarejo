@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { Upload, Folder, Clock, Tag, Image as ImageIcon, Grip, Edit, Trash, FolderInput, Move, ArrowLeft, ChevronRight } from 'lucide-vue-next'
 import ContextMenu from './ui/ContextMenu.vue'
 import Dialog from './ui/Dialog.vue'
+import ConfirmDialog from './ui/ConfirmDialog.vue'
 
 import Input from './ui/Input.vue'
 import Button from './ui/Button.vue'
 import { ShoppingCart, Sparkles } from 'lucide-vue-next'
+import { useFolder } from '~/composables/useFolder'
+import { useAuth } from '~/composables/useAuth'
+import { useSupabase } from '~/composables/useSupabase'
 
 // Props
 const props = defineProps<{
@@ -36,6 +40,47 @@ interface Folder {
     parentId: string | number | null
 }
 
+// Use folder composable to get real folders from database
+const { folders: dbFolders, loadFolders, createFolder, updateFolder, deleteFolder, moveFolder } = useFolder()
+const auth = useAuth()
+const supabase = useSupabase()
+
+// Mapeamento asset_key -> folder_id para persistência de "mover para pasta"
+const assetFolderMap = ref<Map<string, string | null>>(new Map())
+
+const ASSET_FOLDERS_MIGRATION_MSG = 'A tabela asset_folders não existe. Execute o SQL em database/asset_folders_migration.sql no Supabase (Dashboard → SQL Editor) para persistir a movimentação de imagens.'
+
+function isAssetFoldersTableMissing(err: any): boolean {
+    if (!err) return false
+    const e = err as { message?: string; code?: string; status?: number }
+    const m = String(e?.message ?? '').toLowerCase()
+    const c = String(e?.code ?? '')
+    return (e?.status === 404) || m.includes('asset_folders') || m.includes('does not exist') || c === '42P01' || c === 'PGRST116'
+}
+
+const loadAssetFolders = async () => {
+    const user = auth.user.value
+    if (!user) return
+    try {
+        const { data, error } = await supabase
+            .from('asset_folders')
+            .select('asset_key, folder_id')
+            .eq('user_id', user.id)
+        if (error) throw error
+        const map = new Map<string, string | null>()
+        ;(data || []).forEach((row: { asset_key: string; folder_id: string | null }) => {
+            map.set(row.asset_key, row.folder_id)
+        })
+        assetFolderMap.value = map
+    } catch (e) {
+        if (isAssetFoldersTableMissing(e)) {
+            console.warn('asset_folders: tabela ausente.', ASSET_FOLDERS_MIGRATION_MSG)
+        } else {
+            console.error('Erro ao carregar asset_folders:', e)
+        }
+    }
+}
+
 // Reactive Data - Now fetched from API
 const assets = ref<{
     uploads: any[],
@@ -46,14 +91,22 @@ const assets = ref<{
 }>({
     uploads: [],
     brand: [],
-    folders: [
-        { id: 'f1', name: 'Campanha Natal', type: 'folder', parentId: null },
-        { id: 'f2', name: 'Cliente A', type: 'folder', parentId: null }
-    ],
+    folders: [], // Pastas vazias - serão carregadas do banco
     recents: [],
     elements: [],
 
 })
+
+// Watch database folders and sync to assets
+watch(dbFolders, (newFolders) => {
+    // Convert database folders to AssetsPanel format
+    assets.value.folders = newFolders.map(f => ({
+        id: f.id,
+        name: f.name,
+        type: 'folder' as const,
+        parentId: f.parent_id
+    }))
+}, { immediate: true, deep: true })
 
 // Fetch assets from Contabo S3 on mount
 const fetchAssets = async () => {
@@ -61,9 +114,10 @@ const fetchAssets = async () => {
     try {
         const data = await $fetch('/api/assets')
         if (data && Array.isArray(data)) {
+            const map = assetFolderMap.value
             assets.value.uploads = data.map((item: any) => ({
                 ...item,
-                folderId: null
+                folderId: map.get(item.id) ?? null
             }))
         }
     } catch (e) {
@@ -88,14 +142,59 @@ const fetchBrands = async () => {
     }
 }
 
+// Fetch recent items (combines uploads and brands sorted by lastModified)
+const fetchRecents = async () => {
+    isLoadingAssets.value = true
+    try {
+        // Fetch both uploads and brands
+        const [uploadsData, brandsData] = await Promise.all([
+            $fetch('/api/assets').catch(() => []),
+            $fetch('/api/brands').catch(() => [])
+        ])
+        
+        // Combine and sort by lastModified (most recent first)
+        const allItems = [
+            ...(Array.isArray(uploadsData) ? uploadsData.map((item: any) => ({
+                ...item,
+                type: 'upload'
+            })) : []),
+            ...(Array.isArray(brandsData) ? brandsData.map((item: any) => ({
+                ...item,
+                type: 'brand'
+            })) : [])
+        ]
+        
+        // Sort by lastModified (most recent first)
+        allItems.sort((a: any, b: any) => {
+            const dateA = a.lastModified ? new Date(a.lastModified).getTime() : 0
+            const dateB = b.lastModified ? new Date(b.lastModified).getTime() : 0
+            return dateB - dateA
+        })
+        
+        // Limit to 50 most recent items
+        assets.value.recents = allItems.slice(0, 50)
+    } catch (e) {
+        console.error('Failed to fetch recent items:', e)
+        assets.value.recents = []
+    } finally {
+        isLoadingAssets.value = false
+    }
+}
+
 // Watch category changes to fetch data
 watch(activeCategory, (newCat) => {
     if (newCat === 'uploads') fetchAssets()
     if (newCat === 'brand') fetchBrands()
+    if (newCat === 'recents') fetchRecents()
 })
 
-onMounted(() => {
+onMounted(async () => {
+    await loadFolders()
+    await loadAssetFolders()
     fetchAssets()
+    if (activeCategory.value === 'recents') {
+        fetchRecents()
+    }
 })
 
 // Current folder object
@@ -199,6 +298,47 @@ const handleBackgroundContextMenu = (e: MouseEvent) => {
     }
 }
 
+// Confirm Dialog State
+const showConfirmDialog = ref(false)
+const pendingDeleteItem = ref<any>(null)
+const confirmDeleteMessage = computed(() => {
+    const item = pendingDeleteItem.value
+    if (!item) return ''
+    return `Tem certeza que deseja excluir "${item.name}"?`
+})
+
+const confirmDelete = async () => {
+    const item = pendingDeleteItem.value
+    if (!item) return
+    
+    if (item.type === 'folder') {
+        // Deletar pasta do banco de dados
+        try {
+            await deleteFolder(String(item.id))
+            // A pasta será removida automaticamente via watch do dbFolders
+        } catch (e) {
+            console.error('Erro ao deletar pasta:', e)
+            alert('Erro ao deletar pasta. Tente novamente.')
+        }
+    } else {
+         // Deletar do Contabo Storage
+         try {
+             await $fetch('/api/assets/delete', {
+                 method: 'POST',
+                 body: { key: item.id }
+             })
+             // Remover da lista local apenas após sucesso
+             assets.value.uploads = assets.value.uploads.filter(u => u.id !== item.id)
+         } catch (e) {
+             console.error('Erro ao deletar asset:', e)
+             alert('Erro ao deletar arquivo. Tente novamente.')
+         }
+    }
+    
+    showConfirmDialog.value = false
+    pendingDeleteItem.value = null
+}
+
 const handleAction = async (action: string) => {
     const item = contextMenu.value.item
     
@@ -211,29 +351,14 @@ const handleAction = async (action: string) => {
     if (!item) return
 
     if (action === 'delete') {
-        if (confirm(`Tem certeza que deseja excluir "${item.name}"?`)) {
-            if (item.type === 'folder') {
-                 assets.value.folders = assets.value.folders.filter(f => f.id !== item.id && f.parentId !== item.id)
-            } else {
-                 // Deletar do Contabo Storage
-                 try {
-                     await $fetch('/api/assets/delete', {
-                         method: 'POST',
-                         body: { key: item.id }
-                     })
-                     // Remover da lista local apenas após sucesso
-                     assets.value.uploads = assets.value.uploads.filter(u => u.id !== item.id)
-                 } catch (e) {
-                     console.error('Erro ao deletar asset:', e)
-                     alert('Erro ao deletar arquivo. Tente novamente.')
-                 }
-            }
-        }
+        pendingDeleteItem.value = item
+        showConfirmDialog.value = true
     } else if (action === 'rename') {
         dialog.value = { show: true, type: 'rename', inputValue: item.name, targetItem: item }
     } else if (action === 'new_folder_inside') {
         dialog.value = { show: true, type: 'new_folder', inputValue: '', targetItem: item } // targetItem is parent
     } else if (action === 'move') {
+        moveTargetId.value = ''
         dialog.value = { show: true, type: 'move', inputValue: '', targetItem: item }
     }
 }
@@ -270,13 +395,20 @@ const availableMoveTargets = computed(() => {
     }
 })
 
-const handleDialogConfirm = () => {
+const handleDialogConfirm = async () => {
     const { type, targetItem, inputValue } = dialog.value
     
     if (type === 'rename') {
         if (targetItem.type === 'folder') {
-            const folder = assets.value.folders.find(f => f.id === targetItem.id)
-            if (folder) folder.name = inputValue
+            // Renomear pasta no banco de dados
+            try {
+                await updateFolder(String(targetItem.id), { name: inputValue })
+                // A pasta será atualizada automaticamente via watch do dbFolders
+            } catch (e) {
+                console.error('Erro ao renomear pasta:', e)
+                alert('Erro ao renomear pasta. Tente novamente.')
+                return
+            }
         } else {
              const file = assets.value.uploads.find(u => u.id === targetItem.id)
              if (file) file.name = inputValue
@@ -284,23 +416,60 @@ const handleDialogConfirm = () => {
     } else if (type === 'new_folder') {
         // If targetItem exists (from 'new_folder_inside'), use it as parent.
         // Else use currentFolderId
-        const parentId = targetItem ? targetItem.id : currentFolderId.value
+        const parentId = targetItem ? String(targetItem.id) : (currentFolderId.value ? String(currentFolderId.value) : null)
         
-        assets.value.folders.push({
-            id: `f${Date.now()}`,
-            name: inputValue || 'Nova Pasta',
-            type: 'folder',
-            parentId: parentId
-        })
+        // Criar pasta no banco de dados
+        try {
+            const newFolder = await createFolder(inputValue || 'Nova Pasta', parentId)
+            // A pasta já foi adicionada ao dbFolders no createFolder
+            // Aguardar próximo tick para garantir que a reatividade foi processada
+            await nextTick()
+            // Forçar atualização imediata do assets para garantir reatividade
+            if (newFolder) {
+                // Atualizar assets.value.folders sincronizando com dbFolders
+                assets.value.folders = dbFolders.value.map(f => ({
+                    id: f.id,
+                    name: f.name,
+                    type: 'folder' as const,
+                    parentId: f.parent_id
+                }))
+            }
+        } catch (e) {
+            console.error('Erro ao criar pasta:', e)
+            alert('Erro ao criar pasta. Tente novamente.')
+            return
+        }
     } else if (type === 'move') {
          if (targetItem.type === 'folder') {
-             const folder = assets.value.folders.find(f => f.id === targetItem.id)
-             if (folder) folder.parentId = moveTargetId.value || null
+             // Mover pasta no banco de dados
+             try {
+                 await moveFolder(String(targetItem.id), moveTargetId.value ? String(moveTargetId.value) : null)
+                 // A pasta será atualizada automaticamente via watch do dbFolders
+             } catch (e) {
+                 console.error('Erro ao mover pasta:', e)
+                 alert('Erro ao mover pasta. Tente novamente.')
+                 return
+             }
          } else {
              const file = assets.value.uploads.find(u => u.id === targetItem.id)
              if (file) {
-                 file.folderId = moveTargetId.value || null
-                 // If we moved it, and we are in 'folders' view, it might disappear from current view, which is expected.
+                 const folderId = moveTargetId.value || null
+                 const user = auth.user.value
+                 if (user) {
+                     try {
+                         await supabase.from('asset_folders').upsert(
+                             { user_id: user.id, asset_key: targetItem.id, folder_id: folderId },
+                             { onConflict: 'user_id,asset_key' }
+                         )
+                         assetFolderMap.value.set(targetItem.id, folderId)
+                         assetFolderMap.value = new Map(assetFolderMap.value)
+                     } catch (e) {
+                         console.error('Erro ao persistir movimento do asset:', e)
+                         alert(isAssetFoldersTableMissing(e) ? ASSET_FOLDERS_MIGRATION_MSG : 'Erro ao mover arquivo. Tente novamente.')
+                         return
+                     }
+                 }
+                 file.folderId = folderId
              }
          }
     }
@@ -407,6 +576,8 @@ const handleFileUpload = async (event: Event) => {
                 } else {
                     await fetchAssets()
                 }
+                // Always refresh recents after upload to include new items
+                await fetchRecents()
             }
         } catch (e) {
             console.error(e)
@@ -527,6 +698,13 @@ const handleFileUpload = async (event: Event) => {
 
                 <!-- Assets Grid -->
                 <template v-else>
+                    <!-- Empty state for recents -->
+                    <div v-if="activeCategory === 'recents' && currentItems.length === 0" class="col-span-2 flex flex-col items-center justify-center py-8 text-zinc-500">
+                        <Clock class="w-8 h-8 mb-2 opacity-50" />
+                        <p class="text-xs">Nenhum item recente</p>
+                        <p class="text-[9px] mt-1 opacity-75">Os arquivos usados recentemente aparecerão aqui</p>
+                    </div>
+                    
                     <div 
                         v-for="asset in currentItems" 
                         :key="asset.id"
@@ -558,9 +736,10 @@ const handleFileUpload = async (event: Event) => {
                 </template>
             </div>
             
-            <div v-if="!currentItems.length" class="text-center py-10 text-zinc-600">
+            <!-- Empty state (only show if not already showing empty state for recents) -->
+            <div v-if="!currentItems.length && !(activeCategory === 'recents')" class="text-center py-10 text-zinc-600">
                 <p class="text-[10px] uppercase tracking-widest">Vazio</p>
-                <p v-if="activeCategory === 'folders' && !currentFolderId" class="text-[9px] mt-2">Clique com o botão direito para criar pasta (WIP)</p>
+                <p v-if="activeCategory === 'folders' && !currentFolderId" class="text-[9px] mt-2">Clique com o botão direito para criar pasta</p>
             </div>
         </div>
 
@@ -600,6 +779,18 @@ const handleFileUpload = async (event: Event) => {
             </div>
         </Dialog>
     </div>
+
+    <!-- Confirm Dialog -->
+    <ConfirmDialog
+        :show="showConfirmDialog"
+        title="Confirmar Exclusão"
+        :message="confirmDeleteMessage"
+        variant="danger"
+        confirm-text="Excluir"
+        cancel-text="Cancelar"
+        @confirm="confirmDelete"
+        @cancel="showConfirmDialog = false; pendingDeleteItem = null"
+    />
 </template>
 
 <style scoped>

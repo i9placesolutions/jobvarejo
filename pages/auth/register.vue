@@ -61,7 +61,7 @@ const passwordStrengthLabel = computed(() => {
 })
 
 const passwordStrengthColor = computed(() => {
-  if (passwordStrength.value <= 2) return 'bg-destructive'
+  if (passwordStrength.value <= 2) return 'bg-red-500'
   if (passwordStrength.value <= 3) return 'bg-yellow-500'
   return 'bg-green-500'
 })
@@ -126,67 +126,59 @@ const handleRegister = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-    <!-- Animated Background Elements -->
-    <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <!-- Gradient orbs -->
-      <div class="absolute top-1/4 -left-20 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse"></div>
-      <div class="absolute bottom-1/4 -right-20 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse" style="animation-delay: 1s;"></div>
-      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl"></div>
-    </div>
-
+  <div class="w-full">
     <!-- Glass Card -->
-    <div class="w-full max-w-md relative z-10">
+    <div class="w-full">
       <!-- Main Glass Card -->
       <div class="glass-card">
         <!-- Logo & Header -->
-        <div class="text-center mb-8">
-          <div class="inline-flex items-center justify-center w-16 h-16 bg-primary/10 backdrop-blur-sm rounded-2xl mb-4 border border-primary/20 shadow-lg">
-            <Sparkles class="w-8 h-8 text-primary" />
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center justify-center w-14 h-14 bg-violet-500/20 backdrop-blur-sm rounded-xl mb-3 border border-violet-500/30 shadow-lg">
+            <Sparkles class="w-7 h-7 text-violet-400" />
           </div>
-          <h1 class="text-2xl font-bold mb-2">Crie sua conta</h1>
-          <p class="text-sm text-muted-foreground">
-            Comece sua jornada criativa hoje
+          <h1 class="text-xl font-bold mb-1 text-white">Crie sua conta</h1>
+          <p class="text-sm text-zinc-400">
+            Comece sua jornada criativa
           </p>
         </div>
 
         <!-- First User - Super Admin Banner -->
-        <div v-if="isFirstUser" class="mb-6 p-4 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl backdrop-blur-sm">
+        <div v-if="isFirstUser" class="mb-4 p-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-lg backdrop-blur-sm">
           <div class="flex items-center gap-3">
-            <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-              <Crown class="w-5 h-5 text-white" />
+            <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+              <Crown class="w-4 h-4 text-white" />
             </div>
             <div class="text-left">
-              <p class="text-sm font-semibold text-amber-600 dark:text-amber-400">Primeiro Usuário - Super Admin</p>
-              <p class="text-xs text-amber-600/70 dark:text-amber-400/70">Você será o administrador principal do sistema</p>
+              <p class="text-sm font-semibold text-amber-400">Primeiro Usuário - Super Admin</p>
+              <p class="text-xs text-amber-400/70">Você será o administrador principal do sistema</p>
             </div>
           </div>
         </div>
 
         <!-- Success Message -->
-        <div v-if="successMessage" class="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl backdrop-blur-sm">
+        <div v-if="successMessage" class="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg backdrop-blur-sm">
           <div class="flex items-start gap-3">
             <div class="flex-shrink-0 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
               <Check class="w-3 h-3 text-white" />
             </div>
-            <p class="text-sm text-green-600 dark:text-green-400">{{ successMessage }}</p>
+            <p class="text-sm text-green-400">{{ successMessage }}</p>
           </div>
         </div>
 
         <!-- Error Message -->
-        <div v-if="errorMessage" class="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-xl backdrop-blur-sm">
-          <p class="text-sm text-destructive text-center">{{ errorMessage }}</p>
+        <div v-if="errorMessage" class="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg backdrop-blur-sm">
+          <p class="text-sm text-red-400 text-center">{{ errorMessage }}</p>
         </div>
 
         <!-- Register Form -->
-        <form @submit.prevent="handleRegister" class="space-y-5">
+        <form @submit.prevent="handleRegister" class="space-y-4">
           <!-- Name Input -->
           <div class="form-group">
-            <label class="form-label" for="name">
+            <label class="form-label text-zinc-300" for="name">
               Nome completo
             </label>
             <div class="relative">
-              <User class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground transition-colors peer-focus:text-primary" />
+              <User class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
               <input
                 id="name"
                 v-model="name"
@@ -194,7 +186,7 @@ const handleRegister = async () => {
                 autocomplete="name"
                 placeholder="Seu nome"
                 class="input-field pl-12"
-                :class="{ 'border-destructive': errorMessage }"
+                :class="{ 'border-red-500': errorMessage }"
                 required
               />
             </div>
@@ -202,11 +194,11 @@ const handleRegister = async () => {
 
           <!-- Email Input -->
           <div class="form-group">
-            <label class="form-label" for="email">
+            <label class="form-label text-zinc-300" for="email">
               E-mail
             </label>
             <div class="relative">
-              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground transition-colors peer-focus:text-primary" />
+              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
               <input
                 id="email"
                 v-model="email"
@@ -214,7 +206,7 @@ const handleRegister = async () => {
                 autocomplete="email"
                 placeholder="seu@email.com"
                 class="input-field pl-12"
-                :class="{ 'border-destructive': errorMessage }"
+                :class="{ 'border-red-500': errorMessage }"
                 required
               />
             </div>
@@ -222,11 +214,11 @@ const handleRegister = async () => {
 
           <!-- Password Input -->
           <div class="form-group">
-            <label class="form-label" for="password">
+            <label class="form-label text-zinc-300" for="password">
               Senha
             </label>
             <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground transition-colors peer-focus:text-primary" />
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
               <input
                 id="password"
                 v-model="password"
@@ -234,13 +226,13 @@ const handleRegister = async () => {
                 autocomplete="new-password"
                 placeholder="••••••••"
                 class="input-field pl-12 pr-12"
-                :class="{ 'border-destructive': errorMessage }"
+                :class="{ 'border-red-500': errorMessage }"
                 required
               />
               <button
                 type="button"
                 @click="showPassword = !showPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
                 tabindex="-1"
               >
                 <EyeOff v-if="showPassword" class="w-5 h-5" />
@@ -251,8 +243,8 @@ const handleRegister = async () => {
             <!-- Password Strength Indicator -->
             <div v-if="password" class="mt-2">
               <div class="flex items-center justify-between mb-1.5">
-                <span class="text-xs text-muted-foreground">Força da senha</span>
-                <span class="text-xs font-medium" :class="passwordStrength <= 2 ? 'text-destructive' : passwordStrength <= 3 ? 'text-yellow-500' : 'text-green-500'">
+                <span class="text-xs text-zinc-500">Força da senha</span>
+                <span class="text-xs font-medium" :class="passwordStrength <= 2 ? 'text-red-400' : passwordStrength <= 3 ? 'text-yellow-400' : 'text-green-400'">
                   {{ passwordStrengthLabel }}
                 </span>
               </div>
@@ -261,10 +253,10 @@ const handleRegister = async () => {
                   v-for="i in 5"
                   :key="i"
                   class="h-1 flex-1 rounded-full transition-colors duration-300"
-                  :class="i <= passwordStrength ? passwordStrengthColor : 'bg-muted'"
+                  :class="i <= passwordStrength ? passwordStrengthColor : 'bg-zinc-700'"
                 ></div>
               </div>
-              <p class="text-xs text-muted-foreground mt-2">
+              <p class="text-xs text-zinc-500 mt-2">
                 Mínimo 8 caracteres. Recomendado: maiúsculas, minúsculas, números e símbolos.
               </p>
             </div>
@@ -272,11 +264,11 @@ const handleRegister = async () => {
 
           <!-- Confirm Password Input -->
           <div class="form-group">
-            <label class="form-label" for="confirmPassword">
+            <label class="form-label text-zinc-300" for="confirmPassword">
               Confirmar senha
             </label>
             <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground transition-colors peer-focus:text-primary" />
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
               <input
                 id="confirmPassword"
                 v-model="confirmPassword"
@@ -284,13 +276,13 @@ const handleRegister = async () => {
                 autocomplete="new-password"
                 placeholder="••••••••"
                 class="input-field pl-12 pr-12"
-                :class="{ 'border-destructive': errorMessage && confirmPassword !== password }"
+                :class="{ 'border-red-500': errorMessage && confirmPassword !== password }"
                 required
               />
               <button
                 type="button"
                 @click="showConfirmPassword = !showConfirmPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
                 tabindex="-1"
               >
                 <EyeOff v-if="showConfirmPassword" class="w-5 h-5" />
@@ -305,13 +297,13 @@ const handleRegister = async () => {
               id="terms"
               type="checkbox"
               required
-              class="mt-1 w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/20"
+              class="mt-1 w-4 h-4 rounded border-zinc-600 bg-[#2c2c2c] text-violet-600 focus:ring-2 focus:ring-violet-500/30"
             />
-            <label for="terms" class="text-sm text-muted-foreground leading-tight">
+            <label for="terms" class="text-sm text-zinc-400 leading-tight">
               Eu concordo com os
-              <NuxtLink to="/terms" class="text-primary hover:underline">Termos de Uso</NuxtLink>
+              <NuxtLink to="/terms" class="text-violet-400 hover:underline">Termos de Uso</NuxtLink>
               e
-              <NuxtLink to="/privacy" class="text-primary hover:underline">Política de Privacidade</NuxtLink>
+              <NuxtLink to="/privacy" class="text-violet-400 hover:underline">Política de Privacidade</NuxtLink>
             </label>
           </div>
 
@@ -330,11 +322,11 @@ const handleRegister = async () => {
         </form>
 
         <!-- Sign In Link -->
-        <p class="text-center text-sm text-muted-foreground mt-8">
+        <p class="text-center text-sm text-zinc-400 mt-6">
           Já tem uma conta?
           <NuxtLink
             to="/auth/login"
-            class="text-primary hover:text-primary/80 font-medium transition-colors"
+            class="text-violet-400 hover:text-violet-300 font-medium transition-colors"
           >
             Fazer login
           </NuxtLink>
@@ -342,7 +334,7 @@ const handleRegister = async () => {
       </div>
 
       <!-- Trust Badges -->
-      <div class="mt-6 flex items-center justify-center gap-6 text-xs text-muted-foreground">
+      <div class="mt-4 flex items-center justify-center gap-4 text-xs text-zinc-500">
         <div class="flex items-center gap-1.5">
           <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
           <span>Gratuito para começar</span>
@@ -359,11 +351,14 @@ const handleRegister = async () => {
 </template>
 
 <style scoped>
-@reference "../../assets/css/main.css";
-
 /* Glassmorphism Card */
 .glass-card {
-  @apply relative bg-card/60 backdrop-blur-xl border border-border/50 rounded-3xl p-8 shadow-2xl;
+  background: rgba(30, 30, 30, 0.9);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.25rem;
+  padding: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   animation: cardEntry 0.5s ease-out;
 }
 
@@ -381,49 +376,93 @@ const handleRegister = async () => {
 
 /* Form Group */
 .form-group {
-  @apply space-y-2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .form-label {
-  @apply text-sm font-medium text-foreground;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 /* Input Field */
 .input-field {
-  @apply w-full px-4 py-3 bg-background/50 backdrop-blur-sm border border-border/50 rounded-xl;
-  @apply text-foreground placeholder:text-muted-foreground;
-  @apply focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50;
-  @apply transition-all duration-200;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(44, 44, 44, 0.8);
+  backdrop-filter: blur(4px);
+  border: 1px solid #3f3f46;
+  border-radius: 0.75rem;
+  color: white;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.input-field::placeholder {
+  color: #71717a;
 }
 
 .input-field:hover {
-  @apply bg-background/70 border-border/70;
+  background: rgba(60, 60, 60, 0.8);
+  border-color: #52525b;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.input-field.border-red-500 {
+  border-color: #ef4444;
 }
 
 /* Primary Button */
 .btn-primary {
-  @apply relative px-6 py-3.5 bg-primary text-primary-foreground rounded-xl;
-  @apply font-semibold shadow-lg shadow-primary/25;
-  @apply hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5;
-  @apply active:translate-y-0 active:shadow-md;
-  @apply focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2;
-  @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0;
-  @apply transition-all duration-200;
+  position: relative;
+  padding: 0.875rem 1.5rem;
+  background: #7c3aed;
+  color: white;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
+  transition: all 0.2s;
+  overflow: hidden;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 20px 25px -5px rgba(124, 58, 237, 0.3);
+  transform: translateY(-2px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.2);
+}
+
+.btn-primary:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.5), 0 0 0 4px rgba(124, 58, 237, 0.2);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: translateY(0);
 }
 
 .btn-primary::before {
   content: '';
-  @apply absolute inset-0 bg-gradient-to-r from-white/20 to-transparent rounded-xl;
-  @apply opacity-0 hover:opacity-100 transition-opacity duration-300;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.2), transparent);
+  border-radius: 0.75rem;
+  opacity: 0;
+  transition: opacity 0.3s;
 }
 
-/* Social Login Button */
-.btn-social {
-  @apply flex items-center justify-center gap-2 px-4 py-2.5;
-  @apply bg-background/50 backdrop-blur-sm border border-border/50 rounded-xl;
-  @apply text-sm font-medium text-foreground;
-  @apply hover:bg-background/80 hover:border-border;
-  @apply hover:-translate-y-0.5 active:translate-y-0;
-  @apply transition-all duration-200;
+.btn-primary:hover::before {
+  opacity: 1;
 }
 </style>

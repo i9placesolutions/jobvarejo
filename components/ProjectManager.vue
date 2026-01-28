@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import Button from './ui/Button.vue'
+import ConfirmDialog from './ui/ConfirmDialog.vue'
 import { Trash2, FolderOpen, Clock, X, Search, FileEdit } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -15,13 +16,15 @@ const emit = defineEmits<{
 const projects = ref<any[]>([])
 const isLoading = ref(false)
 const searchQuery = ref('')
+const showConfirmDialog = ref(false)
+const pendingDeleteId = ref<string | null>(null)
 
 const fetchProjects = async () => {
   isLoading.value = true
   try {
-      const { data } = await useFetch('/api/projects');
-      if (data.value) {
-        projects.value = data.value as any[];
+      const data = await $fetch('/api/projects');
+      if (data) {
+        projects.value = Array.isArray(data) ? data : [];
       }
   } catch (e) {
       console.error("Failed to fetch projects", e);
@@ -31,7 +34,13 @@ const fetchProjects = async () => {
 }
 
 const deleteProject = async (id: string) => {
-  if (!confirm('Tem certeza que deseja excluir este projeto?')) return
+  pendingDeleteId.value = id
+  showConfirmDialog.value = true
+}
+
+const confirmDelete = async () => {
+  const id = pendingDeleteId.value
+  if (!id) return
 
   const supabase = useSupabase()
   const { error } = await supabase
@@ -42,6 +51,9 @@ const deleteProject = async (id: string) => {
   if (!error) {
     projects.value = projects.value.filter(p => p.id !== id)
   }
+  
+  showConfirmDialog.value = false
+  pendingDeleteId.value = null
 }
 
 const loadProject = (project: any) => {
@@ -149,9 +161,21 @@ onMounted(() => {
         <div class="p-4 border-t border-border bg-muted/10 flex justify-end gap-3">
             <Button variant="ghost" @click="$emit('close')" class="rounded-xl h-10 px-6">Fechar</Button>
         </div>
+        </div>
       </div>
-    </div>
-  </Transition>
+    </Transition>
+
+    <!-- Confirm Dialog -->
+    <ConfirmDialog
+        :show="showConfirmDialog"
+        title="Confirmar Exclusão"
+        message="Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita."
+        variant="danger"
+        confirm-text="Excluir"
+        cancel-text="Cancelar"
+        @confirm="confirmDelete"
+        @cancel="showConfirmDialog = false; pendingDeleteId = null"
+    />
 </template>
 
 <style scoped>

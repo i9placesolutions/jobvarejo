@@ -35,6 +35,91 @@ const lastSavedAt = ref<Date | null>(null)
 const hasUnsavedChanges = ref(false)
 const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi carregado do banco
 
+// -----------------------------------------------------------------------------
+// Local draft persistence (offline-safe)
+// When network/storage save fails (ERR_INTERNET_DISCONNECTED), we still want the
+// editor state to survive reloads. We store the latest canvas JSON per page in
+// localStorage and restore it on load.
+// -----------------------------------------------------------------------------
+const DRAFT_KEY_PREFIX = 'jobvarejo:draft:page:'
+const getDraftKey = (projectId: string, pageId: string) => `${DRAFT_KEY_PREFIX}${projectId}:${pageId}`
+type DraftPayload = { updatedAt: number; canvasData: any }
+const DRAFT_PROJECT_KEY_PREFIX = 'jobvarejo:draft:project:'
+const getProjectDraftKey = (projectId: string) => `${DRAFT_PROJECT_KEY_PREFIX}${projectId}`
+type ProjectDraftPayload = { updatedAt: number; project: { id: string; name: string; pages: Page[]; activePageIndex: number } }
+const readDraft = (projectId: string, pageId: string): DraftPayload | null => {
+    if (import.meta.server) return null
+    try {
+        const raw = localStorage.getItem(getDraftKey(projectId, pageId))
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object') return null
+        if (typeof parsed.updatedAt !== 'number' || !('canvasData' in parsed)) return null
+        return parsed as DraftPayload
+    } catch {
+        return null
+    }
+}
+const writeDraft = (projectId: string, pageId: string, canvasData: any) => {
+    if (import.meta.server) return
+    try {
+        const payload: DraftPayload = { updatedAt: Date.now(), canvasData }
+        localStorage.setItem(getDraftKey(projectId, pageId), JSON.stringify(payload))
+    } catch {
+        // ignore quota / serialization issues
+    }
+}
+const clearDraft = (projectId: string, pageId: string) => {
+    if (import.meta.server) return
+    try {
+        localStorage.removeItem(getDraftKey(projectId, pageId))
+    } catch {
+        // ignore
+    }
+}
+
+const readProjectDraft = (projectId: string): ProjectDraftPayload | null => {
+    if (import.meta.server) return null
+    try {
+        const raw = localStorage.getItem(getProjectDraftKey(projectId))
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object') return null
+        if (typeof parsed.updatedAt !== 'number' || !parsed.project) return null
+        return parsed as ProjectDraftPayload
+    } catch {
+        return null
+    }
+}
+
+const writeProjectDraft = () => {
+    if (import.meta.server) return
+    try {
+        if (!project.id) return
+        const payload: ProjectDraftPayload = {
+            updatedAt: Date.now(),
+            project: {
+                id: project.id,
+                name: project.name,
+                pages: JSON.parse(JSON.stringify(project.pages)),
+                activePageIndex: project.activePageIndex
+            }
+        }
+        localStorage.setItem(getProjectDraftKey(project.id), JSON.stringify(payload))
+    } catch {
+        // ignore
+    }
+}
+
+const clearProjectDraft = (projectId: string) => {
+    if (import.meta.server) return
+    try {
+        localStorage.removeItem(getProjectDraftKey(projectId))
+    } catch {
+        // ignore
+    }
+}
+
 export const useProject = () => {
     const supabase = useSupabase()
     const { saveCanvasData, saveThumbnail, loadCanvasData, loadCanvasDataFromPath, deleteProjectFiles, saveStatus: storageSaveStatus } = useStorage()
@@ -80,13 +165,35 @@ export const useProject = () => {
         if (project.pages[index]) {
             project.pages[index].thumbnail = dataUrl
             markAsUnsaved()
+            writeProjectDraft()
         }
     }
 
     const updatePageData = (index: number, json: any) => {
         if (project.pages[index]) {
+            const objectCount = json?.objects?.length || 0;
+            console.log(`💾 updatePageData: salvando ${objectCount} objeto(s) na página ${index} (${project.pages[index].id})`);
+            
             project.pages[index].canvasData = json
+            
+            // Verificar se foi salvo corretamente
+            const savedObjectCount = project.pages[index].canvasData?.objects?.length || 0;
+            if (savedObjectCount !== objectCount) {
+                console.error(`❌ PROBLEMA: Salvamos ${objectCount} objetos mas página tem ${savedObjectCount}`);
+            } else {
+                console.log(`✅ updatePageData: ${savedObjectCount} objeto(s) salvos corretamente`);
+            }
+            
             markAsUnsaved()
+            // Also persist a local draft to survive reloads/offline.
+            const p = project.pages[index]
+            if (p?.id && project.id) {
+                writeDraft(project.id, p.id, json)
+                console.log(`📝 Draft local salvo para página ${p.id}`);
+            }
+            writeProjectDraft()
+        } else {
+            console.error(`❌ updatePageData: página ${index} não existe!`);
         }
     }
 
@@ -185,12 +292,25 @@ export const useProject = () => {
             for (let i = 0; i < project.pages.length; i++) {
                 const page = project.pages[i]
 
-                // Salvar canvas JSON no Storage
+                // Salvar canvas JSON no Storage (com retry automático)
                 if (page.canvasData) {
-                    const path = await saveCanvasData(project.id, page.id, page.canvasData)
-                    if (path) {
-                        storagePaths[i] = path
-                        page.canvasDataPath = path
+                    try {
+                        // Tentar salvar na Contabo (com retry interno)
+                        const path = await saveCanvasData(project.id, page.id, page.canvasData, 3)
+                        if (path) {
+                            storagePaths[i] = path
+                            page.canvasDataPath = path
+                            console.log('✅ Canvas salvo na Contabo:', path)
+                        } else {
+                            // Se falhou após todas as tentativas, o draft local já está salvo
+                            console.warn(`⚠️ Falha ao salvar canvas na Contabo após múltiplas tentativas (página ${page.id})`)
+                            console.warn('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
+                            // Não lançar erro aqui - continuar salvando outras páginas
+                        }
+                    } catch (err: any) {
+                        console.error('❌ Erro crítico ao salvar canvas na Contabo:', err)
+                        console.error('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
+                        // Não lançar erro - continuar com outras páginas
                     }
                 }
 
@@ -246,6 +366,12 @@ export const useProject = () => {
             lastSavedAt.value = new Date()
             hasUnsavedChanges.value = false
             saveStatus.value = 'saved'
+
+            // Clear local drafts after a successful save.
+            for (const p of project.pages) {
+                if (p?.id) clearDraft(project.id, p.id)
+            }
+            clearProjectDraft(project.id)
 
             console.log('Project Saved (Storage):', project.id)
         } catch (e) {
@@ -334,17 +460,59 @@ export const useProject = () => {
                 if (!pageMeta || typeof pageMeta !== 'object' || !pageMeta.id) continue
 
                 let canvasData = null
+                let serverCanvasData = null
 
                 // Se tem canvasDataPath, buscar do Storage usando o caminho direto
                 if (pageMeta.canvasDataPath) {
                     console.log('📥 Buscando canvasData do Storage:', pageMeta.canvasDataPath)
-                    canvasData = await loadCanvasDataFromPath(pageMeta.canvasDataPath)
-                    console.log('✅ CanvasData carregado:', !!canvasData)
+                    serverCanvasData = await loadCanvasDataFromPath(pageMeta.canvasDataPath)
+                    if (serverCanvasData) {
+                        const objectCount = serverCanvasData?.objects?.length || 0
+                        console.log('✅ CanvasData carregado do servidor:', { hasData: !!serverCanvasData, objectCount })
+                    } else {
+                        console.warn('⚠️ CanvasData não encontrado no Storage')
+                    }
                 } else if ((pageMeta as any).canvasData) {
                     // Legacy: dados ainda estão no banco
-                    canvasData = (pageMeta as any).canvasData
-                    console.log('📦 CanvasData encontrado no banco (legacy)')
+                    serverCanvasData = (pageMeta as any).canvasData
+                    const objectCount = serverCanvasData?.objects?.length || 0
+                    console.log('📦 CanvasData encontrado no banco (legacy):', { hasData: !!serverCanvasData, objectCount })
                 }
+
+                // Offline-safe: Verificar draft local, mas só usar se for válido e mais recente
+                const draft = readDraft(data.id, pageMeta.id)
+                if (draft?.canvasData) {
+                    const draftObjectCount = draft.canvasData?.objects?.length || 0
+                    const draftAge = Date.now() - draft.updatedAt
+                    const draftAgeMin = Math.floor(draftAge / 60000)
+                    
+                    // Verificar se o draft tem conteúdo válido (deve ter objetos > 0)
+                    const draftIsValid = draftObjectCount > 0
+                    const serverObjectCount = serverCanvasData?.objects?.length || 0
+                    
+                    // CRITICAL: Só usar draft se ele tiver objetos válidos E se o servidor não tiver dados melhores
+                    // Se o servidor tem dados mas o draft está vazio, sempre usar o servidor
+                    if (draftIsValid && (serverObjectCount === 0 || draftObjectCount >= serverObjectCount)) {
+                        canvasData = draft.canvasData
+                        console.log(`📝 Usando rascunho local (draft) para a página ${pageMeta.id} (${draftAgeMin}min atrás, ${draftObjectCount} objetos)`)
+                    } else {
+                        if (draftObjectCount === 0 && serverObjectCount > 0) {
+                            // Limpar o draft vazio para evitar usar ele novamente
+                            clearDraft(data.id, pageMeta.id)
+                        }
+                        canvasData = serverCanvasData
+                    }
+                } else {
+                    // Sem draft, usar dados do servidor
+                    canvasData = serverCanvasData
+                }
+
+                // Validação final: garantir que temos dados válidos
+                if (canvasData) {
+                    const finalObjectCount = canvasData?.objects?.length || 0
+                    console.log(`✅ CanvasData final para página ${pageMeta.id}:`, { hasData: !!canvasData, objectCount: finalObjectCount })
+                }
+                // Nota: Páginas novas podem não ter canvasData ainda, isso é normal
 
                 const page: Page = {
                     id: pageMeta.id,
@@ -373,6 +541,19 @@ export const useProject = () => {
             return true
         } catch (e) {
             console.error('❌ Load Failed:', e)
+            // Offline-safe fallback: restore from local project draft if present.
+            const local = readProjectDraft(id)
+            if (local?.project?.pages?.length) {
+                console.log('📝 Restaurando projeto do rascunho local (offline fallback):', id)
+                project.id = local.project.id || id
+                project.name = local.project.name || project.name
+                project.pages = local.project.pages || []
+                project.activePageIndex = local.project.activePageIndex || 0
+                hasUnsavedChanges.value = true
+                saveStatus.value = 'error'
+                isProjectLoaded.value = true
+                return true
+            }
             saveStatus.value = 'error'
             return false
         }

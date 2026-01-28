@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2 } from 'lucide-vue-next'
+import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown } from 'lucide-vue-next'
 import FolderTreeItem from '~/components/FolderTreeItem.vue'
+import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
 
 // Page config - middleware handles auth check
 definePageMeta({
@@ -18,6 +19,10 @@ const { folders, loadFolders, createFolder, updateFolder, deleteFolder, toggleFo
 const searchQuery = ref('')
 const viewMode = ref<'grid' | 'list'>('grid')
 const sortBy = ref<'recent' | 'name' | 'date'>('recent')
+const activeView = ref<'recent' | 'all' | 'shared' | 'starred'>('recent')
+const filterOrganization = ref('all')
+const filterType = ref('all')
+const filterTime = ref('all')
 const showCreateProject = ref(false)
 const showCreateFolder = ref(false)
 const showFolderMenu = ref<string | null>(null)
@@ -30,6 +35,33 @@ const isLoading = ref(false)
 const isLoadingProjects = ref(true)
 const draggedProjectId = ref<string | null>(null)
 const isMounted = ref(false)
+
+// Project menu state
+const showProjectMenu = ref<string | null>(null)
+const projectMenuPosition = ref({ x: 0, y: 0 })
+const editingProjectId = ref<string | null>(null)
+const editingProjectName = ref('')
+const renamingProjectId = ref<string | null>(null)
+
+// Confirmation dialog state
+const showConfirmDialog = ref(false)
+const confirmDialogData = ref({
+  title: '',
+  message: '',
+  action: null as (() => void) | null,
+  variant: 'danger' as 'danger' | 'warning' | 'info'
+})
+
+// Notifications state
+const showNotifications = ref(false)
+const notifications = ref<any[]>([])
+const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
+const notificationButtonRef = ref<HTMLElement | null>(null)
+
+// Delete confirmation modal
+const showDeleteConfirm = ref(false)
+const projectToDelete = ref<string | null>(null)
+const projectToDeleteName = ref('')
 
 // Projects data - initialize with empty arrays for SSR
 const projects = ref<any[]>([])
@@ -47,6 +79,9 @@ onMounted(() => {
       if (showFolderMenu.value && !(e.target as HTMLElement)?.closest?.('.folder-context-menu')) {
         showFolderMenu.value = null
       }
+      if (showProjectMenu.value && !(e.target as HTMLElement)?.closest?.('.project-context-menu')) {
+        showProjectMenu.value = null
+      }
     })
   }
 })
@@ -55,11 +90,17 @@ onMounted(() => {
 const loadData = async () => {
   isLoadingProjects.value = true
   try {
+    const userId = auth.user.value?.id
+    if (!userId) {
+      isLoadingProjects.value = false
+      return
+    }
+
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', auth.user.value?.id || '')
+      .eq('id', userId)
       .single()
 
     if (profile) {
@@ -69,17 +110,141 @@ const loadData = async () => {
     // Load folders
     await loadFolders()
 
-    // Load projects with folder info
-    const { data: projectsData } = await supabase
+    // Load projects filtered by user_id (RLS should handle this, but we filter explicitly)
+    const { data: projectsData, error } = await supabase
       .from('projects')
       .select('*')
-      .order('created_at', { ascending: false })
+      .eq('user_id', userId)
+      .order('last_viewed', { ascending: false, nullsFirst: false })
+      .order('updated_at', { ascending: false })
 
-    projects.value = projectsData || []
+    if (error) {
+      console.error('Error loading projects:', error)
+      projects.value = []
+    } else {
+      projects.value = projectsData || []
+    }
   } catch (error) {
     console.error('Error loading data:', error)
+    projects.value = []
   } finally {
     isLoadingProjects.value = false
+  }
+}
+
+// Update last_viewed when project is opened
+const updateLastViewed = async (projectId: string) => {
+  try {
+    await supabase
+      .from('projects')
+      .update({ last_viewed: new Date().toISOString() })
+      .eq('id', projectId)
+    
+    // Update local state
+    const project = projects.value.find(p => p.id === projectId)
+    if (project) {
+      project.last_viewed = new Date().toISOString()
+    }
+  } catch (error) {
+    console.error('Error updating last_viewed:', error)
+  }
+}
+
+// Toggle starred status
+const toggleStarred = async (projectId: string) => {
+  try {
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project) return
+
+    const newStarredValue = !project.is_starred
+
+    const { error } = await supabase
+      .from('projects')
+      .update({ is_starred: newStarredValue })
+      .eq('id', projectId)
+
+    if (error) throw error
+
+    // Update local state
+    project.is_starred = newStarredValue
+  } catch (error) {
+    console.error('Error toggling starred:', error)
+    alert('Erro ao atualizar favorito.')
+  }
+}
+
+// Load notifications from Supabase
+const loadNotifications = async () => {
+  try {
+    const userId = auth.user.value?.id
+    if (!userId) return
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (error) throw error
+
+    notifications.value = data || []
+  } catch (error) {
+    console.error('Error loading notifications:', error)
+    notifications.value = []
+  }
+}
+
+// Toggle notifications modal
+const toggleNotifications = async () => {
+  showNotifications.value = !showNotifications.value
+  if (showNotifications.value) {
+    await loadNotifications()
+  }
+}
+
+// Mark notification as read
+const markAsRead = async (notificationId: string) => {
+  try {
+    const notification = notifications.value.find(n => n.id === notificationId)
+    if (!notification || notification.read) return
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', notificationId)
+      .eq('user_id', auth.user.value?.id)
+
+    if (error) throw error
+
+    notification.read = true
+  } catch (error) {
+    console.error('Error marking notification as read:', error)
+  }
+}
+
+// Mark all as read
+const markAllAsRead = async () => {
+  try {
+    const userId = auth.user.value?.id
+    if (!userId) return
+
+    const unreadIds = notifications.value.filter(n => !n.read).map(n => n.id)
+    if (unreadIds.length === 0) return
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .in('id', unreadIds)
+      .eq('user_id', userId)
+
+    if (error) throw error
+
+    notifications.value.forEach(n => {
+      if (!n.read) n.read = true
+    })
+  } catch (error) {
+    console.error('Error marking all as read:', error)
   }
 }
 
@@ -89,6 +254,18 @@ onMounted(async () => {
   await auth.getSession()
   if (auth.user.value) {
     loadData()
+    loadNotifications()
+  }
+  
+  // Close notifications when clicking outside
+  if (process.client) {
+    document.addEventListener('click', (e) => {
+      if (showNotifications.value && 
+          !(e.target as HTMLElement)?.closest?.('.notifications-modal') &&
+          !(e.target as HTMLElement)?.closest?.('.notification-button')) {
+        showNotifications.value = false
+      }
+    })
   }
 })
 
@@ -96,6 +273,9 @@ onMounted(async () => {
 watch(() => auth.user.value, (newUser) => {
   if (newUser) {
     loadData()
+    loadNotifications()
+  } else {
+    notifications.value = []
   }
 })
 
@@ -140,30 +320,111 @@ const rootProjects = computed(() => {
   return safeProjects.value.filter(p => !p.folder_id)
 })
 
+// Computed: Starred projects count
+const starredProjectsCount = computed(() => {
+  return safeProjects.value.filter(p => p.is_starred === true).length
+})
+
+// Computed: Projects based on active view
+const viewProjects = computed(() => {
+  let result: any[] = []
+
+  if (activeView.value === 'recent') {
+    // Recently viewed - order by last_viewed, fallback to updated_at
+    result = [...safeProjects.value].sort((a, b) => {
+      const aTime = a.last_viewed ? new Date(a.last_viewed).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at).getTime())
+      const bTime = b.last_viewed ? new Date(b.last_viewed).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at).getTime())
+      return bTime - aTime
+    })
+  } else if (activeView.value === 'shared') {
+    // Shared files - projects marked as shared
+    result = safeProjects.value.filter(p => p.is_shared === true)
+  } else if (activeView.value === 'starred') {
+    // Starred projects
+    result = safeProjects.value.filter(p => p.is_starred === true)
+  } else if (activeView.value === 'all') {
+    // All projects
+    result = safeProjects.value
+  }
+
+  return result
+})
+
 // Computed: Filtered and sorted projects
 const filteredProjects = computed(() => {
-  let result: any[]
+  let result: any[] = []
 
+  // Start with view-based filtering
   if (searchQuery.value) {
-    result = safeProjects.value.filter(p =>
+    result = viewProjects.value.filter(p =>
       p.name?.toLowerCase().includes(searchQuery.value.toLowerCase())
     )
   } else if (activeFolderId.value) {
-    result = activeFolderProjects.value
+    // Filter by folder
+    const folderIds = [activeFolderId.value]
+    const getFolderTreeIds = (folderId: string): string[] => {
+      const ids = [folderId]
+      const children = getChildren(folderId)
+      children.forEach(child => {
+        ids.push(...getFolderTreeIds(child.id))
+      })
+      return ids
+    }
+    const allFolderIds = getFolderTreeIds(activeFolderId.value)
+    result = viewProjects.value.filter(p => p.folder_id && allFolderIds.includes(p.folder_id))
   } else {
-    // Show all projects when no folder selected
-    result = [...rootProjects.value, ...safeProjects.value.filter(p => p.folder_id)]
+    result = viewProjects.value
+  }
+
+  // Apply additional filters
+  if (filterOrganization.value === 'personal') {
+    result = result.filter(p => !p.is_shared)
+  } else if (filterOrganization.value === 'team') {
+    result = result.filter(p => p.is_shared === true)
+  }
+
+  if (filterType.value === 'design') {
+    // Assuming all projects are designs for now
+    result = result
+  } else if (filterType.value === 'template') {
+    // Filter templates if we add a type field later
+    result = result
+  }
+
+  // Apply time filter
+  const now = new Date()
+  if (filterTime.value === 'today') {
+    const todayStart = new Date(now.setHours(0, 0, 0, 0))
+    result = result.filter(p => {
+      const viewTime = p.last_viewed ? new Date(p.last_viewed) : (p.updated_at ? new Date(p.updated_at) : new Date(p.created_at))
+      return viewTime >= todayStart
+    })
+  } else if (filterTime.value === 'week') {
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    result = result.filter(p => {
+      const viewTime = p.last_viewed ? new Date(p.last_viewed) : (p.updated_at ? new Date(p.updated_at) : new Date(p.created_at))
+      return viewTime >= weekAgo
+    })
+  } else if (filterTime.value === 'month') {
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    result = result.filter(p => {
+      const viewTime = p.last_viewed ? new Date(p.last_viewed) : (p.updated_at ? new Date(p.updated_at) : new Date(p.created_at))
+      return viewTime >= monthAgo
+    })
   }
 
   // Sort
   result = [...result].sort((a, b) => {
     if (sortBy.value === 'recent') {
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      const aTime = a.last_viewed ? new Date(a.last_viewed).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at).getTime())
+      const bTime = b.last_viewed ? new Date(b.last_viewed).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at).getTime())
+      return bTime - aTime
     } else if (sortBy.value === 'name') {
       return (a.name || '').localeCompare(b.name || '')
-    } else {
+    } else if (sortBy.value === 'date') {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     }
+    return 0
   })
 
   return result
@@ -190,6 +451,13 @@ const createProject = async () => {
 
   isLoading.value = true
   try {
+    const userId = auth.user.value?.id
+    if (!userId) {
+      alert('Usuário não autenticado.')
+      isLoading.value = false
+      return
+    }
+
     const initialPage = {
       id: Math.random().toString(36).substr(2, 9),
       name: 'Página 1',
@@ -206,6 +474,8 @@ const createProject = async () => {
         name: newProjectName.value,
         canvas_data: [initialPage],
         folder_id: activeFolderId.value,
+        user_id: userId,
+        last_viewed: new Date().toISOString(),
       })
       .select()
       .single()
@@ -214,10 +484,25 @@ const createProject = async () => {
 
     if (data) {
       projects.value.unshift(data)
+      
+      // Create notification for new project
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          title: 'Projeto criado',
+          message: `Seu projeto "${newProjectName.value}" foi criado com sucesso`,
+          type: 'success',
+          metadata: { project_id: data.id, project_name: newProjectName.value }
+        })
+      
+      // Reload notifications to show new one
+      await loadNotifications()
     }
 
     newProjectName.value = ''
     showCreateProject.value = false
+    await updateLastViewed(data.id)
     navigateTo(`/editor/${data.id}`)
   } catch (error: any) {
     console.error('Error creating project:', error)
@@ -229,24 +514,127 @@ const createProject = async () => {
 
 // Delete project
 const deleteProject = async (projectId: string) => {
-  if (!confirm('Tem certeza que deseja excluir este projeto?')) return
+  confirmDialogData.value = {
+    title: 'Excluir projeto',
+    message: 'Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita.',
+    variant: 'danger',
+    action: async () => {
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .delete()
+          .eq('id', projectId)
+
+        if (error) throw error
+        projects.value = projects.value.filter(p => p.id !== projectId)
+        showProjectMenu.value = null
+      } catch (error) {
+        console.error('Error deleting project:', error)
+        alert('Erro ao excluir projeto.')
+      }
+    }
+  }
+  showConfirmDialog.value = true
+}
+
+// Duplicate project
+const duplicateProject = async (projectId: string) => {
+  try {
+    const userId = auth.user.value?.id
+    if (!userId) {
+      alert('Usuário não autenticado.')
+      return
+    }
+
+    const original = projects.value.find(p => p.id === projectId)
+    if (!original) return
+
+    const { data, error } = await supabase
+      .from('projects')
+      .insert({
+        name: `${original.name} (cópia)`,
+        canvas_data: original.canvas_data,
+        folder_id: original.folder_id,
+        user_id: userId,
+        last_viewed: new Date().toISOString(),
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    if (data) {
+      projects.value.unshift(data)
+    }
+    showProjectMenu.value = null
+  } catch (error) {
+    console.error('Error duplicating project:', error)
+    alert('Erro ao duplicar projeto.')
+  }
+}
+
+// Start renaming project
+const startRenameProject = (project: any) => {
+  renamingProjectId.value = project.id
+  editingProjectName.value = project.name
+  showProjectMenu.value = null
+}
+
+// Save project name
+const saveProjectName = async (projectId: string) => {
+  if (!editingProjectName.value.trim()) return
 
   try {
     const { error } = await supabase
       .from('projects')
-      .delete()
+      .update({ name: editingProjectName.value.trim() })
       .eq('id', projectId)
 
     if (error) throw error
-    projects.value = projects.value.filter(p => p.id !== projectId)
+
+    const project = projects.value.find(p => p.id === projectId)
+    if (project) {
+      project.name = editingProjectName.value.trim()
+    }
+
+    renamingProjectId.value = null
+    editingProjectName.value = ''
   } catch (error) {
-    console.error('Error deleting project:', error)
-    alert('Erro ao excluir projeto.')
+    console.error('Error renaming project:', error)
+    alert('Erro ao renomear projeto.')
   }
 }
 
+// Cancel renaming project
+const cancelRenameProject = () => {
+  renamingProjectId.value = null
+  editingProjectName.value = ''
+}
+
+// Show project context menu
+const showProjectContextMenu = (projectId: string, event: MouseEvent) => {
+  event.preventDefault()
+  event.stopPropagation()
+  projectMenuPosition.value = { x: event.clientX, y: event.clientY }
+  showProjectMenu.value = projectId
+}
+
+// Handle confirm dialog
+const handleConfirm = () => {
+  if (confirmDialogData.value.action) {
+    confirmDialogData.value.action()
+  }
+  showConfirmDialog.value = false
+}
+
+const handleCancelConfirm = () => {
+  showConfirmDialog.value = false
+}
+
 // Open project
-const openProject = (projectId: string) => {
+const openProject = async (projectId: string) => {
+  // Update last_viewed before navigating
+  await updateLastViewed(projectId)
   navigateTo(`/editor/${projectId}`)
 }
 
@@ -302,17 +690,23 @@ const handleDeleteFolder = async (folderId: string) => {
     message += ' As subpastas também serão excluídas.'
   }
 
-  if (!confirm(message)) return
-
-  try {
-    await deleteFolder(folderId)
-    showFolderMenu.value = null
-    if (activeFolderId.value === folderId) {
-      activeFolderId.value = null
+  confirmDialogData.value = {
+    title: 'Excluir pasta',
+    message,
+    variant: 'danger',
+    action: async () => {
+      try {
+        await deleteFolder(folderId)
+        showFolderMenu.value = null
+        if (activeFolderId.value === folderId) {
+          activeFolderId.value = null
+        }
+      } catch (error) {
+        alert('Erro ao excluir pasta.')
+      }
     }
-  } catch (error) {
-    alert('Erro ao excluir pasta.')
   }
+  showConfirmDialog.value = true
 }
 
 // Show folder context menu
@@ -337,6 +731,14 @@ const formatDistanceToNow = (date: string) => {
   if (diffInHours < 24) return `${diffInHours}h atrás`
   if (diffInDays < 7) return `${diffInDays}d atrás`
   return projectDate.toLocaleDateString('pt-BR')
+}
+
+// Format name to show only first and second name
+const formatUserName = (fullName: string | null | undefined): string => {
+  if (!fullName) return 'Studio PRO'
+  const names = fullName.trim().split(/\s+/)
+  if (names.length <= 2) return fullName
+  return `${names[0]} ${names[1]}`
 }
 
 // Handle sign out
@@ -410,65 +812,130 @@ const handleDropOnRoot = async (event: DragEvent) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-foreground">
-    <!-- Animated Background -->
-    <div class="fixed inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl"></div>
-      <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
-    </div>
+  <div class="h-screen bg-[#0f0f0f] text-white flex flex-col">
+    <!-- Modern Header (Figma Style) -->
+    <header class="h-14 border-b border-white/5 bg-[#1a1a1a] flex items-center justify-between px-6 shrink-0">
+      <!-- Logo and App Name -->
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-gradient-to-br from-violet-500/20 to-purple-500/20 rounded-lg flex items-center justify-center border border-violet-500/30">
+          <Sparkles class="w-4 h-4 text-violet-400" />
+        </div>
+        <span class="text-sm font-semibold text-white">Studio PRO</span>
+      </div>
 
-    <div class="relative z-10 flex h-screen">
-      <!-- Sidebar -->
-      <aside class="w-64 border-r border-border/50 bg-card/40 backdrop-blur-sm flex flex-col">
-        <!-- Sidebar Header -->
-        <div class="p-4 border-b border-border/50">
-          <div class="flex items-center gap-2">
-            <div class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Sparkles class="w-4 h-4 text-primary" />
+      <!-- User Avatar -->
+      <div class="flex items-center gap-3">
+        <div v-if="user" class="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-semibold text-white">
+          {{ user.name?.charAt(0) || 'U' }}
+        </div>
+      </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden">
+      <!-- Sidebar (Figma Style) -->
+      <aside class="w-[240px] border-r border-white/5 bg-[#1a1a1a] flex flex-col shrink-0">
+        <!-- Top Header (Figma Style) -->
+        <div class="h-12 px-3 border-b border-white/5 flex items-center justify-between shrink-0">
+          <!-- User/Workspace Selector -->
+          <div class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer group hover:bg-white/5 rounded-lg px-2 py-1.5 transition-all">
+            <!-- Avatar -->
+            <div v-if="user" class="w-7 h-7 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0">
+              <img 
+                v-if="user.avatar_url" 
+                :src="user.avatar_url" 
+                :alt="user.name"
+                class="w-full h-full rounded-full object-cover"
+              />
+              <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
             </div>
-            <span class="font-bold text-sm">Studio PRO</span>
+            <!-- Workspace Name -->
+            <div class="flex items-center gap-1.5 flex-1 min-w-0">
+              <span class="text-xs font-medium text-white truncate">{{ formatUserName(user?.name) }}</span>
+              <ChevronDown class="w-3.5 h-3.5 text-zinc-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
           </div>
+          
+          <!-- Notification Bell -->
+          <button 
+            ref="notificationButtonRef"
+            @click.stop="toggleNotifications"
+            class="notification-button w-8 h-8 flex items-center justify-center hover:bg-white/5 rounded-lg transition-all text-zinc-400 hover:text-white relative"
+          >
+            <Bell class="w-4 h-4" />
+            <!-- Notification Badge -->
+            <span 
+              v-if="unreadCount > 0" 
+              class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-violet-500 rounded-full"
+            ></span>
+          </button>
         </div>
 
-        <!-- Search -->
-        <div class="p-3">
+        <!-- Search (Rounded) -->
+        <div class="p-3 border-b border-white/5">
           <div class="relative">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="Buscar designs..."
-              class="w-full pl-9 pr-3 py-2 bg-muted/50 border border-border/50 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary/20"
+              placeholder="Search"
+              class="w-full h-9 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white pl-9 pr-3 focus:outline-none focus:border-violet-500/50 placeholder:text-zinc-500 transition-all"
             />
           </div>
         </div>
 
-        <!-- Folders Section -->
-        <div class="flex-1 overflow-y-auto px-3">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pastas</span>
-            <button
-              @click="showCreateFolder = true"
-              class="p-1 hover:bg-muted rounded transition-colors"
-              title="Nova pasta"
-            >
-              <FolderPlus class="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
-
-          <!-- All Projects (root) -->
-          <div
-            :class="[
-              'flex items-center gap-2 py-2 px-2 rounded-lg cursor-pointer transition-colors mb-1',
-              !activeFolderId ? 'bg-primary/10 text-primary' : 'hover:bg-muted/50'
-            ]"
-            @click="setActiveFolder(null)"
-            @dragover="handleDragOver"
-            @drop="handleDropOnRoot"
+        <!-- Navigation Links (Figma Style) -->
+        <div class="p-2 border-b border-white/5">
+          <button 
+            @click="activeView = 'recent'"
+            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mb-1', activeView === 'recent' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
+          >
+            <Clock class="w-4 h-4" />
+            Recents
+          </button>
+          <button 
+            @click="activeView = 'all'"
+            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5', activeView === 'all' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
           >
             <FolderOpen class="w-4 h-4" />
-            <span class="text-sm">Todos os Designs</span>
-            <span class="ml-auto text-xs text-muted-foreground">{{ rootProjects.length }}</span>
+            All Designs
+          </button>
+          <button 
+            @click="activeView = 'shared'"
+            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mt-1', activeView === 'shared' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
+          >
+            <Users class="w-4 h-4" />
+            Shared
+          </button>
+        </div>
+
+        <!-- Folders Section (Figma Style) -->
+        <div class="flex-1 overflow-y-auto">
+          <div class="px-3 py-2">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[10px] font-semibold uppercase text-zinc-500">Folders</span>
+              <button
+                @click="showCreateFolder = true"
+                class="p-1 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-all"
+                title="New folder"
+              >
+                <FolderPlus class="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <!-- All Projects (root) - Rounded -->
+            <div
+              :class="[
+                'flex items-center gap-2.5 h-9 px-3 rounded-lg cursor-pointer transition-all',
+                !activeFolderId ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-zinc-400'
+              ]"
+              @click="setActiveFolder(null)"
+              @dragover="handleDragOver"
+              @drop="handleDropOnRoot"
+            >
+              <FolderOpen class="w-4 h-4 opacity-70" />
+              <span class="text-xs font-medium truncate flex-1">All Designs</span>
+              <span class="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">{{ rootProjects.length }}</span>
+            </div>
           </div>
 
           <!-- Folder Tree -->
@@ -499,62 +966,125 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
         </div>
 
-        <!-- User Section -->
-        <div class="p-3 border-t border-border/50">
-          <div v-if="user" class="flex items-center gap-2">
-            <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-              <span class="text-xs font-medium text-primary">{{ user.name?.charAt(0) || 'U' }}</span>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium truncate">{{ user.name }}</p>
-              <p class="text-xs text-muted-foreground truncate">{{ user.email }}</p>
-            </div>
-            <button
-              @click="handleSignOut"
-              class="p-1.5 hover:bg-muted/50 rounded-lg transition-colors"
-              title="Sair"
-            >
-              <LogOut class="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
+        <!-- Starred Section (Figma Style) -->
+        <div class="px-3 py-2 border-t border-white/5">
+          <button
+            @click="activeView = 'starred'"
+            :class="['w-full flex items-center gap-2.5 h-9 px-3 rounded-lg transition-all cursor-pointer', activeView === 'starred' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
+          >
+            <Star class="w-4 h-4" :class="{ 'fill-current': activeView === 'starred' }" />
+            <span class="text-xs font-medium">Starred</span>
+            <span v-if="starredProjectsCount > 0" class="ml-auto text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">
+              {{ starredProjectsCount }}
+            </span>
+          </button>
+        </div>
+
+        <!-- Sign Out Button -->
+        <div class="p-3 border-t border-white/5">
+          <button
+            @click="handleSignOut"
+            class="w-full h-9 px-3 bg-red-600/10 hover:bg-red-600/20 text-red-400 hover:text-red-300 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-all"
+            title="Sign out"
+          >
+            <LogOut class="w-4 h-4" />
+            <span>Sign out</span>
+          </button>
         </div>
       </aside>
 
       <!-- Main Content -->
-      <main class="flex-1 flex flex-col overflow-hidden">
-        <!-- Header -->
-        <header class="h-14 border-b border-border/50 bg-background/80 backdrop-blur-sm flex items-center justify-between px-6">
-          <div class="flex items-center gap-3">
-            <h1 class="text-lg font-semibold">
-              <span v-if="activeFolderId">{{ folders.find(f => f.id === activeFolderId)?.name || 'Pasta' }}</span>
-              <span v-else-if="searchQuery">Resultados da busca</span>
-              <span v-else>Todos os Designs</span>
-            </h1>
-            <span class="text-sm text-muted-foreground">({{ filteredProjects.length }})</span>
+      <main class="flex-1 flex flex-col overflow-hidden bg-[#0f0f0f]">
+        <!-- Section Title -->
+        <div class="px-6 pt-6 pb-4">
+          <h1 class="text-xl font-semibold text-white mb-1">
+            <span v-if="activeFolderId">{{ folders.find(f => f.id === activeFolderId)?.name || 'Folder' }}</span>
+            <span v-else-if="searchQuery">Search Results</span>
+            <span v-else-if="activeView === 'recent'">Recently viewed</span>
+            <span v-else-if="activeView === 'shared'">Shared files</span>
+            <span v-else-if="activeView === 'starred'">Starred</span>
+            <span v-else>All Designs</span>
+          </h1>
+          <p class="text-xs text-zinc-500">{{ filteredProjects.length }} design{{ filteredProjects.length !== 1 ? 's' : '' }}</p>
+        </div>
+
+        <!-- Filters and Controls (Figma Style) -->
+        <div class="px-6 pb-4 flex items-center justify-between gap-4">
+          <!-- Tabs -->
+          <div class="flex items-center gap-1 bg-white/5 rounded-lg p-1 border border-white/10">
+            <button
+              @click="activeView = 'recent'"
+              :class="['px-3 py-1.5 rounded-md text-xs font-medium transition-all', activeView === 'recent' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
+            >
+              Recently viewed
+            </button>
+            <button
+              @click="activeView = 'shared'"
+              :class="['px-3 py-1.5 rounded-md text-xs font-medium transition-all', activeView === 'shared' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
+            >
+              Shared files
+            </button>
+            <button
+              @click="activeView = 'all'"
+              :class="['px-3 py-1.5 rounded-md text-xs font-medium transition-all', activeView === 'all' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
+            >
+              Shared projects
+            </button>
           </div>
 
-          <div class="flex items-center gap-3">
-            <!-- Sort -->
-            <select
-              v-model="sortBy"
-              class="px-3 py-2 bg-muted/50 hover:bg-muted border border-border/50 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary/20"
-            >
-              <option value="recent">Recentes</option>
-              <option value="name">Nome</option>
-              <option value="date">Data</option>
-            </select>
+          <!-- Filters Row -->
+          <div class="flex items-center gap-2 flex-1 justify-end">
+            <!-- Filter Dropdowns -->
+            <div class="relative">
+              <select
+                v-model="filterOrganization"
+                class="h-8 px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
+              >
+                <option value="all">All organizations</option>
+                <option value="personal">Personal</option>
+                <option value="team">Team</option>
+              </select>
+              <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
+            </div>
 
-            <!-- View Mode -->
-            <div class="flex items-center bg-muted/50 rounded-lg p-1 border border-border/50">
+            <div class="relative">
+              <select
+                v-model="filterType"
+                class="h-8 px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
+              >
+                <option value="all">All files</option>
+                <option value="design">Design</option>
+                <option value="template">Template</option>
+              </select>
+              <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
+            </div>
+
+            <div class="relative">
+              <select
+                v-model="filterTime"
+                class="h-8 px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
+              >
+                <option value="all">Last viewed</option>
+                <option value="today">Today</option>
+                <option value="week">This week</option>
+                <option value="month">This month</option>
+              </select>
+              <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
+            </div>
+
+            <!-- View Mode Toggle -->
+            <div class="flex items-center bg-white/5 rounded-lg p-1 border border-white/10">
               <button
                 @click="viewMode = 'grid'"
-                :class="['p-1.5 rounded transition-colors', viewMode === 'grid' ? 'bg-background shadow-sm' : 'hover:bg-background/50']"
+                :class="['p-1.5 rounded-md transition-all', viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
+                title="Grid view"
               >
                 <Grid class="w-4 h-4" />
               </button>
               <button
                 @click="viewMode = 'list'"
-                :class="['p-1.5 rounded transition-colors', viewMode === 'list' ? 'bg-background shadow-sm' : 'hover:bg-background/50']"
+                :class="['p-1.5 rounded-md transition-all', viewMode === 'list' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
+                title="List view"
               >
                 <List class="w-4 h-4" />
               </button>
@@ -563,37 +1093,39 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <!-- New Project Button -->
             <button
               @click="showCreateProject = true"
-              class="btn-primary flex items-center gap-2"
+              class="h-8 px-4 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
             >
               <Plus class="w-4 h-4" />
-              <span>Novo Design</span>
+              <span>New Design</span>
             </button>
           </div>
-        </header>
+        </div>
 
         <!-- Projects Grid/List -->
-        <div class="flex-1 overflow-y-auto p-6">
+        <div class="flex-1 overflow-y-auto px-6 pb-6">
           <!-- Loading State -->
           <div v-if="isLoadingProjects" class="flex items-center justify-center h-full">
-            <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"></div>
+            <div class="animate-spin w-8 h-8 border-3 border-violet-500 border-t-transparent rounded-full"></div>
           </div>
 
-          <!-- Projects Grid -->
+          <!-- Projects Grid (Figma Style - Rounded Cards) -->
           <div
             v-else-if="filteredProjects.length > 0"
             class="grid gap-4"
-            :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1'"
+            :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-1'"
           >
             <div
               v-for="project in filteredProjects"
               :key="project.id"
-              class="group relative bg-card/60 backdrop-blur-sm border border-border/50 rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer"
+              class="group relative bg-[#1a1a1a] border border-white/10 hover:border-white/20 overflow-hidden transition-all duration-200 cursor-pointer rounded-xl hover:shadow-lg hover:shadow-black/20"
               draggable="true"
               @dragstart="handleDragStart(project.id, $event)"
               @click="openProject(project.id)"
             >
-              <!-- Thumbnail -->
-              <div class="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 relative">
+              <!-- Thumbnail (Rounded Top) -->
+              <div
+                class="aspect-video bg-gradient-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
+              >
                 <img
                   v-if="project.preview_url"
                   :src="project.preview_url"
@@ -601,40 +1133,73 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   :alt="project.name"
                 />
                 <div v-else class="w-full h-full flex items-center justify-center">
-                  <Sparkles class="w-8 h-8 text-primary/30" />
+                  <Sparkles class="w-8 h-8 text-zinc-600" />
                 </div>
+
+                <!-- Actions Button (top right - Rounded) -->
+                <button
+                  @click.stop="showProjectContextMenu(project.id, $event)"
+                  class="absolute top-2 right-2 p-2 bg-black/70 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-black/90 shadow-lg"
+                  title="Actions"
+                >
+                  <MoreVertical class="w-4 h-4 text-white" />
+                </button>
+
+                <!-- Star Button (top left - Rounded) -->
+                <button
+                  @click.stop="toggleStarred(project.id)"
+                  :class="['absolute top-2 left-2 p-2 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/70 text-white hover:bg-black/90']"
+                  title="Star"
+                >
+                  <Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" />
+                </button>
               </div>
 
-              <!-- Content -->
-              <div class="p-3">
-                <h3 class="font-medium text-sm text-foreground mb-1 truncate">{{ project.name || 'Sem título' }}</h3>
-                <p class="text-xs text-muted-foreground">{{ formatDistanceToNow(project.created_at) }}</p>
+              <!-- Content (Rounded Bottom) -->
+              <div class="p-3 rounded-b-xl">
+                <!-- Renaming mode -->
+                <div v-if="renamingProjectId === project.id" @click.stop class="mb-1">
+                  <input
+                    v-model="editingProjectName"
+                    type="text"
+                    class="w-full px-2 py-1.5 text-xs bg-[#2a2a2a] border border-violet-500 rounded-lg focus:outline-none text-white"
+                    @keyup.enter="saveProjectName(project.id)"
+                    @keyup.esc="cancelRenameProject"
+                    @blur="saveProjectName(project.id)"
+                    ref="renameInput"
+                  />
+                </div>
+                <!-- Normal mode -->
+                <h3 v-else class="font-medium text-xs text-white mb-1 truncate">
+                  {{ project.name || 'Untitled' }}
+                </h3>
+                <p class="text-[10px] text-zinc-500">{{ formatDistanceToNow(project.created_at) }}</p>
               </div>
             </div>
           </div>
 
-          <!-- Empty State -->
+          <!-- Empty State (Figma Style) -->
           <div v-else class="flex items-center justify-center h-full">
             <div class="text-center">
-              <div class="w-16 h-16 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FolderOpen class="w-8 h-8 text-muted-foreground" />
+              <div class="w-16 h-16 bg-[#1a1a1a] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
+                <FolderOpen class="w-8 h-8 text-zinc-500" />
               </div>
-              <h3 class="text-lg font-semibold mb-2">
-                <span v-if="searchQuery">Nenhum resultado encontrado</span>
-                <span v-else-if="activeFolderId">Pasta vazia</span>
-                <span v-else>Nenhum projeto ainda</span>
+              <h3 class="text-base font-semibold text-white mb-2">
+                <span v-if="searchQuery">No results found</span>
+                <span v-else-if="activeFolderId">Empty folder</span>
+                <span v-else>No projects yet</span>
               </h3>
-              <p class="text-sm text-muted-foreground mb-6">
-                <span v-if="searchQuery">Tente outra busca</span>
-                <span v-else>Crie seu primeiro design para começar</span>
+              <p class="text-xs text-zinc-500 mb-6">
+                <span v-if="searchQuery">Try another search</span>
+                <span v-else>Create your first design to get started</span>
               </p>
               <button
                 v-if="!searchQuery"
                 @click="showCreateProject = true"
-                class="btn-primary inline-flex items-center gap-2"
+                class="h-10 px-6 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium inline-flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
               >
                 <Plus class="w-4 h-4" />
-                Criar Design
+                Create Design
               </button>
             </div>
           </div>
@@ -642,118 +1207,284 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </main>
     </div>
 
-    <!-- Create Project Modal -->
+    <!-- Create Project Modal (Figma Style) -->
     <div
       v-if="showCreateProject"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
       @click.self="showCreateProject = false"
     >
-      <div class="glass-card w-full max-w-md p-6">
-        <h3 class="text-lg font-semibold mb-4">Novo Design</h3>
-        <p class="text-sm text-muted-foreground mb-4">
-          <span v-if="activeFolderId">Criar em: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
-          <span v-else>Criar na raiz</span>
+      <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
+        <h3 class="text-base font-semibold text-white mb-2">New Design</h3>
+        <p class="text-xs text-zinc-500 mb-4">
+          <span v-if="activeFolderId">Create in: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
+          <span v-else>Create in root</span>
         </p>
         <input
           v-model="newProjectName"
           type="text"
-          placeholder="Nome do projeto..."
-          class="w-full px-4 py-3 bg-background/50 border border-border/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 mb-4"
+          placeholder="Project name..."
+          class="w-full h-10 px-3 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 mb-4 transition-all"
           @keyup.enter="createProject()"
         />
-        <div class="flex gap-3">
+        <div class="flex gap-2">
           <button
             @click="showCreateProject = false"
-            class="flex-1 px-4 py-2.5 bg-muted/50 hover:bg-muted rounded-xl transition-colors"
+            class="flex-1 h-10 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition-all"
           >
-            Cancelar
+            Cancel
           </button>
           <button
             @click="createProject()"
             :disabled="isLoading || !isValidProjectName"
-            class="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+            class="flex-1 h-10 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
           >
-            {{ isLoading ? 'Criando...' : 'Criar' }}
+            {{ isLoading ? 'Creating...' : 'Create' }}
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Create Folder Modal -->
+    <!-- Create Folder Modal (Figma Style) -->
     <div
       v-if="showCreateFolder"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
       @click.self="showCreateFolder = false"
     >
-      <div class="glass-card w-full max-w-md p-6">
-        <h3 class="text-lg font-semibold mb-4">Nova Pasta</h3>
-        <p class="text-sm text-muted-foreground mb-4">
-          <span v-if="activeFolderId">Criar dentro de: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
-          <span v-else>Criar na raiz</span>
+      <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
+        <h3 class="text-base font-semibold text-white mb-2">New Folder</h3>
+        <p class="text-xs text-zinc-500 mb-4">
+          <span v-if="activeFolderId">Create inside: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
+          <span v-else>Create in root</span>
         </p>
         <input
           v-model="newFolderName"
           type="text"
-          placeholder="Nome da pasta..."
-          class="w-full px-4 py-3 bg-background/50 border border-border/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 mb-4"
+          placeholder="Folder name..."
+          class="w-full h-10 px-3 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 mb-4 transition-all"
           @keyup.enter="handleCreateFolder()"
         />
-        <div class="flex gap-3">
+        <div class="flex gap-2">
           <button
             @click="showCreateFolder = false"
-            class="flex-1 px-4 py-2.5 bg-muted/50 hover:bg-muted rounded-xl transition-colors"
+            class="flex-1 h-10 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition-all"
           >
-            Cancelar
+            Cancel
           </button>
           <button
             @click="handleCreateFolder()"
             :disabled="!isValidFolderName"
-            class="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+            class="flex-1 h-10 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
           >
-            Criar
+            Create
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Folder Context Menu -->
+    <!-- Folder Context Menu (Figma Style) -->
     <teleport to="body">
       <div
         v-if="showFolderMenu"
-        class="fixed z-[100] bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[160px]"
+        class="folder-context-menu fixed z-[100] bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-[160px] shadow-xl"
         :style="{ left: `${folderMenuPosition.x}px`, top: `${folderMenuPosition.y}px` }"
       >
         <button
           @click="startEditFolder(folders.find(f => f.id === showFolderMenu))"
-          class="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2 transition-colors"
+          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
         >
           <Pencil class="w-4 h-4" />
-          Renomear
+          Rename
         </button>
         <button
           @click="handleDeleteFolder(showFolderMenu)"
-          class="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2 transition-colors"
+          class="w-full px-3 py-2 text-xs text-left text-red-400 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors rounded mx-1"
         >
           <Trash2 class="w-4 h-4" />
-          Excluir
+          Delete
         </button>
       </div>
+    </teleport>
+
+    <!-- Project Context Menu (Figma Style) -->
+    <teleport to="body">
+      <div
+        v-if="showProjectMenu"
+        class="project-context-menu fixed z-[100] bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-[160px] shadow-xl"
+        :style="{ left: `${projectMenuPosition.x}px`, top: `${projectMenuPosition.y}px` }"
+      >
+        <button
+          @click="startRenameProject(projects.find(p => p.id === showProjectMenu))"
+          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
+        >
+          <Pencil class="w-4 h-4" />
+          Rename
+        </button>
+        <button
+          @click="duplicateProject(showProjectMenu)"
+          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
+        >
+          <Copy class="w-4 h-4" />
+          Duplicate
+        </button>
+        <button
+          @click="toggleStarred(showProjectMenu)"
+          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
+        >
+          <Star class="w-4 h-4" :class="{ 'fill-current': projects.find(p => p.id === showProjectMenu)?.is_starred }" />
+          {{ projects.find(p => p.id === showProjectMenu)?.is_starred ? 'Unstar' : 'Star' }}
+        </button>
+        <div class="h-px bg-white/10 my-1.5 mx-2"></div>
+        <button
+          @click="deleteProject(showProjectMenu)"
+          class="w-full px-3 py-2 text-xs text-left text-red-400 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors rounded mx-1"
+        >
+          <Trash2 class="w-4 h-4" />
+          Delete
+        </button>
+      </div>
+    </teleport>
+
+    <!-- Confirm Dialog -->
+    <ConfirmDialog
+      :show="showConfirmDialog"
+      :title="confirmDialogData.title"
+      :message="confirmDialogData.message"
+      :variant="confirmDialogData.variant"
+      confirm-text="Delete"
+      cancel-text="Cancel"
+      @confirm="handleConfirm"
+      @cancel="handleCancelConfirm"
+    />
+
+    <!-- Notifications Modal (Figma Style) -->
+    <teleport to="body">
+      <!-- Backdrop -->
+      <Transition
+        enter-active-class="transition-opacity duration-200"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-150"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="showNotifications"
+          class="fixed inset-0 z-[199] bg-black/20"
+          @click="showNotifications = false"
+        ></div>
+      </Transition>
+
+      <!-- Modal -->
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 scale-95 translate-y-[-8px]"
+        enter-to-class="opacity-100 scale-100 translate-y-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="opacity-100 scale-100 translate-y-0"
+        leave-to-class="opacity-0 scale-95 translate-y-[-8px]"
+      >
+        <div
+          v-if="showNotifications && notificationButtonRef"
+          class="notifications-modal fixed z-[200]"
+          :style="{
+            top: `${notificationButtonRef.getBoundingClientRect().bottom + 8}px`,
+            left: `${notificationButtonRef.getBoundingClientRect().right + 8}px`
+          }"
+          @click.stop
+        >
+          <div class="w-80 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[500px]">
+            <!-- Header -->
+            <div class="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-white">Notificações</h3>
+              <button
+                v-if="unreadCount > 0"
+                @click="markAllAsRead"
+                class="text-xs text-violet-400 hover:text-violet-300 transition-colors"
+              >
+                Marcar todas como lidas
+              </button>
+            </div>
+
+            <!-- Notifications List -->
+            <div class="flex-1 overflow-y-auto">
+              <div v-if="notifications.length === 0" class="p-8 text-center">
+                <Bell class="w-8 h-8 text-zinc-600 mx-auto mb-2 opacity-50" />
+                <p class="text-xs text-zinc-500">Nenhuma notificação</p>
+              </div>
+              
+              <div v-else class="divide-y divide-white/5">
+                <div
+                  v-for="notification in notifications"
+                  :key="notification.id"
+                  @click="markAsRead(notification.id)"
+                  :class="[
+                    'px-4 py-3 cursor-pointer transition-colors hover:bg-white/5',
+                    !notification.read ? 'bg-white/5' : ''
+                  ]"
+                >
+                  <div class="flex items-start gap-3">
+                    <!-- Icon -->
+                    <div :class="[
+                      'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                      notification.type === 'success' ? 'bg-green-500/20 text-green-400' :
+                      notification.type === 'share' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-violet-500/20 text-violet-400'
+                    ]">
+                      <Bell v-if="notification.type === 'share'" class="w-4 h-4" />
+                      <Sparkles v-else class="w-4 h-4" />
+                    </div>
+                    
+                    <!-- Content -->
+                    <div class="flex-1 min-w-0">
+                      <p class="text-xs font-medium text-white mb-0.5">{{ notification.title }}</p>
+                      <p class="text-[11px] text-zinc-400 line-clamp-2">{{ notification.message }}</p>
+                      <p class="text-[10px] text-zinc-500 mt-1">{{ formatDistanceToNow(notification.created_at) }}</p>
+                    </div>
+
+                    <!-- Unread Indicator -->
+                    <div v-if="!notification.read" class="w-2 h-2 bg-violet-500 rounded-full flex-shrink-0 mt-1"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-4 py-3 border-t border-white/5">
+              <button
+                @click="showNotifications = false"
+                class="w-full text-xs text-zinc-400 hover:text-white transition-colors text-center"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </teleport>
   </div>
 </template>
 
 <style scoped>
-@reference "../assets/css/main.css";
-
-.glass-card {
-  @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl;
-}
-
-.btn-primary {
-  @apply px-4 py-2.5 bg-primary text-primary-foreground rounded-xl font-semibold shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200;
-}
-
 .folder-tree {
   user-select: none;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3c3c3c;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4c4c4c;
 }
 </style>

@@ -30,6 +30,7 @@ import {
 } from 'lucide-vue-next';
 import { LAYOUT_PRESETS, SPLASH_STYLES } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
+import ColorPicker from './ui/ColorPicker.vue';
 
 // Props
 const props = defineProps<{
@@ -74,6 +75,15 @@ const emit = defineEmits<{
 }>();
 
 // UI State
+const showCardColorPicker = ref(false)
+const showAccentColorPicker = ref(false)
+const showSplashColorPicker = ref(false)
+const showSplashTextColorPicker = ref(false)
+const cardColorPickerRef = ref<HTMLElement | null>(null)
+const accentColorPickerRef = ref<HTMLElement | null>(null)
+const splashColorPickerRef = ref<HTMLElement | null>(null)
+const splashTextColorPickerRef = ref<HTMLElement | null>(null)
+
 const expandedSections = ref({
   layout: true,
   spacing: true,
@@ -500,17 +510,27 @@ const verticalAlignOptions = [
         <div class="flex items-center justify-between">
           <label class="text-[10px] text-zinc-500">Cor do Card</label>
           <div class="flex items-center gap-2">
-            <input
-              type="color"
-              :value="globalStyles?.cardColor ?? '#ffffff'"
-              @input="updateGlobal('cardColor', ($event.target as HTMLInputElement).value)"
-              class="w-6 h-6 rounded border border-zinc-700 cursor-pointer"
-            />
+            <div ref="cardColorPickerRef" class="relative">
+              <div
+                class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                :style="{ backgroundColor: globalStyles?.cardColor ?? '#ffffff' }"
+                @click="showCardColorPicker = true"
+              ></div>
+              <ColorPicker
+                :show="showCardColorPicker"
+                :model-value="globalStyles?.cardColor ?? '#ffffff'"
+                :trigger-element="cardColorPickerRef"
+                @update:show="showCardColorPicker = $event"
+                @update:model-value="(val: string) => updateGlobal('cardColor', val)"
+              />
+            </div>
             <input
               type="text"
-              :value="globalStyles?.cardColor ?? '#ffffff'"
-              @blur="updateGlobal('cardColor', ($event.target as HTMLInputElement).value)"
-              class="w-16 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[9px] font-mono"
+              :value="(globalStyles?.cardColor ?? '#ffffff').replace('#', '').toUpperCase()"
+              @blur="updateGlobal('cardColor', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
+              class="w-16 bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
+              placeholder="FFFFFF"
+              maxlength="6"
             />
           </div>
         </div>
@@ -519,17 +539,27 @@ const verticalAlignOptions = [
         <div class="flex items-center justify-between">
           <label class="text-[10px] text-zinc-500">Cor de Destaque</label>
           <div class="flex items-center gap-2">
-            <input
-              type="color"
-              :value="globalStyles?.accentColor ?? '#dc2626'"
-              @input="updateGlobal('accentColor', ($event.target as HTMLInputElement).value)"
-              class="w-6 h-6 rounded border border-zinc-700 cursor-pointer"
-            />
+            <div ref="accentColorPickerRef" class="relative">
+              <div
+                class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                :style="{ backgroundColor: globalStyles?.accentColor ?? '#dc2626' }"
+                @click="showAccentColorPicker = true"
+              ></div>
+              <ColorPicker
+                :show="showAccentColorPicker"
+                :model-value="globalStyles?.accentColor ?? '#dc2626'"
+                :trigger-element="accentColorPickerRef"
+                @update:show="showAccentColorPicker = $event"
+                @update:model-value="(val: string) => updateGlobal('accentColor', val)"
+              />
+            </div>
             <input
               type="text"
-              :value="globalStyles?.accentColor ?? '#dc2626'"
-              @blur="updateGlobal('accentColor', ($event.target as HTMLInputElement).value)"
-              class="w-16 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[9px] font-mono"
+              :value="(globalStyles?.accentColor ?? '#dc2626').replace('#', '').toUpperCase()"
+              @blur="updateGlobal('accentColor', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
+              class="w-16 bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
+              placeholder="DC2626"
+              maxlength="6"
             />
           </div>
         </div>
@@ -590,21 +620,37 @@ const verticalAlignOptions = [
         <div class="grid grid-cols-2 gap-2">
           <div class="space-y-1">
             <label class="text-[9px] text-zinc-500">Cor Splash</label>
-            <input
-              type="color"
-              :value="globalStyles?.splashColor ?? '#dc2626'"
-              @input="updateGlobal('splashColor', ($event.target as HTMLInputElement).value)"
-              class="w-full h-7 rounded border border-zinc-700 cursor-pointer"
-            />
+            <div ref="splashColorPickerRef" class="relative">
+              <div
+                class="w-full h-7 rounded border border-white/10 cursor-pointer relative overflow-hidden"
+                :style="{ backgroundColor: globalStyles?.splashColor ?? '#dc2626' }"
+                @click="showSplashColorPicker = true"
+              ></div>
+              <ColorPicker
+                :show="showSplashColorPicker"
+                :model-value="globalStyles?.splashColor ?? '#dc2626'"
+                :trigger-element="splashColorPickerRef"
+                @update:show="showSplashColorPicker = $event"
+                @update:model-value="(val: string) => updateGlobal('splashColor', val)"
+              />
+            </div>
           </div>
           <div class="space-y-1">
             <label class="text-[9px] text-zinc-500">Texto Splash</label>
-            <input
-              type="color"
-              :value="globalStyles?.splashTextColor ?? '#ffffff'"
-              @input="updateGlobal('splashTextColor', ($event.target as HTMLInputElement).value)"
-              class="w-full h-7 rounded border border-zinc-700 cursor-pointer"
-            />
+            <div ref="splashTextColorPickerRef" class="relative">
+              <div
+                class="w-full h-7 rounded border border-white/10 cursor-pointer relative overflow-hidden"
+                :style="{ backgroundColor: globalStyles?.splashTextColor ?? '#ffffff' }"
+                @click="showSplashTextColorPicker = true"
+              ></div>
+              <ColorPicker
+                :show="showSplashTextColorPicker"
+                :model-value="globalStyles?.splashTextColor ?? '#ffffff'"
+                :trigger-element="splashTextColorPickerRef"
+                @update:show="showSplashTextColorPicker = $event"
+                @update:model-value="(val: string) => updateGlobal('splashTextColor', val)"
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -28,10 +28,16 @@ export default defineNuxtRouteMiddleware((to) => {
   let isAuthenticated = false
 
   if (import.meta.server) {
-    // Server-side: use request event
-    const event = useRequestEvent()
-    const cookieHeader = event?.node?.req?.headers?.cookie
-    isAuthenticated = getCookie('authenticated', cookieHeader) === 'true'
+    // Server-side: use request event (with error handling)
+    try {
+      const event = useRequestEvent()
+      const cookieHeader = event?.node?.req?.headers?.cookie
+      isAuthenticated = getCookie('authenticated', cookieHeader) === 'true'
+    } catch (error) {
+      // If we can't access the event, assume not authenticated
+      console.warn('[Auth Middleware] Could not access request event:', error)
+      isAuthenticated = false
+    }
   } else {
     // Client-side: use document.cookie
     isAuthenticated = getCookie('authenticated') === 'true'

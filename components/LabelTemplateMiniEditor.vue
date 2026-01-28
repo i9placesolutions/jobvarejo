@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { LabelTemplate } from '~/types/label-template'
+import ColorPicker from './ui/ColorPicker.vue'
 import { AVAILABLE_FONT_FAMILIES } from '~/utils/font-catalog'
 
 const props = defineProps<{
@@ -632,7 +633,19 @@ watch(
                 </div>
                 <div>
                   <label class="text-[10px] text-zinc-500">Cor</label>
-                  <input type="color" class="w-full h-8 rounded border border-zinc-700 bg-zinc-800" :value="current('fill', '#ffffff')" @input="patch('fill', ($event.target as HTMLInputElement).value)" />
+                  <div class="relative w-full">
+                    <div
+                      class="w-full h-8 rounded border border-white/10 cursor-pointer relative overflow-hidden"
+                      :style="{ backgroundColor: current('fill', '#ffffff') }"
+                      @click="showFillColorPicker = true"
+                    ></div>
+                    <ColorPicker
+                      :show="showFillColorPicker"
+                      :model-value="current('fill', '#ffffff')"
+                      @update:show="showFillColorPicker = $event"
+                      @update:model-value="(val: string) => patch('fill', val)"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -670,11 +683,35 @@ watch(
               <div class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="text-[10px] text-zinc-500">Fill</label>
-                  <input type="color" class="w-full h-8 rounded border border-zinc-700 bg-zinc-800" :value="current('fill', '#ffffff')" @input="patch('fill', ($event.target as HTMLInputElement).value)" />
+                  <div class="relative w-full">
+                    <div
+                      class="w-full h-8 rounded border border-white/10 cursor-pointer relative overflow-hidden"
+                      :style="{ backgroundColor: current('fill', '#ffffff') }"
+                      @click="showFillColorPicker2 = true"
+                    ></div>
+                    <ColorPicker
+                      :show="showFillColorPicker2"
+                      :model-value="current('fill', '#ffffff')"
+                      @update:show="showFillColorPicker2 = $event"
+                      @update:model-value="(val: string) => patch('fill', val)"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label class="text-[10px] text-zinc-500">Stroke</label>
-                  <input type="color" class="w-full h-8 rounded border border-zinc-700 bg-zinc-800" :value="current('stroke', '#000000')" @input="patch('stroke', ($event.target as HTMLInputElement).value)" />
+                  <div class="relative w-full">
+                    <div
+                      class="w-full h-8 rounded border border-white/10 cursor-pointer relative overflow-hidden"
+                      :style="{ backgroundColor: current('stroke', '#000000') }"
+                      @click="showStrokeColorPicker = true"
+                    ></div>
+                    <ColorPicker
+                      :show="showStrokeColorPicker"
+                      :model-value="current('stroke', '#000000')"
+                      @update:show="showStrokeColorPicker = $event"
+                      @update:model-value="(val: string) => patch('stroke', val)"
+                    />
+                  </div>
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-2">

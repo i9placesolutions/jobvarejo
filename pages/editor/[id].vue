@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed } from 'vue'
-import EditorCanvas from '~/components/EditorCanvas.vue'
 import { useProject } from '~/composables/useProject'
+import EditorCanvas from '~/components/EditorCanvas.vue'
 
 // Get project ID from route
 const route = useRoute()
@@ -15,7 +15,7 @@ definePageMeta({
 })
 
 // Use project composable
-const { project, loadProjectDB, saveStatus, lastSavedAt, hasUnsavedChanges, triggerAutoSave, cancelAutoSave } = useProject()
+const { project, activePage, loadProjectDB, saveStatus, lastSavedAt, hasUnsavedChanges, triggerAutoSave, cancelAutoSave } = useProject()
 
 // Load project on mount
 onMounted(async () => {
@@ -97,7 +97,7 @@ const saveColor = computed(() => {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <span class="text-xs font-medium text-white">{{ project.name }}</span>
+        <span class="text-xs font-medium text-white">{{ activePage?.name || 'Sem título' }}</span>
       </div>
 
       <!-- Save Status Indicator -->
@@ -111,8 +111,15 @@ const saveColor = computed(() => {
     </div>
 
     <!-- Editor Canvas -->
-    <div class="flex-1 overflow-hidden">
-      <EditorCanvas @auto-save="triggerAutoSave" />
+    <div class="flex-1 min-h-0 overflow-hidden">
+      <ClientOnly>
+        <EditorCanvas @auto-save="triggerAutoSave" />
+        <template #fallback>
+          <div class="flex items-center justify-center h-full text-zinc-500">
+            Carregando editor...
+          </div>
+        </template>
+      </ClientOnly>
     </div>
   </div>
 </template>
