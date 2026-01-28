@@ -192,7 +192,6 @@ watch(showLabelTemplatesModal, async (open) => {
 
 const addFrame = () => {
     if (!canvas.value) return;
-    const center = getCenterOfView();
 
     const frameWidth = 1080;
     const frameHeight = 1350;
@@ -209,10 +208,22 @@ const addFrame = () => {
         return `Frame ${maxN + 1}`;
     };
 
+    // Calculate zoom to fit frame in viewport with padding
+    const canvasWidth = canvas.value.getWidth() || 800;
+    const canvasHeight = canvas.value.getHeight() || 600;
+    const padding = 80; // Padding around frame
+    const zoomX = (canvasWidth - padding * 2) / frameWidth;
+    const zoomY = (canvasHeight - padding * 2) / frameHeight;
+    const fitZoom = Math.min(zoomX, zoomY, 1); // Don't zoom more than 100%
+    
+    // Center position for the frame
+    const centerX = frameWidth / 2;
+    const centerY = frameHeight / 2;
+
     // Create Frame Rect - CENTRALIZADO
     const frame = new fabric.Rect({
-        left: center.x,
-        top: center.y,
+        left: centerX,
+        top: centerY,
         originX: 'center',
         originY: 'center',
         width: frameWidth,
@@ -249,6 +260,15 @@ const addFrame = () => {
     // Frames devem ficar atrás do conteúdo (evita bloquear drag/seleção de imagens)
     ensureFramesBelowContents();
     canvas.value.setActiveObject(frame);
+    
+    // Adjust zoom and center viewport to fit the frame
+    canvas.value.setZoom(fitZoom);
+    const vpt = canvas.value.viewportTransform || [1, 0, 0, 1, 0, 0];
+    // Center the frame in viewport
+    vpt[4] = (canvasWidth - frameWidth * fitZoom) / 2;
+    vpt[5] = (canvasHeight - frameHeight * fitZoom) / 2;
+    canvas.value.setViewportTransform(vpt);
+    
     canvas.value.requestRenderAll();
     
     // Force update canvasObjects immediately so LayersPanel shows the new frame
@@ -5933,10 +5953,16 @@ const setupSnapping = () => {
 
     const getSnapTargets = (exclude: any) => {
         const all = canvas.value!.getObjects();
+        // Get the parent frame ID of the object being moved (if any)
+        const parentFrameId = (exclude as any)?.parentFrameId as string | undefined;
+        
         return all.filter((o: any) => {
             if (!o || o === exclude) return false;
             if (o.excludeFromExport || isControl(o)) return false;
             if (o.id === 'artboard-bg' || o.id === 'guide-vertical' || o.id === 'guide-horizontal') return false;
+            // CRITICAL: Exclude the parent frame from snap targets to prevent the object
+            // from being "stuck" snapping to its own container
+            if (parentFrameId && o.isFrame && o._customId === parentFrameId) return false;
             return true;
         });
     };
@@ -5944,7 +5970,6 @@ const setupSnapping = () => {
     let lastPointer = { x: 0, y: 0 };
     let constrainAxis: 'x' | 'y' | null = null;
     let constrainRef = { left: 0, top: 0 };
-    const altLabels = { visible: false, items: [] as { x: number; y: number; text: string }[] };
 
     const getPointer = (evt: MouseEvent) => {
         const el = canvasEl.value || canvas.value?.getElement?.();
@@ -5961,13 +5986,17 @@ const setupSnapping = () => {
     canvas.value.on('object:moving', (e: any) => {
         const obj = e.target;
         const evt = e.e as MouseEvent | undefined;
+        
+        // Hide guides by default
+        verticalGuide.set({ visible: false });
+        horizontalGuide.set({ visible: false });
+        
+        // Skip for frames and controls
         if (!obj || obj.isFrame || isControl(obj)) {
-            verticalGuide.set({ visible: false });
-            horizontalGuide.set({ visible: false });
-            altLabels.visible = false;
             return;
         }
 
+        // SmartObject containment
         if (obj.group && (obj.group as any).isSmartObject) {
             const parentGroup = obj.group;
             const cardW = (parentGroup as any)._cardWidth || parentGroup.width;
@@ -5979,10 +6008,10 @@ const setupSnapping = () => {
             if (obj.originY === 'center') { minY = -halfH + objH / 2; maxY = halfH - objH / 2; } else if (obj.originY === 'top') { maxY = halfH - objH; }
             if (obj.left < minX) obj.set('left', minX); if (obj.left > maxX) obj.set('left', maxX);
             if (obj.top < minY) obj.set('top', minY); if (obj.top > maxY) obj.set('top', maxY);
-            verticalGuide.set({ visible: false }); horizontalGuide.set({ visible: false });
             return;
         }
 
+        // ProductZone containment
         if (obj.group && (obj.group as any).isProductZone) {
             const zone = obj.group;
             const zoneW = (zone as any)._zoneWidth || zone.width;
@@ -5994,11 +6023,10 @@ const setupSnapping = () => {
             if (obj.originY === 'center') { minY = -halfH + cardH / 2; maxY = halfH - cardH / 2; }
             if (obj.left < minX) obj.set('left', minX); if (obj.left > maxX) obj.set('left', maxX);
             if (obj.top < minY) obj.set('top', minY); if (obj.top > maxY) obj.set('top', maxY);
-            verticalGuide.set({ visible: false }); horizontalGuide.set({ visible: false });
             return;
         }
 
-        // SHIFT: mover em linha reta (horizontal ou vertical)
+        // SHIFT: constrain to axis
         if (evt?.shiftKey) {
             const ptr = getPointer(evt);
             const dx = Math.abs(ptr.x - lastPointer.x);
@@ -6010,151 +6038,101 @@ const setupSnapping = () => {
             if (constrainAxis === 'x') obj.set('top', constrainRef.top);
             if (constrainAxis === 'y') obj.set('left', constrainRef.left);
             lastPointer = ptr;
-            verticalGuide.set({ visible: false });
-            horizontalGuide.set({ visible: false });
-            if (evt) lastPointer = getPointer(evt);
-            canvas.value!.requestRenderAll();
             return;
         }
         constrainAxis = null;
         if (evt) lastPointer = getPointer(evt);
 
-        const b = getBounds(obj);
-        let vVisible = false, hVisible = false;
-        let vX = 0, vY1 = -5000, vY2 = 5000, hY = 0, hX1 = -5000, hX2 = 5000;
-
+        // === SMART GUIDES - Calculate on-the-fly ===
         const targets = getSnapTargets(obj);
-        const pageW = activePage.value?.width ?? 1080;
-        const pageH = activePage.value?.height ?? 1920;
-        const pageCX = pageW / 2, pageCY = pageH / 2;
+        const b = getBounds(obj);
+        
+        // Get parent frame for snap targets (if object is inside a frame)
+        const parentFrameId = (obj as any).parentFrameId as string | undefined;
+        const parentFrame = parentFrameId ? canvas.value!.getObjects().find((o: any) => o.isFrame && o._customId === parentFrameId) : null;
+        
+        // Page/frame dimensions for center snap
+        let pageCX: number, pageCY: number;
+        if (parentFrame) {
+            // Snap to parent frame center
+            const fb = getBounds(parentFrame);
+            pageCX = fb.centerX;
+            pageCY = fb.centerY;
+        } else {
+            // Snap to page center
+            const pageW = activePage.value?.width ?? 1080;
+            const pageH = activePage.value?.height ?? 1920;
+            pageCX = pageW / 2;
+            pageCY = pageH / 2;
+        }
 
-        type VAlign = 'left' | 'right' | 'center';
-        type HAlign = 'top' | 'bottom' | 'center';
-        let bestV = { d: SNAP_RANGE + 1, x: 0, align: 'center' as VAlign };
-        let bestH = { d: SNAP_RANGE + 1, y: 0, align: 'center' as HAlign };
+        let vVisible = false, hVisible = false;
+        let vX = 0, hY = 0;
+        let bestVDist = SNAP_RANGE + 1;
+        let bestHDist = SNAP_RANGE + 1;
+        let snapVType: 'left' | 'right' | 'center' = 'center';
+        let snapHType: 'top' | 'bottom' | 'center' = 'center';
 
-        const trySnapV = (x: number) => {
-            const dl = Math.abs(b.left - x), dr = Math.abs(b.right - x), dc = Math.abs(b.centerX - x);
-            const d = Math.min(dl, dr, dc);
-            const align: VAlign = d === dl ? 'left' : d === dr ? 'right' : 'center';
-            if (d < bestV.d) bestV = { d, x, align };
-        };
-        const trySnapH = (y: number) => {
-            const dt = Math.abs(b.top - y), db = Math.abs(b.bottom - y), dc = Math.abs(b.centerY - y);
-            const d = Math.min(dt, db, dc);
-            const align: HAlign = d === dt ? 'top' : d === db ? 'bottom' : 'center';
-            if (d < bestH.d) bestH = { d, y, align };
-        };
+        // Check snap against page/frame center
+        const dcx = Math.abs(b.centerX - pageCX);
+        const dcy = Math.abs(b.centerY - pageCY);
+        if (dcx < bestVDist) { bestVDist = dcx; vX = pageCX; snapVType = 'center'; }
+        if (dcy < bestHDist) { bestHDist = dcy; hY = pageCY; snapHType = 'center'; }
 
+        // Check snap against other objects
         for (const t of targets) {
             const tb = getBounds(t);
-            trySnapV(tb.left); trySnapV(tb.right); trySnapV(tb.centerX);
-            trySnapH(tb.top); trySnapH(tb.bottom); trySnapH(tb.centerY);
-        }
-        trySnapV(pageCX);
-        trySnapH(pageCY);
-
-        const frameId = (obj as any).parentFrameId as string | undefined;
-        const frame = frameId ? getFrameById(frameId) : null;
-        if (frame) {
-            const fb = getBounds(frame);
-            trySnapV(fb.centerX);
-            trySnapH(fb.centerY);
-        }
-
-        // Espaçamento igual: mesma distância entre objetos (ex.: produtos, cards)
-        const rowThreshold = 20;
-        const rowObjs = [obj, ...targets].filter((o: any) => {
-            const ob = getBounds(o);
-            return Math.abs(ob.centerY - b.centerY) <= rowThreshold;
-        });
-        rowObjs.sort((a: any, b: any) => getBounds(a).centerX - getBounds(b).centerX);
-        let idx = rowObjs.indexOf(obj);
-        if (idx > 0 && idx < rowObjs.length - 1) {
-            const leftB = getBounds(rowObjs[idx - 1]);
-            const rightB = getBounds(rowObjs[idx + 1]);
-            trySnapV((leftB.right + rightB.left) / 2);
-        }
-        const colObjs = [obj, ...targets].filter((o: any) => {
-            const ob = getBounds(o);
-            return Math.abs(ob.centerX - b.centerX) <= rowThreshold;
-        });
-        colObjs.sort((a: any, b: any) => getBounds(a).centerY - getBounds(b).centerY);
-        idx = colObjs.indexOf(obj);
-        if (idx > 0 && idx < colObjs.length - 1) {
-            const topB = getBounds(colObjs[idx - 1]);
-            const bottomB = getBounds(colObjs[idx + 1]);
-            trySnapH((topB.bottom + bottomB.top) / 2);
+            
+            // Vertical snaps (left-left, right-right, left-right, right-left, center-center)
+            const dl = Math.abs(b.left - tb.left);
+            const dr = Math.abs(b.right - tb.right);
+            const dlr = Math.abs(b.left - tb.right);
+            const drl = Math.abs(b.right - tb.left);
+            const dc = Math.abs(b.centerX - tb.centerX);
+            
+            if (dl < bestVDist) { bestVDist = dl; vX = tb.left; snapVType = 'left'; }
+            if (dr < bestVDist) { bestVDist = dr; vX = tb.right; snapVType = 'right'; }
+            if (dlr < bestVDist) { bestVDist = dlr; vX = tb.right; snapVType = 'left'; }
+            if (drl < bestVDist) { bestVDist = drl; vX = tb.left; snapVType = 'right'; }
+            if (dc < bestVDist) { bestVDist = dc; vX = tb.centerX; snapVType = 'center'; }
+            
+            // Horizontal snaps (top-top, bottom-bottom, top-bottom, bottom-top, center-center)
+            const dt = Math.abs(b.top - tb.top);
+            const dbo = Math.abs(b.bottom - tb.bottom);
+            const dtb = Math.abs(b.top - tb.bottom);
+            const dbt = Math.abs(b.bottom - tb.top);
+            const dcy2 = Math.abs(b.centerY - tb.centerY);
+            
+            if (dt < bestHDist) { bestHDist = dt; hY = tb.top; snapHType = 'top'; }
+            if (dbo < bestHDist) { bestHDist = dbo; hY = tb.bottom; snapHType = 'bottom'; }
+            if (dtb < bestHDist) { bestHDist = dtb; hY = tb.bottom; snapHType = 'top'; }
+            if (dbt < bestHDist) { bestHDist = dbt; hY = tb.top; snapHType = 'bottom'; }
+            if (dcy2 < bestHDist) { bestHDist = dcy2; hY = tb.centerY; snapHType = 'center'; }
         }
 
-        if (bestV.d <= SNAP_RANGE) {
-            const x = bestV.x;
-            if (bestV.align === 'left') setObjLeft(obj, x);
-            else if (bestV.align === 'right') setObjRight(obj, x);
-            else setObjCenterX(obj, x);
-            vVisible = true; vX = x;
+        // Apply snap ONLY if within range
+        if (bestVDist <= SNAP_RANGE) {
+            if (snapVType === 'left') setObjLeft(obj, vX);
+            else if (snapVType === 'right') setObjRight(obj, vX);
+            else setObjCenterX(obj, vX);
+            vVisible = true;
         }
-        if (bestH.d <= SNAP_RANGE) {
-            const y = bestH.y;
-            if (bestH.align === 'top') setObjTop(obj, y);
-            else if (bestH.align === 'bottom') setObjBottom(obj, y);
-            else setObjCenterY(obj, y);
-            hVisible = true; hY = y;
-        }
-
-        verticalGuide.set({ x1: vX, y1: vY1, x2: vX, y2: vY2, visible: vVisible });
-        horizontalGuide.set({ x1: hX1, y1: hY, x2: hX2, y2: hY, visible: hVisible });
-
-        if (evt?.altKey) {
-            altLabels.visible = true;
-            altLabels.items = [];
-            const nb = getBounds(obj);
-            for (const t of targets) {
-                const tb = getBounds(t);
-                const dx = Math.abs(nb.centerX - tb.centerX);
-                const dy = Math.abs(nb.centerY - tb.centerY);
-                if (dx < 8 && dy < 8) continue;
-                const midX = (nb.centerX + tb.centerX) / 2;
-                const midY = (nb.centerY + tb.centerY) / 2;
-                if (dx >= dy)
-                    altLabels.items.push({ x: midX, y: midY, text: `${Math.round(dx)} px` });
-                else
-                    altLabels.items.push({ x: midX, y: midY, text: `${Math.round(dy)} px` });
-            }
-            if (altLabels.items.length > 3) altLabels.items = altLabels.items.slice(0, 3);
-        } else {
-            altLabels.visible = false;
+        
+        if (bestHDist <= SNAP_RANGE) {
+            if (snapHType === 'top') setObjTop(obj, hY);
+            else if (snapHType === 'bottom') setObjBottom(obj, hY);
+            else setObjCenterY(obj, hY);
+            hVisible = true;
         }
 
-        if (evt) lastPointer = getPointer(evt);
-        canvas.value!.requestRenderAll();
+        // Show guides
+        if (vVisible) verticalGuide.set({ x1: vX, y1: -5000, x2: vX, y2: 5000, visible: true });
+        if (hVisible) horizontalGuide.set({ x1: -5000, y1: hY, x2: 5000, y2: hY, visible: true });
     });
-
-    const drawAltOverlay = () => {
-        if (!canvas.value || !altLabels.visible || altLabels.items.length === 0) return;
-        const ctx = canvas.value.getContext();
-        const vpt = canvas.value.viewportTransform!;
-        ctx.save();
-        ctx.font = '11px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = GUIDE_COLOR;
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-        ctx.lineWidth = 2;
-        for (const it of altLabels.items) {
-            const p = fabric.util.transformPoint({ x: it.x, y: it.y }, vpt);
-            ctx.strokeText(it.text, p.x, p.y);
-            ctx.fillText(it.text, p.x, p.y);
-        }
-        ctx.restore();
-    };
-
-    canvas.value.on('after:render', drawAltOverlay);
 
     canvas.value.on('mouse:up', () => {
         verticalGuide.set({ visible: false });
         horizontalGuide.set({ visible: false });
-        altLabels.visible = false;
         constrainAxis = null;
         canvas.value!.requestRenderAll();
         if (selectedObjectRef.value) triggerRef(selectedObjectRef);
@@ -6520,23 +6498,17 @@ const setupReactivity = () => {
              return;
         }
 
-        // CRITICAL: Frame clipping must be per-frame (clipContent) and update LIVE while dragging.
-        // - If the object enters a frame: set parentFrameId + apply that frame's clip (if enabled).
-        // - If the object leaves the frame: clear parentFrameId + remove the owned clip immediately.
-        // This guarantees multiple frames can have independent clipContent settings.
+        // Frame clipping: update parentFrameId when object enters/leaves a frame
         if (target && !target.isFrame && !target.excludeFromExport) {
             const currentParentId = (target as any).parentFrameId as (string | undefined);
             const frameUnder = findFrameUnderObject(target);
             const nextParentId = frameUnder?._customId as (string | undefined);
 
+            // Only update clip when parent actually changes (not on every move)
             if (nextParentId !== currentParentId) {
                 (target as any).parentFrameId = nextParentId;
+                syncObjectFrameClip(target);
             }
-
-            // Always sync clip while moving so it matches the *current* parent frame (or clears when none).
-            syncObjectFrameClip(target);
-            target.setCoords?.();
-            canvas.value.requestRenderAll();
         }
         // Optimized Zone Move
         if (target && isLikelyProductZone(target)) {
@@ -11728,6 +11700,9 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
                 o.lockMovementY = false;
             }
         });
+
+        // Frames sempre atrás do conteúdo (evita bloquear drag do mouse em imagens)
+        ensureFramesBelowContents();
 
         canvasObjects.value = [...canvas.value.getObjects()];
         canvas.value.requestRenderAll();
