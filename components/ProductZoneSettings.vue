@@ -30,7 +30,9 @@ import {
 } from 'lucide-vue-next';
 import { LAYOUT_PRESETS, SPLASH_STYLES } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
+import type { GlobalStyles } from '~/types/product-zone';
 import ColorPicker from './ui/ColorPicker.vue';
+import { AVAILABLE_FONT_FAMILIES } from '~/utils/font-catalog';
 
 // Props
 const props = defineProps<{
@@ -52,15 +54,7 @@ const props = defineProps<{
     borderColor?: string;
     showBorder?: boolean;
   };
-  globalStyles?: {
-    cardColor?: string;
-    accentColor?: string;
-    isProdBgTransparent?: boolean;
-    splashStyle?: string;
-    splashColor?: string;
-    splashTextColor?: string;
-    splashTemplateId?: string;
-  };
+  globalStyles?: Partial<GlobalStyles>;
   labelTemplates?: LabelTemplate[];
 }>();
 
@@ -79,10 +73,20 @@ const showCardColorPicker = ref(false)
 const showAccentColorPicker = ref(false)
 const showSplashColorPicker = ref(false)
 const showSplashTextColorPicker = ref(false)
+const showCardBorderColorPicker = ref(false)
+const showProdNameColorPicker = ref(false)
+const showSplashFillPicker = ref(false)
+const showPriceTextColorPicker = ref(false)
+const showPriceCurrencyColorPicker = ref(false)
 const cardColorPickerRef = ref<HTMLElement | null>(null)
 const accentColorPickerRef = ref<HTMLElement | null>(null)
 const splashColorPickerRef = ref<HTMLElement | null>(null)
 const splashTextColorPickerRef = ref<HTMLElement | null>(null)
+const cardBorderColorPickerRef = ref<HTMLElement | null>(null)
+const prodNameColorPickerRef = ref<HTMLElement | null>(null)
+const splashFillPickerRef = ref<HTMLElement | null>(null)
+const priceTextColorPickerRef = ref<HTMLElement | null>(null)
+const priceCurrencyColorPickerRef = ref<HTMLElement | null>(null)
 
 const expandedSections = ref({
   layout: true,
@@ -111,6 +115,18 @@ const updateZone = (prop: string, value: any) => {
 const updateGlobal = (prop: string, value: any) => {
   emit('update:globalStyles', prop, value);
 };
+
+const FONT_DATALIST_ID = 'product-zone-fonts';
+
+const weightOptions = [
+  { label: '300', value: 300 },
+  { label: '400', value: 400 },
+  { label: '500', value: 500 },
+  { label: '600', value: 600 },
+  { label: '700', value: 700 },
+  { label: '800', value: 800 },
+  { label: '900', value: 900 }
+];
 
 const handlePaddingChange = (value: number) => {
   if (syncGaps.value) {
@@ -505,6 +521,9 @@ const verticalAlignOptions = [
       </button>
       
       <div v-if="expandedSections.styles" class="space-y-3 animate-in slide-in-from-top-2 duration-200">
+        <datalist :id="FONT_DATALIST_ID">
+          <option v-for="f in AVAILABLE_FONT_FAMILIES" :key="f" :value="f">{{ f }}</option>
+        </datalist>
         
         <!-- Card Color -->
         <div class="flex items-center justify-between">
@@ -574,6 +593,70 @@ const verticalAlignOptions = [
           />
           <span class="text-[10px] text-zinc-400">Fundo transparente nos cards</span>
         </label>
+
+        <!-- Card Border -->
+        <div class="grid grid-cols-2 gap-2">
+          <div class="space-y-1.5">
+            <label class="text-[10px] text-zinc-500">Arredondamento (Card)</label>
+            <div class="flex items-center gap-2">
+              <input
+                type="range"
+                :value="globalStyles?.cardBorderRadius ?? 8"
+                @input="updateGlobal('cardBorderRadius', Number(($event.target as HTMLInputElement).value))"
+                min="0"
+                max="40"
+                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+              />
+              <span class="w-10 text-center text-[10px] font-mono text-zinc-400">
+                {{ Math.round(globalStyles?.cardBorderRadius ?? 8) }}
+              </span>
+            </div>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-[10px] text-zinc-500">Borda (Card)</label>
+            <div class="flex items-center gap-2">
+              <input
+                type="range"
+                :value="globalStyles?.cardBorderWidth ?? 0"
+                @input="updateGlobal('cardBorderWidth', Number(($event.target as HTMLInputElement).value))"
+                min="0"
+                max="12"
+                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+              />
+              <span class="w-10 text-center text-[10px] font-mono text-zinc-400">
+                {{ Math.round(globalStyles?.cardBorderWidth ?? 0) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <label class="text-[10px] text-zinc-500">Cor da borda (Card)</label>
+          <div class="flex items-center gap-2">
+            <div ref="cardBorderColorPickerRef" class="relative">
+              <div
+                class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                :style="{ backgroundColor: globalStyles?.cardBorderColor ?? '#000000' }"
+                @click="showCardBorderColorPicker = true"
+              ></div>
+              <ColorPicker
+                :show="showCardBorderColorPicker"
+                :model-value="globalStyles?.cardBorderColor ?? '#000000'"
+                :trigger-element="cardBorderColorPickerRef"
+                @update:show="showCardBorderColorPicker = $event"
+                @update:model-value="(val: string) => updateGlobal('cardBorderColor', val)"
+              />
+            </div>
+            <input
+              type="text"
+              :value="(globalStyles?.cardBorderColor ?? '#000000').replace('#', '').toUpperCase()"
+              @blur="updateGlobal('cardBorderColor', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
+              class="w-16 bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
+              placeholder="000000"
+              maxlength="6"
+            />
+          </div>
+        </div>
 
         <!-- Label Template -->
         <div class="space-y-1.5">
@@ -650,6 +733,349 @@ const verticalAlignOptions = [
                 @update:show="showSplashTextColorPicker = $event"
                 @update:model-value="(val: string) => updateGlobal('splashTextColor', val)"
               />
+            </div>
+          </div>
+        </div>
+
+        <div class="h-px bg-white/5" />
+
+        <!-- Product Name Typography -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Nome do Produto</span>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[10px] text-zinc-500">Fonte</label>
+            <input
+              type="text"
+              :value="globalStyles?.prodNameFont ?? 'Inter'"
+              :list="FONT_DATALIST_ID"
+              @change="updateGlobal('prodNameFont', ($event.target as HTMLInputElement).value)"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              placeholder="Inter"
+            />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Cor</label>
+              <div class="flex items-center gap-2">
+                <div ref="prodNameColorPickerRef" class="relative">
+                  <div
+                    class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                    :style="{ backgroundColor: globalStyles?.prodNameColor ?? '#000000' }"
+                    @click="showProdNameColorPicker = true"
+                  ></div>
+                  <ColorPicker
+                    :show="showProdNameColorPicker"
+                    :model-value="globalStyles?.prodNameColor ?? '#000000'"
+                    :trigger-element="prodNameColorPickerRef"
+                    @update:show="showProdNameColorPicker = $event"
+                    @update:model-value="(val: string) => updateGlobal('prodNameColor', val)"
+                  />
+                </div>
+                <input
+                  type="text"
+                  :value="(globalStyles?.prodNameColor ?? '#000000').replace('#', '').toUpperCase()"
+                  @blur="updateGlobal('prodNameColor', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
+                  class="w-full bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
+                  placeholder="000000"
+                  maxlength="6"
+                />
+              </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Peso</label>
+              <select
+                :value="globalStyles?.prodNameWeight ?? 700"
+                @change="updateGlobal('prodNameWeight', Number(($event.target as HTMLSelectElement).value))"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              >
+                <option v-for="w in weightOptions" :key="w.value" :value="w.value">{{ w.label }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Escala (tamanho)</label>
+              <div class="flex items-center gap-2">
+                <input
+                  type="range"
+                  :value="Math.round(((globalStyles?.prodNameScale ?? 1) * 100))"
+                  @input="updateGlobal('prodNameScale', Number(($event.target as HTMLInputElement).value) / 100)"
+                  min="60"
+                  max="170"
+                  class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+                />
+                <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
+                  {{ Math.round((globalStyles?.prodNameScale ?? 1) * 100) }}%
+                </span>
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Altura da linha</label>
+              <div class="flex items-center gap-2">
+                <input
+                  type="range"
+                  :value="Math.round(((globalStyles?.prodNameLineHeight ?? 1.05) * 100))"
+                  @input="updateGlobal('prodNameLineHeight', Number(($event.target as HTMLInputElement).value) / 100)"
+                  min="80"
+                  max="180"
+                  class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+                />
+                <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
+                  {{ (globalStyles?.prodNameLineHeight ?? 1.05).toFixed(2) }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Transformação</label>
+              <select
+                :value="globalStyles?.prodNameTransform ?? 'upper'"
+                @change="updateGlobal('prodNameTransform', ($event.target as HTMLSelectElement).value)"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              >
+                <option value="upper">MAIÚSCULO</option>
+                <option value="lower">minúsculo</option>
+                <option value="none">Normal</option>
+              </select>
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Alinhamento</label>
+              <select
+                :value="globalStyles?.prodNameAlign ?? 'center'"
+                @change="updateGlobal('prodNameAlign', ($event.target as HTMLSelectElement).value)"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              >
+                <option value="left">Esquerda</option>
+                <option value="center">Centro</option>
+                <option value="right">Direita</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="h-px bg-white/5" />
+
+        <!-- Price Tag (Etiqueta) -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Etiqueta de Preço</span>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[10px] text-zinc-500">Tamanho da etiqueta (escala)</label>
+            <div class="flex items-center gap-2">
+              <input
+                type="range"
+                :value="Math.round(((globalStyles?.splashScale ?? 1) * 100))"
+                @input="updateGlobal('splashScale', Number(($event.target as HTMLInputElement).value) / 100)"
+                min="60"
+                max="170"
+                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+              />
+              <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
+                {{ Math.round((globalStyles?.splashScale ?? 1) * 100) }}%
+              </span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Fundo da etiqueta</label>
+              <div class="flex items-center gap-2">
+                <div ref="splashFillPickerRef" class="relative">
+                  <div
+                    class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                    :style="{ backgroundColor: globalStyles?.splashFill ?? '#000000' }"
+                    @click="showSplashFillPicker = true"
+                  ></div>
+                  <ColorPicker
+                    :show="showSplashFillPicker"
+                    :model-value="globalStyles?.splashFill ?? '#000000'"
+                    :trigger-element="splashFillPickerRef"
+                    @update:show="showSplashFillPicker = $event"
+                    @update:model-value="(val: string) => updateGlobal('splashFill', val)"
+                  />
+                </div>
+                <input
+                  type="text"
+                  :value="(globalStyles?.splashFill ?? '#000000').replace('#', '').toUpperCase()"
+                  @blur="updateGlobal('splashFill', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
+                  class="w-full bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
+                  placeholder="000000"
+                  maxlength="6"
+                />
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Arredondamento</label>
+              <div class="flex items-center gap-2">
+                <input
+                  type="range"
+                  :value="Math.round(((globalStyles?.splashRoundness ?? 1) * 100))"
+                  @input="updateGlobal('splashRoundness', Number(($event.target as HTMLInputElement).value) / 100)"
+                  min="0"
+                  max="100"
+                  class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+                />
+                <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
+                  {{ Math.round((globalStyles?.splashRoundness ?? 1) * 100) }}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Fonte (Preço)</label>
+              <input
+                type="text"
+                :value="globalStyles?.priceFont ?? 'Inter'"
+                :list="FONT_DATALIST_ID"
+                @change="updateGlobal('priceFont', ($event.target as HTMLInputElement).value)"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                placeholder="Inter"
+              />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] text-zinc-500">Peso (Preço)</label>
+              <select
+                :value="(globalStyles?.priceFontWeight as any) ?? ''"
+                @change="updateGlobal('priceFontWeight', (($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : undefined))"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              >
+                <option value="">Padrão</option>
+                <option v-for="w in weightOptions" :key="w.value" :value="w.value">{{ w.label }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div class="space-y-1">
+              <div class="flex items-center justify-between">
+                <label class="text-[9px] text-zinc-500">Texto (Preço)</label>
+                <button
+                  v-if="globalStyles?.priceTextColor"
+                  type="button"
+                  class="text-[9px] text-zinc-400 hover:text-zinc-200 transition-colors"
+                  @click="updateGlobal('priceTextColor', undefined)"
+                  title="Voltar para a cor do modelo"
+                >
+                  Padrão
+                </button>
+              </div>
+              <div class="flex items-center gap-2">
+                <div ref="priceTextColorPickerRef" class="relative">
+                  <div
+                    class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                    :style="{
+                      backgroundColor: globalStyles?.priceTextColor ?? 'transparent',
+                      backgroundImage: globalStyles?.priceTextColor ? undefined : 'linear-gradient(45deg, rgba(255,255,255,0.12) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.12) 75%, transparent 75%, transparent)',
+                      backgroundSize: globalStyles?.priceTextColor ? undefined : '8px 8px'
+                    }"
+                    @click="showPriceTextColorPicker = true"
+                  ></div>
+                  <ColorPicker
+                    :show="showPriceTextColorPicker"
+                    :model-value="globalStyles?.priceTextColor ?? '#ffffff'"
+                    :trigger-element="priceTextColorPickerRef"
+                    @update:show="showPriceTextColorPicker = $event"
+                    @update:model-value="(val: string) => updateGlobal('priceTextColor', val)"
+                  />
+                </div>
+                <input
+                  type="text"
+                  :value="globalStyles?.priceTextColor ? globalStyles.priceTextColor.replace('#', '').toUpperCase() : ''"
+                  @blur="(e) => { const v = (e.target as HTMLInputElement).value.trim(); updateGlobal('priceTextColor', v ? ('#' + v.replace('#', '')) : undefined) }"
+                  class="w-full bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
+                  placeholder="PADRÃO"
+                  maxlength="6"
+                />
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <div class="flex items-center justify-between">
+                <label class="text-[9px] text-zinc-500">Cifra (R$)</label>
+                <button
+                  v-if="globalStyles?.priceCurrencyColor"
+                  type="button"
+                  class="text-[9px] text-zinc-400 hover:text-zinc-200 transition-colors"
+                  @click="updateGlobal('priceCurrencyColor', undefined)"
+                  title="Voltar para a cor do modelo"
+                >
+                  Padrão
+                </button>
+              </div>
+              <div class="flex items-center gap-2">
+                <div ref="priceCurrencyColorPickerRef" class="relative">
+                  <div
+                    class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                    :style="{
+                      backgroundColor: globalStyles?.priceCurrencyColor ?? 'transparent',
+                      backgroundImage: globalStyles?.priceCurrencyColor ? undefined : 'linear-gradient(45deg, rgba(255,255,255,0.12) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.12) 75%, transparent 75%, transparent)',
+                      backgroundSize: globalStyles?.priceCurrencyColor ? undefined : '8px 8px'
+                    }"
+                    @click="showPriceCurrencyColorPicker = true"
+                  ></div>
+                  <ColorPicker
+                    :show="showPriceCurrencyColorPicker"
+                    :model-value="globalStyles?.priceCurrencyColor ?? '#000000'"
+                    :trigger-element="priceCurrencyColorPickerRef"
+                    @update:show="showPriceCurrencyColorPicker = $event"
+                    @update:model-value="(val: string) => updateGlobal('priceCurrencyColor', val)"
+                  />
+                </div>
+                <input
+                  type="text"
+                  :value="globalStyles?.priceCurrencyColor ? globalStyles.priceCurrencyColor.replace('#', '').toUpperCase() : ''"
+                  @blur="(e) => { const v = (e.target as HTMLInputElement).value.trim(); updateGlobal('priceCurrencyColor', v ? ('#' + v.replace('#', '')) : undefined) }"
+                  class="w-full bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
+                  placeholder="PADRÃO"
+                  maxlength="6"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[10px] text-zinc-500">Escala dos textos (Etiqueta)</label>
+            <div class="flex items-center gap-2">
+              <input
+                type="range"
+                :value="Math.round(((globalStyles?.splashTextScale ?? 1) * 100))"
+                @input="updateGlobal('splashTextScale', Number(($event.target as HTMLInputElement).value) / 100)"
+                min="70"
+                max="160"
+                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+              />
+              <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
+                {{ Math.round((globalStyles?.splashTextScale ?? 1) * 100) }}%
+              </span>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[10px] text-zinc-500">Offset Y (Etiqueta)</label>
+            <div class="flex items-center gap-2">
+              <input
+                type="range"
+                :value="globalStyles?.splashOffsetY ?? 0"
+                @input="updateGlobal('splashOffsetY', Number(($event.target as HTMLInputElement).value))"
+                min="-120"
+                max="120"
+                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+              />
+              <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
+                {{ globalStyles?.splashOffsetY ?? 0 }}px
+              </span>
             </div>
           </div>
         </div>

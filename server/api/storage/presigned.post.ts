@@ -95,9 +95,12 @@ export default defineEventHandler(async (event) => {
         ContentType: contentType || 'application/octet-stream'
       })
     } else {
+      // CRITICAL: Disable checksum mode for S3-compatible storage (e.g. Contabo)
+      // that may return 500 when x-amz-checksum-mode=ENABLED is present in the presigned URL
       command = new GetObjectCommand({
         Bucket: config.bucket,
-        Key: key
+        Key: key,
+        ChecksumMode: 'DISABLED'
       })
     }
 

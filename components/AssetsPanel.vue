@@ -11,6 +11,7 @@ import { ShoppingCart, Sparkles } from 'lucide-vue-next'
 import { useFolder } from '~/composables/useFolder'
 import { useAuth } from '~/composables/useAuth'
 import { useSupabase } from '~/composables/useSupabase'
+import { useAiImageStudio } from '~/composables/useAiImageStudio'
 
 // Props
 const props = defineProps<{
@@ -44,6 +45,7 @@ interface Folder {
 const { folders: dbFolders, loadFolders, createFolder, updateFolder, deleteFolder, moveFolder } = useFolder()
 const auth = useAuth()
 const supabase = useSupabase()
+const aiStudio = useAiImageStudio()
 
 // Mapeamento asset_key -> folder_id para persistência de "mover para pasta"
 const assetFolderMap = ref<Map<string, string | null>>(new Map())
@@ -186,6 +188,12 @@ watch(activeCategory, (newCat) => {
     if (newCat === 'uploads') fetchAssets()
     if (newCat === 'brand') fetchBrands()
     if (newCat === 'recents') fetchRecents()
+})
+
+// When AI Studio creates a new image, refresh libraries
+watch(() => aiStudio.refreshTick.value, async () => {
+    await fetchAssets()
+    await fetchRecents()
 })
 
 onMounted(async () => {
@@ -588,6 +596,7 @@ const handleFileUpload = async (event: Event) => {
         }
     }
 }
+
 </script>
 
 <template>
@@ -610,13 +619,24 @@ const handleFileUpload = async (event: Event) => {
 
         <div v-if="activeCategory === 'uploads' || activeCategory === 'brand' || (activeCategory === 'folders' && currentFolderId)" class="px-3 py-2 border-b border-white/5">
             <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleFileUpload" />
-            <Button size="sm" class="w-full text-xs" @click="triggerUpload" :disabled="isUploading">
-                <template v-if="isUploading">Enviando...</template>
-                <template v-else>
-                    <Upload class="w-3.5 h-3.5 mr-2" />
-                    {{ activeCategory === 'brand' ? 'Upload Marca' : 'Fazer Upload' }}
-                </template>
-            </Button>
+            <div class="grid grid-cols-2 gap-2">
+                <Button size="sm" class="w-full text-xs" @click="triggerUpload" :disabled="isUploading">
+                    <template v-if="isUploading">Enviando...</template>
+                    <template v-else>
+                        <Upload class="w-3.5 h-3.5 mr-2" />
+                        {{ activeCategory === 'brand' ? 'Upload Marca' : 'Fazer Upload' }}
+                    </template>
+                </Button>
+                <Button
+                    size="sm"
+                    class="w-full text-xs"
+                    variant="secondary"
+                    @click="aiStudio.openStudio({ initial: { mode: 'generate', filenameBase: 'ai-image' }, applyMode: 'insert' })"
+                >
+                    <Sparkles class="w-3.5 h-3.5 mr-2" />
+                    Criar com IA
+                </Button>
+            </div>
             <p v-if="uploadError" class="text-[9px] text-red-400 mt-1">{{ uploadError }}</p>
         </div>
 
@@ -751,7 +771,6 @@ const handleFileUpload = async (event: Event) => {
             :items="contextMenuItems"
             @select="handleAction"
         />
-
 
 
         <!-- Action Dialog -->

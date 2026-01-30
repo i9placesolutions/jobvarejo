@@ -171,8 +171,12 @@ export interface GlobalStyles {
   prodNameFont?: string;
   prodNameColor?: string;
   prodNameSize?: number;
+  // Multiplier over the responsive default size (Fabric-based editor).
+  prodNameScale?: number;
   prodNameWeight?: number;
   prodNameAlign?: 'left' | 'center' | 'right';
+  prodNameLineHeight?: number;
+  prodNameTransform?: 'none' | 'upper' | 'lower';
   // Limite
   limitFont?: string;
   limitColor?: string;
@@ -186,9 +190,17 @@ export interface GlobalStyles {
   splashTemplateId?: string;
   splashOffsetY?: number;
   splashScale?: number;
+  // Label (price tag) advanced styling (zone-level overrides; does not mutate templates)
+  splashFill?: string;
+  splashStrokeWidth?: number;
+  splashRoundness?: number; // 0..1 (1 = pill)
+  splashTextScale?: number;
   // Price
   priceFont?: string;
   priceFontSize?: number;
+  priceFontWeight?: number | string;
+  priceTextColor?: string;
+  priceCurrencyColor?: string;
   currencySymbol?: string;
   // Tema
   theme?: 'light' | 'dark' | 'vibrant' | 'minimal';
@@ -327,13 +339,18 @@ export const DEFAULT_PRODUCT_ZONE: ProductZone = {
 export const DEFAULT_GLOBAL_STYLES: GlobalStyles = {
   cardColor: '#ffffff',
   cardBorderRadius: 8,
+  cardBorderColor: '#000000',
+  cardBorderWidth: 0,
   isProdBgTransparent: false,
   accentColor: '#dc2626',
   prodNameFont: 'Inter',
   prodNameColor: '#000000',
   prodNameSize: 24,
+  prodNameScale: 1,
   prodNameWeight: 700,
   prodNameAlign: 'center',
+  prodNameLineHeight: 1.05,
+  prodNameTransform: 'upper',
   limitColor: '#ef4444',
   limitSize: 14,
   splashStyle: 'classic',
@@ -341,8 +358,17 @@ export const DEFAULT_GLOBAL_STYLES: GlobalStyles = {
   splashTextColor: '#ffffff',
   splashTemplateId: undefined,
   splashScale: 1,
+  splashFill: '#000000',
+  splashStrokeWidth: undefined,
+  splashRoundness: 1,
+  splashTextScale: 1,
   priceFont: 'Arial',
   priceFontSize: 60,
+  priceFontWeight: undefined,
+  priceTextColor: undefined,
+  // Keep undefined by default to preserve the template's own currency color (ex: black on yellow circle).
+  // Users can override per design/zone via Product Zone settings.
+  priceCurrencyColor: undefined,
   currencySymbol: 'R$',
   theme: 'vibrant'
 };

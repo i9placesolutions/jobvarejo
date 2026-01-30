@@ -1,30 +1,111 @@
-import { processImage, downloadImage } from "~/server/utils/image-processor";
+import { processImageWithOptions, downloadImage } from "~/server/utils/image-processor";
 import { getS3Client } from "~/server/utils/s3";
 
-export default defineEventHandler(async (event) => {
-    const body = await readBody(event);
-    const { imageUrl } = body;
-
-    if (!imageUrl) {
-        throw createError({ statusCode: 400, statusMessage: "imageUrl is required" });
-    }
-
+const extractContaboKeyFromUrl = (rawUrl: string, bucketName: string): string | null => {
     try {
-        console.log('🎨 [Remove BG] Iniciando remoção de fundo para:', imageUrl);
+        const decoded = decodeURIComponent(rawUrl);
+        const urlObj = new URL(decoded);
+        const pathParts = decodeURIComponent(urlObj.pathname).split('/').filter(Boolean);
+        if (pathParts.length === 0) return null;
 
-        // Download image
-        const rawBuffer = await downloadImage(imageUrl);
+        // Path-style: /<bucket>/<key...>
+        if (pathParts[0] === bucketName) {
+            return pathParts.slice(1).join('/');
+        }
 
-        // Process (resize + remove BG + optimize)
-        const processedBuffer = await processImage(rawBuffer);
+        // Some URLs may include encoded ":" in bucketName; compare decoded parts
+        const decodedBucket = decodeURIComponent(bucketName);
+        if (pathParts[0] === decodedBucket) {
+            return pathParts.slice(1).join('/');
+        }
 
-        // Upload to S3
+        // Virtual-host style: https://<bucket>.<endpoint>/<key...>
+        const host = urlObj.hostname;
+        if (host.startsWith(`${bucketName}.`) || host.startsWith(`${decodedBucket}.`)) {
+            return pathParts.join('/');
+        }
+
+        return null;
+    } catch {
+        return null;
+    }
+};
+
+export default defineEventHandler(async (event) => {
+    try {
+        const contentType = getHeader(event, "content-type") || "";
+
+        let rawBuffer: Buffer | null = null;
+        let sourceLabel = "unknown";
+        let imageUrl: string | null = null;
+        let overwrite = false;
+
+        if (contentType.includes("multipart/form-data")) {
+            const form = await readMultipartFormData(event);
+            const file = form?.find((p) => p.name === "file") || form?.[0];
+            const overwriteField = form?.find((p) => p.name === "overwrite") as any;
+            overwrite = overwriteField?.data ? String(overwriteField.data).toLowerCase() === 'true' || String(overwriteField.data) === '1' : false;
+
+            if (!file?.data) {
+                throw createError({ statusCode: 400, statusMessage: "file is required" });
+            }
+
+            rawBuffer = file.data;
+            sourceLabel = file.filename || "uploaded file";
+        } else {
+            const body = await readBody(event);
+            const { imageUrl: bodyImageUrl, imageDataUrl, overwrite: bodyOverwrite } = body || {};
+            overwrite = bodyOverwrite === true || bodyOverwrite === 1 || bodyOverwrite === '1';
+
+            if (typeof imageDataUrl === "string" && imageDataUrl.startsWith("data:")) {
+                const match = /^data:([^;]+);base64,(.+)$/.exec(imageDataUrl);
+                if (!match) {
+                    throw createError({ statusCode: 400, statusMessage: "Invalid imageDataUrl" });
+                }
+                rawBuffer = Buffer.from(match[2], "base64");
+                sourceLabel = "data-url";
+            } else if (typeof bodyImageUrl === "string" && bodyImageUrl) {
+                imageUrl = bodyImageUrl;
+                sourceLabel = bodyImageUrl;
+                rawBuffer = await downloadImage(bodyImageUrl);
+            } else {
+                throw createError({ statusCode: 400, statusMessage: "imageUrl or file is required" });
+            }
+        }
+
+        console.log("🎨 [Remove BG] Iniciando remoção de fundo para:", sourceLabel);
+
         const config = useRuntimeConfig();
         const s3 = getS3Client();
         const bucketName = config.contaboBucket;
 
         const timestamp = Date.now();
-        const key = `uploads/bg-removed-${timestamp}.webp`;
+
+        // Resolve destination key for overwrite or temp output
+        let key: string | null = null;
+        let overwritten = false;
+        let outputFormat: 'webp' | 'png' = 'webp';
+
+        if (overwrite && imageUrl) {
+            const extractedKey = extractContaboKeyFromUrl(imageUrl, bucketName);
+            if (extractedKey) {
+                key = extractedKey;
+                overwritten = true;
+                const lower = extractedKey.toLowerCase();
+                outputFormat = lower.endsWith('.png') ? 'png' : 'webp';
+            }
+        }
+
+        if (!key) {
+            // Keep derived images out of the uploads library by default
+            key = `processed/bg-removed-${timestamp}.${outputFormat === 'png' ? 'png' : 'webp'}`;
+        }
+
+        // Process (resize + remove BG + optimize)
+        const processedBuffer = await processImageWithOptions(rawBuffer, { outputFormat });
+
+        // Upload to S3 (overwrite or new key)
+        const contentTypeOut = outputFormat === 'png' ? 'image/png' : 'image/webp';
 
         const { PutObjectCommand } = await import("@aws-sdk/client-s3");
 
@@ -32,20 +113,24 @@ export default defineEventHandler(async (event) => {
             Bucket: bucketName,
             Key: key,
             Body: processedBuffer,
-            ContentType: 'image/webp',
+            ContentType: contentTypeOut,
             ACL: 'public-read'
         });
 
         await s3.send(putCommand);
 
         // Generate public URL
-        const finalUrl = `https://${config.contaboEndpoint}/${bucketName}/${key}`;
+        const canonicalUrl = `https://${config.contaboEndpoint}/${bucketName}/${key}`;
+        const finalUrl = `${canonicalUrl}?v=${timestamp}`;
 
         console.log('✅ [Remove BG] Fundo removido com sucesso:', finalUrl);
 
         return {
             success: true,
-            url: finalUrl
+            url: finalUrl,
+            canonicalUrl,
+            key,
+            overwritten
         };
 
     } catch (err: any) {

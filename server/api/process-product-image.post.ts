@@ -40,9 +40,11 @@ export default defineEventHandler(async (event) => {
             
             if (match && match.Key) {
                 // Generate pre-signed URL (valid for 1 hour)
+                // ChecksumMode DISABLED for S3-compatible storage (e.g. Contabo) that may return 500
                 const getCommand = new GetObjectCommand({
                     Bucket: bucketName,
-                    Key: match.Key
+                    Key: match.Key,
+                    ChecksumMode: 'DISABLED'
                 });
                 const signedUrl = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
                 
@@ -115,9 +117,11 @@ export default defineEventHandler(async (event) => {
         await s3.send(putCommand);
         
         // Generate pre-signed URL for the new upload
+        // ChecksumMode DISABLED for S3-compatible storage (e.g. Contabo) that may return 500
         const getCommand = new GetObjectCommand({
             Bucket: bucketName,
-            Key: key
+            Key: key,
+            ChecksumMode: 'DISABLED'
         });
         const finalUrl = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
         

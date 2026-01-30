@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
         // Map S3 objects to our asset format
         const uploads = contents
             .filter(item => item.Key && !item.Key.endsWith('/')) // Filter out folders if any
+            .filter(item => !String(item.Key).startsWith('uploads/bg-removed-')) // Hide derived assets from list
             .map((item, index) => {
                 // Extract clean name from Key (uploads/timestamp-filename.ext)
                 const keyParts = item.Key!.split('/');

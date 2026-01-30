@@ -11,7 +11,7 @@ export default defineNuxtConfig({
     contaboSecretKey: process.env.CONTABO_SECRET_KEY,
     contaboBrandsBucket: process.env.CONTABO_BRANDS_BUCKET,
     contaboImportBucket: process.env.CONTABO_IMPORT_BUCKET,
-    openaiApiKey: process.env.NUXT_OPENAI_API_KEY,
+    openaiApiKey: process.env.NUXT_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
     serperApiKey: process.env.NUXT_SERPER_API_KEY,
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
 

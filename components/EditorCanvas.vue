@@ -7,8 +7,10 @@ import ProjectManager from './ProjectManager.vue'
 import SidebarLeft from './SidebarLeft.vue'
 import ProductReviewModal from './ProductReviewModal.vue'
 import LabelTemplateManager from './LabelTemplateManager.vue'
+import AiImageStudioModal from './AiImageStudioModal.vue'
 import ContextMenu from './ui/ContextMenu.vue'
 import { useProductZone } from '~/composables/useProductZone'
+import { useAiImageStudio } from '~/composables/useAiImageStudio'
 import { removeBackground } from "@imgly/background-removal"
 import type { LabelTemplate } from '~/types/label-template'
 import {
@@ -77,6 +79,44 @@ let globalMouseUpHandler: ((e: MouseEvent) => void) | null = null
 
 // Flag to track if canvas is destroyed (prevents errors after unmount)
 const isCanvasDestroyed = ref(false)
+
+// === AI Image Studio (global modal) ===
+const aiStudio = useAiImageStudio()
+const aiStudioOpen = aiStudio.open
+const aiStudioOptions = aiStudio.options
+const aiStudioUploads = ref<Array<{ id: string; name: string; url: string }>>([])
+
+const refreshAiStudioUploads = async () => {
+    try {
+        const data: any = await $fetch('/api/assets').catch(() => [])
+        if (Array.isArray(data)) {
+            aiStudioUploads.value = data.map((a: any) => ({ id: a.id, name: a.name, url: a.url }))
+        }
+    } catch (e) {
+        console.warn('[ai-studio] Falha ao carregar uploads:', e)
+    }
+}
+
+const guessAiSizeFromObject = (obj: any): '1024x1024' | '1024x1536' | '1536x1024' => {
+    const w = Math.max(1, Number(obj?.getScaledWidth?.() ?? ((obj?.width || 1) * (obj?.scaleX || 1))) || 1)
+    const h = Math.max(1, Number(obj?.getScaledHeight?.() ?? ((obj?.height || 1) * (obj?.scaleY || 1))) || 1)
+    const ar = w / h
+    if (ar > 1.15) return '1536x1024'
+    if (ar < 0.87) return '1024x1536'
+    return '1024x1024'
+}
+
+const findImageTargetInSelection = (obj: any): { img: any; parent: any | null } | null => {
+    if (!obj) return null
+    const t = String(obj.type || '').toLowerCase()
+    if (t === 'image') return { img: obj, parent: null }
+    if (t === 'group' || t === 'activeselection') {
+        const list = typeof obj.getObjects === 'function' ? obj.getObjects() : []
+        const img = (list || []).find((o: any) => String(o?.type || '').toLowerCase() === 'image')
+        return img ? { img, parent: obj } : null
+    }
+    return null
+}
 
 /**
  * Safe wrapper for requestRenderAll that checks if canvas is valid before rendering.
@@ -289,6 +329,7 @@ const productZoneState = useProductZone()
 // Label templates (price splash models)
 const showLabelTemplatesModal = ref(false)
 const labelTemplates = ref<LabelTemplate[]>([])
+const hasLoadedLabelTemplatesFromDb = ref(false)
 
 const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
 const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
@@ -297,12 +338,102 @@ const LABEL_TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio']
 
 const serializeLabelTemplatesForProject = () => {
     // Keep project JSON lean: previews can be regenerated client-side.
-    return (labelTemplates.value || []).map((t: any) => ({ ...t, previewDataUrl: undefined }))
+    // Avoid embedding DB/library templates into every project (keeps canvas_data smaller).
+    return (labelTemplates.value || [])
+        .filter((t: any) => !(t as any)?.__fromDb)
+        .map((t: any) => ({ ...t, previewDataUrl: undefined }))
 }
 
 const hydrateLabelTemplatesFromProjectJson = (json: any) => {
     const raw = json?.[LABEL_TEMPLATES_JSON_KEY]
-    if (Array.isArray(raw)) labelTemplates.value = raw as any
+    if (!Array.isArray(raw)) return;
+
+    const existing = (labelTemplates.value || []) as any[];
+    const byId = new Map<string, any>(existing.map(t => [String(t?.id), t]));
+    for (const t of raw as any[]) {
+        if (!t?.id) continue;
+        const prev = byId.get(String(t.id));
+        byId.set(String(t.id), {
+            ...(prev || {}),
+            ...t,
+            previewDataUrl: (t as any).previewDataUrl ?? prev?.previewDataUrl
+        });
+    }
+    labelTemplates.value = Array.from(byId.values()) as any;
+}
+
+const normalizeDbLabelTemplate = (row: any): LabelTemplate | null => {
+    if (!row?.id || !row?.group) return null;
+    return {
+        id: String(row.id),
+        name: String(row.name || 'Etiqueta'),
+        kind: (row.kind || 'priceGroup-v1') as any,
+        group: row.group ?? (row as any)['group'],
+        previewDataUrl: row.preview_data_url ?? undefined,
+        createdAt: row.created_at ? String(row.created_at) : new Date().toISOString(),
+        updatedAt: row.updated_at ? String(row.updated_at) : (row.created_at ? String(row.created_at) : new Date().toISOString())
+    };
+}
+
+const loadLabelTemplatesFromDb = async () => {
+    if (hasLoadedLabelTemplatesFromDb.value) return;
+    hasLoadedLabelTemplatesFromDb.value = true;
+
+    try {
+        const userId = currentUser.value?.id || undefined;
+        const resp: any = await $fetch('/api/label-templates', { method: 'GET', query: userId ? { userId } : {} });
+        const rows = Array.isArray(resp?.templates) ? resp.templates : [];
+        const incoming = rows.map(normalizeDbLabelTemplate).filter(Boolean) as LabelTemplate[];
+        if (!incoming.length) return;
+
+        const existing = (labelTemplates.value || []) as any[];
+        const byId = new Map<string, any>(existing.map(t => [String(t?.id), t]));
+
+        for (const t of incoming) {
+            const prev = byId.get(String(t.id));
+            if (prev) {
+                // Keep local templates local; just merge DB updates on top.
+                byId.set(String(t.id), {
+                    ...prev,
+                    ...t,
+                    previewDataUrl: t.previewDataUrl ?? prev.previewDataUrl
+                });
+            } else {
+                byId.set(String(t.id), { ...t, __fromDb: true });
+            }
+        }
+        labelTemplates.value = Array.from(byId.values()) as any;
+    } catch (err) {
+        console.warn('[labelTemplates] Falha ao carregar modelos do banco', err);
+    }
+}
+
+const upsertLabelTemplateToDb = async (tpl: LabelTemplate) => {
+    if (!tpl || (tpl as any).isBuiltIn) return;
+    try {
+        await $fetch('/api/label-templates', {
+            method: 'POST',
+            body: {
+                id: tpl.id,
+                userId: currentUser.value?.id ?? null,
+                name: tpl.name,
+                kind: tpl.kind,
+                group: tpl.group,
+                previewDataUrl: tpl.previewDataUrl ?? null
+            }
+        });
+    } catch (err) {
+        console.warn('[labelTemplates] Falha ao salvar modelo no banco', err);
+    }
+}
+
+const deleteLabelTemplateFromDb = async (templateId: string) => {
+    if (!templateId) return;
+    try {
+        await $fetch('/api/label-templates', { method: 'DELETE', query: { id: templateId } });
+    } catch (err) {
+        console.warn('[labelTemplates] Falha ao excluir modelo do banco', err);
+    }
 }
 
 const activeZoneTemplateId = () => {
@@ -381,6 +512,7 @@ const ungroupSelection = () => {
 
 watch(showLabelTemplatesModal, async (open) => {
     if (!open) return;
+    await loadLabelTemplatesFromDb();
     await ensureBuiltInDefaultLabelTemplate();
     await ensureBuiltInAtacarejoLabelTemplate();
     // Generate missing previews lazily (not persisted in the project JSON).
@@ -2648,6 +2780,7 @@ const applyColorStyle = (styleId: string) => {
 const historyStack = ref<string[]>([]);
 const historyIndex = ref(-1);
 const isHistoryProcessing = ref(false); // Flag to prevent loop
+let isZoneCascadeDelete = false;
 
 const showDeletePageModal = ref(false)
 
@@ -2903,7 +3036,7 @@ const renderProducts = (products: any[]) => {
             const optimalSize = productZoneState.getOptimalImageSize(product);
             
             if(items[0]) { // BG
-                items[0].set({ width: product.width, height: product.height, fill: product.backgroundColor });
+                items[0].set({ width: product.width, height: product.height, fill: product.backgroundColor || '#ffffff' });
             }
             if(items[1]) { // Textbox
                 items[1].set({ 
@@ -2994,13 +3127,59 @@ watch(activePage, async (newPage, oldPage) => {
 	            
 	            // Restore label templates stored alongside the Fabric JSON (persisted per page).
 	            hydrateLabelTemplatesFromProjectJson(newPage.canvasData);
-	            
+
+	            // CRITICAL: Pre-process images to generate fresh presigned URLs for Contabo images
+	            // This prevents errors when old presigned URLs have expired
+	            const canvasDataToLoad = JSON.parse(JSON.stringify(newPage.canvasData));
+	            if (canvasDataToLoad.objects && Array.isArray(canvasDataToLoad.objects)) {
+	                const contaboImages = canvasDataToLoad.objects.filter((obj: any) => {
+	                    const t = (obj?.type || '').toLowerCase();
+	                    const isImage = t === 'image';
+	                    const hasSrc = obj?.src && typeof obj.src === 'string';
+	                    const decodedSrc = hasSrc ? decodeURIComponent(obj.src) : '';
+	                    const isContabo = hasSrc && (decodedSrc.includes('contabostorage.com') || obj.src.includes('contabostorage.com'));
+	                    return isImage && hasSrc && isContabo;
+	                });
+
+	                if (contaboImages.length > 0) {
+	                    console.log(`🔄 watch.deep: Gerando URLs presignadas para ${contaboImages.length} imagem(ns) da Contabo...`);
+	                    const imagesToRemove: any[] = [];
+	                    for (const imgObj of contaboImages) {
+	                        try {
+	                            const key = extractContaboKey(imgObj.src);
+	                            if (!key) {
+	                                imagesToRemove.push(imgObj);
+	                                continue;
+	                            }
+
+	                            const newUrl = await generatePresignedUrl(key);
+	                            if (newUrl) {
+	                                console.log(`✅ URL presignada gerada para imagem: ${key.substring(0, 50)}...`);
+	                                imgObj.src = newUrl;
+	                            } else {
+	                                console.error(`❌ Falha ao gerar URL presignada para: ${key.substring(0, 50)}...`);
+	                                imagesToRemove.push(imgObj);
+	                            }
+	                        } catch (err) {
+	                            console.error(`❌ Erro ao gerar URL presignada:`, err);
+	                            imagesToRemove.push(imgObj);
+	                        }
+	                    }
+
+	                    // Remove images that failed to generate new presigned URLs
+	                    if (imagesToRemove.length > 0) {
+	                        console.warn(`⚠️ watch.deep: Removendo ${imagesToRemove.length} imagem(ns) que falharam ao gerar novas URLs...`);
+	                        canvasDataToLoad.objects = canvasDataToLoad.objects.filter((obj: any) => !imagesToRemove.includes(obj));
+	                    }
+	                }
+	            }
+
 	            // Track whether we loaded successfully and whether we had to degrade (missing images)
 	            let didLoadNewPage = false;
 	            let degradedNewPage = false;
 	            try {
 	                try {
-	                    await canvas.value.loadFromJSON(newPage.canvasData);
+	                    await canvas.value.loadFromJSON(canvasDataToLoad);
 	                    didLoadNewPage = true;
 	                } catch (imageLoadErr: any) {
 	                    const errorStr = imageLoadErr?.message || imageLoadErr?.toString?.() || '';
@@ -3015,7 +3194,8 @@ watch(activePage, async (newPage, oldPage) => {
 	                    console.warn('⚠️ Erro ao carregar imagem durante loadFromJSON:', imageLoadErr);
 	                    console.warn('   Tentando gerar novas URLs presignadas para imagens da Contabo...');
 
-	                    const safeCanvasData = JSON.parse(JSON.stringify(newPage.canvasData));
+	                    // IMPORTANT: Use the pre-processed canvasDataToLoad instead of newPage.canvasData
+	                    const safeCanvasData = JSON.parse(JSON.stringify(canvasDataToLoad));
 	                    if (safeCanvasData?.objects && Array.isArray(safeCanvasData.objects)) {
 	                        const imagesToUpdate: any[] = [];
 	                        
@@ -3033,7 +3213,8 @@ watch(activePage, async (newPage, oldPage) => {
 	                        }
 
 	                        console.log(`🔄 Gerando novas URLs presignadas para ${imagesToUpdate.length} imagem(ns)...`);
-	                        
+
+	                        const imagesToRemove: any[] = [];
 	                        // Generate new presigned URLs for each image
 	                        for (const imgObj of imagesToUpdate) {
 	                            try {
@@ -3041,9 +3222,10 @@ watch(activePage, async (newPage, oldPage) => {
 	                                const key = extractContaboKey(imgObj.src);
 	                                if (!key) {
 	                                    console.warn(`⚠️ Não foi possível extrair chave da URL: ${imgObj.src?.substring(0, 80)}...`);
+	                                    imagesToRemove.push(imgObj);
 	                                    continue;
 	                                }
-	                                
+
 	                                // Generate new presigned URL from key
 	                                const newUrl = await generatePresignedUrl(key);
 	                                if (newUrl) {
@@ -3051,13 +3233,19 @@ watch(activePage, async (newPage, oldPage) => {
 	                                    imgObj.src = newUrl;
 	                                } else {
 	                                    console.error(`❌ Falha ao gerar URL presignada para: ${key.substring(0, 50)}...`);
-	                                    // Keep original URL, Fabric will try to load it
+	                                    imagesToRemove.push(imgObj);
 	                                }
 	                            } catch (err) {
 	                                console.error(`❌ Erro ao gerar URL presignada:`, err);
 	                                console.error(`   URL original: ${imgObj.src?.substring(0, 100)}`);
-	                                // Keep original URL
+	                                imagesToRemove.push(imgObj);
 	                            }
+	                        }
+
+	                        // Remove images that failed to generate new presigned URLs
+	                        if (imagesToRemove.length > 0) {
+	                            console.warn(`⚠️ Removendo ${imagesToRemove.length} imagem(ns) que falharam ao gerar novas URLs...`);
+	                            safeCanvasData.objects = safeCanvasData.objects.filter((obj: any) => !imagesToRemove.includes(obj));
 	                        }
 
 	                        // Try loading again with updated URLs
@@ -3069,7 +3257,8 @@ watch(activePage, async (newPage, oldPage) => {
 	                            return updatedObj && updatedObj.src === img.src; // URL didn't change
 	                        });
 	                    } else {
-	                        await canvas.value.loadFromJSON(newPage.canvasData);
+	                        // No objects array, use pre-processed data
+	                        await canvas.value.loadFromJSON(canvasDataToLoad);
 	                        didLoadNewPage = true;
 	                    }
 	                }
@@ -3083,36 +3272,44 @@ watch(activePage, async (newPage, oldPage) => {
 	                        if (ctx && typeof ctx.clearRect === 'function') {
 	                            canvas.value.clear();
 	                            await new Promise(resolve => setTimeout(resolve, 50));
-	                            await canvas.value.loadFromJSON(newPage.canvasData);
+	                            await canvas.value.loadFromJSON(canvasDataToLoad);
 	                        } else {
 	                            console.warn('⚠️ Contexto do canvas não está disponível, pulando clear()');
 	                            // Tentar carregar diretamente sem clear
-	                            await canvas.value.loadFromJSON(newPage.canvasData);
+	                            await canvas.value.loadFromJSON(canvasDataToLoad);
 	                        }
-	                    } catch (retryErr) {
-	                        console.error('❌ Erro ao recarregar após clear:', retryErr);
-	                        // Se ainda falhar, tentar apenas loadFromJSON sem clear
-	                        try {
-	                            // Last attempt: load without ANY images (never throw due to broken image)
-	                            const safeData = JSON.parse(JSON.stringify(newPage.canvasData));
-	                            if (safeData?.objects && Array.isArray(safeData.objects)) {
-	                                safeData.objects = safeData.objects.filter((obj: any) => obj?.type !== 'image');
-	                            }
-	                            await canvas.value.loadFromJSON(safeData);
-	                            didLoadNewPage = true;
-	                            degradedNewPage = true;
-	                            console.log('✅ loadFromJSON concluído sem imagens (fallback final)');
-	                        } catch (finalErr) {
-	                            console.error('❌ Erro final ao carregar:', finalErr);
-	                            throw finalErr;
-	                        }
-	                    }
-	                } else {
-	                    throw loadErr;
-	                }
-	            }
-	            // If we couldn't load, do NOT continue (prevents wiping saved data with empty state).
-	            if (!didLoadNewPage) {
+                    } catch (retryErr) {
+                        console.error('❌ Erro ao recarregar após clear:', retryErr);
+                        // Penúltima tentativa: substituir imagens Contabo por placeholder (mantém layout)
+                        try {
+                            const dataWithPlaceholders = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
+                            await canvas.value.loadFromJSON(dataWithPlaceholders);
+                            didLoadNewPage = true;
+                            degradedNewPage = true;
+                            console.log('✅ loadFromJSON concluído com placeholder para imagens que falharam');
+                        } catch (placeholderErr) {
+                            // Last attempt: load without ANY images (never throw due to broken image)
+                            try {
+                                const safeData = JSON.parse(JSON.stringify(canvasDataToLoad));
+                                if (safeData?.objects && Array.isArray(safeData.objects)) {
+                                    safeData.objects = safeData.objects.filter((obj: any) => obj?.type !== 'image');
+                                }
+                                await canvas.value.loadFromJSON(safeData);
+                                didLoadNewPage = true;
+                                degradedNewPage = true;
+                                console.log('✅ loadFromJSON concluído sem imagens (fallback final)');
+                            } catch (finalErr) {
+                                console.error('❌ Erro final ao carregar:', finalErr);
+                                throw finalErr;
+                            }
+                        }
+                    }
+                } else {
+                    throw loadErr;
+                }
+            }
+            // If we couldn't load, do NOT continue (prevents wiping saved data with empty state).
+            if (!didLoadNewPage) {
 	                isHistoryProcessing.value = false;
 	                return;
 	            }
@@ -3441,6 +3638,8 @@ const resizeCanvas = () => {
 onMounted(async () => {
   // Load collaborators
   await auth.getSession()
+  await loadLabelTemplatesFromDb()
+  await refreshAiStudioUploads()
   loadCollaborators()
   
   // Initialize Project Store ONLY if it's a new project (default ID)
@@ -3454,6 +3653,42 @@ onMounted(async () => {
   try {
     const fabricModule = await import('fabric');
     fabric = fabricModule; 
+
+    // PATCH: Fabric v7 can call `drawObject(ctx, false, {})` (no cache path),
+    // but `_drawClipPath` assumes a DrawContext with `parentClipPaths` and will crash.
+    // We harden `_drawClipPath` to fill missing context fields.
+    try {
+        const Base = (fabric as any)?.BaseFabricObject;
+        if (Base?.prototype && !(Base.prototype as any).__patchedClipPathContext) {
+            const originalDrawClipPath = Base.prototype._drawClipPath;
+            Base.prototype._drawClipPath = function (ctx: any, clipPath: any, context: any) {
+                const safeCtx = (context && typeof context === 'object') ? context : {};
+                if (!Array.isArray(safeCtx.parentClipPaths)) safeCtx.parentClipPaths = [];
+                if (typeof safeCtx.cacheTranslationX !== 'number') safeCtx.cacheTranslationX = 0;
+                if (typeof safeCtx.cacheTranslationY !== 'number') safeCtx.cacheTranslationY = 0;
+                if (typeof safeCtx.zoomX !== 'number') safeCtx.zoomX = 1;
+                if (typeof safeCtx.zoomY !== 'number') safeCtx.zoomY = 1;
+                // Ensure layer canvas has non-zero dimensions.
+                if (typeof safeCtx.width !== 'number' || safeCtx.width <= 0) {
+                    const w = (typeof this.getScaledWidth === 'function')
+                        ? this.getScaledWidth()
+                        : (Number(this.width || 0) * Number(this.scaleX || 1));
+                    safeCtx.width = Math.max(1, Math.ceil(Number(w) || 1));
+                }
+                if (typeof safeCtx.height !== 'number' || safeCtx.height <= 0) {
+                    const h = (typeof this.getScaledHeight === 'function')
+                        ? this.getScaledHeight()
+                        : (Number(this.height || 0) * Number(this.scaleY || 1));
+                    safeCtx.height = Math.max(1, Math.ceil(Number(h) || 1));
+                }
+                return originalDrawClipPath.call(this, ctx, clipPath, safeCtx);
+            };
+            (Base.prototype as any).__patchedClipPathContext = true;
+            console.log('🩹 Fabric patch aplicado: _drawClipPath context hardening');
+        }
+    } catch (e) {
+        console.warn('⚠️ Falha ao aplicar patch do Fabric (_drawClipPath):', e);
+    }
     
     if (canvasEl.value && wrapperEl.value) {
       try {
@@ -3740,19 +3975,22 @@ onMounted(async () => {
                           
                           if (contaboImages.length > 0) {
                               console.log(`🔄 Gerando URLs presignadas para ${contaboImages.length} imagem(ns) da Contabo...`);
+                              const imagesToRemove: any[] = [];
                               for (const imgObj of contaboImages) {
                                   try {
                                       console.log(`   Processando imagem: ${imgObj.src.substring(0, 100)}...`);
-                                      
+
                                       // Extract key from URL (works with both presigned and permanent URLs)
                                       const key = extractContaboKey(imgObj.src);
                                       if (!key) {
                                           console.warn(`⚠️ Não foi possível extrair chave da URL: ${imgObj.src.substring(0, 80)}...`);
+                                          // Mark for removal since we can't get a valid URL
+                                          imagesToRemove.push(imgObj);
                                           continue;
                                       }
-                                      
+
                                       console.log(`   Key extraída: ${key}`);
-                                      
+
                                       // Generate new presigned URL from key
                                       const newUrl = await generatePresignedUrl(key);
                                       if (newUrl) {
@@ -3761,11 +3999,21 @@ onMounted(async () => {
                                           imgObj.src = newUrl;
                                       } else {
                                           console.error(`❌ Falha ao gerar URL presignada para: ${key.substring(0, 50)}...`);
+                                          // Mark for removal since URL generation failed
+                                          imagesToRemove.push(imgObj);
                                       }
                                   } catch (err) {
                                       console.error(`❌ Erro ao gerar URL presignada para imagem:`, err);
                                       console.error(`   URL original: ${imgObj.src?.substring(0, 100)}`);
+                                      // Mark for removal on error
+                                      imagesToRemove.push(imgObj);
                                   }
+                              }
+
+                              // Remove images that failed to generate new presigned URLs
+                              if (imagesToRemove.length > 0) {
+                                  console.warn(`⚠️ Removendo ${imagesToRemove.length} imagem(ns) que falharam ao gerar novas URLs...`);
+                                  canvasDataToLoad.objects = canvasDataToLoad.objects.filter((obj: any) => !imagesToRemove.includes(obj));
                               }
                           } else {
                               console.log(`ℹ️ Nenhuma imagem Contabo encontrada para gerar URLs presignadas`);
@@ -3790,9 +4038,11 @@ onMounted(async () => {
                               if (isImageError) {
                                   console.warn('⚠️ Erro ao carregar imagem durante loadFromJSON:', imageLoadErr);
                                   console.warn('   Tentando gerar novas URLs presignadas para imagens da Contabo...');
-                                  
-                                  // Clone canvasData and generate new presigned URLs for Contabo images
-                                  const safeCanvasData = JSON.parse(JSON.stringify(page.canvasData));
+
+                                  // IMPORTANT: Use the pre-processed canvasDataToLoad instead of page.canvasData
+                                  // because canvasDataToLoad already has fresh presigned URLs from the pre-processing step
+                                  // Cloning to avoid mutating the original
+                                  const safeCanvasData = JSON.parse(JSON.stringify(canvasDataToLoad));
                                   if (safeCanvasData.objects && Array.isArray(safeCanvasData.objects)) {
                                       const imagesToUpdate: any[] = [];
                                       
@@ -3810,7 +4060,8 @@ onMounted(async () => {
                                       }
 
                                       console.log(`🔄 Gerando novas URLs presignadas para ${imagesToUpdate.length} imagem(ns)...`);
-                                      
+
+                                      const imagesToRemove: any[] = [];
                                       // Generate new presigned URLs for each image
                                       for (const imgObj of imagesToUpdate) {
                                           try {
@@ -3818,9 +4069,10 @@ onMounted(async () => {
                                               const key = extractContaboKey(imgObj.src);
                                               if (!key) {
                                                   console.warn(`⚠️ Não foi possível extrair chave da URL: ${imgObj.src?.substring(0, 80)}...`);
+                                                  imagesToRemove.push(imgObj);
                                                   continue;
                                               }
-                                              
+
                                               // Generate new presigned URL from key
                                               const newUrl = await generatePresignedUrl(key);
                                               if (newUrl) {
@@ -3828,13 +4080,19 @@ onMounted(async () => {
                                                   imgObj.src = newUrl;
                                               } else {
                                                   console.error(`❌ Falha ao gerar URL presignada para: ${key.substring(0, 50)}...`);
-                                                  // Keep original URL, Fabric will try to load it
+                                                  imagesToRemove.push(imgObj);
                                               }
                                           } catch (err) {
                                               console.error(`❌ Erro ao gerar URL presignada:`, err);
                                               console.error(`   URL original: ${imgObj.src?.substring(0, 100)}`);
-                                              // Keep original URL
+                                              imagesToRemove.push(imgObj);
                                           }
+                                      }
+
+                                      // Remove images that failed to generate new presigned URLs
+                                      if (imagesToRemove.length > 0) {
+                                          console.warn(`⚠️ Removendo ${imagesToRemove.length} imagem(ns) que falharam ao gerar novas URLs...`);
+                                          safeCanvasData.objects = safeCanvasData.objects.filter((obj: any) => !imagesToRemove.includes(obj));
                                       }
 
                                       // Try loading again with updated URLs
@@ -3846,8 +4104,8 @@ onMounted(async () => {
                                           return updatedObj && updatedObj.src === img.src; // URL didn't change
                                       });
                                   } else {
-                                      // No objects array, try loading as-is
-                                      await canvas.value.loadFromJSON(page.canvasData);
+                                      // No objects array, try loading with pre-processed data
+                                      await canvas.value.loadFromJSON(canvasDataToLoad);
                                       didLoadPage = true;
                                   }
                               } else {
@@ -4054,20 +4312,28 @@ onMounted(async () => {
                                   }
                               } catch (retryErr) {
                                   console.error('❌ Erro ao recarregar após clear:', retryErr);
-                                  // Se ainda falhar, tentar apenas loadFromJSON sem clear
+                                  // Penúltima tentativa: substituir imagens Contabo por placeholder (mantém layout)
                                   try {
-                                      // Last attempt: load without ANY images
-                                      const safeData = JSON.parse(JSON.stringify(page.canvasData));
-                                      if (safeData?.objects && Array.isArray(safeData.objects)) {
-                                          safeData.objects = safeData.objects.filter((obj: any) => obj?.type !== 'image');
-                                      }
-                                      await canvas.value.loadFromJSON(safeData);
+                                      const dataWithPlaceholders = replaceContaboImagesWithPlaceholder(page.canvasData);
+                                      await canvas.value.loadFromJSON(dataWithPlaceholders);
                                       didLoadPage = true;
                                       degradedPage = true;
-                                      console.log('✅ loadFromJSON concluído sem imagens (fallback final)');
-                                  } catch (finalErr) {
-                                      console.error('❌ Erro final ao carregar:', finalErr);
-                                      throw finalErr;
+                                      console.log('✅ loadFromJSON concluído com placeholder para imagens que falharam');
+                                  } catch (placeholderErr) {
+                                      // Last attempt: load without ANY images
+                                      try {
+                                          const safeData = JSON.parse(JSON.stringify(page.canvasData));
+                                          if (safeData?.objects && Array.isArray(safeData.objects)) {
+                                              safeData.objects = safeData.objects.filter((obj: any) => obj?.type !== 'image');
+                                          }
+                                          await canvas.value.loadFromJSON(safeData);
+                                          didLoadPage = true;
+                                          degradedPage = true;
+                                          console.log('✅ loadFromJSON concluído sem imagens (fallback final)');
+                                      } catch (finalErr) {
+                                          console.error('❌ Erro final ao carregar:', finalErr);
+                                          throw finalErr;
+                                      }
                                   }
                               }
                           } else {
@@ -4266,7 +4532,9 @@ onMounted(async () => {
                   // Important: DO NOT auto-save after a degraded load (missing images),
                   // otherwise we overwrite the stored JSON with placeholders/empty state.
                   if (!degradedPage) {
-                      saveCurrentState();
+                      // Allow overwriting to persist migrations/cleanups (e.g. removing legacy artboard-bg),
+                      // even if the resulting canvas ends up empty.
+                      saveCurrentState({ allowEmptyOverwrite: true, reason: 'post-load-cleanup' });
                   } else {
                       console.warn('⚠️ Carregamento degradado (imagens com erro). Pulando auto-save para não sobrescrever o projeto.');
                   }
@@ -4304,7 +4572,12 @@ onUnmounted(() => {
 
 // --- History & Keyboard ---
 // Ensure function is hoisted or accessible for updateObjectProperty
-let saveCurrentState = () => {}; 
+type SaveStateOptions = {
+    allowEmptyOverwrite?: boolean;
+    reason?: string;
+};
+
+let saveCurrentState: (opts?: SaveStateOptions) => void | Promise<void> = () => {}; 
 
 // Persist/restore Fabric viewport (pan/zoom) inside the stored canvas JSON.
 // Fabric's `toJSON()` does NOT include viewportTransform by default.
@@ -4354,6 +4627,7 @@ const CANVAS_CUSTOM_PROPS = [
     'isProductCard',
     'smartGridId',
     'parentZoneId',
+    '_zoneOrder',
     '_cardWidth',
     '_cardHeight',
     'subTargetCheck',
@@ -4551,13 +4825,51 @@ const generatePresignedUrl = async (urlOrKey: string): Promise<string | null> =>
     }
 };
 
+// 1x1 transparent PNG data URL - usado quando imagem Contabo falha (500) para permitir carregar o resto do canvas
+const PLACEHOLDER_IMAGE_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+/**
+ * Substitui src de imagens Contabo por placeholder para permitir loadFromJSON quando a URL retorna 500.
+ * Preserva layout; imagens quebradas aparecem como quadrado transparente.
+ * Processa recursivamente grupos aninhados.
+ */
+const replaceContaboImagesWithPlaceholder = (canvasData: any): any => {
+    const cloned = JSON.parse(JSON.stringify(canvasData));
+    if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned;
+    
+    let count = 0;
+    
+    // Função recursiva para processar objetos e grupos aninhados
+    const processObject = (obj: any): void => {
+        if (!obj) return;
+        
+        const objType = (obj.type || '').toLowerCase();
+        
+        // Se é uma imagem Contabo, substituir pelo placeholder
+        if (objType === 'image' && typeof obj.src === 'string' && obj.src.includes('contabostorage.com')) {
+            obj.src = PLACEHOLDER_IMAGE_DATA_URL;
+            count++;
+        }
+        
+        // Se é um grupo, processar seus objetos internos recursivamente
+        if (obj.objects && Array.isArray(obj.objects)) {
+            obj.objects.forEach((child: any) => processObject(child));
+        }
+    };
+    
+    cloned.objects.forEach((obj: any) => processObject(obj));
+    
+    if (count > 0) console.warn(`⚠️ Substituindo ${count} imagem(ns) Contabo por placeholder (falha 500)`);
+    return cloned;
+};
+
 // Flag global para evitar logs repetidos de frames faltando
 const missingFramesLogged = new Set<string>();
 
 const setupHistory = () => {
     if (!canvas.value) return;
 
-    const saveState = async () => {
+    const saveState = async (opts: SaveStateOptions = {}) => {
         if (isHistoryProcessing.value) return; // Prevent loop
         
         // Remove redo stack if new action happens (standard history behavior)
@@ -4823,8 +5135,11 @@ const setupHistory = () => {
 
              // CRITICAL: Não sobrescrever canvasData existente com um canvas vazio
              // Isso evita perder dados quando saveState é chamado acidentalmente com canvas vazio
-             if (objectCount === 0 && existingObjectCount > 0) {
-                 console.warn(`⚠️ Pulando salvamento: canvas está vazio (${objectCount} objetos) mas página já tem ${existingObjectCount} objetos salvos`);
+             if (!opts.allowEmptyOverwrite && objectCount === 0 && existingObjectCount > 0) {
+                 console.warn(`⚠️ Pulando salvamento: canvas está vazio (${objectCount} objetos) mas página já tem ${existingObjectCount} objetos salvos`, {
+                     pageIndex: project.activePageIndex,
+                     reason: opts.reason || 'unspecified'
+                 });
                  return;
              }
 
@@ -5017,7 +5332,7 @@ const setupHistory = () => {
 
     // Only save initial state if canvas has objects, or if page is completely new (no existing data)
     if (currentObjectCount > 0 || !pageHasData) {
-        saveState();
+        saveState({ reason: 'initial-history-capture' });
     } else {
         console.log('ℹ️ Pullando saveState inicial: canvas vazio mas página já tem dados');
     }
@@ -5025,7 +5340,7 @@ const setupHistory = () => {
     // Fabric Events to trigger Save
     canvas.value.on('object:added', (e: any) => {
         if (!isHistoryProcessing.value) {
-            saveState();
+            saveState({ allowEmptyOverwrite: true, reason: 'object:added' });
             triggerAutoSave(); // Auto-save to Contabo
         }
         updateScrollbars();
@@ -5037,19 +5352,51 @@ const setupHistory = () => {
         // For zones, run our normalization/layout first and save only once (prevents unstable undo states).
         if (obj && isLikelyProductZone(obj)) {
             handleObjectModified(e);
-            saveState();
+            saveState({ allowEmptyOverwrite: true, reason: 'object:modified(zone)' });
             triggerAutoSave(); // Auto-save to Contabo
             return;
         }
 
         handleObjectModified(e);
         // Save AFTER any normalization so each Ctrl+Z reverts one user action.
-        saveState();
+        saveState({ allowEmptyOverwrite: true, reason: 'object:modified' });
         triggerAutoSave(); // Auto-save to Contabo
     });
     canvas.value.on('object:removed', (e: any) => {
-        if (!isHistoryProcessing.value) {
-            saveState();
+        if (isHistoryProcessing.value) {
+            updateScrollbars();
+            return;
+        }
+
+        const obj = e?.target;
+        // Cascading delete: removing a zone must remove all its bound cards in a single undo step.
+        if (obj && isLikelyProductZone(obj) && !isZoneCascadeDelete) {
+            const zoneId = obj._customId;
+            if (zoneId) {
+                isZoneCascadeDelete = true;
+                try {
+                    const toRemove = canvas.value.getObjects().filter((o: any) => {
+                        if (!o || o.excludeFromExport) return false;
+                        const isCard = !!(o.isSmartObject || o.isProductCard || String(o.name || '').startsWith('product-card'));
+                        return isCard && o.parentZoneId === zoneId;
+                    });
+                    toRemove.forEach((child: any) => {
+                        try { canvas.value.remove(child); } catch (_) { /* ignore */ }
+                    });
+                } finally {
+                    isZoneCascadeDelete = false;
+                }
+            }
+
+            saveState({ allowEmptyOverwrite: true, reason: 'object:removed(zone+cascade)' });
+            triggerAutoSave(); // Auto-save to Contabo
+            updateScrollbars();
+            return;
+        }
+
+        // When cascading, skip intermediate saves for each child removal.
+        if (!isZoneCascadeDelete) {
+            saveState({ allowEmptyOverwrite: true, reason: 'object:removed' });
             triggerAutoSave(); // Auto-save to Contabo
         }
         updateScrollbars();
@@ -5065,6 +5412,123 @@ const handleObjectModified = (e: any) => {
         ensureZoneSanity(obj);
         normalizeZoneScale(obj);
         recalculateZoneLayout(obj, undefined, { save: false });
+        return;
+    }
+
+    // Product zone: dragging a card reorders the grid (snap back into slots on drop).
+    if ((obj.isSmartObject || obj.isProductCard || String(obj.name || '').startsWith('product-card')) && (obj as any).parentZoneId && canvas.value) {
+        const zoneId = (obj as any).parentZoneId as string;
+        const zone = canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && o?._customId === zoneId);
+        if (zone) {
+            ensureZoneSanity(zone);
+            const cards = getZoneChildren(zone);
+            if (cards.length > 0) {
+                // Ensure a stable order index exists.
+                const hasAllOrders = cards.every((c: any) => Number.isFinite((c as any)._zoneOrder));
+                if (!hasAllOrders) {
+                    cards
+                        .slice()
+                        .sort((a: any, b: any) => {
+                            const rowDiff = (a.top ?? 0) - (b.top ?? 0);
+                            if (Math.abs(rowDiff) > 50) return rowDiff;
+                            return (a.left ?? 0) - (b.left ?? 0);
+                        })
+                        .forEach((c: any, i: number) => ((c as any)._zoneOrder = i));
+                }
+
+                const ordered = cards.slice().sort((a: any, b: any) => ((a as any)._zoneOrder ?? 0) - ((b as any)._zoneOrder ?? 0));
+                const fromIndex = ordered.indexOf(obj);
+
+                // Find nearest slot index for the drop position.
+                const zoneRect = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
+                const padding = typeof zone._zonePadding === 'number' ? zone._zonePadding : (zone.padding ?? 20);
+                const gapX = zone.gapHorizontal ?? padding;
+                const gapY = zone.gapVertical ?? padding;
+                const layoutDirection = zone.layoutDirection || 'horizontal';
+                const verticalAlign = zone.verticalAlign || 'top';
+                const lastRowBehavior = zone.lastRowBehavior || 'fill';
+                const zoneConfig: ProductZone = {
+                    x: zoneRect.left,
+                    y: zoneRect.top,
+                    width: zoneRect.width,
+                    height: zoneRect.height,
+                    padding,
+                    gapHorizontal: gapX,
+                    gapVertical: gapY,
+                    columns: typeof zone.columns === 'number' ? zone.columns : 0,
+                    rows: typeof zone.rows === 'number' ? zone.rows : 0,
+                    cardAspectRatio: zone.cardAspectRatio ?? 'auto',
+                    lastRowBehavior
+                };
+
+                const { cols, rows, itemWidth, itemHeight } = calculateGridLayout(zoneConfig, ordered.length);
+                const usableW = Math.max(0, zoneRect.width - (padding * 2));
+                const usableH = Math.max(0, zoneRect.height - (padding * 2));
+                let itemW = Math.max(50, itemWidth);
+                let itemH = Math.max(50, itemHeight);
+
+                let startX = zoneRect.left + padding;
+                let startY = zoneRect.top + padding;
+
+                if (verticalAlign === 'stretch' && rows > 0) {
+                    itemH = Math.max(50, (usableH - ((rows - 1) * gapY)) / rows);
+                }
+                const usedGridH = (rows * itemH) + ((rows - 1) * gapY);
+                if (verticalAlign === 'center') startY += Math.max(0, (usableH - usedGridH) / 2);
+                else if (verticalAlign === 'bottom') startY += Math.max(0, usableH - usedGridH);
+
+                const centers: Array<{ x: number; y: number }> = [];
+                for (let i = 0; i < ordered.length; i++) {
+                    const safeRows = Math.max(1, rows);
+                    const col = layoutDirection === 'vertical' ? Math.floor(i / safeRows) : (i % cols);
+                    const row = layoutDirection === 'vertical' ? (i % safeRows) : Math.floor(i / cols);
+
+                    const isLastRow = layoutDirection !== 'vertical' && row === rows - 1;
+                    const itemsInRow = isLastRow ? (ordered.length % cols || cols) : cols;
+                    const shouldFillRow = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < cols;
+                    const rowItemW = shouldFillRow
+                        ? Math.max(50, (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow))
+                        : itemW;
+                    const slotW = (layoutDirection === 'vertical' ? itemW : rowItemW);
+
+                    let x = startX + (col * (slotW + gapX));
+                    if (isLastRow && lastRowBehavior === 'center' && itemsInRow < cols) {
+                        const rowWidth = (itemsInRow * itemW) + ((itemsInRow - 1) * gapX);
+                        const remainingSpace = usableW - rowWidth;
+                        x += remainingSpace / 2;
+                    }
+                    const cx = x + (slotW / 2);
+                    const cy = startY + (row * (itemH + gapY)) + (itemH / 2);
+                    centers.push({ x: cx, y: cy });
+                }
+
+                let toIndex = fromIndex;
+                const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
+                if (center && centers.length) {
+                    let best = 0;
+                    let bestD = Number.POSITIVE_INFINITY;
+                    for (let i = 0; i < centers.length; i++) {
+                        const dx = centers[i]!.x - center.x;
+                        const dy = centers[i]!.y - center.y;
+                        const d = (dx * dx) + (dy * dy);
+                        if (d < bestD) {
+                            bestD = d;
+                            best = i;
+                        }
+                    }
+                    toIndex = best;
+                }
+
+                if (fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
+                    const moved = ordered.splice(fromIndex, 1)[0];
+                    ordered.splice(toIndex, 0, moved);
+                    ordered.forEach((c: any, i: number) => ((c as any)._zoneOrder = i));
+                }
+
+                // Snap everything back into the grid after drop.
+                recalculateZoneLayout(zone, ordered, { save: false });
+            }
+        }
         return;
     }
     
@@ -5125,19 +5589,35 @@ const undo = async () => {
         historyIndex.value--;
         const state = JSON.parse(historyStack.value[historyIndex.value] || '{}');
         hydrateLabelTemplatesFromProjectJson(state);
-        
-        await canvas.value.loadFromJSON(state);
-        rehydrateCanvasZones();
-        
-        // Limpar seleção após undo
-        canvas.value.discardActiveObject();
-        safeRequestRenderAll();
-        
-        // Refresh Reactivity
-        const objs = canvas.value.getObjects();
-        canvasObjects.value = [...objs];
-        updateSelection();
-        isHistoryProcessing.value = false;
+        const prevRenderOnAddRemove = canvas.value.renderOnAddRemove;
+        canvas.value.renderOnAddRemove = false;
+
+        try {
+            await canvas.value.loadFromJSON(state);
+            // CRITICAL: sanitize clipPaths BEFORE any render to avoid fabric crash (forEach of undefined)
+            sanitizeAllClipPaths();
+            rehydrateCanvasZones();
+            sanitizeAllClipPaths();
+
+            // Limpar seleção após undo
+            canvas.value.discardActiveObject();
+            safeRequestRenderAll();
+
+            // Refresh Reactivity
+            const objs = canvas.value.getObjects();
+            canvasObjects.value = [...objs];
+            updateSelection();
+        } catch (err) {
+            console.error('❌ Undo failed:', err);
+            // Nuclear fallback: remove clipPaths and try one more render
+            try {
+                removeAllClipPaths();
+                safeRequestRenderAll();
+            } catch {}
+        } finally {
+            canvas.value.renderOnAddRemove = prevRenderOnAddRemove;
+            isHistoryProcessing.value = false;
+        }
     }
 }
 
@@ -5147,19 +5627,36 @@ const redo = async () => {
         historyIndex.value++;
         const state = JSON.parse(historyStack.value[historyIndex.value] || '{}');
         hydrateLabelTemplatesFromProjectJson(state);
-        
-        await canvas.value.loadFromJSON(state);
-        rehydrateCanvasZones();
-        
-        // Limpar seleção após redo
-        canvas.value.discardActiveObject();
-        safeRequestRenderAll();
-        
-        // Refresh Reactivity
-        const objs = canvas.value.getObjects();
-        canvasObjects.value = [...objs];
-        updateSelection();
-        isHistoryProcessing.value = false;
+
+        const prevRenderOnAddRemove = canvas.value.renderOnAddRemove;
+        canvas.value.renderOnAddRemove = false;
+
+        try {
+            await canvas.value.loadFromJSON(state);
+            // CRITICAL: sanitize clipPaths BEFORE any render to avoid fabric crash (forEach of undefined)
+            sanitizeAllClipPaths();
+            rehydrateCanvasZones();
+            sanitizeAllClipPaths();
+
+            // Limpar seleção após redo
+            canvas.value.discardActiveObject();
+            safeRequestRenderAll();
+
+            // Refresh Reactivity
+            const objs = canvas.value.getObjects();
+            canvasObjects.value = [...objs];
+            updateSelection();
+        } catch (err) {
+            console.error('❌ Redo failed:', err);
+            // Nuclear fallback: remove clipPaths and try one more render
+            try {
+                removeAllClipPaths();
+                safeRequestRenderAll();
+            } catch {}
+        } finally {
+            canvas.value.renderOnAddRemove = prevRenderOnAddRemove;
+            isHistoryProcessing.value = false;
+        }
     }
 }
 
@@ -6561,6 +7058,33 @@ const setupSnapping = () => {
             return;
         }
 
+        // Card-in-zone containment (cards are NOT children of the zone group; they are bound via parentZoneId)
+        if ((obj.isSmartObject || obj.isProductCard || String(obj.name || '').startsWith('product-card')) && (obj as any).parentZoneId) {
+            const zoneId = (obj as any).parentZoneId as string;
+            const zone = canvas.value!.getObjects().find((o: any) => isLikelyProductZone(o) && o?._customId === zoneId);
+            if (zone) {
+                const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
+                const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+                const objW = obj.getScaledWidth?.() ?? 0;
+                const objH = obj.getScaledHeight?.() ?? 0;
+
+                // Zone bounds constraint while dragging (reorder happens on drop).
+                if (center) {
+                    const zr = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
+                    const pad = typeof (zone as any)._zonePadding === 'number' ? (zone as any)._zonePadding : 20;
+                    const minCx = zr.left + pad + (objW / 2);
+                    const maxCx = (zr.left + zr.width) - pad - (objW / 2);
+                    const minCy = zr.top + pad + (objH / 2);
+                    const maxCy = (zr.top + zr.height) - pad - (objH / 2);
+                    const cx = clamp(center.x, minCx, maxCx);
+                    const cy = clamp(center.y, minCy, maxCy);
+                    setObjCenterX(obj, cx);
+                    setObjCenterY(obj, cy);
+                    obj.setCoords();
+                }
+            }
+        }
+
         // ProductZone containment
         if (obj.group && (obj.group as any).isProductZone) {
             const zone = obj.group;
@@ -6749,7 +7273,6 @@ const updateSelection = () => {
     // Sync Product Zone State
     if (active && isLikelyProductZone(active)) {
         ensureZoneSanity(active);
-        const zoneRect = getZoneRect(active);
         // Initialize state from object data
         const pad = typeof active._zonePadding === 'number' ? active._zonePadding : (active.padding || 20);
         const zoneConfig = {
@@ -6767,12 +7290,8 @@ const updateSelection = () => {
             highlightHeight: active.highlightHeight || 1.5,
         };
         productZoneState.updateZone(zoneConfig);
-        productZoneState.updateGlobalStyles(zoneRect ? {
-            cardColor: zoneRect.fill as string || '#ffffff',
-            accentColor: active.accentColor || '#ff0000',
-            splashColor: active.splashColor || '#000000',
-            splashTextColor: active.splashTextColor || '#ffffff'
-        } : {});
+        const zoneStyles = (active as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value ?? {};
+        productZoneState.updateGlobalStyles(zoneStyles);
     }
 }
 
@@ -6840,6 +7359,230 @@ const cleanupOrphanedObjects = () => {
 // --- Reactivity & Layers Sync ---
 const setupReactivity = () => {
     if (!canvas.value) return; 
+
+    const isLikelyProductCard = (obj: any) => {
+        if (!obj) return false;
+        if (obj.type !== 'group') return false;
+        if (!obj.isSmartObject && !obj.isProductCard) return false;
+        if (typeof obj.getObjects !== 'function') return false;
+        const objs = obj.getObjects() || [];
+        return objs.some((o: any) => o?.name === 'offerBackground');
+    };
+
+    const getStylesForCard = (card: any): Partial<GlobalStyles> => {
+        if (!canvas.value) return productZoneState.globalStyles.value;
+        const zoneId = card?.parentZoneId;
+        if (zoneId) {
+            const zone = canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && (o as any)._customId === zoneId);
+            if (zone && (zone as any)._zoneGlobalStyles) return (zone as any)._zoneGlobalStyles as any;
+        }
+        return productZoneState.globalStyles.value;
+    };
+
+    const normalizeCardScaleAndRelayout = (card: any, opts: { save?: boolean } = {}) => {
+        if (!canvas.value || !card || card.type !== 'group') return;
+        if (!isLikelyProductCard(card)) return;
+
+        const shouldSave = opts.save !== false;
+        const center = typeof card.getCenterPoint === 'function' ? card.getCenterPoint() : { x: card.left ?? 0, y: card.top ?? 0 };
+        const scaledW = Math.abs(typeof card.getScaledWidth === 'function' ? card.getScaledWidth() : (Number(card.width || 0) * Number(card.scaleX || 1)));
+        const scaledH = Math.abs(typeof card.getScaledHeight === 'function' ? card.getScaledHeight() : (Number(card.height || 0) * Number(card.scaleY || 1)));
+        const nextW = Math.max(50, Math.round(Number(scaledW) || 0));
+        const nextH = Math.max(50, Math.round(Number(scaledH) || 0));
+        if (!nextW || !nextH) return;
+
+        card.set({
+            originX: 'center',
+            originY: 'center',
+            left: center.x,
+            top: center.y,
+            scaleX: 1,
+            scaleY: 1,
+            flipX: false,
+            flipY: false,
+            width: nextW,
+            height: nextH
+        });
+
+        const styles = getStylesForCard(card);
+        resizeSmartObject(card, nextW, nextH, styles);
+        card.setCoords();
+        canvas.value.requestRenderAll();
+        if (shouldSave) saveCurrentState();
+    };
+
+    const normalizeImageScaleAndCrop = (img: any, opts: { save?: boolean } = {}) => {
+        if (!canvas.value || !img) return;
+        const t = String(img.type || '').toLowerCase();
+        if (t !== 'image') return;
+
+        const shouldSave = opts.save !== false;
+        const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+        const center = typeof img.getCenterPoint === 'function' ? img.getCenterPoint() : { x: img.left ?? 0, y: img.top ?? 0 };
+
+        const scaleX = Math.abs(Number(img.scaleX ?? 1)) || 1;
+        const scaleY = Math.abs(Number(img.scaleY ?? 1)) || 1;
+        const curW = Math.max(1, Number(img.width ?? 1) || 1);
+        const curH = Math.max(1, Number(img.height ?? 1) || 1);
+
+        // What the user "wants" in canvas units after the resize gesture
+        const desiredW = Math.max(1, curW * scaleX);
+        const desiredH = Math.max(1, curH * scaleY);
+
+        // Source (natural) dimensions in pixels
+        const el: any = (img as any)._originalElement || (img as any)._element || null;
+        const srcW = Math.max(1, Number((img as any).__sourceWidth ?? el?.naturalWidth ?? el?.width ?? curW) || 1);
+        const srcH = Math.max(1, Number((img as any).__sourceHeight ?? el?.naturalHeight ?? el?.height ?? curH) || 1);
+        (img as any).__sourceWidth = srcW;
+        (img as any).__sourceHeight = srcH;
+
+        // Preserve the current focal point (center of the current crop)
+        const prevCropX = Math.max(0, Number(img.cropX ?? 0) || 0);
+        const prevCropY = Math.max(0, Number(img.cropY ?? 0) || 0);
+        const prevCropW = clamp(curW, 1, srcW);
+        const prevCropH = clamp(curH, 1, srcH);
+        const cxRatio = clamp((prevCropX + (prevCropW / 2)) / srcW, 0, 1);
+        const cyRatio = clamp((prevCropY + (prevCropH / 2)) / srcH, 0, 1);
+
+        // Behavior:
+        // - If user shrinks the box: crop (cut the extra area).
+        // - If user enlarges beyond source: scale uniformly (no distortion) + crop if needed.
+        const scale = Math.max(desiredW / srcW, desiredH / srcH, 1);
+        const cropW = clamp(desiredW / scale, 1, srcW);
+        const cropH = clamp(desiredH / scale, 1, srcH);
+
+        const nextCropX = clamp((cxRatio * srcW) - (cropW / 2), 0, srcW - cropW);
+        const nextCropY = clamp((cyRatio * srcH) - (cropH / 2), 0, srcH - cropH);
+
+        img.set({
+            originX: 'center',
+            originY: 'center',
+            left: center.x,
+            top: center.y,
+            // enforce uniform scaling for predictable crop behavior (avoid stretching)
+            scaleX: scale,
+            scaleY: scale,
+            width: cropW,
+            height: cropH,
+            cropX: nextCropX,
+            cropY: nextCropY
+        });
+
+        safeAddWithUpdate(img);
+        img.setCoords?.();
+        canvas.value.requestRenderAll();
+        if (shouldSave) saveCurrentState();
+    };
+
+    // Canva/Figma-like behavior for side handles on images:
+    // - Dragging side handles crops/hides only the side you reduced.
+    // - Dragging back reveals the hidden area (no stretching).
+    // - Corner handles keep normal scale behavior (handled elsewhere).
+    const normalizeImageCropBySideHandle = (img: any, transform: any, opts: { save?: boolean } = {}) => {
+        if (!canvas.value || !img) return;
+        const t = String(img.type || '').toLowerCase();
+        if (t !== 'image') return;
+
+        const cornerRaw = String(transform?.corner || '').toLowerCase();
+        if (!cornerRaw) return;
+
+        const original = transform?.original || {};
+        const abs = (n: any) => Math.abs(Number(n ?? 0) || 0);
+        const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+        // Consider flips: a flipped image swaps left/right or top/bottom behavior.
+        const flipX = !!img.flipX;
+        const flipY = !!img.flipY;
+        let corner = cornerRaw;
+        if (flipX) {
+            if (corner === 'ml') corner = 'mr';
+            else if (corner === 'mr') corner = 'ml';
+        }
+        if (flipY) {
+            if (corner === 'mt') corner = 'mb';
+            else if (corner === 'mb') corner = 'mt';
+        }
+
+        const isSideHandle = corner === 'ml' || corner === 'mr' || corner === 'mt' || corner === 'mb';
+        if (!isSideHandle) return;
+
+        const shouldSave = opts.save !== false;
+
+        // Base scale BEFORE the gesture started (critical: do NOT force >=1)
+        const baseScaleX = abs(original.scaleX) || abs(img.scaleX) || 1;
+        const baseScaleY = abs(original.scaleY) || abs(img.scaleY) || 1;
+
+        // Anchor point (keep the opposite side fixed, like Canva)
+        let anchorOriginX: any = 'center';
+        let anchorOriginY: any = 'center';
+        if (corner === 'mr') { anchorOriginX = 'left'; anchorOriginY = 'center'; }
+        if (corner === 'ml') { anchorOriginX = 'right'; anchorOriginY = 'center'; }
+        if (corner === 'mb') { anchorOriginX = 'center'; anchorOriginY = 'top'; }
+        if (corner === 'mt') { anchorOriginX = 'center'; anchorOriginY = 'bottom'; }
+        const anchorPoint = (typeof img.getPointByOrigin === 'function')
+            ? img.getPointByOrigin(anchorOriginX, anchorOriginY)
+            : null;
+
+        const curW = Math.max(1, Number(img.width ?? 1) || 1);
+        const curH = Math.max(1, Number(img.height ?? 1) || 1);
+        const desiredDisplayW = Math.max(1, curW * (abs(img.scaleX) || 1));
+        const desiredDisplayH = Math.max(1, curH * (abs(img.scaleY) || 1));
+
+        // Source (natural) dimensions in pixels
+        const el: any = (img as any)._originalElement || (img as any)._element || null;
+        const srcW = Math.max(1, Number((img as any).__sourceWidth ?? el?.naturalWidth ?? el?.width ?? curW) || 1);
+        const srcH = Math.max(1, Number((img as any).__sourceHeight ?? el?.naturalHeight ?? el?.height ?? curH) || 1);
+        (img as any).__sourceWidth = srcW;
+        (img as any).__sourceHeight = srcH;
+
+        const prevCropX = Math.max(0, Number(img.cropX ?? 0) || 0);
+        const prevCropY = Math.max(0, Number(img.cropY ?? 0) || 0);
+        const prevCropW = clamp(curW, 1, srcW);
+        const prevCropH = clamp(curH, 1, srcH);
+
+        // Convert the user's handle drag (display size) into crop size at the BASE scale.
+        const nextCropW = clamp(desiredDisplayW / baseScaleX, 1, srcW);
+        const nextCropH = clamp(desiredDisplayH / baseScaleY, 1, srcH);
+
+        // Only move crop origin for the axis being resized, keeping the opposite edge fixed.
+        let nextCropX = prevCropX;
+        let nextCropY = prevCropY;
+
+        if (corner === 'ml') {
+            nextCropX = prevCropX + (prevCropW - nextCropW);
+        } else if (corner === 'mr') {
+            nextCropX = prevCropX;
+        }
+
+        if (corner === 'mt') {
+            nextCropY = prevCropY + (prevCropH - nextCropH);
+        } else if (corner === 'mb') {
+            nextCropY = prevCropY;
+        }
+
+        nextCropX = clamp(nextCropX, 0, srcW - nextCropW);
+        nextCropY = clamp(nextCropY, 0, srcH - nextCropH);
+
+        img.set({
+            // Reset the scaling caused by Fabric's resize gesture back to the pre-gesture scale
+            scaleX: baseScaleX,
+            scaleY: baseScaleY,
+            width: nextCropW,
+            height: nextCropH,
+            cropX: nextCropX,
+            cropY: nextCropY
+        });
+
+        if (anchorPoint && typeof img.setPositionByOrigin === 'function') {
+            img.setPositionByOrigin(anchorPoint, anchorOriginX, anchorOriginY);
+        }
+
+        safeAddWithUpdate(img);
+        img.setCoords?.();
+        canvas.value.requestRenderAll();
+        if (shouldSave) saveCurrentState();
+    };
 
     const updateObjects = () => {
         // CRITICAL: Preserve exact order from canvas.getObjects()
@@ -6928,6 +7671,24 @@ const setupReactivity = () => {
     canvas.value.on('object:modified', (e: any) => {
         const obj = e?.target;
         if (!obj || obj.excludeFromExport) return;
+
+        // If a product card was resized (scaled), convert scale into width/height and reflow internals (image/title/limit/label).
+        // This keeps layout crisp and responsive instead of just stretching the whole group.
+        const action = e?.transform?.action || '';
+        const didScale = typeof action === 'string' && action.includes('scale');
+        if (didScale && isLikelyProductCard(obj) && ((obj.scaleX ?? 1) !== 1 || (obj.scaleY ?? 1) !== 1)) {
+            normalizeCardScaleAndRelayout(obj, { save: false });
+        }
+        // Images:
+        // - Corner handles: normal scale behavior (no crop conversion).
+        // - Side handles (ml/mr/mt/mb): crop/hide only the reduced side (Canva-like).
+        if (didScale && String(obj.type || '').toLowerCase() === 'image' && ((obj.scaleX ?? 1) !== 1 || (obj.scaleY ?? 1) !== 1)) {
+            const corner = String(e?.transform?.corner || '').toLowerCase();
+            const isSide = corner === 'ml' || corner === 'mr' || corner === 'mt' || corner === 'mb';
+            if (isSide) {
+                normalizeImageCropBySideHandle(obj, e?.transform, { save: false });
+            }
+        }
 
         // CRITICAL: Re-enable caching after movement stops to prevent trails
         // Apply to ALL objects, not just frames, to fix flickering during movement
@@ -7607,7 +8368,7 @@ const updateObjectProperty = (prop: string, value: any) => {
         if (isLikelyProductZone(active)) {
             const zoneRect = getZoneRect(active);
             if (zoneRect && ['fill', 'stroke', 'strokeWidth', 'strokeDashArray', 'rx', 'ry'].includes(prop)) {
-                if (prop === 'fill') zoneRect.set('fill', value);
+                if (prop === 'fill') zoneRect.set('fill', (value === null || value === undefined || value === '') ? 'transparent' : value);
                 if (prop === 'stroke') zoneRect.set('stroke', value);
                 if (prop === 'strokeWidth') zoneRect.set('strokeWidth', Number(value));
                 if (prop === 'strokeDashArray') zoneRect.set('strokeDashArray', value);
@@ -7628,7 +8389,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 ? active.getObjects().find((o: any) => o.name === 'offerBackground')
                 : null;
             if (bg && ['fill', 'stroke', 'strokeWidth', 'strokeDashArray', 'rx', 'ry'].includes(prop)) {
-                if (prop === 'fill') bg.set('fill', value);
+                if (prop === 'fill') bg.set('fill', (value === null || value === undefined || value === '') ? 'transparent' : value);
                 if (prop === 'stroke') bg.set('stroke', value);
                 if (prop === 'strokeWidth') bg.set('strokeWidth', Number(value));
                 if (prop === 'strokeDashArray') bg.set('strokeDashArray', value);
@@ -7796,7 +8557,7 @@ const applySmartStyle = (group: any, key: string, value: any) => {
     // 2. Splash/Background
     if (key === 'splashFill') {
         const bg = objects.find((o: any) => o.name === 'offerBackground');
-        if (bg) bg.set('fill', value);
+        if (bg && !(value === null || value === undefined || value === '')) bg.set('fill', value);
     }
     
     safeAddWithUpdate(group);
@@ -7960,39 +8721,77 @@ const updateSmartGroup = (keyOrUpdates: any, value?: any) => {
     saveCurrentState();
 }
 
+const buildRemoveBgRequest = async (imageUrl: string) => {
+    if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
+        const blob = await (await fetch(imageUrl)).blob();
+        const formData = new FormData();
+        const mime = String(blob.type || '').toLowerCase();
+        const ext = mime.includes('jpeg') || mime.includes('jpg')
+            ? 'jpg'
+            : mime.includes('png')
+                ? 'png'
+                : mime.includes('webp')
+                    ? 'webp'
+                    : 'png';
+        formData.append('file', blob, `image.${ext}`);
+        formData.append('overwrite', '1');
+        return { body: formData as any };
+    }
+    return { body: { imageUrl, overwrite: true } as any };
+};
+
 const handleAction = async (action: string) => {
     if (!canvas.value) return;
     const active = canvas.value.getActiveObject();
 
+    // AI edit current image (mask workflow) - replaces the selected image in the design.
+    if (action === 'ai-edit-image') {
+        const found = findImageTargetInSelection(active);
+        if (!found?.img) {
+            alert('Selecione uma imagem primeiro');
+            return;
+        }
+        const img = found.img;
+        const imageUrl = (img as any).src || (img as any)._element?.src || (typeof (img as any).getSrc === 'function' ? (img as any).getSrc() : null);
+        if (!imageUrl) {
+            alert('Não foi possível obter a URL da imagem. Tente usar uma imagem do storage.');
+            return;
+        }
+        if (!(img as any)._customId) (img as any)._customId = Math.random().toString(36).substr(2, 9);
+
+        aiStudio.openStudio({
+            initial: {
+                mode: 'edit',
+                baseImageUrl: String(imageUrl),
+                size: guessAiSizeFromObject(img),
+                filenameBase: 'ai-edit',
+                transparent: false,
+                removeBg: false
+            },
+            applyMode: 'replace',
+            replaceTargetId: String((img as any)._customId)
+        });
+        return;
+    }
+
     // Remove Image Background
     if (action === 'remove-image-bg') {
-        console.log('🔵 [Remove BG] Ação chamada via PropertiesPanel!');
-
         if (!active) {
             console.warn('⚠️ [Remove BG] Nenhum objeto selecionado');
             alert('Selecione uma imagem primeiro');
             return;
         }
 
-        console.log('🔍 [Remove BG] Objeto ativo:', active ? {
-            type: active.type,
-            hasSrc: !!active.src,
-            hasElement: !!(active as any)._element
-        } : 'NENHUM');
-
-        // Check if it's an image or a group containing an image
+        // Check if it's an image (direct) or a group/selection containing an image
         let targetImage = active;
         let imageUrl = null;
 
         if (active.type === 'image') {
-            console.log('✅ [Remove BG] É uma imagem direta');
             imageUrl = active.src || (active as any)._element?.src || (active as any).getSrc();
-        } else if (active.type === 'group') {
-            console.log('🔍 [Remove BG] É um grupo, procurando imagem dentro...');
-            const objects = active.getObjects();
+        } else if (active.type === 'group' || active.type === 'activeSelection') {
+            const objects = typeof active.getObjects === 'function' ? active.getObjects() : [];
             const foundImage = objects.find((o: any) => o.type === 'image');
             if (foundImage) {
-                console.log('✅ [Remove BG] Imagem encontrada no grupo');
                 targetImage = foundImage;
                 imageUrl = foundImage.src || (foundImage as any)._element?.src || foundImage.getSrc();
             }
@@ -8008,63 +8807,70 @@ const handleAction = async (action: string) => {
             return;
         }
 
-        if (imageUrl.startsWith('blob:')) {
-            console.warn('⚠️ [Remove BG] Imagem é um blob URL temporário:', imageUrl);
-            alert('Esta imagem é um arquivo local temporário. Use uma imagem do storage.');
-            return;
-        }
-
-        if (imageUrl.startsWith('data:')) {
-            console.warn('⚠️ [Remove BG] Imagem é uma data URL');
-            alert('Esta imagem está embutida. Use uma imagem do storage.');
-            return;
-        }
-
-        console.log('🔍 [Remove BG] URL da imagem:', imageUrl);
-
         // Show loading indicator
         const loadingIndicator = document.createElement('div');
-        loadingIndicator.className = 'fixed top-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2';
+        loadingIndicator.className = 'fixed top-4 right-4 bg-zinc-900 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2 border border-white/10';
         loadingIndicator.innerHTML = '<span class="animate-spin mr-2">⟳</span> Removendo fundo...';
         document.body.appendChild(loadingIndicator);
 
         try {
+            const request = await buildRemoveBgRequest(imageUrl);
             const result = await $fetch('/api/remove-image-bg', {
                 method: 'POST',
-                body: { imageUrl }
+                ...(request as any)
             }) as any;
-
-            console.log('📨 [Remove BG] Resposta da API:', result);
 
             if (result?.url) {
                 // Load new image with callback to ensure it's loaded
                 fabric.Image.fromURL(result.url, (newImg) => {
                     if (!newImg || !canvas.value) return;
 
-                    // For groups, we need to replace the image inside
-                    if (active.type === 'group') {
-                        console.log('🔄 [Remove BG] Substituindo imagem dentro do grupo');
-                        const objects = active.getObjects();
+                    const oldDisplayWidth = (targetImage.width || 1) * (targetImage.scaleX || 1);
+                    const oldDisplayHeight = (targetImage.height || 1) * (targetImage.scaleY || 1);
+                    const newWidth = newImg.width || 1;
+                    const newHeight = newImg.height || 1;
+                    const newScaleX = oldDisplayWidth / newWidth;
+                    const newScaleY = oldDisplayHeight / newHeight;
+
+                    // For groups/selections, replace the image inside
+                    if (active.type === 'group' || active.type === 'activeSelection') {
+                        const objects = typeof active.getObjects === 'function' ? active.getObjects() : [];
                         const imgIndex = objects.findIndex((o: any) => o.type === 'image');
                         if (imgIndex >= 0) {
-                            active.remove(objects[imgIndex]);
+                            const oldImg = objects[imgIndex];
+                            active.remove(oldImg);
+                            (newImg as any).src = result.url;
                             newImg.set({
-                                left: targetImage.left,
-                                top: targetImage.top,
-                                scaleX: targetImage.scaleX,
-                                scaleY: targetImage.scaleY,
-                                angle: targetImage.angle
+                                left: oldImg.left,
+                                top: oldImg.top,
+                                scaleX: newScaleX,
+                                scaleY: newScaleY,
+                                angle: oldImg.angle || 0,
+                                originX: oldImg.originX || 'center',
+                                originY: oldImg.originY || 'center',
+                                name: (oldImg as any).name,
+                                _customId: (oldImg as any)._customId,
+                                opacity: (oldImg as any).opacity,
+                                flipX: (oldImg as any).flipX,
+                                flipY: (oldImg as any).flipY,
+                                clipPath: (oldImg as any).clipPath,
+                                filters: (oldImg as any).filters
                             });
-                            active.insertAt(newImg, imgIndex, true);
+                            if (typeof (active as any).insertAt === 'function') {
+                                (active as any).insertAt(newImg, imgIndex);
+                            } else {
+                                active.add(newImg);
+                            }
+                            safeAddWithUpdate(active);
+                            active.setCoords();
                         }
                     } else {
-                        console.log('🔄 [Remove BG] Substituindo imagem direta');
                         // Preserve ALL properties from current image
                         const propsToPreserve = {
                             left: active.left,
                             top: active.top,
-                            scaleX: active.scaleX,
-                            scaleY: active.scaleY,
+                            scaleX: newScaleX,
+                            scaleY: newScaleY,
                             angle: active.angle,
                             originX: active.originX,
                             originY: active.originY,
@@ -8073,21 +8879,31 @@ const handleAction = async (action: string) => {
                             hasControls: active.hasControls,
                             hasBorders: active.hasBorders,
                             _customId: (active as any)._customId,
-                            name: (active as any).name
+                            name: (active as any).name,
+                            opacity: (active as any).opacity,
+                            flipX: (active as any).flipX,
+                            flipY: (active as any).flipY,
+                            clipPath: (active as any).clipPath,
+                            filters: (active as any).filters,
+                            src: result.url
                         };
 
                         newImg.set(propsToPreserve);
+                        (newImg as any).src = result.url;
 
                         // Remove old image and add new one
+                        const oldIndex = canvas.value.getObjects().indexOf(active);
                         canvas.value.remove(active);
-                        canvas.value.add(newImg);
+                        if (oldIndex >= 0 && typeof (canvas.value as any).insertAt === 'function') {
+                            (canvas.value as any).insertAt(newImg, oldIndex);
+                        } else {
+                            canvas.value.add(newImg);
+                        }
                     }
 
                     canvas.value.setActiveObject(active.type === 'group' ? active : newImg);
                     canvas.value.requestRenderAll();
                     saveCurrentState();
-
-                    console.log('✅ [Remove BG] Fundo removido com sucesso:', result.url);
                 }, {
                     crossOrigin: 'anonymous'
                 });
@@ -9007,6 +9823,109 @@ const insertAssetToCanvas = async (asset: any) => {
     }
 };
 
+const findObjectByCustomId = (id: string): { obj: any; parent: any | null } | null => {
+    if (!canvas.value || !id) return null;
+    const walk = (node: any, parent: any | null): { obj: any; parent: any | null } | null => {
+        if (!node) return null;
+        if ((node as any)._customId === id) return { obj: node, parent };
+        const t = String(node.type || '').toLowerCase();
+        if (t === 'group' || t === 'activeselection') {
+            const list = typeof node.getObjects === 'function' ? node.getObjects() : [];
+            for (const child of (list || [])) {
+                const found = walk(child, node);
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+    for (const top of canvas.value.getObjects()) {
+        const found = walk(top, null);
+        if (found) return found;
+    }
+    return null;
+};
+
+const replaceImageByCustomId = async (targetId: string, newUrl: string) => {
+    if (!canvas.value || !fabric || !targetId || !newUrl) return;
+
+    const found = findObjectByCustomId(targetId);
+    if (!found) return;
+
+    const target = found.obj;
+    if (String(target?.type || '').toLowerCase() !== 'image') return;
+
+    try {
+        const oldDisplayW = Math.abs((target.width || 1) * (target.scaleX || 1));
+        const oldDisplayH = Math.abs((target.height || 1) * (target.scaleY || 1));
+        const newImg: any = await fabric.Image.fromURL(newUrl, { crossOrigin: 'anonymous' });
+        if (!newImg) return;
+
+        const newW = newImg.width || 1;
+        const newH = newImg.height || 1;
+        const newScaleX = oldDisplayW / newW;
+        const newScaleY = oldDisplayH / newH;
+
+        newImg.set({
+            left: target.left,
+            top: target.top,
+            scaleX: newScaleX,
+            scaleY: newScaleY,
+            angle: target.angle || 0,
+            originX: target.originX || 'center',
+            originY: target.originY || 'center',
+            name: (target as any).name,
+            _customId: (target as any)._customId,
+            opacity: (target as any).opacity,
+            flipX: (target as any).flipX,
+            flipY: (target as any).flipY,
+            clipPath: (target as any).clipPath,
+            filters: (target as any).filters
+        });
+        (newImg as any).src = newUrl;
+
+        if (found.parent) {
+            const parent = found.parent;
+            const list = typeof parent.getObjects === 'function' ? parent.getObjects() : [];
+            const idx = list.indexOf(target);
+            parent.remove(target);
+            if (typeof (parent as any).insertAt === 'function' && idx >= 0) (parent as any).insertAt(newImg, idx);
+            else parent.add(newImg);
+            safeAddWithUpdate(parent);
+            parent.setCoords?.();
+            canvas.value.setActiveObject(parent);
+        } else {
+            const oldIndex = canvas.value.getObjects().indexOf(target);
+            canvas.value.remove(target);
+            if (oldIndex >= 0 && typeof (canvas.value as any).insertAt === 'function') {
+                (canvas.value as any).insertAt(newImg, oldIndex);
+            } else {
+                canvas.value.add(newImg);
+            }
+            canvas.value.setActiveObject(newImg);
+        }
+
+        canvas.value.requestRenderAll();
+        saveCurrentState();
+    } catch (e) {
+        console.warn('[ai-studio] Falha ao substituir imagem:', e);
+    }
+};
+
+const handleAiStudioCreated = async (asset: { id: string; name: string; url: string }) => {
+    if (!asset?.url) return;
+    await refreshAiStudioUploads();
+
+    const opts = aiStudio.options.value || {};
+    if (opts.applyMode === 'replace' && opts.replaceTargetId) {
+        await replaceImageByCustomId(String(opts.replaceTargetId), asset.url);
+    } else {
+        await insertAssetToCanvas(asset);
+    }
+
+    aiStudio.handleCreated(asset);
+    aiStudio.open.value = false;
+};
+
 const handlePaste = async (e: ClipboardEvent) => {
     if (!e.clipboardData || !canvas.value) return;
     const items = e.clipboardData.items;
@@ -9235,7 +10154,7 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
 
     // 2. Title (Top) - positioned at top of card
     const titleY = -halfH + (cardHeight * 0.08); // Near top
-    const title = new fabric.Textbox(product.name.toUpperCase(), {
+    const title = new fabric.Textbox(String(product.name || ''), {
         fontSize: baseSize * 0.09,
         fontFamily: 'Inter',
         fontWeight: '900',
@@ -9307,17 +10226,12 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
         .replace(/\s+/g, '')
         .trim();
 
-    // Unit text - primeiro tenta weight, depois packUnit
-    // Também tenta inferir do nome do produto se não tiver weight ou packUnit
-    let unitText = (product as any).weight || (product as any).packUnit || '';
-
-    // Se não tem unitText, tenta inferir do nome do produto (ex: "5KG", "900ML", "UN")
-    if (!unitText && product.name) {
-        const match = product.name.match(/(\d+(?:\.\d+)?)?\s*(KG|G|MG|L|ML|UN)$/i);
-        if (match) {
-            unitText = match[0].toUpperCase().replace(/\s+/g, '');
-        }
-    }
+    // Unit label on the tag: ONLY "KG" or "UN" (gramatura stays in the product name).
+    const unitHint =
+        (product as any).unit ??
+        (product as any).packUnit ??
+        (/\bkg\b/i.test(String(product.name || '')) ? 'KG' : '');
+    const unitText = normalizeUnitForLabel(unitHint);
 
     console.log('[createSmartObject] Processed values:', {
         priceStr,
@@ -9407,6 +10321,8 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     (group as any).packQuantity = (product as any).packQuantity ?? null;
     (group as any).packUnit = (product as any).packUnit ?? null;
     (group as any).packageLabel = (product as any).packageLabel ?? null;
+    (group as any).unit = (product as any).unit ?? null;
+    (group as any).unitLabel = unitText;
     
     // Internal elements should be selectable for manual adjustments
     group.getObjects().forEach((obj: any) => {
@@ -9592,153 +10508,6 @@ const handleImagePaste = (event: ClipboardEvent) => {
                 if(blob) reader.readAsDataURL(blob);
             }
         }
-    }
-}
-
-const handleRemoveBackground = async () => {
-    console.log('🔵 [Remove BG] Função chamada!');
-
-    if (!canvas.value) {
-        console.error('❌ [Remove BG] Canvas não existe');
-        return;
-    }
-
-    const active = canvas.value.getActiveObject();
-    console.log('🔍 [Remove BG] Objeto ativo:', active ? {
-        type: active.type,
-        hasSrc: !!active.src,
-        hasElement: !!(active as any)._element,
-        elementSrc: (active as any)._element?.src
-    } : 'NENHUM');
-
-    if (!active) {
-        console.warn('⚠️ [Remove BG] Nenhum objeto selecionado');
-        alert('Selecione uma imagem primeiro');
-        return;
-    }
-
-    // Check if it's an image or a group containing an image
-    let targetImage = active;
-    let imageUrl = null;
-
-    if (active.type === 'image') {
-        console.log('✅ [Remove BG] É uma imagem direta');
-        imageUrl = active.src || (active as any)._element?.src || (active as any).getSrc();
-    } else if (active.type === 'group') {
-        console.log('🔍 [Remove BG] É um grupo, procurando imagem dentro...');
-        const objects = active.getObjects();
-        const foundImage = objects.find((o: any) => o.type === 'image');
-        if (foundImage) {
-            console.log('✅ [Remove BG] Imagem encontrada no grupo');
-            targetImage = foundImage;
-            imageUrl = foundImage.src || (foundImage as any)._element?.src || foundImage.getSrc();
-        }
-    } else {
-        console.warn('⚠️ [Remove BG] Tipo de objeto não suportado:', active.type);
-        alert('Selecione uma imagem válida');
-        return;
-    }
-
-    if (!imageUrl) {
-        console.warn('⚠️ [Remove BG] Imagem não tem URL');
-        alert('Não foi possível obter a URL da imagem. Tente usar uma imagem do storage.');
-        return;
-    }
-
-    if (imageUrl.startsWith('blob:')) {
-        console.warn('⚠️ [Remove BG] Imagem é um blob URL temporário:', imageUrl);
-        alert('Esta imagem é um arquivo local temporário. Use uma imagem do storage.');
-        return;
-    }
-
-    if (imageUrl.startsWith('data:')) {
-        console.warn('⚠️ [Remove BG] Imagem é uma data URL');
-        alert('Esta imagem está embutida. Use uma imagem do storage.');
-        return;
-    }
-
-    console.log('🔍 [Remove BG] URL da imagem:', imageUrl);
-
-    isProcessing.value = true;
-
-    // Show loading indicator
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.className = 'fixed top-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2';
-    loadingIndicator.innerHTML = '<span class="animate-spin mr-2">⟳</span> Removendo fundo...';
-    document.body.appendChild(loadingIndicator);
-
-    try {
-        const result = await $fetch('/api/remove-image-bg', {
-            method: 'POST',
-            body: { imageUrl }
-        }) as any;
-
-        console.log('📨 [Remove BG] Resposta da API:', result);
-
-        if (result?.url) {
-            // Load new image with callback to ensure it's loaded
-            fabric.Image.fromURL(result.url, (newImg) => {
-                if (!newImg || !canvas.value) return;
-
-                // For groups, we need to replace the image inside
-                if (active.type === 'group') {
-                    console.log('🔄 [Remove BG] Substituindo imagem dentro do grupo');
-                    const objects = active.getObjects();
-                    const imgIndex = objects.findIndex((o: any) => o.type === 'image');
-                    if (imgIndex >= 0) {
-                        active.remove(objects[imgIndex]);
-                        newImg.set({
-                            left: targetImage.left,
-                            top: targetImage.top,
-                            scaleX: targetImage.scaleX,
-                            scaleY: targetImage.scaleY,
-                            angle: targetImage.angle
-                        });
-                        active.insertAt(newImg, imgIndex, true);
-                    }
-                } else {
-                    console.log('🔄 [Remove BG] Substituindo imagem direta');
-                    // Preserve ALL properties from current image
-                    const propsToPreserve = {
-                        left: active.left,
-                        top: active.top,
-                        scaleX: active.scaleX,
-                        scaleY: active.scaleY,
-                        angle: active.angle,
-                        originX: active.originX,
-                        originY: active.originY,
-                        selectable: active.selectable,
-                        evented: active.evented,
-                        hasControls: active.hasControls,
-                        hasBorders: active.hasBorders,
-                        _customId: (active as any)._customId,
-                        name: (active as any).name
-                    };
-
-                    newImg.set(propsToPreserve);
-
-                    // Remove old image and add new one
-                    canvas.value.remove(active);
-                    canvas.value.add(newImg);
-                }
-
-                canvas.value.setActiveObject(active.type === 'group' ? active : newImg);
-                canvas.value.requestRenderAll();
-                saveCurrentState();
-
-                console.log('✅ [Remove BG] Fundo removido com sucesso:', result.url);
-            }, {
-                crossOrigin: 'anonymous'
-            });
-        } else {
-            throw new Error('API não retornou URL válida');
-        }
-    } catch (err: any) {
-        console.error('❌ [Remove BG] Erro ao remover fundo:', err);
-        alert('Erro ao remover fundo: ' + (err.message || 'Erro desconhecido'));
-    } finally {
-        isProcessing.value = false;
-        loadingIndicator?.remove();
     }
 }
 
@@ -10203,6 +10972,8 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
 
         // Visual props live on the inner rect.
         if (prop === 'backgroundColor' && zoneRect) {
+            // Persist the intent on the zone (so we can distinguish "no background" vs Fabric default black).
+            zone.set('backgroundColor', val);
             zoneRect.set('fill', val || 'transparent');
             return;
         }
@@ -10254,46 +11025,11 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any) => 
 
     list.forEach((card: any) => {
         if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') return;
-        const objs = card.getObjects();
-        const bg = objs.find((o: any) => o.name === 'offerBackground');
-
-        if (bg && bg.type === 'rect') {
-            if (styles.isProdBgTransparent) bg.set('fill', 'transparent');
-            else if (styles.cardColor) bg.set('fill', styles.cardColor);
-
-            if (typeof styles.cardBorderRadius === 'number') {
-                bg.set({ rx: styles.cardBorderRadius, ry: styles.cardBorderRadius });
-            }
-            if (styles.cardBorderColor) bg.set('stroke', styles.cardBorderColor);
-            if (typeof styles.cardBorderWidth === 'number') bg.set('strokeWidth', styles.cardBorderWidth);
+        const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0;
+        const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0;
+        if (cardW && cardH) {
+            resizeSmartObject(card, cardW, cardH, styles);
         }
-
-        const priceGroup = objs.find((o: any) => o.name === 'priceGroup');
-        if (priceGroup && priceGroup.type === 'group' && typeof priceGroup.getObjects === 'function') {
-            const parts = priceGroup.getObjects();
-            const priceBg = parts.find((o: any) => o.name === 'price_bg');
-            const priceText = parts.find((o: any) => o.name === 'price_value_text' || o.name === 'smart_price');
-
-            const accent = styles.splashColor ?? styles.accentColor;
-            if (priceBg && accent) {
-                priceBg.set('stroke', accent);
-                if (fabric?.Shadow) {
-                    const blur = priceBg.shadow?.blur ?? 12;
-                    priceBg.set('shadow', new fabric.Shadow({ color: accent, blur, offsetX: 0, offsetY: 0 }));
-                }
-            }
-
-            if (priceText && styles.splashTextColor) {
-                priceText.set('fill', styles.splashTextColor);
-            }
-
-            // Reflow price parts in case the font or card size changed.
-            const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0;
-            const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0;
-            if (cardW && cardH) layoutPriceGroup(priceGroup, cardW, cardH);
-            safeAddWithUpdate(priceGroup);
-        }
-
         safeAddWithUpdate(card);
         card.setCoords();
     });
@@ -10403,11 +11139,45 @@ const formatCentsToPrice = (cents: number | null): string | null => {
 };
 
 const splitPriceParts = (raw: any): { integer: string; dec: string } => {
-    const s = String(raw ?? '').replace(/R\$\s*/gi, '').trim();
-    const m = s.match(/^(\d+)(?:[.,](\d{1,2}))?/);
-    const integer = m?.[1] || '0';
-    const dec = (m?.[2] || '00').padEnd(2, '0').slice(0, 2);
+    const s0 = String(raw ?? '')
+        .replace(/R\$\s*/gi, '')
+        .replace(/\s+/g, '')
+        .trim();
+    if (!s0) return { integer: '0', dec: '00' };
+
+    // Support thousands separators:
+    // - "1.999,99" (pt-BR)
+    // - "1,999.99" (en-US)
+    const lastComma = s0.lastIndexOf(',');
+    const lastDot = s0.lastIndexOf('.');
+    const sepIdx = Math.max(lastComma, lastDot);
+
+    if (sepIdx === -1) {
+        const integer = s0.replace(/[^\d]/g, '') || '0';
+        return { integer, dec: '00' };
+    }
+
+    const rawInt = s0.slice(0, sepIdx);
+    const rawDec = s0.slice(sepIdx + 1);
+    const integer = rawInt.replace(/[^\d]/g, '') || '0';
+    const dec = rawDec.replace(/[^\d]/g, '').padEnd(2, '0').slice(0, 2) || '00';
     return { integer, dec };
+};
+
+const normalizeUnitForLabel = (raw: any): 'KG' | 'UN' => {
+    const s0 = String(raw ?? '').trim();
+    if (!s0) return 'UN';
+    const s = s0.toUpperCase().replace(/\s+/g, '');
+
+    // Remove a leading numeric quantity (e.g. "500ML", "1KG", "2,5KG") so we don't show gramatura.
+    const tok = s.replace(/^\d+(?:[.,]\d+)?/, '');
+
+    // Only allow these units on the label.
+    if (tok === 'KG' || tok === 'K' || tok === 'KILO' || tok === 'KILOS' || tok.includes('KG')) return 'KG';
+    if (tok === 'UN' || tok === 'UND' || tok === 'UNID' || tok === 'UNIDADE' || tok.includes('UN')) return 'UN';
+
+    // Everything else (ML/L/G/etc) becomes "UN" (gramatura stays in the product name).
+    return 'UN';
 };
 
 const computePackLine = (opts: { packageLabel?: any; packQuantity?: any; packUnit?: any; packPrice?: any }): string | null => {
@@ -10495,8 +11265,8 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
 
     // Unit label: prefer packUnit ("UN") and fall back to inferred unit from weight (e.g. "KG").
     const unitFromPack = String(data?.packUnit ?? '').trim();
-    const unit = (unitFromPack || String(data?.unit ?? '').trim() || String(data?.weight ?? '').trim()).toUpperCase().replace(/\s+/g, '');
-    const unitLabel = unit ? unit.replace(/^\d+(?:[.,]\d+)?/, '') : '';
+    const unit = unitFromPack || String(data?.unit ?? '').trim() || String(data?.weight ?? '').trim();
+    const unitLabel = normalizeUnitForLabel(unit);
     if (retailUnit) setText(retailUnit, unitLabel);
     if (wholesaleUnit) setText(wholesaleUnit, unitLabel);
 
@@ -10569,9 +11339,12 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
 
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
-    const totalW = clamp(cardW * 0.98, 160, cardW);
+    // Keep width content-driven (prevents "stretch wide" tags when cards are wide).
+    // We'll compute it after we size texts.
+    let totalW = clamp(cardW * 0.9, 160, cardW);
     const ratio = (showRetail && showWholesale) ? 0.30 : 0.22;
     const totalH = clamp(cardH * ratio, 70, Math.max(70, cardH * 0.45));
+    const padX = clamp(cardW * 0.04, 10, 28);
 
     // Section heights
     let retailH = 0;
@@ -10606,10 +11379,6 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         });
     };
 
-    if (showRetail) setBg(retailBg, retailH, retailCY, Math.max(6, Math.min(18, totalH * 0.08)));
-    if (showBanner && bannerBg) setBg(bannerBg, bannerH, bannerCY, Math.max(4, Math.min(12, totalH * 0.05)));
-    if (showWholesale) setBg(wholesaleBg, wholesaleH, wholesaleCY, Math.max(6, Math.min(18, totalH * 0.08)));
-
     const setTextSizing = (txt: any, defaultScale: number, baseH: number) => {
         if (!txt || !String(txt.type || '').includes('text')) return;
         const scale = typeof txt.__fontScale === 'number' ? txt.__fontScale : defaultScale;
@@ -10617,6 +11386,48 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         if (typeof txt.initDimensions === 'function') txt.initDimensions();
     };
     const getW = (t: any) => (t && typeof t.getScaledWidth === 'function' ? t.getScaledWidth() : 0);
+
+    const measureTierWidth = (tier: {
+        blockH: number;
+        currency: any;
+        integer: any;
+        decimal: any;
+        unit: any;
+        pack: any;
+    }) => {
+        const { blockH, currency, integer, decimal, unit, pack } = tier;
+        if (!blockH || !Number.isFinite(blockH)) return 0;
+
+        const gapX = Math.max(4, blockH * 0.06);
+        setTextSizing(integer, 0.60, blockH);
+        setTextSizing(decimal, 0.36, blockH);
+        setTextSizing(currency, 0.22, blockH);
+        setTextSizing(unit, 0.22, blockH);
+        setTextSizing(pack, 0.18, blockH);
+
+        const packVisible = isShown(pack) && String(pack?.text || '').trim().length > 0;
+        const unitVisible = isShown(unit) && String(unit?.text || '').trim().length > 0;
+
+        let w = getW(currency) + gapX + getW(integer) + getW(decimal);
+        if (unitVisible) w += gapX + getW(unit);
+        if (packVisible) w = Math.max(w, getW(pack));
+        return w;
+    };
+
+    // Pass 1: compute minimal required width based on text content.
+    let contentW = 0;
+    if (showRetail) contentW = Math.max(contentW, measureTierWidth({ blockH: retailH, currency: retailCurrency, integer: retailInteger, decimal: retailDecimal, unit: retailUnit, pack: retailPack }));
+    if (showWholesale) contentW = Math.max(contentW, measureTierWidth({ blockH: wholesaleH, currency: wholesaleCurrency, integer: wholesaleInteger, decimal: wholesaleDecimal, unit: wholesaleUnit, pack: wholesalePack }));
+    if (showBanner && bannerText) {
+        setTextSizing(bannerText, 0.32, bannerH);
+        contentW = Math.max(contentW, getW(bannerText));
+    }
+    totalW = clamp(contentW + (padX * 2), 160, cardW);
+
+    // Apply final width to backgrounds.
+    if (showRetail) setBg(retailBg, retailH, retailCY, Math.max(6, Math.min(18, totalH * 0.08)));
+    if (showBanner && bannerBg) setBg(bannerBg, bannerH, bannerCY, Math.max(4, Math.min(12, totalH * 0.05)));
+    if (showWholesale) setBg(wholesaleBg, wholesaleH, wholesaleCY, Math.max(6, Math.min(18, totalH * 0.08)));
 
     const layoutTier = (tier: {
         blockH: number;
@@ -10630,7 +11441,6 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         const { blockH, blockCY, currency, integer, decimal, unit, pack } = tier;
         if (!blockH || !Number.isFinite(blockH)) return;
 
-        const padX = totalW * 0.06;
         const maxPriceW = totalW - (padX * 2);
         const gapX = Math.max(4, blockH * 0.06);
 
@@ -10725,7 +11535,11 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     
     if (!priceBg || !currencyCircle || !currencyText) return null;
     
-    const pillH = cardH * 0.18;
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+    // Scale label by overall card size (avoid "stretch wide" when cards are wide).
+    const base = Math.min(cardW, cardH);
+    const pillH = clamp(base * 0.18, 46, Math.max(46, cardH * 0.24));
     const circleSize = pillH * 0.72; // Slightly smaller "R$" area
     const textGap = pillH * 0.18;
     const rightPad = pillH * 0.35;
@@ -10778,21 +11592,29 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         setTextSizing(priceText, 0.7);
     }
 
+    // Normalize the unit label so we never show gramatura (e.g. "500ML") in the tag.
+    if (priceUnit && priceUnit.visible !== false) {
+        const cur = String(priceUnit.text || '').trim();
+        if (cur) {
+            const normalized = normalizeUnitForLabel(cur);
+            if (normalized !== cur.toUpperCase().replace(/\s+/g, '')) {
+                priceUnit.set?.('text', normalized);
+                if (typeof priceUnit.initDimensions === 'function') priceUnit.initDimensions();
+            }
+        }
+    }
+
     const getW = (t: any) => (t && typeof t.getScaledWidth === 'function' ? t.getScaledWidth() : 0);
     const calcTextWidth = () =>
         hasSplit
-            ? (getW(priceInteger) +
-                  getW(priceDecimal) +
-                  (priceUnit && priceUnit.visible !== false && String(priceUnit.text || '').trim()
-                      ? (getW(priceUnit) + textGap)
-                      : 0))
+            ? (getW(priceInteger) + getW(priceDecimal))
             : getW(priceText);
 
     let textWidth = calcTextWidth();
-    const basePillW = cardW * 0.85;
-    const maxPillW = cardW * 0.98;
+    const maxPillW = cardW * 0.96;
     const minPillW = textWidth + (circleSize * 0.85) + textGap + rightPad;
-    let pillW = Math.min(Math.max(basePillW, minPillW), maxPillW);
+    const minVisualW = Math.max(120, pillH * 2.6);
+    let pillW = clamp(minPillW, minVisualW, maxPillW);
     
     if (minPillW > maxPillW && textWidth > 0) {
         const availableTextWidth = maxPillW - (circleSize * 0.85) - textGap - rightPad;
@@ -10810,11 +11632,18 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         pillW = maxPillW;
     }
     
+    const roundness = clamp(
+        typeof (priceBg as any).__roundness === 'number' ? (priceBg as any).__roundness : 1,
+        0,
+        1
+    );
+    const radius = (pillH / 2) * roundness;
+
     priceBg.set({
         width: pillW,
         height: pillH,
-        rx: pillH / 2,
-        ry: pillH / 2,
+        rx: radius,
+        ry: radius,
         originX: 'center',
         originY: 'center',
         left: 0,
@@ -10822,7 +11651,8 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     });
 
     // Keep the "neon" border/glow proportional to the pill size (prevents losing the pattern on resize).
-    const strokeW = Math.max(1, Math.min(4, pillH * 0.04));
+    const customStrokeW = Number((priceBg as any).__strokeWidth);
+    const strokeW = Number.isFinite(customStrokeW) ? clamp(customStrokeW, 0, Math.max(0, pillH * 0.2)) : Math.max(1, Math.min(4, pillH * 0.04));
     const accentColor = typeof priceBg.stroke === 'string' ? priceBg.stroke : '#ff0000';
     priceBg.set({ strokeWidth: strokeW });
     if (fabric?.Shadow) {
@@ -10871,8 +11701,8 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             const clip = new fabric.Rect({
                 width: pillW,
                 height: pillH,
-                rx: pillH / 2,
-                ry: pillH / 2,
+                rx: radius,
+                ry: radius,
                 originX: 'center',
                 originY: 'center',
                 left: 0,
@@ -10921,9 +11751,21 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             const unitVisible = priceUnit.visible !== false && unitText.length > 0;
             priceUnit.set({ visible: unitVisible });
             if (unitVisible) {
-                const unitY = (typeof priceUnit.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.24) * pillH;
+                const unitY = (typeof priceUnit.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * pillH;
                 const decW = getW(priceDecimal);
-                priceUnit.set({ originX: 'left', originY: 'center', left: textStartX + intW + decW + textGap, top: unitY });
+
+                // Place unit UNDER the cents (centavos), aligned to the right edge of the decimal block.
+                const unitRightX = textStartX + intW + decW;
+                priceUnit.set({ originX: 'right', originY: 'center', left: unitRightX, top: unitY });
+
+                // If unit becomes wider than the cents block, shrink it to fit under the cents.
+                const unitW = getW(priceUnit);
+                if (decW > 0 && unitW > decW) {
+                    const s = decW / unitW;
+                    priceUnit.set({ scaleX: s, scaleY: s });
+                } else {
+                    priceUnit.set({ scaleX: 1, scaleY: 1 });
+                }
             }
         }
     } else if (priceText) {
@@ -11111,15 +11953,9 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     const unitTxt = parts.find((o: any) => o?.name === 'price_unit_text');
     const legacy = parts.find((o: any) => o?.name === 'smart_price' || o?.name === 'price_value_text');
 
-    const cleaned = String(rawPrice || '')
-        .replace(/R\$\s*/gi, '')
-        .replace(/\s+/g, '')
-        .trim();
-
-    const m = cleaned.match(/^(\d+)(?:[\.,](\d{1,2}))?/);
-    const integer = m?.[1] || '0';
-    const dec = (m?.[2] || '00').padEnd(2, '0').slice(0, 2);
-    const decimalText = `,${dec}`;
+    const priceParts = splitPriceParts(rawPrice);
+    const integer = priceParts.integer;
+    const decimalText = `,${priceParts.dec}`;
 
     if (intTxt && decTxt) {
         intTxt.set?.('text', integer);
@@ -11128,8 +11964,9 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
         if (typeof decTxt.initDimensions === 'function') decTxt.initDimensions();
 
         if (unitTxt) {
-            const u = String(unitText || unitTxt.text || '').trim();
-            unitTxt.set?.('text', u ? u.toUpperCase() : '');
+            const raw = (typeof unitText === 'string' && unitText.trim().length) ? unitText : String(unitTxt.text || '').trim();
+            const u = raw ? normalizeUnitForLabel(raw) : '';
+            unitTxt.set?.('text', u);
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
         }
         return;
@@ -11139,13 +11976,18 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
 }
 
 function inferUnitFromCard(card: any): string | undefined {
-    if (!card || typeof card.getObjects !== 'function') return undefined;
-    const title = card.getObjects().find((o: any) => o?.name === 'smart_title' || o?.name === 'title');
-    const text = String(title?.text || '').toLowerCase();
-    const m = text.match(/\b\d+(?:[\.,]\d+)?\s*(kg|g|mg|l|ml|un)\b/i);
-    if (!m) return undefined;
-    const raw = m[0].replace(/\s+/g, '');
-    return raw.toUpperCase();
+    if (!card) return 'UN';
+    // Prefer explicit metadata (new cards store it on the group).
+    const meta = (card as any).unitLabel ?? (card as any).unit ?? (card as any).packUnit ?? '';
+    if (String(meta || '').trim().length) return normalizeUnitForLabel(meta);
+
+    // Fallback: if the title mentions KG anywhere, treat as KG (gramatura stays in the name).
+    if (typeof card.getObjects === 'function') {
+        const title = card.getObjects().find((o: any) => o?.name === 'smart_title' || o?.name === 'title');
+        const text = String(title?.text || '');
+        if (/\bkg\b/i.test(text)) return 'KG';
+    }
+    return 'UN';
 }
 
 async function renderLabelTemplatePreview(tpl: LabelTemplate): Promise<string | undefined> {
@@ -11201,6 +12043,7 @@ async function createLabelTemplateFromSelection(name: string) {
     tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     labelTemplates.value = [...labelTemplates.value, tpl];
     saveCurrentState();
+    await upsertLabelTemplateToDb(tpl);
 }
 
 async function createDefaultLabelTemplate(name: string) {
@@ -11225,6 +12068,7 @@ async function createDefaultLabelTemplate(name: string) {
         tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
         labelTemplates.value = [...labelTemplates.value, tpl];
         saveCurrentState();
+        await upsertLabelTemplateToDb(tpl);
     } catch (err) {
         console.warn('[labelTemplates] Failed to create default template', err);
     }
@@ -11311,6 +12155,7 @@ async function updateLabelTemplateFromSelection(templateId: string) {
     copy[idx] = next;
     labelTemplates.value = copy;
     saveCurrentState();
+    await upsertLabelTemplateToDb(next);
 }
 
 function deleteLabelTemplateById(templateId: string) {
@@ -11318,6 +12163,7 @@ function deleteLabelTemplateById(templateId: string) {
     if (t?.isBuiltIn) return;
     labelTemplates.value = (labelTemplates.value || []).filter(x => x.id !== templateId);
     saveCurrentState();
+    void deleteLabelTemplateFromDb(templateId);
 }
 
 async function duplicateLabelTemplateById(templateId: string) {
@@ -11331,8 +12177,10 @@ async function duplicateLabelTemplateById(templateId: string) {
         createdAt: now,
         updatedAt: now
     };
+    if (!copy.previewDataUrl) copy.previewDataUrl = await renderLabelTemplatePreview(copy);
     labelTemplates.value = [...labelTemplates.value, copy];
     saveCurrentState();
+    await upsertLabelTemplateToDb(copy);
 }
 
 async function applyLabelTemplateToCard(card: any, templateId: string) {
@@ -11354,7 +12202,7 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
     const oldCurrencyText = oldCurrency?.text;
     const oldUnitText = oldUnit?.text;
     const inferredUnit = (typeof oldUnitText === 'string' && oldUnitText.trim().length)
-        ? oldUnitText
+        ? normalizeUnitForLabel(oldUnitText)
         : inferUnitFromCard(card);
 
     const newPg = await instantiatePriceGroupFromTemplate(tpl);
@@ -11418,7 +12266,7 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
 
 function buildDefaultPriceGroupForCard(priceStr: string, cardW: number, cardH: number, top: number, unitText?: string) {
     const pillH = cardH * 0.18;
-    const pillW = cardW * 0.85;
+    const pillW = Math.min(cardW * 0.6, cardW - 10);
     const priceBg = new fabric.Rect({
         width: pillW,
         height: pillH,
@@ -11459,10 +12307,9 @@ function buildDefaultPriceGroupForCard(priceStr: string, cardW: number, cardH: n
         name: 'price_currency_text'
     });
 
-    const cleaned = String(priceStr || '').replace(/R\$\s*/gi, '').trim();
-    const m = cleaned.match(/^(\d+)(?:[\.,](\d{1,2}))?/);
-    const integer = m?.[1] || '0';
-    const dec = (m?.[2] || '00').padEnd(2, '0').slice(0, 2);
+    const parts = splitPriceParts(priceStr);
+    const integer = parts.integer;
+    const dec = parts.dec;
 
     const priceInteger = new fabric.IText(integer, {
         fontSize: pillH * 0.72,
@@ -11492,19 +12339,19 @@ function buildDefaultPriceGroupForCard(priceStr: string, cardW: number, cardH: n
         __yOffsetRatio: -0.18
     });
 
-    const u = String(unitText || '').trim();
-    const priceUnit = new fabric.IText(u ? u.toUpperCase() : '', {
+    const u = normalizeUnitForLabel(unitText);
+    const priceUnit = new fabric.IText(u, {
         fontSize: pillH * 0.26,
         fontFamily: 'Inter',
         fontWeight: '800',
         fill: '#ffffff',
-        originX: 'left',
+        originX: 'right',
         originY: 'center',
         left: 0,
         top: 0,
         name: 'price_unit_text',
         __fontScale: 0.26,
-        __yOffsetRatio: 0.24,
+        __yOffsetRatio: 0.22,
         visible: !!u
     });
 
@@ -11748,7 +12595,7 @@ async function resetCardPriceGroupToDefault(card: any) {
             ? `${oldInt.text || '0'}${oldDec.text || ',00'}`
             : (typeof oldPrice?.text === 'string' ? oldPrice.text : '0,00');
     const oldUnitText = typeof oldUnit?.text === 'string' ? oldUnit.text : undefined;
-    const inferredUnit = oldUnitText && oldUnitText.trim().length ? oldUnitText : inferUnitFromCard(card);
+    const inferredUnit = oldUnitText && oldUnitText.trim().length ? normalizeUnitForLabel(oldUnitText) : inferUnitFromCard(card);
 
     const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0;
     const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0;
@@ -11829,6 +12676,7 @@ async function setTemplateSplashImage(templateId: string, file: File) {
         list[idx] = next;
         labelTemplates.value = list;
         saveCurrentState();
+        await upsertLabelTemplateToDb(next);
     } catch (err) {
         console.warn('[labelTemplates] Failed to set splash image', err);
     }
@@ -11944,6 +12792,7 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
     list[idx] = next;
     labelTemplates.value = list;
     saveCurrentState();
+    await upsertLabelTemplateToDb(next);
 
     // If this template is in use by any zone, re-apply it to keep cards in sync.
     if (canvas.value) {
@@ -11958,17 +12807,25 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
 }
 
 // Helper for Responsive Card Layout
-const resizeSmartObject = (group: any, w: number, h: number) => {
+const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
     // Reset Group Scale/Skew to ensure clean internal layout
     group.scale(1);
     group.set({ width: w, height: h });
     
     const halfW = w / 2;
     const halfH = h / 2;
+    const baseSize = Math.min(w, h);
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const objects = group.getObjects();
     
     const bg = objects.find((o: any) => o.name === 'offerBackground');
     const title = objects.find((o: any) => o.name === 'smart_title');
+    const limit = objects.find((o: any) =>
+        o?.name === 'smart_limit' ||
+        o?.name === 'limitText' ||
+        o?.name === 'product_limit' ||
+        o?.data?.smartType === 'product-limit'
+    );
     const img = objects.find((o: any) => o.name === 'smart_image');
     // Splash can vary names, find by exclusion or property
     const splash = objects.find((o: any) => o.name === 'smart_price' || o.name === 'smart_splash' || (o.type === 'group' && o !== bg));
@@ -11987,6 +12844,14 @@ const resizeSmartObject = (group: any, w: number, h: number) => {
                  left: 0,
                  top: 0
              });
+
+             if (styles) {
+                 if (styles.isProdBgTransparent) bg.set('fill', 'transparent');
+                 else if (styles.cardColor) bg.set('fill', styles.cardColor);
+                 if (typeof styles.cardBorderRadius === 'number') bg.set({ rx: styles.cardBorderRadius, ry: styles.cardBorderRadius });
+                 if (styles.cardBorderColor) bg.set('stroke', styles.cardBorderColor);
+                 if (typeof styles.cardBorderWidth === 'number') bg.set('strokeWidth', styles.cardBorderWidth);
+             }
         } else {
              bg.set({ scaleX: w / bg.width, scaleY: h / bg.height, left: 0, top: 0, originX: 'center', originY: 'center' });
         }
@@ -12004,6 +12869,31 @@ const resizeSmartObject = (group: any, w: number, h: number) => {
             top: -halfH + marginTop,
             scaleX: 1, scaleY: 1
         });
+
+        if (styles) {
+            if (styles.prodNameFont) title.set('fontFamily', styles.prodNameFont);
+            if (styles.prodNameColor) title.set('fill', styles.prodNameColor);
+            if (styles.prodNameWeight !== undefined) title.set('fontWeight', styles.prodNameWeight as any);
+            if (styles.prodNameAlign) title.set('textAlign', styles.prodNameAlign);
+            if (typeof styles.prodNameLineHeight === 'number') title.set('lineHeight', styles.prodNameLineHeight);
+
+            const rawKey = '__rawText';
+            const curText = String((title as any).text ?? '');
+            if (typeof (title as any)[rawKey] !== 'string') (title as any)[rawKey] = curText;
+            const mode = styles.prodNameTransform ?? 'none';
+            if (mode === 'none') {
+                (title as any)[rawKey] = curText;
+            } else {
+                const baseText = String((title as any)[rawKey] ?? curText);
+                const nextText = mode === 'upper' ? baseText.toUpperCase() : mode === 'lower' ? baseText.toLowerCase() : baseText;
+                if (nextText !== curText) title.set('text', nextText);
+            }
+
+            const scale = typeof styles.prodNameScale === 'number' ? styles.prodNameScale : 1;
+            const baseFont = baseSize * 0.09;
+            const nextFont = clamp(baseFont * scale, 10, baseSize * 0.22);
+            title.set('fontSize', nextFont);
+        }
         
         // Responsive Text Width
         if (title.type === 'textbox') {
@@ -12018,6 +12908,50 @@ const resizeSmartObject = (group: any, w: number, h: number) => {
         if (typeof title.initDimensions === 'function') title.initDimensions();
         titleH = title.getScaledHeight() + marginTop;
     }
+
+    // 2.1 Limit badge/text (Below Title)
+    let limitH = 0;
+    if (limit && String(limit.type || '').includes('text')) {
+        const marginTop = h * 0.05;
+        const gap = Math.max(4, h * 0.008);
+
+        const titleHeight = title ? (title.getScaledHeight?.() ?? title.height ?? 0) : 0;
+        limit.set({
+            originX: 'center',
+            originY: 'top',
+            left: 0,
+            top: -halfH + marginTop + titleHeight + gap,
+            scaleX: 1,
+            scaleY: 1
+        });
+
+        if (styles) {
+            if (styles.limitFont) limit.set('fontFamily', styles.limitFont);
+            if (styles.limitColor) limit.set('fill', styles.limitColor);
+
+            // Dynamic sizing: base on card size, and respect legacy `limitSize` as multiplier (default ~14).
+            const mult = (typeof styles.limitSize === 'number' && styles.limitSize > 0) ? (styles.limitSize / 14) : 1;
+            const baseFont = baseSize * 0.045;
+            const nextFont = clamp(baseFont * mult, 8, baseSize * 0.12);
+            limit.set('fontSize', nextFont);
+        } else {
+            // Reasonable default if older cards have this text but no styles passed
+            const baseFont = baseSize * 0.045;
+            limit.set('fontSize', clamp(baseFont, 8, baseSize * 0.12));
+        }
+
+        // Hide if empty
+        const txt = String((limit as any).text ?? '').trim();
+        limit.visible = txt.length > 0;
+
+        if (limit.type === 'textbox') {
+            limit.set({ width: w * 0.9 });
+            if (typeof (limit as any).initDimensions === 'function') (limit as any).initDimensions();
+        }
+
+        if (typeof (limit as any).initDimensions === 'function') (limit as any).initDimensions();
+        limitH = limit.visible ? ((limit.getScaledHeight?.() ?? 0) + gap) : 0;
+    }
     
     // 3. Bottom Element (Splash/Price)
     let bottomH = 0;
@@ -12025,20 +12959,70 @@ const resizeSmartObject = (group: any, w: number, h: number) => {
         const marginBottom = h * 0.05;
         
         if (splash.type === 'group' && splash.name === 'priceGroup') {
+            // Apply label styling overrides (local to the selected zone/design; never mutates templates).
+            if (styles && typeof splash.getObjects === 'function') {
+                const parts = splash.getObjects();
+                const priceBg = parts.find((o: any) => o?.name === 'price_bg');
+                const currencyText = parts.find((o: any) => o?.name === 'price_currency_text');
+                const priceInteger = parts.find((o: any) => o?.name === 'price_integer_text');
+                const priceDecimal = parts.find((o: any) => o?.name === 'price_decimal_text');
+                const priceUnit = parts.find((o: any) => o?.name === 'price_unit_text');
+
+                if (priceBg) {
+                    const accent = styles.splashColor ?? styles.accentColor;
+                    if (accent) priceBg.set('stroke', accent);
+                    if (styles.splashFill) priceBg.set('fill', styles.splashFill);
+                    if (typeof styles.splashRoundness === 'number') (priceBg as any).__roundness = styles.splashRoundness;
+                    if (typeof styles.splashStrokeWidth === 'number') (priceBg as any).__strokeWidth = styles.splashStrokeWidth;
+                }
+
+                const applyTextShared = (t: any) => {
+                    if (!t || !String(t.type || '').includes('text')) return;
+                    if (styles.priceFont) t.set('fontFamily', styles.priceFont);
+                    if (styles.priceFontWeight !== undefined) t.set('fontWeight', styles.priceFontWeight as any);
+
+                    const mult = typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
+                    if (typeof t.__fontScale === 'number') {
+                        if (typeof t.__fontScaleBase !== 'number') t.__fontScaleBase = t.__fontScale;
+                        t.__fontScale = t.__fontScaleBase * mult;
+                    }
+                    if (typeof t.initDimensions === 'function') t.initDimensions();
+                };
+
+                const applyPriceText = (t: any) => {
+                    applyTextShared(t);
+                    if (!t || !String(t.type || '').includes('text')) return;
+                    if (typeof styles.priceTextColor === 'string' && styles.priceTextColor.trim()) t.set('fill', styles.priceTextColor);
+                    else if (typeof styles.splashTextColor === 'string' && styles.splashTextColor.trim()) t.set('fill', styles.splashTextColor);
+                };
+
+                const applyCurrencyText = (t: any) => {
+                    applyTextShared(t);
+                    if (!t || !String(t.type || '').includes('text')) return;
+                    // IMPORTANT: do NOT override currency fill by default; preserve the template (ex: black on yellow).
+                    if (typeof styles.priceCurrencyColor === 'string' && styles.priceCurrencyColor.trim()) t.set('fill', styles.priceCurrencyColor);
+                };
+
+                applyCurrencyText(currencyText);
+                [priceInteger, priceDecimal, priceUnit].forEach(applyPriceText);
+            }
+
             const layout = layoutPriceGroup(splash, w, h);
             
             if (layout) {
                 const { pillH } = layout;
+                const scale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
+                const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
                 splash.set({
-                    scaleX: 1,
-                    scaleY: 1,
+                    scaleX: scale,
+                    scaleY: scale,
                     originX: 'center',
                     originY: 'center',
                     left: 0,
-                    top: halfH - (pillH / 2) - marginBottom
+                    top: halfH - ((pillH * scale) / 2) - marginBottom + offsetY
                 });
                 
-                bottomH = pillH + marginBottom;
+                bottomH = (pillH * scale) + marginBottom;
             } else {
                 // Fallback to generic scaling for older cards without named parts
                 let sScale = splash.scaleX;
@@ -12097,7 +13081,7 @@ const resizeSmartObject = (group: any, w: number, h: number) => {
     
     // 4. Image (Middle - Object Fit: Contain)
     if (img) {
-        const availH = h - titleH - bottomH - 20; // 20px buffer
+        const availH = h - titleH - limitH - bottomH - 20; // 20px buffer
         const availW = w * 0.9;
         
         if (availH > 20) {
@@ -12122,7 +13106,7 @@ const resizeSmartObject = (group: any, w: number, h: number) => {
             // Center in available space
             // Space starts at: -halfH + titleH
             // Space center: (-halfH + titleH) + (availH / 2)
-            const centerY = (-halfH + titleH) + (availH / 2);
+            const centerY = (-halfH + titleH + limitH) + (availH / 2);
             
             img.set({
                 scaleX: scale,
@@ -12377,12 +13361,18 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
     
     if (cards.length === 0) return;
     
-    // 2. Sort by visual order (Top-Left to Bottom-Right)
-    cards.sort((a: any, b: any) => {
-        const rowDiff = a.top - b.top;
-        if (Math.abs(rowDiff) > 50) return rowDiff; // Same row tolerance
-        return a.left - b.left;
-    });
+    // 2. Sort by stable zone order when available, otherwise fall back to visual order.
+    const hasAllOrders = cards.every((c: any) => Number.isFinite((c as any)._zoneOrder));
+    if (hasAllOrders) {
+        cards.sort((a: any, b: any) => ((a as any)._zoneOrder ?? 0) - ((b as any)._zoneOrder ?? 0));
+    } else {
+        cards.sort((a: any, b: any) => {
+            const rowDiff = (a.top ?? 0) - (b.top ?? 0);
+            if (Math.abs(rowDiff) > 50) return rowDiff; // Same row tolerance
+            return (a.left ?? 0) - (b.left ?? 0);
+        });
+        cards.forEach((c: any, i: number) => ((c as any)._zoneOrder = i));
+    }
     
     // 3. Setup Grid Vars
     const zoneRect = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
@@ -12393,6 +13383,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
     const lastRowBehavior = zone.lastRowBehavior || 'fill'; 
     const layoutDirection = zone.layoutDirection || 'horizontal';
     const verticalAlign = zone.verticalAlign || 'top';
+    const stylesToApply: Partial<GlobalStyles> = (zone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value;
     
     const count = cards.length;
     
@@ -12457,9 +13448,10 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
         const rowItemW = shouldFillRow
             ? Math.max(50, (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow))
             : itemW;
+        const slotW = (layoutDirection === 'vertical' ? itemW : rowItemW);
 
         // Base Position
-        let x = startX + (col * ((layoutDirection === 'vertical' ? itemW : rowItemW) + gapX));
+        let x = startX + (col * (slotW + gapX));
 
         // Last Row Logic (Horizontal Fill Order)
         if (isLastRow && lastRowBehavior === 'center' && itemsInRow < cols) {
@@ -12468,12 +13460,15 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
             x += remainingSpace / 2;
         }
 
-        const centerX = x + ((layoutDirection === 'vertical' ? itemW : rowItemW) / 2);
+        const centerX = x + (slotW / 2);
         const centerY = startY + (row * (itemH + gapY)) + (itemH / 2);
+
+        // Store slot bounds for optional tooling/debugging and future constraints.
+        (card as any)._zoneSlot = { zoneId: zone._customId, left: x, top: startY + (row * (itemH + gapY)), width: slotW, height: itemH };
         
         // Resize & Position
         if (card.isSmartObject || card.name?.startsWith('product-card')) {
-             resizeSmartObject(card, rowItemW, itemH);
+             resizeSmartObject(card, rowItemW, itemH, stylesToApply);
              card.set({
                  left: centerX,
                  top: centerY,
@@ -12492,7 +13487,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
                  scaleY: itemH / card.height
              });
         }
-        
+
         card.setCoords();
     });
     
@@ -12723,6 +13718,19 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             if (z.opacity === 0) z.opacity = 1;
 
             ensureZoneSanity(z);
+
+            // Zones should start with no background by default.
+            // Fabric defaults rect fill to black when fill is unset/undefined; we normalize using `z.backgroundColor`.
+            const zr = getZoneRect(z);
+            if (zr) {
+                const desired = typeof (z as any).backgroundColor === 'string' ? String((z as any).backgroundColor).trim() : '';
+                if (!desired || desired === 'transparent') {
+                    zr.set('fill', 'transparent');
+                } else {
+                    zr.set('fill', desired);
+                }
+            }
+
             normalizeZoneScale(z);
             // Ensure Fabric v7 group bounds match the inner rect (prevents the "outer container" selection bug).
             safeAddWithUpdate(z);
@@ -12742,6 +13750,15 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             // Ensure visibility
             if (card.visible === false) card.visible = true;
             if (card.opacity === 0 || card.opacity === undefined) card.opacity = 1;
+
+            // Prevent random black rectangles: Fabric defaults rect fill to black when fill is unset/undefined.
+            // If a card's background fill becomes invalid, restore a safe default.
+            if (card.type === 'group' && typeof card.getObjects === 'function') {
+                const bg = card.getObjects().find((c: any) => c?.name === 'offerBackground' && c?.type === 'rect');
+                if (bg && (bg.fill === undefined || bg.fill === null || bg.fill === '')) {
+                    bg.set('fill', 'transparent');
+                }
+            }
 
             // Ensure the card is properly initialized
             if (typeof card.setCoords === 'function') card.setCoords();
@@ -12824,6 +13841,13 @@ const handleRecalculateLayout = () => {
         @load="(data) => loadCanvasData(data)"
       />
 
+      <AiImageStudioModal
+        v-model="aiStudioOpen"
+        :uploads="aiStudioUploads"
+        :initial="aiStudioOptions.initial"
+        @created="handleAiStudioCreated"
+      />
+
       <!-- Central Workspace -->
       <div class="flex flex-1 min-h-0 min-w-0 overflow-hidden relative bg-[#1a1a1a]">
           <!-- Left Sidebar (New Component) -->
@@ -12857,28 +13881,6 @@ const handleRecalculateLayout = () => {
                     @select="handleCanvasContextMenuSelect"
                   />
                   
-                  <!-- Floating Grid Actions (HTML UI outside the grid) -->
-                  <div 
-                    v-if="selectedObjectPos.visible"
-                    class="absolute z-40 pointer-events-none"
-                    :style="{ 
-                        top: (selectedObjectPos.top - 40) + 'px', 
-                        left: selectedObjectPos.left + 'px', 
-                        width: selectedObjectPos.width + 'px',
-                        display: 'flex',
-                        justifyContent: 'center'
-                    }"
-                  >
-                    <div class="bg-[#2c2c2c] p-1 rounded-lg shadow-lg border border-white/10 pointer-events-auto animate-in fade-in zoom-in duration-200" title="Importar Lista de Produtos">
-                        <button
-                            @click="handleImportProductList"
-                            class="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
-                        >
-                            <StickyNote class="w-4 h-4" />
-                        </button>
-                    </div>
-                  </div>
-
                   <!-- Virtual Scrollbars (Figma Style) -->
                   <div 
                     v-show="scrollV.visible" 
@@ -13072,13 +14074,6 @@ const handleRecalculateLayout = () => {
                   <button @click="showLabelTemplatesModal = true" title="Modelos de Etiqueta" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all">
                     <Tag class="w-4 h-4" />
                   </button>
-                  
-                  <div class="w-px h-6 bg-white/10 mx-0.5"></div>
-                  
-                  <button @click="console.log('🔴 BOTÃO CLIQUEADO!'); handleRemoveBackground()" :disabled="isProcessing" title="Remove BG" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
-                    <Scissors class="w-4 h-4" />
-                    <span v-if="isProcessing" class="absolute inset-0 flex items-center justify-center bg-[#2a2a2a] rounded-lg"><span class="w-2 h-2 rounded-full border-2 border-zinc-500 border-t-white animate-spin"></span></span>
-                  </button>
               </div>
           </main>
 
@@ -13143,15 +14138,6 @@ const handleRecalculateLayout = () => {
                    >
                      <Share2 class="w-2.5 h-2.5 flex-shrink-0" />
                      <span>Share</span>
-                   </button>
-
-                   <!-- TESTE REMOVE BG -->
-                   <button
-                     @click="console.log('TESTE BG CLIQUEADO!'); handleRemoveBackground()"
-                     class="h-5 px-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-[9px] font-bold transition-all flex items-center gap-0.5 flex-shrink-0 whitespace-nowrap animate-pulse"
-                     title="Remover fundo da imagem selecionada"
-                   >
-                     <span>🔴 TESTE BG</span>
                    </button>
 
                    <!-- Zoom Dropdown -->

@@ -38,14 +38,17 @@ export default defineEventHandler(async (event) => {
         const assets = await Promise.all(
             (response.Contents || [])
                 .filter(item => item.Key && !item.Key.endsWith('/'))
+                .filter(item => !String(item.Key).startsWith('uploads/bg-removed-')) // Hide derived assets from library
                 .map(async (item) => {
                     const key = item.Key!;
                     const name = key.split('/').pop()?.replace(/^\d+-/, '') || key;
                     
                     // Generate pre-signed URL (valid for 1 hour)
+                    // ChecksumMode DISABLED for S3-compatible storage (e.g. Contabo) that may return 500
                     const getCommand = new GetObjectCommand({
                         Bucket: bucketName,
-                        Key: key
+                        Key: key,
+                        ChecksumMode: 'DISABLED'
                     });
                     const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
                     

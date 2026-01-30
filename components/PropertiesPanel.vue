@@ -55,7 +55,44 @@ const emit = defineEmits<{
 
 // --- Computed Helpers ---
 const isText = computed(() => props.selectedObject && (props.selectedObject.type === 'i-text' || props.selectedObject.type === 'text' || props.selectedObject.type === 'textbox'))
-const isImage = computed(() => props.selectedObject?.type === 'image')
+
+const getSelectionObjects = (obj: any): any[] => {
+  if (!obj) return []
+  if (typeof obj.getObjects === 'function') {
+    const list = obj.getObjects()
+    return Array.isArray(list) ? list : []
+  }
+  const legacy = (obj as any)._objects
+  return Array.isArray(legacy) ? legacy : []
+}
+
+const isImage = computed(() => {
+  const t = String(props.selectedObject?.type || '').toLowerCase()
+  return t === 'image'
+})
+
+const findImageTarget = computed(() => {
+  const obj = props.selectedObject
+  if (!obj) return null
+
+  // Direct image
+  if (String(obj.type || '').toLowerCase() === 'image') return obj
+  if (typeof (obj as any).getSrc === 'function' && (obj as any).getSrc()) return obj
+  if (typeof (obj as any).src === 'string' && (obj as any).src) return obj
+  if (typeof (obj as any)._element?.src === 'string' && (obj as any)._element?.src) return obj
+
+  // Group / activeSelection: find first image inside
+  const t = String(obj.type || '').toLowerCase()
+  if (t === 'group' || t === 'activeselection') {
+    const list = getSelectionObjects(obj)
+    const img = list.find((o: any) => String(o?.type || '').toLowerCase() === 'image' || typeof o?.getSrc === 'function' || typeof o?.src === 'string')
+    return img || null
+  }
+
+  return null
+})
+
+const canRemoveImageBg = computed(() => !!findImageTarget.value)
 const isSmartGroup = computed(() => props.selectedObject?.type === 'group' && props.selectedObject.isSmartObject)
 const isGroup = computed(() => props.selectedObject?.type === 'group' || props.selectedObject?.type === 'activeSelection')
 const isMultiSelect = computed(() => props.selectedObject?.type === 'activeSelection')
@@ -602,31 +639,43 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
       </div>
 
-      <!-- IMAGE FILTERS (New) -->
-      <div v-if="isImage" class="p-4 border-b border-black/20 space-y-3">
+      <!-- IMAGE FILTERS / REMOVE BG -->
+      <div v-if="canRemoveImageBg" class="p-4 border-b border-black/20 space-y-3">
           <div class="flex items-center justify-between">
               <span class="text-[11px] font-bold text-zinc-400">Image Filters</span>
-              <button
-                  @click="console.log('🔴 BOTÃO PROPERTIES CLICADO!'); $emit('action', 'remove-image-bg')"
-                  class="flex items-center gap-1 px-2 py-1 text-[9px] bg-purple-600 hover:bg-purple-500 rounded transition-colors"
-                  title="Remover fundo da imagem"
-              >
-                  <Scan class="w-3 h-3" />
-                  Remover Fundo
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                    type="button"
+                    @click="$emit('action', 'ai-edit-image')"
+                    class="flex items-center gap-1 px-2 py-1 text-[9px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                    title="Editar esta imagem com IA (máscara)"
+                >
+                    <Sparkles class="w-3 h-3" />
+                    Editar com IA
+                </button>
+                <button
+                    type="button"
+                    @click="$emit('action', 'remove-image-bg')"
+                    class="flex items-center gap-1 px-2 py-1 text-[9px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                    title="Remover fundo da imagem"
+                >
+                    <Scan class="w-3 h-3" />
+                    Remover Fundo
+                </button>
+              </div>
           </div>
 
-          <div class="space-y-2">
+          <div v-if="isImage" class="space-y-2">
               <div class="flex justify-between items-center"><span class="text-[10px] text-zinc-500">Brightness</span><span class="text-[10px] text-zinc-400">{{ (getVal('filters', []).find((f: any) => f.type === 'Brightness')?.brightness || 0).toFixed(2) }}</span></div>
               <input type="range" min="-1" max="1" step="0.05" :value="getVal('filters', []).find((f: any) => f.type === 'Brightness')?.brightness || 0" @input="e => $emit('update-property', 'filter-brightness', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
           </div>
 
-          <div class="space-y-2">
+          <div v-if="isImage" class="space-y-2">
               <div class="flex justify-between items-center"><span class="text-[10px] text-zinc-500">Contrast</span><span class="text-[10px] text-zinc-400">{{ (getVal('filters', []).find((f: any) => f.type === 'Contrast')?.contrast || 0).toFixed(2) }}</span></div>
               <input type="range" min="-1" max="1" step="0.05" :value="getVal('filters', []).find((f: any) => f.type === 'Contrast')?.contrast || 0" @input="e => $emit('update-property', 'filter-contrast', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
           </div>
           
-          <div class="space-y-2">
+          <div v-if="isImage" class="space-y-2">
               <div class="flex justify-between items-center"><span class="text-[10px] text-zinc-500">Saturation</span><span class="text-[10px] text-zinc-400">{{ (getVal('filters', []).find((f: any) => f.type === 'Saturation')?.saturation || 0).toFixed(2) }}</span></div>
               <input type="range" min="-1" max="1" step="0.05" :value="getVal('filters', []).find((f: any) => f.type === 'Saturation')?.saturation || 0" @input="e => $emit('update-property', 'filter-saturation', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
           </div>

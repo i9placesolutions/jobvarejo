@@ -34,76 +34,126 @@ const getRemoveBackground = async () => {
     return removeBackgroundModule;
 };
 
-export const processImage = async (imageBuffer: Buffer) => {
+// Valida se a imagem resultante tem conteúdo visível (não totalmente transparente)
+const validateImageHasContent = async (buffer: Buffer, sharp: any): Promise<boolean> => {
     try {
-        const sharp = await getSharp();
+        const { data, info } = await sharp(buffer).raw().toBuffer({ resolveWithObject: true });
+        
+        let opaquePixels = 0;
+        const totalPixels = info.width * info.height;
+        
+        // Check alpha channel (every 4th byte starting at index 3 for RGBA)
+        if (info.channels === 4) {
+            for (let i = 3; i < data.length; i += 4) {
+                if (data[i] > 10) opaquePixels++; // Consider pixels with alpha > 10 as opaque
+            }
+        } else {
+            // No alpha channel = all pixels are opaque
+            return true;
+        }
+        
+        const opaquePercent = (opaquePixels / totalPixels) * 100;
+        console.log(`📊 [Image Validate] Pixels opacos: ${opaquePercent.toFixed(2)}% (${opaquePixels}/${totalPixels})`);
+        
+        // If less than 1% of pixels are opaque, something is wrong
+        return opaquePercent > 1;
+    } catch (e) {
+        console.warn('⚠️ [Image Validate] Erro ao validar imagem:', e);
+        return true; // Assume it's valid if we can't check
+    }
+};
 
-        console.log('🖼️ [Image Process] Iniciando processamento de imagem...');
+export const processImage = async (imageBuffer: Buffer) => {
+    return processImageWithOptions(imageBuffer, {});
+};
 
-        // 1. Resize/Normalize (to max 800x800) and convert to PNG
-        console.log('📐 [Image Process] Redimensionando para max 800x800...');
-        const resizedBuffer = await sharp(imageBuffer)
-            .resize(800, 800, {
-                fit: 'inside',
-                withoutEnlargement: true,
-                background: { r: 0, g: 0, b: 0, alpha: 0 } // Transparent padding if needed, but 'inside' avoids it
-            })
-            .png()
-            .toBuffer();
+type ProcessImageOptions = {
+    outputFormat?: 'webp' | 'png';
+};
 
+export const processImageWithOptions = async (imageBuffer: Buffer, options: ProcessImageOptions = {}) => {
+    const sharp = await getSharp();
+    const outputFormat: 'webp' | 'png' = options.outputFormat || 'webp';
+
+    console.log('🖼️ [Image Process] Iniciando processamento de imagem...');
+    console.log(`📊 [Image Process] Buffer original: ${imageBuffer.length} bytes`);
+
+    // 1. Resize/Normalize (to max 800x800) and convert to PNG
+    console.log('📐 [Image Process] Redimensionando para max 800x800...');
+    const resizedBuffer = await sharp(imageBuffer)
+        .resize(800, 800, {
+            fit: 'inside',
+            withoutEnlargement: true,
+            background: { r: 255, g: 255, b: 255, alpha: 1 } // White background for resize
+        })
+        .flatten({ background: { r: 255, g: 255, b: 255 } }) // Ensure no pre-existing alpha
+        .png()
+        .toBuffer();
+
+    const resizedMeta = await sharp(resizedBuffer).metadata();
+    console.log(`📊 [Image Process] Após resize: ${resizedBuffer.length} bytes, ${resizedMeta.width}x${resizedMeta.height}`);
+
+    try {
         // 2. Remove Background using @imgly/background-removal-node
-        // It expects a MIME type when using Blob.
         console.log('🎨 [Image Process] Removendo fundo da imagem...');
         const blob = new Blob([resizedBuffer], { type: 'image/png' });
 
-        // Config: publicPath might be needed to locate wasm files if not resolved automatically.
-        // Usually works out of the box in Node.
-        // We set progress to false to avoid console spam
         const removeBackground = await getRemoveBackground();
         const rbResult = await removeBackground(blob, {
-            progress: (key, current, total) => {},
-            debug: false
+            progress: (key: string, current: number, total: number) => {
+                if (current === total) console.log(`   ✓ ${key} concluído`);
+            },
+            debug: false,
+            model: 'medium',
+            output: {
+                format: 'image/png',
+                type: 'foreground'
+            }
         });
 
         const rbBuffer = Buffer.from(await rbResult.arrayBuffer());
+        console.log(`📊 [Image Process] Após remoção de fundo: ${rbBuffer.length} bytes`);
+
+        // Validate that the result has actual content
+        const hasContent = await validateImageHasContent(rbBuffer, sharp);
+        
+        if (!hasContent) {
+            console.warn('⚠️ [Image Process] Imagem resultante está vazia/transparente! Retornando original otimizada...');
+            // Return optimized original without background removal
+            const fallbackPipeline = sharp(imageBuffer).resize(800, 800, { fit: 'inside', withoutEnlargement: true });
+            const fallbackBuffer = outputFormat === 'png'
+                ? await fallbackPipeline.png().toBuffer()
+                : await fallbackPipeline.webp({ quality: 85 }).toBuffer();
+            return fallbackBuffer;
+        }
+
         console.log('✅ [Image Process] Fundo removido com sucesso!');
 
-        // 3. Optimize to WebP
+        // 3. Optimize output (preserve alpha)
+        if (outputFormat === 'png') {
+            console.log('📦 [Image Process] Otimizando para PNG...');
+            const finalPng = await sharp(rbBuffer).png().toBuffer();
+            console.log(`✅ [Image Process] Imagem processada: ${finalPng.length} bytes`);
+            return finalPng;
+        }
+
         console.log('📦 [Image Process] Otimizando para WebP...');
-        const finalBuffer = await sharp(rbBuffer)
-            .webp({ quality: 85 })
-            .toBuffer();
+        const finalWebp = await sharp(rbBuffer).webp({ quality: 85, alphaQuality: 100 }).toBuffer();
 
-        console.log('✅ [Image Process] Imagem processada com sucesso!');
-        return finalBuffer;
+        console.log(`✅ [Image Process] Imagem processada: ${finalWebp.length} bytes`);
+        return finalWebp;
+        
     } catch (error: any) {
-        // If background removal fails, try to at least resize and optimize
-        if (error?.message?.includes('Background removal') || error?.message?.includes('imgly')) {
-            console.warn('⚠️ [Image Process] Remoção de fundo falhou, aplicando apenas resize e otimização...');
-            try {
-                const sharp = await getSharp();
-                const fallbackBuffer = await sharp(imageBuffer)
-                    .resize(800, 800, {
-                        fit: 'inside',
-                        withoutEnlargement: true
-                    })
-                    .webp({ quality: 85 })
-                    .toBuffer();
-                console.log('✅ [Image Process] Imagem processada (sem remoção de fundo)');
-                return fallbackBuffer;
-            } catch (fallbackError) {
-                console.error('❌ [Image Process] Fallback também falhou:', fallbackError);
-                throw fallbackError;
-            }
-        }
-
-        // If sharp is not available, return original buffer as fallback
-        if (error?.message?.includes('Sharp não está instalado')) {
-            console.warn('⚠️ [Image Process] Retornando imagem original (sharp não disponível)');
-            return imageBuffer;
-        }
-        console.error("❌ [Image Process] Erro no processamento:", error);
-        throw error;
+        console.error('❌ [Image Process] Erro na remoção de fundo:', error?.message || error);
+        
+        // Fallback: return resized and optimized original
+        console.warn('⚠️ [Image Process] Aplicando fallback (sem remoção de fundo)...');
+        const fallbackPipeline = sharp(imageBuffer).resize(800, 800, { fit: 'inside', withoutEnlargement: true });
+        const fallbackBuffer = outputFormat === 'png'
+            ? await fallbackPipeline.png().toBuffer()
+            : await fallbackPipeline.webp({ quality: 85 }).toBuffer();
+        console.log(`✅ [Image Process] Fallback aplicado: ${fallbackBuffer.length} bytes`);
+        return fallbackBuffer;
     }
 };
 
@@ -112,4 +162,24 @@ export const downloadImage = async (url: string): Promise<Buffer> => {
     if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
     const arrayBuffer = await response.arrayBuffer();
     return Buffer.from(arrayBuffer);
+}
+
+export const createBlankPng = async (width: number, height: number, opts: { transparent?: boolean } = {}): Promise<Buffer> => {
+    const sharp = await getSharp();
+    const w = Math.max(1, Math.floor(Number(width) || 1));
+    const h = Math.max(1, Math.floor(Number(height) || 1));
+    const transparent = opts.transparent !== false;
+    const background = transparent
+        ? { r: 0, g: 0, b: 0, alpha: 0 }
+        : { r: 255, g: 255, b: 255, alpha: 1 };
+    return sharp({
+        create: {
+            width: w,
+            height: h,
+            channels: 4,
+            background
+        }
+    })
+        .png()
+        .toBuffer();
 }
