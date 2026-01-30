@@ -75,6 +75,214 @@ const activeMode = ref<'design' | 'prototype'>('design')
 const showZoomMenu = ref(false)
 let globalMouseUpHandler: ((e: MouseEvent) => void) | null = null
 
+// Flag to track if canvas is destroyed (prevents errors after unmount)
+const isCanvasDestroyed = ref(false)
+
+/**
+ * Safe wrapper for requestRenderAll that checks if canvas is valid before rendering.
+ * Prevents "Cannot read properties of undefined" errors when canvas is disposed.
+ */
+const safeRequestRenderAll = (canvasInstance?: any): void => {
+    const c = canvasInstance || canvas.value;
+    if (!c || isCanvasDestroyed.value) return;
+    if (typeof c.requestRenderAll !== 'function') return;
+    
+    // Additional check for contextTop which causes clearRect errors
+    try {
+        // Check if contextTop exists (used in renderTop)
+        if (c.contextTop === undefined || c.contextTop === null) {
+            // Canvas might be in an invalid state, skip render
+            return;
+        }
+        c.requestRenderAll();
+    } catch (e) {
+        // Silently ignore render errors on destroyed/invalid canvas
+    }
+};
+
+/**
+ * Validates if a clipPath is a valid Fabric.js object
+ * A valid clipPath must have required Fabric methods and properties
+ */
+const isValidClipPath = (clipPath: any): boolean => {
+    if (!clipPath) return false;
+
+    // Must be an object
+    if (typeof clipPath !== 'object' || Array.isArray(clipPath)) return false;
+
+    // Must have Fabric-specific properties
+    if (!clipPath.type) return false;
+
+    // CRITICAL: _objects must ALWAYS be an array if it exists
+    // fabric.js createClipPathLayer calls forEach on _objects
+    if (clipPath._objects !== undefined && !Array.isArray(clipPath._objects)) {
+        console.warn('[clipPath] _objects não é um array:', clipPath._objects);
+        return false;
+    }
+
+    // Ensure _objects is initialized as empty array for group-like objects
+    // This prevents "forEach of undefined" errors in fabric.js
+    if (clipPath._objects === undefined &&
+        (clipPath.type === 'group' || clipPath.type === 'activeSelection')) {
+        console.warn('[clipPath] Group sem _objects array:', clipPath.type);
+        return false;
+    }
+
+    // Must have render method
+    if (typeof clipPath.render !== 'function') return false;
+
+    // RECURSIVELY validate nested clipPaths
+    if (clipPath.clipPath && !isValidClipPath(clipPath.clipPath)) {
+        console.warn('[clipPath] clipPath aninhado inválido');
+        return false;
+    }
+
+    // Validate all child objects have proper _objects arrays
+    if (Array.isArray(clipPath._objects)) {
+        for (const child of clipPath._objects) {
+            if (child && child._objects !== undefined && !Array.isArray(child._objects)) {
+                console.warn('[clipPath] Child com _objects inválido:', child.type);
+                return false;
+            }
+            // Check nested clipPath on child
+            if (child && child.clipPath && !isValidClipPath(child.clipPath)) {
+                console.warn('[clipPath] Child com clipPath aninhado inválido');
+                return false;
+            }
+        }
+    }
+
+    return true;
+};
+
+/**
+ * Clears invalid clipPath from an object
+ * @param obj - Fabric object to check
+ * @param recursive - Whether to check children in groups
+ */
+const clearInvalidClipPath = (obj: any, recursive: boolean = false): void => {
+    if (!obj) return;
+
+    try {
+        // First, fix any clipPath that has malformed _objects
+        if (obj.clipPath) {
+            const clip = obj.clipPath;
+            // CRITICAL FIX: Ensure _objects is ALWAYS an array for clipPaths
+            // fabric.js createClipPathLayer calls forEach on _objects without checking
+            if (clip._objects === undefined || clip._objects === null) {
+                clip._objects = [];
+            } else if (!Array.isArray(clip._objects)) {
+                console.warn('[clipPath] _objects não é um array em:', obj.type || 'unknown', '- removendo clipPath');
+                obj.set('clipPath', null);
+                if (obj._frameClipOwner) {
+                    delete obj._frameClipOwner;
+                }
+                return;
+            }
+            // Also fix nested clipPath
+            if (clip.clipPath) {
+                if (clip.clipPath._objects === undefined || clip.clipPath._objects === null) {
+                    clip.clipPath._objects = [];
+                } else if (!Array.isArray(clip.clipPath._objects)) {
+                    obj.set('clipPath', null);
+                    if (obj._frameClipOwner) {
+                        delete obj._frameClipOwner;
+                    }
+                    return;
+                }
+            }
+        }
+
+        // Check if object has an invalid clipPath (after fixing attempt)
+        if (obj.clipPath && !isValidClipPath(obj.clipPath)) {
+            console.warn('[clipPath] Removendo clipPath inválido de objeto:', obj.type || 'unknown', obj.id || 'no-id');
+            obj.set('clipPath', null);
+
+            // Also clear the frame owner reference if it exists
+            if (obj._frameClipOwner) {
+                delete obj._frameClipOwner;
+            }
+        }
+
+        // Also check and fix malformed _objects arrays on the object itself
+        // This happens when fabric.js objects are deserialized incorrectly
+        if (obj._objects !== undefined && !Array.isArray(obj._objects)) {
+            console.warn('[clipPath] Fixing _objects não-array em:', obj.type || 'unknown');
+            obj._objects = [];
+        }
+
+        // Recursively check children in groups
+        if (recursive && obj._objects && Array.isArray(obj._objects)) {
+            obj._objects.forEach((child: any) => {
+                clearInvalidClipPath(child, true);
+            });
+        }
+
+        // Also check objects in groups via getObjects if available
+        if (recursive && typeof obj.getObjects === 'function') {
+            const children = obj.getObjects();
+            if (Array.isArray(children)) {
+                children.forEach((child: any) => {
+                    clearInvalidClipPath(child, true);
+                });
+            }
+        }
+    } catch (e) {
+        // Silently handle errors during clipPath clearing
+        console.warn('[clipPath] Erro ao limpar clipPath:', e);
+    }
+};
+
+/**
+ * Validates and sanitizes all clipPaths in the canvas.
+ * Should be called after loadFromJSON and before any render operations.
+ */
+const sanitizeAllClipPaths = (): void => {
+    if (!canvas.value || isCanvasDestroyed.value) return;
+
+    try {
+        const objects = canvas.value.getObjects();
+        objects.forEach((obj: any) => {
+            clearInvalidClipPath(obj, true);
+        });
+    } catch (e) {
+        console.warn('⚠️ Erro ao sanitizar clipPaths:', e);
+    }
+};
+
+/**
+ * Nuclear option: Removes ALL clipPaths from the canvas.
+ * Use this as a last resort when sanitization fails and rendering still crashes.
+ */
+const removeAllClipPaths = (): void => {
+    if (!canvas.value || isCanvasDestroyed.value) return;
+
+    try {
+        const objects = canvas.value.getObjects();
+        let clearedCount = 0;
+        objects.forEach((obj: any) => {
+            if (obj.clipPath) {
+                obj.set('clipPath', null);
+                delete obj._frameClipOwner;
+                clearedCount++;
+            }
+            // Also check nested objects in groups
+            if (obj._objects && Array.isArray(obj._objects)) {
+                obj._objects.forEach((child: any) => {
+                    if (child.clipPath) {
+                        child.set('clipPath', null);
+                        delete child._frameClipOwner;
+                        clearedCount++;
+                    }
+                });
+            }
+        });
+        console.log(`[clipPath] Nuclear option: removidos ${clearedCount} clipPaths`);
+    } catch (e) {
+        console.warn('⚠️ Erro ao remover clipPaths:', e);
+    }
+};
+
 // Product Zone State
 const productZoneState = useProductZone()
 
@@ -336,12 +544,17 @@ const getOrCreateFrameClipRect = (frame: any) => {
     const wantPathClip = hasCornerRadii;
 
     if (!(frame as any).__clipRect) {
-        (frame as any).__clipRect = wantPathClip
+        // CRITICAL: Force originX/originY to match the frame's origin for consistent clipping
+        // Frames are created with originX='center' and originY='center', so we use those as defaults
+        const clipOriginX = frame.originX || 'center';
+        const clipOriginY = frame.originY || 'center';
+
+        const clip = wantPathClip
             ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
                 left: frame.left,
                 top: frame.top,
-                originX: frame.originX ?? 'left',
-                originY: frame.originY ?? 'top',
+                originX: clipOriginX,
+                originY: clipOriginY,
                 angle: frame.angle ?? 0,
                 scaleX: frame.scaleX ?? 1,
                 scaleY: frame.scaleY ?? 1,
@@ -355,8 +568,8 @@ const getOrCreateFrameClipRect = (frame: any) => {
                 top: frame.top,
                 width: frame.width,
                 height: frame.height,
-                originX: frame.originX ?? 'left',
-                originY: frame.originY ?? 'top',
+                originX: clipOriginX,
+                originY: clipOriginY,
                 angle: frame.angle ?? 0,
                 scaleX: frame.scaleX ?? 1,
                 scaleY: frame.scaleY ?? 1,
@@ -367,17 +580,27 @@ const getOrCreateFrameClipRect = (frame: any) => {
                 evented: false,
                 objectCaching: false
             });
+
+        // CRITICAL: Initialize _objects as empty array for all clipPath objects
+        // fabric.js createClipPathLayer calls forEach on _objects without checking
+        clip._objects = [];
+
+        (frame as any).__clipRect = clip;
     }
 
     let clip = (frame as any).__clipRect;
+    // CRITICAL: Force originX/originY to match the frame's origin for consistent clipping
+    const clipOriginX = frame.originX || 'center';
+    const clipOriginY = frame.originY || 'center';
+
     // If mode changed (rect -> path or path -> rect), recreate clip and let syncFrameClips refresh children.
     const isPathClip = String(clip?.type || '').toLowerCase() === 'path';
     if (wantPathClip && !isPathClip) {
         clip = new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
             left: frame.left,
             top: frame.top,
-            originX: frame.originX ?? 'left',
-            originY: frame.originY ?? 'top',
+            originX: clipOriginX,
+            originY: clipOriginY,
             angle: frame.angle ?? 0,
             scaleX: frame.scaleX ?? 1,
             scaleY: frame.scaleY ?? 1,
@@ -386,6 +609,7 @@ const getOrCreateFrameClipRect = (frame: any) => {
             evented: false,
             objectCaching: false
         });
+        clip._objects = []; // CRITICAL: Initialize _objects
         (frame as any).__clipRect = clip;
     } else if (!wantPathClip && isPathClip) {
         clip = new fabric.Rect({
@@ -393,8 +617,8 @@ const getOrCreateFrameClipRect = (frame: any) => {
             top: frame.top,
             width: frame.width,
             height: frame.height,
-            originX: frame.originX ?? 'left',
-            originY: frame.originY ?? 'top',
+            originX: clipOriginX,
+            originY: clipOriginY,
             angle: frame.angle ?? 0,
             scaleX: frame.scaleX ?? 1,
             scaleY: frame.scaleY ?? 1,
@@ -405,16 +629,16 @@ const getOrCreateFrameClipRect = (frame: any) => {
             evented: false,
             objectCaching: false
         });
+        clip._objects = []; // CRITICAL: Initialize _objects
         (frame as any).__clipRect = clip;
     }
 
-    // Update properties.
     if (String(clip?.type || '').toLowerCase() === 'path') {
         clip.set({
             left: frame.left,
             top: frame.top,
-            originX: frame.originX ?? 'left',
-            originY: frame.originY ?? 'top',
+            originX: clipOriginX,
+            originY: clipOriginY,
             angle: frame.angle ?? 0,
             scaleX: frame.scaleX ?? 1,
             scaleY: frame.scaleY ?? 1,
@@ -430,8 +654,8 @@ const getOrCreateFrameClipRect = (frame: any) => {
             top: frame.top,
             width: frame.width,
             height: frame.height,
-            originX: frame.originX ?? 'left',
-            originY: frame.originY ?? 'top',
+            originX: clipOriginX,
+            originY: clipOriginY,
             angle: frame.angle ?? 0,
             scaleX: frame.scaleX ?? 1,
             scaleY: frame.scaleY ?? 1,
@@ -441,6 +665,11 @@ const getOrCreateFrameClipRect = (frame: any) => {
         });
     }
     if (typeof clip.setCoords === 'function') clip.setCoords();
+    // CRITICAL: Ensure _objects is always initialized, even for existing clips
+    // This can happen when clips are cached and reused
+    if (clip && clip._objects === undefined) {
+        clip._objects = [];
+    }
     return clip;
 };
 
@@ -889,7 +1118,7 @@ const updatePenPreview = () => {
                     // Ensure no clipping
                     currentPenPath.value.set('clipTo', undefined);
                     // Force immediate render for smooth preview
-                    canvas.value.renderAll();
+                    safeRequestRenderAll();
                 } catch (e) {
                     // If update fails, recreate the path
                     canvas.value.remove(currentPenPath.value);
@@ -905,7 +1134,7 @@ const updatePenPreview = () => {
                         objectCaching: false, // Disable caching for real-time updates
                     });
                     canvas.value.add(currentPenPath.value);
-                    canvas.value.renderAll();
+                    safeRequestRenderAll();
                 }
             } else {
                 // CREATE new preview line (only once)
@@ -922,14 +1151,14 @@ const updatePenPreview = () => {
                     objectCaching: false, // Disable caching for real-time updates
                 });
                 canvas.value.add(currentPenPath.value);
-                canvas.value.renderAll();
+                safeRequestRenderAll();
             }
         } else {
             // Remove preview line if no mouse position
             if (currentPenPath.value) {
                 canvas.value.remove(currentPenPath.value);
                 currentPenPath.value = null;
-                canvas.value.renderAll();
+                safeRequestRenderAll();
             }
         }
         return;
@@ -960,7 +1189,7 @@ const updatePenPreview = () => {
         try {
             currentPenPath.value.set('path', fabric.util.parsePath(pathString));
             currentPenPath.value.setCoords();
-            canvas.value.renderAll();
+            safeRequestRenderAll();
         } catch (e) {
             // If update fails, recreate the path
             canvas.value.remove(currentPenPath.value);
@@ -973,7 +1202,7 @@ const updatePenPreview = () => {
                 excludeFromExport: true
             });
             canvas.value.add(currentPenPath.value);
-            canvas.value.renderAll();
+            safeRequestRenderAll();
         }
     } else {
         // CREATE new preview path (only once)
@@ -986,7 +1215,7 @@ const updatePenPreview = () => {
             excludeFromExport: true
         });
         canvas.value.add(currentPenPath.value);
-        canvas.value.renderAll();
+        safeRequestRenderAll();
     }
 }
 
@@ -2326,12 +2555,32 @@ const startPresentation = async (pageIndex = -1) => {
 
     canvas.value.discardActiveObject();
     canvas.value.requestRenderAll();
-    
-    // 1. Generate Image
-    presentationImage.value = canvas.value.toDataURL({
-        format: 'png',
-        multiplier: 2
-    });
+
+    // 1. Sanitize clipPaths before generating image
+    sanitizeAllClipPaths();
+
+    // 2. Generate Image
+    try {
+        presentationImage.value = canvas.value.toDataURL({
+            format: 'png',
+            multiplier: 2
+        });
+    } catch (err) {
+        console.error('[Prototype] Erro ao gerar imagem:', err);
+        // Nuclear option: clear all clipPaths
+        removeAllClipPaths();
+        try {
+            canvas.value.requestRenderAll();
+            await new Promise(resolve => setTimeout(resolve, 10));
+            presentationImage.value = canvas.value.toDataURL({
+                format: 'png',
+                multiplier: 2
+            });
+        } catch (err2) {
+            console.error('[Prototype] Falha definitiva ao gerar imagem:', err2);
+            presentationImage.value = '';
+        }
+    }
     
     // 2. Generate Hotspots
     // We need to map object coordinates to the image percentages to be responsive in modal
@@ -2444,13 +2693,18 @@ const renderProductZone = (zone: any) => {
 
     let zoneRect = zoneObjectRef.value;
 
-    if (!zoneRect) {
-        // Auto-creation DISABLED due to user preference for 'Infinite/Free Canvas'
-        // To enable: Trigger this manually or use a flag
+    // Only create zone if user explicitly enabled it
+    if (!zone.enabled) {
+        // Remove existing zone if disabled
+        if (zoneRect) {
+            canvas.value.remove(zoneRect);
+            zoneObjectRef.value = null;
+        }
         return;
+    }
 
-        /* 
-        // Create Zone Container
+    if (!zoneRect) {
+        // Create Zone Container (only when enabled)
         zoneRect = new fabric.Rect({
             left: zone.x,
             top: zone.y,
@@ -2464,9 +2718,9 @@ const renderProductZone = (zone: any) => {
             hasControls: true,
             lockRotation: true,
             id: 'product_zone_container',
-            isZone: true // Custom flag
+            isZone: true, // Custom flag
+            isProductZone: true // Flag to identify as product zone
         });
-        */
 
         // Add Event Listeners for "Smart" behavior
         zoneRect.on('moving', (e: any) => {
@@ -2516,7 +2770,15 @@ const renderProductZone = (zone: any) => {
         });
 
         canvas.value.add(zoneRect);
-        canvas.value.sendToBack(zoneRect); // Keep behind products
+        // Move to back by manipulating _objects array (Fabric.js v7 compatible)
+        const objects = canvas.value._objects;
+        if (Array.isArray(objects)) {
+            const index = objects.indexOf(zoneRect);
+            if (index > -1) {
+                objects.splice(index, 1);
+                objects.unshift(zoneRect);
+            }
+        }
         zoneObjectRef.value = zoneRect;
     } else {
         // Update existing zone visual
@@ -2968,7 +3230,7 @@ watch(activePage, async (newPage, oldPage) => {
                 }
             });
 
-            canvas.value.renderAll();
+            safeRequestRenderAll();
         } else {
             // New Blank Page starts with default settings
             // canvas.value.backgroundColor = '#ffffff'; // NO! Workspace is dark. Artboard is white.
@@ -3059,7 +3321,7 @@ watch(activePage, async (newPage, oldPage) => {
 
 const zoomToFit = () => {
     if (!canvas.value || !wrapperEl.value) return;
-    
+
     // Refresh Canvas Size
     canvas.value.setDimensions({
         width: wrapperEl.value.clientWidth,
@@ -3070,7 +3332,9 @@ const zoomToFit = () => {
     const vHeight = canvas.value.getHeight();
     // Infinite Canvas Logic: Fit to ALL Objects
     const objects = canvas.value.getObjects().filter((o: any) => o.id !== 'artboard-bg' && !o.excludeFromExport);
-    
+
+    console.log('🔍 zoomToFit: objects count:', objects.length, 'viewport:', vWidth, 'x', vHeight);
+
     if (objects.length === 0) {
         // Empty Canvas? Center at (0,0) with zoom 1 or default zoom
         canvas.value.setViewportTransform([1, 0, 0, 1, vWidth / 2, vHeight / 2]);
@@ -3081,7 +3345,7 @@ const zoomToFit = () => {
 
     // Calculate Bounding Box of all content
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    
+
     objects.forEach((obj: any) => {
         // `getBoundingRect(true, true)` returns absolute/world coords (no viewport),
         // which is what we want for a stable zoom-to-fit.
@@ -3096,7 +3360,9 @@ const zoomToFit = () => {
 
     const contentWidth = maxX - minX;
     const contentHeight = maxY - minY;
-    
+
+    console.log('🔍 zoomToFit: bounding box:', { minX, minY, maxX, maxY, contentWidth, contentHeight });
+
     // Safety check
     if (contentWidth <= 0 || contentHeight <= 0) {
          canvas.value.setViewportTransform([1, 0, 0, 1, vWidth / 2, vHeight / 2]);
@@ -3107,10 +3373,12 @@ const zoomToFit = () => {
 
     // Add padding (10%)
     const padding = 100;
-    
+
     const scaleX = (vWidth - padding * 2) / contentWidth;
     const scaleY = (vHeight - padding * 2) / contentHeight;
     const scale = Math.min(scaleX, scaleY, 1); // Max zoom 1 to avoid too close
+
+    console.log('🔍 zoomToFit: scale calculations:', { scaleX, scaleY, finalScale: scale });
 
     // Center Logic
     const contentCenterX = minX + contentWidth / 2;
@@ -3119,12 +3387,14 @@ const zoomToFit = () => {
     const viewportX = (vWidth / 2) - (contentCenterX * scale);
     const viewportY = (vHeight / 2) - (contentCenterY * scale);
 
+    console.log('🔍 zoomToFit: viewport transform:', { scale, viewportX, viewportY });
+
     canvas.value.setViewportTransform([scale, 0, 0, scale, viewportX, viewportY]);
     updateZoomState();
     showZoomMenu.value = false
-    
+
     // Infinite Canvas Mode: No Artboard update needed
-    // updateArtboard(); 
+    // updateArtboard();
 }
 
 const updateArtboard = () => {
@@ -3975,7 +4245,7 @@ onMounted(async () => {
                           }
                       });
 
-                      canvas.value.renderAll();
+                      safeRequestRenderAll();
 
                       // Restore last viewport (pan/zoom) if present; otherwise fit.
                       if (savedVpt) {
@@ -4040,7 +4310,15 @@ let saveCurrentState = () => {};
 // Fabric's `toJSON()` does NOT include viewportTransform by default.
 const CANVAS_VIEWPORT_JSON_KEY = '__canvasViewport';
 const getSavedViewportTransform = (data: any): number[] | null => {
-    const vpt = data?.[CANVAS_VIEWPORT_JSON_KEY]?.vpt;
+    const viewportData = data?.[CANVAS_VIEWPORT_JSON_KEY];
+
+    // Check for explicit PSD import flag - always reset viewport for PSD imports
+    if (viewportData?._psdImport) {
+        console.log('📐 PSD import detected - resetting viewport to fit content')
+        return null; // Force zoomToFit
+    }
+
+    const vpt = viewportData?.vpt;
     if (!Array.isArray(vpt) || vpt.length < 6) return null;
     // Ensure all are finite numbers
     for (let i = 0; i < 6; i++) {
@@ -4279,7 +4557,7 @@ const missingFramesLogged = new Set<string>();
 const setupHistory = () => {
     if (!canvas.value) return;
 
-    const saveState = () => {
+    const saveState = async () => {
         if (isHistoryProcessing.value) return; // Prevent loop
         
         // Remove redo stack if new action happens (standard history behavior)
@@ -4334,7 +4612,13 @@ const setupHistory = () => {
         });
         
         // CRITICAL: Force canvas to update its internal object list
-        canvas.value.renderAll();
+        // Clear any problematic clipPaths from zones before rendering
+        allObjs.forEach((obj: any) => {
+            if (obj.clipPath && (obj.isGridZone || obj.isProductZone || obj.name === 'gridZone' || obj.name === 'productZoneContainer')) {
+                obj.clipPath = null;
+            }
+        });
+        safeRequestRenderAll();
         
         // CRITICAL: Pre-serialize all frames to ensure they're included
         // Sometimes toJSON() misses objects, so we'll manually add them if needed
@@ -4361,7 +4645,16 @@ const setupHistory = () => {
         
         // Serialize with custom props
         const json = canvas.value.toJSON([...CANVAS_CUSTOM_PROPS]);
-        
+
+        // CRITICAL: Remove clipPath from all product zones in JSON to prevent rendering errors
+        if (json.objects && Array.isArray(json.objects)) {
+            json.objects.forEach((obj: any) => {
+                if (obj.clipPath && (obj.isGridZone || obj.isProductZone || obj.name === 'gridZone' || obj.name === 'productZoneContainer')) {
+                    obj.clipPath = undefined;
+                }
+            });
+        }
+
         // DEBUG: Log object order being saved
         console.log(`📋 Ordem dos objetos ao salvar (ANTES de verificar missingFrames):`, json.objects?.map((o: any, i: number) => `[${i}] ${o.type} - ${o.name || o.layerName || o._customId} (isFrame=${o.isFrame})`));
         
@@ -4525,10 +4818,20 @@ const setupHistory = () => {
         // CRITICAL: Não salvar se as páginas ainda não foram carregadas
         if (project.activePageIndex >= 0 && project.pages.length > 0 && project.pages[project.activePageIndex]) {
              const objectCount = json.objects?.length || 0;
+             const currentPage = project.pages[project.activePageIndex];
+             const existingObjectCount = currentPage?.canvasData?.objects?.length || 0;
+
+             // CRITICAL: Não sobrescrever canvasData existente com um canvas vazio
+             // Isso evita perder dados quando saveState é chamado acidentalmente com canvas vazio
+             if (objectCount === 0 && existingObjectCount > 0) {
+                 console.warn(`⚠️ Pulando salvamento: canvas está vazio (${objectCount} objetos) mas página já tem ${existingObjectCount} objetos salvos`);
+                 return;
+             }
+
              console.log(`💾 Salvando estado: ${objectCount} objeto(s) para página ${project.activePageIndex}`);
-             
+
              updatePageData(project.activePageIndex, json);
-             
+
              // Verificar se os dados foram salvos corretamente
              const savedPage = project.pages[project.activePageIndex];
              if (savedPage?.canvasData) {
@@ -4541,22 +4844,183 @@ const setupHistory = () => {
                  console.error(`❌ PROBLEMA: Estado não foi salvo! Página ${project.activePageIndex} não tem canvasData`);
              }
              
-             // Generate Thumbnail (Debounced ideally, but simplistic here)
-             // We use a small multiplier to keep it light
-             const dataURL = canvas.value.toDataURL({
-                 format: 'jpeg',
-                 quality: 0.5,
-                 multiplier: 0.1 // 10% size
-             });
-             updatePageThumbnail(project.activePageIndex, dataURL);
+              // Generate Thumbnail (Debounced ideally, but simplistic here)
+              // We use a small multiplier to keep it light
+
+              // CRITICAL: Aggressively clear ALL clipPaths before thumbnail generation
+              // This prevents "Cannot read properties of undefined (reading 'forEach')" errors in fabric.js
+              const clearAllClipPathsAggressively = () => {
+                  if (!canvas.value) return;
+                  try {
+                      const objects = canvas.value.getObjects();
+                      let cleared = 0;
+                      objects.forEach((obj: any) => {
+                          // Clear direct clipPath - use multiple methods to ensure it's removed
+                          if (obj.clipPath) {
+                              try {
+                                  obj.set('clipPath', null);
+                              } catch (e) {}
+                              try {
+                                  delete obj.clipPath;
+                              } catch (e) {}
+                              delete obj._frameClipOwner;
+                              cleared++;
+                          }
+                          // Clear nested clipPaths in groups
+                          if (obj._objects && Array.isArray(obj._objects)) {
+                              obj._objects.forEach((child: any) => {
+                                  if (child.clipPath) {
+                                      try { child.set('clipPath', null); } catch (e) {}
+                                      try { delete child.clipPath; } catch (e) {}
+                                      delete child._frameClipOwner;
+                                      cleared++;
+                                  }
+                              });
+                          }
+                          // Also check via getObjects() for groups
+                          if (typeof obj.getObjects === 'function') {
+                              const children = obj.getObjects();
+                              if (Array.isArray(children)) {
+                                  children.forEach((child: any) => {
+                                      if (child.clipPath) {
+                                          try { child.set('clipPath', null); } catch (e) {}
+                                          try { delete child.clipPath; } catch (e) {}
+                                          delete child._frameClipOwner;
+                                          cleared++;
+                                      }
+                                  });
+                              }
+                          }
+                      });
+                      console.log(`[Thumbnail] Cleared ${cleared} clipPaths before generation`);
+                  } catch (e) {
+                      console.warn('[Thumbnail] Error clearing clipPaths:', e);
+                  }
+              };
+
+              // Clear all clipPaths aggressively
+              clearAllClipPathsAggressively();
+
+              // SANITIZE: Ensure any remaining clipPaths have valid _objects arrays
+              // This prevents "Cannot read properties of undefined (reading 'forEach')" in fabric.js
+              const sanitizeClipPaths = () => {
+                  if (!canvas.value) return;
+                  try {
+                      const objects = canvas.value.getObjects();
+                      let sanitized = 0;
+
+                      const sanitizeClipPath = (clipPath: any) => {
+                          if (!clipPath) return;
+                          // Ensure _objects is always an array, never undefined
+                          if (clipPath._objects === undefined || clipPath._objects === null) {
+                              clipPath._objects = [];
+                              sanitized++;
+                          }
+                          // Recursively sanitize nested clipPaths
+                          if (clipPath.clipPath) {
+                              sanitizeClipPath(clipPath.clipPath);
+                          }
+                      };
+
+                      objects.forEach((obj: any) => {
+                          // Sanitize direct clipPath
+                          if (obj.clipPath) {
+                              sanitizeClipPath(obj.clipPath);
+                          }
+                          // Sanitize nested clipPaths
+                          if (obj._objects && Array.isArray(obj._objects)) {
+                              obj._objects.forEach((child: any) => {
+                                  if (child.clipPath) {
+                                      sanitizeClipPath(child.clipPath);
+                                  }
+                              });
+                          }
+                          if (typeof obj.getObjects === 'function') {
+                              const children = obj.getObjects();
+                              if (Array.isArray(children)) {
+                                  children.forEach((child: any) => {
+                                      if (child.clipPath) {
+                                          sanitizeClipPath(child.clipPath);
+                                      }
+                                  });
+                              }
+                          }
+                      });
+
+                      if (sanitized > 0) {
+                          console.log(`[Thumbnail] Sanitized ${sanitized} clipPath _objects arrays`);
+                      }
+                  } catch (e) {
+                      console.warn('[Thumbnail] Error sanitizing clipPaths:', e);
+                  }
+              };
+
+              // Sanitize any remaining clipPaths
+              sanitizeClipPaths();
+
+              // Force canvas to update its internal state before thumbnail generation
+              if (canvas.value && canvas.value.renderAll) {
+                  canvas.value.renderAll();
+              }
+
+              // Wait for fabric.js to complete internal updates
+              await new Promise(resolve => setTimeout(resolve, 10));
+
+              let dataURL = '';
+              try {
+                  // Check if canvas is valid before generating thumbnail
+                  if (!canvas.value || !canvas.value.getElement()) {
+                      console.warn('[Thumbnail] Canvas not available, skipping thumbnail');
+                      dataURL = '';
+                  } else {
+                      dataURL = canvas.value.toDataURL({
+                          format: 'jpeg',
+                          quality: 0.5,
+                          multiplier: 0.1 // 10% size
+                      });
+                  }
+              } catch (thumbErr) {
+                  console.warn('[Thumbnail] Erro ao gerar thumbnail:', thumbErr);
+                  // Try one more time with complete clipPath removal and sanitization
+                  try {
+                      clearAllClipPathsAggressively();
+                      sanitizeClipPaths();
+                      // Force canvas to update
+                      if (canvas.value && canvas.value.renderAll) {
+                          canvas.value.renderAll();
+                      }
+                      // Wait for fabric.js to complete internal updates
+                      await new Promise(resolve => setTimeout(resolve, 10));
+                      dataURL = canvas.value.toDataURL({
+                          format: 'jpeg',
+                          quality: 0.5,
+                          multiplier: 0.1
+                      });
+                  } catch (fallbackErr) {
+                      console.error('[Thumbnail] Falha definitiva ao gerar thumbnail:', fallbackErr);
+                      dataURL = '';
+                  }
+              }
+              if (dataURL) {
+                  updatePageThumbnail(project.activePageIndex, dataURL);
+              }
         }
     }
     
     // Export for external use
     saveCurrentState = saveState;
 
-    // Capture initial state
-    saveState();
+    // Capture initial state - only if canvas has objects OR page is new/empty
+    const currentObjectCount = canvas.value.getObjects().length;
+    const currentPage = project.pages[project.activePageIndex];
+    const pageHasData = currentPage?.canvasData?.objects?.length > 0;
+
+    // Only save initial state if canvas has objects, or if page is completely new (no existing data)
+    if (currentObjectCount > 0 || !pageHasData) {
+        saveState();
+    } else {
+        console.log('ℹ️ Pullando saveState inicial: canvas vazio mas página já tem dados');
+    }
 
     // Fabric Events to trigger Save
     canvas.value.on('object:added', (e: any) => {
@@ -4667,7 +5131,7 @@ const undo = async () => {
         
         // Limpar seleção após undo
         canvas.value.discardActiveObject();
-        canvas.value.renderAll();
+        safeRequestRenderAll();
         
         // Refresh Reactivity
         const objs = canvas.value.getObjects();
@@ -4689,7 +5153,7 @@ const redo = async () => {
         
         // Limpar seleção após redo
         canvas.value.discardActiveObject();
-        canvas.value.renderAll();
+        safeRequestRenderAll();
         
         // Refresh Reactivity
         const objs = canvas.value.getObjects();
@@ -5248,7 +5712,8 @@ const setupZoomPan = () => {
 
     canvas.value.on('mouse:dblclick', (opt: any) => {
         if (opt.target) {
-            if (opt.target.isGridZone) {
+            // Check for product zone using isLikelyProductZone to handle both isGridZone and isProductZone
+            if (isLikelyProductZone(opt.target)) {
                 // Save reference to the zone for later use during import
                 targetGridZone.value = opt.target;
                 // Open the Product Review Modal directly (same as Assets panel)
@@ -5912,38 +6377,117 @@ const setupSnapping = () => {
     canvas.value.add(verticalGuide);
     canvas.value.add(horizontalGuide);
 
+    // FIXED: Use local coordinates to avoid jump/snap issues
+    // getBoundingRect(true, true) returns world coordinates which conflict with local positioning
     const getBounds = (o: any) => {
-        const r = typeof o.getBoundingRect === 'function' ? o.getBoundingRect(true, true) : { left: o.left, top: o.top, width: o.width * (o.scaleX || 1), height: o.height * (o.scaleY || 1) };
-        const w = r.width;
-        const h = r.height;
-        return { left: r.left, right: r.left + w, top: r.top, bottom: r.top + h, centerX: r.left + w / 2, centerY: r.top + h / 2, width: w, height: h };
+        // For objects inside groups, we need to calculate bounds relative to the canvas
+        // Use origin-aware calculations to get consistent bounds
+        const width = (o.width || 0) * (o.scaleX || 1);
+        const height = (o.height || 0) * (o.scaleY || 1);
+
+        // Calculate actual left/top based on originX/originY
+        let actualLeft = o.left || 0;
+        let actualTop = o.top || 0;
+
+        if (o.originX === 'center') {
+            actualLeft = (o.left || 0) - width / 2;
+        } else if (o.originX === 'right') {
+            actualLeft = (o.left || 0) - width;
+        }
+
+        if (o.originY === 'center') {
+            actualTop = (o.top || 0) - height / 2;
+        } else if (o.originY === 'bottom') {
+            actualTop = (o.top || 0) - height;
+        }
+
+        return {
+            left: actualLeft,
+            right: actualLeft + width,
+            top: actualTop,
+            bottom: actualTop + height,
+            centerX: actualLeft + width / 2,
+            centerY: actualTop + height / 2,
+            width,
+            height
+        };
     };
 
     const w = (o: any) => (o.width || 0) * (o.scaleX || 1);
     const h = (o: any) => (o.height || 0) * (o.scaleY || 1);
+
+    // FIXED: Use Fabric.js native methods for reliable positioning
     const setObjLeft = (obj: any, x: number) => {
-        const ox = obj.originX === 'center' ? 0.5 : obj.originX === 'right' ? 1 : 0;
-        obj.set('left', x - w(obj) * ox);
+        // Set the left edge to x, considering originX
+        const width = w(obj);
+        if (obj.originX === 'center') {
+            obj.set('left', x + width / 2);
+        } else if (obj.originX === 'right') {
+            obj.set('left', x + width);
+        } else {
+            obj.set('left', x);
+        }
     };
     const setObjRight = (obj: any, x: number) => {
-        const ox = obj.originX === 'center' ? 0.5 : obj.originX === 'right' ? 1 : 0;
-        obj.set('left', x - w(obj) * (1 - ox));
+        // Set the right edge to x, considering originX
+        const width = w(obj);
+        if (obj.originX === 'center') {
+            obj.set('left', x - width / 2);
+        } else if (obj.originX === 'right') {
+            obj.set('left', x);
+        } else {
+            obj.set('left', x - width);
+        }
     };
     const setObjTop = (obj: any, y: number) => {
-        const oy = obj.originY === 'center' ? 0.5 : obj.originY === 'bottom' ? 1 : 0;
-        obj.set('top', y - h(obj) * oy);
+        // Set the top edge to y, considering originY
+        const height = h(obj);
+        if (obj.originY === 'center') {
+            obj.set('top', y + height / 2);
+        } else if (obj.originY === 'bottom') {
+            obj.set('top', y + height);
+        } else {
+            obj.set('top', y);
+        }
     };
     const setObjBottom = (obj: any, y: number) => {
-        const oy = obj.originY === 'center' ? 0.5 : obj.originY === 'bottom' ? 1 : 0;
-        obj.set('top', y - h(obj) * (1 - oy));
+        // Set the bottom edge to y, considering originY
+        const height = h(obj);
+        if (obj.originY === 'center') {
+            obj.set('top', y - height / 2);
+        } else if (obj.originY === 'bottom') {
+            obj.set('top', y);
+        } else {
+            obj.set('top', y - height);
+        }
     };
     const setObjCenterX = (obj: any, x: number) => {
-        const ox = obj.originX === 'center' ? 0.5 : obj.originX === 'right' ? 1 : 0;
-        obj.set('left', x - w(obj) * ox);
+        // FIXED: Position center at x
+        // When originX='left', center is at left + width/2, so left = x - width/2
+        // When originX='center', center is at left, so left = x
+        // When originX='right', center is at left - width/2, so left = x + width/2
+        const width = w(obj);
+        if (obj.originX === 'left') {
+            obj.set('left', x - width / 2);
+        } else if (obj.originX === 'right') {
+            obj.set('left', x + width / 2);
+        } else {
+            obj.set('left', x);
+        }
     };
     const setObjCenterY = (obj: any, y: number) => {
-        const oy = obj.originY === 'center' ? 0.5 : obj.originY === 'bottom' ? 1 : 0;
-        obj.set('top', y - h(obj) * oy);
+        // FIXED: Position center at y
+        // When originY='top', center is at top + height/2, so top = y - height/2
+        // When originY='center', center is at top, so top = y
+        // When originY='bottom', center is at top - height/2, so top = y + height/2
+        const height = h(obj);
+        if (obj.originY === 'top') {
+            obj.set('top', y - height / 2);
+        } else if (obj.originY === 'bottom') {
+            obj.set('top', y + height / 2);
+        } else {
+            obj.set('top', y);
+        }
     };
 
     const isControl = (o: any) => {
@@ -5994,6 +6538,12 @@ const setupSnapping = () => {
         // Skip for frames and controls
         if (!obj || obj.isFrame || isControl(obj)) {
             return;
+        }
+
+        // CRITICAL: Disable caching during movement to prevent trails/ghosting/flickering
+        if (obj.objectCaching) {
+            obj.set('objectCaching', false);
+            obj.set('dirty', true);
         }
 
         // SmartObject containment
@@ -6117,7 +6667,7 @@ const setupSnapping = () => {
             else setObjCenterX(obj, vX);
             vVisible = true;
         }
-        
+
         if (bestHDist <= SNAP_RANGE) {
             if (snapHType === 'top') setObjTop(obj, hY);
             else if (snapHType === 'bottom') setObjBottom(obj, hY);
@@ -6125,9 +6675,23 @@ const setupSnapping = () => {
             hVisible = true;
         }
 
-        // Show guides
-        if (vVisible) verticalGuide.set({ x1: vX, y1: -5000, x2: vX, y2: 5000, visible: true });
-        if (hVisible) horizontalGuide.set({ x1: -5000, y1: hY, x2: 5000, y2: hY, visible: true });
+        // CRITICAL: Update object coordinates after snap to prevent jumping
+        if (vVisible || hVisible) {
+            obj.setCoords();
+        }
+
+        // Show guides with proper viewport-aware coordinates
+        // Use canvas viewport bounds to draw guides across visible area
+        const vpt = canvas.value.viewportTransform;
+        const zoom = vpt ? vpt[0] : 1;
+        const canvasWidth = (canvas.value.width || 1080) / zoom;
+        const canvasHeight = (canvas.value.height || 1920) / zoom;
+
+        if (vVisible) verticalGuide.set({ x1: vX, y1: -canvasHeight * 2, x2: vX, y2: canvasHeight * 3, visible: true });
+        if (hVisible) horizontalGuide.set({ x1: -canvasWidth * 2, y1: hY, x2: canvasWidth * 3, y2: hY, visible: true });
+
+        // CRITICAL: Request render to show guides immediately
+        canvas.value.requestRenderAll();
     });
 
     canvas.value.on('mouse:up', () => {
@@ -6159,8 +6723,18 @@ const updateFloatingUI = () => {
 // Global updateSelection function (used by undo/redo and event handlers)
 const updateSelection = () => {
     if (!canvas.value) return;
+
+    // CRITICAL: Sanitize clipPaths before any rendering to prevent forEach errors
+    // This fixes the bug when clicking multiple times on product cards
+    try {
+        sanitizeAllClipPaths();
+    } catch (e) {
+        // Silently fail - don't break selection on sanitization error
+    }
+
     const active = canvas.value.getActiveObject();
-    selectedObjectId.value = active ? active._customId : null;
+    // Ensure selectedId is never undefined - always null if no active object
+    selectedObjectId.value = active ? (active._customId ?? null) : null;
     selectedObjectRef.value = active; // Update ref for Properties Panel
     updateFloatingUI();
     
@@ -6356,7 +6930,8 @@ const setupReactivity = () => {
         if (!obj || obj.excludeFromExport) return;
 
         // CRITICAL: Re-enable caching after movement stops to prevent trails
-        if (obj.isFrame && !obj.objectCaching) {
+        // Apply to ALL objects, not just frames, to fix flickering during movement
+        if (!obj.objectCaching && !obj.isProductZone && !obj.isGridZone) {
             obj.set('objectCaching', true);
             obj.set('statefullCache', true);
             obj.set('dirty', true);
@@ -7385,10 +7960,149 @@ const updateSmartGroup = (keyOrUpdates: any, value?: any) => {
     saveCurrentState();
 }
 
-const handleAction = (action: string) => {
+const handleAction = async (action: string) => {
     if (!canvas.value) return;
     const active = canvas.value.getActiveObject();
-    
+
+    // Remove Image Background
+    if (action === 'remove-image-bg') {
+        console.log('🔵 [Remove BG] Ação chamada via PropertiesPanel!');
+
+        if (!active) {
+            console.warn('⚠️ [Remove BG] Nenhum objeto selecionado');
+            alert('Selecione uma imagem primeiro');
+            return;
+        }
+
+        console.log('🔍 [Remove BG] Objeto ativo:', active ? {
+            type: active.type,
+            hasSrc: !!active.src,
+            hasElement: !!(active as any)._element
+        } : 'NENHUM');
+
+        // Check if it's an image or a group containing an image
+        let targetImage = active;
+        let imageUrl = null;
+
+        if (active.type === 'image') {
+            console.log('✅ [Remove BG] É uma imagem direta');
+            imageUrl = active.src || (active as any)._element?.src || (active as any).getSrc();
+        } else if (active.type === 'group') {
+            console.log('🔍 [Remove BG] É um grupo, procurando imagem dentro...');
+            const objects = active.getObjects();
+            const foundImage = objects.find((o: any) => o.type === 'image');
+            if (foundImage) {
+                console.log('✅ [Remove BG] Imagem encontrada no grupo');
+                targetImage = foundImage;
+                imageUrl = foundImage.src || (foundImage as any)._element?.src || foundImage.getSrc();
+            }
+        } else {
+            console.warn('⚠️ [Remove BG] Tipo de objeto não suportado:', active.type);
+            alert('Selecione uma imagem válida');
+            return;
+        }
+
+        if (!imageUrl) {
+            console.warn('⚠️ [Remove BG] Imagem não tem URL');
+            alert('Não foi possível obter a URL da imagem. Tente usar uma imagem do storage.');
+            return;
+        }
+
+        if (imageUrl.startsWith('blob:')) {
+            console.warn('⚠️ [Remove BG] Imagem é um blob URL temporário:', imageUrl);
+            alert('Esta imagem é um arquivo local temporário. Use uma imagem do storage.');
+            return;
+        }
+
+        if (imageUrl.startsWith('data:')) {
+            console.warn('⚠️ [Remove BG] Imagem é uma data URL');
+            alert('Esta imagem está embutida. Use uma imagem do storage.');
+            return;
+        }
+
+        console.log('🔍 [Remove BG] URL da imagem:', imageUrl);
+
+        // Show loading indicator
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'fixed top-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2';
+        loadingIndicator.innerHTML = '<span class="animate-spin mr-2">⟳</span> Removendo fundo...';
+        document.body.appendChild(loadingIndicator);
+
+        try {
+            const result = await $fetch('/api/remove-image-bg', {
+                method: 'POST',
+                body: { imageUrl }
+            }) as any;
+
+            console.log('📨 [Remove BG] Resposta da API:', result);
+
+            if (result?.url) {
+                // Load new image with callback to ensure it's loaded
+                fabric.Image.fromURL(result.url, (newImg) => {
+                    if (!newImg || !canvas.value) return;
+
+                    // For groups, we need to replace the image inside
+                    if (active.type === 'group') {
+                        console.log('🔄 [Remove BG] Substituindo imagem dentro do grupo');
+                        const objects = active.getObjects();
+                        const imgIndex = objects.findIndex((o: any) => o.type === 'image');
+                        if (imgIndex >= 0) {
+                            active.remove(objects[imgIndex]);
+                            newImg.set({
+                                left: targetImage.left,
+                                top: targetImage.top,
+                                scaleX: targetImage.scaleX,
+                                scaleY: targetImage.scaleY,
+                                angle: targetImage.angle
+                            });
+                            active.insertAt(newImg, imgIndex, true);
+                        }
+                    } else {
+                        console.log('🔄 [Remove BG] Substituindo imagem direta');
+                        // Preserve ALL properties from current image
+                        const propsToPreserve = {
+                            left: active.left,
+                            top: active.top,
+                            scaleX: active.scaleX,
+                            scaleY: active.scaleY,
+                            angle: active.angle,
+                            originX: active.originX,
+                            originY: active.originY,
+                            selectable: active.selectable,
+                            evented: active.evented,
+                            hasControls: active.hasControls,
+                            hasBorders: active.hasBorders,
+                            _customId: (active as any)._customId,
+                            name: (active as any).name
+                        };
+
+                        newImg.set(propsToPreserve);
+
+                        // Remove old image and add new one
+                        canvas.value.remove(active);
+                        canvas.value.add(newImg);
+                    }
+
+                    canvas.value.setActiveObject(active.type === 'group' ? active : newImg);
+                    canvas.value.requestRenderAll();
+                    saveCurrentState();
+
+                    console.log('✅ [Remove BG] Fundo removido com sucesso:', result.url);
+                }, {
+                    crossOrigin: 'anonymous'
+                });
+            } else {
+                throw new Error('API não retornou URL válida');
+            }
+        } catch (err: any) {
+            console.error('❌ [Remove BG] Erro ao remover fundo:', err);
+            alert('Erro ao remover fundo: ' + (err.message || 'Erro desconhecido'));
+        } finally {
+            loadingIndicator?.remove();
+        }
+        return;
+    }
+
     // Export actions
     if (action === 'export-selected' || action === 'export-png' || action === 'export-svg' || action === 'export-jpg') {
         if (!active) {
@@ -7404,22 +8118,53 @@ const handleAction = (action: string) => {
     // Group / Ungroup
     if (action === 'group') {
         if (!active || active.type !== 'activeSelection') return;
+
+        // CRITICAL: Check if all objects are in the same frame
+        const objects = active.getObjects();
+        const parentFrames = new Set(objects.map((o: any) => o.parentFrameId).filter(Boolean));
+
+        if (parentFrames.size > 1) {
+            // Objects are in different frames - prevent grouping
+            alert('Não é possível agrupar objetos de frames diferentes. Mova os objetos para o mesmo frame primeiro.');
+            return;
+        }
+
         active.toGroup();
         canvas.value.requestRenderAll();
         saveCurrentState();
-        // Update selection to the new group
+
+        // Update selection to the new group and preserve parentFrameId
         const newGroup = canvas.value.getActiveObject();
         if (newGroup) {
-             if (!newGroup._customId) newGroup._customId = Math.random().toString(36).substr(2, 9);
-             selectedObjectRef.value = newGroup;
+            if (!newGroup._customId) newGroup._customId = Math.random().toString(36).substr(2, 9);
+            // Preserve parentFrameId from the objects (they all have the same one at this point)
+            if (parentFrames.size === 1) {
+                newGroup.parentFrameId = [...parentFrames][0];
+            }
+            selectedObjectRef.value = newGroup;
         }
         return;
     }
     if (action === 'ungroup') {
         if (!active || active.type !== 'group') return;
+
+        // Preserve parentFrameId before ungrouping
+        const parentFrameId = (active as any).parentFrameId;
+        const objects = active.getObjects();
+        const customIds = objects.map((o: any) => o._customId);
+
         active.toActiveSelection();
         canvas.value.requestRenderAll();
         saveCurrentState();
+
+        // Restore parentFrameId to all children after ungrouping
+        const newSelection = canvas.value.getActiveObject();
+        if (newSelection && parentFrameId) {
+            newSelection.getObjects().forEach((o: any) => {
+                o.parentFrameId = parentFrameId;
+            });
+        }
+
         // Update selection
         selectedObjectRef.value = canvas.value.getActiveObject();
         return;
@@ -7873,7 +8618,7 @@ const exportDesign = () => {
     showExportModal.value = true;
 }
 
-const exportCanvas = (format: 'png' | 'svg' | 'jpg' = 'png') => {
+const exportCanvas = async (format: 'png' | 'svg' | 'jpg' = 'png') => {
     if (!canvas.value) return;
     
     // Deselect for clean export
@@ -7889,11 +8634,34 @@ const exportCanvas = (format: 'png' | 'svg' | 'jpg' = 'png') => {
         downloadFile(url, `${fileName}.svg`);
     } else {
         // PNG or JPG
-        const dataURL = canvas.value.toDataURL({
-            format: format,
-            quality: 1,
-            multiplier: 1
-        });
+        // Sanitize clipPaths before export
+        sanitizeAllClipPaths();
+
+        let dataURL = '';
+        try {
+            dataURL = canvas.value.toDataURL({
+                format: format,
+                quality: 1,
+                multiplier: 1
+            });
+        } catch (exportErr) {
+            console.warn('[Export] Erro ao exportar, tentando sem clipPaths:', exportErr);
+            // Nuclear option: clear all clipPaths
+            removeAllClipPaths();
+            try {
+                canvas.value.requestRenderAll();
+                await new Promise(resolve => setTimeout(resolve, 10));
+                dataURL = canvas.value.toDataURL({
+                    format: format,
+                    quality: 1,
+                    multiplier: 1
+                });
+            } catch (fallbackErr) {
+                console.error('[Export] Falha definitiva ao exportar:', fallbackErr);
+                alert('Erro ao exportar imagem. Tente novamente.');
+                return;
+            }
+        }
         downloadFile(dataURL, `${fileName}.${format}`);
     }
 }
@@ -7912,11 +8680,37 @@ const exportSelectedObject = (format: 'png' | 'svg' | 'jpg' = 'png') => {
         downloadFile(url, `${fileName}.svg`);
     } else {
         // PNG or JPG - create a temporary canvas for the selected object
-        const dataURL = active.toDataURL({
-            format: format,
-            quality: 1,
-            multiplier: 1
-        });
+        // Sanitize clipPath on the active object before export
+        if (active.clipPath) {
+            if (!isValidClipPath(active.clipPath)) {
+                console.warn('[Export Selected] Limpando clipPath inválido do objeto selecionado');
+                active.set('clipPath', null);
+            }
+        }
+        
+        let dataURL = '';
+        try {
+            dataURL = active.toDataURL({
+                format: format,
+                quality: 1,
+                multiplier: 1
+            });
+        } catch (exportErr) {
+            console.error('[Export Selected] Erro ao exportar objeto:', exportErr);
+            // Try without clipPath
+            try {
+                active.set('clipPath', null);
+                dataURL = active.toDataURL({
+                    format: format,
+                    quality: 1,
+                    multiplier: 1
+                });
+            } catch (fallbackErr) {
+                console.error('[Export Selected] Falha definitiva:', fallbackErr);
+                alert('Erro ao exportar objeto. Tente novamente.');
+                return;
+            }
+        }
         downloadFile(dataURL, `${fileName}.${format}`);
     }
 }
@@ -8410,6 +9204,15 @@ const clearCanvas = () => {
 
 // Smart Object Generator (Product Card)
 const createSmartObject = async (product: any, x: number, y: number, width: number, height: number, gridId: string, labelTpl?: LabelTemplate) => {
+    // DEBUG: Log product data
+    console.log('[createSmartObject] Product data:', {
+        name: product.name,
+        price: product.price,
+        weight: product.weight,
+        packUnit: product.packUnit,
+        priceWholesale: product.priceWholesale
+    });
+
     // Layout Constants
     const cardHeight = height || width * 1.4; // Aspect ratio 1:1.4 (fallback)
     const halfW = width / 2;
@@ -8436,7 +9239,7 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
         fontSize: baseSize * 0.09,
         fontFamily: 'Inter',
         fontWeight: '900',
-        fill: '#ffffff',
+        fill: '#1a1a1a',
         textAlign: 'center',
         originX: 'center',
         originY: 'top',
@@ -8444,7 +9247,7 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
         top: titleY,
         width: width - 20,
         name: 'smart_title',
-        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 4, offsetX: 2, offsetY: 2 }),
+        shadow: new fabric.Shadow({ color: 'rgba(255,255,255,0.8)', blur: 2, offsetX: 1, offsetY: 1 }),
         // UX: Prevent font stretching/blurring, enforce reflow
         lockScalingY: true, 
         splitByGrapheme: false
@@ -8500,11 +9303,34 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
 
     // Price Value (shared)
     const priceStr = String(product.price ?? '')
-        .replace(/R\\$\\s*/gi, '')
-        .replace(/\\s+/g, '')
+        .replace(/R\$\s*/gi, '')
+        .replace(/\s+/g, '')
         .trim();
 
-    const unitText = (product as any).weight || (product as any).packUnit;
+    // Unit text - primeiro tenta weight, depois packUnit
+    // Também tenta inferir do nome do produto se não tiver weight ou packUnit
+    let unitText = (product as any).weight || (product as any).packUnit || '';
+
+    // Se não tem unitText, tenta inferir do nome do produto (ex: "5KG", "900ML", "UN")
+    if (!unitText && product.name) {
+        const match = product.name.match(/(\d+(?:\.\d+)?)?\s*(KG|G|MG|L|ML|UN)$/i);
+        if (match) {
+            unitText = match[0].toUpperCase().replace(/\s+/g, '');
+        }
+    }
+
+    console.log('[createSmartObject] Processed values:', {
+        priceStr,
+        unitText,
+        originalPrice: product.price,
+        weight: product.weight,
+        packUnit: product.packUnit,
+        name: product.name
+    });
+
+    if (!priceStr) {
+        console.warn('[createSmartObject] PRECO VAZIO para produto:', product.name);
+    }
 
     // Default tag (fallback)
     const buildDefaultPriceGroup = () => {
@@ -8617,6 +9443,18 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     });
 
     return group;
+}
+
+// Handler para abrir o modal de importação de lista, salvando a referência da zona
+const handleImportProductList = () => {
+    if (!canvas.value) return;
+
+    const active = canvas.value.getActiveObject();
+    if (active && isLikelyProductZone(active)) {
+        targetGridZone.value = active;
+    }
+
+    showPasteListModal.value = true;
 }
 
 // Paste List Handlers
@@ -8757,8 +9595,151 @@ const handleImagePaste = (event: ClipboardEvent) => {
     }
 }
 
-const handleRemoveBackground = () => {
-    // ... Existing logic stub
+const handleRemoveBackground = async () => {
+    console.log('🔵 [Remove BG] Função chamada!');
+
+    if (!canvas.value) {
+        console.error('❌ [Remove BG] Canvas não existe');
+        return;
+    }
+
+    const active = canvas.value.getActiveObject();
+    console.log('🔍 [Remove BG] Objeto ativo:', active ? {
+        type: active.type,
+        hasSrc: !!active.src,
+        hasElement: !!(active as any)._element,
+        elementSrc: (active as any)._element?.src
+    } : 'NENHUM');
+
+    if (!active) {
+        console.warn('⚠️ [Remove BG] Nenhum objeto selecionado');
+        alert('Selecione uma imagem primeiro');
+        return;
+    }
+
+    // Check if it's an image or a group containing an image
+    let targetImage = active;
+    let imageUrl = null;
+
+    if (active.type === 'image') {
+        console.log('✅ [Remove BG] É uma imagem direta');
+        imageUrl = active.src || (active as any)._element?.src || (active as any).getSrc();
+    } else if (active.type === 'group') {
+        console.log('🔍 [Remove BG] É um grupo, procurando imagem dentro...');
+        const objects = active.getObjects();
+        const foundImage = objects.find((o: any) => o.type === 'image');
+        if (foundImage) {
+            console.log('✅ [Remove BG] Imagem encontrada no grupo');
+            targetImage = foundImage;
+            imageUrl = foundImage.src || (foundImage as any)._element?.src || foundImage.getSrc();
+        }
+    } else {
+        console.warn('⚠️ [Remove BG] Tipo de objeto não suportado:', active.type);
+        alert('Selecione uma imagem válida');
+        return;
+    }
+
+    if (!imageUrl) {
+        console.warn('⚠️ [Remove BG] Imagem não tem URL');
+        alert('Não foi possível obter a URL da imagem. Tente usar uma imagem do storage.');
+        return;
+    }
+
+    if (imageUrl.startsWith('blob:')) {
+        console.warn('⚠️ [Remove BG] Imagem é um blob URL temporário:', imageUrl);
+        alert('Esta imagem é um arquivo local temporário. Use uma imagem do storage.');
+        return;
+    }
+
+    if (imageUrl.startsWith('data:')) {
+        console.warn('⚠️ [Remove BG] Imagem é uma data URL');
+        alert('Esta imagem está embutida. Use uma imagem do storage.');
+        return;
+    }
+
+    console.log('🔍 [Remove BG] URL da imagem:', imageUrl);
+
+    isProcessing.value = true;
+
+    // Show loading indicator
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'fixed top-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2';
+    loadingIndicator.innerHTML = '<span class="animate-spin mr-2">⟳</span> Removendo fundo...';
+    document.body.appendChild(loadingIndicator);
+
+    try {
+        const result = await $fetch('/api/remove-image-bg', {
+            method: 'POST',
+            body: { imageUrl }
+        }) as any;
+
+        console.log('📨 [Remove BG] Resposta da API:', result);
+
+        if (result?.url) {
+            // Load new image with callback to ensure it's loaded
+            fabric.Image.fromURL(result.url, (newImg) => {
+                if (!newImg || !canvas.value) return;
+
+                // For groups, we need to replace the image inside
+                if (active.type === 'group') {
+                    console.log('🔄 [Remove BG] Substituindo imagem dentro do grupo');
+                    const objects = active.getObjects();
+                    const imgIndex = objects.findIndex((o: any) => o.type === 'image');
+                    if (imgIndex >= 0) {
+                        active.remove(objects[imgIndex]);
+                        newImg.set({
+                            left: targetImage.left,
+                            top: targetImage.top,
+                            scaleX: targetImage.scaleX,
+                            scaleY: targetImage.scaleY,
+                            angle: targetImage.angle
+                        });
+                        active.insertAt(newImg, imgIndex, true);
+                    }
+                } else {
+                    console.log('🔄 [Remove BG] Substituindo imagem direta');
+                    // Preserve ALL properties from current image
+                    const propsToPreserve = {
+                        left: active.left,
+                        top: active.top,
+                        scaleX: active.scaleX,
+                        scaleY: active.scaleY,
+                        angle: active.angle,
+                        originX: active.originX,
+                        originY: active.originY,
+                        selectable: active.selectable,
+                        evented: active.evented,
+                        hasControls: active.hasControls,
+                        hasBorders: active.hasBorders,
+                        _customId: (active as any)._customId,
+                        name: (active as any).name
+                    };
+
+                    newImg.set(propsToPreserve);
+
+                    // Remove old image and add new one
+                    canvas.value.remove(active);
+                    canvas.value.add(newImg);
+                }
+
+                canvas.value.setActiveObject(active.type === 'group' ? active : newImg);
+                canvas.value.requestRenderAll();
+                saveCurrentState();
+
+                console.log('✅ [Remove BG] Fundo removido com sucesso:', result.url);
+            }, {
+                crossOrigin: 'anonymous'
+            });
+        } else {
+            throw new Error('API não retornou URL válida');
+        }
+    } catch (err: any) {
+        console.error('❌ [Remove BG] Erro ao remover fundo:', err);
+        alert('Erro ao remover fundo: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+        isProcessing.value = false;
+        loadingIndicator?.remove();
+    }
 }
 
 const handleFileUpload = (e: any) => {
@@ -8846,14 +9827,18 @@ const simulateSmartGrid = async (customData: any[] = [], config = { margin: 10, 
         const activeObj = canvas.value.getActiveObject();
         console.log('[simulateSmartGrid] No zone passed, checking activeObject:', activeObj);
         if (activeObj) {
-            // Check custom property safely
-            const isZone = (activeObj as any).isGridZone;
-            
-            if (isZone) {
+            // Check for product zone using isLikelyProductZone to handle both isGridZone and isProductZone
+            if (isLikelyProductZone(activeObj)) {
                 targetZone = activeObj;
-            } else if (activeObj.type === 'group' && !isZone) {
+            } else if (activeObj.type === 'group') {
                 templateObject = activeObj;
             }
+        }
+    } else {
+        // Validate that the passed zone is still a valid product zone
+        if (!isLikelyProductZone(targetZone)) {
+            console.warn('[simulateSmartGrid] Passed zone is not a valid product zone, ignoring');
+            targetZone = null;
         }
     }
     
@@ -8979,7 +9964,10 @@ const simulateSmartGrid = async (customData: any[] = [], config = { margin: 10, 
             gapVertical: gapY,
             lastRowBehavior: lastRowBehavior,
             columns: hasFixedColumns ? targetZone.columns : 0,
-            rows: hasFixedColumns ? totalRows : 0
+            rows: hasFixedColumns ? totalRows : 0,
+            // Ensure both flags are set for consistency
+            isGridZone: true,
+            isProductZone: true
         });
     }
 
@@ -9015,7 +10003,7 @@ const simulateSmartGrid = async (customData: any[] = [], config = { margin: 10, 
             if (templateObject) {
                  // Clone using Promise API (Fabric v6+)
                  const cloned: any = await templateObject.clone(['name', 'id', 'smartGridId', 'isSmartObject', 'originX', 'originY']);
-                 
+
                   cloned.set({
                      left: finalX,
                      top: finalY,
@@ -9024,14 +10012,25 @@ const simulateSmartGrid = async (customData: any[] = [], config = { margin: 10, 
                      visible: true,
                      originX: 'center',
                      originY: 'center',
-                     subTargetCheck: false, // Disable sub-target for cohesive card movement
-                     interactive: false // Card moves as a whole
+                     subTargetCheck: true, // Enable sub-target for individual element selection
+                     interactive: true
                   });
-                 
+
+                  // Ensure internal elements are selectable
+                  const objects = cloned.getObjects ? cloned.getObjects() : [];
+                  objects.forEach((obj: any) => {
+                      const isBackground = obj.name === 'offerBackground' || obj.name === 'price_bg';
+                      obj.set({
+                          selectable: !isBackground,
+                          evented: !isBackground,
+                          hasControls: !isBackground,
+                          hasBorders: !isBackground
+                      });
+                  });
+
                  // Data Injection Logic
-                 const objects = cloned.getObjects ? cloned.getObjects() : [];
-                 let titleFound = false;
-                 let priceFound = false;
+                  let titleFound = false;
+                  let priceFound = false;
 
                  objects.forEach((obj: any) => {
                     if (obj.type.includes('text')) {
@@ -9083,6 +10082,12 @@ const simulateSmartGrid = async (customData: any[] = [], config = { margin: 10, 
             const zoneWidth = zoneRect?.width || zoneBounds.width || 400;
             const zoneHeight = zoneRect?.height || zoneBounds.height || 600;
 
+            // CRITICAL: Clear any clipPath from the zone to prevent rendering errors
+            // Product zones should not have clipPath as cards are added separately to canvas
+            if (targetZone && targetZone.clipPath) {
+                targetZone.clipPath = null;
+            }
+
             // DON'T add to zone group - add directly to canvas to avoid coordinate issues
             // This is the Figma-like behavior where elements are independent
             smartObjects.forEach((obj: any) => {
@@ -9098,6 +10103,7 @@ const simulateSmartGrid = async (customData: any[] = [], config = { margin: 10, 
 
             targetZone.set({
                 isProductZone: true,
+                isGridZone: true, // Ensure both flags are set for compatibility
                 subTargetCheck: false, // Disable sub-target since cards are separate
                 selectable: true,
                 evented: true,
@@ -10106,11 +11112,11 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     const legacy = parts.find((o: any) => o?.name === 'smart_price' || o?.name === 'price_value_text');
 
     const cleaned = String(rawPrice || '')
-        .replace(/R\\$\\s*/gi, '')
-        .replace(/\\s+/g, '')
+        .replace(/R\$\s*/gi, '')
+        .replace(/\s+/g, '')
         .trim();
 
-    const m = cleaned.match(/^(\\d+)(?:[\\.,](\\d{1,2}))?/);
+    const m = cleaned.match(/^(\d+)(?:[\.,](\d{1,2}))?/);
     const integer = m?.[1] || '0';
     const dec = (m?.[2] || '00').padEnd(2, '0').slice(0, 2);
     const decimalText = `,${dec}`;
@@ -10136,9 +11142,9 @@ function inferUnitFromCard(card: any): string | undefined {
     if (!card || typeof card.getObjects !== 'function') return undefined;
     const title = card.getObjects().find((o: any) => o?.name === 'smart_title' || o?.name === 'title');
     const text = String(title?.text || '').toLowerCase();
-    const m = text.match(/\\b\\d+(?:[\\.,]\\d+)?\\s*(kg|g|mg|l|ml|un)\\b/i);
+    const m = text.match(/\b\d+(?:[\.,]\d+)?\s*(kg|g|mg|l|ml|un)\b/i);
     if (!m) return undefined;
-    const raw = m[0].replace(/\\s+/g, '');
+    const raw = m[0].replace(/\s+/g, '');
     return raw.toUpperCase();
 }
 
@@ -10160,9 +11166,17 @@ async function renderLabelTemplatePreview(tpl: LabelTemplate): Promise<string | 
         const scale = Math.min((sc.getWidth() * 0.95) / bw, (sc.getHeight() * 0.9) / bh, 3);
         g.set({ scaleX: scale, scaleY: scale });
         sc.add(g);
-        sc.renderAll();
+        try {
+            sc.renderAll();
+        } catch (e) {
+            // Ignore render errors on static canvas
+        }
         const url = sc.toDataURL({ format: 'png', multiplier: 1 });
-        sc.dispose();
+        try {
+            sc.dispose();
+        } catch (e) {
+            // Ignore dispose errors
+        }
         return url;
     } catch (err) {
         console.warn('[labelTemplates] Failed to render preview', err);
@@ -10445,8 +11459,8 @@ function buildDefaultPriceGroupForCard(priceStr: string, cardW: number, cardH: n
         name: 'price_currency_text'
     });
 
-    const cleaned = String(priceStr || '').replace(/R\\$\\s*/gi, '').trim();
-    const m = cleaned.match(/^(\\d+)(?:[\\.,](\\d{1,2}))?/);
+    const cleaned = String(priceStr || '').replace(/R\$\s*/gi, '').trim();
+    const m = cleaned.match(/^(\d+)(?:[\.,](\d{1,2}))?/);
     const integer = m?.[1] || '0';
     const dec = (m?.[2] || '00').padEnd(2, '0').slice(0, 2);
 
@@ -11177,6 +12191,12 @@ const ensureZoneSanity = (zone: any) => {
     if (!zone._customId) zone._customId = Math.random().toString(36).substr(2, 9);
     let needsBoundsUpdate = false;
 
+    // CRITICAL: Product zones should NOT have clipPath as it causes rendering errors
+    // Cards are added separately to canvas, not as children of the zone group
+    if (zone.clipPath) {
+        zone.clipPath = null;
+    }
+
     // Keep Fabric group padding at 0 to avoid inflating the selection bounds.
     // Use `_zonePadding` for layout math instead (used by recalculateZoneLayout).
     if (typeof zone._zonePadding !== 'number') {
@@ -11494,6 +12514,41 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             if (!o._customId) o._customId = Math.random().toString(36).substr(2, 9);
         });
 
+        // CRITICAL: Clear clipPath from all product zones to prevent rendering errors
+        // Product zones should not have clipPath as cards are added separately to canvas
+        objs.forEach((o: any) => {
+            if (o.clipPath && (o.isGridZone || o.isProductZone || o.name === 'gridZone' || o.name === 'productZoneContainer')) {
+                o.clipPath = null;
+            }
+            // CRITICAL: Ensure all remaining clipPaths have _objects initialized
+            // This prevents "forEach of undefined" errors in fabric.js createClipPathLayer
+            if (o.clipPath && o.clipPath._objects === undefined) {
+                o.clipPath._objects = [];
+            }
+
+            // CRITICAL: Ensure product cards have subTargetCheck enabled for individual element selection
+            if ((o.isProductCard || o.isSmartObject) && o.type === 'group') {
+                if (o.subTargetCheck !== true) {
+                    o.subTargetCheck = true;
+                }
+                if (o.interactive !== true) {
+                    o.interactive = true;
+                }
+                // Ensure internal elements are selectable
+                if (typeof o.getObjects === 'function') {
+                    o.getObjects().forEach((child: any) => {
+                        const isBackground = child.name === 'offerBackground' || child.name === 'price_bg';
+                        if (child.selectable === undefined || child.selectable === isBackground) {
+                            child.selectable = !isBackground;
+                        }
+                        if (child.evented === undefined || child.evented === isBackground) {
+                            child.evented = !isBackground;
+                        }
+                    });
+                }
+            }
+        });
+
         // Re-apply custom rendering patches (e.g. per-corner rounded rects) recursively.
         const patchTree = (o: any) => {
             if (!o) return;
@@ -11536,6 +12591,17 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             // CRITICAL: Always restore isFrame flag (even if missing from JSON)
             f.isFrame = true;
             if (typeof f.clipContent !== 'boolean') f.clipContent = true;
+
+            // CRITICAL: Ensure frames always have originX='center' and originY='center'
+            // This prevents size jumps after reload when clipPath is recalculated
+            if (f.originX !== 'center') {
+                f.originX = 'center';
+                f.setCoords?.();
+            }
+            if (f.originY !== 'center') {
+                f.originY = 'center';
+                f.setCoords?.();
+            }
             
             // Normalize name: if user renamed via layerName, keep it. Otherwise ensure proper "Frame N" name.
             if (!f.layerName) {
@@ -11592,17 +12658,17 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             }
             
             // Check if object center is inside frame bounds
+            // CRITICAL: Use getBoundingRect() to correctly calculate bounds regardless of originX/originY
             const center = typeof o.getCenterPoint === 'function' ? o.getCenterPoint() : null;
             if (center) {
-                const frameLeft = frame.left ?? 0;
-                const frameTop = frame.top ?? 0;
-                const frameWidth = (frame.width ?? 0) * (frame.scaleX ?? 1);
-                const frameHeight = (frame.height ?? 0) * (frame.scaleY ?? 1);
-                
-                const isInsideFrame = center.x >= frameLeft && 
-                                      center.x <= frameLeft + frameWidth &&
-                                      center.y >= frameTop && 
-                                      center.y <= frameTop + frameHeight;
+                const frameBounds = typeof frame.getBoundingRect === 'function'
+                    ? frame.getBoundingRect()
+                    : { left: frame.left, top: frame.top, width: frame.width * (frame.scaleX || 1), height: frame.height * (frame.scaleY || 1) };
+
+                const isInsideFrame = center.x >= frameBounds.left &&
+                                      center.x <= frameBounds.left + frameBounds.width &&
+                                      center.y >= frameBounds.top &&
+                                      center.y <= frameBounds.top + frameBounds.height;
                 
                 if (!isInsideFrame) {
                     console.log(`🔓 Removendo parentFrameId de objeto fora do frame:`, {
@@ -11639,6 +12705,23 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             if (z.name === 'gridZone') z.isGridZone = true;
             if (z.name === 'productZoneContainer') z.isProductZone = true;
             if (!z.isGridZone && !z.isProductZone) z.isGridZone = true;
+
+            // CRITICAL: Clear clipPath from zone AND all its children
+            if (z.clipPath) {
+                z.clipPath = null;
+            }
+            if (typeof z.getObjects === 'function') {
+                z.getObjects().forEach((child: any) => {
+                    if (child.clipPath) {
+                        child.clipPath = null;
+                    }
+                });
+            }
+
+            // CRITICAL: Ensure zone is visible
+            if (z.visible === false) z.visible = true;
+            if (z.opacity === 0) z.opacity = 1;
+
             ensureZoneSanity(z);
             normalizeZoneScale(z);
             // Ensure Fabric v7 group bounds match the inner rect (prevents the "outer container" selection bug).
@@ -11653,6 +12736,16 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
         zones.forEach((z: any) => zonesById.set(z._customId, z));
 
         const cards = objs.filter((o: any) => (o.isSmartObject || o.isProductCard) && o !== null && o !== undefined);
+
+        // CRITICAL: Ensure all product cards are visible and have valid properties
+        cards.forEach((card: any) => {
+            // Ensure visibility
+            if (card.visible === false) card.visible = true;
+            if (card.opacity === 0 || card.opacity === undefined) card.opacity = 1;
+
+            // Ensure the card is properly initialized
+            if (typeof card.setCoords === 'function') card.setCoords();
+        });
 
         // Repair missing parentZoneId by intersection (helps after old history/undo states)
         cards.forEach((card: any) => {
@@ -11777,8 +12870,8 @@ const handleRecalculateLayout = () => {
                     }"
                   >
                     <div class="bg-[#2c2c2c] p-1 rounded-lg shadow-lg border border-white/10 pointer-events-auto animate-in fade-in zoom-in duration-200" title="Importar Lista de Produtos">
-                        <button 
-                            @click="showPasteListModal = true"
+                        <button
+                            @click="handleImportProductList"
                             class="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
                         >
                             <StickyNote class="w-4 h-4" />
@@ -11982,7 +13075,7 @@ const handleRecalculateLayout = () => {
                   
                   <div class="w-px h-6 bg-white/10 mx-0.5"></div>
                   
-                  <button @click="handleRemoveBackground" :disabled="isProcessing" title="Remove BG" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
+                  <button @click="console.log('🔴 BOTÃO CLIQUEADO!'); handleRemoveBackground()" :disabled="isProcessing" title="Remove BG" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
                     <Scissors class="w-4 h-4" />
                     <span v-if="isProcessing" class="absolute inset-0 flex items-center justify-center bg-[#2a2a2a] rounded-lg"><span class="w-2 h-2 rounded-full border-2 border-zinc-500 border-t-white animate-spin"></span></span>
                   </button>
@@ -12042,16 +13135,25 @@ const handleRecalculateLayout = () => {
                    >
                      <Play class="w-2.5 h-2.5" />
                    </button>
-                   
+
                    <!-- Share Button -->
-                   <button 
+                   <button
                      @click="showShareModal = true"
                      class="h-5 px-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-medium transition-all flex items-center gap-0.5 flex-shrink-0 whitespace-nowrap"
                    >
                      <Share2 class="w-2.5 h-2.5 flex-shrink-0" />
                      <span>Share</span>
                    </button>
-                   
+
+                   <!-- TESTE REMOVE BG -->
+                   <button
+                     @click="console.log('TESTE BG CLIQUEADO!'); handleRemoveBackground()"
+                     class="h-5 px-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-[9px] font-bold transition-all flex items-center gap-0.5 flex-shrink-0 whitespace-nowrap animate-pulse"
+                     title="Remover fundo da imagem selecionada"
+                   >
+                     <span>🔴 TESTE BG</span>
+                   </button>
+
                    <!-- Zoom Dropdown -->
                    <div class="relative flex-shrink-0 pr-0.5">
                      <button 

@@ -117,6 +117,7 @@ export interface Splash {
 // === PRODUCT ZONE (Container) ===
 export interface ProductZone {
   id?: string;
+  enabled?: boolean; // Whether the zone is active/visible
   // Bounds
   x: number;
   y: number;
@@ -300,6 +301,7 @@ export type ProductZoneState = {
 
 // === DEFAULT VALUES ===
 export const DEFAULT_PRODUCT_ZONE: ProductZone = {
+  enabled: false, // Disabled by default - user must explicitly enable
   x: 50,
   y: 150,
   width: 900,

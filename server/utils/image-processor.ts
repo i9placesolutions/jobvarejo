@@ -37,21 +37,25 @@ const getRemoveBackground = async () => {
 export const processImage = async (imageBuffer: Buffer) => {
     try {
         const sharp = await getSharp();
-        
+
+        console.log('🖼️ [Image Process] Iniciando processamento de imagem...');
+
         // 1. Resize/Normalize (to max 800x800) and convert to PNG
+        console.log('📐 [Image Process] Redimensionando para max 800x800...');
         const resizedBuffer = await sharp(imageBuffer)
-            .resize(800, 800, { 
-                fit: 'inside', 
+            .resize(800, 800, {
+                fit: 'inside',
                 withoutEnlargement: true,
                 background: { r: 0, g: 0, b: 0, alpha: 0 } // Transparent padding if needed, but 'inside' avoids it
             })
             .png()
             .toBuffer();
-        
+
         // 2. Remove Background using @imgly/background-removal-node
         // It expects a MIME type when using Blob.
+        console.log('🎨 [Image Process] Removendo fundo da imagem...');
         const blob = new Blob([resizedBuffer], { type: 'image/png' });
-        
+
         // Config: publicPath might be needed to locate wasm files if not resolved automatically.
         // Usually works out of the box in Node.
         // We set progress to false to avoid console spam
@@ -60,22 +64,45 @@ export const processImage = async (imageBuffer: Buffer) => {
             progress: (key, current, total) => {},
             debug: false
         });
-        
+
         const rbBuffer = Buffer.from(await rbResult.arrayBuffer());
+        console.log('✅ [Image Process] Fundo removido com sucesso!');
 
         // 3. Optimize to WebP
+        console.log('📦 [Image Process] Otimizando para WebP...');
         const finalBuffer = await sharp(rbBuffer)
             .webp({ quality: 85 })
             .toBuffer();
 
+        console.log('✅ [Image Process] Imagem processada com sucesso!');
         return finalBuffer;
     } catch (error: any) {
+        // If background removal fails, try to at least resize and optimize
+        if (error?.message?.includes('Background removal') || error?.message?.includes('imgly')) {
+            console.warn('⚠️ [Image Process] Remoção de fundo falhou, aplicando apenas resize e otimização...');
+            try {
+                const sharp = await getSharp();
+                const fallbackBuffer = await sharp(imageBuffer)
+                    .resize(800, 800, {
+                        fit: 'inside',
+                        withoutEnlargement: true
+                    })
+                    .webp({ quality: 85 })
+                    .toBuffer();
+                console.log('✅ [Image Process] Imagem processada (sem remoção de fundo)');
+                return fallbackBuffer;
+            } catch (fallbackError) {
+                console.error('❌ [Image Process] Fallback também falhou:', fallbackError);
+                throw fallbackError;
+            }
+        }
+
         // If sharp is not available, return original buffer as fallback
         if (error?.message?.includes('Sharp não está instalado')) {
-            console.warn('⚠️ Retornando imagem original (sharp não disponível)');
+            console.warn('⚠️ [Image Process] Retornando imagem original (sharp não disponível)');
             return imageBuffer;
         }
-        console.error("Image Processing Error:", error);
+        console.error("❌ [Image Process] Erro no processamento:", error);
         throw error;
     }
 };

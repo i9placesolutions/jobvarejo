@@ -2,7 +2,8 @@
 import { ref, onMounted, computed } from 'vue'
 import Button from './ui/Button.vue'
 import ConfirmDialog from './ui/ConfirmDialog.vue'
-import { Trash2, FolderOpen, Clock, X, Search, FileEdit } from 'lucide-vue-next'
+import ImportDialog from './ImportDialog.vue'
+import { Trash2, FolderOpen, Clock, X, Search, FileEdit, Upload } from 'lucide-vue-next'
 
 const props = defineProps<{
   isOpen: boolean
@@ -11,7 +12,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'load', data: any): void
+  (e: 'imported', data: any): void
 }>()
+
+const showImportDialog = ref(false)
 
 const projects = ref<any[]>([])
 const isLoading = ref(false)
@@ -91,9 +95,20 @@ onMounted(() => {
                   <p class="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Gerencie suas artes salvas</p>
               </div>
           </div>
-          <button @click="$emit('close')" class="p-2 hover:bg-accent rounded-full transition-colors text-muted-foreground">
-              <X class="w-5 h-5 " />
-          </button>
+          <div class="flex items-center gap-2">
+            <Button
+              @click="showImportDialog = true"
+              size="sm"
+              variant="outline"
+              class="rounded-lg gap-2"
+            >
+              <Upload class="w-4 h-4" />
+              Importar PSD
+            </Button>
+            <button @click="$emit('close')" class="p-2 hover:bg-accent rounded-full transition-colors text-muted-foreground">
+                <X class="w-5 h-5 " />
+            </button>
+          </div>
         </div>
 
         <!-- Search Bar -->
@@ -175,6 +190,13 @@ onMounted(() => {
         cancel-text="Cancelar"
         @confirm="confirmDelete"
         @cancel="showConfirmDialog = false; pendingDeleteId = null"
+    />
+
+    <!-- Import Dialog -->
+    <ImportDialog
+        :is-open="showImportDialog"
+        @close="showImportDialog = false"
+        @imported="(data) => { emit('imported', data); showImportDialog = false }"
     />
 </template>
 

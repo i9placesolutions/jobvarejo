@@ -107,6 +107,10 @@ Rules:
 - Do not invent values; if missing, use null.
 - Prices MUST be strings with comma decimal and 2 digits (e.g. "23,40").
 - If there are both box/pack price and unit price columns, set "price" to the UNIT price.
+- IMPORTANT: Keep weight/gramatura in the product NAME. Do NOT separate it.
+  Example: "Arroz 5kg" should have name="Arroz 5kg" (not "Arroz")
+  Example: "Leite 1L" should have name="Leite 1L" (not "Leite")
+- The weight field should only be filled if there is a SEPARATE weight column in the input.
 - Normalize common packaging words to abbreviations:
   FARDO -> FD, CAIXA -> CX, PACOTE -> PCT, EMBALAGEM -> EMB.
 - Detect packQuantity/packUnit from columns like "QUANT. EMBA" or patterns like "C/12UN", "12X350ML".

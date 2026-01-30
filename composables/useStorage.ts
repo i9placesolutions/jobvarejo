@@ -408,6 +408,16 @@ export const useStorage = () => {
   }
 
   /**
+   * Obtém URL pública para arquivos de importação (bucket jobpsd)
+   */
+  const getImportPublicUrl = (key: string): string => {
+    const config = useRuntimeConfig().public.contabo || {}
+    const endpoint = config.endpoint || 'usc1.contabostorage.com'
+    const bucket = config.importBucket || '475a29e42e55430abff00915da2fa4bc:jobpsd'
+    return `https://${endpoint}/${bucket}/${key}`
+  }
+
+  /**
    * Deleta todos os arquivos de um projeto
    */
   const deleteProjectFiles = async (projectId: string): Promise<void> => {
@@ -488,7 +498,8 @@ export const useStorage = () => {
     deleteProjectFiles,
     saveProjectPages,
     loadProjectPages,
-    getPublicUrl
+    getPublicUrl,
+    getImportPublicUrl
   }
 }
 

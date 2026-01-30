@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown } from 'lucide-vue-next'
+import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Upload } from 'lucide-vue-next'
 import FolderTreeItem from '~/components/FolderTreeItem.vue'
 import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
+import ImportDialog from '~/components/ImportDialog.vue'
 
 // Page config - middleware handles auth check
 definePageMeta({
@@ -25,6 +26,7 @@ const filterType = ref('all')
 const filterTime = ref('all')
 const showCreateProject = ref(false)
 const showCreateFolder = ref(false)
+const showImportDialog = ref(false)
 const showFolderMenu = ref<string | null>(null)
 const folderMenuPosition = ref({ x: 0, y: 0 })
 const newProjectName = ref('')
@@ -1098,6 +1100,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <Plus class="w-4 h-4" />
               <span>New Design</span>
             </button>
+
+            <!-- Import PSD Button -->
+            <button
+              @click="showImportDialog = true"
+              class="h-8 px-4 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-medium flex items-center gap-2 transition-all border border-white/10"
+            >
+              <Upload class="w-4 h-4" />
+              <span>Import PSD</span>
+            </button>
           </div>
         </div>
 
@@ -1461,6 +1472,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </div>
       </Transition>
     </teleport>
+
+    <!-- Import PSD Dialog -->
+    <ImportDialog
+      :is-open="showImportDialog"
+      @close="showImportDialog = false"
+      @imported="() => { showImportDialog = false; loadData(); }"
+    />
   </div>
 </template>
 

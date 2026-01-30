@@ -325,15 +325,27 @@ export const useProject = () => {
             }
 
             // 2. Preparar payload mínimo para o banco (apenas metadados)
-            const pageMetadata = project.pages.map((page, index) => ({
-                id: page.id,
-                name: page.name,
-                width: page.width,
-                height: page.height,
-                type: page.type,
-                canvasDataPath: storagePaths[index] || page.canvasDataPath, // Caminho no Storage
-                thumbnailUrl: thumbnailUrls[index] || page.thumbnailUrl // URL do thumbnail
-            }))
+            const pageMetadata = project.pages.map((page, index) => {
+                const metadata: any = {
+                    id: page.id,
+                    name: page.name,
+                    width: page.width,
+                    height: page.height,
+                    type: page.type,
+                    canvasDataPath: storagePaths[index] || page.canvasDataPath, // Caminho no Storage
+                    thumbnailUrl: thumbnailUrls[index] || page.thumbnailUrl // URL do thumbnail
+                }
+
+                // CRITICAL: SEMPRE incluir canvasData no banco como backup
+                // Mesmo quando temos storagePath, mantemos canvasData para garantir
+                // que os dados nunca sejam perdidos se o Storage falhar
+                if (page.canvasData) {
+                    metadata.canvasData = page.canvasData
+                    console.log(`💾 Incluindo canvasData no banco para página ${page.id} (${page.canvasData?.objects?.length || 0} objetos)`)
+                }
+
+                return metadata
+            })
 
             const payload = {
                 name: project.name,
@@ -434,6 +446,7 @@ export const useProject = () => {
             }
 
             console.log('📦 Dados do projeto carregados do banco:', { id: data.id, name: data.name, canvasDataType: typeof data.canvas_data })
+            console.log('📦 canvas_data preview:', JSON.stringify(data.canvas_data).substring(0, 500))
 
             project.id = data.id
             project.name = data.name
@@ -462,21 +475,23 @@ export const useProject = () => {
                 let canvasData = null
                 let serverCanvasData = null
 
-                // Se tem canvasDataPath, buscar do Storage usando o caminho direto
-                if (pageMeta.canvasDataPath) {
+                // CRITICAL: PRIMEIRO verificar se tem canvasData direto no banco
+                // Isso é mais rápido e garante que dados recentes sejam usados
+                if ((pageMeta as any).canvasData) {
+                    serverCanvasData = (pageMeta as any).canvasData
+                    const objectCount = serverCanvasData?.objects?.length || 0
+                    console.log(`📦 CanvasData encontrado no banco: ${objectCount} objetos`)
+                }
+                // Só buscar do Storage se NÃO tiver canvasData no banco
+                else if (pageMeta.canvasDataPath) {
                     console.log('📥 Buscando canvasData do Storage:', pageMeta.canvasDataPath)
                     serverCanvasData = await loadCanvasDataFromPath(pageMeta.canvasDataPath)
                     if (serverCanvasData) {
                         const objectCount = serverCanvasData?.objects?.length || 0
-                        console.log('✅ CanvasData carregado do servidor:', { hasData: !!serverCanvasData, objectCount })
+                        console.log('✅ CanvasData carregado do Storage:', { hasData: !!serverCanvasData, objectCount })
                     } else {
                         console.warn('⚠️ CanvasData não encontrado no Storage')
                     }
-                } else if ((pageMeta as any).canvasData) {
-                    // Legacy: dados ainda estão no banco
-                    serverCanvasData = (pageMeta as any).canvasData
-                    const objectCount = serverCanvasData?.objects?.length || 0
-                    console.log('📦 CanvasData encontrado no banco (legacy):', { hasData: !!serverCanvasData, objectCount })
                 }
 
                 // Offline-safe: Verificar draft local, mas só usar se for válido e mais recente
@@ -485,20 +500,28 @@ export const useProject = () => {
                     const draftObjectCount = draft.canvasData?.objects?.length || 0
                     const draftAge = Date.now() - draft.updatedAt
                     const draftAgeMin = Math.floor(draftAge / 60000)
-                    
+
                     // Verificar se o draft tem conteúdo válido (deve ter objetos > 0)
                     const draftIsValid = draftObjectCount > 0
                     const serverObjectCount = serverCanvasData?.objects?.length || 0
-                    
+
+                    console.log(`📝 Draft encontrado para página ${pageMeta.id}: ${draftObjectCount} objetos (idade: ${draftAgeMin}min)`)
+                    console.log(`📝 Servidor tem: ${serverObjectCount} objetos`)
+
                     // CRITICAL: Só usar draft se ele tiver objetos válidos E se o servidor não tiver dados melhores
                     // Se o servidor tem dados mas o draft está vazio, sempre usar o servidor
-                    if (draftIsValid && (serverObjectCount === 0 || draftObjectCount >= serverObjectCount)) {
+                    // Se o servidor tem mais objetos que o draft, usar o servidor
+                    if (draftIsValid && serverObjectCount > 0 && draftObjectCount < serverObjectCount) {
+                        console.log(`⚠️ Draft tem ${draftObjectCount} objetos, servidor tem ${serverObjectCount} - usando servidor`)
+                        canvasData = serverCanvasData
+                    } else if (draftIsValid && (serverObjectCount === 0 || draftObjectCount >= serverObjectCount)) {
                         canvasData = draft.canvasData
                         console.log(`📝 Usando rascunho local (draft) para a página ${pageMeta.id} (${draftAgeMin}min atrás, ${draftObjectCount} objetos)`)
                     } else {
                         if (draftObjectCount === 0 && serverObjectCount > 0) {
                             // Limpar o draft vazio para evitar usar ele novamente
                             clearDraft(data.id, pageMeta.id)
+                            console.log(`🗑️ Draft vazio removido, usando servidor com ${serverObjectCount} objetos`)
                         }
                         canvasData = serverCanvasData
                     }
@@ -511,6 +534,8 @@ export const useProject = () => {
                 if (canvasData) {
                     const finalObjectCount = canvasData?.objects?.length || 0
                     console.log(`✅ CanvasData final para página ${pageMeta.id}:`, { hasData: !!canvasData, objectCount: finalObjectCount })
+                } else {
+                    console.warn(`⚠️ CanvasData é NULL para página ${pageMeta.id}`)
                 }
                 // Nota: Páginas novas podem não ter canvasData ainda, isso é normal
 

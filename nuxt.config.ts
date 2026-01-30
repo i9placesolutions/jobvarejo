@@ -10,6 +10,7 @@ export default defineNuxtConfig({
     contaboAccessKey: process.env.CONTABO_ACCESS_KEY,
     contaboSecretKey: process.env.CONTABO_SECRET_KEY,
     contaboBrandsBucket: process.env.CONTABO_BRANDS_BUCKET,
+    contaboImportBucket: process.env.CONTABO_IMPORT_BUCKET,
     openaiApiKey: process.env.NUXT_OPENAI_API_KEY,
     serperApiKey: process.env.NUXT_SERPER_API_KEY,
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -25,6 +26,7 @@ export default defineNuxtConfig({
       contabo: {
         endpoint: 'usc1.contabostorage.com',
         bucket: '475a29e42e55430abff00915da2fa4bc:jobupload',
+        importBucket: '475a29e42e55430abff00915da2fa4bc:jobpsd',
         region: 'default',
       }
     }

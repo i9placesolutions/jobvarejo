@@ -1,0 +1,34 @@
+{
+    "mcpServers": {
+      "odontoia": {
+        "timeout": 60,
+        "command": "npx",
+        "args": [
+          "-y",
+          "@supabase/mcp-server-supabase@latest",
+          "--access-token",
+          "sbp_5385a52173d35065ca72a87ae304626c8ea1c293",
+          "--project-ref",
+          "ukqiryczvlbcezwmgzsx"
+        ],
+        "transportType": "stdio",
+        "disabled": true
+      },
+  
+      "JOB": {
+        "timeout": 60,
+        "command": "npx",
+        "args": [
+          "-y",
+          "@supabase/mcp-server-supabase@latest",
+          "--access-token",
+          "sbp_f4a7293707e35b517cdd2a5e2e350c5d10f25c4f",
+          "--project-ref",
+          "yxdpanfcxvbawaagfeil"
+        ],
+        "transportType": "stdio",
+        "disabled": false
+      }
+    }
+  }
+  

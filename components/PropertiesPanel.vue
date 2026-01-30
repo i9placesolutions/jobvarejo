@@ -604,8 +604,18 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 
       <!-- IMAGE FILTERS (New) -->
       <div v-if="isImage" class="p-4 border-b border-black/20 space-y-3">
-          <span class="text-[11px] font-bold text-zinc-400">Image Filters</span>
-          
+          <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold text-zinc-400">Image Filters</span>
+              <button
+                  @click="console.log('🔴 BOTÃO PROPERTIES CLICADO!'); $emit('action', 'remove-image-bg')"
+                  class="flex items-center gap-1 px-2 py-1 text-[9px] bg-purple-600 hover:bg-purple-500 rounded transition-colors"
+                  title="Remover fundo da imagem"
+              >
+                  <Scan class="w-3 h-3" />
+                  Remover Fundo
+              </button>
+          </div>
+
           <div class="space-y-2">
               <div class="flex justify-between items-center"><span class="text-[10px] text-zinc-500">Brightness</span><span class="text-[10px] text-zinc-400">{{ (getVal('filters', []).find((f: any) => f.type === 'Brightness')?.brightness || 0).toFixed(2) }}</span></div>
               <input type="range" min="-1" max="1" step="0.05" :value="getVal('filters', []).find((f: any) => f.type === 'Brightness')?.brightness || 0" @input="e => $emit('update-property', 'filter-brightness', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
