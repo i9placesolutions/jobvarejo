@@ -747,14 +747,13 @@ const verticalAlignOptions = [
 
           <div class="space-y-1.5">
             <label class="text-[10px] text-zinc-500">Fonte</label>
-            <input
-              type="text"
+            <select
               :value="globalStyles?.prodNameFont ?? 'Inter'"
-              :list="FONT_DATALIST_ID"
-              @change="updateGlobal('prodNameFont', ($event.target as HTMLInputElement).value)"
+              @change="updateGlobal('prodNameFont', ($event.target as HTMLSelectElement).value)"
               class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              placeholder="Inter"
-            />
+            >
+              <option v-for="f in AVAILABLE_FONT_FAMILIES" :key="f" :value="f">{{ f }}</option>
+            </select>
           </div>
 
           <div class="grid grid-cols-2 gap-2">
@@ -935,14 +934,13 @@ const verticalAlignOptions = [
           <div class="grid grid-cols-2 gap-2">
             <div class="space-y-1.5">
               <label class="text-[10px] text-zinc-500">Fonte (Preço)</label>
-              <input
-                type="text"
+              <select
                 :value="globalStyles?.priceFont ?? 'Inter'"
-                :list="FONT_DATALIST_ID"
-                @change="updateGlobal('priceFont', ($event.target as HTMLInputElement).value)"
+                @change="updateGlobal('priceFont', ($event.target as HTMLSelectElement).value)"
                 class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                placeholder="Inter"
-              />
+              >
+                <option v-for="f in AVAILABLE_FONT_FAMILIES" :key="f" :value="f">{{ f }}</option>
+              </select>
             </div>
             <div class="space-y-1.5">
               <label class="text-[10px] text-zinc-500">Peso (Preço)</label>

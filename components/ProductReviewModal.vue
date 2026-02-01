@@ -5,20 +5,26 @@ import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
 import { Sparkles, X, Check, AlertCircle, Loader2, Search, Upload, FolderOpen } from 'lucide-vue-next'
 import { useProductProcessor, type SmartProduct } from '../composables/useProductProcessor'
+import type { LabelTemplate } from '~/types/label-template'
 
 const props = defineProps<{
     modelValue: boolean
     initialProducts?: SmartProduct[]
+    showImportMode?: boolean
+    existingCount?: number
+    labelTemplates?: LabelTemplate[]
+    initialLabelTemplateId?: string
 }>()
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void
-    (e: 'import', products: SmartProduct[]): void
+    (e: 'import', products: SmartProduct[], opts?: { mode?: 'replace' | 'append'; labelTemplateId?: string }): void
 }>()
 
 const textInput = ref('')
 const step = ref<'input' | 'review'>('input')
 const listFileInput = ref<HTMLInputElement | null>(null)
+const importMode = ref<'replace' | 'append'>('replace')
 
 const LIST_FILE_ACCEPT = 'image/*,.csv,.tsv,.xlsx,.xls,.pdf,text/plain'
 
@@ -34,9 +40,16 @@ const {
     removeProduct 
 } = useProductProcessor()
 
+const resolveProductIndex = (p: any) => {
+    const id = p?.id
+    if (id === null || id === undefined) return -1
+    return (products.value || []).findIndex((x: any) => x?.id === id)
+}
+
 // Watcher to reset state when opening
 watch(() => props.modelValue, (newVal) => {
     if (newVal) {
+        importMode.value = 'replace'
         if (props.initialProducts && props.initialProducts.length > 0) {
             // Load external products directly into review mode
             products.value = [...props.initialProducts]
@@ -91,7 +104,10 @@ const handleDropFile = async (event: DragEvent) => {
 const handleImport = () => {
     // Filter only valid products? Or import all?
     // Provide a clean list to parent
-    emit('import', JSON.parse(JSON.stringify(products.value)));
+    emit('import', JSON.parse(JSON.stringify(products.value)), {
+        mode: importMode.value,
+        labelTemplateId: selectedLabelTemplateId.value || undefined
+    });
     emit('update:modelValue', false);
     
     // Reset for next time?
@@ -104,6 +120,37 @@ const isLoadingAssets = ref(false)
 const assets = ref<any[]>([])
 const assetSearch = ref('')
 const selectedProductIndex = ref<number | null>(null)
+
+const reviewSearch = ref('')
+const selectedLabelTemplateId = ref<string>('')
+
+watch(
+    () => props.modelValue,
+    (open) => {
+        if (!open) return
+        selectedLabelTemplateId.value = String(props.initialLabelTemplateId || '')
+        reviewSearch.value = ''
+    }
+)
+
+const labelTemplateList = computed(() => {
+    const list = Array.isArray(props.labelTemplates) ? props.labelTemplates : []
+    return list
+        .filter(Boolean)
+        .slice()
+        .sort((a: any, b: any) => {
+            const ab = !!a?.isBuiltIn
+            const bb = !!b?.isBuiltIn
+            if (ab !== bb) return ab ? -1 : 1
+            return String(a?.name || '').localeCompare(String(b?.name || ''))
+        })
+})
+
+const selectedLabelTemplate = computed(() => {
+    const id = String(selectedLabelTemplateId.value || '')
+    if (!id) return null
+    return labelTemplateList.value.find(t => String(t.id) === id) || null
+})
 
 const normalizeText = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 
@@ -168,6 +215,16 @@ const getStatusColor = (status: string) => {
         default: return 'text-zinc-500';
     }
 }
+
+const filteredProducts = computed(() => {
+    const list = products.value || []
+    const q = normalizeText(String(reviewSearch.value || '').trim())
+    if (!q) return list
+    return list.filter((p: any) => {
+        const hay = normalizeText(`${p?.name || ''} ${p?.brand || ''} ${p?.price || ''} ${p?.priceWholesale || ''}`)
+        return hay.includes(q)
+    })
+})
 </script>
 
 <template>
@@ -235,6 +292,80 @@ const getStatusColor = (status: string) => {
 
             <!-- STEP 2: REVIEW -->
             <div v-else class="flex flex-col gap-4 flex-1 h-full overflow-hidden">
+                <!-- Review Header / Controls -->
+                <div class="p-3 rounded-lg border border-white/10 bg-zinc-900/40">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="text-xs font-semibold text-zinc-100 truncate">Revisão dos produtos</div>
+                            <div class="text-[10px] text-zinc-500">
+                                Mostrando <span class="text-zinc-300 font-medium">{{ filteredProducts.length }}</span> de
+                                <span class="text-zinc-300 font-medium">{{ products.length }}</span>
+                            </div>
+                        </div>
+                        <div class="w-[280px] max-w-[45%]">
+                            <Input v-model="reviewSearch" placeholder="Buscar (nome, marca, preço...)" class="h-9 text-sm" />
+                        </div>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        <div v-if="props.showImportMode" class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10 bg-black/20">
+                            <div class="min-w-0">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Modo</div>
+                                <div class="text-[10px] text-zinc-500 truncate">
+                                    Zona tem <span class="text-zinc-300 font-medium">{{ Math.max(0, Number(props.existingCount || 0)) }}</span> itens
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    class="h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all"
+                                    :class="importMode === 'replace' ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
+                                    @click="importMode = 'replace'"
+                                    title="Remove os produtos atuais da zona e recria a grade"
+                                >
+                                    Substituir
+                                </button>
+                                <button
+                                    type="button"
+                                    class="h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all"
+                                    :class="importMode === 'append' ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
+                                    @click="importMode = 'append'"
+                                    title="Adiciona ao que já existe e reorganiza a grade"
+                                >
+                                    Adicionar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10 bg-black/20">
+                            <div class="min-w-0">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Etiqueta</div>
+                                <div class="text-[10px] text-zinc-500 truncate">
+                                    Modelo aplicado aos novos cards
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <img
+                                    v-if="selectedLabelTemplate?.previewDataUrl"
+                                    :src="selectedLabelTemplate.previewDataUrl"
+                                    alt="preview"
+                                    class="w-[64px] h-[26px] object-contain rounded bg-zinc-800/60 border border-zinc-700"
+                                />
+                                <select
+                                    class="h-8 bg-transparent border border-zinc-700 rounded px-2 text-xs text-zinc-200 focus:outline-none min-w-[180px]"
+                                    :value="selectedLabelTemplateId"
+                                    @change="selectedLabelTemplateId = String(($event.target as HTMLSelectElement).value || '')"
+                                >
+                                    <option value="">(usar padrão da zona)</option>
+                                    <option v-for="tpl in labelTemplateList" :key="tpl.id" :value="tpl.id">
+                                        {{ tpl.name }}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="overflow-y-auto custom-scrollbar flex-1 border border-zinc-800 rounded-lg bg-zinc-900/50">
                     <table class="w-full text-left text-xs border-collapse">
                         <thead class="bg-zinc-800 text-zinc-400 sticky top-0 z-10">
@@ -247,7 +378,7 @@ const getStatusColor = (status: string) => {
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-800">
-                            <tr v-for="(product, index) in products" :key="product.id" class="hover:bg-white/5 group">
+                            <tr v-for="(product, index) in filteredProducts" :key="product.id" class="hover:bg-white/5 group">
                                 <!-- Image Column -->
                                 <td class="p-2">
                                     <div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center overflow-hidden border border-zinc-700 relative">
@@ -260,14 +391,14 @@ const getStatusColor = (status: string) => {
                                             type="file"
                                             class="hidden"
                                             accept="image/*"
-                                            @change="handleImageUpload($event, index)"
+                                            @change="handleImageUpload($event, resolveProductIndex(product))"
                                         />
 
                                         <div class="absolute top-1 left-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                                             <button
                                                 class="bg-black/60 text-white rounded p-1"
                                                 title="Selecionar do Storage"
-                                                @click.stop="openAssetPicker(index)"
+                                                @click.stop="openAssetPicker(resolveProductIndex(product))"
                                             >
                                                 <FolderOpen class="w-3 h-3" />
                                             </button>
@@ -277,7 +408,7 @@ const getStatusColor = (status: string) => {
                                         <div 
                                             v-if="!product.imageUrl && product.status !== 'processing'" 
                                             class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer z-10"
-                                            @click="processProductImage(index)"
+                                            @click="processProductImage(resolveProductIndex(product))"
                                             title="Buscar Imagem"
                                         >
                                             <Search class="w-3 h-3 text-white" />
@@ -376,7 +507,7 @@ const getStatusColor = (status: string) => {
 
                                 <!-- Actions -->
                                 <td class="p-2 text-right">
-                                    <button @click="removeProduct(index)" class="text-zinc-500 hover:text-red-400 p-1">
+                                    <button @click="removeProduct(resolveProductIndex(product))" class="text-zinc-500 hover:text-red-400 p-1">
                                         <X class="w-3.5 h-3.5" />
                                     </button>
                                 </td>

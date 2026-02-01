@@ -105,9 +105,22 @@ export default defineEventHandler(async (event) => {
     }
 
     // Gerar presigned URL válida por 1 hora
-    const url = await getSignedUrl(s3Client, command, {
+    let url = await getSignedUrl(s3Client, command, {
       expiresIn: 3600
     })
+
+    // CRITICAL: Contabo returns 500 when bucket name has encoded colon (%3A)
+    // The AWS SDK encodes special characters in the URL path, but Contabo expects
+    // the colon to be unencoded. We need to decode the bucket portion of the URL.
+    // Pattern: https://endpoint/tenant%3Abucket/key -> https://endpoint/tenant:bucket/key
+    if (config.bucket?.includes(':') && url.includes('%3A')) {
+      // Only decode the %3A that's part of the bucket name, not query params
+      const urlObj = new URL(url)
+      // Decode the pathname which contains the bucket
+      urlObj.pathname = decodeURIComponent(urlObj.pathname)
+      url = urlObj.toString()
+      console.log('🔧 URL presignada corrigida (decodificado %3A no bucket):', url.substring(0, 100) + '...')
+    }
 
     return {
       url,

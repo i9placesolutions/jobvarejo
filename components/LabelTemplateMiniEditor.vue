@@ -15,6 +15,7 @@ const emit = defineEmits<{
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const viewportEl = ref<HTMLDivElement | null>(null)
 const imageInputEl = ref<HTMLInputElement | null>(null)
+const replaceImageInputEl = ref<HTMLInputElement | null>(null)
 let fabric: any = null
 let canvas: any = null
 let group: any = null
@@ -27,8 +28,25 @@ const zoomPct = ref(100)
 const saveError = ref<string | null>(null)
 const isSaving = ref(false)
 
+const showFillColorPicker = ref(false)
+const showFillColorPicker2 = ref(false)
+const showStrokeColorPicker = ref(false)
+const showTextStrokeColorPicker = ref(false)
+
 const TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio']
 const FONT_DATALIST_ID = 'label-template-fonts'
+
+const FONT_WEIGHT_OPTIONS: Array<{ label: string; value: number }> = [
+  { label: 'Thin (100)', value: 100 },
+  { label: 'Extra Light (200)', value: 200 },
+  { label: 'Light (300)', value: 300 },
+  { label: 'Regular (400)', value: 400 },
+  { label: 'Medium (500)', value: 500 },
+  { label: 'Semi Bold (600)', value: 600 },
+  { label: 'Bold (700)', value: 700 },
+  { label: 'Extra Bold (800)', value: 800 },
+  { label: 'Black (900)', value: 900 }
+]
 
 const loadFabric = async () => {
   if (fabric) return
@@ -280,6 +298,28 @@ const current = (prop: string, fallback: any = '') => {
   return obj ? (obj[prop] ?? fallback) : fallback
 }
 
+const currentNumber = (prop: string, fallback = 0) => {
+  const v = current(prop, fallback)
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
+
+const setTextCase = (mode: 'none' | 'upper' | 'lower') => {
+  const obj = selectedObj.value
+  if (!obj || !canvas) return
+  if (!String(obj?.type || '').includes('text')) return
+  const rawKey = '__rawText'
+  if (typeof obj[rawKey] !== 'string') obj[rawKey] = String(obj.text ?? '')
+  const base = String(obj[rawKey] ?? obj.text ?? '')
+  const next = mode === 'upper' ? base.toUpperCase() : mode === 'lower' ? base.toLowerCase() : base
+  obj.set('text', next)
+  obj.__textCase = mode
+  if (typeof obj.initDimensions === 'function') obj.initDimensions()
+  if (obj.group && typeof obj.group.triggerLayout === 'function') obj.group.triggerLayout()
+  obj.setCoords?.()
+  canvas.requestRenderAll()
+}
+
 const isText = computed(() => {
   const t = selectedObj.value?.type
   return t === 'text' || t === 'i-text' || t === 'textbox'
@@ -291,6 +331,22 @@ const isUnitText = computed(() => selectedName.value === 'price_unit_text')
 const isRect = computed(() => selectedObj.value?.type === 'rect')
 const isCircle = computed(() => selectedObj.value?.type === 'circle')
 const isImage = computed(() => selectedObj.value?.type === 'image')
+
+const currentFontWeight = computed(() => {
+  const raw = current('fontWeight', 400)
+  const n = Number(raw)
+  if (Number.isFinite(n)) return n
+  const s = String(raw ?? '').toLowerCase().trim()
+  if (!s) return 400
+  if (s === 'normal') return 400
+  if (s === 'bold') return 700
+  return 400
+})
+
+const currentTextCase = computed(() => {
+  const v = String((selectedObj.value as any)?.__textCase || 'none') as any
+  return (v === 'upper' || v === 'lower' || v === 'none') ? v : 'none'
+})
 
 const addText = () => {
   if (!fabric || !canvas || !group) return
@@ -353,6 +409,7 @@ const addCircle = () => {
 }
 
 const openAddImage = () => imageInputEl.value?.click()
+const openReplaceImage = () => replaceImageInputEl.value?.click()
 
 const onAddImage = async (e: Event) => {
   const input = e.target as HTMLInputElement
@@ -383,6 +440,64 @@ const onAddImage = async (e: Event) => {
         img.set({ scaleX: s, scaleY: s })
         if (ih > iw) img.set({ scaleX: (targetW * 0.7) / iw, scaleY: (targetW * 0.7) / iw })
         safeAddWithUpdate(group, img)
+        canvas.setActiveObject(img)
+        setSelected()
+        canvas.requestRenderAll()
+        resolve()
+      },
+      { crossOrigin: 'anonymous' }
+    )
+  })
+
+  if (input) input.value = ''
+}
+
+const replaceSelectedImage = async (e: Event) => {
+  const obj = selectedObj.value
+  if (!obj || !fabric || !canvas || !group) return
+  if (obj.type !== 'image') return
+
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result || ''))
+    r.onerror = () => reject(new Error('FileReader failed'))
+    r.readAsDataURL(file)
+  })
+
+  await new Promise<void>((resolve) => {
+    fabric.Image.fromURL(
+      dataUrl,
+      (img: any) => {
+        const prev = obj
+        const keep: any = {
+          left: prev.left,
+          top: prev.top,
+          originX: prev.originX,
+          originY: prev.originY,
+          angle: prev.angle,
+          scaleX: prev.scaleX,
+          scaleY: prev.scaleY,
+          flipX: prev.flipX,
+          flipY: prev.flipY,
+          opacity: prev.opacity,
+          name: prev.name
+        }
+
+        img.set(keep)
+        // preserve crop + clipPath if present (common in splash images)
+        if (typeof prev.cropX === 'number') img.set('cropX', prev.cropX)
+        if (typeof prev.cropY === 'number') img.set('cropY', prev.cropY)
+        if (typeof prev.width === 'number') img.set('width', prev.width)
+        if (typeof prev.height === 'number') img.set('height', prev.height)
+        if (prev.clipPath) img.set('clipPath', prev.clipPath)
+
+        group.remove(prev)
+        safeAddWithUpdate(group, img)
+        safeAddWithUpdate(group)
         canvas.setActiveObject(img)
         setSelected()
         canvas.requestRenderAll()
@@ -503,6 +618,7 @@ watch(
 <template>
   <div class="space-y-3">
     <input ref="imageInputEl" type="file" class="hidden" accept="image/*" @change="onAddImage" />
+    <input ref="replaceImageInputEl" type="file" class="hidden" accept="image/*" @change="replaceSelectedImage" />
 
     <div class="flex items-center justify-between">
       <div class="text-xs font-bold uppercase tracking-widest text-zinc-500">Mini Editor</div>
@@ -596,6 +712,18 @@ watch(
                 <label class="text-[10px] text-zinc-500">Rotacao</label>
                 <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('angle', 0))" @input="patch('angle', Number(($event.target as HTMLInputElement).value))" />
               </div>
+              <div class="col-span-2">
+                <label class="text-[10px] text-zinc-500">Opacity</label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
+                  :value="Number(current('opacity', 1)).toFixed(2)"
+                  @input="patch('opacity', Number(($event.target as HTMLInputElement).value))"
+                />
+              </div>
               <div class="col-span-2 flex items-center justify-between gap-2">
                 <label class="text-[10px] text-zinc-500">Visivel</label>
                 <input type="checkbox" class="h-4 w-4" :checked="!!current('visible', true)" @change="patch('visible', ($event.target as HTMLInputElement).checked)" />
@@ -613,10 +741,21 @@ watch(
               <div class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="text-[10px] text-zinc-500">Fonte</label>
-                  <input
+                  <select
                     class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
+                    :value="current('fontFamily', '')"
+                    @change="patch('fontFamily', ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option value="">(selecionar)</option>
+                    <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">
+                      {{ font }}
+                    </option>
+                  </select>
+                  <input
+                    class="w-full mt-1 bg-zinc-900/60 border border-zinc-700 rounded px-2 py-1 text-[10px] text-zinc-200"
                     :list="FONT_DATALIST_ID"
                     :value="current('fontFamily', '')"
+                    placeholder="ou digite uma fonte…"
                     @input="patch('fontFamily', ($event.target as HTMLInputElement).value)"
                   />
                   <datalist :id="FONT_DATALIST_ID">
@@ -629,7 +768,15 @@ watch(
                 </div>
                 <div>
                   <label class="text-[10px] text-zinc-500">Peso</label>
-                  <input class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="current('fontWeight', '')" @input="patch('fontWeight', ($event.target as HTMLInputElement).value)" />
+                  <select
+                    class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
+                    :value="String(currentFontWeight)"
+                    @change="patch('fontWeight', Number(($event.target as HTMLSelectElement).value))"
+                  >
+                    <option v-for="opt in FONT_WEIGHT_OPTIONS" :key="opt.value" :value="String(opt.value)">
+                      {{ opt.label }}
+                    </option>
+                  </select>
                 </div>
                 <div>
                   <label class="text-[10px] text-zinc-500">Cor</label>
@@ -645,6 +792,81 @@ watch(
                       @update:show="showFillColorPicker = $event"
                       @update:model-value="(val: string) => patch('fill', val)"
                     />
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-zinc-500">Alinhamento</label>
+                  <select class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="current('textAlign', 'left')" @change="patch('textAlign', ($event.target as HTMLSelectElement).value)">
+                    <option value="left">Esquerda</option>
+                    <option value="center">Centro</option>
+                    <option value="right">Direita</option>
+                    <option value="justify">Justificado</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-zinc-500">Estilo</label>
+                  <select class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="current('fontStyle', 'normal')" @change="patch('fontStyle', ($event.target as HTMLSelectElement).value)">
+                    <option value="normal">Normal</option>
+                    <option value="italic">Itálico</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-zinc-500">Line Height</label>
+                  <input type="number" step="0.05" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Number(current('lineHeight', 1)).toFixed(2)" @input="patch('lineHeight', Number(($event.target as HTMLInputElement).value))" />
+                </div>
+                <div>
+                  <label class="text-[10px] text-zinc-500">Letter Spacing</label>
+                  <input type="number" step="10" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(currentNumber('charSpacing', 0))" @input="patch('charSpacing', Number(($event.target as HTMLInputElement).value))" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <div class="col-span-2 flex items-center justify-between gap-2">
+                  <label class="text-[10px] text-zinc-500">Caixa</label>
+                  <select class="w-44 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="currentTextCase" @change="setTextCase(($event.target as HTMLSelectElement).value as any)">
+                    <option value="none">Normal</option>
+                    <option value="upper">MAIÚSCULO</option>
+                    <option value="lower">minúsculo</option>
+                  </select>
+                </div>
+                <div class="col-span-2 flex items-center gap-3">
+                  <label class="text-[10px] text-zinc-500">Decoração</label>
+                  <label class="flex items-center gap-2 text-[10px] text-zinc-300">
+                    <input type="checkbox" class="h-4 w-4" :checked="!!current('underline', false)" @change="patch('underline', ($event.target as HTMLInputElement).checked)" />
+                    Underline
+                  </label>
+                  <label class="flex items-center gap-2 text-[10px] text-zinc-300">
+                    <input type="checkbox" class="h-4 w-4" :checked="!!current('linethrough', false)" @change="patch('linethrough', ($event.target as HTMLInputElement).checked)" />
+                    Strike
+                  </label>
+                </div>
+              </div>
+
+              <div class="pt-2 border-t border-white/10 space-y-2">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Stroke do Texto</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-[10px] text-zinc-500">Cor</label>
+                    <div class="relative w-full">
+                      <div
+                        class="w-full h-8 rounded border border-white/10 cursor-pointer relative overflow-hidden"
+                        :style="{ backgroundColor: current('stroke', '#000000') }"
+                        @click="showTextStrokeColorPicker = true"
+                      ></div>
+                      <ColorPicker
+                        :show="showTextStrokeColorPicker"
+                        :model-value="current('stroke', '#000000')"
+                        @update:show="showTextStrokeColorPicker = $event"
+                        @update:model-value="(val: string) => patch('stroke', val)"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-zinc-500">Stroke W</label>
+                    <input type="number" step="0.1" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Number(current('strokeWidth', 0)).toFixed(1)" @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))" />
                   </div>
                 </div>
               </div>
@@ -757,6 +979,9 @@ watch(
 
               <div v-if="isImage" class="pt-2 border-t border-white/10 space-y-2">
                 <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Imagem</div>
+                <button class="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-200" @click="openReplaceImage">
+                  Trocar imagem
+                </button>
                 <div class="grid grid-cols-2 gap-2">
                   <div class="flex items-center justify-between gap-2">
                     <label class="text-[10px] text-zinc-500">Flip X</label>

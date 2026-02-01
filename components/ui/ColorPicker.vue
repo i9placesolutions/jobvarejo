@@ -41,32 +41,80 @@ const colorAreaRef = ref<HTMLElement | null>(null)
 const hueSliderRef = ref<HTMLElement | null>(null)
 const alphaSliderRef = ref<HTMLElement | null>(null)
 
-// Convert hex to HSL
-const hexToHsl = (hex: string) => {
-  hex = hex.replace('#', '')
-  const r = parseInt(hex.substring(0, 2), 16) / 255
-  const g = parseInt(hex.substring(2, 4), 16) / 255
-  const b = parseInt(hex.substring(4, 6), 16) / 255
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
+
+const rgbToHsl = (r0: number, g0: number, b0: number) => {
+  const r = clamp(r0, 0, 255) / 255
+  const g = clamp(g0, 0, 255) / 255
+  const b = clamp(b0, 0, 255) / 255
 
   const max = Math.max(r, g, b)
   const min = Math.min(r, g, b)
-  let h = 0, s = 0, l = (max + min) / 2
+  const d = max - min
 
-  if (max !== min) {
-    const d = max - min
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+  let h = 0
+  const l = (max + min) / 2
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1))
+
+  if (d !== 0) {
     switch (max) {
-      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break
-      case g: h = ((b - r) / d + 2) / 6; break
-      case b: h = ((r - g) / d + 4) / 6; break
+      case r:
+        h = ((g - b) / d) % 6
+        break
+      case g:
+        h = (b - r) / d + 2
+        break
+      case b:
+        h = (r - g) / d + 4
+        break
     }
+    h *= 60
+    if (h < 0) h += 360
   }
 
   return {
-    h: Math.round(h * 360),
+    h: Math.round(h),
     s: Math.round(s * 100),
     l: Math.round(l * 100)
   }
+}
+
+const parseColorToHslA = (raw: string): { h: number; s: number; l: number; a: number } | null => {
+  const v0 = String(raw || '').trim()
+  if (!v0) return null
+  const v = v0.toLowerCase()
+
+  if (v === 'transparent') {
+    return { h: 0, s: 0, l: 0, a: 0 }
+  }
+
+  // rgba()/rgb()
+  if (v.startsWith('rgb')) {
+    const m = v.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)/)
+    if (!m) return null
+    const r = Number(m[1])
+    const g = Number(m[2])
+    const b = Number(m[3])
+    const a = m[4] != null ? Number(m[4]) : 1
+    if (![r, g, b, a].every(n => Number.isFinite(n))) return null
+    const hsl = rgbToHsl(r, g, b)
+    return { ...hsl, a: clamp(a, 0, 1) }
+  }
+
+  // hex (#RGB / #RRGGBB)
+  const hex = v.startsWith('#') ? v.slice(1) : v
+  const isHex = /^[0-9a-f]{3}$/.test(hex) || /^[0-9a-f]{6}$/.test(hex)
+  if (!isHex) return null
+
+  const full = hex.length === 3
+    ? hex.split('').map(ch => ch + ch).join('')
+    : hex
+  const r = parseInt(full.slice(0, 2), 16)
+  const g = parseInt(full.slice(2, 4), 16)
+  const b = parseInt(full.slice(4, 6), 16)
+  if (![r, g, b].every(n => Number.isFinite(n))) return null
+  const hsl = rgbToHsl(r, g, b)
+  return { ...hsl, a: 1 }
 }
 
 // Convert HSL to hex
@@ -121,26 +169,18 @@ const currentColor = computed(() => {
 
 // Update HSL from hex value
 watch(() => props.modelValue, (newValue) => {
-  if (!newValue) return
-  const hex = newValue.replace('#', '').substring(0, 6)
-  if (hex.length === 6) {
-    const hsl = hexToHsl('#' + hex)
-    hue.value = hsl.h
-    saturation.value = hsl.s
-    lightness.value = hsl.l
-  }
-  
-  // Extract alpha if rgba
-  if (newValue.startsWith('rgba')) {
-    const match = newValue.match(/rgba?\([^)]+,\s*([\d.]+)\)/)
-    if (match) {
-      alpha.value = Math.round(parseFloat(match[1]) * 100)
-    }
-  }
+  const parsed = parseColorToHslA(String(newValue || ''))
+  if (!parsed) return
+  hue.value = parsed.h
+  saturation.value = parsed.s
+  lightness.value = parsed.l
+  alpha.value = Math.round(clamp(parsed.a, 0, 1) * 100)
 }, { immediate: true })
 
 // Emit color changes
 watch([hue, saturation, lightness, alpha], () => {
+  // Avoid mutating parent state when the picker is closed (prevents accidental changes on selection).
+  if (!props.show) return
   emit('update:modelValue', currentColor.value)
 })
 
