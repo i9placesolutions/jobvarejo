@@ -98,7 +98,22 @@ const isGroup = computed(() => props.selectedObject?.type === 'group' || props.s
 const isMultiSelect = computed(() => props.selectedObject?.type === 'activeSelection')
 const canMask = computed(() => props.selectedObject && !isMultiSelect.value)
 const isComponent = computed(() => props.selectedObject?.isComponent)
-const isProductZone = computed(() => props.selectedObject?.isGridZone || props.selectedObject?.isProductZone)
+
+// Helper function to detect product zone (same logic as isLikelyProductZone in EditorCanvas)
+const isLikelyProductZone = (obj: any): boolean => {
+  if (!obj) return false
+  if (obj.isGridZone || obj.isProductZone) return true
+  if (obj.name === 'gridZone' || obj.name === 'productZoneContainer') return true
+  if (obj.type !== 'group') return false
+  // Check for zone rect with dashed stroke
+  const objs = typeof obj.getObjects === 'function' ? obj.getObjects() : (obj._objects || [])
+  const zoneRect = objs.find((o: any) => 
+    o?.type === 'rect' && (o.name === 'zoneRect' || o.name === 'zone-border' || Array.isArray(o.strokeDashArray))
+  ) || objs.find((o: any) => o?.type === 'rect' && Array.isArray(o.strokeDashArray))
+  return !!(zoneRect && Array.isArray(zoneRect.strokeDashArray))
+}
+
+const isProductZone = computed(() => isLikelyProductZone(props.selectedObject))
 const isFrame = computed(() => props.selectedObject?.isFrame)
 const isVectorPath = computed(() => props.selectedObject?.isVectorPath || props.selectedObject?.type === 'path')
 const isRectLike = computed(() => {
@@ -591,7 +606,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 class="relative"
               >
                 <div 
-                  class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                  class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                   :style="{ backgroundColor: getVal('fill', '#000000') }"
                   @click="showFillColorPicker = true"
                 ></div>
@@ -727,7 +742,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 class="relative"
               >
                 <div 
-                  class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                  class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                   :style="{ backgroundColor: getVal('stroke', '#000000') || '#000000' }"
                   @click="showStrokeColorPicker = true"
                 ></div>
@@ -1040,10 +1055,10 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             <!-- Color Swatch -->
             <div 
               ref="pageColorPickerRef"
-              class="relative flex-shrink-0"
+              class="relative shrink-0"
             >
               <div 
-                class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                 :style="{ backgroundColor: getPageColorHex() }"
                 @click="showPageColorPicker = true"
               ></div>
@@ -1064,7 +1079,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 const hex = '#' + (e.target as any).value.replace('#', '');
                 handlePageColorChange(hex);
               }"
-              class="flex-1 min-w-[60px] h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-2 font-mono focus:outline-none focus:border-violet-500/50 uppercase"
+              class="flex-1 min-w-15 h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-2 font-mono focus:outline-none focus:border-violet-500/50 uppercase"
               placeholder="1E1E1E"
               maxlength="6"
             />
@@ -1082,10 +1097,10 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               max="100"
             />
             
-            <span class="text-xs text-zinc-400 flex-shrink-0">%</span>
+            <span class="text-xs text-zinc-400 shrink-0">%</span>
             
             <!-- Eye Icon (Visibility) -->
-            <button class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center transition-all flex-shrink-0 ml-auto" title="Toggle Page Visibility">
+            <button class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center transition-all shrink-0 ml-auto" title="Toggle Page Visibility">
               <Eye class="w-3.5 h-3.5 text-zinc-400" />
             </button>
           </div>
@@ -1115,7 +1130,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <span class="text-xs font-semibold text-white">Styles</span>
           <button 
             @click="handleAddColorStyle"
-            class="w-5 h-5 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
+            class="w-5 h-5 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all shrink-0"
             title="Add Color Style"
           >
             <Plus class="w-3.5 h-3.5 text-zinc-400" />
@@ -1126,7 +1141,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             v-for="style in colorStyles"
             :key="style.id"
             @click="$emit('apply-color-style', style.id)"
-            class="w-5 h-5 rounded border border-white/10 hover:border-white/30 transition-all relative flex-shrink-0"
+            class="w-5 h-5 rounded border border-white/10 hover:border-white/30 transition-all relative shrink-0"
             :style="{ backgroundColor: style.value }"
             :title="style.name || style.value"
           >

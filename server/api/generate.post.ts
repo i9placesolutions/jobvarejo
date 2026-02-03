@@ -4,9 +4,12 @@ export default defineEventHandler(async (event) => {
   const apiKey = config.openaiApiKey
 
   if (!apiKey) {
+    const hasNuxtKey = Boolean(process.env.NUXT_OPENAI_API_KEY)
+    const hasLegacyKey = Boolean(process.env.OPENAI_API_KEY)
     throw createError({
       statusCode: 500,
-      statusMessage: 'OpenAI API Key not configured'
+      statusMessage: 'OpenAI API Key not configured',
+      message: `Set NUXT_OPENAI_API_KEY (recommended) or OPENAI_API_KEY in .env and restart \"npm run dev\". Debug: runtimeConfig.openaiApiKey=false env.NUXT_OPENAI_API_KEY=${hasNuxtKey} env.OPENAI_API_KEY=${hasLegacyKey}`
     })
   }
 

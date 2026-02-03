@@ -1,5 +1,9 @@
 // Nuxt Runtime Config Types
 interface NuxtRuntimeConfig {
+  contaboEndpoint?: string
+  contaboRegion?: string
+  contaboBucket?: string
+  contaboImportBucket?: string
   contaboAccessKey?: string
   contaboSecretKey?: string
   contaboBrandsBucket?: string
@@ -14,6 +18,7 @@ interface NuxtRuntimeConfigPublic {
   contabo: {
     endpoint: string
     bucket: string
+    importBucket?: string
     region: string
   }
 }

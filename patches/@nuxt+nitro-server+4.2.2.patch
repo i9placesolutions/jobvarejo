@@ -1,0 +1,22 @@
+diff --git a/node_modules/@nuxt/nitro-server/dist/runtime/utils/dev.js b/node_modules/@nuxt/nitro-server/dist/runtime/utils/dev.js
+index 3ab66b5..1800c49 100644
+--- a/node_modules/@nuxt/nitro-server/dist/runtime/utils/dev.js
++++ b/node_modules/@nuxt/nitro-server/dist/runtime/utils/dev.js
+@@ -232,7 +232,7 @@ function webComponentScript(base64HTML, startMinimized) {
+       iframe.id = 'frame';
+       iframe.src = 'data:text/html;base64,${base64HTML}';
+       iframe.title = 'Detailed error stack trace';
+-      iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
++      iframe.setAttribute('sandbox', 'allow-scripts');
+       
+       const preview = document.createElement('div');
+       preview.id = 'preview';
+@@ -255,7 +255,7 @@ function webComponentScript(base64HTML, startMinimized) {
+           if (!previewIframe) {
+             previewIframe = document.createElement('iframe');
+             previewIframe.style.cssText = 'width: 1200px; height: 900px; transform: scale(0.2); transform-origin: top left; border: none;';
+-            previewIframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
++            previewIframe.setAttribute('sandbox', 'allow-scripts');
+             preview.appendChild(previewIframe);
+           }
+           

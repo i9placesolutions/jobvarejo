@@ -8,9 +8,14 @@ export const getS3Client = () => {
     const secretAccessKey = config.contaboSecretKey;
 
     if (!accessKeyId || !secretAccessKey || !endpoint) {
+        const missing: string[] = []
+        if (!endpoint) missing.push('CONTABO_ENDPOINT')
+        if (!accessKeyId) missing.push('CONTABO_ACCESS_KEY')
+        if (!secretAccessKey) missing.push('CONTABO_SECRET_KEY')
+
         throw createError({
             statusCode: 500,
-            statusMessage: "Contabo Storage configuration missing"
+            statusMessage: `Contabo Storage configuration missing (${missing.join(', ')})`
         });
     }
 

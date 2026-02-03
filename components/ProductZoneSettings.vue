@@ -109,10 +109,12 @@ const currentPreset = computed(() => {
 
 // Handlers
 const updateZone = (prop: string, value: any) => {
+  console.log('🔍 [ProductZoneSettings] emitting update:zone', prop, value);
   emit('update:zone', prop, value);
 };
 
 const updateGlobal = (prop: string, value: any) => {
+  console.log('🔍 [ProductZoneSettings] emitting update:globalStyles', prop, value);
   emit('update:globalStyles', prop, value);
 };
 
@@ -531,7 +533,7 @@ const verticalAlignOptions = [
           <div class="flex items-center gap-2">
             <div ref="cardColorPickerRef" class="relative">
               <div
-                class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                 :style="{ backgroundColor: globalStyles?.cardColor ?? '#ffffff' }"
                 @click="showCardColorPicker = true"
               ></div>
@@ -560,7 +562,7 @@ const verticalAlignOptions = [
           <div class="flex items-center gap-2">
             <div ref="accentColorPickerRef" class="relative">
               <div
-                class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                 :style="{ backgroundColor: globalStyles?.accentColor ?? '#dc2626' }"
                 @click="showAccentColorPicker = true"
               ></div>
@@ -635,7 +637,7 @@ const verticalAlignOptions = [
           <div class="flex items-center gap-2">
             <div ref="cardBorderColorPickerRef" class="relative">
               <div
-                class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                 :style="{ backgroundColor: globalStyles?.cardBorderColor ?? '#000000' }"
                 @click="showCardBorderColorPicker = true"
               ></div>
@@ -762,7 +764,7 @@ const verticalAlignOptions = [
               <div class="flex items-center gap-2">
                 <div ref="prodNameColorPickerRef" class="relative">
                   <div
-                    class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                    class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                     :style="{ backgroundColor: globalStyles?.prodNameColor ?? '#000000' }"
                     @click="showProdNameColorPicker = true"
                   ></div>
@@ -891,7 +893,7 @@ const verticalAlignOptions = [
               <div class="flex items-center gap-2">
                 <div ref="splashFillPickerRef" class="relative">
                   <div
-                    class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                    class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                     :style="{ backgroundColor: globalStyles?.splashFill ?? '#000000' }"
                     @click="showSplashFillPicker = true"
                   ></div>
@@ -972,7 +974,7 @@ const verticalAlignOptions = [
               <div class="flex items-center gap-2">
                 <div ref="priceTextColorPickerRef" class="relative">
                   <div
-                    class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                    class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                     :style="{
                       backgroundColor: globalStyles?.priceTextColor ?? 'transparent',
                       backgroundImage: globalStyles?.priceTextColor ? undefined : 'linear-gradient(45deg, rgba(255,255,255,0.12) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.12) 75%, transparent 75%, transparent)',
@@ -1015,7 +1017,7 @@ const verticalAlignOptions = [
               <div class="flex items-center gap-2">
                 <div ref="priceCurrencyColorPickerRef" class="relative">
                   <div
-                    class="w-6 h-6 rounded border border-white/10 cursor-pointer flex-shrink-0 relative overflow-hidden"
+                    class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
                     :style="{
                       backgroundColor: globalStyles?.priceCurrencyColor ?? 'transparent',
                       backgroundImage: globalStyles?.priceCurrencyColor ? undefined : 'linear-gradient(45deg, rgba(255,255,255,0.12) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.12) 75%, transparent 75%, transparent)',

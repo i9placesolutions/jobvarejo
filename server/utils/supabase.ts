@@ -1,24 +1,31 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Get Supabase URL and keys from environment
-const supabaseUrl = process.env.NUXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NUXT_PUBLIC_SUPABASE_KEY
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
-}
-
 // Create client with anon key (for client-side operations)
 export const createSupabaseClient = () => {
+  const config = useRuntimeConfig()
+  const supabaseUrl = config.public.supabaseUrl
+  const supabaseAnonKey = config.public.supabaseKey
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing Supabase environment variables (NUXT_PUBLIC_SUPABASE_URL / NUXT_PUBLIC_SUPABASE_KEY)')
+  }
+
   return createClient(supabaseUrl, supabaseAnonKey)
 }
 
 // Create admin client with service role key (for server operations)
 export const createSupabaseAdmin = () => {
+  const config = useRuntimeConfig()
+  const supabaseUrl = config.public.supabaseUrl
+  const supabaseServiceKey = config.supabaseServiceRoleKey
+
+  if (!supabaseUrl) {
+    throw new Error('Missing Supabase URL (NUXT_PUBLIC_SUPABASE_URL)')
+  }
   if (!supabaseServiceKey) {
     throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
   }
+
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,

@@ -9,11 +9,16 @@ export default defineEventHandler(async (event) => {
   const secretAccessKey = config.contaboSecretKey;
   const bucketName = config.contaboBucket;
 
-  // Since we don't have keys yet, we return a mock error or handle it
-  if (!accessKeyId || !secretAccessKey || !endpoint) {
+  if (!accessKeyId || !secretAccessKey || !endpoint || !bucketName) {
+    const missing: string[] = []
+    if (!endpoint) missing.push('CONTABO_ENDPOINT')
+    if (!bucketName) missing.push('CONTABO_BUCKET')
+    if (!accessKeyId) missing.push('CONTABO_ACCESS_KEY')
+    if (!secretAccessKey) missing.push('CONTABO_SECRET_KEY')
+
     throw createError({
         statusCode: 500,
-        statusMessage: "Contabo Storage configuration missing (NUXT_CONTABO_ACCESS_KEY, etc.)"
+        statusMessage: `Contabo Storage configuration missing (${missing.join(', ')})`
     });
   }
 

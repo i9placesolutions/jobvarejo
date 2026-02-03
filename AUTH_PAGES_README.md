@@ -88,6 +88,33 @@ NUXT_PUBLIC_SUPABASE_URL=sua_url_supabase
 NUXT_PUBLIC_SUPABASE_KEY=sua_key_supabase
 ```
 
+Observações importantes:
+
+- `NUXT_PUBLIC_*` é exposto ao navegador (client bundle). Use aqui apenas chaves públicas (ex.: Supabase `anon`).
+- Para a lista completa de variáveis suportadas, use o arquivo [.env.example](.env.example) como referência.
+
+### Configuração completa (quando usar uploads/IA)
+
+Além do Supabase público acima, algumas rotas do backend usam variáveis **server-only** (NÃO use prefixo `NUXT_PUBLIC_` para segredos):
+
+```env
+# Supabase (server only)
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Contabo S3 (server only)
+CONTABO_ENDPOINT=
+CONTABO_REGION=default
+CONTABO_BUCKET=
+CONTABO_ACCESS_KEY=
+CONTABO_SECRET_KEY=
+CONTABO_BRANDS_BUCKET=
+CONTABO_IMPORT_BUCKET=
+
+# OpenAI / Serper (server only)
+NUXT_OPENAI_API_KEY=
+NUXT_SERPER_API_KEY=
+```
+
 ### Composables usados
 
 ```typescript

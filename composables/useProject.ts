@@ -18,6 +18,7 @@ export interface Project {
     pages: Page[];
     activePageIndex: number;
     canvasStorageEnabled?: boolean; // Flag para usar Storage
+    colorStyles?: any[]; // Color styles for the project
 }
 
 // Estado Global (Singleton)

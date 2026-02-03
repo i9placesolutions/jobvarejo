@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed } from 'vue'
+import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed, nextTick } from 'vue'
 import Button from './ui/Button.vue'
 import LayersPanel from './LayersPanel.vue'
 import PropertiesPanel from './PropertiesPanel.vue'
@@ -76,6 +76,9 @@ const currentEditingPath = ref<any>(null) // Path object currently being edited
 const activeMode = ref<'design' | 'prototype'>('design')
 const showZoomMenu = ref(false)
 let globalMouseUpHandler: ((e: MouseEvent) => void) | null = null
+let domCanvasDblClickHandler: ((e: MouseEvent) => void) | null = null
+let lastDomDblClickAt = 0
+let wrapperResizeObserver: ResizeObserver | null = null
 
 // Flag to track if canvas is destroyed (prevents errors after unmount)
 const isCanvasDestroyed = ref(false)
@@ -126,18 +129,146 @@ const safeRequestRenderAll = (canvasInstance?: any): void => {
     const c = canvasInstance || canvas.value;
     if (!c || isCanvasDestroyed.value) return;
     if (typeof c.requestRenderAll !== 'function') return;
-    
-    // Additional check for contextTop which causes clearRect errors
-    try {
-        // Check if contextTop exists (used in renderTop)
-        if (c.contextTop === undefined || c.contextTop === null) {
-            // Canvas might be in an invalid state, skip render
-            return;
+
+    const ensureFabricContexts = (fc: any): boolean => {
+        try {
+            // In some edge cases (fast drag / mouseup outside / resize), Fabric can lose its cached contexts.
+            // If we just skip render, the lower canvas stays cleared (appears black). Rehydrate from DOM elements.
+            if (fc.upperCanvasEl && (!fc.contextTop || typeof fc.contextTop.clearRect !== 'function')) {
+                const ctxTop = fc.upperCanvasEl.getContext?.('2d');
+                if (ctxTop) fc.contextTop = ctxTop;
+            }
+            if (fc.lowerCanvasEl && (!fc.contextContainer || typeof fc.contextContainer.clearRect !== 'function')) {
+                const ctx = fc.lowerCanvasEl.getContext?.('2d');
+                if (ctx) fc.contextContainer = ctx;
+            }
+            // Some Fabric builds also keep a direct `context` alias.
+            if (!fc.context && fc.contextContainer) fc.context = fc.contextContainer;
+            return !!(fc.contextContainer && typeof fc.contextContainer.clearRect === 'function');
+        } catch {
+            return false;
         }
+    };
+
+    try {
+        if (!ensureFabricContexts(c)) return;
         c.requestRenderAll();
-    } catch (e) {
-        // Silently ignore render errors on destroyed/invalid canvas
+    } catch {
+        // As a last resort, attempt a synchronous render.
+        try {
+            if (typeof c.renderAll === 'function') c.renderAll();
+        } catch {
+            // Ignore
+        }
     }
+};
+
+// Hardens Fabric render calls to avoid the editor going black when something
+// unexpected sneaks into internal `_objects` arrays (canvas/group/clipPath).
+const patchCanvasRenderSafety = (c: any): void => {
+    if (!c || (c as any).__patchedSafeRender) return;
+
+    const isValidRenderable = (o: any) => {
+        return !!(o && typeof o === 'object' && typeof o.render === 'function' && typeof o.setCoords === 'function');
+    };
+
+    const ensureFabricContexts = (fc: any): boolean => {
+        try {
+            if (fc.upperCanvasEl && (!fc.contextTop || typeof fc.contextTop.clearRect !== 'function')) {
+                const ctxTop = fc.upperCanvasEl.getContext?.('2d');
+                if (ctxTop) fc.contextTop = ctxTop;
+            }
+            if (fc.lowerCanvasEl && (!fc.contextContainer || typeof fc.contextContainer.clearRect !== 'function')) {
+                const ctx = fc.lowerCanvasEl.getContext?.('2d');
+                if (ctx) fc.contextContainer = ctx;
+            }
+            if (!fc.context && fc.contextContainer) fc.context = fc.contextContainer;
+            return !!(fc.contextContainer && typeof fc.contextContainer.clearRect === 'function');
+        } catch {
+            return false;
+        }
+    };
+
+    const purgeInvalidRecursive = (container: any): number => {
+        if (!container) return 0;
+        const internal = (container as any)._objects;
+        let removed = 0;
+        if (Array.isArray(internal)) {
+            const before = internal.length;
+            const valid = internal.filter(isValidRenderable);
+            if (valid.length !== before) {
+                internal.length = 0;
+                valid.forEach((o: any) => internal.push(o));
+                removed += (before - valid.length);
+                if (typeof (container as any)._onStackOrderChanged === 'function') (container as any)._onStackOrderChanged();
+                if (typeof (container as any).triggerLayout === 'function') (container as any).triggerLayout();
+                if (typeof (container as any).setCoords === 'function') (container as any).setCoords();
+                (container as any).dirty = true;
+            }
+            for (const child of internal) {
+                // Clean invalid clipPaths (common crash source)
+                try {
+                    if (child?.clipPath) clearInvalidClipPath(child, true);
+                } catch {
+                    // ignore
+                }
+                if (child && Array.isArray((child as any)._objects)) {
+                    removed += purgeInvalidRecursive(child);
+                }
+                // Some clipPaths are groups internally
+                try {
+                    const cp = child?.clipPath;
+                    if (cp && Array.isArray((cp as any)._objects)) {
+                        removed += purgeInvalidRecursive(cp);
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        }
+        return removed;
+    };
+
+    const origRequest = typeof c.requestRenderAll === 'function' ? c.requestRenderAll.bind(c) : null;
+    const origRender = typeof c.renderAll === 'function' ? c.renderAll.bind(c) : null;
+
+    if (origRequest) {
+        (c as any).__origRequestRenderAll = origRequest;
+        c.requestRenderAll = () => {
+            if (!ensureFabricContexts(c)) return;
+            purgeInvalidRecursive(c);
+            try {
+                return origRequest();
+            } catch (e) {
+                // Try one more time after purging
+                try {
+                    purgeInvalidRecursive(c);
+                } catch {
+                    // ignore
+                }
+                try {
+                    return origRender ? origRender() : undefined;
+                } catch {
+                    // ignore
+                }
+            }
+        };
+    }
+
+    if (origRender) {
+        (c as any).__origRenderAll = origRender;
+        c.renderAll = () => {
+            if (!ensureFabricContexts(c)) return;
+            purgeInvalidRecursive(c);
+            try {
+                return origRender();
+            } catch {
+                // ignore
+            }
+        };
+    }
+
+    (c as any).__patchedSafeRender = true;
 };
 
 /**
@@ -1127,10 +1258,10 @@ const finishPenPath = () => {
             pathString += `M ${point.x} ${point.y}`;
         } else {
             const prevPoint = penPathPoints.value[index - 1];
-            if (point.handles && point.handles.in) {
+            if (prevPoint && point.handles && point.handles.in) {
                 // Bezier curve
-                const cp1x = prevPoint.handles?.out?.x || prevPoint.x;
-                const cp1y = prevPoint.handles?.out?.y || prevPoint.y;
+                const cp1x = prevPoint.handles?.out?.x ?? prevPoint.x;
+                const cp1y = prevPoint.handles?.out?.y ?? prevPoint.y;
                 const cp2x = point.handles.in.x;
                 const cp2y = point.handles.in.y;
                 pathString += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${point.x} ${point.y}`;
@@ -1183,8 +1314,9 @@ const addPenPoint = (point: {x: number, y: number}, withHandles = false) => {
     // Check if clicking near the first point to close the path
     if (penPathPoints.value.length >= 2) {
         const firstPoint = penPathPoints.value[0];
+        if (!firstPoint) return;
         const distance = Math.sqrt(
-            Math.pow(point.x - firstPoint.x, 2) + 
+            Math.pow(point.x - firstPoint.x, 2) +
             Math.pow(point.y - firstPoint.y, 2)
         );
         const threshold = 15; // pixels - adjust as needed
@@ -1222,7 +1354,8 @@ const updatePenPreview = () => {
     if (penPathPoints.value.length < 2) {
         // Show first point + preview line to mouse position
         const firstPoint = penPathPoints.value[0];
-        
+        if (!firstPoint) return;
+
         // Create/update point circle (only once)
         if (!currentPenPoint.value) {
             currentPenPoint.value = new fabric.Circle({
@@ -1310,9 +1443,9 @@ const updatePenPreview = () => {
             pathString += `M ${point.x} ${point.y}`;
         } else {
             const prevPoint = penPathPoints.value[index - 1];
-            if (point.handles && point.handles.in) {
-                const cp1x = prevPoint.handles?.out?.x || prevPoint.x;
-                const cp1y = prevPoint.handles?.out?.y || prevPoint.y;
+            if (prevPoint && point.handles && point.handles.in) {
+                const cp1x = prevPoint.handles?.out?.x ?? prevPoint.x;
+                const cp1y = prevPoint.handles?.out?.y ?? prevPoint.y;
                 const cp2x = point.handles.in.x;
                 const cp2y = point.handles.in.y;
                 pathString += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${point.x} ${point.y}`;
@@ -1665,9 +1798,9 @@ const closePath = () => {
                 pathString += `M ${point.x} ${point.y}`;
             } else {
                 const prevPoint = penPathPoints.value[index - 1];
-                if (point.handles && point.handles.in) {
-                    const cp1x = prevPoint.handles?.out?.x || prevPoint.x;
-                    const cp1y = prevPoint.handles?.out?.y || prevPoint.y;
+                if (prevPoint && point.handles && point.handles.in) {
+                    const cp1x = prevPoint.handles?.out?.x ?? prevPoint.x;
+                    const cp1y = prevPoint.handles?.out?.y ?? prevPoint.y;
                     const cp2x = point.handles.in.x;
                     const cp2y = point.handles.in.y;
                     pathString += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${point.x} ${point.y}`;
@@ -1945,6 +2078,21 @@ const handleInteraction = () => {
 
 const safeAddWithUpdate = (group: any, object?: any) => {
     if (!group) return;
+    
+    // CRITICAL: Validate object is a proper Fabric object before adding
+    if (object) {
+        const isValid = object && typeof object === 'object' && typeof object.setCoords === 'function';
+        if (!isValid) {
+            console.error('❌ [safeAddWithUpdate] Tentativa de adicionar objeto inválido ao grupo!', {
+                objectType: typeof object,
+                objectValue: object,
+                hasSetCoords: typeof object?.setCoords === 'function',
+                groupId: group._customId || group.id
+            });
+            return; // BLOCK invalid objects
+        }
+    }
+    
     if (typeof group.addWithUpdate === 'function') {
         if (object) group.addWithUpdate(object);
         else group.addWithUpdate();
@@ -1964,10 +2112,104 @@ const safeAddWithUpdate = (group: any, object?: any) => {
     group.dirty = true;
 };
 
+const groupLocalToCanvasPoint = (group: any, x: number, y: number): { x: number; y: number } => {
+    try {
+        if (!group || !fabric) return { x, y };
+        const hasMatrix = typeof group.calcTransformMatrix === 'function';
+        if (!hasMatrix || !fabric?.util?.transformPoint || !fabric?.Point) return { x, y };
+        const m = group.calcTransformMatrix();
+        const p = new fabric.Point(Number(x) || 0, Number(y) || 0);
+        const out = fabric.util.transformPoint(p, m);
+        return { x: Number(out?.x) || 0, y: Number(out?.y) || 0 };
+    } catch {
+        return { x, y };
+    }
+};
+
 // === ALT/OPTION + DRAG DUPLICATE (Figma/Canva-like) ===
 // When user Alt-drags an object, we keep the original in place and drag a clone.
 const setupAltDragDuplicate = () => {
     if (!canvas.value || !fabric) return;
+
+    const isValidFabricObject = (o: any) => {
+        return !!(o && typeof o === 'object' && typeof o._set === 'function' && typeof o.render === 'function' && typeof o.setCoords === 'function');
+    };
+
+    const sanitizeFabricJson = (json: any) => {
+        if (!json || typeof json !== 'object') return json;
+        try {
+            if (Array.isArray((json as any).objects)) {
+                (json as any).objects = (json as any).objects.filter((x: any) => x && typeof x === 'object');
+            }
+            const cp = (json as any).clipPath;
+            if (cp != null && typeof cp !== 'object') {
+                delete (json as any).clipPath;
+            }
+        } catch {
+            // ignore
+        }
+        return json;
+    };
+
+    const enlivenOne = (json: any): Promise<any> => {
+        return new Promise((resolve) => {
+            try {
+                if (!fabric?.util?.enlivenObjects) return resolve(null);
+                const cleaned = sanitizeFabricJson(json);
+                fabric.util.enlivenObjects([cleaned], (objs: any[]) => {
+                    resolve(objs?.[0] || null);
+                });
+            } catch {
+                resolve(null);
+            }
+        });
+    };
+
+    const cloneFabricObjectSafe = async (source: any, propsToInclude: string[]) => {
+        if (!source) return null;
+
+        // 1) Try Fabric v7 Promise-based clone
+        try {
+            const out = source.clone?.(propsToInclude);
+            if (out && typeof out.then === 'function') {
+                const cloned = await out;
+                if (isValidFabricObject(cloned)) return cloned;
+                // If clone returned a plain object representation, try to enliven it
+                if (cloned && typeof cloned === 'object' && (cloned.type || cloned.objects || cloned.src)) {
+                    const enlivened = await enlivenOne(cloned);
+                    if (isValidFabricObject(enlivened)) return enlivened;
+                }
+            }
+        } catch {
+            // ignore
+        }
+
+        // 2) Try Fabric v5 callback-based clone (some builds/polyfills still expose it)
+        try {
+            const cloned = await new Promise<any>((resolve, reject) => {
+                try {
+                    if (typeof source.clone !== 'function') return resolve(null);
+                    source.clone((c: any) => resolve(c), propsToInclude);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+            if (isValidFabricObject(cloned)) return cloned;
+        } catch {
+            // ignore
+        }
+
+        // 3) Fallback: serialize + enliven
+        try {
+            const json = typeof source.toObject === 'function' ? source.toObject(propsToInclude) : null;
+            const enlivened = await enlivenOne(json);
+            if (isValidFabricObject(enlivened)) return enlivened;
+        } catch {
+            // ignore
+        }
+
+        return null;
+    };
 
     const state = {
         armed: false,
@@ -1989,17 +2231,40 @@ const setupAltDragDuplicate = () => {
     };
 
     const assignNewIdsDeep = (obj: any) => {
-        if (!obj) return;
+        if (!obj || typeof obj !== 'object') return;
+        
+        // Validate object is a proper Fabric object
+        if (typeof obj.setCoords !== 'function' || typeof obj._set !== 'function' || typeof obj.render !== 'function') {
+            console.error('❌ [assignNewIdsDeep] Objeto inválido detectado!', {
+                objectType: typeof obj,
+                hasSetCoords: typeof obj?.setCoords === 'function',
+                hasSet: typeof obj?._set === 'function',
+                hasRender: typeof obj?.render === 'function'
+            });
+            return;
+        }
+        
         obj._customId = Math.random().toString(36).substr(2, 9);
         if (typeof obj.getObjects === 'function') {
             try {
                 const list = obj.getObjects() || [];
                 list.forEach((c: any) => {
                     if (!c || c.excludeFromExport) return;
+                    
+                    // CRITICAL: Validate child is a proper Fabric object
+                    if (typeof c !== 'object' || typeof c.setCoords !== 'function' || typeof c._set !== 'function' || typeof c.render !== 'function') {
+                        console.error('❌ [assignNewIdsDeep] Filho inválido detectado e ignorado!', {
+                            childType: typeof c,
+                            childValue: c,
+                            parentId: obj._customId
+                        });
+                        return;
+                    }
+                    
                     c._customId = Math.random().toString(36).substr(2, 9);
                 });
-            } catch {
-                // ignore
+            } catch (err) {
+                console.error('❌ [assignNewIdsDeep] Erro ao processar filhos:', err);
             }
         }
     };
@@ -2059,12 +2324,15 @@ const setupAltDragDuplicate = () => {
         const parentGroup = state.parentGroup;
         const curPos = { left: Number(original.left || 0), top: Number(original.top || 0) };
 
-        // Create clone (Fabric v7 clone() returns a Promise; callback signature is not supported)
-        (original as any)
-            .clone(['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name'])
+        cloneFabricObjectSafe(original, ['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name'])
             .then((cloned: any) => {
                 try {
                     if (!cloned || !canvas.value) return;
+
+                    if (!isValidFabricObject(cloned)) {
+                        console.error('❌ [alt-duplicate] Clone inválido (não-Fabric). Abortando para não corromper o canvas.', cloned);
+                        return;
+                    }
 
                     // Reset original to its start position (so it "stays")
                     original.set?.({ left: state.start.left, top: state.start.top });
@@ -2182,17 +2450,35 @@ const computeArrangedOrder = (list: any[], selected: Set<any>, mode: ArrangeMode
 
 const applyArrangedOrder = (container: any, newOrder: any[]) => {
     if (!container || !Array.isArray(newOrder)) return;
+    
+    // CRITICAL: Filter out invalid objects before applying order
+    const validObjects = newOrder.filter((o: any) => {
+        const isValid = o && typeof o === 'object' && typeof o.setCoords === 'function';
+        if (!isValid) {
+            console.error('❌ [applyArrangedOrder] Objeto inválido detectado e removido!', {
+                objectType: typeof o,
+                objectValue: o,
+                containerId: container._customId || container.id
+            });
+        }
+        return isValid;
+    });
+    
+    if (validObjects.length !== newOrder.length) {
+        console.warn(`⚠️ [applyArrangedOrder] Removidos ${newOrder.length - validObjects.length} objetos inválidos`);
+    }
+    
     // Fabric keeps render order in the internal `_objects` array for both Canvas and Group.
     const internal = (container as any)._objects;
     if (Array.isArray(internal)) {
         internal.length = 0;
-        newOrder.forEach(o => internal.push(o));
+        validObjects.forEach(o => internal.push(o));
         if (typeof container._onStackOrderChanged === 'function') container._onStackOrderChanged();
     } else if (typeof container.getObjects === 'function' && typeof container.remove === 'function' && typeof container.add === 'function') {
         // Fallback: rebuild by remove/add (can be slower, but safe).
         const cur = container.getObjects().slice();
         cur.forEach((o: any) => container.remove(o));
-        newOrder.forEach((o: any) => container.add(o));
+        validObjects.forEach((o: any) => container.add(o));
     }
 
     if (container === canvas.value) {
@@ -2293,26 +2579,29 @@ const collaborators = ref<any[]>([])
 
 // Generate color from string (consistent color for same name/email)
 const getColorFromString = (str: string): string => {
-  const colors = [
-    'bg-green-500', 'bg-purple-500', 'bg-blue-500', 'bg-pink-500', 
+  const colors: string[] = [
+    'bg-green-500', 'bg-purple-500', 'bg-blue-500', 'bg-pink-500',
     'bg-yellow-500', 'bg-indigo-500', 'bg-red-500', 'bg-teal-500',
     'bg-orange-500', 'bg-cyan-500'
   ]
   let hash = 0
   for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash)
+    const code = str.charCodeAt(i)
+    if (!isNaN(code)) {
+      hash = code + ((hash << 5) - hash)
+    }
   }
-  return colors[Math.abs(hash) % colors.length]
+  return colors[Math.abs(hash) % colors.length] ?? 'bg-gray-500'
 }
 
 // Get initial from name
 const getInitial = (name: string | null | undefined): string => {
   if (!name) return '?'
   const parts = name.trim().split(' ')
-  if (parts.length >= 2) {
+  if (parts.length >= 2 && parts[0] && parts[parts.length - 1]) {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
   }
-  return name[0].toUpperCase()
+  return name[0]?.toUpperCase() ?? '?'
 }
 
 // Load collaborators (users who have access to this project)
@@ -2332,10 +2621,10 @@ const loadCollaborators = async () => {
         .from('profiles')
         .select('id, name, email, avatar_url')
         .limit(3)
-      
+
       if (allUsers && allUsers.length > 0) {
         // Filter out current user and add others
-        const otherUsers = allUsers.filter(u => u.id !== currentUser.value?.id)
+        const otherUsers = allUsers.filter((u: any) => u.id !== currentUser.value?.id)
         usersToShow.push(...otherUsers.slice(0, 2))
       }
     } catch (err) {
@@ -2710,17 +2999,56 @@ const handleZoomOut = () => {
 
 const handleZoom100 = () => {
     if (!canvas.value) return;
-    // Reset viewport transform to 1, but keep center? 
+    // Reset viewport transform to 1, but keep center?
     // Usually 100% means 1 pixel = 1 pixel.
     canvas.value.setZoom(1);
-    
+
     // Center logic (optional)
     const vpw = canvas.value.getWidth();
     const vph = canvas.value.getHeight();
     // Assuming A4 or standard size, we center the viewport
     // canvas.value.viewportTransform[4] = (vpw - (activePage.value.width))/2; // simplified
     // canvas.value.viewportTransform[5] = (vph - (activePage.value.height))/2;
-    
+
+    canvas.value.requestRenderAll();
+    updateZoomState();
+}
+
+const handleZoom50 = () => {
+    if (!canvas.value) return;
+    canvas.value.setZoom(0.5);
+    canvas.value.requestRenderAll();
+    updateZoomState();
+}
+
+const handleZoom200 = () => {
+    if (!canvas.value) return;
+    canvas.value.setZoom(2);
+    canvas.value.requestRenderAll();
+    updateZoomState();
+}
+
+const handleZoom400 = () => {
+    if (!canvas.value) return;
+    canvas.value.setZoom(4);
+    canvas.value.requestRenderAll();
+    updateZoomState();
+}
+
+const handleZoomToSelection = () => {
+    if (!canvas.value || !selectedObjectRef.value) return;
+    const obj = selectedObjectRef.value;
+    // Zoom to fit the selected object
+    const padding = 20;
+    const vpw = canvas.value.getWidth();
+    const vph = canvas.value.getHeight();
+    const objWidth = (obj.width || 1) * (obj.scaleX || 1);
+    const objHeight = (obj.height || 1) * (obj.scaleY || 1);
+    const scaleX = (vpw - padding * 2) / objWidth;
+    const scaleY = (vph - padding * 2) / objHeight;
+    const zoom = Math.min(scaleX, scaleY, 2); // Cap at 200%
+
+    canvas.value.setZoom(zoom);
     canvas.value.requestRenderAll();
     updateZoomState();
 }
@@ -2855,6 +3183,24 @@ const showShareModal = ref(false)
 const shareUrl = ref('')
 const shareCanEdit = ref(false)
 const shareCanView = ref(true)
+
+const generateShareLink = () => {
+    const baseUrl = window.location.origin;
+    shareUrl.value = `${baseUrl}/editor/${project.id}`;
+}
+
+const copyShareUrl = async () => {
+    if (!shareUrl.value) {
+        generateShareLink();
+    }
+    try {
+        await navigator.clipboard.writeText(shareUrl.value);
+        // Optionally show a success notification
+    } catch (err) {
+        console.error('Failed to copy URL:', err);
+    }
+}
+
 const showPresentationModal = ref(false)
 const presentationImage = ref('')
 const presentationHotspots = ref<any[]>([])
@@ -3769,31 +4115,202 @@ const updateArtboard = () => {
 }
 
 const resizeCanvas = () => {
-    if(canvas.value && wrapperEl.value) {
-        const oldWidth = canvas.value.getWidth();
-        const oldHeight = canvas.value.getHeight();
+    if (!canvas.value || !wrapperEl.value) return;
+
+    const oldW = canvas.value.getWidth?.() || 0;
+    const oldH = canvas.value.getHeight?.() || 0;
+    const newW = wrapperEl.value.clientWidth || oldW;
+    const newH = wrapperEl.value.clientHeight || oldH;
+    if (!newW || !newH) return;
+
+    // Preserve the scene point currently at the center of the viewport.
+    // This avoids drifting to corners when panels expand/collapse.
+    const vpt = Array.isArray(canvas.value.viewportTransform) ? [...canvas.value.viewportTransform] : [1, 0, 0, 1, 0, 0];
+    const scale = Number(vpt[0] || 1);
+    let sceneCenter: any = null;
+    try {
+        if (oldW > 0 && oldH > 0 && (fabric as any)?.util?.invertTransform && (fabric as any)?.util?.transformPoint) {
+            const inv = (fabric as any).util.invertTransform(vpt);
+            sceneCenter = (fabric as any).util.transformPoint({ x: oldW / 2, y: oldH / 2 }, inv);
+        }
+    } catch {
+        sceneCenter = null;
+    }
+
+    canvas.value.setDimensions({ width: newW, height: newH });
+    canvas.value.calcOffset?.();
+
+    if (sceneCenter && typeof sceneCenter.x === 'number' && typeof sceneCenter.y === 'number') {
+        const next = [scale, 0, 0, scale, (newW / 2) - (sceneCenter.x * scale), (newH / 2) - (sceneCenter.y * scale)];
+        canvas.value.setViewportTransform(next);
+    } else {
+        // Fallback: keep scale and center the origin
+        canvas.value.setViewportTransform([scale, 0, 0, scale, newW / 2, newH / 2]);
+    }
+
+    updateScrollbars();
+    safeRequestRenderAll();
+}
+
+// 🔒 === CONTAINMENT SYSTEM (Product Cards & Zones) ===
+// Ensures:
+// 1. Product cards stay INSIDE product zones
+// 2. Product images stay INSIDE product cards
+// 3. Works on load, move, and scale
+// MUST be declared at component scope to be accessible in all event handlers
+const applyContainmentConstraints = (obj: any) => {
+    if (!obj || !canvas.value) return;
+
+    const getCardBaseSize = (card: any): { w: number; h: number } | null => {
+        if (!card) return null;
+        const w0 = Number((card as any)._cardWidth);
+        const h0 = Number((card as any)._cardHeight);
+        if (Number.isFinite(w0) && w0 > 0 && Number.isFinite(h0) && h0 > 0) {
+            return { w: w0, h: h0 };
+        }
+        try {
+            if (card.type === 'group' && typeof card.getObjects === 'function') {
+                const bg = card.getObjects().find((c: any) => c?.name === 'offerBackground' && (c?.type === 'rect' || c?.type === 'Rect'));
+                const bw = Number(bg?.width);
+                const bh = Number(bg?.height);
+                if (Number.isFinite(bw) && bw > 0 && Number.isFinite(bh) && bh > 0) {
+                    return { w: bw, h: bh };
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        const w1 = Number(card?.width);
+        const h1 = Number(card?.height);
+        if (Number.isFinite(w1) && w1 > 0 && Number.isFinite(h1) && h1 > 0) {
+            return { w: w1, h: h1 };
+        }
+        return null;
+    };
+    
+    // CONSTRAINT 1: Product Card must stay inside Product Zone
+    if (obj.type === 'group' && (obj.isSmartObject || obj.isProductCard || isLikelyProductCard(obj))) {
+        const parentZoneId = obj.parentZoneId;
+        if (!parentZoneId) return;
         
-        canvas.value.setDimensions({
-            width: wrapperEl.value.clientWidth,
-            height: wrapperEl.value.clientHeight
-        });
+        // Find parent zone
+        const zone = canvas.value.getObjects().find((o: any) => 
+            o._customId === parentZoneId && 
+            (o.isProductZone || o.name === 'productZoneContainer')
+        );
         
-        // Maintain viewport position when resizing
-        if (oldWidth > 0 && oldHeight > 0) {
-            const vpt = canvas.value.viewportTransform;
-            const ratioX = canvas.value.getWidth() / oldWidth;
-            const ratioY = canvas.value.getHeight() / oldHeight;
-            
-            // Adjust viewport transform to maintain relative position
-            vpt[4] *= ratioX;
-            vpt[5] *= ratioY;
-            
-            canvas.value.setViewportTransform(vpt);
+        if (!zone) return;
+        
+        // Get zone boundaries (robust to origin/viewport)
+        const zm = (typeof getZoneMetrics === 'function') ? (getZoneMetrics(zone) ?? zone.getBoundingRect(true)) : zone.getBoundingRect(true);
+        const zoneLeft = zm.left;
+        const zoneTop = zm.top;
+        const zoneRight = zm.left + zm.width;
+        const zoneBottom = zm.top + zm.height;
+        
+        // Get card boundaries (prefer the real card container size, not the group bounding box)
+        const base = getCardBaseSize(obj);
+        const baseW = base?.w ?? (Number(obj.width) || 0);
+        const baseH = base?.h ?? (Number(obj.height) || 0);
+        const cardWidth = Math.abs(baseW * Number(obj.scaleX || 1));
+        const cardHeight = Math.abs(baseH * Number(obj.scaleY || 1));
+        const center = (typeof obj.getCenterPoint === 'function')
+            ? obj.getCenterPoint()
+            : { x: (obj.left ?? 0), y: (obj.top ?? 0) };
+
+        const cardLeft = center.x - cardWidth / 2;
+        const cardTop = center.y - cardHeight / 2;
+        const cardRight = cardLeft + cardWidth;
+        const cardBottom = cardTop + cardHeight;
+        
+        // Calculate constraints
+        let constrainedCx = center.x;
+        let constrainedCy = center.y;
+        
+        // Constrain horizontally
+        if (cardLeft < zoneLeft) {
+            constrainedCx = zoneLeft + cardWidth / 2;
+        } else if (cardRight > zoneRight) {
+            constrainedCx = zoneRight - cardWidth / 2;
         }
         
-        updateScrollbars();
+        // Constrain vertically
+        if (cardTop < zoneTop) {
+            constrainedCy = zoneTop + cardHeight / 2;
+        } else if (cardBottom > zoneBottom) {
+            constrainedCy = zoneBottom - cardHeight / 2;
+        }
+        
+        // Apply constraints if needed
+        if (constrainedCx !== center.x || constrainedCy !== center.y) {
+            // Keep card positioned by its center, regardless of its current origin.
+            if (fabric?.Point && typeof obj.setPositionByOrigin === 'function') {
+                obj.setPositionByOrigin(new fabric.Point(constrainedCx, constrainedCy), 'center', 'center');
+            } else {
+                obj.set({ left: constrainedCx, top: constrainedCy, originX: 'center', originY: 'center' });
+            }
+            obj.setCoords();
+        }
     }
-}
+    
+    // CONSTRAINT 2: Product Images must stay inside Product Card (when in deep-select mode)
+    if (obj.type === 'image' && obj.group) {
+        const parentCard = obj.group;
+        
+        // Only constrain if parent is a product card
+        if (!parentCard.isSmartObject && !parentCard.isProductCard && !isLikelyProductCard(parentCard)) {
+            return;
+        }
+        
+        // Get card boundaries in GROUP-LOCAL coordinates (do not use scaled group bounds)
+        const base = getCardBaseSize(parentCard);
+        const cardW = Number(base?.w ?? parentCard.width ?? 0);
+        const cardH = Number(base?.h ?? parentCard.height ?? 0);
+        if (!Number.isFinite(cardW) || cardW <= 0 || !Number.isFinite(cardH) || cardH <= 0) return;
+        const cardLeft = -cardW / 2;
+        const cardTop = -cardH / 2;
+        const cardRight = cardW / 2;
+        const cardBottom = cardH / 2;
+        
+        // Get image boundaries in GROUP-LOCAL coordinates
+        const imgWidth = Math.abs(Number(obj.width || 0) * Number(obj.scaleX || 1));
+        const imgHeight = Math.abs(Number(obj.height || 0) * Number(obj.scaleY || 1));
+        if (!Number.isFinite(imgWidth) || imgWidth <= 0 || !Number.isFinite(imgHeight) || imgHeight <= 0) return;
+        const imgLeft = obj.left - imgWidth / 2;
+        const imgTop = obj.top - imgHeight / 2;
+        const imgRight = imgLeft + imgWidth;
+        const imgBottom = imgTop + imgHeight;
+        
+        // Calculate constraints
+        let constrainedLeft = obj.left;
+        let constrainedTop = obj.top;
+        
+        // Constrain horizontally
+        if (imgLeft < cardLeft) {
+            constrainedLeft = cardLeft + imgWidth / 2;
+        } else if (imgRight > cardRight) {
+            constrainedLeft = cardRight - imgWidth / 2;
+        }
+        
+        // Constrain vertically
+        if (imgTop < cardTop) {
+            constrainedTop = cardTop + imgHeight / 2;
+        } else if (imgBottom > cardBottom) {
+            constrainedTop = cardBottom - imgHeight / 2;
+        }
+        
+        // Apply constraints if needed
+        if (constrainedLeft !== obj.left || constrainedTop !== obj.top) {
+            obj.set({
+                left: constrainedLeft,
+                top: constrainedTop
+            });
+            obj.setCoords();
+            parentCard.dirty = true;
+        }
+    }
+};
 
 onMounted(async () => {
   // Load collaborators
@@ -3870,6 +4387,9 @@ onMounted(async () => {
           clipTo: undefined,
         });
 
+        // Prevent black-screen render failures by guarding Fabric rendering.
+        patchCanvasRenderSafety(canvas.value);
+
         // PATCH: Improve hit-testing for product cards inside zones.
         // Some interactions (deep select, non-evented children, transparent areas) can make Fabric miss the card and start a group selection rectangle.
         // We wrap `findTarget` to prefer the top-most product card under pointer when Fabric returns null or the zone itself.
@@ -3890,28 +4410,40 @@ onMounted(async () => {
                         const shouldOverride = !target || isLikelyProductZone(target);
                         if (!shouldOverride) return info;
 
-                        let pt: any = null;
+                        const pts: any[] = [];
                         try {
-                            pt = (typeof this.getScenePoint === 'function') ? this.getScenePoint(evt) : null;
-                        } catch {
-                            pt = null;
-                        }
-                        if (!pt) {
-                            try {
-                                pt = (typeof this.getPointer === 'function') ? this.getPointer(evt) : null;
-                            } catch {
-                                pt = null;
+                            if (typeof this.getScenePoint === 'function') {
+                                const p0 = this.getScenePoint(evt);
+                                if (p0 && typeof p0.x === 'number' && typeof p0.y === 'number') pts.push(p0);
                             }
+                        } catch {
+                            // ignore
                         }
-                        if (!pt || typeof pt.x !== 'number' || typeof pt.y !== 'number') return info;
+                        try {
+                            if (typeof this.getPointer === 'function') {
+                                const p1 = this.getPointer(evt);
+                                if (p1 && typeof p1.x === 'number' && typeof p1.y === 'number') pts.push(p1);
+                                const vpt = this.viewportTransform;
+                                if (p1 && Array.isArray(vpt) && vpt.length >= 6 && (fabric as any)?.util?.invertTransform) {
+                                    const inv = (fabric as any).util.invertTransform(vpt);
+                                    const p2 = (fabric as any).util.transformPoint(p1, inv);
+                                    if (p2 && typeof p2.x === 'number' && typeof p2.y === 'number') pts.push(p2);
+                                }
+                            }
+                        } catch {
+                            // ignore
+                        }
+                        if (!pts.length) return info;
 
                         const list = (typeof this.getObjects === 'function' ? this.getObjects() : (this._objects || [])).slice().reverse();
                         for (const o of list) {
                             if (!isProductCardGroup(o)) continue;
                             try {
                                 const r = o.getBoundingRect(true, true);
-                                if (pt.x >= r.left && pt.x <= (r.left + r.width) && pt.y >= r.top && pt.y <= (r.top + r.height)) {
-                                    return { ...info, target: o };
+                                for (const pt of pts) {
+                                    if (pt.x >= r.left && pt.x <= (r.left + r.width) && pt.y >= r.top && pt.y <= (r.top + r.height)) {
+                                        return { ...info, target: o };
+                                    }
                                 }
                             } catch {
                                 // ignore
@@ -3931,6 +4463,36 @@ onMounted(async () => {
         zoomToFit();
       } catch (error) {
         console.error('Error initializing canvas:', error);
+      }
+
+      // Fallback: alguns estados pós-load podem não emitir `mouse:dblclick` do Fabric.
+      // Escutamos dblclick no DOM e disparamos manualmente o evento do Fabric.
+      try {
+          if (!domCanvasDblClickHandler && canvas.value?.upperCanvasEl) {
+              domCanvasDblClickHandler = (evt: MouseEvent) => {
+                  if (!canvas.value) return;
+                  const now = Date.now();
+                  if (now - lastDomDblClickAt < 250) return;
+                  lastDomDblClickAt = now;
+
+                  const c: any = canvas.value as any;
+                  let info: any = null;
+                  try {
+                      info = (typeof c.findTarget === 'function') ? c.findTarget(evt) : null;
+                  } catch (e) {
+                      info = null;
+                  }
+                  const target = info?.target ?? info ?? null;
+                  try {
+                      c.fire?.('mouse:dblclick', { e: evt, originalEvent: evt, target });
+                  } catch (e) {
+                      // ignore
+                  }
+              };
+              canvas.value.upperCanvasEl.addEventListener('dblclick', domCanvasDblClickHandler, { passive: true });
+          }
+      } catch (e) {
+          // ignore
       }
 
       // Initialize Smart Grid
@@ -4016,6 +4578,23 @@ onMounted(async () => {
 
       // Resize Window Event - Resize Canvas & Re-center
       window.addEventListener('resize', resizeCanvas);
+
+      // CRITICAL: wrapper size changes (sidebars/panels) do NOT trigger window resize.
+      // Observe wrapper and resize Fabric canvas accordingly to avoid large black areas.
+      try {
+          if (!wrapperResizeObserver && typeof window !== 'undefined' && 'ResizeObserver' in window && wrapperEl.value) {
+              let raf = 0;
+              wrapperResizeObserver = new ResizeObserver(() => {
+                  if (raf) cancelAnimationFrame(raf);
+                  raf = requestAnimationFrame(() => {
+                      resizeCanvas();
+                  });
+              });
+              wrapperResizeObserver.observe(wrapperEl.value);
+          }
+      } catch (e) {
+          // ignore
+      }
       
       // Initial scrollbar update
       updateScrollbars();
@@ -4080,7 +4659,7 @@ onMounted(async () => {
 
               if ((canvas.value as any)._currentTransform) {
                   (canvas.value as any)._currentTransform = null;
-                  canvas.value.requestRenderAll();
+                  safeRequestRenderAll();
               }
           };
           window.addEventListener('mouseup', globalMouseUpHandler);
@@ -4196,6 +4775,38 @@ onMounted(async () => {
                           const imageCount = loadedObjects.filter((o: any) => (o.type || '').toLowerCase() === 'image').length;
                           console.log(`✅ loadFromJSON concluído: ${loadedCount} objeto(s) carregado(s) (esperado: ${expectedObjects}), ${imageCount} imagem(ns)`);
                           
+                          // CRITICAL: Sanitize groups to remove invalid objects
+                          let removedInvalidObjects = 0;
+                          loadedObjects.forEach((obj: any) => {
+                              if (obj.type === 'group' && typeof obj.getObjects === 'function') {
+                                  const children = obj.getObjects();
+                                  const validChildren = children.filter((child: any) => {
+                                      const isValid = child && typeof child === 'object' && typeof child.setCoords === 'function';
+                                      if (!isValid) {
+                                          console.error('❌ Objeto inválido removido do grupo:', {
+                                              groupId: obj._customId || obj.name,
+                                              childType: typeof child,
+                                              childValue: child
+                                          });
+                                          removedInvalidObjects++;
+                                      }
+                                      return isValid;
+                                  });
+                                  
+                                  if (validChildren.length !== children.length) {
+                                      // Rebuild group with valid children only
+                                      const internal = (obj as any)._objects;
+                                      if (Array.isArray(internal)) {
+                                          internal.length = 0;
+                                          validChildren.forEach((c: any) => internal.push(c));
+                                      }
+                                  }
+                              }
+                          });
+                          
+                          if (removedInvalidObjects > 0) {
+                              console.warn(`⚠️ Removidos ${removedInvalidObjects} objetos inválidos de grupos durante sanitização`);
+                          }
                           // Log image loading status
                           const expectedImages = (canvasDataToLoad.objects || []).filter((o: any) => (o.type || '').toLowerCase() === 'image').length;
                           if (expectedImages > 0) {
@@ -4380,6 +4991,14 @@ onMounted(async () => {
                           });
                       }
                       
+                      // 🔒 APPLY CONTAINMENT CONSTRAINTS ON LOAD
+                      // Ensure product cards stay in zones and images stay in cards
+                      console.log('🔒 Aplicando constraints de contenção...');
+                      const allLoadedObjects = canvas.value.getObjects();
+                      allLoadedObjects.forEach((obj: any) => {
+                          applyContainmentConstraints(obj);
+                      });
+                      
                       // CRITICAL: Preserve exact order from JSON - don't reorder objects
                       // Force update canvasObjects to reflect restored state (order preserved from loadFromJSON)
                       // IMPORTANT: Get objects in exact order they were loaded (Fabric preserves order in _objects array)
@@ -4446,7 +5065,23 @@ onUnmounted(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
   window.removeEventListener('resize', resizeCanvas);
   window.removeEventListener('keydown', handleKeyDown);
+    if (wrapperResizeObserver) {
+        try {
+            wrapperResizeObserver.disconnect();
+        } catch (e) {
+            // ignore
+        }
+        wrapperResizeObserver = null;
+    }
   // ESC handler cleanup is handled by Vue's cleanup
+    if (domCanvasDblClickHandler && canvas.value?.upperCanvasEl) {
+        try {
+            canvas.value.upperCanvasEl.removeEventListener('dblclick', domCanvasDblClickHandler as any);
+        } catch (e) {
+            // ignore
+        }
+        domCanvasDblClickHandler = null;
+    }
   if (globalMouseUpHandler) {
     window.removeEventListener('mouseup', globalMouseUpHandler);
     globalMouseUpHandler = null;
@@ -4608,7 +5243,7 @@ const extractContaboKey = (url: string): string | null => {
         if (bucketPlain) candidates.add(bucketPlain);
 
         const hostname = (urlObj.hostname || '').toLowerCase();
-        const first = pathParts[0];
+        const first = pathParts[0] ?? '';
         // Check if first part is bucket (may have : or match configured bucket)
         const firstLooksLikeBucket = first.includes(':') || candidates.has(first);
         const hostLooksLikeVirtualHost = [...candidates].some(b => b && hostname.startsWith(`${b.toLowerCase()}.`));
@@ -5499,7 +6134,7 @@ const handleObjectModified = (e: any) => {
                 const rowTops = new Array<number>(rows);
                 rowTops[0] = startY;
                 for (let r = 1; r < rows; r++) {
-                    rowTops[r] = rowTops[r - 1] + rowHeights[r - 1] + gapY;
+                    rowTops[r] = rowTops[r - 1] + (rowHeights[r - 1] ?? baseH) + gapY;
                 }
 
                 const centers: Array<{ x: number; y: number }> = [];
@@ -5856,15 +6491,65 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         if (active) {
             e.preventDefault();
             try {
-                (window as any)._clipboard = await (active as any).clone([
+                const cloned = await (active as any).clone([
                     '_customId',
                     'name',
                     'layerName',
                     'parentFrameId',
                     'parentZoneId',
                     'isSmartObject',
-                    'isProductCard'
+                    'isProductCard',
+                    'opacity',
+                    'flipX',
+                    'flipY',
+                    'clipPath',
+                    'filters',
+                    'originX',
+                    'originY',
+                    'angle',
+                    'scaleX',
+                    'scaleY'
                 ]);
+                
+                // Store the parent group reference for paste operation
+                // CRITICAL: Store both the reference AND the _customId for reliable lookup
+                const parentGroup = (active as any).group;
+                (cloned as any)._sourceGroupRef = parentGroup;
+                (cloned as any)._sourceGroupId = parentGroup?._customId || null;
+                
+                // CRITICAL: Store the ORIGINAL group-local coordinates from the active object
+                // These are the coordinates relative to the group center (where 0,0 is center)
+                (cloned as any)._sourceLeft = Number(active.left) || 0;
+                (cloned as any)._sourceTop = Number(active.top) || 0;
+                
+                // Also search for the parent group in canvas if not found via .group property
+                // This handles cases where deep-select doesn't set .group correctly
+                if (!parentGroup && String(active.type || '').toLowerCase() === 'image') {
+                    const allObjects = canvas.value.getObjects();
+                    for (const obj of allObjects) {
+                        if (obj.type === 'group' && (obj.isSmartObject || obj.isProductCard || isLikelyProductCard(obj))) {
+                            if (typeof obj.getObjects === 'function') {
+                                const children = obj.getObjects();
+                                const containsImage = children.some((child: any) => 
+                                    child === active || child._customId === active._customId
+                                );
+                                if (containsImage) {
+                                    (cloned as any)._sourceGroupRef = obj;
+                                    (cloned as any)._sourceGroupId = obj._customId;
+                                    console.log('📋 [copy] Found parent group via canvas search:', obj._customId || obj.name);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                (window as any)._clipboard = cloned;
+                console.log('📋 [copy] Stored clipboard:', {
+                    sourceGroupId: (cloned as any)._sourceGroupId,
+                    sourceLeft: (cloned as any)._sourceLeft,
+                    sourceTop: (cloned as any)._sourceTop
+                });
             } catch (err) {
                 console.warn('[clipboard] Falha ao copiar (clone)', err);
             }
@@ -5875,6 +6560,10 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         const clip = (window as any)._clipboard;
         if (clip) {
             e.preventDefault();
+            
+            // CRITICAL: Get active object BEFORE discarding to check parent group
+            const activeBeforePaste = canvas.value.getActiveObject();
+            
             try {
                 const cloned: any = await (clip as any).clone([
                     '_customId',
@@ -5883,33 +6572,212 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                     'parentFrameId',
                     'parentZoneId',
                     'isSmartObject',
-                    'isProductCard'
+                    'isProductCard',
+                    'opacity',
+                    'flipX',
+                    'flipY',
+                    'clipPath',
+                    'filters',
+                    'originX',
+                    'originY',
+                    'angle',
+                    'scaleX',
+                    'scaleY'
                 ]);
 
-                canvas.value.discardActiveObject();
-                cloned.set({
-                    left: (Number(cloned.left) || 0) + 20,
-                    top: (Number(cloned.top) || 0) + 20,
-                    evented: true,
-                    selectable: true,
-                });
-
-                // Assign new IDs
-                if (cloned.type === 'activeSelection') {
-                    cloned.canvas = canvas.value;
-                    cloned.forEachObject((obj: any) => {
-                        obj._customId = Math.random().toString(36).substr(2, 9);
-                        canvas.value.add(obj);
-                    });
-                    cloned.setCoords?.();
-                } else {
-                    cloned._customId = Math.random().toString(36).substr(2, 9);
-                    canvas.value.add(cloned);
+                // CRITICAL: Find the parent group - PRIORITY is the clipboard's stored group
+                // This ensures images pasted back go to the same container they were copied from
+                let originalParentGroup = null;
+                
+                // FIRST PRIORITY: Use the stored group from clipboard (where the image was copied from)
+                const sourceGroupId = (clip as any)._sourceGroupId;
+                const sourceGroupRef = (clip as any)._sourceGroupRef;
+                
+                if (sourceGroupId || sourceGroupRef) {
+                    const allObjects = canvas.value.getObjects();
+                    // Try to find the group by ID first (most reliable)
+                    if (sourceGroupId) {
+                        originalParentGroup = allObjects.find((obj: any) => 
+                            obj._customId === sourceGroupId && 
+                            obj.type === 'group' &&
+                            (obj.isSmartObject || obj.isProductCard || isLikelyProductCard(obj))
+                        ) || null;
+                    }
+                    // Fallback to reference check
+                    if (!originalParentGroup && sourceGroupRef) {
+                        originalParentGroup = allObjects.find((obj: any) => 
+                            obj === sourceGroupRef && 
+                            (obj.isSmartObject || obj.isProductCard || isLikelyProductCard(obj))
+                        ) || null;
+                    }
+                    
+                    if (originalParentGroup) {
+                        console.log('📦 [paste] Found source group from clipboard:', originalParentGroup._customId || originalParentGroup.name);
+                    }
+                }
+                
+                // SECOND PRIORITY: Check if activeBeforePaste is an image inside a product card
+                if (!originalParentGroup && activeBeforePaste && String(activeBeforePaste.type || '').toLowerCase() === 'image') {
+                    // Search all groups in the canvas to find which one contains this image
+                    const allObjects = canvas.value.getObjects();
+                    for (const obj of allObjects) {
+                        if (obj.type === 'group' && (obj.isSmartObject || obj.isProductCard || isLikelyProductCard(obj))) {
+                            // Check if this group contains the active image
+                            if (typeof obj.getObjects === 'function') {
+                                const children = obj.getObjects();
+                                const containsActiveImage = children.some((child: any) => 
+                                    child === activeBeforePaste || 
+                                    child._customId === activeBeforePaste._customId
+                                );
+                                if (containsActiveImage) {
+                                    originalParentGroup = obj;
+                                    console.log('📦 [paste] Found group via active image:', obj._customId || obj.name);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // THIRD PRIORITY: Check if activeBeforePaste is a product card group itself
+                if (!originalParentGroup && activeBeforePaste) {
+                    if (activeBeforePaste.type === 'group' && (activeBeforePaste.isSmartObject || activeBeforePaste.isProductCard || isLikelyProductCard(activeBeforePaste))) {
+                        originalParentGroup = activeBeforePaste;
+                        console.log('📦 [paste] Active object is a product card group:', activeBeforePaste._customId || activeBeforePaste.name);
+                    } else if ((activeBeforePaste as any).group) {
+                        const parentGroup = (activeBeforePaste as any).group;
+                        if (parentGroup.isSmartObject || parentGroup.isProductCard || isLikelyProductCard(parentGroup)) {
+                            originalParentGroup = parentGroup;
+                            console.log('📦 [paste] Found via activeBeforePaste.group:', parentGroup._customId || parentGroup.name);
+                        }
+                    }
                 }
 
-                canvas.value.setActiveObject(cloned);
-                canvas.value.requestRenderAll();
-                saveCurrentState();
+                const isProductCardGroup =
+                    originalParentGroup &&
+                    String(originalParentGroup.type || '').toLowerCase() === 'group' &&
+                    (originalParentGroup.isSmartObject || originalParentGroup.isProductCard || String(originalParentGroup.name || '').startsWith('product-card') || isLikelyProductCard(originalParentGroup));
+                const isInnerImage = String((clip as any).type || '').toLowerCase() === 'image';
+                
+                // Check if the cloned object itself is a product card (to prevent duplicating containers)
+                const isPastingProductCard = 
+                    String(cloned.type || '').toLowerCase() === 'group' &&
+                    (cloned.isSmartObject || cloned.isProductCard || String(cloned.name || '').startsWith('product-card') || isLikelyProductCard(cloned));
+
+                console.log('🔍 Paste check:', {
+                    hasParentGroup: !!originalParentGroup,
+                    isProductCardGroup,
+                    isInnerImage,
+                    isPastingProductCard,
+                    clipType: clip.type,
+                    activeObjType: activeBeforePaste?.type,
+                    parentGroupName: originalParentGroup?.name || originalParentGroup?._customId,
+                    groupChildrenCount: originalParentGroup ? (typeof originalParentGroup.getObjects === 'function' ? originalParentGroup.getObjects().length : 0) : 0
+                });
+
+                canvas.value.discardActiveObject();
+
+                // PREVENT: If copying a product card itself, DO NOT paste it (would create duplicate container)
+                if (isPastingProductCard) {
+                    console.warn('⚠️ Não é possível colar um container de produto inteiro. Cole apenas as imagens dentro do container.');
+                    return;
+                }
+
+                // If pasting an image that was inside a product card, paste it back into the same group
+                if (isProductCardGroup && isInnerImage && originalParentGroup) {
+                    cloned._customId = Math.random().toString(36).substr(2, 9);
+                    
+                    // CRITICAL FIX: Use the ORIGINAL coordinates from when the image was copied
+                    // These are stored in the clipboard and are relative to the group center
+                    let targetLeft = Number((clip as any)._sourceLeft) || 0;
+                    let targetTop = Number((clip as any)._sourceTop) || 0;
+                    
+                    // Apply small offset so the pasted image is visible (like Ctrl+D does)
+                    targetLeft += 20;
+                    targetTop += 20;
+                    
+                    console.log('📍 Paste coordinates (from clipboard source):', {
+                        sourceLeft: (clip as any)._sourceLeft,
+                        sourceTop: (clip as any)._sourceTop,
+                        targetLeft,
+                        targetTop,
+                        groupWidth: originalParentGroup.width,
+                        groupHeight: originalParentGroup.height
+                    });
+                    
+                    // IMPORTANT: When adding an object into an existing group, Fabric expects object coords in CANVAS space.
+                    // It will convert them into group-local space when entering the group.
+                    const targetCanvas = groupLocalToCanvasPoint(originalParentGroup, targetLeft, targetTop);
+
+                    cloned.set({
+                        left: targetCanvas.x,
+                        top: targetCanvas.y,
+                        originX: 'center',
+                        originY: 'center',
+                        angle: clip.angle || 0,
+                        scaleX: clip.scaleX || 1,
+                        scaleY: clip.scaleY || 1,
+                        flipX: !!clip.flipX,
+                        flipY: !!clip.flipY,
+                        opacity: clip.opacity ?? 1,
+                        selectable: true,
+                        evented: true,
+                        hasControls: true,
+                        hasBorders: true,
+                    });
+
+                    console.log('📦 Adicionando imagem ao grupo:', {
+                        groupName: originalParentGroup.name || originalParentGroup._customId,
+                        childrenBefore: originalParentGroup.getObjects().length,
+                        clonedCoords: { left: cloned.left, top: cloned.top }
+                    });
+                    
+                    // CRITICAL: Add via safeAddWithUpdate(group, obj) so Fabric enters group coordinate system correctly.
+                    // This prevents the object from rendering using canvas coords ("nasce fora").
+                    safeAddWithUpdate(originalParentGroup, cloned);
+
+                    // Ensure parent stays in deep-select mode (same as duplicate)
+                    originalParentGroup.set({ subTargetCheck: true, interactive: true });
+                    originalParentGroup.setCoords?.();
+                    
+                    console.log('✅ Imagem adicionada ao grupo:', {
+                        groupName: originalParentGroup.name || originalParentGroup._customId,
+                        childrenAfter: originalParentGroup.getObjects().length,
+                        clonedId: cloned._customId,
+                        clonedFinalCoords: { left: cloned.left, top: cloned.top }
+                    });
+
+                    // Select the cloned image (important: select within the group context)
+                    canvas.value.setActiveObject(cloned);
+                    canvas.value.requestRenderAll();
+                    canvasObjects.value = [...canvas.value.getObjects()];
+                    saveCurrentState();
+                } else {
+                    // Regular paste behavior for non-product-card objects
+                    cloned.set({
+                        left: (Number(cloned.left) || 0) + 20,
+                        top: (Number(cloned.top) || 0) + 20,
+                        evented: true,
+                        selectable: true,
+                    });
+
+                    // Assign new IDs
+                    if (cloned.type === 'activeSelection') {
+                        cloned.canvas = canvas.value;
+                        cloned.forEachObject((obj: any) => {
+                            obj._customId = Math.random().toString(36).substr(2, 9);
+                            canvas.value.add(obj);
+                        });
+                        cloned.setCoords?.();
+                    } else {
+                        cloned._customId = Math.random().toString(36).substr(2, 9);
+                        canvas.value.add(cloned);
+                    }
+
+                    canvas.value.setActiveObject(cloned);
+                    canvas.value.requestRenderAll();
+                    saveCurrentState();
+                }
             } catch (err) {
                 console.warn('[clipboard] Falha ao colar (clone)', err);
             }
@@ -7481,6 +8349,17 @@ const updateSelection = () => {
     
     // Sync Product Zone State
     if (active && isLikelyProductZone(active)) {
+        // CRITICAL: Ensure zone flags are set so PropertiesPanel detects it correctly
+        if (!active.isGridZone && !active.isProductZone) {
+            if (active.name === 'gridZone') {
+                active.isGridZone = true;
+            } else if (active.name === 'productZoneContainer') {
+                active.isProductZone = true;
+            } else {
+                // Default to isGridZone for zones detected by strokeDashArray
+                active.isGridZone = true;
+            }
+        }
         ensureZoneSanity(active);
         // Initialize state from object data
         const pad = typeof active._zonePadding === 'number' ? active._zonePadding : (active.padding || 20);
@@ -7797,10 +8676,20 @@ const setupReactivity = () => {
     const updateObjects = () => {
         // CRITICAL: Preserve exact order from canvas.getObjects()
         // Don't reorder or sort - maintain order as saved
+        const isValidFabricObject = (o: any) => {
+            return !!(o && typeof o === 'object' && typeof o.render === 'function' && typeof o.setCoords === 'function');
+        };
+
         const objs = canvas.value.getObjects();
         const toRemove: any[] = [];
+        let hasInvalid = false;
         
         objs.forEach((o: any) => {
+            if (!isValidFabricObject(o)) {
+                hasInvalid = true;
+                console.error('❌ [updateObjects] Objeto inválido detectado no canvas (será ignorado/purgado):', o);
+                return;
+            }
             const name = o.name || '';
             
             // Clean up orphaned control objects that shouldn't be visible
@@ -7836,6 +8725,19 @@ const setupReactivity = () => {
                 o._customId = Math.random().toString(36).substr(2, 9);
             }
         });
+
+        // If something corrupted the internal stack (e.g., number inserted into _objects), purge it to prevent render crashes.
+        if (hasInvalid) {
+            const internal = (canvas.value as any)._objects;
+            if (Array.isArray(internal)) {
+                const next = internal.filter((o: any) => isValidFabricObject(o));
+                if (next.length !== internal.length) {
+                    internal.length = 0;
+                    next.forEach((o: any) => internal.push(o));
+                    if (typeof (canvas.value as any)._onStackOrderChanged === 'function') (canvas.value as any)._onStackOrderChanged();
+                }
+            }
+        }
         
         // Remove orphaned objects (from end to preserve order)
         if (toRemove.length > 0) {
@@ -7859,7 +8761,7 @@ const setupReactivity = () => {
     // Frames: auto-parent new objects when created inside a frame + keep clipPaths in sync
     canvas.value.on('object:added', (e: any) => {
         const obj = e?.target;
-        if (!obj || obj.excludeFromExport) return;
+        if (!obj || typeof obj !== 'object' || obj.excludeFromExport) return;
         
         // Don't assign _customId to control objects
         const name = obj.name || '';
@@ -8088,6 +8990,9 @@ const setupReactivity = () => {
              lastZoneState.left = target.left;
              lastZoneState.top = target.top;
         }
+        
+        // 🔒 CONTAINMENT CONSTRAINTS: Keep objects inside their parents
+        applyContainmentConstraints(target);
     });
 
     // Smart Scaling for Textbox Reflow & Product Zone AutoLayout
@@ -8117,7 +9022,19 @@ const setupReactivity = () => {
             obj._zoneHeight = Math.abs(obj.getScaledHeight?.() ?? obj._zoneHeight ?? 0);
             recalculateZoneLayout(obj, undefined, { save: false });
         }
+        
+        // 🔒 Apply containment after scaling
+        applyContainmentConstraints(obj);
     });
+    
+    // 🔒 Apply containment after modification (drag end)
+    canvas.value.on('object:modified', (e: any) => {
+        const obj = e.target;
+        if (obj) {
+            applyContainmentConstraints(obj);
+        }
+    });
+    
     canvas.value.on('mouse:wheel', updateFloatingUI);
 
     // 'selection:created', 'selection:updated', 'selection:cleared'
@@ -8154,15 +9071,115 @@ const setupReactivity = () => {
 
     // 2. Enable deep select on Double Click
     canvas.value.on('mouse:dblclick', (opt: any) => {
-        const rawTarget = opt.target;
-        if (!rawTarget) return;
+        const c: any = canvas.value as any;
+        const evt = opt.e || opt.originalEvent;
+        let rawTarget = opt.target;
+
+        if (import.meta.dev) {
+            console.log('[DeepSelect] dblclick', {
+                hasTarget: !!rawTarget,
+                rawType: rawTarget?.type,
+                rawName: rawTarget?.name,
+                rawLayerName: rawTarget?.layerName,
+                rawId: rawTarget?._customId,
+                hasEvt: !!evt
+            });
+        }
+
+        const isProductCardGroup = (o: any) => {
+            return !!(o && o.type === 'group' && (o.isSmartObject || o.isProductCard || String(o.name || '').startsWith('product-card') || isLikelyProductCard(o)) && String(o.name || '') !== 'priceGroup');
+        };
+
+        const getCandidatePointsFromEvent = (): any[] => {
+            if (!evt || !canvas.value) return [];
+            const pts: any[] = [];
+            try {
+                if (typeof c.getScenePoint === 'function') {
+                    const p0 = c.getScenePoint(evt);
+                    if (p0 && typeof p0.x === 'number' && typeof p0.y === 'number') pts.push(p0);
+                }
+            } catch (e) {
+                // ignore
+            }
+            try {
+                if (typeof canvas.value.getPointer === 'function') {
+                    const p1 = canvas.value.getPointer(evt);
+                    if (p1 && typeof p1.x === 'number' && typeof p1.y === 'number') pts.push(p1);
+                    const vpt = canvas.value.viewportTransform;
+                    if (p1 && Array.isArray(vpt) && vpt.length >= 6 && (fabric as any)?.util?.invertTransform) {
+                        const inv = (fabric as any).util.invertTransform(vpt);
+                        const p2 = (fabric as any).util.transformPoint(p1, inv);
+                        if (p2 && typeof p2.x === 'number' && typeof p2.y === 'number') pts.push(p2);
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+            return pts;
+        };
+
+        const findTopCardAtPointer = (): any | null => {
+            if (!evt || !canvas.value) return null;
+            const pts = getCandidatePointsFromEvent();
+            if (!pts.length) return null;
+
+            const objs = canvas.value.getObjects().slice().reverse();
+            for (const o of objs) {
+                if (!isProductCardGroup(o)) continue;
+                try {
+                    for (const p of pts) {
+                        if (typeof o.containsPoint === 'function' && o.containsPoint(p, undefined, true)) return o;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+                try {
+                    const br = o.getBoundingRect?.(true) ?? null;
+                    if (br) {
+                        for (const p of pts) {
+                            if (p.x >= br.left && p.x <= (br.left + br.width) && p.y >= br.top && p.y <= (br.top + br.height)) return o;
+                        }
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+            return null;
+        };
+
+        // Fabric nem sempre fornece opt.target no dblclick após loadFromJSON.
+        // Tenta resolver via findTarget/hit-test manual.
+        if (!rawTarget && evt && typeof c.findTarget === 'function') {
+            try { rawTarget = c.findTarget(evt); } catch (e) { /* ignore */ }
+        }
+        if (!rawTarget) {
+            rawTarget = findTopCardAtPointer();
+        }
+        if (!rawTarget) {
+            if (import.meta.dev) console.warn('[DeepSelect] dblclick sem target e sem card no ponteiro');
+            return;
+        }
 
         // If user double-clicks an inner element of a product card, use its parent group as the target.
         // This makes deep-select work even when a legacy card was loaded with subTargetCheck=true.
-        const target = (rawTarget as any)?.group && (rawTarget as any).group?.type === 'group' &&
-            ((rawTarget as any).group?.isSmartObject || (rawTarget as any).group?.isProductCard || isLikelyProductCard((rawTarget as any).group))
+        // Se o dblclick caiu na zone/overlay, tenta forçar o card que está embaixo do ponteiro.
+        let target = (rawTarget as any)?.group && isProductCardGroup((rawTarget as any).group)
             ? (rawTarget as any).group
             : rawTarget;
+        if (!isProductCardGroup(target)) {
+            const cardUnderPointer = findTopCardAtPointer();
+            if (cardUnderPointer) target = cardUnderPointer;
+        }
+
+        if (import.meta.dev) {
+            console.log('[DeepSelect] alvo resolvido', {
+                type: target?.type,
+                name: target?.name,
+                id: target?._customId,
+                isCard: isProductCardGroup(target),
+                parentZoneId: (target as any)?.parentZoneId
+            });
+        }
         
 	        // Nested label editing: double click the priceGroup to edit its inner parts.
 	        if (target.type === 'group' && target.name === 'priceGroup') {
@@ -8189,7 +9206,7 @@ const setupReactivity = () => {
 	             return;
 	        }
 
-	        if ((target.isSmartObject || target.isProductCard || isLikelyProductCard(target) || String((target as any).parentZoneId || '').trim().length) && target.type === 'group') {
+            if ((target.isSmartObject || target.isProductCard || isLikelyProductCard(target) || String((target as any).parentZoneId || '').trim().length) && target.type === 'group') {
 	             console.log('[DeepSelect] Entering group edit mode');
 	             target.set({
 	                 subTargetCheck: true,
@@ -8285,7 +9302,7 @@ const updatePageSettings = (prop: string, value: any) => {
                 // Extract RGB values (ignore alpha for canvas background)
                 const rgba = value.match(/rgba?\(([^)]+)\)/);
                 if (rgba) {
-                    const parts = rgba[1].split(',').map(s => s.trim());
+                    const parts = rgba[1].split(',').map((s: string) => s.trim());
                     const r = parseInt(parts[0]);
                     const g = parseInt(parts[1]);
                     const b = parseInt(parts[2]);
@@ -8298,7 +9315,7 @@ const updatePageSettings = (prop: string, value: any) => {
         }
         // Also update activePage background
         if (activePage.value) {
-            activePage.value.backgroundColor = value;
+            (activePage.value as any).backgroundColor = value;
             updatePageData(project.activePageIndex, { backgroundColor: value });
         }
     }
@@ -9076,7 +10093,7 @@ const handleAction = async (action: string) => {
 
             if (result?.url) {
                 // Load new image with callback to ensure it's loaded
-                fabric.Image.fromURL(result.url, (newImg) => {
+                fabric.Image.fromURL(result.url, (newImg: any) => {
                     if (!newImg || !canvas.value) return;
 
                     const oldDisplayWidth = (targetImage.width || 1) * (targetImage.scaleX || 1);
@@ -10195,13 +11212,6 @@ const handlePaste = async (e: ClipboardEvent) => {
                      if (result.success) {
                          const img = await fabric.Image.fromURL(result.url, { crossOrigin: 'anonymous' });
                          if (img) {
-                            const center = getCenterOfView();
-                            img.set({
-                                left: center.x,
-                                top: center.y,
-                                originX: 'center',
-                                originY: 'center'
-                            });
                              // Scale down if huge
                              if (img.width > 500) {
                                  img.scaleToWidth(500);
@@ -10209,10 +11219,98 @@ const handlePaste = async (e: ClipboardEvent) => {
                              
                              (img as any)._customId = Math.random().toString(36).substr(2, 9);
                              
-                             canvas.value.add(img);
-                             canvas.value.setActiveObject(img);
-                             canvas.value.requestRenderAll();
-                             saveCurrentState();
+                             // Check if there's a product card group selected to paste INTO
+                             const activeObj = canvas.value.getActiveObject();
+                             let targetProductCard = null;
+                             
+                             // Check if active object is a product card
+                             if (activeObj && activeObj.type === 'group' && 
+                                 (activeObj.isSmartObject || activeObj.isProductCard || isLikelyProductCard(activeObj))) {
+                                 targetProductCard = activeObj;
+                             }
+                             // Check if active object is an image inside a product card
+                             else if (activeObj && String(activeObj.type || '').toLowerCase() === 'image') {
+                                 const allObjects = canvas.value.getObjects();
+                                 for (const obj of allObjects) {
+                                     if (obj.type === 'group' && (obj.isSmartObject || obj.isProductCard || isLikelyProductCard(obj))) {
+                                         if (typeof obj.getObjects === 'function') {
+                                             const children = obj.getObjects();
+                                             const containsImage = children.some((child: any) => 
+                                                 child === activeObj || child._customId === activeObj._customId
+                                             );
+                                             if (containsImage) {
+                                                 targetProductCard = obj;
+                                                 break;
+                                             }
+                                         }
+                                     }
+                                 }
+                             }
+                             // Check via .group property
+                             else if (activeObj && (activeObj as any).group) {
+                                 const parentGroup = (activeObj as any).group;
+                                 if (parentGroup.isSmartObject || parentGroup.isProductCard || isLikelyProductCard(parentGroup)) {
+                                     targetProductCard = parentGroup;
+                                 }
+                             }
+                             
+                             if (targetProductCard) {
+                                 // Paste inside the product card
+                                 console.log('📦 [handlePaste] Pasting image into product card:', targetProductCard._customId || targetProductCard.name);
+                                 
+                                 // Find existing product image to position relative to it
+                                 const groupChildren = typeof targetProductCard.getObjects === 'function' 
+                                     ? targetProductCard.getObjects() 
+                                     : [];
+                                 
+                                 const existingProductImage = groupChildren.find((child: any) => 
+                                     String(child.type || '').toLowerCase() === 'image' &&
+                                     (child.name === 'smart_image' || child.name === 'product_image' || child.name === 'productImage')
+                                 ) || groupChildren.find((child: any) => String(child.type || '').toLowerCase() === 'image');
+                                 
+                                 // Position at same place as existing image (with small offset)
+                                 let targetLeft = existingProductImage ? (Number(existingProductImage.left) || 0) + 10 : 0;
+                                 let targetTop = existingProductImage ? (Number(existingProductImage.top) || 0) + 10 : 0;
+                                 
+                                 const targetCanvas = groupLocalToCanvasPoint(targetProductCard, targetLeft, targetTop);
+                                 img.set({
+                                     left: targetCanvas.x,
+                                     top: targetCanvas.y,
+                                     originX: 'center',
+                                     originY: 'center',
+                                     selectable: true,
+                                     evented: true,
+                                     hasControls: true,
+                                     hasBorders: true,
+                                 });
+
+                                 // CRITICAL: Add via safeAddWithUpdate so the image enters the group coordinate system.
+                                 safeAddWithUpdate(targetProductCard, img);
+                                 
+                                 // Ensure deep-select mode is active
+                                 targetProductCard.set({ subTargetCheck: true, interactive: true });
+                                 targetProductCard.setCoords?.();
+                                 targetProductCard.dirty = true;
+                                 
+                                 canvas.value.setActiveObject(img);
+                                 canvas.value.requestRenderAll();
+                                 canvasObjects.value = [...canvas.value.getObjects()];
+                                 saveCurrentState();
+                             } else {
+                                 // Regular paste to canvas center
+                                 const center = getCenterOfView();
+                                 img.set({
+                                     left: center.x,
+                                     top: center.y,
+                                     originX: 'center',
+                                     originY: 'center'
+                                 });
+                                 
+                                 canvas.value.add(img);
+                                 canvas.value.setActiveObject(img);
+                                 canvas.value.requestRenderAll();
+                                 saveCurrentState();
+                             }
                          }
                      }
                  } catch (err) {
@@ -11334,7 +12432,17 @@ const simulateSmartGrid = async (
 
 // === ZONE LOGIC ===
 
+const getCurrentZoneObject = () => {
+    if (!canvas.value) return null;
+    const active = canvas.value.getActiveObject?.();
+    if (active && isLikelyProductZone(active)) return active;
+    const selected = selectedObjectRef.value as any;
+    if (selected && isLikelyProductZone(selected)) return selected;
+    return null;
+}
+
 const handleUpdateZone = (prop: string, val: any) => {
+    console.log('🔍 [handleUpdateZone] CALLED with prop:', prop, 'val:', val);
     // 1. Update Reactive State
     productZoneState.updateZone({ [prop]: val });
     
@@ -11425,16 +12533,20 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
 };
 
 const updateZoneOnCanvas = (prop: string, val: any) => {
-    const active = canvas.value.getActiveObject();
-    if (!active || !isLikelyProductZone(active)) return;
-    applyZoneUpdates(active, { [prop]: val });
+    const zone = getCurrentZoneObject();
+    console.log('🔍 [updateZoneOnCanvas] zone found:', !!zone, zone?._customId, 'prop:', prop);
+    if (!zone) {
+        console.warn('⚠️ [updateZoneOnCanvas] No zone found! Cannot update canvas.');
+        return;
+    }
+    applyZoneUpdates(zone, { [prop]: val });
 }
 
 const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any) => {
     if (!canvas.value) return;
     const list = zone && isLikelyProductZone(zone)
         ? getZoneChildren(zone)
-        : canvas.value.getObjects().filter((o: any) => (o.isSmartObject || o.isProductCard) && o.type === 'group');
+        : canvas.value.getObjects().filter((o: any) => o?.type === 'group' && (o.isSmartObject || o.isProductCard || isLikelyProductCard(o)));
 
     list.forEach((card: any) => {
         if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') return;
@@ -11449,10 +12561,11 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any) => 
 };
 
 const handleApplyZonePreset = (presetId: string) => {
+    console.log('🔍 [handleApplyZonePreset] CALLED with presetId:', presetId);
     productZoneState.applyPreset(presetId);
     if (!canvas.value) return;
-    const active = canvas.value.getActiveObject();
-    if (!active || !isLikelyProductZone(active)) return;
+    const active = getCurrentZoneObject();
+    if (!active) return;
     const z = productZoneState.productZone.value;
     applyZoneUpdates(active, {
         columns: z.columns ?? 0,
@@ -11466,8 +12579,8 @@ const handleApplyZonePreset = (presetId: string) => {
 const handleSyncZoneGaps = (padding: number) => {
     productZoneState.syncGapsWithPadding(padding);
     if (!canvas.value) return;
-    const active = canvas.value.getActiveObject();
-    if (!active || !isLikelyProductZone(active)) return;
+    const active = getCurrentZoneObject();
+    if (!active) return;
     const z = productZoneState.productZone.value;
     applyZoneUpdates(active, {
         padding: z.padding,
@@ -11477,11 +12590,11 @@ const handleSyncZoneGaps = (padding: number) => {
 };
 
 const handleUpdateGlobalStyles = async (prop: string, val: any) => {
+    console.log('🔍 [handleUpdateGlobalStyles] CALLED with prop:', prop, 'val:', val);
     productZoneState.updateGlobalStyles({ [prop]: val });
     if (!canvas.value) return;
 
-    const active = canvas.value.getActiveObject();
-    const zone = active && isLikelyProductZone(active) ? active : null;
+    const zone = getCurrentZoneObject();
 
     // Persist styles on the zone so they survive undo/redo and reload.
     if (zone) {
@@ -11502,6 +12615,10 @@ const handleUpdateGlobalStyles = async (prop: string, val: any) => {
 
     applyGlobalStylesToCards(stylesToApply, zone || undefined);
     canvas.value.requestRenderAll();
+    // Força a atualização visual adicional para garantir que mudanças sejam visíveis
+    nextTick(() => {
+        canvas.value?.requestRenderAll();
+    });
     saveCurrentState();
     triggerRef(selectedObjectRef);
 };
@@ -12232,11 +13349,18 @@ function getPriceGroupFromAny(obj: any): any | null {
         cur = cur.group;
     }
 
-    // If a full card group is selected, grab its internal price group.
+    // If a full card (or any group) is selected, grab its internal price group (deep).
     if (obj.type === 'group' && typeof obj.getObjects === 'function') {
-        const children = obj.getObjects();
-        const pg = children.find((o: any) => o && o.type === 'group' && o.name === 'priceGroup');
-        if (pg) return pg;
+        const queue: any[] = [...(obj.getObjects() || [])];
+        while (queue.length) {
+            const cur = queue.shift();
+            if (!cur) continue;
+            if (cur.type === 'group' && cur.name === 'priceGroup') return cur;
+            if (cur.type === 'group' && typeof cur.getObjects === 'function') {
+                const kids = cur.getObjects() || [];
+                for (const k of kids) queue.push(k);
+            }
+        }
     }
 
     return null;
@@ -13408,8 +14532,9 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         o?.data?.smartType === 'product-limit'
     );
     const img = objects.find((o: any) => o.name === 'smart_image');
-    // Splash can vary names, find by exclusion or property
-    const splash = objects.find((o: any) => o.name === 'smart_price' || o.name === 'smart_splash' || (o.type === 'group' && o !== bg));
+    // Splash can vary names; prefer the canonical price label group when present (even when nested).
+    const priceGroup = getPriceGroupFromAny(group);
+    const splash = priceGroup ?? objects.find((o: any) => o.name === 'smart_price' || o.name === 'smart_splash' || (o.type === 'group' && o !== bg));
 
     // When the user moves an inner element (deep select), we mark it with `__manualTransform`.
     // During zone relayout (and on reload), we must NOT override these user placements.
@@ -13635,6 +14760,10 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 const { pillH } = layout;
                 const scale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
                 const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+                
+                // Force dirty flag to ensure Fabric.js updates the object
+                splash.dirty = true;
+                
                 if (!splashManual) {
                     splash.set({
                         scaleX: scale,
@@ -13644,7 +14773,13 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                         left: 0,
                         top: halfH - ((pillH * scale) / 2) - marginBottom + offsetY
                     });
+                } else {
+                    // Manual positioning: keep left/top, but still apply the zone-level scale.
+                    splash.set({ scaleX: scale, scaleY: scale });
                 }
+                
+                // Force coordinate update
+                splash.setCoords();
                 
                 bottomH = (pillH * scale) + marginBottom;
             } else {
@@ -13668,6 +14803,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                         left: 0,
                         top: halfH - marginBottom
                     });
+                } else {
+                    splash.set({ scaleX: sScale, scaleY: sScale });
                 }
                 
                 bottomH = (splash.height * sScale) + marginBottom;
@@ -13860,17 +14997,31 @@ const isLikelyProductCard = (obj: any) => {
     const children = obj.getObjects() || [];
     if (!children.length) return false;
 
-    const isText = (o: any) => String(o?.type || '').includes('text');
-    const hasImage = children.some((c: any) => String(c?.type || '').toLowerCase() === 'image' || ['smart_image', 'product_image', 'productImage'].includes(String(c?.name || '')));
-    const hasTitle = children.some((c: any) => isText(c) && /(^smart_title$|^title$|title)/i.test(String(c?.name || '')));
-    const hasBg = children.some((c: any) => String(c?.type || '') === 'rect' && /(offerBackground|background|bg)/i.test(String(c?.name || '')));
-    const hasPriceGroup = children.some((c: any) => String(c?.type || '') === 'group' && String(c?.name || '') === 'priceGroup');
+    const isText = (o: any) => String(o?.type || '').toLowerCase().includes('text');
+    const hasOfferBg = children.some((c: any) => String(c?.name || '') === 'offerBackground');
+    const hasBg = hasOfferBg || children.some((c: any) => String(c?.type || '').toLowerCase() === 'rect' && /(offerBackground|background|bg)/i.test(String(c?.name || '')));
+    const hasPriceGroup = children.some((c: any) => String(c?.type || '').toLowerCase() === 'group' && String(c?.name || '') === 'priceGroup');
     const hasAnyPriceText = children.some((c: any) => /price_(integer|decimal|value|currency|unit)_text/i.test(String(c?.name || '')));
+    const hasImage = children.some((c: any) => {
+        const t = String(c?.type || '').toLowerCase();
+        const n = String(c?.name || '');
+        return t === 'image' || ['smart_image', 'product_image', 'productImage'].includes(n);
+    });
+    const hasTitle = children.some((c: any) => isText(c) && /(^smart_title$|^title$|title)/i.test(String(c?.name || '')));
     const textCount = children.filter((c: any) => isText(c)).length;
+    const nonTextCount = children.length - textCount;
+
+    // Super-forte: o retângulo de fundo padrão do card.
+    if (hasOfferBg) return true;
+    // Forte: templates normalmente sempre têm o priceGroup.
+    if (hasPriceGroup && (hasImage || hasTitle || textCount >= 1)) return true;
+
+    // Heurística mais permissiva para cards montados manualmente:
+    // se for um grupo (não-zone) com texto + algum elemento visual, tratamos como card.
+    if (textCount >= 1 && nonTextCount >= 1 && (hasImage || hasBg || hasAnyPriceText)) return true;
 
     // Most cards have an embedded priceGroup. Require at least 2 signals to avoid false positives.
     const signals = [hasPriceGroup, hasImage, hasTitle, hasBg, hasAnyPriceText].filter(Boolean).length;
-    if (hasPriceGroup && (hasImage || hasTitle || hasBg || textCount >= 1)) return true;
     if (hasAnyPriceText && hasImage && textCount >= 1) return true;
     return signals >= 3 || (hasAnyPriceText && textCount >= 2);
 }
@@ -14015,9 +15166,23 @@ const getZoneChildren = (zone: any) => {
     
     return objs.filter((o: any) => {
         if (o === zone) return false;
+
+        if (o.visible === false) return false;
+
+        // If object is explicitly bound to this zone, accept it even if flags/heuristics are missing.
+        const zoneId = String((zone as any)?._customId || '').trim();
+        const boundId = String((o as any)?.parentZoneId || '').trim();
+        if (zoneId && boundId && boundId === zoneId) {
+            if ((o as any).excludeFromExport) return false;
+            if ((o as any).isFrame) return false;
+            if (isLikelyProductZone(o)) return false;
+            if (o.type !== 'group' || typeof o.getObjects !== 'function') return false;
+            if (String(o.name || '') === 'priceGroup') return false;
+            return true;
+        }
+
         const isCard = !!(o.isProductCard || o.isSmartObject || isLikelyProductCard(o));
         if (!isCard) return false;
-        if (o.visible === false) return false;
 
         // Upgrade legacy card objects (old saves) so the rest of the engine can rely on flags.
         if (!o.isProductCard && !o.isSmartObject && isLikelyProductCard(o)) {
@@ -14290,7 +15455,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
     const rowTops = new Array<number>(rows);
     rowTops[0] = startY;
     for (let r = 1; r < rows; r++) {
-        rowTops[r] = rowTops[r - 1] + rowHeights[r - 1] + gapY;
+        rowTops[r] = rowTops[r - 1] + (rowHeights[r - 1] ?? baseH) + gapY;
     }
     
     cards.forEach((card: any, index: number) => {
@@ -14396,6 +15561,18 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
                 if (!o.isProductCard && !o.isSmartObject && isLikelyProductCard(o)) {
                     o.isProductCard = true;
                     o.isSmartObject = true;
+                }
+
+                // Normalize origin to center for stable containment math.
+                try {
+                    const cp = typeof o.getCenterPoint === 'function'
+                        ? o.getCenterPoint()
+                        : { x: (o.left ?? 0), y: (o.top ?? 0) };
+                    if (o.originX !== 'center' || o.originY !== 'center') {
+                        o.set({ originX: 'center', originY: 'center', left: cp.x, top: cp.y });
+                    }
+                } catch (e) {
+                    // ignore
                 }
                 // Default state = rigid card selection (deep select is opt-in via dblclick)
                 if (o.subTargetCheck !== false) o.subTargetCheck = false;
@@ -14645,12 +15822,20 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
         });
 
         // Repair missing parentZoneId by intersection (helps after old history/undo states)
+        // CRITICAL: Preserve card positions from saved data - only repair missing parentZoneId
+        const cardsWithSavedParentZone = new Set<any>();
         cards.forEach((card: any) => {
             if (!card._customId) card._customId = Math.random().toString(36).substr(2, 9);
             if (card._cardWidth == null) card._cardWidth = card.width;
             if (card._cardHeight == null) card._cardHeight = card.height;
 
-            if (card.parentZoneId && zonesById.has(card.parentZoneId)) return;
+            // If card already has a valid parentZoneId from saved data, preserve it
+            if (card.parentZoneId && zonesById.has(card.parentZoneId)) {
+                cardsWithSavedParentZone.add(card);
+                return;
+            }
+            
+            // Only repair cards that are missing parentZoneId
             card.parentZoneId = undefined;
 
             const center = typeof card.getCenterPoint === 'function'
@@ -14720,7 +15905,21 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             zones.forEach((z: any) => {
                 if (z.isProductZone || zoneIdsWithCards.has(z._customId)) {
                     try {
-                        recalculateZoneLayout(z);
+                        // CRITICAL: Only relayout if cards don't have saved positions
+                        // Check if cards in this zone have valid positions from saved data
+                        const zoneCards = cards.filter((c: any) => c.parentZoneId === z._customId);
+                        const hasAllSavedPositions = zoneCards.every((c: any) => 
+                            cardsWithSavedParentZone.has(c) && 
+                            typeof c.left === 'number' && 
+                            typeof c.top === 'number'
+                        );
+                        
+                        // Skip relayout if all cards have saved positions (preserve loaded layout)
+                        if (!hasAllSavedPositions) {
+                            recalculateZoneLayout(z);
+                        } else {
+                            console.log(`📍 Preservando posições salvas dos cards na zona ${z.name || z._customId}`);
+                        }
                     } catch (err) {
                         console.warn('[rehydrateCanvasZones] Failed to relayout zone', err);
                     }
@@ -14787,11 +15986,10 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
 }
 
 const handleRecalculateLayout = () => {
-    const active = canvas.value.getActiveObject();
-    if (active && isLikelyProductZone(active)) {
-        ensureZoneSanity(active);
-        recalculateZoneLayout(active);
-    }
+    const zone = getCurrentZoneObject();
+    if (!zone) return;
+    ensureZoneSanity(zone);
+    recalculateZoneLayout(zone);
 }
 
 
@@ -14855,7 +16053,7 @@ const handleRecalculateLayout = () => {
                   ></div>
                   <div 
                     v-show="scrollH.visible" 
-                    class="absolute bottom-1 h-1.5 bg-white/20 hover:bg-white/40 rounded-full z-[60] transition-colors cursor-pointer" 
+                                        class="absolute bottom-1 h-1.5 bg-white/20 hover:bg-white/40 rounded-full z-60 transition-colors cursor-pointer" 
                     :style="{ left: scrollH.left + 'px', width: scrollH.width + 'px' }"
                     @mousedown="handleHorizontalScrollbarDrag"
                   ></div>
@@ -14971,7 +16169,7 @@ const handleRecalculateLayout = () => {
                       <Frame class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
-                    <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-[140px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                       <button @click="addFrame" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Frame</button>
                       <button @click="addShape('rect')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Rectangle</button>
                     </div>
@@ -14983,7 +16181,7 @@ const handleRecalculateLayout = () => {
                       <Square class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
-                    <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-[140px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                       <button @click="addShape('rect')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Rectangle</button>
                       <button @click="addShape('rect', { rx: 20, ry: 20 })" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Rounded Rect</button>
                     </div>
@@ -14995,7 +16193,7 @@ const handleRecalculateLayout = () => {
                       <Circle class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
-                    <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-[140px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                       <button @click="addShape('circle')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Circle</button>
                       <button @click="addShape('ellipse')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Ellipse</button>
                     </div>
@@ -15003,14 +16201,14 @@ const handleRecalculateLayout = () => {
                   
                   <!-- Text Tool with Dropdown -->
                   <div class="relative group">
-                    <button @click="addText" title="Text (T)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
+                    <button @click="() => addText()" title="Text (T)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
                       <Type class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
-                    <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-[140px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="addText" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Text</button>
-                      <button @click="addText('heading')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Heading</button>
-                      <button @click="addText('body')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Body</button>
+                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                      <button @click="() => addText()" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Text</button>
+                      <button @click="() => addText('heading')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Heading</button>
+                      <button @click="() => addText('body')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Body</button>
                     </div>
                   </div>
                   
@@ -15020,7 +16218,7 @@ const handleRecalculateLayout = () => {
                       <PenTool class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
-                    <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-[140px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                       <button @click="togglePenMode" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Pen Tool</button>
                       <button @click="toggleDrawing" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Pencil</button>
                       <div class="h-px bg-white/10 my-1"></div>
@@ -15043,11 +16241,11 @@ const handleRecalculateLayout = () => {
           </main>
 
           <!-- Right Sidebar (Properties - Figma Style) -->
-          <aside class="w-[300px] border-l border-white/5 h-full bg-[#1a1a1a] text-white flex flex-col shrink-0 z-10 overflow-hidden">
+           <aside class="w-75 border-l border-white/5 h-full bg-[#1a1a1a] text-white flex flex-col shrink-0 z-10 overflow-hidden">
                <!-- Top Controls (Share, Play, Zoom, Avatar) -->
                <div class="h-10 px-2 flex items-center justify-between border-b border-white/5 shrink-0 min-w-0">
                  <!-- Left: Design/Prototype Tabs -->
-                 <div class="flex items-center gap-0 flex-shrink-0">
+               <div class="flex items-center gap-0 shrink-0">
                    <button 
                      @click="activeMode = 'design'"
                      class="h-full px-1.5 border-b-2 transition-colors text-[9px] font-medium"
@@ -15065,9 +16263,9 @@ const handleRecalculateLayout = () => {
                  </div>
                  
                  <!-- Right: Controls -->
-                 <div class="flex items-center gap-0.5 ml-auto flex-shrink-0 min-w-0">
+                                 <div class="flex items-center gap-0.5 ml-auto shrink-0 min-w-0">
                    <!-- User Avatar -->
-                   <div class="flex items-center -space-x-1 flex-shrink-0">
+                                     <div class="flex items-center -space-x-1 shrink-0">
                      <div 
                        v-for="(user, index) in (collaborators.length > 0 ? collaborators : (currentUser ? [currentUser] : [])).slice(0, 1)" 
                        :key="user.id || index"
@@ -15088,9 +16286,9 @@ const handleRecalculateLayout = () => {
                    </div>
                    
                    <!-- Play Button -->
-                   <button 
-                     @click="startPresentation"
-                     class="w-5 h-5 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all flex-shrink-0"
+                   <button
+                     @click="() => startPresentation()"
+                                         class="w-5 h-5 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all shrink-0"
                      title="Apresentar"
                    >
                      <Play class="w-2.5 h-2.5" />
@@ -15099,26 +16297,26 @@ const handleRecalculateLayout = () => {
                    <!-- Share Button -->
                    <button
                      @click="showShareModal = true"
-                     class="h-5 px-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-medium transition-all flex items-center gap-0.5 flex-shrink-0 whitespace-nowrap"
+                                         class="h-5 px-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-medium transition-all flex items-center gap-0.5 shrink-0 whitespace-nowrap"
                    >
-                     <Share2 class="w-2.5 h-2.5 flex-shrink-0" />
+                                         <Share2 class="w-2.5 h-2.5 shrink-0" />
                      <span>Share</span>
                    </button>
 
                    <!-- Zoom Dropdown -->
-                   <div class="relative flex-shrink-0 pr-0.5">
+                   <div class="relative shrink-0 pr-0.5">
                      <button 
                        @click="showZoomMenu = !showZoomMenu"
                        class="h-5 px-1 hover:bg-white/10 rounded text-[9px] font-medium text-white flex items-center gap-0.5 transition-all whitespace-nowrap"
                      >
                        <span>{{ currentZoom }}%</span>
-                       <ChevronDown class="w-2 h-2 text-zinc-400 flex-shrink-0" />
+                                             <ChevronDown class="w-2 h-2 text-zinc-400 shrink-0" />
                      </button>
                      
                      <!-- Zoom Menu -->
                      <div 
                        v-if="showZoomMenu"
-                       class="absolute top-full right-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-[120px] z-50"
+                                             class="absolute top-full right-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-30 z-50"
                        @click.stop
                      >
                        <button @click="handleZoom50" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">50%</button>
@@ -15134,27 +16332,28 @@ const handleRecalculateLayout = () => {
                </div>
                
                <div class="min-h-0 flex-1 flex flex-col">
-                  <PropertiesPanel 
-                     :selectedObject="selectedObjectRef" 
-                     :pageSettings="pageSettings"
-                     :colorStyles="colorStyles"
-                     :productZone="productZoneState.productZone.value"
-                     :productGlobalStyles="productZoneState.globalStyles.value"
-                     :labelTemplates="labelTemplates"
-                     :activeMode="activeMode"
-                     @update-property="updateObjectProperty"
-                     @update-smart-group="updateSmartGroup"
-                     @update-page-settings="updatePageSettings"
-                     @action="handleAction"
-                     @add-color-style="addColorStyle"
-                     @apply-color-style="applyColorStyle"
-                     @update-zone="handleUpdateZone"
-                     @update-global-styles="handleUpdateGlobalStyles"
-                     @apply-preset="handleApplyZonePreset"
-                     @sync-gaps="handleSyncZoneGaps"
-                     @recalculate-layout="handleRecalculateLayout"
-                     @manage-label-templates="showLabelTemplatesModal = true"
-                 />
+      <PropertiesPanel
+        v-if="selectedObjectRef"
+        :selectedObject="selectedObjectRef"
+        :pageSettings="pageSettings"
+        :colorStyles="project.colorStyles"
+        :productZone="productZoneState.productZone.value"
+        :productGlobalStyles="productZoneState.globalStyles.value"
+        :labelTemplates="labelTemplates"
+        @update-property="updateObjectProperty"
+        @update-smart-group="updateSmartGroup"
+        @update-page-settings="updatePageSettings"
+        @action="handleAction"
+        @add-color-style="addColorStyle"
+        @apply-color-style="applyColorStyle"
+        @add-interaction="() => {}"
+        @update-zone="(prop, val) => productZoneState.updateZone({ [prop]: val })"
+        @update-global-styles="handleUpdateGlobalStyles"
+        @apply-preset="handleApplyZonePreset"
+        @sync-gaps="productZoneState.syncGapsWithPadding"
+        @recalculate-layout="productZoneState.recalculateLayout"
+        @manage-label-templates="showLabelTemplatesModal = true"
+      />
                </div>
           </aside>
       </div>
@@ -15213,7 +16412,7 @@ const handleRecalculateLayout = () => {
         <template #default>
           <div class="space-y-5 py-2">
             <div class="relative group">
-              <div class="absolute -inset-1 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
+                            <div class="absolute -inset-1 bg-linear-to-r from-violet-600 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
               <div class="relative flex items-center gap-4 p-4 bg-white dark:bg-zinc-900 border border-border/50 rounded-2xl shadow-sm">
                 <div class="w-10 h-10 bg-violet-500/10 rounded-xl flex items-center justify-center shrink-0">
                   <Sparkles class="w-5 h-5 text-violet-600" />
@@ -15311,7 +16510,7 @@ const handleRecalculateLayout = () => {
                 <input ref="listImageInput" type="file" hidden accept="image/*" @change="handleListImageUpload" />
               </div>
 
-              <div v-else class="relative rounded-2xl overflow-hidden border border-border bg-black/[0.02] p-2">
+                            <div v-else class="relative rounded-2xl overflow-hidden border border-border bg-black/2 p-2">
                 <div class="aspect-video w-full rounded-xl overflow-hidden bg-black/5 flex items-center justify-center relative group">
                   <img :src="pastedImage" class="max-w-full max-h-full object-contain shadow-2xl" />
                   <button @click="pastedImage = null" class="absolute top-2 right-2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full backdrop-blur-sm transition-all">
@@ -15438,9 +16637,9 @@ const handleRecalculateLayout = () => {
       </UiDialog>
 
       <!-- Presentation Mode Overlay -->
-      <div v-if="showPresentationModal" class="fixed inset-0 z-[100] bg-black flex items-center justify-center">
+      <div v-if="showPresentationModal" class="fixed inset-0 z-100 bg-black flex items-center justify-center">
           <div class="relative w-full h-full flex items-center justify-center p-10">
-              <div class="relative shadow-2xl max-w-full max-h-full aspect-[9/16]">
+              <div class="relative shadow-2xl max-w-full max-h-full aspect-9/16">
                   <img :src="presentationImage" class="w-full h-full object-contain" />
                   
                   <!-- Hotspots Layer -->

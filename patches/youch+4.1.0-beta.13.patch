@@ -1,0 +1,74 @@
+diff --git a/node_modules/youch/build/public/error_info/script.js b/node_modules/youch/build/public/error_info/script.js
+index 81beda3..07f6c2f 100644
+--- a/node_modules/youch/build/public/error_info/script.js
++++ b/node_modules/youch/build/public/error_info/script.js
+@@ -1,13 +1,58 @@
+ function copyErrorMessage(button) {
+-  const errorText = button.dataset.errorText;
+-  
+-  navigator.clipboard.writeText(errorText)
+-    .then(() => {
+-      button.classList.add('copied');
+-      setTimeout(() => button.classList.remove('copied'), 2000);
+-    })
+-    .catch(() => {
+-      button.classList.add('copied');
+-      setTimeout(() => button.classList.remove('copied'), 2000);
+-    });
++  const errorText = (button && button.dataset && button.dataset.errorText) ? button.dataset.errorText : '';
++
++  const markCopied = () => {
++    if (!button) return;
++    button.classList.add('copied');
++    setTimeout(() => button.classList.remove('copied'), 2000);
++  };
++
++  const fallbackCopy = () => {
++    try {
++      if (document && typeof document.queryCommandSupported === 'function' && document.queryCommandSupported('copy')) {
++        const textarea = document.createElement('textarea');
++        textarea.value = errorText;
++        textarea.setAttribute('readonly', '');
++        textarea.style.position = 'fixed';
++        textarea.style.opacity = '0';
++        textarea.style.pointerEvents = 'none';
++        document.body.appendChild(textarea);
++        textarea.select();
++        try {
++          document.execCommand('copy');
++        } finally {
++          document.body.removeChild(textarea);
++        }
++        return true;
++      }
++    } catch {
++      // ignore
++    }
++
++    try {
++      // Último recurso: permite o usuário copiar manualmente.
++      window.prompt('Copie o texto do erro:', errorText);
++      return true;
++    } catch {
++      return false;
++    }
++  };
++
++  // Tenta clipboard API quando disponível; caso contrário, fallback.
++  try {
++    if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
++      navigator.clipboard.writeText(errorText)
++        .then(markCopied)
++        .catch(() => {
++          fallbackCopy();
++          markCopied();
++        });
++      return;
++    }
++  } catch {
++    // ignore
++  }
++
++  fallbackCopy();
++  markCopied();
+ }

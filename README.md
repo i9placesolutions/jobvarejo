@@ -20,6 +20,22 @@ yarn install
 bun install
 ```
 
+## Environment variables
+
+Crie um arquivo `.env` com base no `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Obrigatórias para rodar o editor sem 500 em `/api/assets`:
+- `NUXT_PUBLIC_SUPABASE_URL`
+- `NUXT_PUBLIC_SUPABASE_KEY`
+- `CONTABO_ENDPOINT`
+- `CONTABO_BUCKET`
+- `CONTABO_ACCESS_KEY`
+- `CONTABO_SECRET_KEY`
+
 ## Development Server
 
 Start the development server on `http://localhost:3000`:

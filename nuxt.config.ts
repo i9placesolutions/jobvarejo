@@ -4,16 +4,16 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineNuxtConfig({
   runtimeConfig: {
     // Private keys (server-side only)
-    contaboEndpoint: process.env.CONTABO_ENDPOINT,
-    contaboRegion: process.env.CONTABO_REGION,
-    contaboBucket: process.env.CONTABO_BUCKET,
-    contaboAccessKey: process.env.CONTABO_ACCESS_KEY,
-    contaboSecretKey: process.env.CONTABO_SECRET_KEY,
-    contaboBrandsBucket: process.env.CONTABO_BRANDS_BUCKET,
-    contaboImportBucket: process.env.CONTABO_IMPORT_BUCKET,
-    openaiApiKey: process.env.NUXT_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-    serperApiKey: process.env.NUXT_SERPER_API_KEY,
-    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    contaboEndpoint: process.env.CONTABO_ENDPOINT || process.env.NUXT_CONTABO_ENDPOINT || 'usc1.contabostorage.com',
+    contaboRegion: process.env.CONTABO_REGION || process.env.NUXT_CONTABO_REGION || 'default',
+    contaboBucket: process.env.CONTABO_BUCKET || process.env.NUXT_CONTABO_BUCKET || '475a29e42e55430abff00915da2fa4bc:jobupload',
+    contaboAccessKey: process.env.CONTABO_ACCESS_KEY || process.env.NUXT_CONTABO_ACCESS_KEY || '',
+    contaboSecretKey: process.env.CONTABO_SECRET_KEY || process.env.NUXT_CONTABO_SECRET_KEY || '',
+    contaboBrandsBucket: process.env.CONTABO_BRANDS_BUCKET || process.env.NUXT_CONTABO_BRANDS_BUCKET || '',
+    contaboImportBucket: process.env.CONTABO_IMPORT_BUCKET || process.env.NUXT_CONTABO_IMPORT_BUCKET || '475a29e42e55430abff00915da2fa4bc:jobpsd',
+    openaiApiKey: process.env.NUXT_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
+    serperApiKey: process.env.NUXT_SERPER_API_KEY || '',
+    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
 
     public: {
       // Public keys (exposed to client)
@@ -21,13 +21,29 @@ export default defineNuxtConfig({
       supabaseKey: process.env.NUXT_PUBLIC_SUPABASE_KEY,
 
       // Contabo public config (needed for client-side URL construction)
-      // IMPORTANT: These must match the actual values in .env since process.env vars
-      // without NUXT_PUBLIC_ prefix are NOT exposed to the client
+      // IMPORTANT: These are not secrets, but they end up in the client bundle.
+      // Keep access/secret keys ONLY in private runtimeConfig.
       contabo: {
-        endpoint: 'usc1.contabostorage.com',
-        bucket: '475a29e42e55430abff00915da2fa4bc:jobupload',
-        importBucket: '475a29e42e55430abff00915da2fa4bc:jobpsd',
-        region: 'default',
+        endpoint:
+          process.env.NUXT_PUBLIC_CONTABO_ENDPOINT ||
+          process.env.CONTABO_ENDPOINT ||
+          process.env.NUXT_CONTABO_ENDPOINT ||
+          'usc1.contabostorage.com',
+        bucket:
+          process.env.NUXT_PUBLIC_CONTABO_BUCKET ||
+          process.env.CONTABO_BUCKET ||
+          process.env.NUXT_CONTABO_BUCKET ||
+          '475a29e42e55430abff00915da2fa4bc:jobupload',
+        importBucket:
+          process.env.NUXT_PUBLIC_CONTABO_IMPORT_BUCKET ||
+          process.env.CONTABO_IMPORT_BUCKET ||
+          process.env.NUXT_CONTABO_IMPORT_BUCKET ||
+          '475a29e42e55430abff00915da2fa4bc:jobpsd',
+        region:
+          process.env.NUXT_PUBLIC_CONTABO_REGION ||
+          process.env.CONTABO_REGION ||
+          process.env.NUXT_CONTABO_REGION ||
+          'default',
       }
     }
   },

@@ -7,7 +7,7 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "patch-package && nuxt prepare"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.975.0",
@@ -34,6 +34,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@types/webfontloader": "^1.6.38"
+    "@types/webfontloader": "^1.6.38",
+    "patch-package": "^8.0.0"
   }
 }
