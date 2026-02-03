@@ -123,8 +123,77 @@ async function processLayer(
   console.log(`   Dimensões: ${layer.width}x${layer.height}, Posição: (${layer.left}, ${layer.top})`)
   console.log(`   isHidden: ${isHidden}, Opacidade: ${layer.opacity} (${layer.composedOpacity})`)
 
-  // Se não for um grupo, processar conteúdo (imagem ou texto)
-  if (layer.type !== 'Group' && !isHidden) {
+  // Se for um grupo, processar recursivamente e criar um fabric.Group
+  if (layer.type === 'Group') {
+    console.log(`📁 Processando GRUPO: ${layer.name || 'unnamed'} com ${layer.children?.length || 0} filhos`)
+    
+    const groupObjects: any[] = []
+    
+    // Processar todos os filhos do grupo
+    if (layer.children && Array.isArray(layer.children)) {
+      for (const child of layer.children) {
+        const childIndex = ++layerCounter.value
+        await processLayer(child, groupObjects, s3Client, importBucket, userId, fileId, tempDir, depth + 1, childIndex, layerCounter)
+      }
+    }
+    
+    // Só criar o grupo se tiver objetos filhos e não estiver oculto
+    if (groupObjects.length > 0 && !isHidden) {
+      // Usar opacidade real do grupo
+      const opacity = Math.max(0, Math.min(1, layer.composedOpacity ?? layer.opacity ?? 1))
+      
+      // Criar objeto de grupo compatível com Fabric.js
+      const groupObj = {
+        type: 'group',
+        version: '7.1.0',
+        originX: 'left',
+        originY: 'top',
+        left: layer.left ?? 0,
+        top: layer.top ?? 0,
+        width: layer.width || 100,
+        height: layer.height || 100,
+        fill: 'rgb(0,0,0)',
+        stroke: null,
+        strokeWidth: 0,
+        strokeDashArray: null,
+        strokeLineCap: 'butt',
+        strokeDashOffset: 0,
+        strokeLineJoin: 'miter',
+        strokeUniform: false,
+        strokeMiterLimit: 4,
+        scaleX: 1,
+        scaleY: 1,
+        angle: 0,
+        flipX: false,
+        flipY: false,
+        opacity: opacity,
+        shadow: null,
+        visible: true,
+        backgroundColor: '',
+        fillRule: 'nonzero',
+        paintFirst: 'fill',
+        globalCompositeOperation: 'source-over',
+        skewX: 0,
+        skewY: 0,
+        objects: groupObjects,
+        name: layer.name || `Group ${depth}`,
+        _customId: customId
+      }
+      
+      canvasObjects.push(groupObj)
+      console.log(`✅ Grupo criado: ${layer.name} com ${groupObjects.length} objetos, opacity=${opacity}`)
+    } else if (groupObjects.length > 0) {
+      // Se o grupo está oculto mas tem filhos, adicionar os filhos diretamente (flat)
+      // para manter a visibilidade individual
+      console.log(`⚠️ Grupo oculto, adicionando ${groupObjects.length} objetos individualmente`)
+      canvasObjects.push(...groupObjects)
+    }
+    
+    return // Grupo processado, não continuar
+  }
+
+  // Se não for um grupo e não estiver oculto, processar conteúdo (imagem ou texto)
+  if (!isHidden) {
     // Processar camada que tem imagem (pixel data)
     // @webtoon/psd usa composite() para obter pixels RGBA
     if (layer.width > 0 && layer.height > 0) {
@@ -176,10 +245,9 @@ async function processLayer(
         const config = useRuntimeConfig()
         const assetUrl = `https://${config.contaboEndpoint}/${importBucket}/${assetKey}`
 
-        // Calcular opacidade - Usar 1.0 (totalmente visível) para garantir que apareça
-        // @webtoon/psd já retorna composedOpacity (0-1)
-        const opacity = 1.0 // Forçar opacidade total para debug
-        console.log(`   Opacidade forçada para 1.0 (era ${layer.composedOpacity})`)
+        // Usar opacidade real do PSD - @webtoon/psd retorna composedOpacity (0-1)
+        const opacity = Math.max(0, Math.min(1, layer.composedOpacity ?? layer.opacity ?? 1))
+        console.log(`   Opacidade: ${opacity}`)
 
         canvasObjects.push({
           type: 'image',
@@ -239,7 +307,15 @@ async function processLayer(
         let fontSize = 16
         let fontFamily = 'Arial'
         let fontWeight = 'normal'
+        let fontStyle = ''
         let fill = '#000000'
+        let textAlign = 'left'
+        let charSpacing = 0
+        let underline = false
+        let lineHeight = 1.16
+        let textWidth = 100
+        let textHeight = 20
+        let baselineShift = 0
 
         if (textProps) {
           // @webtoon/psd textProperties estrutura
@@ -255,6 +331,59 @@ async function processLayer(
                 fill = rgbToHex(color.r * 255, color.g * 255, color.b * 255)
               }
             }
+
+            // Alinhamento de texto
+            if (docData.justification) {
+              const justifMap: Record<number, string> = {
+                0: 'left',
+                1: 'right', 
+                2: 'center',
+                3: 'justify'
+              }
+              textAlign = justifMap[docData.justification] || 'left'
+            }
+
+            // Peso da fonte (fauxBold)
+            if (docData.fauxBold) {
+              fontWeight = 'bold'
+            }
+
+            // Estilo itálico (fauxItalic)
+            if (docData.fauxItalic) {
+              fontStyle = 'italic'
+            }
+
+            // Espaçamento entre letras (tracking)
+            // PSD tracking é em 1/1000 de em, converter para pixels
+            if (docData.tracking !== undefined) {
+              charSpacing = (docData.tracking / 1000) * fontSize
+            }
+
+            // Underline
+            if (docData.underline) {
+              underline = true
+            }
+
+            // Line height (leading)
+            if (docData.leading !== undefined && docData.leading > 0) {
+              lineHeight = docData.leading / fontSize
+            }
+          }
+
+          // Extrair dimensões reais do texto do PSD
+          if (textProps.boundingBox) {
+            const bbox = textProps.boundingBox
+            if (bbox.right !== undefined && bbox.left !== undefined) {
+              textWidth = Math.abs(bbox.right - bbox.left)
+            }
+            if (bbox.bottom !== undefined && bbox.top !== undefined) {
+              textHeight = Math.abs(bbox.bottom - bbox.top)
+            }
+          }
+
+          // Baseline para ajuste de posição
+          if (textProps.baselineShift !== undefined) {
+            baselineShift = textProps.baselineShift
           }
         }
 
@@ -274,9 +403,9 @@ async function processLayer(
 
         console.log(`Text layer: "${textValue}" at position (${psdLeft}, ${psdTop}), fontSize: ${fontSize}, fill: ${fill}`)
 
-        // Calcular opacidade - Usar 1.0 (totalmente visível) para garantir que apareça
-        const opacity = 1.0 // Forçar opacidade total para debug
-        console.log(`   Opacidade do texto forçada para 1.0 (era ${layer.composedOpacity})`)
+        // Usar opacidade real do PSD
+        const opacity = Math.max(0, Math.min(1, layer.composedOpacity ?? layer.opacity ?? 1))
+        console.log(`   Opacidade do texto: ${opacity}`)
 
         canvasObjects.push({
           type: 'i-text',
@@ -284,9 +413,9 @@ async function processLayer(
           originX: 'left',
           originY: 'top',
           left: psdLeft,
-          top: psdTop,
-          width: 100, // largura estimada
-          height: 20, // altura estimada
+          top: psdTop - baselineShift, // Ajustar por baseline shift
+          width: Math.max(textWidth, 50),
+          height: Math.max(textHeight, fontSize * lineHeight),
           fill: fill,
           stroke: null,
           strokeWidth: 0,
@@ -313,14 +442,14 @@ async function processLayer(
           fontFamily: fontFamily,
           fontWeight: fontWeight,
           fontSize: Math.max(fontSize, 8),
-          lineHeight: 1.16,
-          underline: false,
+          lineHeight: lineHeight,
+          underline: underline,
           overline: false,
           linethrough: false,
-          textAlign: 'left',
-          fontStyle: '',
+          textAlign: textAlign,
+          fontStyle: fontStyle,
           textBackgroundColor: '',
-          charSpacing: 0,
+          charSpacing: charSpacing,
           minWidth: 20,
           splitByGrapheme: false,
           name: layer.name || 'Text Layer',
@@ -335,16 +464,8 @@ async function processLayer(
     }
   }
 
-  // SEMPRE processar filhos recursivamente (grupos), mesmo se a camada pai estiver oculta
-  // @webtoon/psd usa `children` para grupos
-  if (layer.children && Array.isArray(layer.children)) {
-    console.log(`   Processando ${layer.children.length} filhos de ${layer.name || 'unnamed'}...`)
-    for (const child of layer.children) {
-      // Incrementa o índice global para cada filho
-      const childIndex = ++layerCounter.value
-      await processLayer(child, canvasObjects, s3Client, importBucket, userId!, fileId, tempDir, depth + 1, childIndex, layerCounter)
-    }
-  }
+  // NOTA: Filhos de grupos são processados no bloco de tratamento de grupos acima
+  // Camadas normais (não-grupos) não devem ter filhos no PSD
 }
 
 export default defineEventHandler(async (event) => {

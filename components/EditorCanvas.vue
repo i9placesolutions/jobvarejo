@@ -2598,8 +2598,14 @@ const getColorFromString = (str: string): string => {
 const getInitial = (name: string | null | undefined): string => {
   if (!name) return '?'
   const parts = name.trim().split(' ')
-  if (parts.length >= 2 && parts[0] && parts[parts.length - 1]) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  const firstPart = parts[0]
+  const lastPart = parts[parts.length - 1]
+  if (parts.length >= 2 && firstPart && lastPart) {
+    const first = firstPart[0]
+    const last = lastPart[0]
+    if (first && last) {
+      return (first + last).toUpperCase()
+    }
   }
   return name[0]?.toUpperCase() ?? '?'
 }
@@ -4902,8 +4908,104 @@ onMounted(async () => {
                           }
                       });
                       
-                      // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
+                       // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
                       rehydrateCanvasZones();
+                      
+                      // CRITICAL FIX: Restore lost object names in product cards after JSON load
+                      // When canvas is loaded from JSON, nested object names inside groups are lost
+                      const restoreProductCardNames = () => {
+                          if (!canvas.value) return;
+                          
+                          canvas.value.getObjects().forEach((obj: any) => {
+                              // Check if this is a product card
+                              if (obj.type === 'group' && (obj.isProductCard || obj.isSmartObject || isLikelyProductCard(obj))) {
+                                  if (typeof obj.getObjects !== 'function') return;
+                                  
+                                  const children = obj.getObjects();
+                                  
+                                  // Find price group inside the card
+                                  const priceGroup = children.find((child: any) => 
+                                      child.type === 'group' && (
+                                          child.name === 'priceGroup' || 
+                                          child.name === 'smart_price' ||
+                                          child.name === 'smart_splash'
+                                      )
+                                  );
+                                  
+                                  if (priceGroup && typeof priceGroup.getObjects === 'function') {
+                                      const priceChildren = priceGroup.getObjects();
+                                      
+                                      // Heuristic: identify elements by type and assign names
+                                      priceChildren.forEach((child: any) => {
+                                          if (child.name) return; // Already has a name
+                                          
+                                          // Try to identify by type and properties
+                                          if (child.type === 'rect') {
+                                              // The largest rect is likely price_bg
+                                              const isLargest = !priceChildren.some((other: any) => 
+                                                  other !== child && 
+                                                  other.type === 'rect' && 
+                                                  (other.width * other.height) > (child.width * child.height)
+                                              );
+                                              if (isLargest) {
+                                                  child.set('name', 'price_bg');
+                                                  console.log('[restoreProductCardNames] Assigned name: price_bg');
+                                              }
+                                          } else if (child.type === 'circle') {
+                                              child.set('name', 'price_currency_bg');
+                                              console.log('[restoreProductCardNames] Assigned name: price_currency_bg');
+                                          } else if (child.type && child.type.includes('text')) {
+                                              const text = String(child.text || '').trim();
+                                              if (text === 'R$' || text.includes('R$')) {
+                                                  child.set('name', 'price_currency_text');
+                                                  console.log('[restoreProductCardNames] Assigned name: price_currency_text');
+                                              } else if (/^\d+$/.test(text.replace(',', ''))) {
+                                                  // Integer part of price
+                                                  const hasInteger = priceChildren.some((other: any) => 
+                                                      other !== child && other.name === 'price_integer_text'
+                                                  );
+                                                  if (!hasInteger) {
+                                                      child.set('name', 'price_integer_text');
+                                                      console.log('[restoreProductCardNames] Assigned name: price_integer_text');
+                                                  } else {
+                                                      child.set('name', 'price_decimal_text');
+                                                      console.log('[restoreProductCardNames] Assigned name: price_decimal_text');
+                                                  }
+                                              } else {
+                                                  child.set('name', 'price_unit_text');
+                                                  console.log('[restoreProductCardNames] Assigned name: price_unit_text');
+                                              }
+                                          }
+                                      });
+                                      
+                                      // Also fix other card children
+                                      children.forEach((child: any) => {
+                                          if (child.name) return;
+                                          
+                                          if (child.type === 'rect' && child.width > child.height * 0.8) {
+                                              // Likely offer background
+                                              child.set('name', 'offerBackground');
+                                              console.log('[restoreProductCardNames] Assigned name: offerBackground');
+                                          } else if (child.type && child.type.includes('text')) {
+                                              const text = String(child.text || '').trim().toLowerCase();
+                                              if (text.includes('kg') || text.includes('ml') || text.includes('un')) {
+                                                  child.set('name', 'smart_limit');
+                                                  console.log('[restoreProductCardNames] Assigned name: smart_limit');
+                                              } else {
+                                                  child.set('name', 'smart_title');
+                                                  console.log('[restoreProductCardNames] Assigned name: smart_title');
+                                              }
+                                          } else if (child.type === 'image') {
+                                              child.set('name', 'smart_image');
+                                              console.log('[restoreProductCardNames] Assigned name: smart_image');
+                                          }
+                                      });
+                                  }
+                              }
+                          });
+                      };
+                      
+                      restoreProductCardNames();
                       
                       // DEBUG: Log objects after rehydrate
                       const objsAfterRehydrate = canvas.value.getObjects();
@@ -6131,10 +6233,9 @@ const handleObjectModified = (e: any) => {
                 if (verticalAlign === 'center') startY += Math.max(0, (usableH - usedGridH) / 2);
                 else if (verticalAlign === 'bottom') startY += Math.max(0, usableH - usedGridH);
 
-                const rowTops = new Array<number>(rows);
-                rowTops[0] = startY;
+                const rowTops: number[] = [startY];
                 for (let r = 1; r < rows; r++) {
-                    rowTops[r] = rowTops[r - 1] + (rowHeights[r - 1] ?? baseH) + gapY;
+                    rowTops[r] = rowTops[r - 1]! + (rowHeights[r - 1] ?? baseH) + gapY;
                 }
 
                 const centers: Array<{ x: number; y: number }> = [];
@@ -8381,6 +8482,19 @@ const updateSelection = () => {
         productZoneState.updateZone(zoneConfig);
         const zoneStyles = (active as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value ?? {};
         productZoneState.updateGlobalStyles(zoneStyles);
+    }
+    // Se um card de produto for selecionado, carregar os estilos da zona pai
+    else if (active && isLikelyProductCard(active)) {
+        const parentZoneId = active.parentZoneId;
+        if (parentZoneId && canvas.value) {
+            const parentZone = canvas.value.getObjects().find((o: any) => 
+                isLikelyProductZone(o) && o._customId === parentZoneId
+            );
+            if (parentZone) {
+                const zoneStyles = (parentZone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value ?? {};
+                productZoneState.updateGlobalStyles(zoneStyles);
+            }
+        }
     }
 }
 
@@ -12224,8 +12338,35 @@ const simulateSmartGrid = async (
 
             // Generate Object
             if (templateObject) {
-                 // Clone using Promise API (Fabric v6+)
+                  // Clone using Promise API (Fabric v6+)
                  const cloned: any = await templateObject.clone(['name', 'id', 'smartGridId', 'isSmartObject', 'originX', 'originY']);
+
+                  // CRITICAL FIX: Preserve nested object names after clone
+                  // The clone operation loses names of children inside groups (like priceGroup)
+                  const fixNestedNames = (clonedObj: any, sourceObj: any) => {
+                      if (!clonedObj || !sourceObj) return;
+                      
+                      // Fix direct children
+                      if (typeof clonedObj.getObjects === 'function' && typeof sourceObj.getObjects === 'function') {
+                          const clonedChildren = clonedObj.getObjects();
+                          const sourceChildren = sourceObj.getObjects();
+                          
+                          clonedChildren.forEach((child: any, idx: number) => {
+                              const sourceChild = sourceChildren[idx];
+                              if (sourceChild && sourceChild.name && !child.name) {
+                                  child.set('name', sourceChild.name);
+                                  console.log(`[simulateSmartGrid] Fixed name for child ${idx}: ${sourceChild.name}`);
+                              }
+                              
+                              // Recursively fix nested groups
+                              if (child.type === 'group' && sourceChild && sourceChild.type === 'group') {
+                                  fixNestedNames(child, sourceChild);
+                              }
+                          });
+                      }
+                  };
+                  
+                  fixNestedNames(cloned, templateObject);
 
                   cloned.set({
                      left: finalX,
@@ -12438,6 +12579,19 @@ const getCurrentZoneObject = () => {
     if (active && isLikelyProductZone(active)) return active;
     const selected = selectedObjectRef.value as any;
     if (selected && isLikelyProductZone(selected)) return selected;
+    
+    // Se o objeto selecionado for um card de produto, tentar encontrar a zona pai
+    const target = active || selected;
+    if (target && isLikelyProductCard(target)) {
+        const parentZoneId = target.parentZoneId;
+        if (parentZoneId) {
+            const zone = canvas.value.getObjects().find((o: any) => 
+                isLikelyProductZone(o) && o._customId === parentZoneId
+            );
+            if (zone) return zone;
+        }
+    }
+    
     return null;
 }
 
@@ -12543,21 +12697,39 @@ const updateZoneOnCanvas = (prop: string, val: any) => {
 }
 
 const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any) => {
-    if (!canvas.value) return;
+    console.log('🔍 [applyGlobalStylesToCards] CALLED', { hasZone: !!zone, stylesKeys: Object.keys(styles || {}) });
+    if (!canvas.value) {
+        console.warn('⚠️ [applyGlobalStylesToCards] No canvas!');
+        return;
+    }
     const list = zone && isLikelyProductZone(zone)
         ? getZoneChildren(zone)
         : canvas.value.getObjects().filter((o: any) => o?.type === 'group' && (o.isSmartObject || o.isProductCard || isLikelyProductCard(o)));
+    
+    console.log('🔍 [applyGlobalStylesToCards] Found cards:', list.length);
 
-    list.forEach((card: any) => {
-        if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') return;
+    list.forEach((card: any, idx: number) => {
+        console.log(`🔍 [applyGlobalStylesToCards] Processing card ${idx}:`, { 
+            type: card?.type, 
+            name: card?.name,
+            hasGetObjects: typeof card?.getObjects === 'function'
+        });
+        if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') {
+            console.log(`⚠️ [applyGlobalStylesToCards] Skipping card ${idx} - invalid`);
+            return;
+        }
         const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0;
         const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0;
+        console.log(`🔍 [applyGlobalStylesToCards] Card ${idx} dimensions:`, { cardW, cardH });
         if (cardW && cardH) {
+            console.log(`🔍 [applyGlobalStylesToCards] Calling resizeSmartObject for card ${idx}`);
             resizeSmartObject(card, cardW, cardH, styles);
         }
         safeAddWithUpdate(card);
         card.setCoords();
     });
+    
+    console.log('🔍 [applyGlobalStylesToCards] DONE');
 };
 
 const handleApplyZonePreset = (presetId: string) => {
@@ -13066,19 +13238,28 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
 
 
 function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
-    if (!priceGroup || !priceGroup.getObjects) return null;
+    console.log('🔍 [layoutPriceGroup] CALLED', { hasPriceGroup: !!priceGroup, hasGetObjects: !!priceGroup?.getObjects, cardW, cardH });
+    if (!priceGroup || !priceGroup.getObjects) {
+        console.log('🔍 [layoutPriceGroup] Returning null - no priceGroup or getObjects');
+        return null;
+    }
 
     // Atacarejo template (2-tier label)
     try {
         const deep = collectObjectsDeep(priceGroup);
-        if (findByName(deep, 'atac_retail_bg')) {
+        const hasAtacarejo = findByName(deep, 'atac_retail_bg');
+        console.log('🔍 [layoutPriceGroup] Atacarejo check:', hasAtacarejo);
+        if (hasAtacarejo) {
             return layoutAtacarejoPriceGroup(priceGroup, cardW, cardH);
         }
-    } catch (_) {
+    } catch (e) {
+        console.log('🔍 [layoutPriceGroup] Atacarejo check error:', e);
         // fall through to legacy layout
     }
     
     const all = priceGroup.getObjects();
+    console.log('🔍 [layoutPriceGroup] Objects in priceGroup:', all.length, all.map((o: any) => o?.name || 'unnamed'));
+    
     const priceBg = all.find((o: any) => o.name === 'price_bg');
     const priceBgImage = all.find((o: any) => o.name === 'price_bg_image' || o.name === 'splash_image');
     const currencyCircle = all.find((o: any) => o.name === 'price_currency_bg' || o.name === 'priceSymbolBg');
@@ -13091,7 +13272,12 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     const priceDecimal = all.find((o: any) => o.name === 'price_decimal_text' || o.name === 'priceDecimal' || o.name === 'price_decimal');
     const priceUnit = all.find((o: any) => o.name === 'price_unit_text' || o.name === 'priceUnit' || o.name === 'price_unit');
     
-    if (!priceBg || !currencyCircle || !currencyText) return null;
+    console.log('🔍 [layoutPriceGroup] Found elements:', { priceBg: !!priceBg, currencyCircle: !!currencyCircle, currencyText: !!currencyText, priceText: !!priceText, priceInteger: !!priceInteger, priceDecimal: !!priceDecimal });
+    
+    if (!priceBg || !currencyCircle || !currencyText) {
+        console.log('🔍 [layoutPriceGroup] Returning null - missing required elements');
+        return null;
+    }
     
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
@@ -14513,6 +14699,8 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
 
 // Helper for Responsive Card Layout
 const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
+    console.log('🔍 [resizeSmartObject] CALLED', { groupName: group?.name, w, h, hasStyles: !!styles, splashScale: styles?.splashScale, splashOffsetY: styles?.splashOffsetY });
+    
     // Reset Group Scale/Skew to ensure clean internal layout
     group.scale(1);
     group.set({ width: w, height: h });
@@ -14522,6 +14710,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     const baseSize = Math.min(w, h);
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const objects = group.getObjects();
+    console.log('🔍 [resizeSmartObject] Objects in group:', objects.length, objects.map((o: any) => o?.name));
     
     const bg = objects.find((o: any) => o.name === 'offerBackground');
     const title = objects.find((o: any) => o.name === 'smart_title');
@@ -14534,7 +14723,9 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     const img = objects.find((o: any) => o.name === 'smart_image');
     // Splash can vary names; prefer the canonical price label group when present (even when nested).
     const priceGroup = getPriceGroupFromAny(group);
+    console.log('🔍 [resizeSmartObject] priceGroup found:', !!priceGroup, priceGroup?.name);
     const splash = priceGroup ?? objects.find((o: any) => o.name === 'smart_price' || o.name === 'smart_splash' || (o.type === 'group' && o !== bg));
+    console.log('🔍 [resizeSmartObject] splash found:', !!splash, splash?.name, splash?.type);
 
     // When the user moves an inner element (deep select), we mark it with `__manualTransform`.
     // During zone relayout (and on reload), we must NOT override these user placements.
@@ -14755,26 +14946,31 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
             }
 
             const layout = layoutPriceGroup(splash, w, h);
+            console.log('🔍 [resizeSmartObject] layoutPriceGroup result:', !!layout, layout ? { pillH: layout.pillH } : 'null');
             
             if (layout) {
                 const { pillH } = layout;
                 const scale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
                 const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+                console.log('🔍 [resizeSmartObject] Applying styles to splash:', { scale, offsetY, splashManual });
                 
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
                 
                 if (!splashManual) {
+                    const newTop = halfH - ((pillH * scale) / 2) - marginBottom + offsetY;
+                    console.log('🔍 [resizeSmartObject] Setting splash position:', { left: 0, top: newTop, scale });
                     splash.set({
                         scaleX: scale,
                         scaleY: scale,
                         originX: 'center',
                         originY: 'center',
                         left: 0,
-                        top: halfH - ((pillH * scale) / 2) - marginBottom + offsetY
+                        top: newTop
                     });
                 } else {
                     // Manual positioning: keep left/top, but still apply the zone-level scale.
+                    console.log('🔍 [resizeSmartObject] Manual mode - applying only scale:', scale);
                     splash.set({ scaleX: scale, scaleY: scale });
                 }
                 
@@ -14782,32 +14978,63 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 splash.setCoords();
                 
                 bottomH = (pillH * scale) + marginBottom;
+                console.log('🔍 [resizeSmartObject] Splash updated, bottomH:', bottomH);
             } else {
                 // Fallback to generic scaling for older cards without named parts
-                let sScale = splash.scaleX;
-                if ((splash.width * sScale) > w * 0.9) {
-                    sScale = (w * 0.9) / splash.width;
+                // Apply global styles even in fallback mode
+                const globalScale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
+                const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+                
+                // Guardar o scale base na primeira vez para evitar acumulação
+                if (typeof (splash as any).__baseScaleX !== 'number') {
+                    (splash as any).__baseScaleX = splash.scaleX || 1;
+                    (splash as any).__baseScaleY = splash.scaleY || 1;
+                }
+                const baseScaleX = (splash as any).__baseScaleX;
+                const baseScaleY = (splash as any).__baseScaleY;
+                
+                let sScaleX = baseScaleX * globalScale;
+                let sScaleY = baseScaleY * globalScale;
+                
+                // Clamp para não ultrapassar limites
+                if ((splash.width * sScaleX) > w * 0.9) {
+                    const clampScale = (w * 0.9) / splash.width;
+                    sScaleX = clampScale;
+                    sScaleY = clampScale;
                 }
                 
                 const maxSplashH = h * 0.35;
-                if ((splash.height * sScale) > maxSplashH) {
-                    sScale = maxSplashH / splash.height;
+                if ((splash.height * sScaleY) > maxSplashH) {
+                    const clampScale = maxSplashH / splash.height;
+                    sScaleX = clampScale;
+                    sScaleY = clampScale;
                 }
                 
+                console.log('🔍 [resizeSmartObject] Fallback - Applying scale:', { baseScaleX, globalScale, sScaleX, sScaleY, offsetY });
+                
+                // Force dirty flag to ensure Fabric.js updates the object
+                splash.dirty = true;
+                
                 if (!splashManual) {
+                    const newTop = halfH - marginBottom + offsetY;
+                    console.log('🔍 [resizeSmartObject] Fallback - Setting position:', { left: 0, top: newTop, sScaleX, sScaleY });
                     splash.set({
-                        scaleX: sScale,
-                        scaleY: sScale,
+                        scaleX: sScaleX,
+                        scaleY: sScaleY,
                         originX: 'center',
                         originY: 'bottom',
                         left: 0,
-                        top: halfH - marginBottom
+                        top: newTop
                     });
                 } else {
-                    splash.set({ scaleX: sScale, scaleY: sScale });
+                    splash.set({ scaleX: sScaleX, scaleY: sScaleY });
                 }
                 
-                bottomH = (splash.height * sScale) + marginBottom;
+                // Force coordinate update
+                splash.setCoords();
+                
+                bottomH = (splash.height * sScaleY) + marginBottom;
+                console.log('🔍 [resizeSmartObject] Fallback - Splash updated, bottomH:', bottomH);
             }
         } else {
             // Max height for splash: 30% of card
@@ -15452,10 +15679,9 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
         startY += Math.max(0, usableH - usedGridH);
     }
 
-    const rowTops = new Array<number>(rows);
-    rowTops[0] = startY;
+    const rowTops: number[] = [startY];
     for (let r = 1; r < rows; r++) {
-        rowTops[r] = rowTops[r - 1] + (rowHeights[r - 1] ?? baseH) + gapY;
+        rowTops[r] = rowTops[r - 1]! + (rowHeights[r - 1] ?? baseH) + gapY;
     }
     
     cards.forEach((card: any, index: number) => {

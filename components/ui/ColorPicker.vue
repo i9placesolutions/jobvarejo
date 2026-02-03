@@ -186,8 +186,11 @@ watch([hue, saturation, lightness, alpha], () => {
 
 // Color area gradient
 const colorAreaGradient = computed(() => {
+  // CORREÇÃO: Canto superior direito deve ser a cor pura do matiz (50% lightness)
+  // Não branco (100% lightness) como estava antes
   const hueColor = `hsl(${hue.value}, 100%, 50%)`
-  return `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hueColor})`
+  const whiteColor = `hsl(${hue.value}, 0%, 100%)`
+  return `linear-gradient(to top, #000, transparent), linear-gradient(to right, ${whiteColor}, ${hueColor})`
 })
 
 // Hue slider gradient
@@ -215,7 +218,9 @@ const updateColorFromArea = (e: MouseEvent) => {
   const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
   
   saturation.value = Math.round(x * 100)
-  lightness.value = Math.round((1 - y) * 100)
+  // CORREÇÃO: No topo (y=0) deve mostrar a cor pura (50% lightness)
+  // No fundo (y=1) deve mostrar preto (0% lightness)
+  lightness.value = Math.round(50 * (1 - y))
 }
 
 // Handle hue slider
@@ -275,7 +280,9 @@ onUnmounted(() => {
 
 // Color area selector position
 const colorSelectorX = computed(() => `${saturation.value}%`)
-const colorSelectorY = computed(() => `${100 - lightness.value}%`)
+// CORREÇÃO: Como lightness agora varia de 0 a 50 (em vez de 0 a 100), 
+// precisamos multiplicar por 2 para obter a posição Y correta
+const colorSelectorY = computed(() => `${100 - (lightness.value * 2)}%`)
 
 // Hue selector position
 const hueSelectorX = computed(() => `${(hue.value / 360) * 100}%`)
