@@ -466,7 +466,7 @@ const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
 const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
 const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
 const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
-const LABEL_TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness']
+const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur']
 
 const serializeLabelTemplatesForProject = () => {
     // Keep project JSON lean: previews can be regenerated client-side.
@@ -13722,6 +13722,221 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
 };
 
 
+/**
+ * Layout function for custom user-created templates.
+ * Preserves the original proportions and scales everything proportionally.
+ */
+function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
+
+    const all = priceGroup.getObjects();
+    const priceBg = all.find((o: any) => o.name === 'price_bg');
+    const priceBgImage = all.find((o: any) => o.name === 'price_bg_image' || o.name === 'splash_image');
+
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+    // Get original template dimensions from priceBg metadata
+    const originalW = typeof (priceBg as any)?.__originalWidth === 'number'
+        ? (priceBg as any).__originalWidth
+        : (priceBg?.width || 200);
+    const originalH = typeof (priceBg as any)?.__originalHeight === 'number'
+        ? (priceBg as any).__originalHeight
+        : (priceBg?.height || 46);
+
+    // Calculate target size based on card dimensions
+    const maxPillW = cardW * 0.96;
+    const maxPillH = cardH * 0.28;
+    const minPillH = Math.max(36, cardH * 0.12);
+
+    // Calculate scale factors to fit within bounds
+    const scaleByWidth = maxPillW / originalW;
+    const scaleByHeight = maxPillH / originalH;
+    let scale = Math.min(scaleByWidth, scaleByHeight);
+
+    // Ensure minimum height
+    const scaledH = originalH * scale;
+    if (scaledH < minPillH) {
+        scale = minPillH / originalH;
+    }
+
+    // Clamp scale to reasonable limits
+    scale = clamp(scale, 0.3, 3);
+
+    // Apply scale to priceBg
+    const newW = originalW * scale;
+    const newH = originalH * scale;
+
+    // Get roundness from metadata or default to 1 (fully rounded)
+    const roundness = clamp(
+        typeof (priceBg as any)?.__roundness === 'number' ? (priceBg as any).__roundness : 1,
+        0,
+        1
+    );
+    const radius = (newH / 2) * roundness;
+
+    priceBg.set({
+        width: newW,
+        height: newH,
+        rx: radius,
+        ry: radius,
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: 0
+    });
+
+    // Scale stroke proportionally
+    const originalStrokeW = typeof (priceBg as any)?.__strokeWidth === 'number'
+        ? (priceBg as any).__strokeWidth
+        : null;
+    if (originalStrokeW !== null) {
+        priceBg.set({ strokeWidth: originalStrokeW * scale });
+    }
+
+    // Scale shadow blur proportionally
+    if (fabric?.Shadow && priceBg.shadow) {
+        const originalBlur = typeof (priceBg as any)?.__shadowBlur === 'number'
+            ? (priceBg as any).____shadowBlur
+            : 15;
+        const shadow = priceBg.shadow;
+        shadow.blur = Math.max(2, originalBlur * scale);
+    }
+
+    // Handle background image
+    if (priceBgImage && priceBgImage.type === 'image') {
+        const img: any = priceBgImage;
+        img.set({
+            originX: 'center',
+            originY: 'center',
+            left: 0,
+            top: 0
+        });
+
+        const el: any = img._originalElement || img._element;
+        const iw = el?.naturalWidth || el?.width || img.width || 0;
+        const ih = el?.naturalHeight || el?.height || img.height || 0;
+
+        if (iw > 0 && ih > 0) {
+            img.set({ cropX: 0, cropY: 0, width: iw, height: ih });
+            const imgScale = Math.max(newW / iw, newH / ih);
+            if (Number.isFinite(imgScale) && imgScale > 0) {
+                const cropW = Math.min(iw, newW / imgScale);
+                const cropH = Math.min(ih, newH / imgScale);
+                const cropX = Math.max(0, (iw - cropW) / 2);
+                const cropY = Math.max(0, (ih - cropH) / 2);
+                img.set({ cropX, cropY, width: cropW, height: cropH, scaleX: imgScale, scaleY: imgScale });
+            }
+        }
+
+        // Clip to pill shape
+        if (fabric?.Rect) {
+            const clip = new fabric.Rect({
+                width: newW,
+                height: newH,
+                rx: radius,
+                ry: radius,
+                originX: 'center',
+                originY: 'center',
+                left: 0,
+                top: 0
+            });
+            img.set({ clipPath: clip });
+        }
+
+        if (typeof priceBg.fill === 'string' && priceBg.fill !== 'transparent') {
+            priceBg.set('fill', 'transparent');
+        }
+        if (typeof img.sendToBack === 'function') img.sendToBack();
+    }
+
+    // Scale all text elements proportionally
+    all.forEach((obj: any) => {
+        if (!obj || obj.type !== 'text') return;
+
+        // Get original font size from metadata or current value
+        const originalFontSize = typeof obj.__originalFontSize === 'number'
+            ? obj.__originalFontSize
+            : (obj.fontSize || 14);
+
+        // Get original position from metadata
+        const originalLeft = typeof obj.__originalLeft === 'number' ? obj.__originalLeft : obj.left;
+        const originalTop = typeof obj.__originalTop === 'number' ? obj.__originalTop : obj.top;
+        const originalOriginX = obj.__originalOriginX || obj.originX || 'center';
+        const originalOriginY = obj.__originalOriginY || obj.originY || 'center';
+
+        // Get original fontFamily from metadata or current value
+        const originalFontFamily = typeof obj.__originalFontFamily === 'string'
+            ? obj.__originalFontFamily
+            : obj.fontFamily;
+
+        console.log('[layoutCustomPriceGroup] Text element:', {
+            name: obj.name,
+            originalFontFamily,
+            fontFamily: obj.fontFamily,
+            fontSize: obj.fontSize,
+            scaledFontSize: originalFontSize * scale
+        });
+
+        // Apply scaled values - explicitly preserve fontFamily
+        obj.set({
+            fontFamily: originalFontFamily || undefined, // Preserve the font family
+            fontSize: originalFontSize * scale,
+            left: (typeof originalLeft === 'number' ? originalLeft * scale : originalLeft),
+            top: (typeof originalTop === 'number' ? originalTop * scale : originalTop),
+            originX: originalOriginX,
+            originY: originalOriginY,
+            scaleX: 1,
+            scaleY: 1,
+            strokeWidth: (obj.strokeWidth || 0) * scale
+        });
+
+        if (typeof obj.initDimensions === 'function') obj.initDimensions();
+    });
+
+    // Scale all other objects (circles, rects, etc.)
+    all.forEach((obj: any) => {
+        if (!obj || obj.type === 'text') return;
+        if (obj.name === 'price_bg' || obj.name === 'price_bg_image' || obj.name === 'splash_image') return;
+
+        // Get original dimensions
+        const originalLeft = typeof obj.__originalLeft === 'number' ? obj.__originalLeft : obj.left;
+        const originalTop = typeof obj.__originalTop === 'number' ? obj.__originalTop : obj.top;
+        const originalScaleX = typeof obj.__originalScaleX === 'number' ? obj.__originalScaleX : 1;
+        const originalScaleY = typeof obj.__originalScaleY === 'number' ? obj.__originalScaleY : 1;
+
+        obj.set({
+            left: (typeof originalLeft === 'number' ? originalLeft * scale : originalLeft),
+            top: (typeof originalTop === 'number' ? originalTop * scale : originalTop),
+            scaleX: originalScaleX * scale,
+            scaleY: originalScaleY * scale
+        });
+
+        // For circles, also scale radius
+        if (obj.type === 'circle' && typeof obj.__originalRadius === 'number') {
+            obj.set({ radius: obj.__originalRadius * scale });
+        }
+        // For rects, also scale width/height if they have original values stored
+        if (obj.type === 'rect') {
+            if (typeof obj.__originalWidth === 'number') {
+                obj.set({ width: obj.__originalWidth * scale });
+            }
+            if (typeof obj.__originalHeight === 'number') {
+                obj.set({ height: obj.__originalHeight * scale });
+            }
+            if (typeof obj.__originalRx === 'number') {
+                obj.set({ rx: obj.__originalRx * scale });
+            }
+            if (typeof obj.__originalRy === 'number') {
+                obj.set({ ry: obj.__originalRy * scale });
+            }
+        }
+    });
+
+    safeAddWithUpdate(priceGroup);
+    return { pillW: newW, pillH: newH };
+}
+
+
 function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     console.log('🔍 [layoutPriceGroup] CALLED', { hasPriceGroup: !!priceGroup, hasGetObjects: !!priceGroup?.getObjects, cardW, cardH });
     if (!priceGroup || !priceGroup.getObjects) {
@@ -13741,22 +13956,37 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         console.log('🔍 [layoutPriceGroup] Atacarejo check error:', e);
         // fall through to legacy layout
     }
-    
+
     const all = priceGroup.getObjects();
     console.log('🔍 [layoutPriceGroup] Objects in priceGroup:', all.length, all.map((o: any) => o?.name || 'unnamed'));
-    
+
     const priceBg = all.find((o: any) => o.name === 'price_bg');
     const priceBgImage = all.find((o: any) => o.name === 'price_bg_image' || o.name === 'splash_image');
     const currencyCircle = all.find((o: any) => o.name === 'price_currency_bg' || o.name === 'priceSymbolBg');
     const currencyTextPrimary = all.find((o: any) => o.name === 'price_currency_text');
     const currencyTextLegacy = all.find((o: any) => o.name === 'priceSymbol' || o.name === 'price_currency');
     const currencyText = currencyTextPrimary || currencyTextLegacy;
-
     const priceText = all.find((o: any) => o.name === 'price_value_text' || o.name === 'smart_price');
     const priceInteger = all.find((o: any) => o.name === 'price_integer_text' || o.name === 'priceInteger' || o.name === 'price_integer');
     const priceDecimal = all.find((o: any) => o.name === 'price_decimal_text' || o.name === 'priceDecimal' || o.name === 'price_decimal');
     const priceUnit = all.find((o: any) => o.name === 'price_unit_text' || o.name === 'priceUnit' || o.name === 'price_unit');
-    
+
+    // Check if this has the standard template structure (price_bg + currencyCircle + currencyText + price texts)
+    const hasStandardStructure = !!(priceBg && currencyCircle && currencyText &&
+                                   (priceText || (priceInteger && priceDecimal)));
+
+    // Check if this is a custom template:
+    // - Explicitly marked as custom, OR
+    // - Does NOT have standard structure BUT has __originalWidth metadata
+    const isCustomTemplate = (priceGroup as any).__isCustomTemplate === true ||
+                            (!hasStandardStructure && priceBg && typeof (priceBg as any).__originalWidth === 'number');
+
+    // For custom templates, use proportional scaling to preserve original design
+    if (isCustomTemplate && priceBg) {
+        console.log('🔍 [layoutPriceGroup] Using custom template layout (standard structure:', hasStandardStructure, ')');
+        return layoutCustomPriceGroup(priceGroup, cardW, cardH);
+    }
+
     console.log('🔍 [layoutPriceGroup] Found elements:', { priceBg: !!priceBg, currencyCircle: !!currencyCircle, currencyText: !!currencyText, priceText: !!priceText, priceInteger: !!priceInteger, priceDecimal: !!priceDecimal });
     
     if (!priceBg || !currencyCircle || !currencyText) {
@@ -14176,6 +14406,68 @@ function serializePriceGroupForTemplate(pg: any) {
     safeAddWithUpdate(pg);
     delete j.layoutManager;
     delete j.layout;
+
+    // Mark this as a custom template and store original dimensions for proportional scaling
+    (j as any).__isCustomTemplate = true;
+
+    // Store original values on each object for proportional scaling
+    if (Array.isArray(j.objects)) {
+        j.objects.forEach((obj: any) => {
+            if (!obj) return;
+
+            // Store original position
+            obj.__originalLeft = obj.left;
+            obj.__originalTop = obj.top;
+            obj.__originalOriginX = obj.originX;
+            obj.__originalOriginY = obj.originY;
+            obj.__originalScaleX = obj.scaleX || 1;
+            obj.__originalScaleY = obj.scaleY || 1;
+
+            // For text objects, store original font size and font family
+            if (obj.type === 'text') {
+                if (typeof obj.fontSize === 'number') {
+                    obj.__originalFontSize = obj.fontSize;
+                }
+                if (typeof obj.fontFamily === 'string') {
+                    obj.__originalFontFamily = obj.fontFamily;
+                }
+            }
+
+            // For circles, store original radius
+            if (obj.type === 'circle' && typeof obj.radius === 'number') {
+                obj.__originalRadius = obj.radius;
+            }
+
+            // For rects, store original dimensions and radius
+            if (obj.type === 'rect') {
+                if (typeof obj.width === 'number') obj.__originalWidth = obj.width;
+                if (typeof obj.height === 'number') obj.__originalHeight = obj.height;
+                if (typeof obj.rx === 'number') obj.__originalRx = obj.rx;
+                if (typeof obj.ry === 'number') obj.__originalRy = obj.ry;
+
+                // For price_bg, store special metadata
+                if (obj.name === 'price_bg') {
+                    obj.__originalWidth = obj.width;
+                    obj.__originalHeight = obj.height;
+                    obj.__roundness = typeof obj.rx === 'number' && obj.height > 0
+                        ? (obj.rx * 2) / obj.height
+                        : 1;
+                    if (typeof obj.strokeWidth === 'number') {
+                        obj.__strokeWidth = obj.strokeWidth;
+                    }
+                    if (obj.shadow && typeof obj.shadow.blur === 'number') {
+                        obj.__shadowBlur = obj.shadow.blur;
+                    }
+                }
+            }
+
+            // Store original stroke width
+            if (typeof obj.strokeWidth === 'number') {
+                obj.__originalStrokeWidth = obj.strokeWidth;
+            }
+        });
+    }
+
     return j;
 }
 

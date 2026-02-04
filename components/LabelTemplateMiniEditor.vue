@@ -516,14 +516,6 @@ const isCircle = computed(() => {
   return false
 })
 
-const isEllipse = computed(() => {
-  if (selectedObj.value?.type === 'ellipse') return true
-  if (isPriceGroupSelected.value || isSplashImageSelected.value) {
-    return findObjectByNameDeep(group, 'price_bg')?.type === 'ellipse'
-  }
-  return false
-})
-
 const isImage = computed(() => selectedObj.value?.type === 'image')
 
 const currentFontWeight = computed(() => {
@@ -866,310 +858,283 @@ watch(
 </script>
 
 <template>
-  <div class="mini-editor-container">
+  <div class="me-container">
     <input ref="imageInputEl" type="file" class="hidden" accept="image/*" @change="onAddImage" />
     <input ref="replaceImageInputEl" type="file" class="hidden" accept="image/*" @change="replaceSelectedImage" />
 
     <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-linear-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
+    <div class="me-header">
+      <div class="me-header-left">
+        <div class="me-icon-wrapper">
+          <svg class="me-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
         </div>
-        <div>
-          <h3 class="text-sm font-semibold text-white">Editor de Etiqueta</h3>
-          <p class="text-[10px] text-zinc-500">Customize cores, fontes e posições</p>
+        <div class="me-header-info">
+          <h3 class="me-title">Editor de Etiqueta</h3>
+          <p class="me-subtitle">Personalize cores, fontes e layout</p>
         </div>
       </div>
-      <button 
-        class="p-2 rounded-lg hover:bg-white/5 text-zinc-400 hover:text-white transition-colors"
-        @click="emit('close')"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <button class="me-close" @click="emit('close')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
-      <!-- Left Panel - Canvas Preview -->
-      <div class="lg:col-span-3 space-y-3">
-        <!-- Template Name -->
-        <div class="flex items-center gap-2">
+    <div class="me-grid">
+      <!-- Left Panel - Canvas -->
+      <div class="me-main-panel">
+        <!-- Template Name Input -->
+        <div class="me-name-input">
+          <svg class="me-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
           <input
             v-model="editorName"
-            class="flex-1 bg-zinc-900/50 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-colors"
+            class="me-input-field"
             placeholder="Nome do modelo..."
           />
         </div>
 
         <!-- Toolbar -->
-        <div class="flex items-center gap-1 p-1.5 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
-          <button 
-            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:bg-white/5 hover:text-white transition-all"
-            @click="addText"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
-            </svg>
-            Texto
-          </button>
-          <button 
-            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:bg-white/5 hover:text-white transition-all"
-            @click="addRect"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
-            </svg>
-            Retângulo
-          </button>
-          <button 
-            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:bg-white/5 hover:text-white transition-all"
-            @click="addCircle"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="9" stroke-width="2" />
-            </svg>
-            Círculo
-          </button>
-          <button 
-            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:bg-white/5 hover:text-white transition-all"
-            @click="openAddImage"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            Imagem
-          </button>
-          
-          <div class="w-px h-6 bg-zinc-700 mx-1"></div>
-          
-          <button 
-            class="p-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-            :disabled="!selectedObj || selectedObj === group"
-            @click="moveLayer(-1)"
-            title="Mover para trás"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
-          </button>
-          <button 
-            class="p-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-            :disabled="!selectedObj || selectedObj === group"
-            @click="moveLayer(1)"
-            title="Mover para frente"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-            </svg>
-          </button>
-          
-          <div class="flex-1"></div>
-          
-          <button 
-            class="p-2 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-            :disabled="!selectedObj || selectedObj === group"
-            @click="deleteSelected"
-            title="Excluir elemento"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
+        <div class="me-toolbar">
+          <div class="me-toolbar-group">
+            <button class="me-tool-btn" @click="addText" title="Adicionar texto">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+              </svg>
+              <span>Texto</span>
+            </button>
+            <button class="me-tool-btn" @click="addRect" title="Adicionar retângulo">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+              </svg>
+              <span>Rect</span>
+            </button>
+            <button class="me-tool-btn" @click="addCircle" title="Adicionar círculo">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" stroke-width="2" />
+              </svg>
+              <span>Círc</span>
+            </button>
+            <button class="me-tool-btn" @click="openAddImage" title="Adicionar imagem">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span>Img</span>
+            </button>
+          </div>
+
+          <div class="me-toolbar-divider"></div>
+
+          <div class="me-toolbar-group">
+            <button
+              class="me-tool-btn"
+              :class="{ 'me-tool-btn--disabled': !selectedObj || selectedObj === group }"
+              :disabled="!selectedObj || selectedObj === group"
+              @click="moveLayer(-1)"
+              title="Enviar para trás"
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            </button>
+            <button
+              class="me-tool-btn"
+              :class="{ 'me-tool-btn--disabled': !selectedObj || selectedObj === group }"
+              :disabled="!selectedObj || selectedObj === group"
+              @click="moveLayer(1)"
+              title="Trazer para frente"
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              </svg>
+            </button>
+            <button
+              class="me-tool-btn me-tool-btn--danger"
+              :class="{ 'me-tool-btn--disabled': !selectedObj || selectedObj === group }"
+              :disabled="!selectedObj || selectedObj === group"
+              @click="deleteSelected"
+              title="Excluir elemento"
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <!-- Canvas Viewport -->
-        <div 
-          ref="viewportEl" 
-          class="mini-editor-viewport relative rounded-xl border border-zinc-800/50 bg-zinc-950/80 overflow-hidden"
-          style="height: 280px;"
-        >
-          <canvas ref="canvasEl" class="w-full h-full block" />
-          
-          <!-- Zoom indicator -->
-          <div class="absolute bottom-3 left-3 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] text-zinc-400 font-mono">
-            {{ zoomPct }}%
-          </div>
+        <div ref="viewportEl" class="me-viewport">
+          <canvas ref="canvasEl" />
+          <div class="me-zoom-badge">{{ zoomPct }}%</div>
         </div>
 
         <!-- Bottom Controls -->
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2">
-            <button 
-              class="px-3 py-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-xs text-zinc-300 transition-colors"
-              @click="fitToViewport()"
-            >
-              <span class="flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                </svg>
-                Centralizar
-              </span>
-            </button>
-            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800/50">
-              <svg class="w-3.5 h-3.5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+        <div class="me-bottom-controls">
+          <div class="me-controls-left">
+            <button class="me-control-btn" @click="fitToViewport()">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
               </svg>
-              <input 
-                type="range" 
-                min="50" 
-                max="200" 
-                :value="zoomPct" 
-                class="w-24 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" 
-                @input="setZoom(Number(($event.target as HTMLInputElement).value))" 
+              Centralizar
+            </button>
+            <div class="me-zoom-control">
+              <svg class="me-zoom-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="range"
+                min="50"
+                max="200"
+                :value="zoomPct"
+                class="me-zoom-slider"
+                @input="setZoom(Number(($event.target as HTMLInputElement).value))"
               />
             </div>
           </div>
-          
-          <button
-            class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-sm font-semibold text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20"
-            :disabled="isSaving"
-            @click="save"
-          >
-            <svg v-if="!isSaving" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+          <button class="me-save-btn" :disabled="isSaving" @click="save">
+            <svg v-if="!isSaving" class="me-save-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
             </svg>
-            <svg v-else class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <svg v-else class="me-save-icon me-save-icon--spinning" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
             </svg>
-            {{ isSaving ? 'Salvando...' : 'Salvar Alterações' }}
+            {{ isSaving ? 'Salvando...' : 'Salvar' }}
           </button>
         </div>
-        
-        <div v-if="saveError" class="text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2 border border-red-500/20">
+
+        <div v-if="saveError" class="me-error-msg">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
           {{ saveError }}
         </div>
       </div>
 
       <!-- Right Panel - Properties -->
-      <div class="lg:col-span-2 space-y-3 max-h-130 overflow-y-auto pr-1 custom-scrollbar">
-        <!-- No Selection -->
-        <div v-if="!selectedObj" class="p-4 rounded-xl border border-zinc-800/50 bg-zinc-900/30">
-          <div class="text-center py-8">
-            <div class="w-14 h-14 rounded-2xl bg-zinc-800/50 flex items-center justify-center mx-auto mb-3">
-              <svg class="w-7 h-7 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-              </svg>
-            </div>
-            <p class="text-sm text-zinc-400 font-medium">Selecione um elemento</p>
-            <p class="text-[10px] text-zinc-600 mt-1">Clique em um item da etiqueta para editar</p>
+      <div class="me-props-panel custom-scrollbar">
+        <!-- No Selection State -->
+        <div v-if="!selectedObj" class="me-empty-state">
+          <div class="me-empty-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+            </svg>
           </div>
+          <p class="me-empty-title">Selecione um elemento</p>
+          <p class="me-empty-text">Clique em um item da etiqueta para editar suas propriedades</p>
         </div>
 
-        <div v-else class="space-y-3">
+        <div v-else class="me-props-content">
           <!-- Selection Header -->
-          <div class="p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                <span class="text-amber-400 text-lg font-bold">{{ (selectedObj.type || 'O').charAt(0).toUpperCase() }}</span>
-              </div>
-              <div class="flex-1 min-w-0">
-                <input
-                  class="w-full bg-transparent text-sm font-semibold text-white focus:outline-none placeholder-zinc-500"
-                  :value="current('name', '')"
-                  placeholder="Nome do elemento"
-                  @input="patch('name', ($event.target as HTMLInputElement).value)"
-                />
-                <p class="text-[10px] text-zinc-500 capitalize">{{ selectedObj.type || 'objeto' }}</p>
-              </div>
+          <div class="me-selection-header">
+            <div class="me-type-badge">
+              {{ (selectedObj.type || 'O').charAt(0).toUpperCase() }}
+            </div>
+            <div class="me-selection-info">
+              <input
+                class="me-selection-name"
+                :value="current('name', '')"
+                placeholder="Nome do elemento"
+                @input="patch('name', ($event.target as HTMLInputElement).value)"
+              />
+              <span class="me-selection-type">{{ selectedObj.type || 'objeto' }}</span>
             </div>
           </div>
 
           <!-- Transform Section -->
-          <div class="p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30 space-y-3">
-            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="me-props-section">
+            <div class="me-props-section-title">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
               </svg>
               Transformação
             </div>
-            <div class="grid grid-cols-4 gap-2">
-              <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">X</label>
-                <input 
-                  type="number" 
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="Math.round(current('left', 0))" 
-                  @input="patch('left', Number(($event.target as HTMLInputElement).value))" 
+            <div class="me-props-grid me-props-grid--4">
+              <div class="me-prop-item">
+                <label class="me-prop-label">X</label>
+                <input
+                  type="number"
+                  class="me-prop-input"
+                  :value="Math.round(current('left', 0))"
+                  @input="patch('left', Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
-              <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Y</label>
-                <input 
-                  type="number" 
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="Math.round(current('top', 0))" 
-                  @input="patch('top', Number(($event.target as HTMLInputElement).value))" 
+              <div class="me-prop-item">
+                <label class="me-prop-label">Y</label>
+                <input
+                  type="number"
+                  class="me-prop-input"
+                  :value="Math.round(current('top', 0))"
+                  @input="patch('top', Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
-              <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Escala X</label>
-                <input 
-                  type="number" 
+              <div class="me-prop-item">
+                <label class="me-prop-label">Esc X</label>
+                <input
+                  type="number"
                   step="0.05"
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="Number(current('scaleX', 1)).toFixed(2)" 
-                  @input="patch('scaleX', Number(($event.target as HTMLInputElement).value))" 
+                  class="me-prop-input"
+                  :value="Number(current('scaleX', 1)).toFixed(2)"
+                  @input="patch('scaleX', Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
-              <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Escala Y</label>
-                <input 
-                  type="number" 
+              <div class="me-prop-item">
+                <label class="me-prop-label">Esc Y</label>
+                <input
+                  type="number"
                   step="0.05"
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="Number(current('scaleY', 1)).toFixed(2)" 
-                  @input="patch('scaleY', Number(($event.target as HTMLInputElement).value))" 
+                  class="me-prop-input"
+                  :value="Number(current('scaleY', 1)).toFixed(2)"
+                  @input="patch('scaleY', Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
             </div>
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Rotação</label>
-                <div class="flex items-center gap-1">
-                  <input 
-                    type="number" 
-                    class="flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                    :value="Math.round(current('angle', 0))" 
-                    @input="patch('angle', Number(($event.target as HTMLInputElement).value))" 
+            <div class="me-props-grid me-props-grid--2">
+              <div class="me-prop-item">
+                <label class="me-prop-label">Rotação</label>
+                <div class="me-prop-input-with-unit">
+                  <input
+                    type="number"
+                    class="me-prop-input me-prop-input--compact"
+                    :value="Math.round(current('angle', 0))"
+                    @input="patch('angle', Number(($event.target as HTMLInputElement).value))"
                   />
-                  <span class="text-[10px] text-zinc-500">°</span>
+                  <span class="me-prop-unit">°</span>
                 </div>
               </div>
-              <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Opacidade</label>
-                <div class="flex items-center gap-2 h-7">
-                  <input 
+              <div class="me-prop-item">
+                <label class="me-prop-label">Opacidade</label>
+                <div class="me-opacity-control">
+                  <input
                     type="range"
-                    min="0" 
-                    max="1" 
+                    min="0"
+                    max="1"
                     step="0.05"
-                    class="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer" 
-                    :value="Number(current('opacity', 1))" 
-                    @input="patch('opacity', parseFloat(($event.target as HTMLInputElement).value))" 
+                    :value="Number(current('opacity', 1))"
+                    @input="patch('opacity', parseFloat(($event.target as HTMLInputElement).value))"
                   />
-                  <span class="text-[10px] text-zinc-400 w-10 text-right tabular-nums">{{ Math.round(Number(current('opacity', 1)) * 100) }}%</span>
+                  <span class="me-opacity-value">{{ Math.round(Number(current('opacity', 1)) * 100) }}%</span>
                 </div>
               </div>
             </div>
-            <label class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer">
-              <span class="text-xs text-zinc-300">Visível</span>
-              <input 
-                type="checkbox" 
-                class="w-4 h-4 rounded bg-zinc-800 border-zinc-600 text-amber-500 focus:ring-amber-500/20 cursor-pointer" 
-                :checked="!!current('visible', true)" 
-                @change="patch('visible', ($event.target as HTMLInputElement).checked)" 
+            <label class="me-checkbox-row">
+              <span>Visível</span>
+              <input
+                type="checkbox"
+                class="me-checkbox"
+                :checked="!!current('visible', true)"
+                @change="patch('visible', ($event.target as HTMLInputElement).checked)"
               />
             </label>
           </div>
 
           <!-- Text Properties -->
-          <div v-if="isText" class="p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30 space-y-3">
-            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+          <div v-if="isText" class="me-text-props">
+            <div class="me-props-subsection-title">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
               </svg>
@@ -1177,22 +1142,22 @@ watch(
             </div>
             
             <div>
-              <label class="text-[10px] text-zinc-500 mb-1 block">Conteúdo</label>
-              <input 
-                class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                :value="current('text', '')" 
-                @input="patch('text', ($event.target as HTMLInputElement).value)" 
+              <label class="me-prop-label">Conteúdo</label>
+              <input
+                class="me-text-input"
+                :value="current('text', '')"
+                @input="patch('text', ($event.target as HTMLInputElement).value)"
               />
             </div>
-            
-            <div v-if="isUnitText" class="text-[10px] text-amber-400/80 bg-amber-500/10 rounded-lg px-2 py-1.5">
+
+            <div v-if="isUnitText" class="me-hint-box">
               💡 Use para gramatura/unidade (ex: 1KG, 900ML, UN)
             </div>
-            
+
             <div>
-              <label class="text-[10px] text-zinc-500 mb-1 block">Fonte</label>
+              <label class="me-prop-label">Fonte</label>
               <select
-                class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50"
+                class="me-select-input"
                 :value="current('fontFamily', '')"
                 @change="patch('fontFamily', ($event.target as HTMLSelectElement).value)"
                   >
@@ -1200,21 +1165,21 @@ watch(
                 <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
               </select>
             </div>
-            
-            <div class="grid grid-cols-2 gap-2">
+
+            <div class="me-grid-2">
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Tamanho</label>
-                <input 
-                  type="number" 
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="Math.round(current('fontSize', 20))" 
-                  @input="patch('fontSize', Number(($event.target as HTMLInputElement).value))" 
+                <label class="me-prop-label">Tamanho</label>
+                <input
+                  type="number"
+                  class="me-text-input"
+                  :value="Math.round(current('fontSize', 20))"
+                  @input="patch('fontSize', Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Peso</label>
+                <label class="me-prop-label">Peso</label>
                 <select
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50"
+                  class="me-select-input"
                   :value="String(currentFontWeight)"
                   @change="patch('fontWeight', Number(($event.target as HTMLSelectElement).value))"
                 >
@@ -1222,21 +1187,21 @@ watch(
                 </select>
               </div>
             </div>
-            
+
             <div>
-              <label class="text-[10px] text-zinc-500 mb-1 block">Cor do Texto</label>
-              <div class="flex items-center gap-2">
-                <div 
+              <label class="me-prop-label">Cor do Texto</label>
+              <div class="me-color-picker-group">
+                <div
                   ref="fillColorTrigger"
-                  class="w-8 h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden shadow-inner shrink-0"
+                  class="me-fill-swatch"
                   :style="{ backgroundColor: current('fill', '#ffffff') }"
                   @click="showFillColorPicker = true"
                 ></div>
-                <input 
-                  class="flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white font-mono uppercase focus:outline-none focus:border-amber-500/50" 
-                  :value="String(current('fill', '#ffffff')).replace('#', '').toUpperCase()" 
+                <input
+                  class="me-color-hex-input"
+                  :value="String(current('fill', '#ffffff')).replace('#', '').toUpperCase()"
                   maxlength="6"
-                  @input="patch('fill', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))" 
+                  @input="patch('fill', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
                 />
                 <ColorPicker
                   :show="showFillColorPicker"
@@ -1248,12 +1213,12 @@ watch(
               </div>
             </div>
 
-            <div class="grid grid-cols-3 gap-2">
+            <div class="me-grid-3">
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Alinhamento</label>
-                <select 
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="current('textAlign', 'left')" 
+                <label class="me-prop-label">Alinhamento</label>
+                <select
+                  class="me-select-input"
+                  :value="current('textAlign', 'left')"
                   @change="patch('textAlign', ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="left">Esq</option>
@@ -1263,10 +1228,10 @@ watch(
                 </select>
               </div>
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Estilo</label>
-                <select 
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="current('fontStyle', 'normal')" 
+                <label class="me-prop-label">Estilo</label>
+                <select
+                  class="me-select-input"
+                  :value="current('fontStyle', 'normal')"
                   @change="patch('fontStyle', ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="normal">Normal</option>
@@ -1274,10 +1239,10 @@ watch(
                 </select>
               </div>
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Caixa</label>
-                <select 
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="currentTextCase" 
+                <label class="me-prop-label">Caixa</label>
+                <select
+                  class="me-select-input"
+                  :value="currentTextCase"
                   @change="setTextCase(($event.target as HTMLSelectElement).value as any)"
                 >
                   <option value="none">Auto</option>
@@ -1287,64 +1252,64 @@ watch(
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
+            <div class="me-grid-2">
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Altura Linha</label>
-                <input 
-                  type="number" 
+                <label class="me-prop-label">Altura Linha</label>
+                <input
+                  type="number"
                   step="0.1"
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="Number(current('lineHeight', 1)).toFixed(1)" 
-                  @input="patch('lineHeight', Number(($event.target as HTMLInputElement).value))" 
+                  class="me-text-input"
+                  :value="Number(current('lineHeight', 1)).toFixed(1)"
+                  @input="patch('lineHeight', Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Espaçamento</label>
-                <input 
-                  type="number" 
+                <label class="me-prop-label">Espaçamento</label>
+                <input
+                  type="number"
                   step="10"
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="Math.round(currentNumber('charSpacing', 0))" 
-                  @input="patch('charSpacing', Number(($event.target as HTMLInputElement).value))" 
+                  class="me-text-input"
+                  :value="Math.round(currentNumber('charSpacing', 0))"
+                  @input="patch('charSpacing', Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
             </div>
 
-            <div class="flex items-center gap-4 p-2 rounded-lg bg-zinc-800/30">
-              <label class="flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  class="w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-600 text-amber-500 cursor-pointer" 
-                  :checked="!!current('underline', false)" 
-                  @change="patch('underline', ($event.target as HTMLInputElement).checked)" 
+            <div class="me-checkbox-group">
+              <label class="me-checkbox-label">
+                <input
+                  type="checkbox"
+                  class="me-small-checkbox"
+                  :checked="!!current('underline', false)"
+                  @change="patch('underline', ($event.target as HTMLInputElement).checked)"
                 />
                 Sublinhado
               </label>
-              <label class="flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  class="w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-600 text-amber-500 cursor-pointer" 
-                  :checked="!!current('linethrough', false)" 
-                  @change="patch('linethrough', ($event.target as HTMLInputElement).checked)" 
+              <label class="me-checkbox-label">
+                <input
+                  type="checkbox"
+                  class="me-small-checkbox"
+                  :checked="!!current('linethrough', false)"
+                  @change="patch('linethrough', ($event.target as HTMLInputElement).checked)"
                 />
                 Riscado
               </label>
             </div>
 
             <!-- Text Stroke -->
-            <div class="pt-3 border-t border-zinc-800/50 space-y-2">
-              <div class="text-[10px] font-semibold text-zinc-400 flex items-center gap-1.5">
+            <div class="me-stroke-section">
+              <div class="me-stroke-header">
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 Contorno
               </div>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="me-grid-2">
                 <div>
-                  <label class="text-[10px] text-zinc-500 mb-1 block">Cor</label>
-                  <div 
+                  <label class="me-prop-label">Cor</label>
+                  <div
                     ref="textStrokeColorTrigger"
-                    class="w-full h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden"
+                    class="me-stroke-swatch"
                     :style="{ backgroundColor: current('stroke', 'transparent') }"
                     @click="showTextStrokeColorPicker = true"
                   ></div>
@@ -1357,64 +1322,64 @@ watch(
                   />
                 </div>
                 <div>
-                  <label class="text-[10px] text-zinc-500 mb-1 block">Largura</label>
-                  <input 
-                    type="number" 
+                  <label class="me-prop-label">Largura</label>
+                  <input
+                    type="number"
                     step="0.5"
-                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                    :value="Number(current('strokeWidth', 0)).toFixed(1)" 
-                    @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))" 
+                    class="me-text-input"
+                    :value="Number(current('strokeWidth', 0)).toFixed(1)"
+                    @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))"
                   />
                 </div>
               </div>
             </div>
 
             <!-- Decimal special fields -->
-            <div v-if="isDecimalText" class="pt-3 border-t border-amber-500/20 space-y-2">
-              <div class="text-[10px] font-semibold text-amber-400 flex items-center gap-1.5">
+            <div v-if="isDecimalText" class="me-decimal-section">
+              <div class="me-decimal-header">
                 ⚡ Ajustes Automáticos (Centavos)
               </div>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="me-grid-2">
                 <div>
-                  <label class="text-[10px] text-zinc-500 mb-1 block">Escala</label>
-                  <input 
-                    type="number" 
+                  <label class="me-prop-label">Escala</label>
+                  <input
+                    type="number"
                     step="0.01"
-                    class="w-full bg-zinc-800/50 border border-amber-500/30 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                    :value="Number(current('__fontScale', 0.42)).toFixed(2)" 
-                    @input="patchCustom('__fontScale', Number(($event.target as HTMLInputElement).value))" 
+                    class="me-amber-input"
+                    :value="Number(current('__fontScale', 0.42)).toFixed(2)"
+                    @input="patchCustom('__fontScale', Number(($event.target as HTMLInputElement).value))"
                   />
                 </div>
                 <div>
-                  <label class="text-[10px] text-zinc-500 mb-1 block">Offset Y</label>
-                  <input 
-                    type="number" 
+                  <label class="me-prop-label">Offset Y</label>
+                  <input
+                    type="number"
                     step="0.01"
-                    class="w-full bg-zinc-800/50 border border-amber-500/30 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                    :value="Number(current('__yOffsetRatio', -0.18)).toFixed(2)" 
-                    @input="patchCustom('__yOffsetRatio', Number(($event.target as HTMLInputElement).value))" 
+                    class="me-amber-input"
+                    :value="Number(current('__yOffsetRatio', -0.18)).toFixed(2)"
+                    @input="patchCustom('__yOffsetRatio', Number(($event.target as HTMLInputElement).value))"
                   />
                 </div>
               </div>
-              <p class="text-[9px] text-zinc-500">Controla tamanho/altura ao adaptar no card</p>
+              <p class="me-decimal-hint">Controla tamanho/altura ao adaptar no card</p>
             </div>
           </div>
 
           <!-- Shape Properties (Non-text) -->
-          <div v-if="!isText" class="p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30 space-y-3">
-            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+          <div v-if="!isText" class="me-shape-props">
+            <div class="me-shape-props-title">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
               </svg>
               Aparência
             </div>
-            
-            <div class="grid grid-cols-2 gap-2">
+
+            <div class="me-grid-2">
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Preenchimento</label>
-                <div 
+                <label class="me-prop-label">Preenchimento</label>
+                <div
                   ref="fillColorTrigger2"
-                  class="w-full h-9 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden"
+                  class="me-fill-swatch-large"
                   :style="{ backgroundColor: current('fill', '#ffffff') }"
                   @click="showFillColorPicker2 = !showFillColorPicker2"
                 ></div>
@@ -1427,13 +1392,13 @@ watch(
                 />
               </div>
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Contorno</label>
-                <div 
+                <label class="me-prop-label">Contorno</label>
+                <div
                   ref="strokeColorTrigger"
-                  class="w-full h-9 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden checkerboard-bg"
+                  class="me-stroke-swatch-large checkerboard-bg"
                   @click="showStrokeColorPicker = true"
                 >
-                  <div 
+                  <div
                     class="absolute inset-0"
                     :style="{ backgroundColor: current('stroke', null) || 'transparent' }"
                   ></div>
@@ -1449,120 +1414,120 @@ watch(
             </div>
 
             <div>
-              <label class="text-[10px] text-zinc-500 mb-1 block">Largura do Contorno</label>
-              <input 
-                type="number" 
+              <label class="me-prop-label">Largura do Contorno</label>
+              <input
+                type="number"
                 min="0"
                 step="0.5"
-                class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                :value="Number(current('strokeWidth', 0)).toFixed(1)" 
-                @input="(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (!isNaN(v)) patch('strokeWidth', v) }" 
+                class="me-stroke-width-input"
+                :value="Number(current('strokeWidth', 0)).toFixed(1)"
+                @input="(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (!isNaN(v)) patch('strokeWidth', v) }"
               />
             </div>
 
             <!-- Rect specific -->
-            <div v-if="isRect" class="pt-3 border-t border-zinc-800/50 space-y-3">
-              <div class="text-[10px] font-semibold text-zinc-400 flex items-center gap-1.5">
+            <div v-if="isRect" class="me-dimensions-section">
+              <div class="me-dimensions-header">
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
                 </svg>
                 Dimensões
               </div>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="me-grid-2">
                 <div>
-                  <label class="text-[10px] text-zinc-500 mb-1 block">Largura</label>
-                  <input 
-                    type="number" 
-                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                    :value="Math.round(current('width', 0))" 
-                    @input="patch('width', Number(($event.target as HTMLInputElement).value))" 
+                  <label class="me-prop-label">Largura</label>
+                  <input
+                    type="number"
+                    class="me-text-input"
+                    :value="Math.round(current('width', 0))"
+                    @input="patch('width', Number(($event.target as HTMLInputElement).value))"
                   />
                 </div>
                 <div>
-                  <label class="text-[10px] text-zinc-500 mb-1 block">Altura</label>
-                  <input 
-                    type="number" 
-                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                    :value="Math.round(current('height', 0))" 
-                    @input="patch('height', Number(($event.target as HTMLInputElement).value))" 
+                  <label class="me-prop-label">Altura</label>
+                  <input
+                    type="number"
+                    class="me-text-input"
+                    :value="Math.round(current('height', 0))"
+                    @input="patch('height', Number(($event.target as HTMLInputElement).value))"
                   />
                 </div>
               </div>
-              
+
               <!-- Border Radius Section -->
-              <div class="pt-2 space-y-2">
-                <div class="text-[10px] font-semibold text-zinc-400 flex items-center gap-1.5">
+              <div class="me-border-radius-section">
+                <div class="me-radius-header">
                   <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12V5a1 1 0 011-1h7M20 12v7a1 1 0 01-1 1h-7" />
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8M20 12a8 8 0 01-8 8" />
                   </svg>
                   Arredondamento
                 </div>
-                <div class="grid grid-cols-2 gap-2">
+                <div class="me-grid-2">
                   <div>
-                    <label class="text-[10px] text-zinc-500 mb-1 block">Horizontal</label>
-                    <div class="flex items-center gap-2">
-                      <input 
+                    <label class="me-prop-label">Horizontal</label>
+                    <div class="me-range-group">
+                      <input
                         type="range"
                         min="0"
                         max="100"
-                        class="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                        class="me-range-input"
                         :value="Math.round(current('rx', 0))"
                         @input="patch('rx', Number(($event.target as HTMLInputElement).value))"
                       />
-                      <input 
+                      <input
                         type="number"
                         min="0"
-                        class="w-14 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500/50" 
-                        :value="Math.round(current('rx', 0))" 
-                        @input="patch('rx', Number(($event.target as HTMLInputElement).value))" 
+                        class="me-range-number"
+                        :value="Math.round(current('rx', 0))"
+                        @input="patch('rx', Number(($event.target as HTMLInputElement).value))"
                       />
                     </div>
                   </div>
                   <div>
-                    <label class="text-[10px] text-zinc-500 mb-1 block">Vertical</label>
-                    <div class="flex items-center gap-2">
-                      <input 
+                    <label class="me-prop-label">Vertical</label>
+                    <div class="me-range-group">
+                      <input
                         type="range"
                         min="0"
                         max="100"
-                        class="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                        class="me-range-input"
                         :value="Math.round(current('ry', 0))"
                         @input="patch('ry', Number(($event.target as HTMLInputElement).value))"
                       />
-                      <input 
+                      <input
                         type="number"
                         min="0"
-                        class="w-14 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500/50" 
-                        :value="Math.round(current('ry', 0))" 
-                        @input="patch('ry', Number(($event.target as HTMLInputElement).value))" 
+                        class="me-range-number"
+                        :value="Math.round(current('ry', 0))"
+                        @input="patch('ry', Number(($event.target as HTMLInputElement).value))"
                       />
                     </div>
                   </div>
                 </div>
-                <p class="text-[9px] text-zinc-500">Ajuste para cantos arredondados</p>
+                <p class="me-radius-hint">Ajuste para cantos arredondados</p>
               </div>
             </div>
 
             <!-- Circle specific -->
-            <div v-if="isCircle" class="pt-3 border-t border-zinc-800/50 space-y-2">
-              <div class="text-[10px] font-semibold text-zinc-400">Dimensões</div>
+            <div v-if="isCircle" class="me-circle-section">
+              <div class="me-dimensions-header">Dimensões</div>
               <div>
-                <label class="text-[10px] text-zinc-500 mb-1 block">Raio</label>
-                <input 
-                  type="number" 
-                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                  :value="Math.round(current('radius', 0))" 
-                  @input="patch('radius', Number(($event.target as HTMLInputElement).value))" 
+                <label class="me-prop-label">Raio</label>
+                <input
+                  type="number"
+                  class="me-text-input"
+                  :value="Math.round(current('radius', 0))"
+                  @input="patch('radius', Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
             </div>
 
             <!-- Image specific -->
-            <div v-if="isImage" class="pt-3 border-t border-zinc-800/50 space-y-3">
-              <div class="text-[10px] font-semibold text-zinc-400">Imagem</div>
-              <button 
-                class="w-full px-3 py-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-xs text-zinc-300 transition-colors flex items-center justify-center gap-2"
+            <div v-if="isImage" class="me-image-section">
+              <div class="me-dimensions-header">Imagem</div>
+              <button
+                class="me-replace-image-btn"
                 @click="openReplaceImage"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1570,22 +1535,22 @@ watch(
                 </svg>
                 Trocar Imagem
               </button>
-              <div class="flex items-center gap-4">
-                <label class="flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-600 text-amber-500 cursor-pointer" 
-                    :checked="!!current('flipX', false)" 
-                    @change="patch('flipX', ($event.target as HTMLInputElement).checked)" 
+              <div class="me-image-checkboxes">
+                <label class="me-checkbox-label">
+                  <input
+                    type="checkbox"
+                    class="me-small-checkbox"
+                    :checked="!!current('flipX', false)"
+                    @change="patch('flipX', ($event.target as HTMLInputElement).checked)"
                   />
                   Flip H
                 </label>
-                <label class="flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-600 text-amber-500 cursor-pointer" 
-                    :checked="!!current('flipY', false)" 
-                    @change="patch('flipY', ($event.target as HTMLInputElement).checked)" 
+                <label class="me-checkbox-label">
+                  <input
+                    type="checkbox"
+                    class="me-small-checkbox"
+                    :checked="!!current('flipY', false)"
+                    @change="patch('flipY', ($event.target as HTMLInputElement).checked)"
                   />
                   Flip V
                 </label>
@@ -1594,11 +1559,11 @@ watch(
           </div>
 
           <!-- Help text -->
-          <div class="p-3 rounded-xl bg-amber-500/5 border border-amber-500/10">
-            <p class="text-[10px] text-amber-400/80 leading-relaxed">
-              💡 <strong>Dica:</strong> Use nomes especiais como <code class="bg-black/20 px-1 rounded text-[9px]">price_decimal_text</code>, 
-              <code class="bg-black/20 px-1 rounded text-[9px]">price_unit_text</code>, 
-              <code class="bg-black/20 px-1 rounded text-[9px]">price_integer_text</code> 
+          <div class="me-help-box">
+            <p class="me-help-text">
+              💡 <strong>Dica:</strong> Use nomes especiais como <code class="me-help-code">price_decimal_text</code>,
+              <code class="me-help-code">price_unit_text</code>,
+              <code class="me-help-code">price_integer_text</code>
               para layout automático no card.
             </p>
           </div>
@@ -1609,20 +1574,291 @@ watch(
 </template>
 
 <style scoped>
-.mini-editor-container {
-  padding: 1rem;
+@import "tailwindcss";
+
+/* Container */
+.me-container {
+  @apply flex flex-col h-full p-4;
 }
 
-.mini-editor-viewport :deep(.canvas-container) {
-  width: 100% !important;
-  height: 100% !important;
+/* Header */
+.me-header {
+  @apply flex items-center justify-between pb-4 mb-4 border-b border-white/10;
 }
 
-.mini-editor-viewport :deep(canvas) {
-  max-width: 100%;
-  max-height: 100%;
+.me-header-left {
+  @apply flex items-center gap-3;
 }
 
+.me-icon-wrapper {
+  @apply w-10 h-10 rounded-xl bg-linear-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20;
+}
+
+.me-icon {
+  @apply w-5 h-5 text-white;
+}
+
+.me-header-info {
+  @apply flex flex-col;
+}
+
+.me-title {
+  @apply text-sm font-semibold text-white;
+}
+
+.me-subtitle {
+  @apply text-[10px] text-zinc-500;
+}
+
+.me-close {
+  @apply w-9 h-9 rounded-xl hover:bg-white/5 flex items-center justify-center text-zinc-500 hover:text-white transition-colors;
+}
+
+.me-close svg {
+  @apply w-5 h-5;
+}
+
+/* Grid Layout */
+.me-grid {
+  @apply grid grid-cols-1 lg:grid-cols-5 gap-4 flex-1 min-h-0;
+}
+
+.me-main-panel {
+  @apply lg:col-span-3 flex flex-col gap-3 min-h-0;
+}
+
+/* Name Input */
+.me-name-input {
+  @apply flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 rounded-xl px-3 py-2.5 transition-colors focus-within:border-violet-500/30 focus-within:ring-1 focus-within:ring-violet-500/10;
+}
+
+.me-input-icon {
+  @apply w-4 h-4 text-zinc-500 shrink-0;
+}
+
+.me-input-field {
+  @apply flex-1 bg-transparent text-sm text-white placeholder-zinc-600 focus:outline-none;
+}
+
+/* Toolbar */
+.me-toolbar {
+  @apply flex items-center gap-1 p-1 bg-zinc-900/50 rounded-xl border border-zinc-800/50;
+}
+
+.me-toolbar-group {
+  @apply flex items-center gap-0.5;
+}
+
+.me-toolbar-divider {
+  @apply w-px h-5 bg-zinc-800 mx-1;
+}
+
+.me-tool-btn {
+  @apply flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:bg-white/5 hover:text-white transition-all;
+}
+
+.me-tool-btn svg {
+  @apply w-4 h-4;
+}
+
+.me-tool-btn span {
+  @apply hidden sm:inline;
+}
+
+.me-tool-btn--disabled {
+  @apply opacity-30 cursor-not-allowed;
+}
+
+.me-tool-btn--danger {
+  @apply text-red-400 hover:text-red-300 hover:bg-red-500/10;
+}
+
+/* Viewport */
+.me-viewport {
+  @apply relative rounded-xl border border-zinc-800/50 bg-zinc-950/80 overflow-hidden flex-1 min-h-[240px];
+}
+
+.me-viewport canvas {
+  @apply w-full h-full;
+}
+
+.me-zoom-badge {
+  @apply absolute bottom-3 left-3 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] text-zinc-400 font-mono;
+}
+
+/* Bottom Controls */
+.me-bottom-controls {
+  @apply flex items-center justify-between gap-3;
+}
+
+.me-controls-left {
+  @apply flex items-center gap-2;
+}
+
+.me-control-btn {
+  @apply flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-xs text-zinc-300 transition-colors;
+}
+
+.me-control-btn svg {
+  @apply w-3.5 h-3.5;
+}
+
+.me-zoom-control {
+  @apply flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800/50;
+}
+
+.me-zoom-icon {
+  @apply w-3.5 h-3.5 text-zinc-500 shrink-0;
+}
+
+.me-zoom-slider {
+  @apply w-24 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500;
+}
+
+.me-save-btn {
+  @apply flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-violet-500/20;
+}
+
+.me-save-icon {
+  @apply w-4 h-4;
+}
+
+.me-save-icon--spinning {
+  @apply animate-spin;
+}
+
+/* Error Message */
+.me-error-msg {
+  @apply flex items-center gap-2 px-3 py-2 text-xs text-red-400 bg-red-500/10 rounded-lg border border-red-500/20;
+}
+
+.me-error-msg svg {
+  @apply w-4 h-4 shrink-0;
+}
+
+/* Properties Panel */
+.me-props-panel {
+  @apply lg:col-span-2 overflow-y-auto pr-1 max-h-[520px];
+}
+
+/* Empty State */
+.me-empty-state {
+  @apply flex flex-col items-center justify-center py-12 px-4 text-center;
+}
+
+.me-empty-icon {
+  @apply w-14 h-14 rounded-2xl bg-zinc-900 flex items-center justify-center mb-3;
+}
+
+.me-empty-icon svg {
+  @apply w-7 h-7 text-zinc-700;
+}
+
+.me-empty-title {
+  @apply text-sm font-medium text-zinc-400 mb-1;
+}
+
+.me-empty-text {
+  @apply text-[10px] text-zinc-600 max-w-[180px];
+}
+
+/* Props Content */
+.me-props-content {
+  @apply flex flex-col gap-3;
+}
+
+/* Selection Header */
+.me-selection-header {
+  @apply flex items-center gap-3 p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30;
+}
+
+.me-type-badge {
+  @apply w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0;
+  @apply text-violet-400 text-lg font-bold;
+}
+
+.me-selection-info {
+  @apply flex-1 min-w-0;
+}
+
+.me-selection-name {
+  @apply w-full bg-transparent text-sm font-semibold text-white focus:outline-none placeholder-zinc-500;
+}
+
+.me-selection-type {
+  @apply text-[10px] text-zinc-500 capitalize;
+}
+
+/* Props Section */
+.me-props-section {
+  @apply p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30 space-y-3;
+}
+
+.me-props-section-title {
+  @apply text-[10px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2;
+}
+
+.me-props-section-title svg {
+  @apply w-3.5 h-3.5;
+}
+
+.me-props-grid {
+  @apply grid gap-2;
+}
+
+.me-props-grid--4 {
+  @apply grid-cols-4;
+}
+
+.me-props-grid--2 {
+  @apply grid-cols-2;
+}
+
+.me-prop-item {
+  @apply flex flex-col;
+}
+
+.me-prop-label {
+  @apply text-[10px] text-zinc-500 mb-1;
+}
+
+.me-prop-input {
+  @apply w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 transition-colors;
+}
+
+.me-prop-input--compact {
+  @apply flex-1 rounded-r-none border-r-0;
+}
+
+.me-prop-input-with-unit {
+  @apply flex items-center;
+}
+
+.me-prop-unit {
+  @apply text-[10px] text-zinc-500 px-2;
+}
+
+.me-opacity-control {
+  @apply flex items-center gap-2 h-7 flex-1;
+}
+
+.me-opacity-control input {
+  @apply flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500;
+}
+
+.me-opacity-value {
+  @apply text-[10px] text-zinc-400 w-10 text-right tabular-nums;
+}
+
+.me-checkbox-row {
+  @apply flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors cursor-pointer;
+}
+
+.me-checkbox {
+  @apply w-4 h-4 rounded bg-zinc-800 border-zinc-600 text-violet-500 focus:ring-violet-500/20 cursor-pointer;
+}
+
+/* Custom Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
@@ -1640,7 +1876,7 @@ watch(
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Range input styling */
+/* Range Input Styling */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -1650,12 +1886,12 @@ input[type="range"] {
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: #8b5cf6;
   cursor: pointer;
-  margin-top: -5px;
+  margin-top: -4px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
@@ -1665,20 +1901,186 @@ input[type="range"]::-webkit-slider-runnable-track {
   border-radius: 2px;
 }
 
-/* Checkbox styling */
+/* Checkbox Styling */
 input[type="checkbox"] {
-  accent-color: #f59e0b;
+  accent-color: #8b5cf6;
 }
 
-/* Checkerboard pattern for transparent colors */
+/* Text Properties Section */
+.me-text-props {
+  @apply p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30 space-y-3;
+}
+
+.me-props-subsection-title {
+  @apply text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2;
+}
+
+.me-text-input {
+  @apply w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50;
+}
+
+.me-select-input {
+  @apply w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50;
+}
+
+.me-hint-box {
+  @apply text-[10px] text-amber-400/80 bg-amber-500/10 rounded-lg px-2 py-1.5;
+}
+
+.me-grid-2 {
+  @apply grid grid-cols-2 gap-2;
+}
+
+.me-grid-3 {
+  @apply grid grid-cols-3 gap-2;
+}
+
+.me-color-picker-group {
+  @apply flex items-center gap-2;
+}
+
+.me-color-swatch {
+  @apply w-8 h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden shadow-inner shrink-0;
+}
+
+.me-fill-swatch {
+  @apply w-8 h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden shadow-inner shrink-0;
+}
+
+.me-color-hex-input {
+  @apply flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white font-mono uppercase focus:outline-none focus:border-amber-500/50;
+}
+
+.me-checkbox-group {
+  @apply flex items-center gap-4 p-2 rounded-lg bg-zinc-800/30;
+}
+
+.me-checkbox-label {
+  @apply flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer;
+}
+
+.me-small-checkbox {
+  @apply w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-600 text-amber-500 cursor-pointer;
+}
+
+.me-stroke-section {
+  @apply pt-3 border-t border-zinc-800/50 space-y-2;
+}
+
+.me-stroke-header {
+  @apply text-[10px] font-semibold text-zinc-400 flex items-center gap-1.5;
+}
+
+.me-stroke-swatch {
+  @apply w-full h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden;
+}
+
+.me-decimal-section {
+  @apply pt-3 border-t border-amber-500/20 space-y-2;
+}
+
+.me-decimal-header {
+  @apply text-[10px] font-semibold text-amber-400 flex items-center gap-1.5;
+}
+
+.me-amber-input {
+  @apply w-full bg-zinc-800/50 border border-amber-500/30 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50;
+}
+
+.me-decimal-hint {
+  @apply text-[9px] text-zinc-500;
+}
+
+/* Shape Properties Section */
+.me-shape-props {
+  @apply p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30 space-y-3;
+}
+
+.me-shape-props-title {
+  @apply text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2;
+}
+
+.me-fill-swatch-large {
+  @apply w-full h-9 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden;
+}
+
+.me-stroke-swatch-large {
+  @apply w-full h-9 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden;
+}
+
+.me-stroke-width-input {
+  @apply w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50;
+}
+
+.me-dimensions-section {
+  @apply pt-3 border-t border-zinc-800/50 space-y-3;
+}
+
+.me-dimensions-header {
+  @apply text-[10px] font-semibold text-zinc-400 flex items-center gap-1.5;
+}
+
+.me-border-radius-section {
+  @apply pt-2 space-y-2;
+}
+
+.me-radius-header {
+  @apply text-[10px] font-semibold text-zinc-400 flex items-center gap-1.5;
+}
+
+.me-range-group {
+  @apply flex items-center gap-2;
+}
+
+.me-range-input {
+  @apply flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500;
+}
+
+.me-range-number {
+  @apply w-14 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500/50;
+}
+
+.me-radius-hint {
+  @apply text-[9px] text-zinc-500;
+}
+
+.me-circle-section {
+  @apply pt-3 border-t border-zinc-800/50 space-y-2;
+}
+
+.me-image-section {
+  @apply pt-3 border-t border-zinc-800/50 space-y-3;
+}
+
+.me-replace-image-btn {
+  @apply w-full px-3 py-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-xs text-zinc-300 transition-colors flex items-center justify-center gap-2;
+}
+
+.me-image-checkboxes {
+  @apply flex items-center gap-4;
+}
+
+/* Help Box */
+.me-help-box {
+  @apply p-3 rounded-xl bg-amber-500/5 border border-amber-500/10;
+}
+
+.me-help-text {
+  @apply text-[10px] text-amber-400/80 leading-relaxed;
+}
+
+.me-help-code {
+  @apply bg-black/20 px-1 rounded text-[9px];
+}
+
+/* Checkerboard background for transparent colors */
 .checkerboard-bg {
-  background-image: 
-    linear-gradient(45deg, #444 25%, transparent 25%),
-    linear-gradient(-45deg, #444 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #444 75%),
-    linear-gradient(-45deg, transparent 75%, #444 75%);
+  background-image:
+    linear-gradient(45deg, #3f3f46 25%, transparent 25%),
+    linear-gradient(-45deg, #3f3f46 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #3f3f46 75%),
+    linear-gradient(-45deg, transparent 75%, #3f3f46 75%);
   background-size: 8px 8px;
   background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
-  background-color: #333;
 }
 </style>
