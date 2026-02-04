@@ -108,20 +108,30 @@ async function processLayer(
   tempDir: string,
   depth = 0,
   layerIndex = depth,
-  layerCounter = { value: depth }
+  layerCounter = { value: depth },
+  processedIds = new Set<string>() // Track processed IDs to avoid duplicates
 ): Promise<void> {
-  // Pular camadas ocultas - @webtoon/psd usa isHidden
-  // MAS processar filhos mesmo se o pai estiver oculto (camadas podem estar visíveis dentro de grupo oculto)
-  const isHidden = layer.isHidden || layer.composedOpacity === 0
-
   // Gerar ID único para o objeto usando layerIndex global
   const customId = `${fileId}_layer_${layerIndex}`
+  
+  // Skip if already processed (avoid duplicates)
+  if (processedIds.has(customId)) {
+    console.log(`⚠️ Camada ${layer.name || 'unnamed'} já processada, ignorando duplicata`)
+    return
+  }
+  processedIds.add(customId)
+
+  // Verificar visibilidade - importar TODAS as camadas, mas marcar como invisíveis se necessário
+  // @webtoon/psd usa isHidden e composedOpacity
+  const isHidden = layer.isHidden || layer.composedOpacity === 0
+  const opacity = Math.max(0, Math.min(1, layer.composedOpacity ?? layer.opacity ?? 1))
+  const isVisible = !isHidden && opacity > 0
 
   // DEBUG: Log tipo da camada
   console.log(`🔍 Processando camada: ${layer.name || 'unnamed'} (depth: ${depth}, type: ${layer?.type})`)
   console.log(`   Tem texto? ${!!layer.text}, Tem filhos? ${!!layer.children?.length}`)
   console.log(`   Dimensões: ${layer.width}x${layer.height}, Posição: (${layer.left}, ${layer.top})`)
-  console.log(`   isHidden: ${isHidden}, Opacidade: ${layer.opacity} (${layer.composedOpacity})`)
+  console.log(`   isHidden: ${isHidden}, Opacidade: ${opacity}, Visível: ${isVisible}`)
 
   // Se for um grupo, processar recursivamente e criar um fabric.Group
   if (layer.type === 'Group') {
@@ -133,15 +143,12 @@ async function processLayer(
     if (layer.children && Array.isArray(layer.children)) {
       for (const child of layer.children) {
         const childIndex = ++layerCounter.value
-        await processLayer(child, groupObjects, s3Client, importBucket, userId, fileId, tempDir, depth + 1, childIndex, layerCounter)
+        await processLayer(child, groupObjects, s3Client, importBucket, userId, fileId, tempDir, depth + 1, childIndex, layerCounter, processedIds)
       }
     }
     
-    // Só criar o grupo se tiver objetos filhos e não estiver oculto
-    if (groupObjects.length > 0 && !isHidden) {
-      // Usar opacidade real do grupo
-      const opacity = Math.max(0, Math.min(1, layer.composedOpacity ?? layer.opacity ?? 1))
-      
+    // Criar grupo se tiver objetos filhos (mesmo que invisível)
+    if (groupObjects.length > 0) {
       // Criar objeto de grupo compatível com Fabric.js
       const groupObj = {
         type: 'group',
@@ -168,7 +175,7 @@ async function processLayer(
         flipY: false,
         opacity: opacity,
         shadow: null,
-        visible: true,
+        visible: isVisible,
         backgroundColor: '',
         fillRule: 'nonzero',
         paintFirst: 'fill',
@@ -181,291 +188,300 @@ async function processLayer(
       }
       
       canvasObjects.push(groupObj)
-      console.log(`✅ Grupo criado: ${layer.name} com ${groupObjects.length} objetos, opacity=${opacity}`)
-    } else if (groupObjects.length > 0) {
-      // Se o grupo está oculto mas tem filhos, adicionar os filhos diretamente (flat)
-      // para manter a visibilidade individual
-      console.log(`⚠️ Grupo oculto, adicionando ${groupObjects.length} objetos individualmente`)
-      canvasObjects.push(...groupObjects)
+      console.log(`✅ Grupo criado: ${layer.name} com ${groupObjects.length} objetos, opacity=${opacity}, visible=${isVisible}`)
     }
     
     return // Grupo processado, não continuar
   }
 
-  // Se não for um grupo e não estiver oculto, processar conteúdo (imagem ou texto)
-  if (!isHidden) {
-    // Processar camada que tem imagem (pixel data)
-    // @webtoon/psd usa composite() para obter pixels RGBA
-    if (layer.width > 0 && layer.height > 0) {
-      try {
-        // Extrair imagem da camada como RGBA (Uint8ClampedArray)
-        const rgba = await layer.composite()
-        const imgWidth = layer.width
-        const imgHeight = layer.height
+  // IMPORTANTE: Processar TODAS as camadas, não apenas visíveis
+  // Camadas de texto são prioridade
+  if (layer.text) {
+    try {
+      const textValue = layer.text
+      const textProps = layer.textProperties
 
-        console.log(`Layer ${layer.name}: ${imgWidth}x${imgHeight}, RGBA size: ${rgba.length} bytes`)
+      // Extrair informações de fonte das textProperties
+      let fontSize = 16
+      let fontFamily = 'Arial'
+      let fontWeight = 'normal'
+      let fontStyle = ''
+      let fill = '#000000'
+      let textAlign = 'left'
+      let charSpacing = 0
+      let underline = false
+      let lineHeight = 1.16
+      let textWidth = layer.width || 100
+      let textHeight = layer.height || fontSize * 1.5
+      let baselineShift = 0
 
-        // DEBUG: Analisar pixels para detectar problemas
-        let totalR = 0, totalG = 0, totalB = 0, totalA = 0
-        let transparentPixels = 0, whitePixels = 0
+      if (textProps) {
+        // @webtoon/psd textProperties estrutura
+        if (textProps.documentData) {
+          const docData = textProps.documentData
+          fontSize = docData.fontSize || 16
+          fontFamily = docData.fontFamily || 'Arial'
 
-        for (let i = 0; i < Math.min(rgba.length, 1000); i += 4) {
-          totalR += rgba[i]
-          totalG += rgba[i + 1]
-          totalB += rgba[i + 2]
-          totalA += rgba[i + 3]
+          // Cor do texto
+          if (docData.textColor) {
+            const color = docData.textColor
+            if (color.r !== undefined) {
+              fill = rgbToHex(color.r * 255, color.g * 255, color.b * 255)
+            }
+          }
 
-          if (rgba[i + 3] < 10) transparentPixels++
-          if (rgba[i] > 240 && rgba[i + 1] > 240 && rgba[i + 2] > 240 && rgba[i + 3] > 200) whitePixels++
+          // Alinhamento de texto
+          if (docData.justification) {
+            const justifMap: Record<number, string> = {
+              0: 'left',
+              1: 'right', 
+              2: 'center',
+              3: 'justify'
+            }
+            textAlign = justifMap[docData.justification] || 'left'
+          }
+
+          // Peso da fonte (fauxBold)
+          if (docData.fauxBold) {
+            fontWeight = 'bold'
+          }
+
+          // Estilo itálico (fauxItalic)
+          if (docData.fauxItalic) {
+            fontStyle = 'italic'
+          }
+
+          // Espaçamento entre letras (tracking)
+          // PSD tracking é em 1/1000 de em, converter para pixels
+          if (docData.tracking !== undefined) {
+            charSpacing = (docData.tracking / 1000) * fontSize
+          }
+
+          // Underline
+          if (docData.underline) {
+            underline = true
+          }
+
+          // Line height (leading)
+          if (docData.leading !== undefined && docData.leading > 0) {
+            lineHeight = docData.leading / fontSize
+          }
         }
 
-        const pixelCount = Math.min(rgba.length, 1000) / 4
-        console.log(`   Média RGB: (${Math.round(totalR/pixelCount)}, ${Math.round(totalG/pixelCount)}, ${Math.round(totalB/pixelCount)})`)
-        console.log(`   Média Alpha: ${Math.round(totalA/pixelCount)}`)
-        console.log(`   Pixels transparentes: ${transparentPixels}/${pixelCount}, Pixels brancos: ${whitePixels}/${pixelCount}`)
+        // Extrair dimensões reais do texto do PSD
+        if (textProps.boundingBox) {
+          const bbox = textProps.boundingBox
+          if (bbox.right !== undefined && bbox.left !== undefined) {
+            textWidth = Math.abs(bbox.right - bbox.left)
+          }
+          if (bbox.bottom !== undefined && bbox.top !== undefined) {
+            textHeight = Math.abs(bbox.bottom - bbox.top)
+          }
+        }
 
-        // Converter RGBA para PNG usando pngjs
-        const pngBuffer = rgbaToPngBuffer(rgba, imgWidth, imgHeight)
-
-        // Salvar arquivo temporariamente
-        const layerFilename = `layer_${depth}.png`
-        const layerPath = join(tempDir, layerFilename)
-        writeFile(layerPath, pngBuffer, () => {})
-
-        // Upload para Contabo
-        const assetKey = `import-files/${userId}/${fileId}/${layerFilename}`
-        await s3Client.send(new PutObjectCommand({
-          Bucket: importBucket,
-          Key: assetKey,
-          Body: pngBuffer,
-          ContentType: 'image/png'
-        }))
-
-        // URL pública do asset
-        const config = useRuntimeConfig()
-        const assetUrl = `https://${config.contaboEndpoint}/${importBucket}/${assetKey}`
-
-        // Usar opacidade real do PSD - @webtoon/psd retorna composedOpacity (0-1)
-        const opacity = Math.max(0, Math.min(1, layer.composedOpacity ?? layer.opacity ?? 1))
-        console.log(`   Opacidade: ${opacity}`)
-
-        canvasObjects.push({
-          type: 'image',
-          version: '7.1.0',
-          originX: 'left',
-          originY: 'top',
-          left: layer.left ?? 0,
-          top: layer.top ?? 0,
-          width: imgWidth,
-          height: imgHeight,
-          fill: 'rgb(0,0,0)',
-          stroke: null,
-          strokeWidth: 0,
-          strokeDashArray: null,
-          strokeLineCap: 'butt',
-          strokeDashOffset: 0,
-          strokeLineJoin: 'miter',
-          strokeUniform: false,
-          strokeMiterLimit: 4,
-          scaleX: 1,
-          scaleY: 1,
-          angle: 0,
-          flipX: false,
-          flipY: false,
-          opacity: opacity,
-          shadow: null,
-          visible: true,
-          backgroundColor: '',
-          fillRule: 'nonzero',
-          paintFirst: 'fill',
-          globalCompositeOperation: 'source-over',
-          skewX: 0,
-          skewY: 0,
-          cropX: 0,
-          cropY: 0,
-          src: assetUrl,
-          crossOrigin: 'anonymous',
-          filters: [],
-          name: layer.name || `Layer ${depth}`,
-          _customId: customId
-        })
-
-        console.log(`✅ Imagem criada: ${layer.name} at (${layer.left ?? 0}, ${layer.top ?? 0}), ${imgWidth}x${imgHeight}, opacity=${opacity}`)
-      } catch (err) {
-        console.warn(`Failed to process layer image for ${layer.name}:`, err)
+        // Baseline para ajuste de posição
+        if (textProps.baselineShift !== undefined) {
+          baselineShift = textProps.baselineShift
+        }
       }
-    }
 
-    // Processar camada de texto
-    // @webtoon/psd usa propriedade `text` para conteúdo e `textProperties` para estilos
-    if (layer.text) {
-      try {
-        const textValue = layer.text
-        const textProps = layer.textProperties
-
-        // Extrair informações de fonte das textProperties
-        let fontSize = 16
-        let fontFamily = 'Arial'
-        let fontWeight = 'normal'
-        let fontStyle = ''
-        let fill = '#000000'
-        let textAlign = 'left'
-        let charSpacing = 0
-        let underline = false
-        let lineHeight = 1.16
-        let textWidth = 100
-        let textHeight = 20
-        let baselineShift = 0
-
-        if (textProps) {
-          // @webtoon/psd textProperties estrutura
-          if (textProps.documentData) {
-            const docData = textProps.documentData
-            fontSize = docData.fontSize || 16
-            fontFamily = docData.fontFamily || 'Arial'
-
-            // Cor do texto
-            if (docData.textColor) {
-              const color = docData.textColor
-              if (color.r !== undefined) {
-                fill = rgbToHex(color.r * 255, color.g * 255, color.b * 255)
-              }
-            }
-
-            // Alinhamento de texto
-            if (docData.justification) {
-              const justifMap: Record<number, string> = {
-                0: 'left',
-                1: 'right', 
-                2: 'center',
-                3: 'justify'
-              }
-              textAlign = justifMap[docData.justification] || 'left'
-            }
-
-            // Peso da fonte (fauxBold)
-            if (docData.fauxBold) {
-              fontWeight = 'bold'
-            }
-
-            // Estilo itálico (fauxItalic)
-            if (docData.fauxItalic) {
-              fontStyle = 'italic'
-            }
-
-            // Espaçamento entre letras (tracking)
-            // PSD tracking é em 1/1000 de em, converter para pixels
-            if (docData.tracking !== undefined) {
-              charSpacing = (docData.tracking / 1000) * fontSize
-            }
-
-            // Underline
-            if (docData.underline) {
-              underline = true
-            }
-
-            // Line height (leading)
-            if (docData.leading !== undefined && docData.leading > 0) {
-              lineHeight = docData.leading / fontSize
-            }
-          }
-
-          // Extrair dimensões reais do texto do PSD
-          if (textProps.boundingBox) {
-            const bbox = textProps.boundingBox
-            if (bbox.right !== undefined && bbox.left !== undefined) {
-              textWidth = Math.abs(bbox.right - bbox.left)
-            }
-            if (bbox.bottom !== undefined && bbox.top !== undefined) {
-              textHeight = Math.abs(bbox.bottom - bbox.top)
-            }
-          }
-
-          // Baseline para ajuste de posição
-          if (textProps.baselineShift !== undefined) {
-            baselineShift = textProps.baselineShift
-          }
-        }
-
-        // Cor padrão para texto escuro: usar branco se a cor for muito escura
-        // para garantir visibilidade em fundo escuro
-        if (fill === '#000000' || fill === '#000' || fill === 'black') {
-          fill = '#FFFFFF'
-        }
-        // Se a cor for muito clara (quase branca), usar preto para contraste
-        else if (fill === '#FFFFFF' || fill === '#FFF' || fill === 'white') {
-          fill = '#000000'
-        }
-
-        // Posição PSD para Fabric.js
-        const psdLeft = layer.left ?? 0
-        const psdTop = layer.top ?? 0
-
-        console.log(`Text layer: "${textValue}" at position (${psdLeft}, ${psdTop}), fontSize: ${fontSize}, fill: ${fill}`)
-
-        // Usar opacidade real do PSD
-        const opacity = Math.max(0, Math.min(1, layer.composedOpacity ?? layer.opacity ?? 1))
-        console.log(`   Opacidade do texto: ${opacity}`)
-
-        canvasObjects.push({
-          type: 'i-text',
-          version: '7.1.0',
-          originX: 'left',
-          originY: 'top',
-          left: psdLeft,
-          top: psdTop - baselineShift, // Ajustar por baseline shift
-          width: Math.max(textWidth, 50),
-          height: Math.max(textHeight, fontSize * lineHeight),
-          fill: fill,
-          stroke: null,
-          strokeWidth: 0,
-          strokeDashArray: null,
-          strokeLineCap: 'butt',
-          strokeDashOffset: 0,
-          strokeLineJoin: 'miter',
-          strokeUniform: false,
-          strokeMiterLimit: 4,
-          scaleX: 1,
-          scaleY: 1,
-          angle: 0,
-          flipX: false,
-          flipY: false,
-          opacity: opacity,
-          shadow: null,
-          visible: true,
-          backgroundColor: '',
-          fillRule: 'nonzero',
-          paintFirst: 'fill',
-          globalCompositeOperation: 'source-over',
-          skewX: 0,
-          skewY: 0,
-          fontFamily: fontFamily,
-          fontWeight: fontWeight,
-          fontSize: Math.max(fontSize, 8),
-          lineHeight: lineHeight,
-          underline: underline,
-          overline: false,
-          linethrough: false,
-          textAlign: textAlign,
-          fontStyle: fontStyle,
-          textBackgroundColor: '',
-          charSpacing: charSpacing,
-          minWidth: 20,
-          splitByGrapheme: false,
-          name: layer.name || 'Text Layer',
-          text: textValue,
-          _customId: customId
-        })
-
-        console.log(`✅ Texto criado: "${textValue}" at (${psdLeft}, ${psdTop}), opacity=${opacity}, fill=${fill}`)
-      } catch (err) {
-        console.warn(`Failed to process text layer ${layer.name}:`, err)
+      // Cor padrão para texto escuro: usar branco se a cor for muito escura
+      // para garantir visibilidade em fundo escuro
+      if (fill === '#000000' || fill === '#000' || fill === 'black') {
+        fill = '#FFFFFF'
       }
+      // Se a cor for muito clara (quase branca), usar preto para contraste
+      else if (fill === '#FFFFFF' || fill === '#FFF' || fill === 'white') {
+        fill = '#000000'
+      }
+
+      // Posição PSD para Fabric.js
+      const psdLeft = layer.left ?? 0
+      const psdTop = layer.top ?? 0
+
+      console.log(`Text layer: "${textValue}" at position (${psdLeft}, ${psdTop}), fontSize: ${fontSize}, fill: ${fill}`)
+      console.log(`   Opacidade do texto: ${opacity}, Visível: ${isVisible}`)
+
+      canvasObjects.push({
+        type: 'i-text',
+        version: '7.1.0',
+        originX: 'left',
+        originY: 'top',
+        left: psdLeft,
+        top: psdTop - baselineShift, // Ajustar por baseline shift
+        width: Math.max(textWidth, 50),
+        height: Math.max(textHeight, fontSize * lineHeight),
+        fill: fill,
+        stroke: null,
+        strokeWidth: 0,
+        strokeDashArray: null,
+        strokeLineCap: 'butt',
+        strokeDashOffset: 0,
+        strokeLineJoin: 'miter',
+        strokeUniform: false,
+        strokeMiterLimit: 4,
+        scaleX: 1,
+        scaleY: 1,
+        angle: 0,
+        flipX: false,
+        flipY: false,
+        opacity: opacity,
+        shadow: null,
+        visible: isVisible,
+        backgroundColor: '',
+        fillRule: 'nonzero',
+        paintFirst: 'fill',
+        globalCompositeOperation: 'source-over',
+        skewX: 0,
+        skewY: 0,
+        fontFamily: fontFamily,
+        fontWeight: fontWeight,
+        fontSize: Math.max(fontSize, 8),
+        lineHeight: lineHeight,
+        underline: underline,
+        overline: false,
+        linethrough: false,
+        textAlign: textAlign,
+        fontStyle: fontStyle,
+        textBackgroundColor: '',
+        charSpacing: charSpacing,
+        minWidth: 20,
+        splitByGrapheme: false,
+        name: layer.name || 'Text Layer',
+        text: textValue,
+        _customId: customId
+      })
+
+      console.log(`✅ Texto criado: "${textValue}" at (${psdLeft}, ${psdTop}), opacity=${opacity}, visible=${isVisible}`)
+      return // Texto processado, não continuar para evitar duplicatas
+    } catch (err) {
+      console.warn(`Failed to process text layer ${layer.name}:`, err)
     }
   }
 
-  // NOTA: Filhos de grupos são processados no bloco de tratamento de grupos acima
-  // Camadas normais (não-grupos) não devem ter filhos no PSD
+  // Processar camada que tem imagem (pixel data)
+  // @webtoon/psd usa composite() para obter pixels RGBA
+  // REMOVIDA a verificação de width/height - processar todas as camadas com pixels
+  try {
+    // Extrair imagem da camada como RGBA (Uint8ClampedArray)
+    const rgba = await layer.composite()
+    
+    // Se não tiver dimensões definidas, usar o tamanho do PSD ou padrão
+    const imgWidth = layer.width || Math.sqrt(rgba.length / 4) || 100
+    const imgHeight = layer.height || Math.sqrt(rgba.length / 4) || 100
+
+    console.log(`Layer ${layer.name}: ${imgWidth}x${imgHeight}, RGBA size: ${rgba.length} bytes`)
+
+    // DEBUG: Analisar pixels para detectar problemas
+    let totalR = 0, totalG = 0, totalB = 0, totalA = 0
+    let transparentPixels = 0, whitePixels = 0
+
+    for (let i = 0; i < Math.min(rgba.length, 1000); i += 4) {
+      totalR += rgba[i]
+      totalG += rgba[i + 1]
+      totalB += rgba[i + 2]
+      totalA += rgba[i + 3]
+
+      if (rgba[i + 3] < 10) transparentPixels++
+      if (rgba[i] > 240 && rgba[i + 1] > 240 && rgba[i + 2] > 240 && rgba[i + 3] > 200) whitePixels++
+    }
+
+    const pixelCount = Math.min(rgba.length, 1000) / 4
+    console.log(`   Média RGB: (${Math.round(totalR/pixelCount)}, ${Math.round(totalG/pixelCount)}, ${Math.round(totalB/pixelCount)})`)
+    console.log(`   Média Alpha: ${Math.round(totalA/pixelCount)}`)
+    console.log(`   Pixels transparentes: ${transparentPixels}/${pixelCount}, Pixels brancos: ${whitePixels}/${pixelCount}`)
+
+    // Converter RGBA para PNG usando pngjs
+    const pngBuffer = rgbaToPngBuffer(rgba, imgWidth, imgHeight)
+
+    // Salvar arquivo temporariamente
+    const layerFilename = `layer_${layerCounter.value}_${depth}.png`
+    const layerPath = join(tempDir, layerFilename)
+    writeFile(layerPath, pngBuffer, () => {})
+
+    // Upload para Contabo
+    const assetKey = `import-files/${userId}/${fileId}/${layerFilename}`
+    await s3Client.send(new PutObjectCommand({
+      Bucket: importBucket,
+      Key: assetKey,
+      Body: pngBuffer,
+      ContentType: 'image/png'
+    }))
+
+    // URL pública do asset
+    const config = useRuntimeConfig()
+    const assetUrl = `https://${config.contaboEndpoint}/${importBucket}/${assetKey}`
+
+    console.log(`   Opacidade: ${opacity}, Visível: ${isVisible}`)
+
+    canvasObjects.push({
+      type: 'image',
+      version: '7.1.0',
+      originX: 'left',
+      originY: 'top',
+      left: layer.left ?? 0,
+      top: layer.top ?? 0,
+      width: imgWidth,
+      height: imgHeight,
+      fill: 'rgb(0,0,0)',
+      stroke: null,
+      strokeWidth: 0,
+      strokeDashArray: null,
+      strokeLineCap: 'butt',
+      strokeDashOffset: 0,
+      strokeLineJoin: 'miter',
+      strokeUniform: false,
+      strokeMiterLimit: 4,
+      scaleX: 1,
+      scaleY: 1,
+      angle: 0,
+      flipX: false,
+      flipY: false,
+      opacity: opacity,
+      shadow: null,
+      visible: isVisible,
+      backgroundColor: '',
+      fillRule: 'nonzero',
+      paintFirst: 'fill',
+      globalCompositeOperation: 'source-over',
+      skewX: 0,
+      skewY: 0,
+      cropX: 0,
+      cropY: 0,
+      src: assetUrl,
+      crossOrigin: 'anonymous',
+      filters: [],
+      name: layer.name || `Layer ${depth}`,
+      _customId: customId
+    })
+
+    console.log(`✅ Imagem criada: ${layer.name} at (${layer.left ?? 0}, ${layer.top ?? 0}), ${imgWidth}x${imgHeight}, opacity=${opacity}, visible=${isVisible}`)
+  } catch (err) {
+    console.warn(`Failed to process layer image for ${layer.name}:`, err)
+    
+    // Se falhar em extrair imagem, criar um placeholder/retângulo para não perder a camada
+    // Isso ajuda a manter a estrutura do layout mesmo que o conteúdo não seja renderizável
+    console.log(`⚠️ Criando placeholder para camada ${layer.name} que falhou no processamento`)
+    canvasObjects.push({
+      type: 'rect',
+      version: '7.1.0',
+      originX: 'left',
+      originY: 'top',
+      left: layer.left ?? 0,
+      top: layer.top ?? 0,
+      width: layer.width || 100,
+      height: layer.height || 100,
+      fill: 'rgba(128,128,128,0.3)',
+      stroke: '#666666',
+      strokeWidth: 1,
+      strokeDashArray: [5, 5],
+      opacity: opacity,
+      visible: isVisible,
+      name: layer.name || `Layer ${depth} (placeholder)`,
+      _customId: customId,
+      _isPlaceholder: true
+    })
+  }
 }
 
 export default defineEventHandler(async (event) => {
@@ -476,6 +492,10 @@ export default defineEventHandler(async (event) => {
   console.log('FormData fields:', formData?.map(f => f.name))
 
   const fileField = formData?.find(f => f.name === 'file')
+  
+  // Verificar se há parâmetro para desabilitar auto-center
+  const autoCenterField = formData?.find(f => f.name === 'autoCenter')
+  const autoCenter = autoCenterField?.data ? autoCenterField.data.toString() !== 'false' : true
 
   if (!fileField || !fileField.filename) {
     throw createError({
@@ -512,6 +532,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     console.log(`Processing PSD: ${filename} (${fileField.data.length} bytes)`)
+    console.log(`Auto-center: ${autoCenter}`)
 
     // Converter Buffer para ArrayBuffer para @webtoon/psd
     const arrayBuffer = fileField.data.buffer.slice(
@@ -577,6 +598,9 @@ export default defineEventHandler(async (event) => {
 
     // Contador global para nomes únicos de camadas (usado como objeto para referência)
     const layerCounter = { value: 0 }
+    
+    // Set para rastrear IDs processados e evitar duplicatas
+    const processedIds = new Set<string>()
 
     // Processar camadas - @webtoon/psd usa `children` e `layers`
     // Tenta ambas as propriedades para garantir que capturamos todas as camadas
@@ -589,7 +613,7 @@ export default defineEventHandler(async (event) => {
     // Função wrapper para passar o contador global
     async function processLayerWithCounter(layer: any, depth: number) {
       const currentIndex = ++layerCounter.value
-      await processLayer(layer, canvasObjects, s3Client, importBucket, userId!, fileId, tempDir, depth, currentIndex, layerCounter)
+      await processLayer(layer, canvasObjects, s3Client, importBucket, userId!, fileId, tempDir, depth, currentIndex, layerCounter, processedIds)
     }
 
     for (let i = 0; i < layersToProcess.length; i++) {
@@ -617,49 +641,57 @@ export default defineEventHandler(async (event) => {
       console.log(`    Dimensões: width=${obj.width}, height=${obj.height}`)
       console.log(`    Visível: ${obj.visible}, Opacidade: ${obj.opacity}`)
       if (obj.type === 'image') {
-        console.log(`    Src: ${obj.src}`)
+        console.log(`    Src: ${obj.src?.substring(0, 80)}...`)
       } else if (obj.type === 'i-text') {
         console.log(`    Texto: "${obj.text}", fill: ${obj.fill}, fontSize: ${obj.fontSize}`)
       }
     })
 
-    // ===== AUTO-CENTER =====
-    // Calcular o bounding box de todos os objetos
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    canvasObjects.forEach(obj => {
-      const x = obj.left || 0
-      const y = obj.top || 0
-      const w = obj.width || 0
-      const h = obj.height || 0
-      minX = Math.min(minX, x)
-      minY = Math.min(minY, y)
-      maxX = Math.max(maxX, x + w)
-      maxY = Math.max(maxY, y + h)
-    })
-
-    if (minX !== Infinity) {
-      console.log(`=== BOUNDING BOX DOS OBJETOS ===`)
-      console.log(`Min: (${minX}, ${minY}), Max: (${maxX}, ${maxY})`)
-      console.log(`Width: ${maxX - minX}, Height: ${maxY - minY}`)
-
-      // Calcular offset para centralizar no canvas (1080x1080)
-      const contentWidth = maxX - minX
-      const contentHeight = maxY - minY
-      const canvasCenterX = 1080 / 2
-      const canvasCenterY = 1080 / 2
-      const contentCenterX = minX + contentWidth / 2
-      const contentCenterY = minY + contentHeight / 2
-
-      const offsetX = canvasCenterX - contentCenterX
-      const offsetY = canvasCenterY - contentCenterY
-
-      // Aplicar offset a todos os objetos
+    // ===== AUTO-CENTER (OPCIONAL) =====
+    let boundingBox = null
+    
+    if (autoCenter) {
+      // Calcular o bounding box de todos os objetos
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
       canvasObjects.forEach(obj => {
-        obj.left = (obj.left || 0) + offsetX
-        obj.top = (obj.top || 0) + offsetY
+        const x = obj.left || 0
+        const y = obj.top || 0
+        const w = obj.width || 0
+        const h = obj.height || 0
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x + w)
+        maxY = Math.max(maxY, y + h)
       })
 
-      console.log(`✅ Auto-center: offset=${offsetX.toFixed(0)},${offsetY.toFixed(0)}, objects=${canvasObjects.length}`)
+      if (minX !== Infinity) {
+        console.log(`=== BOUNDING BOX DOS OBJETOS ===`)
+        console.log(`Min: (${minX}, ${minY}), Max: (${maxX}, ${maxY})`)
+        console.log(`Width: ${maxX - minX}, Height: ${maxY - minY}`)
+
+        // Calcular offset para centralizar no canvas (1080x1080)
+        const contentWidth = maxX - minX
+        const contentHeight = maxY - minY
+        const canvasCenterX = 1080 / 2
+        const canvasCenterY = 1080 / 2
+        const contentCenterX = minX + contentWidth / 2
+        const contentCenterY = minY + contentHeight / 2
+
+        const offsetX = canvasCenterX - contentCenterX
+        const offsetY = canvasCenterY - contentCenterY
+
+        // Aplicar offset a todos os objetos
+        canvasObjects.forEach(obj => {
+          obj.left = (obj.left || 0) + offsetX
+          obj.top = (obj.top || 0) + offsetY
+        })
+
+        console.log(`✅ Auto-center aplicado: offset=${offsetX.toFixed(0)},${offsetY.toFixed(0)}, objects=${canvasObjects.length}`)
+        
+        boundingBox = { minX, minY, maxX, maxY }
+      }
+    } else {
+      console.log('ℹ️ Auto-center desabilitado - mantendo posições originais do PSD')
     }
 
     // Criar estrutura JSON do Fabric.js
@@ -670,8 +702,12 @@ export default defineEventHandler(async (event) => {
       _psdImport: {
         canvasWidth: psd.width,
         canvasHeight: psd.height,
-        boundingBox: minX !== Infinity ? { minX, minY, maxX, maxY } : null,
-        autoCenter: true
+        boundingBox: boundingBox,
+        autoCenter: autoCenter,
+        originalDimensions: {
+          width: psd.width,
+          height: psd.height
+        }
       }
     }
 
@@ -701,7 +737,8 @@ export default defineEventHandler(async (event) => {
           originalFilename: filename,
           originalFormat: 'psd',
           convertedAt: new Date().toISOString(),
-          layerCount: canvasObjects.length
+          layerCount: canvasObjects.length,
+          autoCenter: autoCenter
         }
       },
       canvasJson,

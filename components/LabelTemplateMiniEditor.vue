@@ -34,18 +34,17 @@ const showStrokeColorPicker = ref(false)
 const showTextStrokeColorPicker = ref(false)
 
 const TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio']
-const FONT_DATALIST_ID = 'label-template-fonts'
 
 const FONT_WEIGHT_OPTIONS: Array<{ label: string; value: number }> = [
-  { label: 'Thin (100)', value: 100 },
-  { label: 'Extra Light (200)', value: 200 },
-  { label: 'Light (300)', value: 300 },
-  { label: 'Regular (400)', value: 400 },
-  { label: 'Medium (500)', value: 500 },
-  { label: 'Semi Bold (600)', value: 600 },
-  { label: 'Bold (700)', value: 700 },
-  { label: 'Extra Bold (800)', value: 800 },
-  { label: 'Black (900)', value: 900 }
+  { label: 'Thin', value: 100 },
+  { label: 'Extra Light', value: 200 },
+  { label: 'Light', value: 300 },
+  { label: 'Regular', value: 400 },
+  { label: 'Medium', value: 500 },
+  { label: 'Semi Bold', value: 600 },
+  { label: 'Bold', value: 700 },
+  { label: 'Extra Bold', value: 800 },
+  { label: 'Black', value: 900 }
 ]
 
 const loadFabric = async () => {
@@ -415,39 +414,42 @@ const onAddImage = async (e: Event) => {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file || !fabric || !canvas || !group) return
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(String(r.result || ''))
-    r.onerror = () => reject(new Error('FileReader failed'))
-    r.readAsDataURL(file)
-  })
+  
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result || ''))
+      r.onerror = () => reject(new Error('FileReader failed'))
+      r.readAsDataURL(file)
+    })
 
-  await new Promise<void>((resolve) => {
-    fabric.Image.fromURL(
-      dataUrl,
-      (img: any) => {
-        img.set({
-          left: 0,
-          top: 0,
-          originX: 'center',
-          originY: 'center',
-          name: `custom_image_${Math.random().toString(36).slice(2, 7)}`
-        })
-        const iw = img.width || 1
-        const ih = img.height || 1
-        const targetW = 180
-        const s = targetW / iw
-        img.set({ scaleX: s, scaleY: s })
-        if (ih > iw) img.set({ scaleX: (targetW * 0.7) / iw, scaleY: (targetW * 0.7) / iw })
-        safeAddWithUpdate(group, img)
-        canvas.setActiveObject(img)
-        setSelected()
-        canvas.requestRenderAll()
-        resolve()
-      },
-      { crossOrigin: 'anonymous' }
-    )
-  })
+    // Fabric v7: fromURL returns a Promise
+    const img: any = await fabric.Image.fromURL(dataUrl, { crossOrigin: 'anonymous' })
+    
+    img.set({
+      left: 0,
+      top: 0,
+      originX: 'center',
+      originY: 'center',
+      name: `custom_image_${Math.random().toString(36).slice(2, 7)}`
+    })
+    
+    const iw = img.width || 1
+    const ih = img.height || 1
+    const targetW = 180
+    const s = targetW / iw
+    img.set({ scaleX: s, scaleY: s })
+    if (ih > iw) img.set({ scaleX: (targetW * 0.7) / iw, scaleY: (targetW * 0.7) / iw })
+    
+    safeAddWithUpdate(group, img)
+    canvas.setActiveObject(img)
+    setSelected()
+    canvas.requestRenderAll()
+    
+    console.log('✅ [MiniEditor] Imagem adicionada com sucesso:', img.name)
+  } catch (err) {
+    console.error('❌ [MiniEditor] Erro ao adicionar imagem:', err)
+  }
 
   if (input) input.value = ''
 }
@@ -461,51 +463,51 @@ const replaceSelectedImage = async (e: Event) => {
   const file = input.files?.[0]
   if (!file) return
 
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(String(r.result || ''))
-    r.onerror = () => reject(new Error('FileReader failed'))
-    r.readAsDataURL(file)
-  })
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result || ''))
+      r.onerror = () => reject(new Error('FileReader failed'))
+      r.readAsDataURL(file)
+    })
 
-  await new Promise<void>((resolve) => {
-    fabric.Image.fromURL(
-      dataUrl,
-      (img: any) => {
-        const prev = obj
-        const keep: any = {
-          left: prev.left,
-          top: prev.top,
-          originX: prev.originX,
-          originY: prev.originY,
-          angle: prev.angle,
-          scaleX: prev.scaleX,
-          scaleY: prev.scaleY,
-          flipX: prev.flipX,
-          flipY: prev.flipY,
-          opacity: prev.opacity,
-          name: prev.name
-        }
+    // Fabric v7: fromURL returns a Promise
+    const img: any = await fabric.Image.fromURL(dataUrl, { crossOrigin: 'anonymous' })
+    
+    const prev = obj
+    const keep: any = {
+      left: prev.left,
+      top: prev.top,
+      originX: prev.originX,
+      originY: prev.originY,
+      angle: prev.angle,
+      scaleX: prev.scaleX,
+      scaleY: prev.scaleY,
+      flipX: prev.flipX,
+      flipY: prev.flipY,
+      opacity: prev.opacity,
+      name: prev.name
+    }
 
-        img.set(keep)
-        // preserve crop + clipPath if present (common in splash images)
-        if (typeof prev.cropX === 'number') img.set('cropX', prev.cropX)
-        if (typeof prev.cropY === 'number') img.set('cropY', prev.cropY)
-        if (typeof prev.width === 'number') img.set('width', prev.width)
-        if (typeof prev.height === 'number') img.set('height', prev.height)
-        if (prev.clipPath) img.set('clipPath', prev.clipPath)
+    img.set(keep)
+    // preserve crop + clipPath if present (common in splash images)
+    if (typeof prev.cropX === 'number') img.set('cropX', prev.cropX)
+    if (typeof prev.cropY === 'number') img.set('cropY', prev.cropY)
+    if (typeof prev.width === 'number') img.set('width', prev.width)
+    if (typeof prev.height === 'number') img.set('height', prev.height)
+    if (prev.clipPath) img.set('clipPath', prev.clipPath)
 
-        group.remove(prev)
-        safeAddWithUpdate(group, img)
-        safeAddWithUpdate(group)
-        canvas.setActiveObject(img)
-        setSelected()
-        canvas.requestRenderAll()
-        resolve()
-      },
-      { crossOrigin: 'anonymous' }
-    )
-  })
+    group.remove(prev)
+    safeAddWithUpdate(group, img)
+    safeAddWithUpdate(group)
+    canvas.setActiveObject(img)
+    setSelected()
+    canvas.requestRenderAll()
+    
+    console.log('✅ [MiniEditor] Imagem substituída com sucesso')
+  } catch (err) {
+    console.error('❌ [MiniEditor] Erro ao substituir imagem:', err)
+  }
 
   if (input) input.value = ''
 }
@@ -616,388 +618,688 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="mini-editor-container">
     <input ref="imageInputEl" type="file" class="hidden" accept="image/*" @change="onAddImage" />
     <input ref="replaceImageInputEl" type="file" class="hidden" accept="image/*" @change="replaceSelectedImage" />
 
-    <div class="flex items-center justify-between">
-      <div class="text-xs font-bold uppercase tracking-widest text-zinc-500">Mini Editor</div>
-      <button class="text-xs text-zinc-300 hover:text-white" @click="emit('close')">Fechar Editor</button>
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-white">Editor de Etiqueta</h3>
+          <p class="text-[10px] text-zinc-500">Customize cores, fontes e posições</p>
+        </div>
+      </div>
+      <button 
+        class="p-2 rounded-lg hover:bg-white/5 text-zinc-400 hover:text-white transition-colors"
+        @click="emit('close')"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <div class="space-y-2 min-w-0">
-        <label class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Nome do Modelo</label>
-        <input
-          v-model="editorName"
-          class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-violet-500"
-        />
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <!-- Left Panel - Canvas Preview -->
+      <div class="lg:col-span-3 space-y-3">
+        <!-- Template Name -->
+        <div class="flex items-center gap-2">
+          <input
+            v-model="editorName"
+            class="flex-1 bg-zinc-900/50 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-colors"
+            placeholder="Nome do modelo..."
+          />
+        </div>
 
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2 flex-wrap">
-            <button class="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-200" @click="addText">Adicionar Texto</button>
-            <button class="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-200" @click="addRect">Retangulo</button>
-            <button class="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-200" @click="addCircle">Circulo</button>
-            <button class="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-200" @click="openAddImage">Imagem</button>
-            <button class="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-200" :disabled="!selectedObj || selectedObj === group" @click="moveLayer(-1)">Para Tras</button>
-            <button class="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-200" :disabled="!selectedObj || selectedObj === group" @click="moveLayer(1)">Para Frente</button>
-          </div>
-          <button
-            class="px-2 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-[10px] text-red-300"
+        <!-- Toolbar -->
+        <div class="flex items-center gap-1 p-1.5 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
+          <button 
+            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:bg-white/5 hover:text-white transition-all"
+            @click="addText"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+            </svg>
+            Texto
+          </button>
+          <button 
+            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:bg-white/5 hover:text-white transition-all"
+            @click="addRect"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+            </svg>
+            Retângulo
+          </button>
+          <button 
+            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:bg-white/5 hover:text-white transition-all"
+            @click="addCircle"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" stroke-width="2" />
+            </svg>
+            Círculo
+          </button>
+          <button 
+            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:bg-white/5 hover:text-white transition-all"
+            @click="openAddImage"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Imagem
+          </button>
+          
+          <div class="w-px h-6 bg-zinc-700 mx-1"></div>
+          
+          <button 
+            class="p-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            :disabled="!selectedObj || selectedObj === group"
+            @click="moveLayer(-1)"
+            title="Mover para trás"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </button>
+          <button 
+            class="p-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            :disabled="!selectedObj || selectedObj === group"
+            @click="moveLayer(1)"
+            title="Mover para frente"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+          </button>
+          
+          <div class="flex-1"></div>
+          
+          <button 
+            class="p-2 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             :disabled="!selectedObj || selectedObj === group"
             @click="deleteSelected"
+            title="Excluir elemento"
           >
-            Excluir
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
           </button>
         </div>
 
-        <div ref="viewportEl" class="mini-editor-viewport relative rounded-xl border border-white/10 bg-black/20 p-2 overflow-hidden h-[240px]">
-          <canvas ref="canvasEl" class="w-full h-full block rounded-lg" />
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button class="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200" @click="fitToViewport()">
-            Centralizar
-          </button>
-          <div class="flex items-center gap-2 ml-auto">
-            <label class="text-[10px] text-zinc-500">Zoom</label>
-            <input type="range" min="50" max="200" :value="zoomPct" class="w-28" @input="setZoom(Number(($event.target as HTMLInputElement).value))" />
+        <!-- Canvas Viewport -->
+        <div 
+          ref="viewportEl" 
+          class="mini-editor-viewport relative rounded-xl border border-zinc-800/50 bg-zinc-950/80 overflow-hidden"
+          style="height: 280px;"
+        >
+          <canvas ref="canvasEl" class="w-full h-full block" />
+          
+          <!-- Zoom indicator -->
+          <div class="absolute bottom-3 left-3 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] text-zinc-400 font-mono">
+            {{ zoomPct }}%
           </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <button 
+              class="px-3 py-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-xs text-zinc-300 transition-colors"
+              @click="fitToViewport()"
+            >
+              <span class="flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                Centralizar
+              </span>
+            </button>
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800/50">
+              <svg class="w-3.5 h-3.5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+              </svg>
+              <input 
+                type="range" 
+                min="50" 
+                max="200" 
+                :value="zoomPct" 
+                class="w-24 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" 
+                @input="setZoom(Number(($event.target as HTMLInputElement).value))" 
+              />
+            </div>
+          </div>
+          
           <button
-            class="px-3 py-2 rounded-lg bg-violet-500/15 hover:bg-violet-500/25 text-xs text-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-sm font-semibold text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20"
             :disabled="isSaving"
             @click="save"
           >
-            {{ isSaving ? 'Salvando...' : 'Salvar Alteracoes' }}
+            <svg v-if="!isSaving" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <svg v-else class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            {{ isSaving ? 'Salvando...' : 'Salvar Alterações' }}
           </button>
         </div>
-        <div v-if="saveError" class="text-[10px] text-red-400">{{ saveError }}</div>
+        
+        <div v-if="saveError" class="text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2 border border-red-500/20">
+          {{ saveError }}
+        </div>
       </div>
 
-      <div class="space-y-2 min-w-0">
-        <div class="p-3 rounded-xl border border-white/10 bg-zinc-900/30">
-          <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Selecionado</div>
-          <div v-if="!selectedObj" class="text-xs text-zinc-500">Clique em um elemento dentro da etiqueta (texto, circulo, pill...).</div>
-          <div v-else class="space-y-2">
-            <div class="text-xs text-white font-semibold truncate">
-              {{ selectedObj.name || selectedObj.type }}
-              <span class="text-[10px] text-zinc-500 ml-2">({{ selectedObj.type }})</span>
+      <!-- Right Panel - Properties -->
+      <div class="lg:col-span-2 space-y-3 max-h-[520px] overflow-y-auto pr-1 custom-scrollbar">
+        <!-- No Selection -->
+        <div v-if="!selectedObj" class="p-4 rounded-xl border border-zinc-800/50 bg-zinc-900/30">
+          <div class="text-center py-8">
+            <div class="w-14 h-14 rounded-2xl bg-zinc-800/50 flex items-center justify-center mx-auto mb-3">
+              <svg class="w-7 h-7 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+              </svg>
             </div>
+            <p class="text-sm text-zinc-400 font-medium">Selecione um elemento</p>
+            <p class="text-[10px] text-zinc-600 mt-1">Clique em um item da etiqueta para editar</p>
+          </div>
+        </div>
 
-            <div class="grid grid-cols-2 gap-2">
-              <div class="col-span-2">
-                <label class="text-[10px] text-zinc-500">Nome (id)</label>
-                <input class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="current('name', '')" @input="patch('name', ($event.target as HTMLInputElement).value)" />
-                <div class="text-[10px] text-zinc-500 mt-1">
-                  Use nomes especiais: `price_decimal_text`, `price_unit_text`, `price_integer_text` para layout automatico.
-                </div>
+        <div v-else class="space-y-3">
+          <!-- Selection Header -->
+          <div class="p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <span class="text-amber-400 text-lg font-bold">{{ (selectedObj.type || 'O').charAt(0).toUpperCase() }}</span>
               </div>
-              <div>
-                <label class="text-[10px] text-zinc-500">X</label>
-                <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('left', 0))" @input="patch('left', Number(($event.target as HTMLInputElement).value))" />
-              </div>
-              <div>
-                <label class="text-[10px] text-zinc-500">Y</label>
-                <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('top', 0))" @input="patch('top', Number(($event.target as HTMLInputElement).value))" />
-              </div>
-              <div>
-                <label class="text-[10px] text-zinc-500">Scale X</label>
-                <input type="number" step="0.01" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Number(current('scaleX', 1)).toFixed(2)" @input="patch('scaleX', Number(($event.target as HTMLInputElement).value))" />
-              </div>
-              <div>
-                <label class="text-[10px] text-zinc-500">Scale Y</label>
-                <input type="number" step="0.01" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Number(current('scaleY', 1)).toFixed(2)" @input="patch('scaleY', Number(($event.target as HTMLInputElement).value))" />
-              </div>
-              <div class="col-span-2">
-                <label class="text-[10px] text-zinc-500">Rotacao</label>
-                <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('angle', 0))" @input="patch('angle', Number(($event.target as HTMLInputElement).value))" />
-              </div>
-              <div class="col-span-2">
-                <label class="text-[10px] text-zinc-500">Opacity</label>
+              <div class="flex-1 min-w-0">
                 <input
-                  type="number"
-                  step="0.05"
-                  min="0"
-                  max="1"
-                  class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
-                  :value="Number(current('opacity', 1)).toFixed(2)"
-                  @input="patch('opacity', Number(($event.target as HTMLInputElement).value))"
+                  class="w-full bg-transparent text-sm font-semibold text-white focus:outline-none placeholder-zinc-500"
+                  :value="current('name', '')"
+                  placeholder="Nome do elemento"
+                  @input="patch('name', ($event.target as HTMLInputElement).value)"
                 />
-              </div>
-              <div class="col-span-2 flex items-center justify-between gap-2">
-                <label class="text-[10px] text-zinc-500">Visivel</label>
-                <input type="checkbox" class="h-4 w-4" :checked="!!current('visible', true)" @change="patch('visible', ($event.target as HTMLInputElement).checked)" />
-              </div>
-            </div>
-
-            <div v-if="isText" class="pt-2 border-t border-white/10 space-y-2">
-              <div>
-                <label class="text-[10px] text-zinc-500">Texto</label>
-                <input class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="current('text', '')" @input="patch('text', ($event.target as HTMLInputElement).value)" />
-              </div>
-              <div v-if="isUnitText" class="text-[10px] text-zinc-500">
-                Dica: use este texto para gramatura/unidade (ex: 1KG, 900ML, UN).
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="text-[10px] text-zinc-500">Fonte</label>
-                  <select
-                    class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
-                    :value="current('fontFamily', '')"
-                    @change="patch('fontFamily', ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option value="">(selecionar)</option>
-                    <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">
-                      {{ font }}
-                    </option>
-                  </select>
-                  <input
-                    class="w-full mt-1 bg-zinc-900/60 border border-zinc-700 rounded px-2 py-1 text-[10px] text-zinc-200"
-                    :list="FONT_DATALIST_ID"
-                    :value="current('fontFamily', '')"
-                    placeholder="ou digite uma fonte…"
-                    @input="patch('fontFamily', ($event.target as HTMLInputElement).value)"
-                  />
-                  <datalist :id="FONT_DATALIST_ID">
-                    <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font" />
-                  </datalist>
-                </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500">Tamanho</label>
-                  <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('fontSize', 20))" @input="patch('fontSize', Number(($event.target as HTMLInputElement).value))" />
-                </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500">Peso</label>
-                  <select
-                    class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
-                    :value="String(currentFontWeight)"
-                    @change="patch('fontWeight', Number(($event.target as HTMLSelectElement).value))"
-                  >
-                    <option v-for="opt in FONT_WEIGHT_OPTIONS" :key="opt.value" :value="String(opt.value)">
-                      {{ opt.label }}
-                    </option>
-                  </select>
-                </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500">Cor</label>
-                  <div class="relative w-full">
-                    <div
-                      class="w-full h-8 rounded border border-white/10 cursor-pointer relative overflow-hidden"
-                      :style="{ backgroundColor: current('fill', '#ffffff') }"
-                      @click="showFillColorPicker = true"
-                    ></div>
-                    <ColorPicker
-                      :show="showFillColorPicker"
-                      :model-value="current('fill', '#ffffff')"
-                      @update:show="showFillColorPicker = $event"
-                      @update:model-value="(val: string) => patch('fill', val)"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="text-[10px] text-zinc-500">Alinhamento</label>
-                  <select class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="current('textAlign', 'left')" @change="patch('textAlign', ($event.target as HTMLSelectElement).value)">
-                    <option value="left">Esquerda</option>
-                    <option value="center">Centro</option>
-                    <option value="right">Direita</option>
-                    <option value="justify">Justificado</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500">Estilo</label>
-                  <select class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="current('fontStyle', 'normal')" @change="patch('fontStyle', ($event.target as HTMLSelectElement).value)">
-                    <option value="normal">Normal</option>
-                    <option value="italic">Itálico</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500">Line Height</label>
-                  <input type="number" step="0.05" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Number(current('lineHeight', 1)).toFixed(2)" @input="patch('lineHeight', Number(($event.target as HTMLInputElement).value))" />
-                </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500">Letter Spacing</label>
-                  <input type="number" step="10" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(currentNumber('charSpacing', 0))" @input="patch('charSpacing', Number(($event.target as HTMLInputElement).value))" />
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2">
-                <div class="col-span-2 flex items-center justify-between gap-2">
-                  <label class="text-[10px] text-zinc-500">Caixa</label>
-                  <select class="w-44 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="currentTextCase" @change="setTextCase(($event.target as HTMLSelectElement).value as any)">
-                    <option value="none">Normal</option>
-                    <option value="upper">MAIÚSCULO</option>
-                    <option value="lower">minúsculo</option>
-                  </select>
-                </div>
-                <div class="col-span-2 flex items-center gap-3">
-                  <label class="text-[10px] text-zinc-500">Decoração</label>
-                  <label class="flex items-center gap-2 text-[10px] text-zinc-300">
-                    <input type="checkbox" class="h-4 w-4" :checked="!!current('underline', false)" @change="patch('underline', ($event.target as HTMLInputElement).checked)" />
-                    Underline
-                  </label>
-                  <label class="flex items-center gap-2 text-[10px] text-zinc-300">
-                    <input type="checkbox" class="h-4 w-4" :checked="!!current('linethrough', false)" @change="patch('linethrough', ($event.target as HTMLInputElement).checked)" />
-                    Strike
-                  </label>
-                </div>
-              </div>
-
-              <div class="pt-2 border-t border-white/10 space-y-2">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Stroke do Texto</div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-[10px] text-zinc-500">Cor</label>
-                    <div class="relative w-full">
-                      <div
-                        class="w-full h-8 rounded border border-white/10 cursor-pointer relative overflow-hidden"
-                        :style="{ backgroundColor: current('stroke', '#000000') }"
-                        @click="showTextStrokeColorPicker = true"
-                      ></div>
-                      <ColorPicker
-                        :show="showTextStrokeColorPicker"
-                        :model-value="current('stroke', '#000000')"
-                        @update:show="showTextStrokeColorPicker = $event"
-                        @update:model-value="(val: string) => patch('stroke', val)"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label class="text-[10px] text-zinc-500">Stroke W</label>
-                    <input type="number" step="0.1" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Number(current('strokeWidth', 0)).toFixed(1)" @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))" />
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="isDecimalText" class="pt-2 border-t border-white/10 space-y-2">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Centavos</div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-[10px] text-zinc-500">Escala (auto)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
-                      :value="Number(current('__fontScale', 0.42)).toFixed(2)"
-                      @input="patchCustom('__fontScale', Number(($event.target as HTMLInputElement).value))"
-                    />
-                  </div>
-                  <div>
-                    <label class="text-[10px] text-zinc-500">Altura (auto)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
-                      :value="Number(current('__yOffsetRatio', -0.18)).toFixed(2)"
-                      @input="patchCustom('__yOffsetRatio', Number(($event.target as HTMLInputElement).value))"
-                    />
-                  </div>
-                </div>
-                <div class="text-[10px] text-zinc-500">
-                  Esses campos controlam o tamanho/altura automaticamente quando a etiqueta adapta ao card.
-                </div>
-              </div>
-            </div>
-
-            <div v-else class="pt-2 border-t border-white/10 space-y-2">
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="text-[10px] text-zinc-500">Fill</label>
-                  <div class="relative w-full">
-                    <div
-                      class="w-full h-8 rounded border border-white/10 cursor-pointer relative overflow-hidden"
-                      :style="{ backgroundColor: current('fill', '#ffffff') }"
-                      @click="showFillColorPicker2 = true"
-                    ></div>
-                    <ColorPicker
-                      :show="showFillColorPicker2"
-                      :model-value="current('fill', '#ffffff')"
-                      @update:show="showFillColorPicker2 = $event"
-                      @update:model-value="(val: string) => patch('fill', val)"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500">Stroke</label>
-                  <div class="relative w-full">
-                    <div
-                      class="w-full h-8 rounded border border-white/10 cursor-pointer relative overflow-hidden"
-                      :style="{ backgroundColor: current('stroke', '#000000') }"
-                      @click="showStrokeColorPicker = true"
-                    ></div>
-                    <ColorPicker
-                      :show="showStrokeColorPicker"
-                      :model-value="current('stroke', '#000000')"
-                      @update:show="showStrokeColorPicker = $event"
-                      @update:model-value="(val: string) => patch('stroke', val)"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="text-[10px] text-zinc-500">Stroke W</label>
-                  <input type="number" step="0.1" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Number(current('strokeWidth', 0)).toFixed(1)" @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))" />
-                </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500">Opacity</label>
-                  <input type="number" step="0.05" min="0" max="1" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Number(current('opacity', 1)).toFixed(2)" @input="patch('opacity', Number(($event.target as HTMLInputElement).value))" />
-                </div>
-              </div>
-
-              <div v-if="isRect" class="pt-2 border-t border-white/10 space-y-2">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Retangulo</div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-[10px] text-zinc-500">W</label>
-                    <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('width', 0))" @input="patch('width', Number(($event.target as HTMLInputElement).value))" />
-                  </div>
-                  <div>
-                    <label class="text-[10px] text-zinc-500">H</label>
-                    <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('height', 0))" @input="patch('height', Number(($event.target as HTMLInputElement).value))" />
-                  </div>
-                  <div>
-                    <label class="text-[10px] text-zinc-500">RX</label>
-                    <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('rx', 0))" @input="patch('rx', Number(($event.target as HTMLInputElement).value))" />
-                  </div>
-                  <div>
-                    <label class="text-[10px] text-zinc-500">RY</label>
-                    <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('ry', 0))" @input="patch('ry', Number(($event.target as HTMLInputElement).value))" />
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="isCircle" class="pt-2 border-t border-white/10 space-y-2">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Circulo</div>
-                <div>
-                  <label class="text-[10px] text-zinc-500">Raio</label>
-                  <input type="number" class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs" :value="Math.round(current('radius', 0))" @input="patch('radius', Number(($event.target as HTMLInputElement).value))" />
-                </div>
-              </div>
-
-              <div v-if="isImage" class="pt-2 border-t border-white/10 space-y-2">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Imagem</div>
-                <button class="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-200" @click="openReplaceImage">
-                  Trocar imagem
-                </button>
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="flex items-center justify-between gap-2">
-                    <label class="text-[10px] text-zinc-500">Flip X</label>
-                    <input type="checkbox" class="h-4 w-4" :checked="!!current('flipX', false)" @change="patch('flipX', ($event.target as HTMLInputElement).checked)" />
-                  </div>
-                  <div class="flex items-center justify-between gap-2">
-                    <label class="text-[10px] text-zinc-500">Flip Y</label>
-                    <input type="checkbox" class="h-4 w-4" :checked="!!current('flipY', false)" @change="patch('flipY', ($event.target as HTMLInputElement).checked)" />
-                  </div>
-                </div>
+                <p class="text-[10px] text-zinc-500 capitalize">{{ selectedObj.type || 'objeto' }}</p>
               </div>
             </div>
           </div>
-        </div>
-        <div class="text-[10px] text-zinc-500">
-          Dica: selecione o grupo inteiro (priceGroup) para mover/escala geral; selecione textos para alterar fonte/tamanho.
+
+          <!-- Transform Section -->
+          <div class="p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30 space-y-3">
+            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+              Transformação
+            </div>
+            <div class="grid grid-cols-4 gap-2">
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">X</label>
+                <input 
+                  type="number" 
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="Math.round(current('left', 0))" 
+                  @input="patch('left', Number(($event.target as HTMLInputElement).value))" 
+                />
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Y</label>
+                <input 
+                  type="number" 
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="Math.round(current('top', 0))" 
+                  @input="patch('top', Number(($event.target as HTMLInputElement).value))" 
+                />
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Escala X</label>
+                <input 
+                  type="number" 
+                  step="0.05"
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="Number(current('scaleX', 1)).toFixed(2)" 
+                  @input="patch('scaleX', Number(($event.target as HTMLInputElement).value))" 
+                />
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Escala Y</label>
+                <input 
+                  type="number" 
+                  step="0.05"
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="Number(current('scaleY', 1)).toFixed(2)" 
+                  @input="patch('scaleY', Number(($event.target as HTMLInputElement).value))" 
+                />
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Rotação</label>
+                <div class="flex items-center gap-1">
+                  <input 
+                    type="number" 
+                    class="flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                    :value="Math.round(current('angle', 0))" 
+                    @input="patch('angle', Number(($event.target as HTMLInputElement).value))" 
+                  />
+                  <span class="text-[10px] text-zinc-500">°</span>
+                </div>
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Opacidade</label>
+                <div class="flex items-center gap-2">
+                  <input 
+                    type="range"
+                    min="0" 
+                    max="1" 
+                    step="0.05"
+                    class="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" 
+                    :value="current('opacity', 1)" 
+                    @input="patch('opacity', Number(($event.target as HTMLInputElement).value))" 
+                  />
+                  <span class="text-[10px] text-zinc-400 w-8">{{ Math.round(current('opacity', 1) * 100) }}%</span>
+                </div>
+              </div>
+            </div>
+            <label class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer">
+              <span class="text-xs text-zinc-300">Visível</span>
+              <input 
+                type="checkbox" 
+                class="w-4 h-4 rounded bg-zinc-800 border-zinc-600 text-amber-500 focus:ring-amber-500/20 cursor-pointer" 
+                :checked="!!current('visible', true)" 
+                @change="patch('visible', ($event.target as HTMLInputElement).checked)" 
+              />
+            </label>
+          </div>
+
+          <!-- Text Properties -->
+          <div v-if="isText" class="p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30 space-y-3">
+            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+              </svg>
+              Texto
+            </div>
+            
+            <div>
+              <label class="text-[10px] text-zinc-500 mb-1 block">Conteúdo</label>
+              <input 
+                class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                :value="current('text', '')" 
+                @input="patch('text', ($event.target as HTMLInputElement).value)" 
+              />
+            </div>
+            
+            <div v-if="isUnitText" class="text-[10px] text-amber-400/80 bg-amber-500/10 rounded-lg px-2 py-1.5">
+              💡 Use para gramatura/unidade (ex: 1KG, 900ML, UN)
+            </div>
+            
+            <div>
+              <label class="text-[10px] text-zinc-500 mb-1 block">Fonte</label>
+              <select
+                class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50"
+                :value="current('fontFamily', '')"
+                @change="patch('fontFamily', ($event.target as HTMLSelectElement).value)"
+                  >
+                <option value="">(selecionar)</option>
+                <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
+              </select>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Tamanho</label>
+                <input 
+                  type="number" 
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="Math.round(current('fontSize', 20))" 
+                  @input="patch('fontSize', Number(($event.target as HTMLInputElement).value))" 
+                />
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Peso</label>
+                <select
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50"
+                  :value="String(currentFontWeight)"
+                  @change="patch('fontWeight', Number(($event.target as HTMLSelectElement).value))"
+                >
+                  <option v-for="opt in FONT_WEIGHT_OPTIONS" :key="opt.value" :value="String(opt.value)">{{ opt.label }}</option>
+                </select>
+              </div>
+            </div>
+            
+            <div>
+              <label class="text-[10px] text-zinc-500 mb-1 block">Cor do Texto</label>
+              <div class="flex items-center gap-2">
+                <div 
+                  class="w-8 h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden shadow-inner flex-shrink-0"
+                  :style="{ backgroundColor: current('fill', '#ffffff') }"
+                  @click="showFillColorPicker = true"
+                ></div>
+                <input 
+                  class="flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white font-mono uppercase focus:outline-none focus:border-amber-500/50" 
+                  :value="String(current('fill', '#ffffff')).replace('#', '').toUpperCase()" 
+                  maxlength="6"
+                  @input="patch('fill', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))" 
+                />
+                <ColorPicker
+                  :show="showFillColorPicker"
+                  :model-value="current('fill', '#ffffff')"
+                  @update:show="showFillColorPicker = $event"
+                  @update:model-value="(val: string) => patch('fill', val)"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Alinhamento</label>
+                <select 
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="current('textAlign', 'left')" 
+                  @change="patch('textAlign', ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="left">Esq</option>
+                  <option value="center">Centro</option>
+                  <option value="right">Dir</option>
+                  <option value="justify">Just</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Estilo</label>
+                <select 
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="current('fontStyle', 'normal')" 
+                  @change="patch('fontStyle', ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="normal">Normal</option>
+                  <option value="italic">Itálico</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Caixa</label>
+                <select 
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="currentTextCase" 
+                  @change="setTextCase(($event.target as HTMLSelectElement).value as any)"
+                >
+                  <option value="none">Auto</option>
+                  <option value="upper">MAIÚS</option>
+                  <option value="lower">minús</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Altura Linha</label>
+                <input 
+                  type="number" 
+                  step="0.1"
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="Number(current('lineHeight', 1)).toFixed(1)" 
+                  @input="patch('lineHeight', Number(($event.target as HTMLInputElement).value))" 
+                />
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Espaçamento</label>
+                <input 
+                  type="number" 
+                  step="10"
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="Math.round(currentNumber('charSpacing', 0))" 
+                  @input="patch('charSpacing', Number(($event.target as HTMLInputElement).value))" 
+                />
+              </div>
+            </div>
+
+            <div class="flex items-center gap-4 p-2 rounded-lg bg-zinc-800/30">
+              <label class="flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  class="w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-600 text-amber-500 cursor-pointer" 
+                  :checked="!!current('underline', false)" 
+                  @change="patch('underline', ($event.target as HTMLInputElement).checked)" 
+                />
+                Sublinhado
+              </label>
+              <label class="flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  class="w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-600 text-amber-500 cursor-pointer" 
+                  :checked="!!current('linethrough', false)" 
+                  @change="patch('linethrough', ($event.target as HTMLInputElement).checked)" 
+                />
+                Riscado
+              </label>
+            </div>
+
+            <!-- Text Stroke -->
+            <div class="pt-3 border-t border-zinc-800/50 space-y-2">
+              <div class="text-[10px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Contorno
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-zinc-500 mb-1 block">Cor</label>
+                  <div 
+                    class="w-full h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden"
+                    :style="{ backgroundColor: current('stroke', 'transparent') }"
+                    @click="showTextStrokeColorPicker = true"
+                  ></div>
+                  <ColorPicker
+                    :show="showTextStrokeColorPicker"
+                    :model-value="current('stroke', '#000000')"
+                    @update:show="showTextStrokeColorPicker = $event"
+                    @update:model-value="(val: string) => patch('stroke', val)"
+                  />
+                </div>
+                <div>
+                  <label class="text-[10px] text-zinc-500 mb-1 block">Largura</label>
+                  <input 
+                    type="number" 
+                    step="0.5"
+                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                    :value="Number(current('strokeWidth', 0)).toFixed(1)" 
+                    @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))" 
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Decimal special fields -->
+            <div v-if="isDecimalText" class="pt-3 border-t border-amber-500/20 space-y-2">
+              <div class="text-[10px] font-semibold text-amber-400 flex items-center gap-1.5">
+                ⚡ Ajustes Automáticos (Centavos)
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-zinc-500 mb-1 block">Escala</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    class="w-full bg-zinc-800/50 border border-amber-500/30 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                    :value="Number(current('__fontScale', 0.42)).toFixed(2)" 
+                    @input="patchCustom('__fontScale', Number(($event.target as HTMLInputElement).value))" 
+                  />
+                </div>
+                <div>
+                  <label class="text-[10px] text-zinc-500 mb-1 block">Offset Y</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    class="w-full bg-zinc-800/50 border border-amber-500/30 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                    :value="Number(current('__yOffsetRatio', -0.18)).toFixed(2)" 
+                    @input="patchCustom('__yOffsetRatio', Number(($event.target as HTMLInputElement).value))" 
+                  />
+                </div>
+              </div>
+              <p class="text-[9px] text-zinc-500">Controla tamanho/altura ao adaptar no card</p>
+            </div>
+          </div>
+
+          <!-- Shape Properties (Non-text) -->
+          <div v-if="!isText" class="p-3 rounded-xl border border-zinc-800/50 bg-zinc-900/30 space-y-3">
+            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+              Aparência
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Preenchimento</label>
+                <div 
+                  class="w-full h-9 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden"
+                  :style="{ backgroundColor: current('fill', '#ffffff') }"
+                  @click="showFillColorPicker2 = true"
+                ></div>
+                <ColorPicker
+                  :show="showFillColorPicker2"
+                  :model-value="current('fill', '#ffffff')"
+                  @update:show="showFillColorPicker2 = $event"
+                  @update:model-value="(val: string) => patch('fill', val)"
+                />
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Contorno</label>
+                <div 
+                  class="w-full h-9 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden"
+                  :style="{ backgroundColor: current('stroke', '#000000') }"
+                  @click="showStrokeColorPicker = true"
+                ></div>
+                <ColorPicker
+                  :show="showStrokeColorPicker"
+                  :model-value="current('stroke', '#000000')"
+                  @update:show="showStrokeColorPicker = $event"
+                  @update:model-value="(val: string) => patch('stroke', val)"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="text-[10px] text-zinc-500 mb-1 block">Largura do Contorno</label>
+              <input 
+                type="number" 
+                step="0.5"
+                class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                :value="Number(current('strokeWidth', 0)).toFixed(1)" 
+                @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))" 
+              />
+            </div>
+
+            <!-- Rect specific -->
+            <div v-if="isRect" class="pt-3 border-t border-zinc-800/50 space-y-2">
+              <div class="text-[10px] font-semibold text-zinc-400">Dimensões</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-zinc-500 mb-1 block">Largura</label>
+                  <input 
+                    type="number" 
+                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                    :value="Math.round(current('width', 0))" 
+                    @input="patch('width', Number(($event.target as HTMLInputElement).value))" 
+                  />
+                </div>
+                <div>
+                  <label class="text-[10px] text-zinc-500 mb-1 block">Altura</label>
+                  <input 
+                    type="number" 
+                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                    :value="Math.round(current('height', 0))" 
+                    @input="patch('height', Number(($event.target as HTMLInputElement).value))" 
+                  />
+                </div>
+                <div>
+                  <label class="text-[10px] text-zinc-500 mb-1 block">Raio X</label>
+                  <input 
+                    type="number" 
+                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                    :value="Math.round(current('rx', 0))" 
+                    @input="patch('rx', Number(($event.target as HTMLInputElement).value))" 
+                  />
+                </div>
+                <div>
+                  <label class="text-[10px] text-zinc-500 mb-1 block">Raio Y</label>
+                  <input 
+                    type="number" 
+                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                    :value="Math.round(current('ry', 0))" 
+                    @input="patch('ry', Number(($event.target as HTMLInputElement).value))" 
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Circle specific -->
+            <div v-if="isCircle" class="pt-3 border-t border-zinc-800/50 space-y-2">
+              <div class="text-[10px] font-semibold text-zinc-400">Dimensões</div>
+              <div>
+                <label class="text-[10px] text-zinc-500 mb-1 block">Raio</label>
+                <input 
+                  type="number" 
+                  class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
+                  :value="Math.round(current('radius', 0))" 
+                  @input="patch('radius', Number(($event.target as HTMLInputElement).value))" 
+                />
+              </div>
+            </div>
+
+            <!-- Image specific -->
+            <div v-if="isImage" class="pt-3 border-t border-zinc-800/50 space-y-3">
+              <div class="text-[10px] font-semibold text-zinc-400">Imagem</div>
+              <button 
+                class="w-full px-3 py-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-xs text-zinc-300 transition-colors flex items-center justify-center gap-2"
+                @click="openReplaceImage"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Trocar Imagem
+              </button>
+              <div class="flex items-center gap-4">
+                <label class="flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    class="w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-600 text-amber-500 cursor-pointer" 
+                    :checked="!!current('flipX', false)" 
+                    @change="patch('flipX', ($event.target as HTMLInputElement).checked)" 
+                  />
+                  Flip H
+                </label>
+                <label class="flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    class="w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-600 text-amber-500 cursor-pointer" 
+                    :checked="!!current('flipY', false)" 
+                    @change="patch('flipY', ($event.target as HTMLInputElement).checked)" 
+                  />
+                  Flip V
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Help text -->
+          <div class="p-3 rounded-xl bg-amber-500/5 border border-amber-500/10">
+            <p class="text-[10px] text-amber-400/80 leading-relaxed">
+              💡 <strong>Dica:</strong> Use nomes especiais como <code class="bg-black/20 px-1 rounded text-[9px]">price_decimal_text</code>, 
+              <code class="bg-black/20 px-1 rounded text-[9px]">price_unit_text</code>, 
+              <code class="bg-black/20 px-1 rounded text-[9px]">price_integer_text</code> 
+              para layout automático no card.
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -1005,12 +1307,64 @@ watch(
 </template>
 
 <style scoped>
+.mini-editor-container {
+  padding: 1rem;
+}
+
 .mini-editor-viewport :deep(.canvas-container) {
   width: 100% !important;
   height: 100% !important;
 }
+
 .mini-editor-viewport :deep(canvas) {
   max-width: 100%;
   max-height: 100%;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Range input styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f59e0b;
+  cursor: pointer;
+  margin-top: -5px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: #3f3f46;
+  border-radius: 2px;
+}
+
+/* Checkbox styling */
+input[type="checkbox"] {
+  accent-color: #f59e0b;
 }
 </style>

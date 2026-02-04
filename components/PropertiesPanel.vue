@@ -99,6 +99,61 @@ const isMultiSelect = computed(() => props.selectedObject?.type === 'activeSelec
 const canMask = computed(() => props.selectedObject && !isMultiSelect.value)
 const isComponent = computed(() => props.selectedObject?.isComponent)
 
+// Helper to detect if selected object is a ProductCard
+const isProductCard = computed(() => {
+  const obj = props.selectedObject
+  if (!obj) return false
+  return obj.type === 'group' && (obj.isSmartObject || obj.isProductCard || String(obj.name || '').startsWith('product-card'))
+})
+
+// Helper to get the background element of a ProductCard/SmartGroup for styling
+const getBackgroundElement = computed(() => {
+  const obj = props.selectedObject
+  if (!obj) return null
+  
+  // For ProductCard/SmartObject groups, find the offerBackground
+  if (obj.type === 'group' && (obj.isSmartObject || obj.isProductCard || String(obj.name || '').startsWith('product-card'))) {
+    const objs = typeof obj.getObjects === 'function' ? obj.getObjects() : (obj._objects || [])
+    return objs.find((o: any) => o?.name === 'offerBackground') || null
+  }
+  
+  // For ProductZones, find the zone rect
+  if (isLikelyProductZone(obj)) {
+    const objs = typeof obj.getObjects === 'function' ? obj.getObjects() : (obj._objects || [])
+    return objs.find((o: any) => o?.type === 'rect' && (o.name === 'zoneRect' || o.name === 'zone-border')) || 
+           objs.find((o: any) => o?.type === 'rect') || null
+  }
+  
+  return null
+})
+
+// Get the effective fill value (from background element for groups, or from object directly)
+const getEffectiveFill = computed(() => {
+  const bg = getBackgroundElement.value
+  if (bg) {
+    return bg.fill || '#000000'
+  }
+  return props.selectedObject?.fill || '#000000'
+})
+
+// Get the effective stroke value
+const getEffectiveStroke = computed(() => {
+  const bg = getBackgroundElement.value
+  if (bg) {
+    return bg.stroke || '#000000'
+  }
+  return props.selectedObject?.stroke || '#000000'
+})
+
+// Get the effective strokeWidth value
+const getEffectiveStrokeWidth = computed(() => {
+  const bg = getBackgroundElement.value
+  if (bg) {
+    return bg.strokeWidth ?? 0
+  }
+  return props.selectedObject?.strokeWidth ?? 0
+})
+
 // Helper function to detect product zone (same logic as isLikelyProductZone in EditorCanvas)
 const isLikelyProductZone = (obj: any): boolean => {
   if (!obj) return false
@@ -162,10 +217,13 @@ const fillColorPickerRef = ref<HTMLElement | null>(null)
 const strokeColorPickerRef = ref<HTMLElement | null>(null)
 const pageColorPickerRef = ref<HTMLElement | null>(null)
 
+// Track which input is currently focused to prevent value override during typing
+const focusedInput = ref<string | null>(null)
+
 // Helper to safely get value
 const getVal = (prop: string, defaultVal: any = '') => props.selectedObject ? (props.selectedObject[prop] ?? defaultVal) : defaultVal
 
-// Safe getters for Fabric.js methods
+// Safe getters for Fabric.js methods (defined early for use in computed)
 const getScaledWidth = () => {
   if (!props.selectedObject) return 0
   if (typeof props.selectedObject.getScaledWidth === 'function') {
@@ -182,6 +240,26 @@ const getScaledHeight = () => {
   }
   // Fallback for proxy objects or objects without the method
   return props.selectedObject.height * (props.selectedObject.scaleY || 1) || 0
+}
+
+// Computed values that respect focus state (don't override during typing)
+const displayLeft = computed(() => focusedInput.value === 'left' ? undefined : Math.round(getVal('left', 0)))
+const displayTop = computed(() => focusedInput.value === 'top' ? undefined : Math.round(getVal('top', 0)))
+const displayWidth = computed(() => focusedInput.value === 'width' ? undefined : Math.round(getScaledWidth()))
+const displayHeight = computed(() => focusedInput.value === 'height' ? undefined : Math.round(getScaledHeight()))
+const displayAngle = computed(() => focusedInput.value === 'angle' ? undefined : Math.round(getVal('angle', 0)))
+
+// Handlers for input focus/blur
+const handleFocus = (inputName: string) => {
+  focusedInput.value = inputName
+}
+const handleBlur = () => {
+  focusedInput.value = null
+}
+
+// Input handler that emits and maintains local state
+const handlePropertyInput = (prop: string, value: any) => {
+  emit('update-property', prop, value)
 }
 
 // Helper functions for page color/opacity
@@ -379,25 +457,25 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <div class="grid grid-cols-2 gap-2">
               <div class="flex items-center gap-2 group">
                   <span class="text-[10px] text-zinc-500 w-3">X</span>
-                  <input type="number" :value="Math.round(getVal('left', 0))" @input="e => $emit('update-property', 'left', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
+                  <input type="number" :value="displayLeft ?? Math.round(getVal('left', 0))" @focus="handleFocus('left')" @blur="handleBlur" @input="e => handlePropertyInput('left', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
               </div>
               <div class="flex items-center gap-2 group">
                   <span class="text-[10px] text-zinc-500 w-3">Y</span>
-                  <input type="number" :value="Math.round(getVal('top', 0))" @input="e => $emit('update-property', 'top', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
+                  <input type="number" :value="displayTop ?? Math.round(getVal('top', 0))" @focus="handleFocus('top')" @blur="handleBlur" @input="e => handlePropertyInput('top', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
               </div>
               <div class="flex items-center gap-2 group">
                   <span class="text-[10px] text-zinc-500 w-3">W</span>
-                  <input type="number" :value="Math.round(getScaledWidth())" @input="e => $emit('update-property', 'width', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
+                  <input type="number" :value="displayWidth ?? Math.round(getScaledWidth())" @focus="handleFocus('width')" @blur="handleBlur" @input="e => handlePropertyInput('width', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
               </div>
               <div class="flex items-center gap-2 group">
                   <span class="text-[10px] text-zinc-500 w-3">H</span>
-                  <input type="number" :value="Math.round(getScaledHeight())" @input="e => $emit('update-property', 'height', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
+                  <input type="number" :value="displayHeight ?? Math.round(getScaledHeight())" @focus="handleFocus('height')" @blur="handleBlur" @input="e => handlePropertyInput('height', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
               </div>
               
               <!-- Rotation & Corner Radius -->
               <div class="flex items-center gap-2 group">
                   <span class="text-[10px] text-zinc-500 w-3">∠</span>
-                  <input type="number" :value="Math.round(getVal('angle', 0))" @input="e => $emit('update-property', 'angle', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
+                  <input type="number" :value="displayAngle ?? Math.round(getVal('angle', 0))" @focus="handleFocus('angle')" @blur="handleBlur" @input="e => handlePropertyInput('angle', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
               </div>
               <div class="flex items-center gap-2 group" v-if="isRectLike && !isText">
                   <span class="text-[10px] text-zinc-500 w-3">R</span>

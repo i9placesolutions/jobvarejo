@@ -24,6 +24,8 @@ const importedProject = ref<any | null>(null)
 const importedCanvasJson = ref<any | null>(null)
 // Estado local de erro para evitar warning de readonly
 const localError = ref<string | null>(null)
+// Opção para centralizar conteúdo no canvas
+const autoCenter = ref(false)
 
 // Computed para mostrar erro local ou do composable
 const displayError = computed(() => localError.value || error.value)
@@ -73,6 +75,7 @@ watch(() => props.isOpen, (isOpen) => {
       importedProject.value = null
       importedCanvasJson.value = null
       localError.value = null
+      autoCenter.value = false
     }, 300)
   } else {
     // Limpar erros ao abrir
@@ -158,7 +161,9 @@ const handleImport = async () => {
   // Limpar erros locais antes de começar
   localError.value = null
 
-  const result = await importAndSave(droppedFile.value, designName.value)
+  const result = await importAndSave(droppedFile.value, designName.value, {
+    autoCenter: autoCenter.value
+  })
 
   if (result?.success && result.project) {
     importedProject.value = result.project
@@ -302,6 +307,22 @@ const formatFileSize = (bytes: number): string => {
             </div>
           </div>
 
+          <!-- Auto-center Option -->
+          <div class="flex items-start gap-3 p-4 bg-muted/30 rounded-xl border border-border">
+            <label class="flex items-start gap-3 cursor-pointer">
+              <input
+                v-model="autoCenter"
+                type="checkbox"
+                :disabled="isProcessing"
+                class="w-4 h-4 mt-0.5 rounded border-border bg-muted text-primary focus:ring-primary/20"
+              />
+              <div class="text-xs text-muted-foreground space-y-1">
+                <p class="font-medium text-foreground">Centralizar conteúdo no canvas</p>
+                <p>Move o layout do PSD para o centro do canvas. Desmarque para manter as posições originais.</p>
+              </div>
+            </label>
+          </div>
+
           <!-- Info Box -->
           <div class="flex items-start gap-3 p-4 bg-muted/30 rounded-xl border border-border">
             <FileText class="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
@@ -310,7 +331,8 @@ const formatFileSize = (bytes: number): string => {
               <ul class="ml-4 list-disc space-y-0.5">
                 <li>Camadas de imagem → objetos de imagem</li>
                 <li>Camadas de texto → texto editável</li>
-                <li>Posicionamento preservado</li>
+                <li>Grupos preservados</li>
+                <li>Todas as camadas importadas (mesmo invisíveis)</li>
               </ul>
             </div>
           </div>

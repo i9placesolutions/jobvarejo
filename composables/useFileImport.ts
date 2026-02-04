@@ -58,8 +58,13 @@ export const useFileImport = () => {
 
   /**
    * Importa arquivo PSD
+   * @param file Arquivo PSD a ser importado
+   * @param options Opções de importação
    */
-  const importPSD = async (file: File): Promise<ImportResult | null> => {
+  const importPSD = async (
+    file: File, 
+    options?: { autoCenter?: boolean }
+  ): Promise<ImportResult | null> => {
     if (!auth.user.value?.id) {
       importError.value = 'Usuário não autenticado'
       importStatus.value = 'error'
@@ -90,6 +95,10 @@ export const useFileImport = () => {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('userId', auth.user.value.id)
+      
+      // Desabilitar auto-center por padrão para manter posições originais do PSD
+      const autoCenter = options?.autoCenter ?? false
+      formData.append('autoCenter', autoCenter.toString())
 
       importStatus.value = 'converting'
       importProgress.value = 30
@@ -139,11 +148,14 @@ export const useFileImport = () => {
   /**
    * Detecta formato e importa automaticamente
    */
-  const importFile = async (file: File): Promise<ImportResult | null> => {
+  const importFile = async (
+    file: File,
+    options?: { autoCenter?: boolean }
+  ): Promise<ImportResult | null> => {
     const ext = file.name.toLowerCase()
 
     if (ext.endsWith('.psd')) {
-      return await importPSD(file)
+      return await importPSD(file, options)
     } else if (ext.endsWith('.pdf')) {
       return await importPDF(file)
     } else if (ext.endsWith('.ai')) {
@@ -284,11 +296,12 @@ export const useFileImport = () => {
    */
   const importAndSave = async (
     file: File,
-    designName?: string
+    designName?: string,
+    options?: { autoCenter?: boolean }
   ): Promise<{ success: boolean; project?: any; error?: string }> => {
     reset()
 
-    const result = await importFile(file)
+    const result = await importFile(file, options)
 
     if (!result) {
       return {

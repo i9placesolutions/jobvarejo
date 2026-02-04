@@ -78,6 +78,7 @@ const showZoomMenu = ref(false)
 let globalMouseUpHandler: ((e: MouseEvent) => void) | null = null
 let domCanvasDblClickHandler: ((e: MouseEvent) => void) | null = null
 let lastDomDblClickAt = 0
+let lastDblClickTime = 0 // Shared between handlers to prevent duplicate processing
 let wrapperResizeObserver: ResizeObserver | null = null
 
 // Flag to track if canvas is destroyed (prevents errors after unmount)
@@ -169,7 +170,16 @@ const patchCanvasRenderSafety = (c: any): void => {
     if (!c || (c as any).__patchedSafeRender) return;
 
     const isValidRenderable = (o: any) => {
-        return !!(o && typeof o === 'object' && typeof o.render === 'function' && typeof o.setCoords === 'function');
+        // `render` + `setCoords` are required for stable rendering;
+        // `getRelativeCenterPoint`/`calcTransformMatrix` are required by Fabric v7 layout engine.
+        return !!(
+            o &&
+            typeof o === 'object' &&
+            typeof o.render === 'function' &&
+            typeof o.setCoords === 'function' &&
+            typeof o.getRelativeCenterPoint === 'function' &&
+            typeof o.calcTransformMatrix === 'function'
+        );
     };
 
     const ensureFabricContexts = (fc: any): boolean => {
@@ -269,6 +279,73 @@ const patchCanvasRenderSafety = (c: any): void => {
     }
 
     (c as any).__patchedSafeRender = true;
+};
+
+// Removes any non-Fabric/plain objects from `_objects` trees to prevent
+// Fabric v7 layout crashes (e.g. `getRelativeCenterPoint is not a function`).
+// This is intentionally conservative: invalid children are dropped.
+const sanitizeLayoutTree = (): void => {
+    if (!canvas.value || isCanvasDestroyed.value) return;
+
+    const isValidLayoutObject = (o: any) => {
+        return !!(
+            o &&
+            typeof o === 'object' &&
+            typeof o.render === 'function' &&
+            typeof o.setCoords === 'function' &&
+            typeof o.getRelativeCenterPoint === 'function' &&
+            typeof o.calcTransformMatrix === 'function'
+        );
+    };
+
+    const purge = (container: any): number => {
+        if (!container) return 0;
+        const internal = (container as any)._objects;
+        let removed = 0;
+        if (Array.isArray(internal)) {
+            const before = internal.length;
+            const valid = internal.filter(isValidLayoutObject);
+            if (valid.length !== before) {
+                internal.length = 0;
+                valid.forEach((o: any) => internal.push(o));
+                removed += (before - valid.length);
+                try {
+                    if (typeof (container as any)._onStackOrderChanged === 'function') (container as any)._onStackOrderChanged();
+                } catch {
+                    // ignore
+                }
+                try {
+                    if (typeof (container as any).setCoords === 'function') (container as any).setCoords();
+                } catch {
+                    // ignore
+                }
+                (container as any).dirty = true;
+            }
+            for (const child of internal) {
+                // Groups/active selections can nest.
+                if (child && Array.isArray((child as any)._objects)) {
+                    removed += purge(child);
+                }
+                // Some clipPaths are groups internally.
+                try {
+                    const cp = child?.clipPath;
+                    if (cp && Array.isArray((cp as any)._objects)) removed += purge(cp);
+                } catch {
+                    // ignore
+                }
+            }
+        }
+        return removed;
+    };
+
+    try {
+        const removed = purge(canvas.value);
+        if (removed > 0) {
+            console.warn(`⚠️ [sanitizeLayoutTree] Removidos ${removed} objeto(s) inválido(s) do tree para evitar crash de layout`);
+        }
+    } catch (e) {
+        console.warn('⚠️ [sanitizeLayoutTree] Falha ao sanitizar tree:', e);
+    }
 };
 
 /**
@@ -1552,21 +1629,35 @@ watch(isPenMode, (newVal) => {
 
 // Enter node editing mode for vector paths
 const enterPathNodeEditing = (pathObj: any) => {
-    if (!pathObj || !pathObj.isVectorPath) return;
-    
-    isNodeEditing.value = true;
-    currentEditingPath.value = pathObj;
-    selectedPathNodeIndex.value = null;
-    canvas.value.discardActiveObject();
-    
-    // Restore pen path data if available
-    const pathData = pathObj.penPathData || [];
-    
-    // Create control points for each node
-    const vpt = canvas.value.viewportTransform;
-    const zoom = canvas.value.getZoom();
-    
-    pathData.forEach((point: any, index: number) => {
+    try {
+        if (!pathObj || !pathObj.isVectorPath) return;
+        if (!canvas.value || isCanvasDestroyed.value) return;
+        
+        // Safety check: ensure object is on canvas
+        if (!canvas.value.getObjects().includes(pathObj)) {
+            console.warn('[enterPathNodeEditing] Object not found on canvas');
+            return;
+        }
+        
+        isNodeEditing.value = true;
+        currentEditingPath.value = pathObj;
+        selectedPathNodeIndex.value = null;
+        canvas.value.discardActiveObject();
+        
+        // Restore pen path data if available
+        const pathData = pathObj.penPathData || [];
+        
+        // Create control points for each node
+        const vpt = canvas.value.viewportTransform;
+        const zoom = canvas.value.getZoom();
+        
+        if (!vpt || typeof zoom !== 'number') {
+            console.warn('[enterPathNodeEditing] Invalid viewport state');
+            return;
+        }
+        
+        pathData.forEach((point: any, index: number) => {
+            try {
         const canvasX = point.x * zoom + vpt[4];
         const canvasY = point.y * zoom + vpt[5];
         
@@ -1663,13 +1754,19 @@ const enterPathNodeEditing = (pathObj: any) => {
                     }
                 );
                 canvas.value.add(handleLine);
+                    }
+                }
+            } catch (e) {
+                console.warn(`[enterPathNodeEditing] Error creating control point/handle ${index}:`, e);
             }
-        }
-    });
-    
-    pathObj.selectable = false;
-    pathObj.evented = false;
-    canvas.value.requestRenderAll();
+        });
+        
+        pathObj.selectable = false;
+        pathObj.evented = false;
+        safeRequestRenderAll();
+    } catch (error) {
+        console.error('[enterPathNodeEditing] Error:', error);
+    }
 }
 
 // Select a path node
@@ -1964,40 +2061,60 @@ const splitPath = () => {
 
 // --- Node Editing Logic ---
 const enterNodeEditing = (obj: any) => {
-    if (!obj || (obj.type !== 'polygon' && obj.type !== 'polyline')) return;
-    
-    isNodeEditing.value = true;
-    canvas.value.discardActiveObject(); // Deselect main object to focus on points
-    
-    const matrix = obj.calcTransformMatrix();
-    const points = obj.points;
-    
-    points.forEach((point: any, index: number) => {
-        // Transform point coordinates to canvas coordinates
-        const p = fabric.util.transformPoint({ x: point.x - obj.pathOffset.x, y: point.y - obj.pathOffset.y }, matrix);
+    try {
+        if (!obj || (obj.type !== 'polygon' && obj.type !== 'polyline')) return;
+        if (!canvas.value || isCanvasDestroyed.value) return;
         
-        const control = new fabric.Circle({
-            left: p.x,
-            top: p.y,
-            radius: 4,
-            fill: '#ffffff',
-            stroke: '#0d99ff',
-            strokeWidth: 1,
-            hasControls: false,
-            hasBorders: false,
-            originX: 'center',
-            originY: 'center',
-            name: 'control_point',
-            data: { index: index, parentObj: obj }, // Link to parent
-            excludeFromExport: true // CRITICAL: Don't show in LayersPanel
+        // Safety check: ensure object is on canvas
+        if (!canvas.value.getObjects().includes(obj)) {
+            console.warn('[enterNodeEditing] Object not found on canvas');
+            return;
+        }
+        
+        isNodeEditing.value = true;
+        canvas.value.discardActiveObject(); // Deselect main object to focus on points
+        
+        const matrix = obj.calcTransformMatrix();
+        const points = obj.points;
+        
+        if (!points || !Array.isArray(points)) {
+            console.warn('[enterNodeEditing] No points found on object');
+            return;
+        }
+        
+        points.forEach((point: any, index: number) => {
+            try {
+                // Transform point coordinates to canvas coordinates
+                const p = fabric.util.transformPoint({ x: point.x - obj.pathOffset.x, y: point.y - obj.pathOffset.y }, matrix);
+                
+                const control = new fabric.Circle({
+                    left: p.x,
+                    top: p.y,
+                    radius: 4,
+                    fill: '#ffffff',
+                    stroke: '#0d99ff',
+                    strokeWidth: 1,
+                    hasControls: false,
+                    hasBorders: false,
+                    originX: 'center',
+                    originY: 'center',
+                    name: 'control_point',
+                    data: { index: index, parentObj: obj }, // Link to parent
+                    excludeFromExport: true // CRITICAL: Don't show in LayersPanel
+                });
+                
+                canvas.value.add(control);
+            } catch (e) {
+                console.warn(`[enterNodeEditing] Error creating control point ${index}:`, e);
+            }
         });
         
-        canvas.value.add(control);
-    });
-    
-    obj.selectable = false; // Lock parent while editing
-    obj.evented = false;
-    canvas.value.requestRenderAll();
+        obj.selectable = false; // Lock parent while editing
+        obj.evented = false;
+        safeRequestRenderAll();
+    } catch (error) {
+        console.error('[enterNodeEditing] Error:', error);
+    }
 }
 
 
@@ -2078,6 +2195,71 @@ const handleInteraction = () => {
 
 const safeAddWithUpdate = (group: any, object?: any) => {
     if (!group) return;
+
+    // Fabric v7 LayoutManager will call `getRelativeCenterPoint()` on each child.
+    // If any non-Fabric/plain object sneaks into `_objects`, `triggerLayout()` / `setCoords()` can crash.
+    // CRITICAL: Must include _set check as Fabric internals use this method
+    const isValidLayoutChild = (o: any) => {
+        return !!(
+            o &&
+            typeof o === 'object' &&
+            (typeof o._set === 'function' || typeof o.set === 'function') &&
+            typeof o.render === 'function' &&
+            typeof o.setCoords === 'function' &&
+            typeof o.getRelativeCenterPoint === 'function' &&
+            typeof o.calcTransformMatrix === 'function'
+        );
+    };
+
+    const purgeInvalidForLayoutRecursive = (container: any): number => {
+        if (!container) return 0;
+        const internal = (container as any)._objects;
+        let removed = 0;
+        if (Array.isArray(internal)) {
+            const before = internal.length;
+            const valid = internal.filter(isValidLayoutChild);
+            if (valid.length !== before) {
+                internal.length = 0;
+                valid.forEach((o: any) => internal.push(o));
+                removed += (before - valid.length);
+                try {
+                    if (typeof (container as any)._onStackOrderChanged === 'function') (container as any)._onStackOrderChanged();
+                } catch {
+                    // ignore
+                }
+                try {
+                    if (typeof (container as any).setCoords === 'function') (container as any).setCoords();
+                } catch {
+                    // ignore
+                }
+                (container as any).dirty = true;
+            }
+            for (const child of internal) {
+                try {
+                    const cp = child?.clipPath;
+                    if (cp && Array.isArray((cp as any)._objects)) removed += purgeInvalidForLayoutRecursive(cp);
+                } catch {
+                    // ignore
+                }
+                if (child && Array.isArray((child as any)._objects)) {
+                    removed += purgeInvalidForLayoutRecursive(child);
+                }
+            }
+        }
+        return removed;
+    };
+
+    try {
+        const removed = purgeInvalidForLayoutRecursive(group);
+        if (removed > 0) {
+            console.warn(`⚠️ [safeAddWithUpdate] Removidos ${removed} objeto(s) inválido(s) antes de layout/setCoords`, {
+                groupId: group?._customId || group?.id,
+                groupType: group?.type
+            });
+        }
+    } catch {
+        // ignore
+    }
     
     // CRITICAL: Validate object is a proper Fabric object before adding
     if (object) {
@@ -2091,6 +2273,20 @@ const safeAddWithUpdate = (group: any, object?: any) => {
             });
             return; // BLOCK invalid objects
         }
+        
+        // Extra check for groups: ensure all children have required methods
+        if (object.type === 'group' && object.getObjects) {
+            const children = object.getObjects();
+            const invalidChildren = children.filter((c: any) => c && typeof c.getRelativeCenterPoint !== 'function');
+            if (invalidChildren.length > 0) {
+                console.error('❌ [safeAddWithUpdate] Grupo contém objetos filhos inválidos!', {
+                    invalidCount: invalidChildren.length,
+                    totalChildren: children.length,
+                    groupId: object._customId
+                });
+                // Don't block, but warn - the group layout might fail
+            }
+        }
     }
     
     if (typeof group.addWithUpdate === 'function') {
@@ -2103,7 +2299,14 @@ const safeAddWithUpdate = (group: any, object?: any) => {
     }
     // Fabric v7+: groups use LayoutManager; `triggerLayout()` replaces `addWithUpdate/_calcBounds`.
     if (typeof group.triggerLayout === 'function') {
-        group.triggerLayout();
+        try {
+            group.triggerLayout();
+        } catch (e) {
+            console.error('❌ [safeAddWithUpdate] triggerLayout failed:', e);
+            // Fallback to older methods
+            if (typeof group._calcBounds === 'function') group._calcBounds();
+            if (typeof group._updateObjectsCoords === 'function') group._updateObjectsCoords();
+        }
     } else {
         if (typeof group._calcBounds === 'function') group._calcBounds();
         if (typeof group._updateObjectsCoords === 'function') group._updateObjectsCoords();
@@ -2126,60 +2329,20 @@ const groupLocalToCanvasPoint = (group: any, x: number, y: number): { x: number;
     }
 };
 
-// === GLOBAL HELPER: Find parent group for an object (used by delete and other operations) ===
-const findParentGroupForObjectGlobal = (obj: any): any => {
-    if (!obj || !canvas.value) return null;
-    
-    // First check if object has direct group reference
-    if (obj.group) return obj.group;
-    
-    const allObjects = canvas.value.getObjects();
-    
-    // Search function that finds the IMMEDIATE parent group containing the object
-    const searchInGroup = (group: any, depth: number = 0): { group: any, depth: number } | null => {
-        if (!group || typeof group.getObjects !== 'function') return null;
-        
-        const children = group.getObjects() || [];
-        
-        for (const child of children) {
-            // Direct match
-            if (child === obj || (obj._customId && child._customId === obj._customId)) {
-                return { group, depth };
-            }
-            
-            // If child is also a group, search deeper
-            if (child.type === 'group' || child.type === 'Group') {
-                const deeper = searchInGroup(child, depth + 1);
-                if (deeper) {
-                    return deeper; // Return the deepest match (immediate parent)
-                }
-            }
-        }
-        
-        return null;
-    };
-    
-    // Look for groups that are in ACTIVE edit mode first
-    for (const canvasObj of allObjects) {
-        if (canvasObj.type === 'group' || canvasObj.type === 'Group') {
-            const isInteractive = canvasObj.interactive === true || canvasObj.subTargetCheck === true;
-            
-            if (isInteractive) {
-                const result = searchInGroup(canvasObj, 0);
-                if (result) return result.group;
-            }
-        }
+// Inverse: convert canvas point to group-local coordinates
+const canvasToGroupLocalPoint = (group: any, x: number, y: number): { x: number; y: number } => {
+    try {
+        if (!group || !fabric) return { x, y };
+        const hasMatrix = typeof group.calcTransformMatrix === 'function' && typeof fabric?.util?.invertTransform === 'function';
+        if (!hasMatrix || !fabric?.util?.transformPoint || !fabric?.Point) return { x, y };
+        const m = group.calcTransformMatrix();
+        const inverted = fabric.util.invertTransform(m);
+        const p = new fabric.Point(Number(x) || 0, Number(y) || 0);
+        const out = fabric.util.transformPoint(p, inverted);
+        return { x: Number(out?.x) || 0, y: Number(out?.y) || 0 };
+    } catch {
+        return { x, y };
     }
-    
-    // Fallback: search all groups
-    for (const canvasObj of allObjects) {
-        if (canvasObj.type === 'group' || canvasObj.type === 'Group') {
-            const result = searchInGroup(canvasObj, 0);
-            if (result) return result.group;
-        }
-    }
-    
-    return null;
 };
 
 // === ALT/OPTION + DRAG DUPLICATE (Figma/Canva-like) ===
@@ -2188,24 +2351,79 @@ const setupAltDragDuplicate = () => {
     if (!canvas.value || !fabric) return;
 
     const isValidFabricObject = (o: any) => {
-        // Fabric.js v7 compatibility: validate that object is a proper Fabric instance
-        // Must have essential methods and be a proper object instance (not plain JSON)
-        if (!o || typeof o !== 'object') return false;
-        
-        // Check essential Fabric object methods
-        const hasSet = typeof o.set === 'function';
-        const hasRender = typeof o.render === 'function';
-        const hasSetCoords = typeof o.setCoords === 'function';
-        const hasToObject = typeof o.toObject === 'function';
-        
-        // Fabric v7 objects should have these prototype methods
-        // A plain JSON object won't have them properly bound
-        const hasType = typeof o.type === 'string' && o.type.length > 0;
-        
-        // Additional check: ensure it's not a plain object by checking constructor
-        const isProperInstance = o.constructor && o.constructor.name !== 'Object';
-        
-        return hasSet && hasRender && hasSetCoords && hasToObject && (hasType || isProperInstance);
+        return !!(
+            o &&
+            typeof o === 'object' &&
+            // CRITICAL: Fabric v7 requires _set specifically for internal operations like enterGroup
+            typeof o._set === 'function' &&
+            typeof o.render === 'function' &&
+            typeof o.setCoords === 'function' &&
+            typeof o.getRelativeCenterPoint === 'function' &&
+            typeof o.calcTransformMatrix === 'function'
+        );
+    };
+
+    const validateFabricTree = (o: any): boolean => {
+        if (!isValidFabricObject(o)) return false;
+        if (String(o?.type || '').toLowerCase() === 'group' && typeof o.getObjects === 'function') {
+            const kids = o.getObjects() || [];
+            for (const k of kids) {
+                if (!validateFabricTree(k)) return false;
+            }
+        }
+        return true;
+    };
+
+    // Recursively repair groups by removing invalid children that would break LayoutManager
+    // Returns the number of removed objects
+    const repairGroupChildren = (group: any): number => {
+        if (!group || typeof group !== 'object') return 0;
+        if (String(group.type || '').toLowerCase() !== 'group' || !group._objects) return 0;
+
+        const internal = group._objects;
+        if (!Array.isArray(internal)) return 0;
+
+        let totalRemoved = 0;
+        const validChildren: any[] = [];
+
+        for (const child of internal) {
+            // Check if child is a valid Fabric object
+            if (!isValidFabricObject(child)) {
+                console.warn('[repairGroupChildren] Removendo filho inválido:', child?.type || typeof child, child);
+                totalRemoved++;
+                continue;
+            }
+
+            // Recursively repair nested groups
+            if (String(child.type || '').toLowerCase() === 'group') {
+                const nestedRemoved = repairGroupChildren(child);
+                totalRemoved += nestedRemoved;
+                // Even if nested was repaired, check if it's still valid
+                if (!isValidFabricObject(child)) {
+                    console.warn('[repairGroupChildren] Removendo grupo aninhado que permanece inválido');
+                    totalRemoved++;
+                    continue;
+                }
+            }
+
+            validChildren.push(child);
+        }
+
+        if (totalRemoved > 0) {
+            // Replace internal objects array
+            internal.length = 0;
+            validChildren.forEach((c: any) => internal.push(c));
+
+            // Mark as dirty and update
+            try {
+                if (typeof group._onStackOrderChanged === 'function') group._onStackOrderChanged();
+            } catch { /* ignore */ }
+            group.dirty = true;
+
+            console.warn(`[repairGroupChildren] Removidos ${totalRemoved} objeto(s) inválido(s) do grupo ${group._customId || group.id || 'unknown'}`);
+        }
+
+        return totalRemoved;
     };
 
     const sanitizeFabricJson = (json: any) => {
@@ -2224,36 +2442,94 @@ const setupAltDragDuplicate = () => {
         return json;
     };
 
-    // Fabric.js v7 compatible enliven function
-    const enlivenOne = async (json: any): Promise<any> => {
-        if (!json || typeof json !== 'object') return null;
-        if (!fabric?.util?.enlivenObjects) return null;
-        
+    const enlivenMany = async (objectsJson: any[]): Promise<any[]> => {
+        if (!fabric?.util?.enlivenObjects) return [];
+        const cleanedList = Array.isArray(objectsJson) ? objectsJson.map(sanitizeFabricJson) : [];
+        const fn = fabric.util.enlivenObjects;
+        let result: any[] = [];
         try {
-            const cleaned = sanitizeFabricJson(json);
-            const fn = fabric.util.enlivenObjects;
-            
-            // Try Promise-based API first (Fabric v7)
-            try {
-                const result = fn([cleaned]);
-                if (result && typeof result.then === 'function') {
-                    const objs = await result;
-                    return Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
-                }
-            } catch {
-                // Fall through to callback-based API
-            }
-            
-            // Fallback to callback-based API (Fabric v5/v6)
-            return new Promise((resolve) => {
+            const maybe = fn(cleanedList);
+            if (maybe && typeof maybe.then === 'function') result = await maybe;
+        } catch {
+            // fall back to callback form below
+        }
+        if (result.length === 0) {
+            result = await new Promise<any[]>((resolve) => {
                 try {
-                    fn([cleaned], (objs: any[]) => {
-                        resolve(Array.isArray(objs) && objs.length > 0 ? objs[0] : null);
-                    });
+                    fn(cleanedList, (objs: any[]) => resolve(Array.isArray(objs) ? objs : []));
                 } catch {
-                    resolve(null);
+                    resolve([]);
                 }
             });
+        }
+        // CRITICAL: Filter out any objects that don't have all required Fabric methods
+        // Sometimes enlivenObjects returns partial objects that break LayoutManager
+        const validResults = result.filter((obj: any) => {
+            const isValid = !!(
+                obj &&
+                typeof obj === 'object' &&
+                typeof obj._set === 'function' &&
+                typeof obj.set === 'function' &&
+                typeof obj.render === 'function' &&
+                typeof obj.setCoords === 'function' &&
+                typeof obj.getRelativeCenterPoint === 'function' &&
+                typeof obj.calcTransformMatrix === 'function'
+            );
+            if (!isValid && obj) {
+                console.warn('[enlivenMany] Objeto inválido filtrado:', obj.type || typeof obj);
+            }
+            return isValid;
+        });
+        return validResults;
+    };
+
+    const enlivenOne = async (json: any): Promise<any> => {
+        if (!json || typeof json !== 'object') return null;
+        const out = await enlivenMany([json]);
+        return out?.[0] || null;
+    };
+
+    const cloneViaJson = async (source: any, propsToInclude: string[]) => {
+        try {
+            if (!source || typeof source.toObject !== 'function') return null;
+            const json = sanitizeFabricJson(source.toObject(propsToInclude));
+            if (!json || typeof json !== 'object') return null;
+
+            const type = String(json.type || source.type || '').toLowerCase();
+            if (type === 'group' && Array.isArray((json as any).objects) && fabric?.Group) {
+                const objectsJson = Array.isArray((json as any).objects) ? (json as any).objects : [];
+                const opts: any = { ...(json as any) };
+                delete opts.objects;
+                delete opts.type;
+                // Never restore layout manager from plain JSON (Fabric v7 expects class instance).
+                delete opts.layoutManager;
+                delete opts.layout;
+
+                // clipPath must be a Fabric instance, not raw JSON.
+                const clipJson = opts.clipPath;
+                delete opts.clipPath;
+
+                // enlivenMany now filters invalid objects internally
+                const kids = await enlivenMany(objectsJson);
+                
+                // Double-check: all kids must be valid Fabric objects
+                const validKids = kids.filter((k: any) => isValidFabricObject(k));
+                if (validKids.length !== kids.length) {
+                    console.warn(`[cloneViaJson] Filtrados ${kids.length - validKids.length} objetos inválidos de ${kids.length} total`);
+                }
+                
+                // Create group with only valid children
+                const g = new fabric.Group(validKids, opts);
+                if (clipJson) {
+                    const clipObj = await enlivenOne(clipJson);
+                    if (isValidFabricObject(clipObj)) g.set?.({ clipPath: clipObj });
+                }
+                // Final cleanup: remove any invalid children that would break LayoutManager
+                repairGroupChildren(g);
+                return g;
+            }
+
+            return await enlivenOne(json);
         } catch {
             return null;
         }
@@ -2262,69 +2538,87 @@ const setupAltDragDuplicate = () => {
     const cloneFabricObjectSafe = async (source: any, propsToInclude: string[]) => {
         if (!source) return null;
 
-        // 1) Try Fabric v7 Promise-based clone (preferred method)
+    // 1) Try Fabric v7 Promise-based clone
         try {
-            if (typeof source.clone === 'function') {
-                const result = source.clone(propsToInclude);
-                if (result && typeof result.then === 'function') {
-                    const cloned = await result;
-                    // Fabric v7 clone should return a proper Fabric object
-                    if (isValidFabricObject(cloned)) {
-                        console.log('✅ [cloneFabricObjectSafe] Clone via Promise-based clone() success');
-                        return cloned;
+            const out = source.clone?.(propsToInclude);
+            if (out && typeof out.then === 'function') {
+                const cloned = await out;
+                
+                // CRITICAL: IMMEDIATE check for _set - don't wait for validateFabricTree
+                if (typeof cloned?._set !== 'function') {
+                    console.error('❌ [cloneFabricObjectSafe] Clone from Fabric.clone() missing _set immediately:', {
+                        type: cloned?.type,
+                        hasSet: typeof cloned?.set === 'function',
+                        hasSetCoords: typeof cloned?.setCoords === 'function',
+                        hasRender: typeof cloned?.render === 'function',
+                        hasGetRelativeCenterPoint: typeof cloned?.getRelativeCenterPoint === 'function',
+                        hasCalcTransformMatrix: typeof cloned?.calcTransformMatrix === 'function',
+                        constructor: cloned?.constructor?.name,
+                        keys: Object.keys(cloned || {})
+                    });
+                    // Skip this clone and fall through to next method
+                } else if (validateFabricTree(cloned)) {
+                    // Ensure groups have no invalid children that would break LayoutManager
+                    if (String(cloned?.type || '').toLowerCase() === 'group') {
+                        repairGroupChildren(cloned);
                     }
-                    // If clone returned a plain object representation, try to enliven it
-                    if (cloned && typeof cloned === 'object' && (cloned.type || cloned.objects || cloned.src)) {
-                        console.log('⚠️ [cloneFabricObjectSafe] clone() returned JSON, enlivening...');
-                        const enlivened = await enlivenOne(cloned);
-                        if (isValidFabricObject(enlivened)) return enlivened;
-                    }
-                }
-            }
-        } catch (err) {
-            console.warn('[cloneFabricObjectSafe] Promise-based clone failed:', err);
-        }
-
-        // 2) Try Fabric v5/v6 callback-based clone
-        try {
-            if (typeof source.clone === 'function') {
-                const cloned = await new Promise<any>((resolve, reject) => {
-                    const timeout = setTimeout(() => resolve(null), 2000); // 2s timeout
-                    try {
-                        source.clone((c: any) => {
-                            clearTimeout(timeout);
-                            resolve(c);
-                        }, propsToInclude);
-                    } catch (e) {
-                        clearTimeout(timeout);
-                        reject(e);
-                    }
-                });
-                if (isValidFabricObject(cloned)) {
-                    console.log('✅ [cloneFabricObjectSafe] Clone via callback-based clone() success');
                     return cloned;
                 }
-            }
-        } catch (err) {
-            console.warn('[cloneFabricObjectSafe] Callback-based clone failed:', err);
-        }
-
-        // 3) Fallback: serialize + enliven (most reliable for complex objects)
-        try {
-            console.log('⚠️ [cloneFabricObjectSafe] Trying serialize + enliven fallback...');
-            const json = typeof source.toObject === 'function' ? source.toObject(propsToInclude) : null;
-            if (json) {
-                const enlivened = await enlivenOne(json);
-                if (isValidFabricObject(enlivened)) {
-                    console.log('✅ [cloneFabricObjectSafe] Clone via serialize + enliven success');
-                    return enlivened;
+                // If clone returned a plain object representation, try to enliven it
+                if (cloned && typeof cloned === 'object' && (cloned.type || cloned.objects || cloned.src)) {
+                    const enlivened = await enlivenOne(cloned);
+                    if (validateFabricTree(enlivened)) {
+                        if (String(enlivened?.type || '').toLowerCase() === 'group') {
+                            repairGroupChildren(enlivened);
+                        }
+                        return enlivened;
+                    }
                 }
             }
-        } catch (err) {
-            console.warn('[cloneFabricObjectSafe] Serialize + enliven failed:', err);
+        } catch {
+            // ignore
         }
 
-        console.error('❌ [cloneFabricObjectSafe] All clone methods failed');
+        // 2) Try Fabric v5 callback-based clone (some builds/polyfills still expose it)
+        try {
+            const cloned = await new Promise<any>((resolve, reject) => {
+                try {
+                    if (typeof source.clone !== 'function') return resolve(null);
+                    source.clone((c: any) => resolve(c), propsToInclude);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+            
+            // CRITICAL: Check _set immediately
+            if (typeof cloned?._set !== 'function') {
+                console.error('❌ [cloneFabricObjectSafe] Callback clone missing _set:', cloned?.type);
+            } else if (validateFabricTree(cloned)) {
+                // Ensure groups have no invalid children
+                if (String(cloned?.type || '').toLowerCase() === 'group') {
+                    repairGroupChildren(cloned);
+                }
+                return cloned;
+            }
+        } catch {
+            // ignore
+        }
+
+        // 3) Fallback: serialize + enliven (cloneViaJson already calls repairGroupChildren)
+        try {
+            const json = typeof source.toObject === 'function' ? source.toObject(propsToInclude) : null;
+            const enlivened = await cloneViaJson(source, propsToInclude);
+            if (validateFabricTree(enlivened)) {
+                // Ensure groups have no invalid children (backup check)
+                if (String(enlivened?.type || '').toLowerCase() === 'group') {
+                    repairGroupChildren(enlivened);
+                }
+                return enlivened;
+            }
+        } catch {
+            // ignore
+        }
+
         return null;
     };
 
@@ -2350,13 +2644,14 @@ const setupAltDragDuplicate = () => {
     const assignNewIdsDeep = (obj: any) => {
         if (!obj || typeof obj !== 'object') return;
         
-        // Validate object is a proper Fabric object (Fabric.js v7 uses 'set' instead of '_set')
-        if (typeof obj.setCoords !== 'function' || typeof obj.set !== 'function' || typeof obj.render !== 'function') {
+        // Use the same validation as isValidFabricObject to ensure consistency
+        if (!isValidFabricObject(obj)) {
             console.error('❌ [assignNewIdsDeep] Objeto inválido detectado!', {
                 objectType: typeof obj,
                 hasSetCoords: typeof obj?.setCoords === 'function',
-                hasSet: typeof obj?.set === 'function',
-                hasRender: typeof obj?.render === 'function'
+                hasSet: typeof obj?._set === 'function',
+                hasRender: typeof obj?.render === 'function',
+                hasGetRelativeCenterPoint: typeof obj?.getRelativeCenterPoint === 'function'
             });
             return;
         }
@@ -2368,12 +2663,13 @@ const setupAltDragDuplicate = () => {
                 list.forEach((c: any) => {
                     if (!c || c.excludeFromExport) return;
                     
-                    // CRITICAL: Validate child is a proper Fabric object (Fabric.js v7 uses 'set')
-                    if (typeof c !== 'object' || typeof c.setCoords !== 'function' || typeof c.set !== 'function' || typeof c.render !== 'function') {
+                    // CRITICAL: Validate child is a proper Fabric object using same criteria
+                    if (!isValidFabricObject(c)) {
                         console.error('❌ [assignNewIdsDeep] Filho inválido detectado e ignorado!', {
                             childType: typeof c,
                             childValue: c,
-                            parentId: obj._customId
+                            parentId: obj._customId,
+                            hasGetRelativeCenterPoint: typeof c?.getRelativeCenterPoint === 'function'
                         });
                         return;
                     }
@@ -2406,99 +2702,6 @@ const setupAltDragDuplicate = () => {
         }
     };
 
-    // Helper to find parent group when in interactive editing mode (Fabric v7)
-    const findParentGroupForObject = (obj: any): any => {
-        if (!obj || !canvas.value) return null;
-        
-        // First check if object has direct group reference (Fabric sets this)
-        // BUT ignore ActiveSelection - it's a temporary selection, not a real parent group
-        if (obj.group) {
-            const groupType = String(obj.group.type || '').toLowerCase();
-            if (groupType !== 'activeselection') {
-                return obj.group;
-            }
-        }
-        
-        // In Fabric v7 interactive mode, the parent group has:
-        // - interactive: true
-        // - subTargetCheck: true
-        // We need to find a group that is CURRENTLY being edited (has these flags)
-        // AND contains the object we're looking for
-        
-        const allObjects = canvas.value.getObjects();
-        let foundGroup: any = null;
-        
-        // Search function that returns the MOST NESTED group containing the object
-        const searchInGroup = (group: any, depth: number = 0): { group: any, depth: number } | null => {
-            if (!group || typeof group.getObjects !== 'function') return null;
-            
-            // Skip ActiveSelection
-            const groupType = String(group.type || '').toLowerCase();
-            if (groupType === 'activeselection') return null;
-            
-            const children = group.getObjects() || [];
-            
-            for (const child of children) {
-                // Direct match
-                if (child === obj) {
-                    return { group, depth };
-                }
-                // Match by _customId
-                if (obj._customId && child._customId === obj._customId) {
-                    return { group, depth };
-                }
-                
-                // If child is also a group, search deeper
-                if (child.type === 'group' || child.type === 'Group') {
-                    const deeper = searchInGroup(child, depth + 1);
-                    if (deeper) {
-                        return deeper; // Return the deepest match
-                    }
-                }
-            }
-            
-            return null;
-        };
-        
-        // First, look for groups that are in ACTIVE edit mode (interactive: true)
-        // This is the most likely parent
-        for (const canvasObj of allObjects) {
-            const objType = String(canvasObj.type || '').toLowerCase();
-            // Skip ActiveSelection
-            if (objType === 'activeselection') continue;
-            
-            if (objType === 'group') {
-                const isInteractive = canvasObj.interactive === true || canvasObj.subTargetCheck === true;
-                
-                if (isInteractive) {
-                    const result = searchInGroup(canvasObj, 0);
-                    if (result) {
-                        // Found it in an interactive group - this is likely the correct parent
-                        return result.group;
-                    }
-                }
-            }
-        }
-        
-        // Fallback: search all groups (for non-interactive scenarios)
-        for (const canvasObj of allObjects) {
-            const objType = String(canvasObj.type || '').toLowerCase();
-            // Skip ActiveSelection
-            if (objType === 'activeselection') continue;
-            
-            if (objType === 'group') {
-                const result = searchInGroup(canvasObj, 0);
-                if (result) {
-                    if (!foundGroup || result.depth > 0) {
-                        foundGroup = result.group;
-                    }
-                }
-            }
-        }
-        
-        return foundGroup;
-    };
-
     canvas.value.on('mouse:down', (opt: any) => {
         const evt: MouseEvent | undefined = opt?.e;
         if (!evt) return;
@@ -2516,31 +2719,11 @@ const setupAltDragDuplicate = () => {
         state.didDuplicate = false;
         state.altAtDown = true;
         state.original = active;
-        // Use the global helper for more robust parent detection
-        // Try multiple sources: direct .group property, global search, or local search
-        // CRITICAL: Filter out ActiveSelection - it's NOT a real parent group
-        let detectedParent = (active as any).group || findParentGroupForObjectGlobal(active) || findParentGroupForObject(active) || null;
-        if (detectedParent && String(detectedParent.type || '').toLowerCase() === 'activeselection') {
-            detectedParent = null; // Ignore ActiveSelection
-        }
-        state.parentGroup = detectedParent;
+        state.parentGroup = (active as any).group || null;
         state.start = { left: Number(active.left || 0), top: Number(active.top || 0) };
-        
-        console.log('🎯 [alt-duplicate] mouse:down', {
-            objectType: active.type,
-            objectName: active.name || active._customId,
-            hasDirectGroup: !!(active as any).group,
-            foundParentGroup: !!state.parentGroup,
-            parentGroupName: state.parentGroup?.name || state.parentGroup?._customId,
-            parentGroupType: state.parentGroup?.type,
-            parentIsInteractive: state.parentGroup?.interactive,
-            parentHasSubTargetCheck: state.parentGroup?.subTargetCheck,
-            startPosition: state.start,
-            objectsInParent: state.parentGroup?.getObjects?.()?.length
-        });
     });
 
-    canvas.value.on('mouse:move:before', (opt: any) => {
+    canvas.value.on('mouse:move:before', async (opt: any) => {
         if (!state.armed || state.inProgress || state.didDuplicate) return;
         if (!state.altAtDown) return;
         if (!canvas.value) return;
@@ -2552,25 +2735,87 @@ const setupAltDragDuplicate = () => {
 
         const original = state.original;
         const parentGroup = state.parentGroup;
+        
+// Get current position - when inside a group, coordinates are already local
+        // The original object has been dragged, so original.left/top reflect current position
         const curPos = { left: Number(original.left || 0), top: Number(original.top || 0) };
+        
+        const cloned = await cloneFabricObjectSafe(original, ['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name']);
+        try {
+            if (!cloned || !canvas.value) return;
+            
+            if (!isValidFabricObject(cloned)) {
+                console.error('❌ [alt-duplicate] Clone inválido (não-Fabric). Abortando para não corromper o canvas.', {
+                    type: cloned?.type,
+                    hasSet: typeof cloned?.set === 'function',
+                    hasSetCoords: typeof cloned?.setCoords === 'function',
+                    hasRender: typeof cloned?.render === 'function',
+                    hasGetRelativeCenterPoint: typeof cloned?.getRelativeCenterPoint === 'function',
+                    hasCalcTransformMatrix: typeof cloned?.calcTransformMatrix === 'function',
+                    has_SET: typeof cloned?._set === 'function'
+                });
+                return;
+            }
 
-        cloneFabricObjectSafe(original, ['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name'])
-            .then((cloned: any) => {
-                try {
-                    if (!cloned || !canvas.value) return;
-
-                    if (!isValidFabricObject(cloned)) {
-                        console.error('❌ [alt-duplicate] Clone inválido (não-Fabric). Abortando para não corromper o canvas.', cloned);
-                        state.inProgress = false;
-                        return;
+// DEBUG: Detailed logging to diagnose "_set is not a function" error
+                    console.log('🔍 [alt-duplicate] DEBUG - Cloned object details BEFORE any modification:', {
+                        type: cloned?.type,
+                        hasSet: typeof cloned?.set === 'function',
+                        hasSetCoords: typeof cloned?.setCoords === 'function',
+                        hasRender: typeof cloned?.render === 'function',
+                        hasGetRelativeCenterPoint: typeof cloned?.getRelativeCenterPoint === 'function',
+                        hasCalcTransformMatrix: typeof cloned?.calcTransformMatrix === 'function',
+                        has_SET: typeof cloned?._set === 'function',
+                        prototype: cloned?.constructor?.name,
+                        isFabricObject: !!cloned?.canvas
+                    });
                     }
 
-                    // COMPORTAMENTO COPIAR/COLAR: Clone fica na posição ORIGINAL, usuário continua arrastando o ORIGINAL
-                    // Configure clone at the START position (where original was before dragging)
-                    assignNewIdsDeep(cloned);
+// For groups, check all children have required methods
+                    if (String(cloned?.type || '').toLowerCase() === 'group' && cloned?._objects) {
+                        const kids = cloned.getObjects?.() || [];
+                        const hasInvalidChild = kids.some((c: any) => !isValidFabricObject(c));
+                        if (hasInvalidChild) {
+                            console.warn('[alt-duplicate] Grupo clonado ainda tem filhos inválidos, tentando reparar...');
+                            repairGroupChildren(cloned);
+                            const stillInvalid = cloned.getObjects?.().some((c: any) => !isValidFabricObject(c));
+                            if (stillInvalid) {
+                                throw new Error('Não foi possível reparar todos os filhos do grupo clonado');
+                            }
+                        }
+                    }
+                    
+                    // Check _set one more time before adding
+                    console.log('[alt-duplicate] Checking _set BEFORE adding to group:', {
+                        hasSet: typeof cloned?._set === 'function'
+                    });
+                    
+                    if (typeof cloned?._set !== 'function') {
+                        console.error('❌ [alt-duplicate] CRITICAL: _set disappeared! Cannot add to group.');
+                        return;
+                    }
+                        });
+                        if (childrenWithoutSet.length > 0) {
+                            console.error('❌ [alt-duplicate] DEBUG - Group children missing set method:', childrenWithoutSet);
+                        }
+                    }
+
+                    // Repair the clone to remove any invalid children before adding to parent
+                    if (String(cloned?.type || '').toLowerCase() === 'group') {
+                        repairGroupChildren(cloned);
+                    }
+
+// Reset original to its start position (so it "stays")
+                    original.set?.({ left: state.start.left, top: state.start.top });
+                    original.setCoords?.();
+                    }
+                    
+                    // Configure clone at the current dragged position
+                    // Assign new ID FIRST before any other operations
+                    cloned._customId = Math.random().toString(36).substr(2, 9);
                     cloned.set({
-                        left: state.start.left,
-                        top: state.start.top,
+                        left: curPos.left,
+                        top: curPos.top,
                         selectable: true,
                         evented: true,
                         hasControls: true,
@@ -2584,209 +2829,162 @@ const setupAltDragDuplicate = () => {
                     if ((original as any).isProductCard) (cloned as any).isProductCard = true;
                     if ((original as any).unitLabel) (cloned as any).unitLabel = (original as any).unitLabel;
 
-                    applyNoCacheForProductCards(cloned);
-
-                    // ============ SMART GROUP HANDLING ============
-                    // If the original was inside a group, add the clone to the same group
-                    // Otherwise, add to canvas directly
+applyNoCacheForProductCards(cloned);
                     
-                    let insertionSuccessful = false;
+                    // Final validation before adding to parent
+                    if (String(cloned?.type || '').toLowerCase() === 'group' && !validateFabricTree(cloned)) {
+                        console.error('❌ [alt-duplicate] Clone de grupo falhou na validação final. Tentando reparar...');
+                        repairGroupChildren(cloned);
+                        if (!validateFabricTree(cloned)) {
+                            console.error('❌ [alt-duplicate] Não foi possível reparar o clone. Abortando.');
+                            return;
+                        }
+                    }
                     
+                    // Check _set one more time before adding
+                    if (typeof cloned?._set !== 'function') {
+                        console.error('❌ [alt-duplicate] Clone lost _set after setup! Aborting.');
+                        return;
+                    }
+                    
+// Insert clone into same parent (group) or canvas
                     if (parentGroup && typeof parentGroup.add === 'function') {
-                        // Original was inside a group - add clone to the same group
+                        // Get current objects to find the index of original
+                        const list = typeof parentGroup.getObjects === 'function' ? parentGroup.getObjects() : [];
+                        const idx = Array.isArray(list) ? list.indexOf(original) : -1;
+                        
+                        // Insert clone ABOVE original (idx + 1 means one layer above)
+                        if (typeof parentGroup.insertAt === 'function' && idx >= 0) {
+                            parentGroup.insertAt(cloned, idx + 1);
+                        } else {
+                            parentGroup.add(cloned);
+                        }
+                        
+                        // Force the clone to have the correct parent reference
+                        (cloned as any).group = parentGroup;
+                        
+                        // Update parent group after adding (using simple setCoords to avoid triggering LayoutManager issues)
+                        parentGroup.setCoords?.();
+                        parentGroup.dirty = true;
+                        
+                        console.log('[alt-duplicate] ✅ Clone adicionado ao grupo pai na posição', idx + 1);
+                    }
+                        
                         try {
-                            // COMPORTAMENTO COPIAR/COLAR: Clone fica na posição ORIGINAL (start)
-                            // O original continua sendo arrastado pelo usuário
-                            
-                            // Clone position = original's starting position (LOCAL coordinates within group)
-                            const cloneLeft = state.start.left;
-                            const cloneTop = state.start.top;
-                            
-                            // ========== Z-INDEX: Insert clone at SAME position as original ==========
-                            // Find the index of the original within the group
-                            const groupObjects = parentGroup.getObjects?.() || [];
-                            let originalIndex = groupObjects.indexOf(original);
-                            
-                            // If not found by reference, try by _customId
-                            if (originalIndex < 0 && original._customId) {
-                                originalIndex = groupObjects.findIndex((o: any) => o._customId === original._customId);
+                            // CRITICAL: Use the same aggressive cleanup as safeAddWithUpdate
+                            // This directly manipulates _objects and is more reliable
+                            if (String(parentGroup?.type || '').toLowerCase() === 'group') {
+                                const internal = parentGroup._objects;
+                                if (Array.isArray(internal)) {
+                                    const before = internal.length;
+                                    // Use the same validation as safeAddWithUpdate
+                                    const validOnly = internal.filter((o: any) => {
+                                        return !!(
+                                            o &&
+                                            typeof o === 'object' &&
+                                            (typeof o._set === 'function' || typeof o.set === 'function') &&
+                                            typeof o.render === 'function' &&
+                                            typeof o.setCoords === 'function' &&
+                                            typeof o.getRelativeCenterPoint === 'function' &&
+                                            typeof o.calcTransformMatrix === 'function'
+                                        );
+                                    });
+                                    if (validOnly.length !== before) {
+                                        console.warn(`[alt-duplicate] Removendo ${before - validOnly.length} objetos inválidos do grupo pai`);
+                                        internal.length = 0;
+                                        validOnly.forEach((o: any) => internal.push(o));
+                                        parentGroup.dirty = true;
+                                    }
+                                }
+                                // Also recursively clean nested groups
+                                const kids = parentGroup.getObjects?.() || [];
+                                kids.forEach((child: any) => {
+                                    if (String(child?.type || '').toLowerCase() === 'group' && child._objects) {
+                                        repairGroupChildren(child);
+                                    }
+                                });
+                                // Ensure group state is consistent after cleanup
+                                parentGroup.setCoords?.();
                             }
                             
-                            console.log('🔍 [alt-duplicate] Buscando índice do original no grupo', {
-                                groupObjectsCount: groupObjects.length,
-                                originalIndex,
-                                originalId: original._customId,
-                                originalName: original.name,
-                                groupObjectNames: groupObjects.map((o: any) => o.name || o._customId)
-                            });
+                            // Ultra-strict validation before adding
+                            if (!isValidFabricObject(cloned)) {
+                                throw new Error('Clone falhou na validação final');
+                            }
                             
-                            // First ADD the clone to the group
-                            parentGroup.add(cloned);
-                            
-                            // Set the group reference manually (Fabric v7 may not do this automatically)
-                            cloned.group = parentGroup;
-                            
-                            // Now move to correct z-index position (at originalIndex, so clone is BEHIND original)
-                            // This puts the duplicate at the same layer as the original product (below the price tag)
-                            if (originalIndex >= 0) {
-                                const newGroupObjects = parentGroup.getObjects?.() || [];
-                                const cloneIndex = newGroupObjects.indexOf(cloned);
-                                
-                                if (cloneIndex >= 0 && cloneIndex !== originalIndex) {
-                                    // Move clone to be at the originalIndex position
-                                    // Use Fabric's internal method to reorder
-                                    if (typeof (parentGroup as any)._objects !== 'undefined') {
-                                        // Direct array manipulation for Fabric v7
-                                        const arr = (parentGroup as any)._objects;
-                                        const cloneItem = arr.splice(cloneIndex, 1)[0];
-                                        arr.splice(originalIndex, 0, cloneItem);
+                            // For groups, ensure NO invalid children at all
+                            if (String(cloned?.type || '').toLowerCase() === 'group') {
+                                const kids = cloned.getObjects?.() || [];
+                                const hasInvalidChild = kids.some((c: any) => !isValidFabricObject(c));
+                                if (hasInvalidChild) {
+                                    console.warn('[alt-duplicate] Grupo clonado ainda tem filhos inválidos, tentando reparar...');
+                                    repairGroupChildren(cloned);
+                                    const stillInvalid = cloned.getObjects?.().some((c: any) => !isValidFabricObject(c));
+                                    if (stillInvalid) {
+                                        throw new Error('Não foi possível reparar todos os filhos do grupo clonado');
                                     }
                                 }
                             }
                             
-                            // Then set position (clone stays at original position)
-                            cloned.set({
-                                left: cloneLeft,
-                                top: cloneTop,
-                                visible: true,
-                                opacity: 1
-                            });
+                            // Get current objects to find the index of original
+                            const list = typeof parentGroup.getObjects === 'function' ? parentGroup.getObjects() : [];
+                            const idx = Array.isArray(list) ? list.indexOf(original) : -1;
                             
-                            // CRITICAL: Force group to recalculate and mark dirty for Fabric v7
-                            cloned.setCoords?.();
-                            parentGroup.set('dirty', true);
-                            if (typeof parentGroup.setCoords === 'function') parentGroup.setCoords();
-                            if (typeof (parentGroup as any)._calcBounds === 'function') {
-                                try { (parentGroup as any)._calcBounds(); } catch {}
-                            }
-                            // Also trigger layout update if available
-                            if (typeof (parentGroup as any).triggerLayout === 'function') {
-                                try { (parentGroup as any).triggerLayout(); } catch {}
-                            }
-                            
-                            // Verify clone is actually in the group
-                            const verifyObjects = parentGroup.getObjects?.() || [];
-                            const verifyIndex = verifyObjects.indexOf(cloned);
-                            
-                            if (verifyIndex >= 0) {
-                                insertionSuccessful = true;
-                                
-                                console.log('✅ [alt-duplicate] Clone adicionado ao GRUPO pai (na posição original)', {
-                                    cloneId: cloned._customId,
-                                    cloneType: cloned.type,
-                                    parentGroupName: parentGroup.name || parentGroup._customId,
-                                    clonePosition: { left: cloneLeft, top: cloneTop },
-                                    groupObjectsCount: verifyObjects.length,
-                                    originalLayerIndex: originalIndex,
-                                    cloneLayerIndex: verifyIndex,
-                                    cloneHasGroupRef: cloned.group === parentGroup
-                                });
+                            // Insert clone ABOVE the original (idx + 1 means one layer above)
+                            if (typeof parentGroup.insertAt === 'function' && idx >= 0) {
+                                parentGroup.insertAt(cloned, idx + 1);
                             } else {
-                                console.error('❌ [alt-duplicate] Clone não está no grupo após add()');
+                                parentGroup.add(cloned);
                             }
-                        } catch (groupAddErr) {
-                            console.warn('[alt-duplicate] Falha ao adicionar ao grupo, tentando canvas:', groupAddErr);
-                            // Fall through to canvas addition
-                        }
-                    }
-                    
-                    // If not added to group, add to canvas
-                    if (!insertionSuccessful) {
-                        try {
-                            // Final validation before adding to canvas
-                            if (!isValidFabricObject(cloned)) {
-                                console.error('❌ [alt-duplicate] Clone falhou validação final antes de adicionar ao canvas');
-                                state.inProgress = false;
+                            
+                            // Force the clone to have the correct parent reference
+                            (cloned as any).group = parentGroup;
+                            
+                            // Always update parent group after adding
+                            parentGroup.set?.({ subTargetCheck: true, interactive: true });
+                            safeAddWithUpdate(parentGroup);
+                            parentGroup.setCoords?.();
+                            
+                            console.log('[alt-duplicate] ✅ Clone adicionado ao grupo pai na posição', idx + 1);
+                        } catch (addErr) {
+                            console.error('❌ [alt-duplicate] Erro ao adicionar clone ao grupo:', addErr);
+                            // Fallback: add to canvas instead
+                            try {
+                                const oldIndex = canvas.value.getObjects().indexOf(original);
+                                if (oldIndex >= 0 && typeof (canvas.value as any).insertAt === 'function') {
+                                    (canvas.value as any).insertAt(cloned, oldIndex + 1);
+                                } else {
+                                    canvas.value.add(cloned);
+                                }
+                                console.warn('[alt-duplicate] Clone adicionado ao canvas como fallback');
+                            } catch (fallbackErr) {
+                                console.error('❌ [alt-duplicate] Fallback também falhou:', fallbackErr);
+                                return;
                                 return;
                             }
-                            
-                            // Find the z-index of the parentGroup (if any) or original on canvas
-                            const canvasObjects = canvas.value.getObjects();
-                            let targetIndex = canvasObjects.length; // default: top
-                            
-                            if (parentGroup) {
-                                const groupIndex = canvasObjects.indexOf(parentGroup);
-                                if (groupIndex >= 0) {
-                                    targetIndex = groupIndex + 1; // just above the group
-                                }
-                            } else {
-                                const origIndex = canvasObjects.indexOf(original);
-                                if (origIndex >= 0) {
-                                    targetIndex = origIndex + 1;
-                                }
-                            }
-                            
-                            // Add to canvas
+                        }
+                    } else {
+                        const oldIndex = canvas.value.getObjects().indexOf(original);
+                        if (oldIndex >= 0 && typeof (canvas.value as any).insertAt === 'function') {
+                            (canvas.value as any).insertAt(cloned, oldIndex + 1);
+                        } else {
                             canvas.value.add(cloned);
-                            
-                            // Move to correct z-index position
-                            const finalObjects = canvas.value.getObjects();
-                            const cloneCurrentIndex = finalObjects.indexOf(cloned);
-                            if (cloneCurrentIndex >= 0 && targetIndex < finalObjects.length && cloneCurrentIndex !== targetIndex) {
-                                if (typeof (canvas.value as any).moveTo === 'function') {
-                                    (canvas.value as any).moveTo(cloned, targetIndex);
-                                }
-                            }
-                            
-                            insertionSuccessful = true;
-                            
-                            console.log('✅ [alt-duplicate] Clone adicionado ao CANVAS', {
-                                cloneId: cloned._customId,
-                                cloneType: cloned.type,
-                                insertedAt: targetIndex
-                            });
-                        } catch (addErr) {
-                            console.error('[alt-duplicate] Error adding clone to canvas:', addErr);
-                            state.inProgress = false;
-                            return;
                         }
                     }
 
-                    if (insertionSuccessful) {
-                        // COMPORTAMENTO COPIAR/COLAR: Clone fica parado, ORIGINAL continua sendo arrastado
-                        // NÃO fazer swap do transform - o original já está sendo arrastado pelo usuário
-                        
-                        // Apenas renderizar para mostrar o clone na posição original
-                        canvas.value.requestRenderAll();
-                        state.didDuplicate = true;
-                        
-                        // CRITICAL: If the card is in a ProductZone, recalculate the zone layout
-                        // This ensures the clone is properly positioned in the grid
-                        const zoneId = (cloned as any).parentZoneId;
-                        if (zoneId && !parentGroup) {
-                            // Find the zone and recalculate layout
-                            const zoneObj = canvas.value.getObjects().find((o: any) => 
-                                o._customId === zoneId && isLikelyProductZone(o)
-                            );
-                            if (zoneObj) {
-                                console.log('🔄 [alt-duplicate] Recalculando layout da ProductZone após duplicação', {
-                                    zoneId,
-                                    zoneName: zoneObj.name
-                                });
-                                // Give a brief delay to let the canvas settle
-                                setTimeout(() => {
-                                    recalculateZoneLayout(zoneObj, undefined, { save: false });
-                                }, 50);
-                            }
-                        }
-                        
-                        console.log('✅ [alt-duplicate] Duplicação completa (clone na posição original)', {
-                            cloneId: cloned._customId,
-                            clonePosition: { left: cloned.left, top: cloned.top },
-                            originalPosition: { left: original.left, top: original.top },
-                            parentGroupName: parentGroup?.name || parentGroup?._customId
-                        });
-                    }
+// Make the clone the transform target so the user keeps dragging it
+                    canvas.value.setActiveObject(cloned);
+                    swapTransformToClone(cloned);
+                    canvas.value.requestRenderAll();
+                    
+                    state.didDuplicate = true;
+                } catch (err: any) {
+                    console.warn('[alt-duplicate] Falha ao clonar', err);
                 } finally {
                     state.inProgress = false;
                 }
-            })
-            .catch((err: any) => {
-                console.warn('[alt-duplicate] Falha ao clonar', err);
-                state.inProgress = false;
-            });
     });
-
+    
     canvas.value.on('mouse:up', () => {
         const shouldSave = state.didDuplicate;
         state.armed = false;
@@ -3454,15 +3652,6 @@ const selectedObjectId = ref<string | null>(null)
 const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
 const selectedObjectPos = ref<{top: number, left: number, width: number, visible: boolean}>({ top: 0, left: 0, width: 0, visible: false })
 
-// Debounced save for properties panel (prevents lag during rapid input changes)
-let propertySaveTimer: ReturnType<typeof setTimeout> | null = null;
-const debouncedSaveCurrentState = () => {
-    if (propertySaveTimer) clearTimeout(propertySaveTimer);
-    propertySaveTimer = setTimeout(() => {
-        saveCurrentState();
-    }, 150); // 150ms debounce for snappy feel but coalesces rapid changes
-};
-
 // Enable/disable "Salvar da Selecao" in the label templates modal.
 canSaveLabelTemplateFromSelectionComputed = computed(() => {
     return !!getPriceGroupFromAny(selectedObjectRef.value);
@@ -4084,6 +4273,8 @@ watch(activePage, async (newPage, oldPage) => {
                     canvasDataToLoad = replaceBlobImagesWithPlaceholder(canvasDataToLoad);
                     // Convert Contabo URLs to use local proxy (bypasses presigned URL issues)
                     canvasDataToLoad = convertContaboToProxyUrls(canvasDataToLoad);
+                    // Never restore Fabric internal layout manager classes from JSON.
+                    canvasDataToLoad = stripUnsupportedLayoutPropsFromJson(canvasDataToLoad);
 
 	            // Track whether we loaded successfully and whether we had to degrade (missing images)
 	            let didLoadNewPage = false;
@@ -4106,7 +4297,7 @@ watch(activePage, async (newPage, oldPage) => {
 	                    console.warn('   Tentando gerar novas URLs presignadas para imagens da Contabo...');
 
 	                    // IMPORTANT: Use the pre-processed canvasDataToLoad instead of newPage.canvasData
-	                    const safeCanvasData = JSON.parse(JSON.stringify(canvasDataToLoad));
+	                        const safeCanvasData = stripUnsupportedLayoutPropsFromJson(JSON.parse(JSON.stringify(canvasDataToLoad)));
 	                    if (safeCanvasData?.objects && Array.isArray(safeCanvasData.objects)) {
 	                        const imagesToUpdate: any[] = [];
 	                        
@@ -4193,15 +4384,15 @@ watch(activePage, async (newPage, oldPage) => {
                         console.error('❌ Erro ao recarregar após clear:', retryErr);
                         // Penúltima tentativa: substituir imagens Contabo por placeholder (mantém layout)
                         try {
-                            const dataWithPlaceholders = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
-                            await canvas.value.loadFromJSON(dataWithPlaceholders);
+	                            const dataWithPlaceholders = stripUnsupportedLayoutPropsFromJson(replaceContaboImagesWithPlaceholder(canvasDataToLoad));
+	                            await canvas.value.loadFromJSON(dataWithPlaceholders);
                             didLoadNewPage = true;
                             degradedNewPage = true;
                             console.log('✅ loadFromJSON concluído com placeholder para imagens que falharam');
                         } catch (placeholderErr) {
                             // Last attempt: load without ANY images (never throw due to broken image)
                             try {
-                                const safeData = JSON.parse(JSON.stringify(canvasDataToLoad));
+	                                const safeData = stripUnsupportedLayoutPropsFromJson(JSON.parse(JSON.stringify(canvasDataToLoad)));
                                 if (safeData?.objects && Array.isArray(safeData.objects)) {
                                     safeData.objects = safeData.objects.filter((obj: any) => obj?.type !== 'image');
                                 }
@@ -4301,6 +4492,8 @@ watch(activePage, async (newPage, oldPage) => {
             
             // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
             rehydrateCanvasZones();
+            // CRITICAL: remove invalid objects that break Fabric v7 layout after rehydration
+            sanitizeLayoutTree();
             
             // Ensure all frames have layerName set to "FRAMER" if missing (for LayersPanel display)
             const allObjs = canvas.value.getObjects();
@@ -5150,6 +5343,8 @@ onMounted(async () => {
                       canvasDataToLoad = replaceBlobImagesWithPlaceholder(canvasDataToLoad);
                       // Convert Contabo URLs to use local proxy (bypasses presigned URL issues)
                       canvasDataToLoad = convertContaboToProxyUrls(canvasDataToLoad);
+                      // Never restore Fabric internal layout manager classes from JSON.
+                      canvasDataToLoad = stripUnsupportedLayoutPropsFromJson(canvasDataToLoad);
                       
                       // DEBUG: Log all objects being loaded with order
                       console.log(`📦 CanvasData carregado - ${canvasDataToLoad?.objects?.length || 0} objeto(s):`);
@@ -5168,7 +5363,7 @@ onMounted(async () => {
                               console.warn('⚠️ Erro ao carregar canvas:', imageLoadErr);
                               
                               // Try again with failed images replaced by placeholders
-                              const safeCanvasData = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
+                              const safeCanvasData = stripUnsupportedLayoutPropsFromJson(replaceContaboImagesWithPlaceholder(canvasDataToLoad));
                               await canvas.value.loadFromJSON(safeCanvasData);
                               didLoadPage = true;
                               degradedPage = true;
@@ -5212,6 +5407,8 @@ onMounted(async () => {
                           if (removedInvalidObjects > 0) {
                               console.warn(`⚠️ Removidos ${removedInvalidObjects} objetos inválidos de grupos durante sanitização`);
                           }
+                          // CRITICAL: remove invalid objects that break Fabric v7 layout
+                          sanitizeLayoutTree();
                           // Log image loading status
                           const expectedImages = (canvasDataToLoad.objects || []).filter((o: any) => (o.type || '').toLowerCase() === 'image').length;
                           if (expectedImages > 0) {
@@ -5230,7 +5427,7 @@ onMounted(async () => {
                           if (canvas.value) {
                               try {
                                   const dataWithPlaceholders = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
-                                  await canvas.value.loadFromJSON(dataWithPlaceholders);
+                                  await canvas.value.loadFromJSON(stripUnsupportedLayoutPropsFromJson(dataWithPlaceholders));
                                   didLoadPage = true;
                                   degradedPage = true;
                                   console.log('✅ loadFromJSON concluído com placeholders');
@@ -5994,6 +6191,35 @@ const replaceContaboImagesWithPlaceholder = (canvasData: any): any => {
     return cloned;
 };
 
+// Fabric v7: `Group.layoutManager` must be a class instance.
+// If we persist/restore it from JSON as a plain object, layout calls can crash.
+const stripUnsupportedLayoutPropsFromJson = (data: any): any => {
+    const seen = new Set<any>();
+    const walk = (o: any) => {
+        if (!o || typeof o !== 'object') return;
+        if (seen.has(o)) return;
+        seen.add(o);
+
+        if ((o as any).layoutManager != null) delete (o as any).layoutManager;
+        if ((o as any).layout != null) delete (o as any).layout;
+
+        const cp = (o as any).clipPath;
+        if (cp && typeof cp === 'object') walk(cp);
+
+        const kids = (o as any).objects;
+        if (Array.isArray(kids)) kids.forEach(walk);
+    };
+
+    try {
+        walk(data);
+        if (Array.isArray(data?.objects)) data.objects.forEach(walk);
+    } catch {
+        // ignore
+    }
+
+    return data;
+};
+
 // Flag global para evitar logs repetidos de frames faltando
 const missingFramesLogged = new Set<string>();
 
@@ -6540,11 +6766,9 @@ const handleObjectModified = (e: any) => {
     if (!obj) return;
     
     if (isLikelyProductZone(obj)) {
-        // Cache children BEFORE any zone changes to prevent losing cards
-        const cachedChildren = getZoneChildren(obj);
         ensureZoneSanity(obj);
         normalizeZoneScale(obj);
-        recalculateZoneLayout(obj, cachedChildren, { save: false });
+        recalculateZoneLayout(obj, undefined, { save: false });
         return;
     }
 
@@ -6757,11 +6981,16 @@ const undo = async () => {
         canvas.value.renderOnAddRemove = false;
 
         try {
+            // Avoid persisting Fabric internal layout manager classes via JSON.
+            stripUnsupportedLayoutPropsFromJson(state);
             await canvas.value.loadFromJSON(state);
             // CRITICAL: sanitize clipPaths BEFORE any render to avoid fabric crash (forEach of undefined)
             sanitizeAllClipPaths();
+            // CRITICAL: remove invalid objects that break Fabric v7 layout
+            sanitizeLayoutTree();
             rehydrateCanvasZones();
             sanitizeAllClipPaths();
+            sanitizeLayoutTree();
 
             // Limpar seleção após undo
             canvas.value.discardActiveObject();
@@ -6796,11 +7025,16 @@ const redo = async () => {
         canvas.value.renderOnAddRemove = false;
 
         try {
+            // Avoid persisting Fabric internal layout manager classes via JSON.
+            stripUnsupportedLayoutPropsFromJson(state);
             await canvas.value.loadFromJSON(state);
             // CRITICAL: sanitize clipPaths BEFORE any render to avoid fabric crash (forEach of undefined)
             sanitizeAllClipPaths();
+            // CRITICAL: remove invalid objects that break Fabric v7 layout
+            sanitizeLayoutTree();
             rehydrateCanvasZones();
             sanitizeAllClipPaths();
+            sanitizeLayoutTree();
 
             // Limpar seleção após redo
             canvas.value.discardActiveObject();
@@ -6900,73 +7134,19 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         const active = canvas.value.getActiveObjects();
         if (active.length) {
             e.preventDefault();
-            
-            // Collect objects to delete - separate those in real groups vs canvas root
-            const toDeleteFromCanvas: any[] = [];
-            const toDeleteFromGroup: { obj: any, group: any }[] = [];
-            
-            for (const obj of active) {
-                // Get the group reference, but IGNORE ActiveSelection
-                let parentGroup = (obj as any).group;
-                
-                // CRITICAL: ActiveSelection is NOT a real parent group - skip it
-                if (parentGroup && (
-                    parentGroup.type === 'activeSelection' || 
-                    parentGroup.type === 'ActiveSelection' ||
-                    String(parentGroup.type || '').toLowerCase() === 'activeselection'
-                )) {
-                    parentGroup = null;
-                }
-                
-                // Try global search if no direct parent found
-                if (!parentGroup) {
-                    parentGroup = findParentGroupForObjectGlobal(obj);
-                }
-                
-                // Double-check it's not an ActiveSelection
-                if (parentGroup && (
-                    parentGroup.type === 'activeSelection' || 
-                    parentGroup.type === 'ActiveSelection' ||
-                    String(parentGroup.type || '').toLowerCase() === 'activeselection'
-                )) {
-                    parentGroup = null;
-                }
-                
-                if (parentGroup && typeof parentGroup.remove === 'function') {
-                    toDeleteFromGroup.push({ obj, group: parentGroup });
-                } else {
-                    toDeleteFromCanvas.push(obj);
-                }
-            }
-            
-            // First discard active selection to release objects
             canvas.value.discardActiveObject();
             
-            // Delete from groups first
-            for (const { obj, group } of toDeleteFromGroup) {
-                try {
-                    group.remove(obj);
-                    group.set('dirty', true);
-                    if (typeof group.setCoords === 'function') group.setCoords();
-                    console.log('🗑️ [Delete] Objeto removido do grupo:', {
-                        objectName: obj.name || obj._customId,
-                        parentGroupName: group.name || group._customId
-                    });
-                } catch (err) {
-                    console.warn('[Delete] Erro ao remover do grupo, tentando canvas:', err);
-                    try { canvas.value.remove(obj); } catch {}
-                }
-            }
-            
-            // Delete from canvas
-            for (const obj of toDeleteFromCanvas) {
-                try {
+            active.forEach((obj: any) => {
+                // Check if object is inside a group (deep select mode)
+                if (obj.group && typeof obj.group.remove === 'function') {
+                    // Remove from parent group
+                    obj.group.remove(obj);
+                    console.log('[Delete] Removed object from group:', obj.name || obj.type);
+                } else {
+                    // Remove directly from canvas
                     canvas.value.remove(obj);
-                    console.log('🗑️ [Delete] Objeto removido do canvas:', obj.name || obj._customId);
-                } catch (err) {
-                    console.warn('[Delete] Erro ao remover do canvas:', err);
                 }
-            }
+            });
             
             canvas.value.requestRenderAll();
             saveCurrentState();
@@ -7761,8 +7941,49 @@ const setupZoomPan = () => {
     
     // Removed manual drag logic for gridZone as it conflicted with default behavior
 
+    // Track last dblclick time to prevent duplicate processing from DOM fallback
+    let lastDblClickTime = 0;
+    
     canvas.value.on('mouse:dblclick', (opt: any) => {
-        if (opt.target) {
+        // Wrap entire handler in try-catch to prevent canvas corruption
+        try {
+            console.log('[dblclick] Event triggered', { 
+                hasTarget: !!opt.target, 
+                targetType: opt.target?.type,
+                isCanvasDestroyed: isCanvasDestroyed.value 
+            });
+            
+            // Check if canvas is destroyed
+            if (!canvas.value || isCanvasDestroyed.value) {
+                console.warn('[dblclick] Canvas is destroyed or null, aborting');
+                return;
+            }
+            
+            // Prevent duplicate processing within 300ms
+            const now = Date.now();
+            if (now - lastDblClickTime < 300) {
+                console.log('[dblclick] Ignoring duplicate event');
+                return;
+            }
+            lastDblClickTime = now;
+            
+            // Safety check: validate target object
+            if (!opt.target || typeof opt.target !== 'object') {
+                console.log('[dblclick] No target or invalid target');
+                if (isPenMode.value && penPathPoints.value.length >= 2) {
+                    // Double-click empty space in pen mode = finish path
+                    finishPenPath();
+                }
+                return;
+            }
+            
+            // Check if target is still valid (exists in canvas)
+            const isValidTarget = canvas.value.getObjects().includes(opt.target);
+            if (!isValidTarget) {
+                console.warn('[dblclick] Target object not found in canvas, skipping');
+                return;
+            }
+            
             // Check for product zone using isLikelyProductZone to handle both isGridZone and isProductZone
             if (isLikelyProductZone(opt.target)) {
                 // Save reference to the zone for later use during import
@@ -7780,9 +8001,9 @@ const setupZoomPan = () => {
                 // Enter node editing for vector paths
                 enterPathNodeEditing(opt.target);
             }
-        } else if (isPenMode.value && penPathPoints.value.length >= 2) {
-            // Double-click empty space in pen mode = finish path
-            finishPenPath();
+        } catch (error) {
+            console.error('[dblclick] Error in mouse:dblclick handler:', error);
+            // Don't let errors propagate and corrupt the canvas
         }
     });
     
@@ -8595,11 +8816,20 @@ const setupSnapping = () => {
         if (!obj || obj.isFrame || isControl(obj)) {
             return;
         }
+        
+        // Validate that the object is a proper Fabric object
+        if (!obj.set || typeof obj.set !== 'function') {
+            console.warn('[object:moving] Invalid object detected, skipping');
+            return;
+        }
 
         // If moving a child inside a legacy product card, upgrade the parent group so containment works.
-        if (obj.group && !obj.group.isSmartObject && !obj.group.isProductCard && isLikelyProductCard(obj.group)) {
-            obj.group.isSmartObject = true;
-            obj.group.isProductCard = true;
+        // Validate group is valid before accessing properties
+        if (obj.group && typeof obj.group === 'object' && typeof obj.group.set === 'function') {
+            if (!obj.group.isSmartObject && !obj.group.isProductCard && isLikelyProductCard(obj.group)) {
+                obj.group.isSmartObject = true;
+                obj.group.isProductCard = true;
+            }
         }
 
         // CRITICAL: Disable caching during movement to prevent trails/ghosting/flickering
@@ -8609,7 +8839,7 @@ const setupSnapping = () => {
         }
 
         // SmartObject containment
-        if (obj.group && (obj.group as any).isSmartObject) {
+        if (obj.group && typeof obj.group === 'object' && typeof obj.group.set === 'function' && (obj.group as any).isSmartObject) {
             const parentGroup = obj.group;
             const cardW = (parentGroup as any)._cardWidth || parentGroup.width;
             const cardH = (parentGroup as any)._cardHeight || parentGroup.height;
@@ -9259,15 +9489,7 @@ const setupReactivity = () => {
         // CRITICAL: Preserve exact order from canvas.getObjects()
         // Don't reorder or sort - maintain order as saved
         const isValidFabricObject = (o: any) => {
-            // Fabric.js v7 compatible validation
-            if (!o || typeof o !== 'object') return false;
-            const hasRender = typeof o.render === 'function';
-            const hasSetCoords = typeof o.setCoords === 'function';
-            const hasSet = typeof o.set === 'function';
-            const hasToObject = typeof o.toObject === 'function';
-            // Additional check: must not be a primitive or plain number
-            const isNotPrimitive = typeof o !== 'number' && typeof o !== 'string' && typeof o !== 'boolean';
-            return isNotPrimitive && hasRender && hasSetCoords && hasSet && hasToObject;
+            return !!(o && typeof o === 'object' && typeof o.render === 'function' && typeof o.setCoords === 'function');
         };
 
         const objs = canvas.value.getObjects();
@@ -9606,17 +9828,11 @@ const setupReactivity = () => {
         
         // 2. Zone Auto-Layout (Realtime Resize)
         if (obj && isLikelyProductZone(obj)) {
-            // CRITICAL: Cache children BEFORE updating zone dimensions
-            // This prevents losing cards that may fall outside new bounds during resize
-            const cachedChildren = getZoneChildren(obj);
-            
             ensureZoneSanity(obj);
             obj.setCoords();
             obj._zoneWidth = Math.abs(obj.getScaledWidth?.() ?? obj._zoneWidth ?? 0);
             obj._zoneHeight = Math.abs(obj.getScaledHeight?.() ?? obj._zoneHeight ?? 0);
-            
-            // Use cached children to ensure they stay bound to zone during resize
-            recalculateZoneLayout(obj, cachedChildren, { save: false });
+            recalculateZoneLayout(obj, undefined, { save: false });
         }
         
         // 🔒 Apply containment after scaling
@@ -9666,10 +9882,33 @@ const setupReactivity = () => {
     }
 
     // 2. Enable deep select on Double Click
+    // Note: This handler shares the lastDblClickTime with the previous handler to prevent duplicates
     canvas.value.on('mouse:dblclick', (opt: any) => {
-        const c: any = canvas.value as any;
-        const evt = opt.e || opt.originalEvent;
-        let rawTarget = opt.target;
+        // Wrap entire handler in try-catch to prevent canvas corruption
+        try {
+            console.log('[DeepSelect] Handler triggered', { 
+                hasTarget: !!opt.target, 
+                targetType: opt.target?.type,
+                isCanvasDestroyed: isCanvasDestroyed.value 
+            });
+            
+            // Check if canvas is destroyed
+            if (!canvas.value || isCanvasDestroyed.value) {
+                console.warn('[DeepSelect] Canvas is destroyed or null, aborting');
+                return;
+            }
+            
+            // Skip if already processed by the previous handler
+            const now = Date.now();
+            if (now - lastDblClickTime < 300) {
+                console.log('[DeepSelect] Skipping - already processed by other handler');
+                return;
+            }
+            lastDblClickTime = now;
+            
+            const c: any = canvas.value as any;
+            const evt = opt.e || opt.originalEvent;
+            let rawTarget = opt.target;
 
         if (import.meta.dev) {
             console.log('[DeepSelect] dblclick', {
@@ -9767,6 +10006,12 @@ const setupReactivity = () => {
             if (cardUnderPointer) target = cardUnderPointer;
         }
 
+        // Safety check: ensure target exists before proceeding
+        if (!target) {
+            if (import.meta.dev) console.warn('[DeepSelect] dblclick target is null after all resolution attempts');
+            return;
+        }
+
         if (import.meta.dev) {
             console.log('[DeepSelect] alvo resolvido', {
                 type: target?.type,
@@ -9778,7 +10023,7 @@ const setupReactivity = () => {
         }
         
 	        // Nested label editing: double click the priceGroup to edit its inner parts.
-	        if (target.type === 'group' && target.name === 'priceGroup') {
+	        if (target?.type === 'group' && target?.name === 'priceGroup') {
 	             target.set({ subTargetCheck: true, interactive: true });
 	             if (typeof target.getObjects === 'function') {
 	                 target.getObjects().forEach((child: any) => {
@@ -9802,18 +10047,50 @@ const setupReactivity = () => {
 	             return;
 	        }
 
-            if ((target.isSmartObject || target.isProductCard || isLikelyProductCard(target) || String((target as any).parentZoneId || '').trim().length) && target.type === 'group') {
+            if (target && (target.isSmartObject || target.isProductCard || isLikelyProductCard(target) || String((target as any).parentZoneId || '').trim().length) && target.type === 'group') {
 	             console.log('[DeepSelect] Entering group edit mode');
+	             
+	             // Validate group has required Fabric methods
+	             if (!target.getObjects || typeof target.getObjects !== 'function') {
+	                 console.warn('[DeepSelect] Group missing getObjects method, aborting');
+	                 return;
+	             }
+	             
+	             // Check for corrupted children before enabling deep select
+	             const children = target.getObjects();
+	             const corruptedChildren = children.filter((child: any) => {
+	                 // Check if child is a valid Fabric object
+	                 if (!child || typeof child !== 'object') return true;
+	                 if (!child.set || typeof child.set !== 'function') return true;
+	                 if (!child.setCoords || typeof child.setCoords !== 'function') return true;
+	                 // Check for critical missing methods that cause layout errors
+	                 if (child.type === 'group' && (!child.getObjects || !child.triggerLayout)) {
+	                     console.warn('[DeepSelect] Child group missing critical methods:', child.name || child.type);
+	                 }
+	                 return false;
+	             });
+	             
+	             if (corruptedChildren.length > 0) {
+	                 console.error('[DeepSelect] Group has corrupted children, aborting deep select', {
+	                     corruptedCount: corruptedChildren.length,
+	                     totalChildren: children.length,
+	                     targetName: target.name
+	                 });
+	                 return;
+	             }
+	             
 	             target.set({
 	                 subTargetCheck: true,
 	                 interactive: true
 	             });
-	             if (target.getObjects) {
-	                 target.getObjects().forEach((child: any) => {
-	                     const name = String(child?.name || '');
-	                     const isBackground = name === 'offerBackground' || name === 'price_bg';
-	                     const isBgImage = name === 'price_bg_image' || name === 'splash_image';
-	                     const selectable = !isBackground && !isBgImage;
+	             
+	             target.getObjects().forEach((child: any) => {
+	                 const name = String(child?.name || '');
+	                 const isBackground = name === 'offerBackground' || name === 'price_bg';
+	                 const isBgImage = name === 'price_bg_image' || child?.name === 'splash_image';
+	                 const selectable = !isBackground && !isBgImage;
+	                 
+	                 try {
 	                     child.set({ 
 	                         selectable,
 	                         evented: selectable,
@@ -9826,13 +10103,16 @@ const setupReactivity = () => {
 	                         lockRotation: false
 	                     });
 	                     child.setCoords?.();
-	                 });
-	             }
+	                 } catch (e) {
+	                     console.warn('[DeepSelect] Error setting child properties:', e);
+	                 }
+	             });
+	             
 	             target.setCoords?.();
-	             // UX: on the same double click, try to deep-select the inner element under pointer
-	             // (so users can double click the title/image directly like Canva/Figma).
-	             try {
-	                 const c: any = canvas.value as any;
+             // UX: on the same double click, try to deep-select the inner element under pointer
+             // (so users can double click the title/image directly like Canva/Figma).
+             try {
+                 const c: any = canvas.value as any;
                  const evt = opt.e || opt.originalEvent;
                  if (evt && typeof c.getScenePoint === 'function' && typeof c.searchPossibleTargets === 'function') {
                      const p = c.getScenePoint(evt);
@@ -9840,16 +10120,27 @@ const setupReactivity = () => {
                      const hit = info?.target;
                      const hitName = String(hit?.name || '');
                      const isCardBg = hitName === 'offerBackground' || hitName === 'price_bg' || hitName === 'price_bg_image';
-                     if (hit && hit !== target && !isCardBg) {
+                     
+                     // Safety check: ensure object is still on canvas before setting as active
+                     const isOnCanvas = (obj: any) => {
+                         if (!obj || !canvas.value) return false;
+                         return canvas.value.getObjects().includes(obj);
+                     };
+                     
+                     if (hit && hit !== target && !isCardBg && isOnCanvas(hit)) {
                          c.setActiveObject(hit);
-                     } else {
+                     } else if (isOnCanvas(target)) {
                          c.setActiveObject(target);
                      }
                  }
              } catch (e) {
                  // ignore
              }
-             canvas.value.requestRenderAll();
+             canvas.value?.requestRenderAll?.();
+            }
+        } catch (error) {
+            console.error('[DeepSelect] Error in deep select handler:', error);
+            // Don't let errors corrupt the canvas state
         }
     });
 
@@ -10061,7 +10352,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             safeAddWithUpdate(active);
             active.setCoords?.();
             canvas.value.requestRenderAll();
-            debouncedSaveCurrentState();
+            saveCurrentState();
             triggerRef(selectedObjectRef);
             return;
         }
@@ -10072,7 +10363,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             safeAddWithUpdate(active);
             active.setCoords?.();
             canvas.value.requestRenderAll();
-            debouncedSaveCurrentState();
+            saveCurrentState();
             triggerRef(selectedObjectRef);
             return;
         }
@@ -10090,7 +10381,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             safeAddWithUpdate(active);
             active.setCoords?.();
             canvas.value.requestRenderAll();
-            debouncedSaveCurrentState();
+            saveCurrentState();
             triggerRef(selectedObjectRef);
             return;
         }
@@ -10114,7 +10405,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             safeAddWithUpdate(active);
             active.setCoords?.();
             canvas.value.requestRenderAll();
-            debouncedSaveCurrentState();
+            saveCurrentState();
             triggerRef(selectedObjectRef);
             return;
         }
@@ -10132,7 +10423,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 moveFrameDescendants(active, dx, dy);
                 getOrCreateFrameClipRect(active);
                 canvas.value.requestRenderAll();
-                debouncedSaveCurrentState();
+                saveCurrentState();
                 triggerRef(selectedObjectRef);
                 return;
             }
@@ -10144,7 +10435,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 getOrCreateFrameClipRect(active);
                 syncFrameClips(active);
                 canvas.value.requestRenderAll();
-                debouncedSaveCurrentState();
+                saveCurrentState();
                 triggerRef(selectedObjectRef);
                 return;
             }
@@ -10183,7 +10474,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 moveZoneChildren(active, dx, dy);
                 
                 canvas.value.requestRenderAll();
-                debouncedSaveCurrentState();
+                saveCurrentState();
                 triggerRef(selectedObjectRef);
                 return;
             }
@@ -10211,24 +10502,20 @@ const updateObjectProperty = (prop: string, value: any) => {
                     active._zoneWidth = nextWidth;
                     active._zoneHeight = nextHeight;
                     
-                    // Cache children before layout to avoid losing them
-                    const cachedChildren = getZoneChildren(active);
-                    recalculateZoneLayout(active, cachedChildren, { save: false });
+                    recalculateZoneLayout(active, undefined, { save: false });
                     canvas.value.requestRenderAll();
-                    debouncedSaveCurrentState();
+                    saveCurrentState();
                     triggerRef(selectedObjectRef);
                     return;
                 }
             }
             
             if (prop === 'scaleX' || prop === 'scaleY') {
-                // Cache children before layout
-                const cachedChildren = getZoneChildren(active);
                 active.set(prop, value);
                 normalizeZoneScale(active);
-                recalculateZoneLayout(active, cachedChildren, { save: false });
+                recalculateZoneLayout(active, undefined, { save: false });
                 canvas.value.requestRenderAll();
-                debouncedSaveCurrentState();
+                saveCurrentState();
                 triggerRef(selectedObjectRef);
                 return;
             }
@@ -10249,7 +10536,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 safeAddWithUpdate(active);
                 active.setCoords();
                 canvas.value.requestRenderAll();
-                debouncedSaveCurrentState();
+                saveCurrentState();
                 triggerRef(selectedObjectRef);
                 return;
             }
@@ -10270,7 +10557,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 safeAddWithUpdate(active);
                 active.setCoords();
                 canvas.value.requestRenderAll();
-                debouncedSaveCurrentState();
+                saveCurrentState();
                 triggerRef(selectedObjectRef);
                 return;
             }
@@ -10361,7 +10648,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 o?.set?.(prop, value);
             });
             canvas.value.requestRenderAll();
-            debouncedSaveCurrentState();
+            saveCurrentState();
             triggerRef(selectedObjectRef);
             return;
         }
@@ -10370,7 +10657,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             if (active.isVectorPath) {
                 active.set(prop, value);
                 canvas.value.requestRenderAll();
-                debouncedSaveCurrentState();
+                saveCurrentState();
                 triggerRef(selectedObjectRef);
             }
             return;
@@ -10381,7 +10668,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 o?.set?.(prop, value);
             });
             canvas.value.requestRenderAll();
-            debouncedSaveCurrentState();
+            saveCurrentState();
             triggerRef(selectedObjectRef);
             return;
         }
@@ -10402,14 +10689,9 @@ const updateObjectProperty = (prop: string, value: any) => {
         // If it's a group, we might want to dirty it
         if (active.group) safeAddWithUpdate(active.group);
         
-        // REALTIME: Render immediately for instant visual feedback
-        active.setCoords?.();
         canvas.value.requestRenderAll();
-        
-        // PERSIST: Debounced save to avoid lag during rapid input
-        debouncedSaveCurrentState();
-        
-        // Force update ref for UI sync
+        saveCurrentState();
+        // Force update ref
         triggerRef(selectedObjectRef);
     }
 }
@@ -11236,25 +11518,54 @@ const selectObject = (id: string) => {
     }
 }
 
+// Helper function to find object recursively (including inside groups)
+const findObjectById = (id: string): any => {
+    if (!canvas.value) return null;
+    
+    const searchRecursively = (objects: any[]): any => {
+        for (const obj of objects) {
+            if (obj._customId === id) return obj;
+            // Check inside groups
+            if (obj.type === 'group' && obj.getObjects) {
+                const found = searchRecursively(obj.getObjects());
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+    
+    // Search in canvas objects first
+    let obj = canvas.value.getObjects().find((o: any) => o._customId === id);
+    
+    // If not found in top level, search recursively in groups
+    if (!obj) {
+        for (const topObj of canvas.value.getObjects()) {
+            if (topObj.type === 'group' && topObj.getObjects) {
+                obj = searchRecursively(topObj.getObjects());
+                if (obj) break;
+            }
+        }
+    }
+    
+    return obj;
+};
+
 const toggleVisible = (id: string) => {
-    if (!canvas.value) return; 
-    const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
+    if (!canvas.value) return;
+    const obj = findObjectById(id);
     if (obj) {
         obj.visible = !obj.visible;
         // Deselect if hidden
         if (!obj.visible) canvas.value.discardActiveObject();
         canvas.value.requestRenderAll();
         // Trigger update to refresh UI icons
-        // (Fabric doesn't emit 'modified' on property set via code usually, need to force or rely on array ref update might not catch deep prop)
-        // Since canvasObjects is shallow array, deep prop change might not trigger watcher if we had one. 
-        // But our LayersPanel reads directly from the object prop. We might need to force update the array reference to trigger re-render of panel items.
         canvasObjects.value = [...canvas.value.getObjects()];
     }
 }
 
 const toggleLock = (id: string) => {
-    if (!canvas.value) return; 
-    const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
+    if (!canvas.value) return;
+    const obj = findObjectById(id);
     if (obj) {
         // Lock movement and scaling
         const isLocked = !obj.lockMovementX;
@@ -11271,16 +11582,61 @@ const toggleLock = (id: string) => {
 }
 
 const deleteObject = (id: string) => {
-    if (!canvas.value) return; 
-    const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
+    if (!canvas.value) return;
+    
+    // Helper function to find object recursively (including inside groups)
+    const findObjectRecursively = (objects: any[]): any => {
+        for (const obj of objects) {
+            if (obj._customId === id) return obj;
+            // Check inside groups
+            if (obj.type === 'group' && obj.getObjects) {
+                const found = findObjectRecursively(obj.getObjects());
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+    
+    // Helper function to remove object from its parent (canvas or group)
+    const removeFromParent = (obj: any, parent: any): boolean => {
+        if (parent === canvas.value) {
+            parent.remove(obj);
+            return true;
+        } else if (parent.type === 'group' && parent.remove) {
+            parent.remove(obj);
+            return true;
+        }
+        return false;
+    };
+    
+    // Search in canvas objects
+    let obj = canvas.value.getObjects().find((o: any) => o._customId === id);
+    let parent = canvas.value;
+    
+    // If not found in top level, search recursively in groups
+    if (!obj) {
+        for (const topObj of canvas.value.getObjects()) {
+            if (topObj.type === 'group' && topObj.getObjects) {
+                obj = findObjectRecursively(topObj.getObjects());
+                if (obj) {
+                    parent = topObj;
+                    break;
+                }
+            }
+        }
+    }
+    
     if (obj) {
-        canvas.value.remove(obj);
+        removeFromParent(obj, parent);
         canvas.value.requestRenderAll();
+        saveCurrentState();
     }
 }
 
 const moveLayer = (id: string, dir: 'up' | 'down') => {
-    if (!canvas.value) return; 
+    if (!canvas.value) return;
+    
+    // Search in canvas objects (only top-level objects can be reordered)
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
         if (dir === 'up') obj.bringForward();
@@ -11290,11 +11646,39 @@ const moveLayer = (id: string, dir: 'up' | 'down') => {
         // Update list order
         canvasObjects.value = [...canvas.value.getObjects()];
     }
+    // Note: Objects inside groups cannot be reordered via the layers panel
+    // They follow the group's internal order
 }
 
 const renameLayer = (id: string, newName: string) => {
-    if (!canvas.value) return; 
-    const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
+    if (!canvas.value) return;
+    
+    // Helper function to find object recursively (including inside groups)
+    const findObjectRecursively = (objects: any[]): any => {
+        for (const obj of objects) {
+            if (obj._customId === id) return obj;
+            // Check inside groups
+            if (obj.type === 'group' && obj.getObjects) {
+                const found = findObjectRecursively(obj.getObjects());
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+    
+    // Search in canvas objects
+    let obj = canvas.value.getObjects().find((o: any) => o._customId === id);
+    
+    // If not found in top level, search recursively in groups
+    if (!obj) {
+        for (const topObj of canvas.value.getObjects()) {
+            if (topObj.type === 'group' && topObj.getObjects) {
+                obj = findObjectRecursively(topObj.getObjects());
+                if (obj) break;
+            }
+        }
+    }
+    
     if (obj) {
         obj.layerName = newName; // Custom property for our UI
         // Also update fabric name if standard
@@ -11519,6 +11903,13 @@ const loadCanvasData = async (data: any) => {
         // ignore
     }
 
+    // Never restore Fabric internal layout manager classes from JSON.
+    try {
+        json = stripUnsupportedLayoutPropsFromJson(json);
+    } catch {
+        // ignore
+    }
+
     isHistoryProcessing.value = true;
     hydrateLabelTemplatesFromProjectJson(json);
     
@@ -11594,6 +11985,9 @@ const loadCanvasData = async (data: any) => {
         console.warn(`⚠️ Removendo ${duplicates.length} objeto(s) duplicado(s) após loadFromJSON`);
         duplicates.forEach(dup => canvas.value.remove(dup));
     }
+
+    // CRITICAL: remove invalid objects that break Fabric v7 layout
+    sanitizeLayoutTree();
     
     // NOTE: Removed problematic code that was deleting frames with blue stroke
     // before rehydrateCanvasZones could restore their isFrame flag.
@@ -13169,9 +13563,7 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
     zone.setCoords();
 
     if (shouldRelayout) {
-        // Cache children before relayout to prevent losing them
-        const cachedChildren = getZoneChildren(zone);
-        recalculateZoneLayout(zone, cachedChildren, { save: false });
+        recalculateZoneLayout(zone, undefined, { save: false });
     }
 
     canvas.value.requestRenderAll();
@@ -16092,7 +16484,6 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
     
     // 3. Setup Grid Vars
     const zoneRect = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
-    
     const padding = typeof zone._zonePadding === 'number' ? zone._zonePadding : (zone.padding ?? 20);
     const gapX = zone.gapHorizontal ?? padding;
     const gapY = zone.gapVertical ?? padding;
