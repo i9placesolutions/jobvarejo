@@ -20,7 +20,34 @@ let fabric: any = null
 let canvas: any = null
 let group: any = null
 
+const findObjectByNameDeep = (root: any, wantedName: string): any | null => {
+  if (!root || !wantedName) return null
+  try {
+    if (String(root?.name || '') === wantedName) return root
+    const children: any[] = Array.isArray(root?._objects) ? root._objects : (typeof root?.getObjects === 'function' ? root.getObjects() : [])
+    for (const c of children || []) {
+      const hit = findObjectByNameDeep(c, wantedName)
+      if (hit) return hit
+    }
+  } catch (e) {
+    console.warn('[findObjectByNameDeep] error:', e)
+  }
+  return null
+}
+
+// Debug helper to list all objects in a group
+const listAllObjects = (root: any, prefix = '') => {
+  if (!root) return
+  const name = root?.name || root?.type || 'unknown'
+  console.log(`[listObjects] ${prefix}${name} (${root?.type})`)
+  const children: any[] = Array.isArray(root?._objects) ? root._objects : (typeof root?.getObjects === 'function' ? root.getObjects() : [])
+  for (const c of children || []) {
+    listAllObjects(c, prefix + '  ')
+  }
+}
+
 const selectedObj = shallowRef<any>(null)
+const updateKey = ref(0) // Force reactivity on property changes
 
 const editorName = ref('')
 const isReady = ref(false)
@@ -33,7 +60,13 @@ const showFillColorPicker2 = ref(false)
 const showStrokeColorPicker = ref(false)
 const showTextStrokeColorPicker = ref(false)
 
-const TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio']
+// Trigger elements for color pickers positioning
+const fillColorTrigger = ref<HTMLElement | null>(null)
+const fillColorTrigger2 = ref<HTMLElement | null>(null)
+const strokeColorTrigger = ref<HTMLElement | null>(null)
+const textStrokeColorTrigger = ref<HTMLElement | null>(null)
+
+const TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__rx', '__ry']
 
 const FONT_WEIGHT_OPTIONS: Array<{ label: string; value: number }> = [
   { label: 'Thin', value: 100 },
@@ -257,6 +290,10 @@ const loadTemplate = async () => {
 
   canvas.clear()
   group = await instantiateGroupFromTemplate(props.template)
+
+  console.log('[MiniEditor] Template loaded, listing objects:')
+  listAllObjects(group)
+
   normalizeAndLayoutForEditor(group)
   canvas.add(group)
   canvas.setActiveObject(group)
@@ -265,21 +302,123 @@ const loadTemplate = async () => {
   canvas.requestRenderAll()
 }
 
-const setSelected = () => {
+const setSelected = (opt?: any) => {
   if (!canvas) return
-  const active = canvas.getActiveObject?.()
-  selectedObj.value = active || null
+
+  // When editing a Group with `subTargetCheck`, Fabric keeps the activeObject as the Group.
+  // The actually clicked child comes via `subTargets` in pointer events.
+  let sub: any = null
+
+  // Try multiple ways to get the sub-target (Fabric v7 compatibility)
+  if (Array.isArray(opt?.subTargets) && opt.subTargets.length) {
+    sub = opt.subTargets[0]
+  } else if (opt?.subTarget) {
+    sub = opt.subTarget
+  } else if (Array.isArray(opt?.selected) && opt.selected.length) {
+    // When a child is selected, check if it's inside our group
+    const active = opt.selected[0]
+    if (active && active !== group && group && typeof group.getObjects === 'function') {
+      const children = group.getObjects()
+      if (children.includes(active)) {
+        sub = active
+      }
+    }
+  }
+
+  const target = sub || opt?.target || (Array.isArray(opt?.selected) ? opt.selected[0] : null) || canvas.getActiveObject?.()
+
+  console.log('[MiniEditor] setSelected:', {
+    targetType: target?.type,
+    targetName: target?.name,
+    isGroup: target?.type === 'group',
+    isSubTarget: !!sub,
+    groupName: group?.name,
+    hasActiveObject: !!canvas.getActiveObject?.()
+  })
+
+  selectedObj.value = target || null
+  updateKey.value++
 }
 
 const patch = (prop: string, value: any) => {
   const obj = selectedObj.value
-  if (!obj || !canvas) return
-  obj.set(prop, value)
-  if (obj.type === 'textbox' && typeof obj.initDimensions === 'function') obj.initDimensions()
-  if (obj.type?.includes('text') && typeof obj.initDimensions === 'function') obj.initDimensions()
-  if (obj.group && typeof obj.group.triggerLayout === 'function') obj.group.triggerLayout()
-  if (typeof obj.setCoords === 'function') obj.setCoords()
+  if (!obj || !canvas) {
+    console.warn('[MiniEditor] patch: no object or canvas', { obj, canvas })
+    return
+  }
+
+  // Fabric.Image doesn't render `stroke` / `strokeWidth`.
+  // In label templates, the splash image is usually clipped by (and sits on top of)
+  // the `price_bg` rect, which should carry the border and fill.
+  const isProxiedProp = prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth' || prop.startsWith('stroke') || prop === 'rx' || prop === 'ry' || prop === 'width' || prop === 'height'
+  const isSplashImage = obj?.type === 'image' && (obj?.name === 'price_bg_image' || obj?.name === 'splash_image')
+  const isPriceGroup = obj?.type === 'group' && (obj === group || obj?.name === 'priceGroup')
+
+  let proxyTarget = obj
+  if (isProxiedProp && (isSplashImage || isPriceGroup) && group) {
+    const bg = findObjectByNameDeep(group, 'price_bg')
+    if (bg) {
+      proxyTarget = bg
+      console.log('[MiniEditor] patch: using price_bg proxy instead of', obj?.name)
+    } else {
+      console.warn('[MiniEditor] patch: price_bg NOT FOUND in group!')
+      listAllObjects(group, '  ')
+    }
+  }
+
+  console.log('[MiniEditor] patch:', prop, '=', value, 'on', proxyTarget?.type, proxyTarget?.name, 'id:', proxyTarget?.cacheKey)
+
+  // Use set() method which handles all internal updates
+  proxyTarget.set(prop, value)
+
+  // Persist responsive-layout knobs for the price pill.
+  if (proxyTarget?.name === 'price_bg' && (prop === 'strokeWidth' || prop === 'rx' || prop === 'ry')) {
+    const n = Number(value)
+    if (Number.isFinite(n)) (proxyTarget as any)[`__${prop}`] = n
+  }
+
+  // Force dirty flag for proper re-rendering
+  proxyTarget.dirty = true
+
+  // Handle text objects
+  if (proxyTarget.type === 'textbox' && typeof proxyTarget.initDimensions === 'function') proxyTarget.initDimensions()
+  if (proxyTarget.type?.includes('text') && typeof proxyTarget.initDimensions === 'function') proxyTarget.initDimensions()
+
+  // CRITICAL: Update the group properly when modifying children
+  // Check if the target is inside our group
+  let targetParent = proxyTarget.group
+  let needsGroupUpdate = false
+
+  if (targetParent === group) {
+    needsGroupUpdate = true
+  } else if (group && typeof group.getObjects === 'function') {
+    // Check if target is a child of our group
+    const groupChildren = group.getObjects()
+    if (groupChildren.includes(proxyTarget)) {
+      needsGroupUpdate = true
+    }
+  }
+
+  if (needsGroupUpdate && group) {
+    console.log('[MiniEditor] patch: updating group after child change')
+    safeAddWithUpdate(group)
+  }
+
+  // Update coordinates
+  if (typeof proxyTarget.setCoords === 'function') proxyTarget.setCoords()
+
+  // Also update the main group coords if needed
+  if (group && typeof group.setCoords === 'function') {
+    group.setCoords()
+  }
+
+  // Render
   canvas.requestRenderAll()
+  updateKey.value++ // Force reactivity
+
+  // Verify the change was applied
+  const actualValue = typeof proxyTarget.get === 'function' ? proxyTarget.get(prop) : proxyTarget[prop]
+  console.log('[MiniEditor] after patch:', prop, '=', actualValue, 'expected:', value, 'match:', actualValue === value)
 }
 
 const patchCustom = (prop: string, value: any) => {
@@ -290,11 +429,35 @@ const patchCustom = (prop: string, value: any) => {
   if (obj.group && typeof obj.group.triggerLayout === 'function') obj.group.triggerLayout()
   if (typeof obj.setCoords === 'function') obj.setCoords()
   canvas.requestRenderAll()
+  updateKey.value++ // Force reactivity
 }
 
 const current = (prop: string, fallback: any = '') => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  updateKey.value // Track for reactivity
   const obj = selectedObj.value
-  return obj ? (obj[prop] ?? fallback) : fallback
+  if (!obj) return fallback
+
+  const isProxiedProp = prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth' || prop.startsWith('stroke') || prop === 'rx' || prop === 'ry' || prop === 'width' || prop === 'height'
+  const isSplashImage = obj?.type === 'image' && (obj?.name === 'price_bg_image' || obj?.name === 'splash_image')
+  const isPriceGroup = obj?.type === 'group' && (obj === group || obj?.name === 'priceGroup')
+
+  let target = obj
+  if (isProxiedProp && (isSplashImage || isPriceGroup) && group) {
+    const bg = findObjectByNameDeep(group, 'price_bg')
+    if (bg) target = bg
+  }
+
+  const val = typeof target.get === 'function' ? target.get(prop) : target[prop]
+  const result = val ?? fallback
+
+  // For stroke, if it's transparent/null/undefined, return a default visible color
+  // This prevents the ColorPicker from starting with alpha=0 (invisible)
+  if (prop === 'stroke' && (!result || result === 'transparent' || result === null)) {
+    return fallback || '#000000'
+  }
+
+  return result
 }
 
 const currentNumber = (prop: string, fallback = 0) => {
@@ -327,8 +490,40 @@ const isText = computed(() => {
 const selectedName = computed(() => String(selectedObj.value?.name || ''))
 const isDecimalText = computed(() => selectedName.value === 'price_decimal_text')
 const isUnitText = computed(() => selectedName.value === 'price_unit_text')
-const isRect = computed(() => selectedObj.value?.type === 'rect')
-const isCircle = computed(() => selectedObj.value?.type === 'circle')
+const isPriceGroupSelected = computed(() => {
+  const obj = selectedObj.value
+  return obj?.type === 'group' && (obj === group || obj?.name === 'priceGroup')
+})
+
+const isSplashImageSelected = computed(() => {
+  const obj = selectedObj.value
+  return obj?.type === 'image' && (obj?.name === 'price_bg_image' || obj?.name === 'splash_image')
+})
+
+const isRect = computed(() => {
+  if (selectedObj.value?.type === 'rect') return true
+  if (isPriceGroupSelected.value || isSplashImageSelected.value) {
+    return findObjectByNameDeep(group, 'price_bg')?.type === 'rect'
+  }
+  return false
+})
+
+const isCircle = computed(() => {
+  if (selectedObj.value?.type === 'circle') return true
+  if (isPriceGroupSelected.value || isSplashImageSelected.value) {
+    return findObjectByNameDeep(group, 'price_bg')?.type === 'circle'
+  }
+  return false
+})
+
+const isEllipse = computed(() => {
+  if (selectedObj.value?.type === 'ellipse') return true
+  if (isPriceGroupSelected.value || isSplashImageSelected.value) {
+    return findObjectByNameDeep(group, 'price_bg')?.type === 'ellipse'
+  }
+  return false
+})
+
 const isImage = computed(() => selectedObj.value?.type === 'image')
 
 const currentFontWeight = computed(() => {
@@ -590,9 +785,62 @@ onMounted(async () => {
     selection: true
   })
 
-  canvas.on('selection:created', setSelected)
-  canvas.on('selection:updated', setSelected)
-  canvas.on('selection:cleared', () => (selectedObj.value = null))
+  // Enhanced selection handling for groups with subTargetCheck
+  const handleSelection = (e: any) => {
+    console.log('[MiniEditor] selection event:', e?.kind, 'selected:', e?.selected?.[0]?.name || e?.selected?.[0]?.type)
+
+    // Try to get the actual sub-target that was clicked
+    let actualTarget = e?.selected?.[0]
+
+    // If it's our group, try to find what was actually clicked
+    if (actualTarget === group && e?.subTargets && e.subTargets.length > 0) {
+      actualTarget = e.subTargets[0]
+      console.log('[MiniEditor] using subTarget:', actualTarget?.name)
+    }
+
+    setSelected({
+      target: actualTarget || e?.selected?.[0],
+      subTargets: e?.subTargets,
+      selected: e?.selected
+    })
+  }
+
+  canvas.on('selection:created', handleSelection)
+  canvas.on('selection:updated', handleSelection)
+  canvas.on('selection:cleared', () => {
+    console.log('[MiniEditor] selection cleared')
+    selectedObj.value = null
+    updateKey.value++
+  })
+
+  // Also try to catch clicks on objects
+  canvas.on('mouse:down', (e: any) => {
+    console.log('[MiniEditor] mouse:down', {
+      target: e?.target?.name || e?.target?.type,
+      subTarget: e?.subTarget?.name || e?.subTarget?.type
+    })
+    setSelected({
+      target: e?.target,
+      subTarget: e?.subTarget,
+      subTargets: e?.subTargets
+    })
+  })
+
+  canvas.on('mouse:up', (e: any) => {
+    // Don't clear selection on mouse up
+    if (e?.target) {
+      setSelected({
+        target: e.target,
+        subTarget: e?.subTarget,
+        subTargets: e?.subTargets
+      })
+    }
+  })
+
+  // Add path modifier to ensure subTargetCheck works
+  canvas.on('path:created', (e: any) => {
+    console.log('[MiniEditor] path:created', e?.path?.name)
+  })
 
   isReady.value = true
   setZoom(100)
@@ -625,7 +873,7 @@ watch(
     <!-- Header -->
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
+        <div class="w-9 h-9 rounded-xl bg-linear-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
           <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
           </svg>
@@ -777,7 +1025,7 @@ watch(
           </div>
           
           <button
-            class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-sm font-semibold text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20"
+            class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-sm font-semibold text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20"
             :disabled="isSaving"
             @click="save"
           >
@@ -798,7 +1046,7 @@ watch(
       </div>
 
       <!-- Right Panel - Properties -->
-      <div class="lg:col-span-2 space-y-3 max-h-[520px] overflow-y-auto pr-1 custom-scrollbar">
+      <div class="lg:col-span-2 space-y-3 max-h-130 overflow-y-auto pr-1 custom-scrollbar">
         <!-- No Selection -->
         <div v-if="!selectedObj" class="p-4 rounded-xl border border-zinc-800/50 bg-zinc-900/30">
           <div class="text-center py-8">
@@ -894,17 +1142,17 @@ watch(
               </div>
               <div>
                 <label class="text-[10px] text-zinc-500 mb-1 block">Opacidade</label>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 h-7">
                   <input 
                     type="range"
                     min="0" 
                     max="1" 
                     step="0.05"
-                    class="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" 
-                    :value="current('opacity', 1)" 
-                    @input="patch('opacity', Number(($event.target as HTMLInputElement).value))" 
+                    class="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer" 
+                    :value="Number(current('opacity', 1))" 
+                    @input="patch('opacity', parseFloat(($event.target as HTMLInputElement).value))" 
                   />
-                  <span class="text-[10px] text-zinc-400 w-8">{{ Math.round(current('opacity', 1) * 100) }}%</span>
+                  <span class="text-[10px] text-zinc-400 w-10 text-right tabular-nums">{{ Math.round(Number(current('opacity', 1)) * 100) }}%</span>
                 </div>
               </div>
             </div>
@@ -979,7 +1227,8 @@ watch(
               <label class="text-[10px] text-zinc-500 mb-1 block">Cor do Texto</label>
               <div class="flex items-center gap-2">
                 <div 
-                  class="w-8 h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden shadow-inner flex-shrink-0"
+                  ref="fillColorTrigger"
+                  class="w-8 h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden shadow-inner shrink-0"
                   :style="{ backgroundColor: current('fill', '#ffffff') }"
                   @click="showFillColorPicker = true"
                 ></div>
@@ -992,6 +1241,7 @@ watch(
                 <ColorPicker
                   :show="showFillColorPicker"
                   :model-value="current('fill', '#ffffff')"
+                  :trigger-element="fillColorTrigger"
                   @update:show="showFillColorPicker = $event"
                   @update:model-value="(val: string) => patch('fill', val)"
                 />
@@ -1093,6 +1343,7 @@ watch(
                 <div>
                   <label class="text-[10px] text-zinc-500 mb-1 block">Cor</label>
                   <div 
+                    ref="textStrokeColorTrigger"
                     class="w-full h-8 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden"
                     :style="{ backgroundColor: current('stroke', 'transparent') }"
                     @click="showTextStrokeColorPicker = true"
@@ -1100,6 +1351,7 @@ watch(
                   <ColorPicker
                     :show="showTextStrokeColorPicker"
                     :model-value="current('stroke', '#000000')"
+                    :trigger-element="textStrokeColorTrigger"
                     @update:show="showTextStrokeColorPicker = $event"
                     @update:model-value="(val: string) => patch('stroke', val)"
                   />
@@ -1161,13 +1413,15 @@ watch(
               <div>
                 <label class="text-[10px] text-zinc-500 mb-1 block">Preenchimento</label>
                 <div 
+                  ref="fillColorTrigger2"
                   class="w-full h-9 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden"
                   :style="{ backgroundColor: current('fill', '#ffffff') }"
-                  @click="showFillColorPicker2 = true"
+                  @click="showFillColorPicker2 = !showFillColorPicker2"
                 ></div>
                 <ColorPicker
                   :show="showFillColorPicker2"
                   :model-value="current('fill', '#ffffff')"
+                  :trigger-element="fillColorTrigger2"
                   @update:show="showFillColorPicker2 = $event"
                   @update:model-value="(val: string) => patch('fill', val)"
                 />
@@ -1175,15 +1429,21 @@ watch(
               <div>
                 <label class="text-[10px] text-zinc-500 mb-1 block">Contorno</label>
                 <div 
-                  class="w-full h-9 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden"
-                  :style="{ backgroundColor: current('stroke', '#000000') }"
+                  ref="strokeColorTrigger"
+                  class="w-full h-9 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden checkerboard-bg"
                   @click="showStrokeColorPicker = true"
-                ></div>
+                >
+                  <div 
+                    class="absolute inset-0"
+                    :style="{ backgroundColor: current('stroke', null) || 'transparent' }"
+                  ></div>
+                </div>
                 <ColorPicker
                   :show="showStrokeColorPicker"
                   :model-value="current('stroke', '#000000')"
+                  :trigger-element="strokeColorTrigger"
                   @update:show="showStrokeColorPicker = $event"
-                  @update:model-value="(val: string) => patch('stroke', val)"
+                  @update:model-value="(val: string) => { patch('stroke', val); if (!currentNumber('strokeWidth', 0)) patch('strokeWidth', 2) }"
                 />
               </div>
             </div>
@@ -1192,16 +1452,22 @@ watch(
               <label class="text-[10px] text-zinc-500 mb-1 block">Largura do Contorno</label>
               <input 
                 type="number" 
+                min="0"
                 step="0.5"
                 class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
                 :value="Number(current('strokeWidth', 0)).toFixed(1)" 
-                @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))" 
+                @input="(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (!isNaN(v)) patch('strokeWidth', v) }" 
               />
             </div>
 
             <!-- Rect specific -->
-            <div v-if="isRect" class="pt-3 border-t border-zinc-800/50 space-y-2">
-              <div class="text-[10px] font-semibold text-zinc-400">Dimensões</div>
+            <div v-if="isRect" class="pt-3 border-t border-zinc-800/50 space-y-3">
+              <div class="text-[10px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+                </svg>
+                Dimensões
+              </div>
               <div class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="text-[10px] text-zinc-500 mb-1 block">Largura</label>
@@ -1221,24 +1487,60 @@ watch(
                     @input="patch('height', Number(($event.target as HTMLInputElement).value))" 
                   />
                 </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500 mb-1 block">Raio X</label>
-                  <input 
-                    type="number" 
-                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                    :value="Math.round(current('rx', 0))" 
-                    @input="patch('rx', Number(($event.target as HTMLInputElement).value))" 
-                  />
+              </div>
+              
+              <!-- Border Radius Section -->
+              <div class="pt-2 space-y-2">
+                <div class="text-[10px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12V5a1 1 0 011-1h7M20 12v7a1 1 0 01-1 1h-7" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8M20 12a8 8 0 01-8 8" />
+                  </svg>
+                  Arredondamento
                 </div>
-                <div>
-                  <label class="text-[10px] text-zinc-500 mb-1 block">Raio Y</label>
-                  <input 
-                    type="number" 
-                    class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50" 
-                    :value="Math.round(current('ry', 0))" 
-                    @input="patch('ry', Number(($event.target as HTMLInputElement).value))" 
-                  />
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-[10px] text-zinc-500 mb-1 block">Horizontal</label>
+                    <div class="flex items-center gap-2">
+                      <input 
+                        type="range"
+                        min="0"
+                        max="100"
+                        class="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                        :value="Math.round(current('rx', 0))"
+                        @input="patch('rx', Number(($event.target as HTMLInputElement).value))"
+                      />
+                      <input 
+                        type="number"
+                        min="0"
+                        class="w-14 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500/50" 
+                        :value="Math.round(current('rx', 0))" 
+                        @input="patch('rx', Number(($event.target as HTMLInputElement).value))" 
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-zinc-500 mb-1 block">Vertical</label>
+                    <div class="flex items-center gap-2">
+                      <input 
+                        type="range"
+                        min="0"
+                        max="100"
+                        class="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                        :value="Math.round(current('ry', 0))"
+                        @input="patch('ry', Number(($event.target as HTMLInputElement).value))"
+                      />
+                      <input 
+                        type="number"
+                        min="0"
+                        class="w-14 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500/50" 
+                        :value="Math.round(current('ry', 0))" 
+                        @input="patch('ry', Number(($event.target as HTMLInputElement).value))" 
+                      />
+                    </div>
+                  </div>
                 </div>
+                <p class="text-[9px] text-zinc-500">Ajuste para cantos arredondados</p>
               </div>
             </div>
 
@@ -1366,5 +1668,17 @@ input[type="range"]::-webkit-slider-runnable-track {
 /* Checkbox styling */
 input[type="checkbox"] {
   accent-color: #f59e0b;
+}
+
+/* Checkerboard pattern for transparent colors */
+.checkerboard-bg {
+  background-image: 
+    linear-gradient(45deg, #444 25%, transparent 25%),
+    linear-gradient(-45deg, #444 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #444 75%),
+    linear-gradient(-45deg, transparent 75%, #444 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+  background-color: #333;
 }
 </style>

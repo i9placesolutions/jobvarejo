@@ -85,7 +85,8 @@ const parseColorToHslA = (raw: string): { h: number; s: number; l: number; a: nu
   const v = v0.toLowerCase()
 
   if (v === 'transparent') {
-    return { h: 0, s: 0, l: 0, a: 0 }
+    // Return default black with full opacity instead of invisible
+    return { h: 0, s: 0, l: 0, a: 1 }
   }
 
   // rgba()/rgb()
@@ -152,6 +153,14 @@ const hslToHex = (h: number, s: number, l: number) => {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`
 }
 
+const hexToHsl = (hex: string) => {
+  const v = hex.replace('#', '')
+  const r = parseInt(v.slice(0, 2), 16)
+  const g = parseInt(v.slice(2, 4), 16)
+  const b = parseInt(v.slice(4, 6), 16)
+  return rgbToHsl(r, g, b)
+}
+
 // Current color in hex
 const currentHex = computed(() => {
   return hslToHex(hue.value, saturation.value, lightness.value)
@@ -174,7 +183,10 @@ watch(() => props.modelValue, (newValue) => {
   hue.value = parsed.h
   saturation.value = parsed.s
   lightness.value = parsed.l
-  alpha.value = Math.round(clamp(parsed.a, 0, 1) * 100)
+  // If alpha is 0 (transparent), default to 100 (opaque) for stroke colors
+  // This prevents the "invisible color" problem
+  const parsedAlpha = Math.round(clamp(parsed.a, 0, 1) * 100)
+  alpha.value = parsedAlpha === 0 ? 100 : parsedAlpha
 }, { immediate: true })
 
 // Emit color changes
@@ -186,11 +198,8 @@ watch([hue, saturation, lightness, alpha], () => {
 
 // Color area gradient
 const colorAreaGradient = computed(() => {
-  // CORREÇÃO: Canto superior direito deve ser a cor pura do matiz (50% lightness)
-  // Não branco (100% lightness) como estava antes
   const hueColor = `hsl(${hue.value}, 100%, 50%)`
-  const whiteColor = `hsl(${hue.value}, 0%, 100%)`
-  return `linear-gradient(to top, #000, transparent), linear-gradient(to right, ${whiteColor}, ${hueColor})`
+  return `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hueColor})`
 })
 
 // Hue slider gradient
@@ -217,10 +226,16 @@ const updateColorFromArea = (e: MouseEvent) => {
   const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
   const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
   
-  saturation.value = Math.round(x * 100)
-  // CORREÇÃO: No topo (y=0) deve mostrar a cor pura (50% lightness)
-  // No fundo (y=1) deve mostrar preto (0% lightness)
-  lightness.value = Math.round(50 * (1 - y))
+  // Convert HSV-like area coordinates (X=Sat, Y=Value) to HSL
+  // This is a simplified mapping to match the visual area
+  const hsvS = x
+  const hsvV = 1 - y
+  
+  const l = hsvV * (1 - hsvS / 2)
+  const s = (l === 0 || l === 1) ? 0 : (hsvV - l) / Math.min(l, 1 - l)
+
+  saturation.value = Math.round(s * 100)
+  lightness.value = Math.round(l * 100)
 }
 
 // Handle hue slider
@@ -279,10 +294,17 @@ onUnmounted(() => {
 })
 
 // Color area selector position
-const colorSelectorX = computed(() => `${saturation.value}%`)
-// CORREÇÃO: Como lightness agora varia de 0 a 50 (em vez de 0 a 100), 
-// precisamos multiplicar por 2 para obter a posição Y correta
-const colorSelectorY = computed(() => `${100 - (lightness.value * 2)}%`)
+// Convert HSL back to HSV for selector positioning
+const hsvPosition = computed(() => {
+  const l = lightness.value / 100
+  const s = saturation.value / 100
+  const v = l + s * Math.min(l, 1 - l)
+  const sv = v === 0 ? 0 : 2 * (1 - l / v)
+  return { x: sv * 100, y: (1 - v) * 100 }
+})
+
+const colorSelectorX = computed(() => `${hsvPosition.value.x}%`)
+const colorSelectorY = computed(() => `${hsvPosition.value.y}%`)
 
 // Hue selector position
 const hueSelectorX = computed(() => `${(hue.value / 360) * 100}%`)
@@ -386,6 +408,8 @@ const startEyedropper = () => {
 }
 
 const close = () => {
+  // Emit final color value before closing
+  emit('update:modelValue', currentColor.value)
   internalShow.value = false
 }
 
@@ -479,6 +503,15 @@ const updatePosition = () => {
 
 watch(() => props.show, (newVal) => {
   if (newVal) {
+    // Force refresh from modelValue when opening
+    const parsed = parseColorToHslA(String(props.modelValue || ''))
+    if (parsed) {
+      hue.value = parsed.h
+      saturation.value = parsed.s
+      lightness.value = parsed.l
+      alpha.value = Math.round(clamp(parsed.a, 0, 1) * 100)
+    }
+    
     nextTick(() => {
       updatePosition()
     })
@@ -498,11 +531,11 @@ watch(() => props.show, (newVal) => {
     >
       <div
         v-if="internalShow"
-        class="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm"
+        class="fixed inset-0 z-10100 bg-black/40 backdrop-blur-sm"
         @click.self="close"
       >
         <div
-          class="fixed bg-[#2a2a2a] border border-white/10 rounded-xl shadow-2xl w-[280px] overflow-visible"
+          class="fixed bg-[#2a2a2a] border border-white/10 rounded-xl shadow-2xl w-70 overflow-visible z-10101"
           :style="{ top: `${pickerPosition.top}px`, left: `${pickerPosition.left}px` }"
           @click.stop
         >
@@ -522,7 +555,7 @@ watch(() => props.show, (newVal) => {
             <!-- Main Color Area -->
             <div
               ref="colorAreaRef"
-              class="w-full h-[180px] rounded-lg relative cursor-crosshair overflow-hidden border border-white/10 bg-[#1a1a1a]"
+              class="w-full h-45 rounded-lg relative cursor-crosshair overflow-hidden border border-white/10 bg-[#1a1a1a]"
               :style="{ background: colorAreaGradient }"
               @mousedown="handleColorAreaMouseDown"
             >
@@ -540,7 +573,7 @@ watch(() => props.show, (newVal) => {
               <!-- Eyedropper -->
               <button
                 @click="startEyedropper"
-                class="w-8 h-8 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
+                class="w-8 h-8 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all shrink-0"
                 title="Eyedropper"
                 :class="isEyedropperActive ? 'bg-violet-500/20 border border-violet-500/30' : ''"
               >
@@ -593,7 +626,7 @@ watch(() => props.show, (newVal) => {
                 @blur="updateHex"
                 @keyup.enter="updateHex"
                 type="text"
-                class="flex-1 min-w-[80px] h-7 bg-[#1a1a1a] border border-white/10 rounded text-xs text-white px-2 font-mono focus:outline-none focus:border-violet-500/50"
+                class="flex-1 min-w-20 h-7 bg-[#1a1a1a] border border-white/10 rounded text-xs text-white px-2 font-mono focus:outline-none focus:border-violet-500/50"
                 placeholder="1E1E1E"
                 maxlength="6"
               />

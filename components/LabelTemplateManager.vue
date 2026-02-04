@@ -80,7 +80,7 @@ const onFileChange = (e: Event) => {
         />
       </div>
       <button
-        class="h-[34px] px-3 rounded-lg border text-xs font-bold uppercase tracking-widest transition-all"
+        class="h-8.5 px-3 rounded-lg border text-xs font-bold uppercase tracking-widest transition-all"
         :class="canSaveFromSelection ? 'border-violet-500/40 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20' : 'border-zinc-700 text-zinc-500 cursor-not-allowed'"
         :disabled="!canSaveFromSelection"
         @click="emit('create-from-selection', name)"
@@ -89,7 +89,7 @@ const onFileChange = (e: Event) => {
         Salvar da Selecao
       </button>
       <button
-        class="h-[34px] px-3 rounded-lg border border-zinc-700 bg-zinc-800/60 text-xs font-bold uppercase tracking-widest text-zinc-200 hover:bg-zinc-700 transition-all"
+        class="h-8.5 px-3 rounded-lg border border-zinc-700 bg-zinc-800/60 text-xs font-bold uppercase tracking-widest text-zinc-200 hover:bg-zinc-700 transition-all"
         @click="emit('create-default', name)"
         title="Cria um modelo padrao (mesmo sem selecao)"
       >

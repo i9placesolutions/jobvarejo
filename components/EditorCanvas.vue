@@ -466,7 +466,7 @@ const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
 const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
 const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
 const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
-const LABEL_TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio']
+const LABEL_TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness']
 
 const serializeLabelTemplatesForProject = () => {
     // Keep project JSON lean: previews can be regenerated client-side.
@@ -15392,7 +15392,9 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 const priceUnit = parts.find((o: any) => o?.name === 'price_unit_text');
 
                 if (priceBg) {
-                    const accent = styles.splashColor ?? styles.accentColor;
+                    const tplStroke = typeof (priceBg as any).stroke === 'string' ? String((priceBg as any).stroke).trim() : '';
+                    const hasTemplateStroke = !!tplStroke && tplStroke.toLowerCase() !== 'transparent';
+                    const accent = styles.splashColor ?? (!hasTemplateStroke ? styles.accentColor : undefined);
                     if (accent) priceBg.set('stroke', accent);
                     if (styles.splashFill) priceBg.set('fill', styles.splashFill);
                     if (typeof styles.splashRoundness === 'number') (priceBg as any).__roundness = styles.splashRoundness;

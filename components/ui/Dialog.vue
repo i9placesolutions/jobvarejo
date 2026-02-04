@@ -35,9 +35,9 @@ const close = () => {
       leave-from-class="opacity-100"
       leave-to-class="opacity-0"
     >
-      <div v-if="modelValue" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="close">
+      <div v-if="modelValue" class="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="close">
         <div 
-          class="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 relative z-[10000] pointer-events-auto"
+          class="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 relative z-10000 pointer-events-auto"
           :style="{ width: width, maxWidth: '100%', maxHeight: 'calc(100vh - 2rem)' }"
         >
           <!-- Header -->
