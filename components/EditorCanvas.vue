@@ -2516,6 +2516,7 @@ const setupAltDragDuplicate = () => {
         state.didDuplicate = false;
         state.altAtDown = true;
         state.original = active;
+        
         // Use the global helper for more robust parent detection
         // Try multiple sources: direct .group property, global search, or local search
         // CRITICAL: Filter out ActiveSelection - it's NOT a real parent group
@@ -2524,7 +2525,16 @@ const setupAltDragDuplicate = () => {
             detectedParent = null; // Ignore ActiveSelection
         }
         state.parentGroup = detectedParent;
+        
+        // Store BOTH local and global coordinates for proper group handling
+        // When inside a group with interactive/subTargetCheck, coords are LOCAL to the group
         state.start = { left: Number(active.left || 0), top: Number(active.top || 0) };
+        
+        // Also store the global position for reference
+        if (detectedParent && typeof active.getCenterPoint === 'function') {
+            const globalCenter = active.getCenterPoint();
+            (state as any).globalStart = { x: globalCenter.x, y: globalCenter.y };
+        }
         
         console.log('🎯 [alt-duplicate] mouse:down', {
             objectType: active.type,
@@ -2568,16 +2578,8 @@ const setupAltDragDuplicate = () => {
                     // COMPORTAMENTO COPIAR/COLAR: Clone fica na posição ORIGINAL, usuário continua arrastando o ORIGINAL
                     // Configure clone at the START position (where original was before dragging)
                     assignNewIdsDeep(cloned);
-                    cloned.set({
-                        left: state.start.left,
-                        top: state.start.top,
-                        selectable: true,
-                        evented: true,
-                        hasControls: true,
-                        hasBorders: true,
-                    });
-
-                    // Preserve common metadata
+                    
+                    // Preserve common metadata BEFORE setting position
                     if ((original as any).parentFrameId) (cloned as any).parentFrameId = (original as any).parentFrameId;
                     if ((original as any).parentZoneId) (cloned as any).parentZoneId = (original as any).parentZoneId;
                     if ((original as any).isSmartObject) (cloned as any).isSmartObject = true;
@@ -2586,140 +2588,141 @@ const setupAltDragDuplicate = () => {
 
                     applyNoCacheForProductCards(cloned);
 
-                    // ============ SMART GROUP HANDLING ============
-                    // If the original was inside a group, add the clone to the same group
-                    // Otherwise, add to canvas directly
+                    // ============ FLUIDO COMO CANVA/FIGMA ============
+                    // Clone nasce DENTRO do grupo imediatamente, na posição original
+                    // O usuário continua arrastando o ORIGINAL
                     
                     let insertionSuccessful = false;
                     
                     if (parentGroup && typeof parentGroup.add === 'function') {
-                        // Original was inside a group - add clone to the same group
+                        // ====== CLONE INSIDE GROUP (FLUID LIKE CANVA) ======
                         try {
-                            // COMPORTAMENTO COPIAR/COLAR: Clone fica na posição ORIGINAL (start)
-                            // O original continua sendo arrastado pelo usuário
+                            // The clone should be at the SAME LOCAL position as the original was
+                            // state.start already has the local coordinates (left/top within group)
+                            let cloneLocalLeft = state.start.left;
+                            let cloneLocalTop = state.start.top;
                             
-                            // Clone position = original's starting position (LOCAL coordinates within group)
-                            const cloneLeft = state.start.left;
-                            const cloneTop = state.start.top;
+                            // FABRIC V7 FIX: When group is interactive (subTargetCheck: true),
+                            // object coordinates might be in GLOBAL space. We need to convert to LOCAL.
+                            const isInteractiveGroup = parentGroup.interactive === true || parentGroup.subTargetCheck === true;
                             
-                            // ========== Z-INDEX: Insert clone at SAME position as original ==========
-                            // Find the index of the original within the group
-                            const groupObjects = parentGroup.getObjects?.() || [];
-                            let originalIndex = groupObjects.indexOf(original);
-                            
-                            // If not found by reference, try by _customId
-                            if (originalIndex < 0 && original._customId) {
-                                originalIndex = groupObjects.findIndex((o: any) => o._customId === original._customId);
-                            }
-                            
-                            console.log('🔍 [alt-duplicate] Buscando índice do original no grupo', {
-                                groupObjectsCount: groupObjects.length,
-                                originalIndex,
-                                originalId: original._customId,
-                                originalName: original.name,
-                                groupObjectNames: groupObjects.map((o: any) => o.name || o._customId)
-                            });
-                            
-                            // First ADD the clone to the group
-                            parentGroup.add(cloned);
-                            
-                            // Set the group reference manually (Fabric v7 may not do this automatically)
-                            cloned.group = parentGroup;
-                            
-                            // Now move to correct z-index position (at originalIndex, so clone is BEHIND original)
-                            // This puts the duplicate at the same layer as the original product (below the price tag)
-                            if (originalIndex >= 0) {
-                                const newGroupObjects = parentGroup.getObjects?.() || [];
-                                const cloneIndex = newGroupObjects.indexOf(cloned);
-                                
-                                if (cloneIndex >= 0 && cloneIndex !== originalIndex) {
-                                    // Move clone to be at the originalIndex position
-                                    // Use Fabric's internal method to reorder
-                                    if (typeof (parentGroup as any)._objects !== 'undefined') {
-                                        // Direct array manipulation for Fabric v7
-                                        const arr = (parentGroup as any)._objects;
-                                        const cloneItem = arr.splice(cloneIndex, 1)[0];
-                                        arr.splice(originalIndex, 0, cloneItem);
+                            if (isInteractiveGroup && typeof parentGroup.toLocalPoint === 'function') {
+                                // Convert global coordinates to local group coordinates
+                                try {
+                                    const globalPoint = { x: state.start.left, y: state.start.top };
+                                    const localPoint = parentGroup.toLocalPoint(globalPoint, 'center', 'center');
+                                    if (localPoint && typeof localPoint.x === 'number') {
+                                        cloneLocalLeft = localPoint.x;
+                                        cloneLocalTop = localPoint.y;
+                                        console.log('🔄 [alt-duplicate] Converted to LOCAL coords for interactive group', {
+                                            globalPoint,
+                                            localPoint: { x: cloneLocalLeft, y: cloneLocalTop }
+                                        });
                                     }
+                                } catch (convErr) {
+                                    // Keep original coordinates if conversion fails
+                                    console.log('⚠️ [alt-duplicate] Using original coords (conversion failed)');
                                 }
                             }
                             
-                            // Then set position (clone stays at original position)
+                            // CRITICAL: Set clone's position BEFORE adding to group
                             cloned.set({
-                                left: cloneLeft,
-                                top: cloneTop,
+                                left: cloneLocalLeft,
+                                top: cloneLocalTop,
+                                originX: original.originX || 'center',
+                                originY: original.originY || 'center',
+                                selectable: true,
+                                evented: true,
+                                hasControls: true,
+                                hasBorders: true,
                                 visible: true,
                                 opacity: 1
                             });
                             
-                            // CRITICAL: Force group to recalculate and mark dirty for Fabric v7
+                            // Find where to insert (same z-index as original, so clone is BEHIND)
+                            const groupObjects = parentGroup.getObjects?.() || [];
+                            let originalIndex = groupObjects.indexOf(original);
+                            if (originalIndex < 0 && original._customId) {
+                                originalIndex = groupObjects.findIndex((o: any) => o._customId === original._customId);
+                            }
+                            
+                            // Add clone to group - it will appear IMMEDIATELY inside the group
+                            parentGroup.add(cloned);
+                            cloned.group = parentGroup; // Ensure reference is set
+                            
+                            // Move to correct z-index (at original's position, so clone is behind)
+                            if (originalIndex >= 0 && typeof (parentGroup as any)._objects !== 'undefined') {
+                                const arr = (parentGroup as any)._objects;
+                                const cloneCurrentIdx = arr.indexOf(cloned);
+                                if (cloneCurrentIdx >= 0 && cloneCurrentIdx !== originalIndex) {
+                                    const cloneItem = arr.splice(cloneCurrentIdx, 1)[0];
+                                    arr.splice(originalIndex, 0, cloneItem);
+                                }
+                            }
+                            
+                            // CRITICAL: Update group bounds and mark dirty
                             cloned.setCoords?.();
                             parentGroup.set('dirty', true);
-                            if (typeof parentGroup.setCoords === 'function') parentGroup.setCoords();
+                            
+                            // Use addWithUpdate pattern for Fabric v7
                             if (typeof (parentGroup as any)._calcBounds === 'function') {
                                 try { (parentGroup as any)._calcBounds(); } catch {}
                             }
-                            // Also trigger layout update if available
-                            if (typeof (parentGroup as any).triggerLayout === 'function') {
-                                try { (parentGroup as any).triggerLayout(); } catch {}
+                            if (typeof parentGroup.setCoords === 'function') {
+                                parentGroup.setCoords();
                             }
                             
-                            // Verify clone is actually in the group
+                            // Verify insertion
                             const verifyObjects = parentGroup.getObjects?.() || [];
-                            const verifyIndex = verifyObjects.indexOf(cloned);
-                            
-                            if (verifyIndex >= 0) {
+                            if (verifyObjects.includes(cloned)) {
                                 insertionSuccessful = true;
-                                
-                                console.log('✅ [alt-duplicate] Clone adicionado ao GRUPO pai (na posição original)', {
+                                console.log('✅ [alt-duplicate] Clone INSIDE group (fluid)', {
                                     cloneId: cloned._customId,
-                                    cloneType: cloned.type,
                                     parentGroupName: parentGroup.name || parentGroup._customId,
-                                    clonePosition: { left: cloneLeft, top: cloneTop },
-                                    groupObjectsCount: verifyObjects.length,
-                                    originalLayerIndex: originalIndex,
-                                    cloneLayerIndex: verifyIndex,
-                                    cloneHasGroupRef: cloned.group === parentGroup
+                                    cloneLocalPos: { left: cloneLocalLeft, top: cloneLocalTop },
+                                    groupObjectsCount: verifyObjects.length
                                 });
-                            } else {
-                                console.error('❌ [alt-duplicate] Clone não está no grupo após add()');
                             }
                         } catch (groupAddErr) {
-                            console.warn('[alt-duplicate] Falha ao adicionar ao grupo, tentando canvas:', groupAddErr);
-                            // Fall through to canvas addition
+                            console.warn('[alt-duplicate] Group insertion failed, falling back to canvas:', groupAddErr);
                         }
                     }
                     
                     // If not added to group, add to canvas
                     if (!insertionSuccessful) {
                         try {
+                            // Set position for canvas placement
+                            cloned.set({
+                                left: state.start.left,
+                                top: state.start.top,
+                                selectable: true,
+                                evented: true,
+                                hasControls: true,
+                                hasBorders: true,
+                                visible: true,
+                                opacity: 1
+                            });
+                            
                             // Final validation before adding to canvas
                             if (!isValidFabricObject(cloned)) {
-                                console.error('❌ [alt-duplicate] Clone falhou validação final antes de adicionar ao canvas');
+                                console.error('❌ [alt-duplicate] Clone failed validation');
                                 state.inProgress = false;
                                 return;
                             }
                             
-                            // Find the z-index of the parentGroup (if any) or original on canvas
+                            // Find the z-index position
                             const canvasObjects = canvas.value.getObjects();
-                            let targetIndex = canvasObjects.length; // default: top
+                            let targetIndex = canvasObjects.length;
                             
-                            if (parentGroup) {
-                                const groupIndex = canvasObjects.indexOf(parentGroup);
-                                if (groupIndex >= 0) {
-                                    targetIndex = groupIndex + 1; // just above the group
-                                }
-                            } else {
-                                const origIndex = canvasObjects.indexOf(original);
-                                if (origIndex >= 0) {
-                                    targetIndex = origIndex + 1;
-                                }
+                            const origIndex = canvasObjects.indexOf(original);
+                            if (origIndex >= 0) {
+                                targetIndex = origIndex; // Put clone at original's position
                             }
                             
                             // Add to canvas
                             canvas.value.add(cloned);
                             
-                            // Move to correct z-index position
+                            // Move to correct z-index
                             const finalObjects = canvas.value.getObjects();
                             const cloneCurrentIndex = finalObjects.indexOf(cloned);
                             if (cloneCurrentIndex >= 0 && targetIndex < finalObjects.length && cloneCurrentIndex !== targetIndex) {
@@ -2729,52 +2732,40 @@ const setupAltDragDuplicate = () => {
                             }
                             
                             insertionSuccessful = true;
-                            
-                            console.log('✅ [alt-duplicate] Clone adicionado ao CANVAS', {
+                            console.log('✅ [alt-duplicate] Clone added to CANVAS', {
                                 cloneId: cloned._customId,
-                                cloneType: cloned.type,
                                 insertedAt: targetIndex
                             });
                         } catch (addErr) {
-                            console.error('[alt-duplicate] Error adding clone to canvas:', addErr);
+                            console.error('[alt-duplicate] Canvas insertion error:', addErr);
                             state.inProgress = false;
                             return;
                         }
                     }
 
                     if (insertionSuccessful) {
-                        // COMPORTAMENTO COPIAR/COLAR: Clone fica parado, ORIGINAL continua sendo arrastado
-                        // NÃO fazer swap do transform - o original já está sendo arrastado pelo usuário
-                        
-                        // Apenas renderizar para mostrar o clone na posição original
+                        // Render immediately to show the clone
                         canvas.value.requestRenderAll();
                         state.didDuplicate = true;
                         
-                        // CRITICAL: If the card is in a ProductZone, recalculate the zone layout
-                        // This ensures the clone is properly positioned in the grid
+                        // If the card is in a ProductZone, recalculate layout
                         const zoneId = (cloned as any).parentZoneId;
                         if (zoneId && !parentGroup) {
-                            // Find the zone and recalculate layout
                             const zoneObj = canvas.value.getObjects().find((o: any) => 
                                 o._customId === zoneId && isLikelyProductZone(o)
                             );
                             if (zoneObj) {
-                                console.log('🔄 [alt-duplicate] Recalculando layout da ProductZone após duplicação', {
-                                    zoneId,
-                                    zoneName: zoneObj.name
-                                });
-                                // Give a brief delay to let the canvas settle
                                 setTimeout(() => {
                                     recalculateZoneLayout(zoneObj, undefined, { save: false });
                                 }, 50);
                             }
                         }
                         
-                        console.log('✅ [alt-duplicate] Duplicação completa (clone na posição original)', {
+                        console.log('✅ [alt-duplicate] Complete (fluid like Canva)', {
                             cloneId: cloned._customId,
                             clonePosition: { left: cloned.left, top: cloned.top },
                             originalPosition: { left: original.left, top: original.top },
-                            parentGroupName: parentGroup?.name || parentGroup?._customId
+                            parentGroupName: parentGroup?.name || parentGroup?._customId || 'canvas'
                         });
                     }
                 } finally {
@@ -2782,7 +2773,7 @@ const setupAltDragDuplicate = () => {
                 }
             })
             .catch((err: any) => {
-                console.warn('[alt-duplicate] Falha ao clonar', err);
+                console.warn('[alt-duplicate] Clone failed', err);
                 state.inProgress = false;
             });
     });
@@ -2795,6 +2786,7 @@ const setupAltDragDuplicate = () => {
         state.altAtDown = false;
         state.original = null;
         state.parentGroup = null;
+        (state as any).globalStart = null;
         if (shouldSave) saveCurrentState();
     });
 };
