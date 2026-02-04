@@ -1,10 +1,29 @@
-import { writeFile, unlinkSync, mkdirSync, rmdirSync, existsSync, readdirSync, statSync } from 'fs'
+import { unlinkSync, mkdirSync, rmdirSync, existsSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import { getS3Client } from '~/server/utils/s3'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
-import { readPsd, Psd as PsdFile } from 'ag-psd'
-import type { PsdLayer, PsdText } from 'ag-psd'
+import { readPsd, Psd as PsdFile, Layer } from 'ag-psd'
+// @ts-ignore - pngjs não tem tipos TypeScript oficiais
 import { PNG } from 'pngjs'
+
+interface HTMLCanvasElement {
+  width: number
+  height: number
+  getContext?: (context: string) => any
+  toDataURL?: (format: string) => string
+}
+
+// Tipos locais para compatibilidade
+
+// Type para HTMLCanvasElement no ambiente Node.js
+interface HTMLCanvasElement {
+  width: number
+  height: number
+  getContext?: (context: string) => any
+  toDataURL?: (format: string) => string
+}
+
+// Tipos locais para ag-psd
 
 /**
  * API Endpoint para conversão de arquivos PSD para canvas editável Fabric.js
@@ -104,6 +123,32 @@ function rgbaToPngBuffer(rgba: Uint8ClampedArray, width: number, height: number)
 }
 
 // Tipos para ag-psd
+interface AgPsdText {
+  text: string
+  transform?: number[]
+  style?: {
+    fontFamily?: string
+    fontSize?: number
+    fillColor?: number[]
+    fontColor?: number[]
+    fontWeight?: string
+  }
+  styleRuns?: Array<{
+    from: number
+    to: number
+    styles: {
+      fontFamily?: string
+      fontSize?: number
+      fillColor?: number[]
+      fontColor?: number[]
+    }
+  }>
+  paragraphStyle?: {
+    justification?: 'left' | 'right' | 'center'
+    leading?: number
+  }
+}
+
 interface AgPsdLayer {
   name?: string
   left: number
@@ -116,7 +161,7 @@ interface AgPsdLayer {
   hidden: boolean
   blendMode: string
   visible: boolean
-  text?: PsdText
+  text?: AgPsdText
   children?: AgPsdLayer[]
   image?: HTMLCanvasElement | ImageData
   canvas?: HTMLCanvasElement
@@ -211,7 +256,7 @@ function detectVectorShape(layer: AgPsdLayer): { type: string; data: any; radius
  * Analisa a imagem canvas para detectar a cor predominante
  */
 function extractSolidColorFromCanvas(canvas: HTMLCanvasElement): string | null {
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext?.('2d')
   if (!ctx) return null
 
   const width = canvas.width
@@ -249,7 +294,7 @@ function extractSolidColorFromCanvas(canvas: HTMLCanvasElement): string | null {
  * Processa uma forma vetorial detectada, criando objeto Fabric.js editável
  */
 function createVectorShapeObject(
-  layer: AgPsdLayer,
+  layer: any,
   shapeType: string,
   opacity: number,
   isVisible: boolean,
@@ -342,7 +387,7 @@ function createVectorShapeObject(
  * Processa camada de texto do ag-psd
  */
 function processTextLayer(
-  layer: AgPsdLayer,
+  layer: any,
   opacity: number,
   isVisible: boolean,
   customId: string
@@ -358,10 +403,10 @@ function processTextLayer(
     // Extrair propriedades de texto do ag-psd
     let fontSize = 16
     let fontFamily = 'Arial'
-    let fontWeight = 'normal' as const
+    let fontWeight: 'normal' | 'bold' = 'normal'
     let fontStyle = ''
     let fill = '#000000'
-    let textAlign = 'left' as const
+    let textAlign: 'left' | 'right' | 'center' = 'left'
     let charSpacing = 0
     let lineHeight = 1.16
     let underline = false
@@ -473,7 +518,7 @@ function processTextLayer(
 
 // Função para processar camada recursivamente e extrair objetos
 async function processLayer(
-  layer: AgPsdLayer,
+  layer: any,
   canvasObjects: any[],
   s3Client: ReturnType<typeof getS3Client>,
   importBucket: string,
@@ -597,7 +642,12 @@ async function processLayer(
       }
 
       // Converter canvas para PNG Buffer
-      const pngBuffer = Buffer.from((canvas as HTMLCanvasElement).toDataURL('image/png').split(',')[1], 'base64')
+      const dataUrl = (canvas as HTMLCanvasElement).toDataURL?.('image/png')
+      if (!dataUrl) {
+        console.warn(`Failed to convert canvas to data URL`)
+        return
+      }
+      const pngBuffer = Buffer.from(dataUrl.split(',')[1], 'base64')
 
       // Upload para Contabo
       const layerFilename = `layer_${layerCounter.value}_${depth}.png`
@@ -740,9 +790,7 @@ export default defineEventHandler(async (event) => {
     let psd: PsdFile
     try {
       psd = readPsd(uint8Array, {
-        useImageData: true, // Usa ImageData ao invés de Canvas para evitar premultiplicação
-        skipHidden: false,  // Importar todas as camadas, incluindo ocultas
-        dropWorker: true    // Desabilitar worker para Node.js
+        useImageData: true // Usa ImageData ao invés de Canvas para evitar premultiplicação
       })
       console.log(`✅ PSD parsed: ${psd.width}x${psd.height}, children: ${psd.children?.length || 0}`)
     } catch (parseError: any) {

@@ -1,0 +1,30 @@
+{
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 60,
+      "memory": 3008
+    },
+    "server/**/*.ts": {
+      "maxDuration": 60,
+      "memory": 3008
+    }
+  },
+  "builds": [
+    {
+      "src": "nuxt.config.ts",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": ".output/public"
+      }
+    }
+  ],
+  "build": {
+    "env": {
+      "NODE_OPTIONS": "--max-old-space-size=4096",
+      "SHARP_IGNORE_GLOBAL_LIBVIPS": "true"
+    }
+  },
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".output/public"
+}

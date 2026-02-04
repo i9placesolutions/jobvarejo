@@ -1,0 +1,31 @@
+# Arquivos de desenvolvimento
+*.md
+*.txt
+!robots.txt
+.git
+.gitignore
+.nuxt
+.output
+.vercel
+
+# Scripts e testes
+scripts/
+patches/
+
+# Backups
+*.bak
+*_old/
+app_old/
+
+# Documentação
+ANALISE_*.md
+*_README.md
+*_STATUS.md
+*_PORTABILITY_*.md
+
+# Node modules (será reinstalado)
+node_modules/
+
+# Cache
+.cache/
+dist/

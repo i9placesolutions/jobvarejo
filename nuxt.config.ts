@@ -2,6 +2,52 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  nitro: {
+    preset: 'vercel',
+    
+    // Externalizar dependências pesadas para reduzir bundle size
+    externals: {
+      inline: [
+        '@aws-sdk/client-s3',
+        '@aws-sdk/s3-request-presigner',
+      ]
+    },
+    
+    // Minificar o output
+    minify: true,
+    
+    // Comprimir assets
+    compressPublicAssets: {
+      brotli: true,
+      gzip: true
+    },
+    
+    // Otimizações de bundle - externalizar libs pesadas
+    rollupConfig: {
+      external: [
+        'sharp',
+        '@imgly/background-removal-node',
+        '@imgly/background-removal',
+        'ag-psd',
+        'canvas',
+        'bufferutil',
+        'utf-8-validate',
+      ],
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            // Separar vendors grandes em chunks
+            if (id.includes('openai')) return 'openai';
+            if (id.includes('fabric')) return 'fabric';
+            if (id.includes('xlsx')) return 'xlsx';
+            if (id.includes('@supabase')) return 'supabase';
+            return 'vendor';
+          }
+        }
+      }
+    }
+  },
+  
   runtimeConfig: {
     // Private keys (server-side only)
     contaboEndpoint: process.env.CONTABO_ENDPOINT || process.env.NUXT_CONTABO_ENDPOINT || 'usc1.contabostorage.com',
@@ -47,15 +93,31 @@ export default defineNuxtConfig({
       }
     }
   },
+  
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
+  
+  // Otimizações de build
+  experimental: {
+    payloadExtraction: false,
+  },
+  
   vite: {
     plugins: [
       tailwindcss(),
     ],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: undefined,
+        }
+      }
+    }
   },
+  
   css: ['~/assets/css/main.css'],
   srcDir: '.',
+  
   routeRules: {
     '/editor/**': {
       ssr: false,

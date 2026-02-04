@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
+    "build:vercel": "NODE_OPTIONS='--max-old-space-size=4096' nuxt build",
+    "check:bundle": "bash scripts/check-bundle-size.sh",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
