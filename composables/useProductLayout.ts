@@ -131,11 +131,32 @@ export const useProductLayout = () => {
     // -------------------------------------------------------------------------
     // 4. Price Group (Bottom) - Inclui splash internamente por performance
     // -------------------------------------------------------------------------
-    const priceData = splitPrice(prod.price);
-    const splashColor = styles.splashColor ?? '#dc2626';
+    // ===== LÓGICA DE PREÇO =====
+    // Prioridade: priceSpecial (promo embalagem) > priceSpecialUnit (promo unitário) > priceUnit > pricePack > price
+    let displayPrice = prod.price;
+    let isSpecialPrice = false;
+
+    // Verificar se há preço especial promocional
+    if (prod.priceSpecialUnit && typeof prod.priceSpecialUnit === 'number') {
+      displayPrice = prod.priceSpecialUnit;
+      isSpecialPrice = true;
+    } else if (prod.priceSpecial && typeof prod.priceSpecial === 'number') {
+      displayPrice = prod.priceSpecial;
+      isSpecialPrice = true;
+    } else if (prod.priceUnit && typeof prod.priceUnit === 'number') {
+      displayPrice = prod.priceUnit;
+    } else if (prod.pricePack && typeof prod.pricePack === 'number') {
+      displayPrice = prod.pricePack;
+    }
+
+    const priceData = splitPrice(displayPrice);
+    // Se for preço especial, usar cor verde/diferente para destaque
+    const splashColor = isSpecialPrice
+      ? (styles.splashSpecialColor ?? '#16a34a')  // verde para promoção
+      : (styles.splashColor ?? '#dc2626');
     const splashTextColor = styles.splashTextColor ?? '#ffffff';
     const priceSize = styles.priceFontSize ?? 60;
-    
+
     // Splash Shape
     const splashShape = new fabric.Ellipse({
       rx: 80,
@@ -148,7 +169,7 @@ export const useProductLayout = () => {
     });
 
     // Currency Symbol
-    const priceUnit = new fabric.Text(styles.currencySymbol ?? 'R$', {
+    const priceCurrency = new fabric.Text(styles.currencySymbol ?? 'R$', {
       fontSize: 20,
       fontFamily: styles.priceFont ?? 'Arial',
       fill: splashTextColor,
@@ -156,7 +177,7 @@ export const useProductLayout = () => {
       originY: 'bottom',
       left: -30,
       top: 0,
-      data: { smartType: 'product-price-unit' }
+      data: { smartType: 'product-price-currency' }
     });
 
     // Main Price (Integer)
@@ -186,8 +207,46 @@ export const useProductLayout = () => {
       data: { smartType: 'product-price-decimal' }
     });
 
+    // ===== TEXTO DE CONDIÇÃO ESPECIAL (Opcional) =====
+    // Se houver condição especial (ex: "ACIMA DE 36 UN."), mostrar abaixo do preço
+    const priceObjects: any[] = [splashShape, priceCurrency, priceMain, priceDec];
+
+    if (isSpecialPrice && prod.specialCondition) {
+      const conditionText = new fabric.Text(prod.specialCondition.toUpperCase(), {
+        fontSize: 10,
+        fontFamily: styles.priceFont ?? 'Arial',
+        fill: splashTextColor,
+        fontWeight: 'normal',
+        originX: 'center',
+        originY: 'top',
+        left: 0,
+        top: 45,
+        data: { smartType: 'product-price-condition' }
+      });
+      priceObjects.push(conditionText);
+    }
+
+    // ===== TEXTO DE PREÇO DE EMBALAGEM (se disponível) =====
+    // Se houver preço de embalagem diferente do unitário, mostrar
+    if (prod.pricePack && typeof prod.pricePack === 'number' && prod.pricePack !== displayPrice) {
+      const packPriceData = splitPrice(prod.pricePack);
+      const packLabelText = prod.packageLabel || 'CX';
+      const packText = new fabric.Text(`${packLabelText}: ${packPriceData.integer},${packPriceData.decimal}`, {
+        fontSize: 11,
+        fontFamily: styles.priceFont ?? 'Arial',
+        fill: splashTextColor,
+        fontWeight: 'normal',
+        originX: 'center',
+        originY: 'bottom',
+        left: 0,
+        top: -50,
+        data: { smartType: 'product-price-pack' }
+      });
+      priceObjects.push(packText);
+    }
+
     // Group Price Components
-    const priceGroup = new fabric.Group([splashShape, priceUnit, priceMain, priceDec], {
+    const priceGroup = new fabric.Group(priceObjects, {
       top: cardHeight/2 - 70,
       left: 0,
       originX: 'center',

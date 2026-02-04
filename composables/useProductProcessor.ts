@@ -3,15 +3,29 @@ export interface SmartProduct {
     name: string;
     brand: string | null;
     weight: string | null;
+    // ===== PREÇOS SIMPLES (legado - mantido para compatibilidade) =====
     price: string | null;
-    // Wholesale tier (optional)
+    // ===== PREÇOS POR EMBALAGEM/UNIDADE =====
+    // Preço da embalagem/caixa avulsa (PREÇO CX. AVULSA)
+    pricePack?: string | null;
+    // Preço unitário avulso (PREÇO UND. AVULSA)
+    priceUnit?: string | null;
+    // ===== PREÇOS ESPECIAIS/PROMOCIONAIS =====
+    // Preço especial da embalagem (PREÇO ESPECIAL / PREÇO ACIMA X EMBA.)
+    priceSpecial?: string | null;
+    // Preço unitário especial (PREÇO ESPECIAL UN. / PREÇO UND. ACIMA X EMB)
+    priceSpecialUnit?: string | null;
+    // Condição para preço especial (OBSERVAÇÕES: "ACIMA DE 36 UN.", "ACIMA DE 2 FARDOS")
+    specialCondition?: string | null;
+    // ===== WHOLESALE/ATACADO (legado - mantido para compatibilidade) =====
     priceWholesale?: string | null;
     wholesaleTrigger?: number | null;
     wholesaleTriggerUnit?: string | null;
-    // Pack metadata (optional)
+    // ===== METADATA DE EMBALAGEM =====
     packQuantity?: number | null;
     packUnit?: string | null;
     packageLabel?: string | null;
+    // ===== OUTROS =====
     price_mode: string;
     limit: string | null;
     flavor: string | null;
@@ -34,13 +48,24 @@ export const useProductProcessor = () => {
             name: p.name || 'Produto sem nome',
             brand: p.brand || '',
             weight: p.weight || '',
+            // Preço principal (legado - mantido para compatibilidade)
             price: p.price || '',
+            // Novos campos de preço por embalagem/unidade
+            pricePack: p.pricePack ?? '',
+            priceUnit: p.priceUnit ?? '',
+            // Preços especiais/promocionais
+            priceSpecial: p.priceSpecial ?? '',
+            priceSpecialUnit: p.priceSpecialUnit ?? '',
+            specialCondition: p.specialCondition ?? '',
+            // Wholesale (legado)
             priceWholesale: p.priceWholesale ?? '',
             wholesaleTrigger: p.wholesaleTrigger ?? null,
             wholesaleTriggerUnit: p.wholesaleTriggerUnit ?? '',
+            // Metadata de embalagem
             packQuantity: p.packQuantity ?? null,
             packUnit: p.packUnit ?? '',
             packageLabel: p.packageLabel ?? '',
+            // Outros
             price_mode: p.price_mode || 'retail',
             limit: p.limit || '',
             flavor: p.flavor || '',

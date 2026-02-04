@@ -222,7 +222,7 @@ const filteredProducts = computed(() => {
     const q = normalizeText(String(reviewSearch.value || '').trim())
     if (!q) return list
     return list.filter((p: any) => {
-        const hay = normalizeText(`${p?.name || ''} ${p?.brand || ''} ${p?.price || ''} ${p?.priceWholesale || ''}`)
+        const hay = normalizeText(`${p?.name || ''} ${p?.brand || ''} ${p?.price || ''} ${p?.pricePack || ''} ${p?.priceUnit || ''} ${p?.priceSpecial || ''} ${p?.priceSpecialUnit || ''} ${p?.specialCondition || ''} ${p?.priceWholesale || ''}`)
         return hay.includes(q)
     })
 })
@@ -374,7 +374,7 @@ const filteredProducts = computed(() => {
                             <tr>
                                 <th class="p-3 w-15">Img</th>
                                 <th class="p-3">Produto</th>
-                                <th class="p-3 w-60">Preço</th>
+                                <th class="p-3 w-80">Preços (Und | Emb | +Esp | Esp)</th>
                                 <th class="p-3 w-20">Status</th>
                                 <th class="p-3 w-10"></th>
                             </tr>
@@ -441,17 +441,43 @@ const filteredProducts = computed(() => {
 
                                 <!-- Price Input -->
                                 <td class="p-2">
-                                    <div class="flex items-center text-zinc-400 gap-1">
-                                        <span>R$</span>
-                                        <input 
-                                            v-model="product.price" 
-                                            class="w-full bg-transparent border-none text-white focus:ring-0 p-0 text-xs"
-                                            placeholder="0,00"
-                                        />
+                                    <!-- ===== PREÇOS PRINCIPAIS ===== -->
+                                    <div class="space-y-1">
+                                        <!-- Preço Unitário (Principal) -->
+                                        <div class="flex items-center text-zinc-400 gap-1">
+                                            <span class="text-[9px] uppercase text-zinc-500">Und</span>
+                                            <input
+                                                v-model="product.priceUnit"
+                                                class="w-full bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-white text-xs focus:outline-none focus:border-blue-500"
+                                                placeholder="0,00"
+                                            />
+                                            <span class="text-[9px] uppercase text-zinc-500">Emb</span>
+                                            <input
+                                                v-model="product.pricePack"
+                                                class="w-full bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-white text-xs focus:outline-none focus:border-blue-500"
+                                                placeholder="0,00"
+                                            />
+                                        </div>
+
+                                        <!-- Preços Especiais/Promocionais -->
+                                        <div class="flex items-center text-green-400 gap-1">
+                                            <span class="text-[9px] uppercase text-green-500">+Esp</span>
+                                            <input
+                                                v-model="product.priceSpecialUnit"
+                                                class="w-full bg-transparent border border-green-900/50 rounded px-1 py-0.5 text-green-300 text-xs focus:outline-none focus:border-green-500"
+                                                placeholder="0,00"
+                                            />
+                                            <span class="text-[9px] uppercase text-green-500">Esp</span>
+                                            <input
+                                                v-model="product.priceSpecial"
+                                                class="w-full bg-transparent border border-green-900/50 rounded px-1 py-0.5 text-green-300 text-xs focus:outline-none focus:border-green-500"
+                                                placeholder="0,00"
+                                            />
+                                        </div>
                                     </div>
 
-                                    <!-- Pack / Wholesale (Atacarejo) -->
-                                    <div class="mt-1 flex items-center gap-1 text-[10px] text-zinc-500">
+                                    <!-- ===== METADATA DE EMBALAGEM ===== -->
+                                    <div class="mt-2 flex items-center gap-1 text-[10px] text-zinc-500">
                                         <span class="uppercase">Emb</span>
                                         <input
                                             :value="product.packageLabel ?? ''"
@@ -475,29 +501,51 @@ const filteredProducts = computed(() => {
                                         />
                                     </div>
 
+                                    <!-- ===== CONDIÇÃO ESPECIAL ===== -->
                                     <div class="mt-1 flex items-center gap-1 text-[10px] text-zinc-500">
-                                        <span class="uppercase">Acima</span>
+                                        <span class="uppercase">Condição</span>
                                         <input
-                                            type="number"
-                                            :value="product.wholesaleTrigger ?? ''"
-                                            @input="e => { const v = Number((e.target as any).value); product.wholesaleTrigger = Number.isFinite(v) && v > 0 ? v : null }"
-                                            class="w-14 bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-zinc-200 focus:outline-none"
-                                            placeholder="10"
-                                        />
-                                        <input
-                                            :value="product.wholesaleTriggerUnit ?? ''"
-                                            @input="e => product.wholesaleTriggerUnit = String((e.target as any).value || '').toUpperCase()"
-                                            class="w-10 bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-zinc-200 focus:outline-none"
-                                            placeholder="FD"
-                                        />
-                                        <span class="ml-1 text-zinc-500">R$</span>
-                                        <input
-                                            :value="product.priceWholesale ?? ''"
-                                            @input="e => product.priceWholesale = String((e.target as any).value || '')"
-                                            class="w-full bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-zinc-200 focus:outline-none"
-                                            placeholder="0,00"
+                                            :value="product.specialCondition ?? ''"
+                                            @input="e => product.specialCondition = String((e.target as any).value || '')"
+                                            class="flex-1 bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-zinc-200 focus:outline-none"
+                                            placeholder="ACIMA DE 36 UN."
                                         />
                                     </div>
+
+                                    <!-- ===== PREÇO LEGADO (opcional, colapsado) ===== -->
+                                    <details class="mt-1">
+                                        <summary class="text-[9px] text-zinc-600 cursor-pointer hover:text-zinc-400">Legado</summary>
+                                        <div class="mt-1 flex items-center gap-1 text-[10px] text-zinc-600">
+                                            <span>R$</span>
+                                            <input
+                                                :value="product.price ?? ''"
+                                                @input="e => product.price = String((e.target as any).value || '')"
+                                                class="w-full bg-transparent border border-zinc-800/50 rounded px-1 py-0.5 text-zinc-500 focus:outline-none"
+                                                placeholder="0,00"
+                                            />
+                                            <span class="uppercase">Atac.</span>
+                                            <input
+                                                type="number"
+                                                :value="product.wholesaleTrigger ?? ''"
+                                                @input="e => { const v = Number((e.target as any).value); product.wholesaleTrigger = Number.isFinite(v) && v > 0 ? v : null }"
+                                                class="w-10 bg-transparent border border-zinc-800/50 rounded px-1 py-0.5 text-zinc-500 focus:outline-none"
+                                                placeholder="10"
+                                            />
+                                            <input
+                                                :value="product.wholesaleTriggerUnit ?? ''"
+                                                @input="e => product.wholesaleTriggerUnit = String((e.target as any).value || '').toUpperCase()"
+                                                class="w-8 bg-transparent border border-zinc-800/50 rounded px-1 py-0.5 text-zinc-500 focus:outline-none"
+                                                placeholder="FD"
+                                            />
+                                            <span>R$</span>
+                                            <input
+                                                :value="product.priceWholesale ?? ''"
+                                                @input="e => product.priceWholesale = String((e.target as any).value || '')"
+                                                class="w-full bg-transparent border border-zinc-800/50 rounded px-1 py-0.5 text-zinc-500 focus:outline-none"
+                                                placeholder="0,00"
+                                            />
+                                        </div>
+                                    </details>
                                 </td>
                                 
                                 <!-- Status -->

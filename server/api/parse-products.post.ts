@@ -85,12 +85,51 @@ export default defineEventHandler(async (event) => {
     const openai = await getOpenAI()
 
     const prompt = `
-You extract structured products from supermarket lists.
+You extract structured products from supermarket/lists/retail price lists.
 
 Input can be:
 - plain text lines
 - tables (CSV/Excel/PDF)
 - screenshots/photos of tables (image)
+- ANY LANGUAGE (Portuguese, English, Spanish, etc.)
+
+IMPORTANT: This system supports MULTIPLE PRICE TYPES. Extract ALL available prices.
+
+The system uses AI to intelligently identify price columns even when written differently:
+
+PRICE TYPES TO EXTRACT (with variations):
+1. Pack/Box Price → pricePack
+   - Variations: "PREÇO CX", "PREÇO CAIXA", "PREÇO FARDO", "PRECO EMB", "CX AVULSA",
+     "PACOTE", "PACK", "BOX", "FARDO", "FD", "CX", "PCT"
+
+2. Unit Price → priceUnit
+   - Variations: "PREÇO UND", "PREÇO UNIDADE", "PREÇO UNIT", "UNIDADE", "UNIT",
+     "UND AVULSA", "UN. AVULSA", "PRICE/UN", "PR. UNIT"
+
+3. Special/Promotional Pack Price → priceSpecial
+   - Variations: "PREÇO ESPECIAL", "PREÇO PROMO", "PREÇO PROMOÇÃO", "PREÇO ACIMA",
+     "PROMOÇÃO", "PROMO", "OFERTA", "SPECIAL", "PROMO PRICE", "PROMO PACK"
+
+4. Special/Promotional Unit Price → priceSpecialUnit
+   - Variations: "PREÇO ESPECIAL UN", "PREÇO UN. PROMO", "PREÇO UND PROMO",
+     "UNIT PROMO", "UN. ESPECIAL", "SPECIAL UNIT", "PROMO UNIT"
+
+5. Special Condition → specialCondition
+   - Variations: "OBSERVAÇÃO", "OBS", "CONDICÃO", "CONDIÇÃO", "ACIMA DE",
+     "CONDITION", "OBSERVATION", "FROM", "MIN. QTY"
+   - Examples: "ACIMA DE 36 UN", "ACIMA DE 2 FARDOS", "MIN 10 CX", "FROM 5 UNITS"
+
+COLUMN IDENTIFICATION STRATEGY:
+- Look for numeric values with price format (0,00 or 0.00)
+- Identify columns by HEADER names first
+- If no clear headers, infer from CONTEXT:
+  * Lower value in same row = promotional price
+  * Higher value in same row = regular price
+  * Value divided by quantity = unit price
+- Common patterns:
+  * "CX" / "FD" / "PACK" → pack price
+  * "UN" / "UND" / "UNIT" → unit price
+  * "ESP" / "PROMO" / "OFERTA" → promotional price
 
 Return STRICT JSON in the shape:
 {
@@ -100,18 +139,25 @@ Return STRICT JSON in the shape:
       "brand": string|null,
       "weight": string|null,
 
-      // Main unit price (PRECO UND/UNIDADE). Use Brazilian formatting: "0,00".
+      // ===== LEGACY PRICE FIELDS (for backward compatibility) =====
       "price": string|null,
 
-      // Optional wholesale tier (e.g. "ACIMA 10 FD"): use "0,00"
+      // ===== NEW PRICE FIELDS =====
+      "pricePack": string|null,
+      "priceUnit": string|null,
+      "priceSpecial": string|null,
+      "priceSpecialUnit": string|null,
+      "specialCondition": string|null,
+
+      // ===== LEGACY WHOLESALE (still supported) =====
       "priceWholesale": string|null,
       "wholesaleTrigger": number|null,
-      "wholesaleTriggerUnit": string|null, // e.g. "FD", "CX", "EMB"
+      "wholesaleTriggerUnit": string|null,
 
-      // Pack metadata (for lines like "FD C/12UN")
+      // ===== PACK METADATA =====
       "packQuantity": number|null,
-      "packUnit": string|null, // e.g. "UN"
-      "packageLabel": string|null, // abbreviation like "FD" (FARDO), "CX" (CAIXA), "PCT" (PACOTE)
+      "packUnit": string|null,
+      "packageLabel": string|null,
 
       "limit": string|null,
       "flavor": string|null
@@ -122,14 +168,15 @@ Return STRICT JSON in the shape:
 Rules:
 - Do not invent values; if missing, use null.
 - Prices MUST be strings with comma decimal and 2 digits (e.g. "23,40").
-- If there are both box/pack price and unit price columns, set "price" to the UNIT price.
+- If there are both pack price and unit price columns, populate BOTH pricePack AND priceUnit.
+- If there are regular prices AND special/promotional prices, populate ALL 4 fields.
+- Extract specialCondition from observation/condition column or from price column headers.
 - IMPORTANT: Keep weight/gramatura in the product NAME. Do NOT separate it.
-  Example: "Arroz 5kg" should have name="Arroz 5kg" (not "Arroz")
-  Example: "Leite 1L" should have name="Leite 1L" (not "Leite")
+  Example: "Arroz 5kg" → name="Arroz 5kg" (not "Arroz")
 - The weight field should only be filled if there is a SEPARATE weight column in the input.
-- Normalize common packaging words to abbreviations:
-  FARDO -> FD, CAIXA -> CX, PACOTE -> PCT, EMBALAGEM -> EMB.
-- Detect packQuantity/packUnit from columns like "QUANT. EMBA" or patterns like "C/12UN", "12X350ML".
+- Normalize packaging words: FARDO→FD, CAIXA→CX, PACOTE→PCT, UNIDADE→UN.
+- Detect packQuantity/packUnit from columns like "QUANT", "QTD", "QTY" or patterns like "C/12UN", "12X350ML".
+- Be flexible with spelling: PRECO, PREÇO, PREÇO, PRECO, PÇO are all valid.
 
 Source name: ${filename || 'text'}
 Source content:
@@ -209,8 +256,15 @@ ${text ? `"${text}"` : '(image attached)'}
         const products = rawProducts.map((p: any) => {
             const name = String(p?.name || '').trim();
             const price = normalizePrice(p?.price);
-            const priceWholesale = normalizePrice(p?.priceWholesale);
 
+            // Novos campos de preço
+            const pricePack = normalizePrice(p?.pricePack);
+            const priceUnit = normalizePrice(p?.priceUnit);
+            const priceSpecial = normalizePrice(p?.priceSpecial);
+            const priceSpecialUnit = normalizePrice(p?.priceSpecialUnit);
+
+            // Wholesale legado
+            const priceWholesale = normalizePrice(p?.priceWholesale);
             const packQuantity = normalizeInt(p?.packQuantity);
             const packUnit = normalizeToken(p?.packUnit);
             const wholesaleTrigger = normalizeInt(p?.wholesaleTrigger);
@@ -218,14 +272,26 @@ ${text ? `"${text}"` : '(image attached)'}
             const packageLabel = normalizeToken(p?.packageLabel);
             const wholesaleTriggerUnit = normalizeToken(p?.wholesaleTriggerUnit) || packageLabel;
 
+            // Condição especial (texto completo, preservar formatação)
+            const specialCondition = p?.specialCondition ? String(p.specialCondition).trim() : null;
+
             return {
                 name: name || 'Produto sem nome',
                 brand: p?.brand ? String(p.brand).trim() : null,
                 weight: p?.weight ? String(p.weight).trim().toUpperCase().replace(/\s+/g, '') : null,
+                // Preço principal (legado)
                 price,
+                // Novos campos de preço
+                pricePack,
+                priceUnit,
+                priceSpecial,
+                priceSpecialUnit,
+                specialCondition,
+                // Wholesale legado
                 priceWholesale,
                 wholesaleTrigger,
                 wholesaleTriggerUnit,
+                // Metadata
                 packQuantity,
                 packUnit,
                 packageLabel,

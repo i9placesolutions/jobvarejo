@@ -379,7 +379,7 @@ export const calculateProductPosition = (
  */
 export const migrateProduct = (oldProduct: any): Product => {
   const id = oldProduct.id ?? `prod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
   // Processar imagens
   let images: ProductImage[] = [];
   if (Array.isArray(oldProduct.images)) {
@@ -408,6 +408,20 @@ export const migrateProduct = (oldProduct: any): Product => {
     }];
   }
 
+  // ===== LÓGICA DE PREÇO =====
+  // Prioridade de campos de preço (do mais específico para o mais genérico):
+  // 1. priceUnit (PREÇO UND. AVULSA) - preço unitário
+  // 2. price (legado) - preço principal
+  // 3. pricePack (PREÇO CX. AVULSA) - preço da embalagem (como fallback)
+  let finalPrice = 0;
+  if (oldProduct.priceUnit) {
+    finalPrice = parsePrice(oldProduct.priceUnit);
+  } else if (oldProduct.price) {
+    finalPrice = parsePrice(oldProduct.price);
+  } else if (oldProduct.pricePack) {
+    finalPrice = parsePrice(oldProduct.pricePack);
+  }
+
   return {
     id,
     name: oldProduct.name ?? 'Produto',
@@ -416,7 +430,7 @@ export const migrateProduct = (oldProduct: any): Product => {
     y: oldProduct.y ?? 0,
     width: oldProduct.width ?? 200,
     height: oldProduct.height ?? 300,
-    price: parsePrice(oldProduct.price),
+    price: finalPrice,
     unit: oldProduct.unit ?? 'un',
     showPrice: oldProduct.showPrice ?? true,
     priceMode: oldProduct.price_mode ?? oldProduct.priceMode ?? 'retail',
@@ -432,6 +446,22 @@ export const migrateProduct = (oldProduct: any): Product => {
     flavor: oldProduct.flavor ?? '',
     zIndex: oldProduct.zIndex ?? 0,
     status: oldProduct.status ?? 'done',
+    // ===== NOVOS CAMPOS DE PREÇO =====
+    // Preservar os campos extras para uso futuro
+    pricePack: oldProduct.pricePack ? parsePrice(oldProduct.pricePack) : undefined,
+    priceUnit: oldProduct.priceUnit ? parsePrice(oldProduct.priceUnit) : undefined,
+    priceSpecial: oldProduct.priceSpecial ? parsePrice(oldProduct.priceSpecial) : undefined,
+    priceSpecialUnit: oldProduct.priceSpecialUnit ? parsePrice(oldProduct.priceSpecialUnit) : undefined,
+    specialCondition: oldProduct.specialCondition ?? undefined,
+    // Metadata de embalagem
+    packQuantity: oldProduct.packQuantity ?? undefined,
+    packUnit: oldProduct.packUnit ?? undefined,
+    packageLabel: oldProduct.packageLabel ?? undefined,
+    // Wholesale legado
+    priceWholesale: oldProduct.priceWholesale ? parsePrice(oldProduct.priceWholesale) : undefined,
+    wholesaleTrigger: oldProduct.wholesaleTrigger ?? undefined,
+    wholesaleTriggerUnit: oldProduct.wholesaleTriggerUnit ?? undefined,
+    // Raw data
     raw: oldProduct.raw ?? oldProduct
   };
 };

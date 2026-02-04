@@ -34,12 +34,34 @@ export interface Product {
   y: number;
   width: number;
   height: number;
-  // Preço
+  // ===== PREÇO PRINCIPAL =====
   price: number | string;
   unit?: string; // 'kg', 'un', 'pct', 'lt', etc.
   showPrice?: boolean;
   priceMode?: 'retail' | 'wholesale' | 'pack';
-  // Free Mode (ignora grid)
+  // ===== NOVOS CAMPOS DE PREÇO =====
+  // Preço da embalagem/caixa (PREÇO CX. AVULSA, PREÇO FARDO)
+  pricePack?: number | string;
+  // Preço unitário (PREÇO UND. AVULSA)
+  priceUnit?: number | string;
+  // Preço especial/promocional da embalagem (PREÇO ESPECIAL, PREÇO ACIMA X EMBA.)
+  priceSpecial?: number | string;
+  // Preço unitário especial/promocional (PREÇO ESPECIAL UN., PREÇO UND. ACIMA X EMB)
+  priceSpecialUnit?: number | string;
+  // Condição para preço especial (OBSERVAÇÕES: "ACIMA DE 36 UN.", "ACIMA DE 5 FARDOS")
+  specialCondition?: string;
+  // ===== METADATA DE EMBALAGEM =====
+  // Quantidade por embalagem (do campo "QUANT. EMBA" ou padrão "C/12UN")
+  packQuantity?: number;
+  // Unidade da embalagem ("UN", "CX", "FD", etc.)
+  packUnit?: string;
+  // Etiqueta da embalagem ("FD", "CX", "PCT", "UNIDADE", "FARDO")
+  packageLabel?: string;
+  // ===== WHOLESALE/ATACADO (legado) =====
+  priceWholesale?: number | string;
+  wholesaleTrigger?: number;
+  wholesaleTriggerUnit?: string;
+  // ===== FREE MODE (ignora grid) =====
   isFreeMode?: boolean;
   freeX?: number;
   freeY?: number;
