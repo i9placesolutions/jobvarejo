@@ -120,6 +120,7 @@ const isLoadingAssets = ref(false)
 const assets = ref<any[]>([])
 const assetSearch = ref('')
 const selectedProductIndex = ref<number | null>(null)
+const showLabelPreview = ref(false)
 
 const reviewSearch = ref('')
 const selectedLabelTemplateId = ref<string>('')
@@ -234,7 +235,7 @@ const filteredProducts = computed(() => {
         title="Importação Inteligente"
         width="800px"
     >
-        <div class="flex flex-col gap-4 min-h-[400px]">
+        <div class="flex flex-col gap-4 min-h-100">
             
             <!-- STEP 1: INPUT -->
             <div v-if="step === 'input'" class="flex flex-col gap-4 flex-1">
@@ -302,7 +303,7 @@ const filteredProducts = computed(() => {
                                 <span class="text-zinc-300 font-medium">{{ products.length }}</span>
                             </div>
                         </div>
-                        <div class="w-[280px] max-w-[45%]">
+                        <div class="w-70 max-w-[45%]">
                             <Input v-model="reviewSearch" placeholder="Buscar (nome, marca, preço...)" class="h-9 text-sm" />
                         </div>
                     </div>
@@ -349,10 +350,11 @@ const filteredProducts = computed(() => {
                                     v-if="selectedLabelTemplate?.previewDataUrl"
                                     :src="selectedLabelTemplate.previewDataUrl"
                                     alt="preview"
-                                    class="w-[64px] h-[26px] object-contain rounded bg-zinc-800/60 border border-zinc-700"
+                                    class="w-16 h-6.5 object-contain rounded bg-zinc-800/60 border border-zinc-700 cursor-pointer hover:border-zinc-500 transition-colors"
+                                    @click="showLabelPreview = true"
                                 />
                                 <select
-                                    class="h-8 bg-transparent border border-zinc-700 rounded px-2 text-xs text-zinc-200 focus:outline-none min-w-[180px]"
+                                    class="h-8 bg-transparent border border-zinc-700 rounded px-2 text-xs text-zinc-200 focus:outline-none min-w-45"
                                     :value="selectedLabelTemplateId"
                                     @change="selectedLabelTemplateId = String(($event.target as HTMLSelectElement).value || '')"
                                 >
@@ -370,15 +372,15 @@ const filteredProducts = computed(() => {
                     <table class="w-full text-left text-xs border-collapse">
                         <thead class="bg-zinc-800 text-zinc-400 sticky top-0 z-10">
                             <tr>
-                                <th class="p-3 w-[60px]">Img</th>
+                                <th class="p-3 w-15">Img</th>
                                 <th class="p-3">Produto</th>
-                                <th class="p-3 w-[240px]">Preço</th>
-                                <th class="p-3 w-[80px]">Status</th>
-                                <th class="p-3 w-[40px]"></th>
+                                <th class="p-3 w-60">Preço</th>
+                                <th class="p-3 w-20">Status</th>
+                                <th class="p-3 w-10"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-800">
-                            <tr v-for="(product, index) in filteredProducts" :key="product.id" class="hover:bg-white/5 group">
+                            <tr v-for="product in filteredProducts" :key="product.id" class="hover:bg-white/5 group">
                                 <!-- Image Column -->
                                 <td class="p-2">
                                     <div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center overflow-hidden border border-zinc-700 relative">
@@ -552,7 +554,7 @@ const filteredProducts = computed(() => {
                 </Button>
             </div>
 
-            <div class="max-h-[360px] overflow-y-auto custom-scrollbar border border-zinc-800 rounded-lg bg-zinc-900/50 p-3">
+            <div class="max-h-90 overflow-y-auto custom-scrollbar border border-zinc-800 rounded-lg bg-zinc-900/50 p-3">
                 <div v-if="isLoadingAssets" class="text-xs text-zinc-500">Carregando imagens...</div>
                 <div v-else-if="!filteredAssets.length" class="text-xs text-zinc-500">Nenhuma imagem encontrada.</div>
                 <div v-else class="grid grid-cols-3 gap-2">
@@ -566,6 +568,19 @@ const filteredProducts = computed(() => {
                     </button>
                 </div>
             </div>
+        </div>
+    </Dialog>
+
+    <!-- Label Preview Fullscreen Modal -->
+    <Dialog v-model="showLabelPreview" title="Preview da Etiqueta" fullscreen>
+        <div class="flex flex-col items-center justify-center w-full h-full">
+            <img
+                v-if="selectedLabelTemplate?.previewDataUrl"
+                :src="selectedLabelTemplate.previewDataUrl"
+                alt="Preview em tela cheia"
+                class="max-w-full max-h-full object-contain"
+            />
+            <div v-else class="text-zinc-500 text-sm">Nenhuma etiqueta selecionada</div>
         </div>
     </Dialog>
 </template>

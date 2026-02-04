@@ -66,6 +66,52 @@ const fillColorTrigger2 = ref<HTMLElement | null>(null)
 const strokeColorTrigger = ref<HTMLElement | null>(null)
 const textStrokeColorTrigger = ref<HTMLElement | null>(null)
 
+// Collapsible sections state (Figma-inspired accordion)
+const collapsedSections = ref<Set<string>>(new Set())
+
+const toggleSection = (sectionId: string) => {
+  const newSet = new Set(collapsedSections.value)
+  if (newSet.has(sectionId)) {
+    newSet.delete(sectionId)
+  } else {
+    newSet.add(sectionId)
+  }
+  collapsedSections.value = newSet
+}
+
+const isSectionCollapsed = (sectionId: string) => collapsedSections.value.has(sectionId)
+
+// Preset color palette (Figma-inspired)
+const PRESET_COLORS = [
+  // Primary brand colors
+  '#8b5cf6', '#6366f1', '#3b82f6', '#0ea5e9', '#06b6d4',
+  // Greens and teals
+  '#10b981', '#22c55e', '#84cc16', '#eab308',
+  // Oranges and reds
+  '#f59e0b', '#f97316', '#ef4444', '#dc2626', '#b91c1c',
+  // Pinks and purples
+  '#ec4899', '#d946ef', '#a855f7', '#7c3aed',
+  // Neutrals
+  '#ffffff', '#f4f4f5', '#d4d4d8', '#a1a1aa', '#71717a',
+  '#3f3f46', '#27272a', '#18181b', '#000000'
+]
+
+// Quick preset colors for price labels
+const PRICE_LABEL_COLORS = [
+  '#ef4444', // Red
+  '#f97316', // Orange
+  '#eab308', // Yellow
+  '#22c55e', // Green
+  '#3b82f6', // Blue
+  '#8b5cf6', // Purple
+  '#000000', // Black
+  '#ffffff', // White
+]
+
+const applyPresetColor = (color: string, property: 'fill' | 'stroke') => {
+  patch(property, color)
+}
+
 const TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__rx', '__ry']
 
 const FONT_WEIGHT_OPTIONS: Array<{ label: string; value: number }> = [
@@ -862,156 +908,129 @@ watch(
     <input ref="imageInputEl" type="file" class="hidden" accept="image/*" @change="onAddImage" />
     <input ref="replaceImageInputEl" type="file" class="hidden" accept="image/*" @change="replaceSelectedImage" />
 
-    <!-- Header -->
-    <div class="me-header">
-      <div class="me-header-left">
-        <div class="me-icon-wrapper">
-          <svg class="me-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-        </div>
-        <div class="me-header-info">
-          <h3 class="me-title">Editor de Etiqueta</h3>
-          <p class="me-subtitle">Personalize cores, fontes e layout</p>
-        </div>
+    <!-- Floating Top Bar (compact) -->
+    <div class="me-top-bar">
+      <div class="me-top-left">
+        <input
+          v-model="editorName"
+          class="me-name-input-compact"
+          placeholder="Nome do modelo..."
+        />
       </div>
-      <button class="me-close" @click="emit('close')">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+      <div class="me-top-actions">
+        <button class="me-save-btn-compact" :disabled="isSaving" @click="save">
+          <svg v-if="!isSaving" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <svg v-else class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          {{ isSaving ? 'Salvando...' : 'Salvar' }}
+        </button>
+        <button class="me-close-compact" @click="emit('close')" title="Fechar (Esc)">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div v-if="saveError" class="me-error-msg-compact">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      {{ saveError }}
     </div>
 
     <div class="me-grid">
-      <!-- Left Panel - Canvas -->
+      <!-- Left Panel - Canvas (main area) -->
       <div class="me-main-panel">
-        <!-- Template Name Input -->
-        <div class="me-name-input">
-          <svg class="me-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          <input
-            v-model="editorName"
-            class="me-input-field"
-            placeholder="Nome do modelo..."
-          />
-        </div>
-
-        <!-- Toolbar -->
-        <div class="me-toolbar">
-          <div class="me-toolbar-group">
-            <button class="me-tool-btn" @click="addText" title="Adicionar texto">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
-              </svg>
-              <span>Texto</span>
-            </button>
-            <button class="me-tool-btn" @click="addRect" title="Adicionar retângulo">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
-              </svg>
-              <span>Rect</span>
-            </button>
-            <button class="me-tool-btn" @click="addCircle" title="Adicionar círculo">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9" stroke-width="2" />
-              </svg>
-              <span>Círc</span>
-            </button>
-            <button class="me-tool-btn" @click="openAddImage" title="Adicionar imagem">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span>Img</span>
-            </button>
-          </div>
-
+        <!-- Floating Toolbar -->
+        <div class="me-toolbar-floating">
+          <button class="me-tool-btn-compact" @click="addText" title="Adicionar texto">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+            </svg>
+          </button>
+          <button class="me-tool-btn-compact" @click="addRect" title="Adicionar retângulo">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+            </svg>
+          </button>
+          <button class="me-tool-btn-compact" @click="addCircle" title="Adicionar círculo">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" stroke-width="2" />
+            </svg>
+          </button>
+          <button class="me-tool-btn-compact" @click="openAddImage" title="Adicionar imagem">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
           <div class="me-toolbar-divider"></div>
-
-          <div class="me-toolbar-group">
-            <button
-              class="me-tool-btn"
-              :class="{ 'me-tool-btn--disabled': !selectedObj || selectedObj === group }"
-              :disabled="!selectedObj || selectedObj === group"
-              @click="moveLayer(-1)"
-              title="Enviar para trás"
-            >
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-              </svg>
-            </button>
-            <button
-              class="me-tool-btn"
-              :class="{ 'me-tool-btn--disabled': !selectedObj || selectedObj === group }"
-              :disabled="!selectedObj || selectedObj === group"
-              @click="moveLayer(1)"
-              title="Trazer para frente"
-            >
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-              </svg>
-            </button>
-            <button
-              class="me-tool-btn me-tool-btn--danger"
-              :class="{ 'me-tool-btn--disabled': !selectedObj || selectedObj === group }"
-              :disabled="!selectedObj || selectedObj === group"
-              @click="deleteSelected"
-              title="Excluir elemento"
-            >
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
+          <button
+            class="me-tool-btn-compact"
+            :class="{ 'me-tool-btn--disabled': !selectedObj || selectedObj === group }"
+            :disabled="!selectedObj || selectedObj === group"
+            @click="moveLayer(1)"
+            title="Trazer para frente"
+          >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+          </button>
+          <button
+            class="me-tool-btn-compact"
+            :class="{ 'me-tool-btn--disabled': !selectedObj || selectedObj === group }"
+            :disabled="!selectedObj || selectedObj === group"
+            @click="moveLayer(-1)"
+            title="Enviar para trás"
+          >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </button>
+          <div class="me-toolbar-divider"></div>
+          <button
+            class="me-tool-btn-compact me-tool-btn--danger"
+            :class="{ 'me-tool-btn--disabled': !selectedObj || selectedObj === group }"
+            :disabled="!selectedObj || selectedObj === group"
+            @click="deleteSelected"
+            title="Excluir (Delete)"
+          >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         </div>
 
-        <!-- Canvas Viewport -->
+        <!-- Canvas Viewport (now the main focus) -->
         <div ref="viewportEl" class="me-viewport">
           <canvas ref="canvasEl" />
           <div class="me-zoom-badge">{{ zoomPct }}%</div>
         </div>
 
-        <!-- Bottom Controls -->
-        <div class="me-bottom-controls">
-          <div class="me-controls-left">
-            <button class="me-control-btn" @click="fitToViewport()">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              </svg>
-              Centralizar
-            </button>
-            <div class="me-zoom-control">
-              <svg class="me-zoom-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="range"
-                min="50"
-                max="200"
-                :value="zoomPct"
-                class="me-zoom-slider"
-                @input="setZoom(Number(($event.target as HTMLInputElement).value))"
-              />
-            </div>
-          </div>
-
-          <button class="me-save-btn" :disabled="isSaving" @click="save">
-            <svg v-if="!isSaving" class="me-save-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        <!-- Floating Bottom Controls -->
+        <div class="me-bottom-controls-floating">
+          <button class="me-control-btn-compact" @click="fitToViewport()" title="Centralizar">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
             </svg>
-            <svg v-else class="me-save-icon me-save-icon--spinning" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            {{ isSaving ? 'Salvando...' : 'Salvar' }}
           </button>
-        </div>
-
-        <div v-if="saveError" class="me-error-msg">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {{ saveError }}
+          <div class="me-zoom-control-compact">
+            <svg class="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="range"
+              min="50"
+              max="200"
+              :value="zoomPct"
+              class="me-zoom-slider-compact"
+              @input="setZoom(Number(($event.target as HTMLInputElement).value))"
+            />
+          </div>
         </div>
       </div>
 
@@ -1029,7 +1048,7 @@ watch(
         </div>
 
         <div v-else class="me-props-content">
-          <!-- Selection Header -->
+          <!-- Selection Header with Quick Actions -->
           <div class="me-selection-header">
             <div class="me-type-badge">
               {{ (selectedObj.type || 'O').charAt(0).toUpperCase() }}
@@ -1043,397 +1062,470 @@ watch(
               />
               <span class="me-selection-type">{{ selectedObj.type || 'objeto' }}</span>
             </div>
+            <!-- Quick Actions (Figma-inspired) -->
+            <div class="me-quick-actions">
+              <button
+                class="me-quick-btn"
+                :class="{ 'me-quick-btn--active': !!current('visible', true) }"
+                :title="!!current('visible', true) ? 'Ocultar' : 'Mostrar'"
+                @click="patch('visible', !current('visible', true))"
+              >
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </button>
+              <button
+                class="me-quick-btn me-quick-btn--danger"
+                title="Excluir"
+                @click="deleteSelected"
+              >
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
           </div>
 
-          <!-- Transform Section -->
-          <div class="me-props-section">
-            <div class="me-props-section-title">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <!-- Collapsible: Transform Section -->
+          <div class="me-accordion-section">
+            <button
+              class="me-accordion-header"
+              :class="{ 'me-accordion-header--collapsed': isSectionCollapsed('transform') }"
+              @click="toggleSection('transform')"
+            >
+              <svg class="me-accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
               </svg>
-              Transformação
-            </div>
-            <div class="me-props-grid me-props-grid--4">
-              <div class="me-prop-item">
-                <label class="me-prop-label">X</label>
-                <input
-                  type="number"
-                  class="me-prop-input"
-                  :value="Math.round(current('left', 0))"
-                  @input="patch('left', Number(($event.target as HTMLInputElement).value))"
-                />
-              </div>
-              <div class="me-prop-item">
-                <label class="me-prop-label">Y</label>
-                <input
-                  type="number"
-                  class="me-prop-input"
-                  :value="Math.round(current('top', 0))"
-                  @input="patch('top', Number(($event.target as HTMLInputElement).value))"
-                />
-              </div>
-              <div class="me-prop-item">
-                <label class="me-prop-label">Esc X</label>
-                <input
-                  type="number"
-                  step="0.05"
-                  class="me-prop-input"
-                  :value="Number(current('scaleX', 1)).toFixed(2)"
-                  @input="patch('scaleX', Number(($event.target as HTMLInputElement).value))"
-                />
-              </div>
-              <div class="me-prop-item">
-                <label class="me-prop-label">Esc Y</label>
-                <input
-                  type="number"
-                  step="0.05"
-                  class="me-prop-input"
-                  :value="Number(current('scaleY', 1)).toFixed(2)"
-                  @input="patch('scaleY', Number(($event.target as HTMLInputElement).value))"
-                />
-              </div>
-            </div>
-            <div class="me-props-grid me-props-grid--2">
-              <div class="me-prop-item">
-                <label class="me-prop-label">Rotação</label>
-                <div class="me-prop-input-with-unit">
+              <span>Posição &amp; Tamanho</span>
+              <svg class="me-accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div v-show="!isSectionCollapsed('transform')" class="me-accordion-content">
+              <div class="me-props-grid me-props-grid--4">
+                <div class="me-prop-item">
+                  <label class="me-prop-label">X</label>
                   <input
                     type="number"
-                    class="me-prop-input me-prop-input--compact"
+                    class="me-prop-input"
+                    :value="Math.round(current('left', 0))"
+                    @input="patch('left', Number(($event.target as HTMLInputElement).value))"
+                  />
+                </div>
+                <div class="me-prop-item">
+                  <label class="me-prop-label">Y</label>
+                  <input
+                    type="number"
+                    class="me-prop-input"
+                    :value="Math.round(current('top', 0))"
+                    @input="patch('top', Number(($event.target as HTMLInputElement).value))"
+                  />
+                </div>
+                <div class="me-prop-item">
+                  <label class="me-prop-label">Escala X</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    class="me-prop-input"
+                    :value="Number(current('scaleX', 1)).toFixed(2)"
+                    @input="patch('scaleX', Number(($event.target as HTMLInputElement).value))"
+                  />
+                </div>
+                <div class="me-prop-item">
+                  <label class="me-prop-label">Escala Y</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    class="me-prop-input"
+                    :value="Number(current('scaleY', 1)).toFixed(2)"
+                    @input="patch('scaleY', Number(($event.target as HTMLInputElement).value))"
+                  />
+                </div>
+              </div>
+              <div class="me-props-grid me-props-grid--3">
+                <div class="me-prop-item">
+                  <label class="me-prop-label">Rotação</label>
+                  <div class="me-prop-input-with-unit">
+                    <input
+                      type="number"
+                      class="me-prop-input me-prop-input--compact"
+                      :value="Math.round(current('angle', 0))"
+                      @input="patch('angle', Number(($event.target as HTMLInputElement).value))"
+                    />
+                    <span class="me-prop-unit">°</span>
+                  </div>
+                </div>
+                <div class="me-prop-item">
+                  <label class="me-prop-label">Opacidade</label>
+                  <div class="me-opacity-control">
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      :value="Number(current('opacity', 1))"
+                      @input="patch('opacity', parseFloat(($event.target as HTMLInputElement).value))"
+                    />
+                    <span class="me-opacity-value">{{ Math.round(Number(current('opacity', 1)) * 100) }}%</span>
+                  </div>
+                </div>
+                <div class="me-prop-item">
+                  <label class="me-prop-label">Ângulo</label>
+                  <input
+                    type="number"
+                    class="me-prop-input"
                     :value="Math.round(current('angle', 0))"
                     @input="patch('angle', Number(($event.target as HTMLInputElement).value))"
                   />
-                  <span class="me-prop-unit">°</span>
                 </div>
               </div>
-              <div class="me-prop-item">
-                <label class="me-prop-label">Opacidade</label>
-                <div class="me-opacity-control">
+            </div>
+          </div>
+
+          <!-- Collapsible: Appearance Section (Fill & Stroke) -->
+          <div class="me-accordion-section">
+            <button
+              class="me-accordion-header"
+              :class="{ 'me-accordion-header--collapsed': isSectionCollapsed('appearance') }"
+              @click="toggleSection('appearance')"
+            >
+              <svg class="me-accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+              <span>Cor &amp; Aparência</span>
+              <svg class="me-accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div v-show="!isSectionCollapsed('appearance')" class="me-accordion-content">
+              <!-- Preset Colors (Figma-inspired) -->
+              <div class="me-preset-colors">
+                <button
+                  v-for="color in PRICE_LABEL_COLORS"
+                  :key="color"
+                  class="me-preset-color"
+                  :class="{ 'me-preset-color--active': String(current('fill', '')).toLowerCase() === color.toLowerCase() }"
+                  :style="{ backgroundColor: color }"
+                  :title="color"
+                  @click="applyPresetColor(color, 'fill')"
+                ></button>
+              </div>
+
+              <div class="me-props-grid me-props-grid--2">
+                <div>
+                  <label class="me-prop-label">Preenchimento</label>
+                  <div class="me-color-row">
+                    <div
+                      :ref="isText ? 'fillColorTrigger' : 'fillColorTrigger2'"
+                      class="me-color-swatch-large"
+                      :style="{ backgroundColor: current('fill', '#ffffff') }"
+                      @click="isText ? (showFillColorPicker = true) : (showFillColorPicker2 = true)"
+                    ></div>
+                    <input
+                      class="me-color-hex-input"
+                      :value="String(current('fill', '#ffffff')).replace('#', '').toUpperCase()"
+                      maxlength="6"
+                      @input="patch('fill', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
+                    />
+                    <ColorPicker
+                      :show="isText ? showFillColorPicker : showFillColorPicker2"
+                      :model-value="current('fill', '#ffffff')"
+                      :trigger-element="isText ? fillColorTrigger : fillColorTrigger2"
+                      @update:show="isText ? (showFillColorPicker = $event) : (showFillColorPicker2 = $event)"
+                      @update:model-value="(val: string) => patch('fill', val)"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label class="me-prop-label">Contorno</label>
+                  <div class="me-color-row">
+                    <div
+                      ref="strokeColorTrigger"
+                      class="me-color-swatch-large me-color-swatch--stroke checkerboard-bg"
+                      @click="showStrokeColorPicker = true"
+                    >
+                      <div
+                        class="absolute inset-0"
+                        :style="{ backgroundColor: current('stroke', null) || 'transparent' }"
+                      ></div>
+                    </div>
+                    <input
+                      class="me-color-hex-input"
+                      :value="String(current('stroke', '000000')).replace('#', '').toUpperCase()"
+                      maxlength="6"
+                      @input="patch('stroke', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
+                    />
+                    <ColorPicker
+                      :show="showStrokeColorPicker"
+                      :model-value="current('stroke', '#000000')"
+                      :trigger-element="strokeColorTrigger"
+                      @update:show="showStrokeColorPicker = $event"
+                      @update:model-value="(val: string) => patch('stroke', val)"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label class="me-prop-label">Largura do Contorno</label>
+                <div class="me-stroke-width-control">
                   <input
                     type="range"
                     min="0"
-                    max="1"
-                    step="0.05"
-                    :value="Number(current('opacity', 1))"
-                    @input="patch('opacity', parseFloat(($event.target as HTMLInputElement).value))"
+                    max="20"
+                    step="0.5"
+                    :value="Number(current('strokeWidth', 0))"
+                    @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))"
                   />
-                  <span class="me-opacity-value">{{ Math.round(Number(current('opacity', 1)) * 100) }}%</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    step="0.5"
+                    class="me-stroke-width-number"
+                    :value="Number(current('strokeWidth', 0)).toFixed(1)"
+                    @input="(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (!isNaN(v)) patch('strokeWidth', v) }"
+                  />
                 </div>
               </div>
             </div>
-            <label class="me-checkbox-row">
-              <span>Visível</span>
-              <input
-                type="checkbox"
-                class="me-checkbox"
-                :checked="!!current('visible', true)"
-                @change="patch('visible', ($event.target as HTMLInputElement).checked)"
-              />
-            </label>
           </div>
 
-          <!-- Text Properties -->
-          <div v-if="isText" class="me-text-props">
-            <div class="me-props-subsection-title">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <!-- Collapsible: Typography Section (Text only) -->
+          <div v-if="isText" class="me-accordion-section">
+            <button
+              class="me-accordion-header"
+              :class="{ 'me-accordion-header--collapsed': isSectionCollapsed('typography') }"
+              @click="toggleSection('typography')"
+            >
+              <svg class="me-accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
               </svg>
-              Texto
-            </div>
-            
-            <div>
-              <label class="me-prop-label">Conteúdo</label>
-              <input
-                class="me-text-input"
-                :value="current('text', '')"
-                @input="patch('text', ($event.target as HTMLInputElement).value)"
-              />
-            </div>
-
-            <div v-if="isUnitText" class="me-hint-box">
-              💡 Use para gramatura/unidade (ex: 1KG, 900ML, UN)
-            </div>
-
-            <div>
-              <label class="me-prop-label">Fonte</label>
-              <select
-                class="me-select-input"
-                :value="current('fontFamily', '')"
-                @change="patch('fontFamily', ($event.target as HTMLSelectElement).value)"
-                  >
-                <option value="">(selecionar)</option>
-                <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
-              </select>
-            </div>
-
-            <div class="me-grid-2">
+              <span>Tipografia</span>
+              <svg class="me-accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div v-show="!isSectionCollapsed('typography')" class="me-accordion-content">
               <div>
-                <label class="me-prop-label">Tamanho</label>
+                <label class="me-prop-label">Conteúdo</label>
                 <input
-                  type="number"
                   class="me-text-input"
-                  :value="Math.round(current('fontSize', 20))"
-                  @input="patch('fontSize', Number(($event.target as HTMLInputElement).value))"
+                  :value="current('text', '')"
+                  @input="patch('text', ($event.target as HTMLInputElement).value)"
                 />
               </div>
-              <div>
-                <label class="me-prop-label">Peso</label>
-                <select
-                  class="me-select-input"
-                  :value="String(currentFontWeight)"
-                  @change="patch('fontWeight', Number(($event.target as HTMLSelectElement).value))"
-                >
-                  <option v-for="opt in FONT_WEIGHT_OPTIONS" :key="opt.value" :value="String(opt.value)">{{ opt.label }}</option>
-                </select>
-              </div>
-            </div>
 
-            <div>
-              <label class="me-prop-label">Cor do Texto</label>
-              <div class="me-color-picker-group">
-                <div
-                  ref="fillColorTrigger"
-                  class="me-fill-swatch"
-                  :style="{ backgroundColor: current('fill', '#ffffff') }"
-                  @click="showFillColorPicker = true"
-                ></div>
-                <input
-                  class="me-color-hex-input"
-                  :value="String(current('fill', '#ffffff')).replace('#', '').toUpperCase()"
-                  maxlength="6"
-                  @input="patch('fill', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
-                />
-                <ColorPicker
-                  :show="showFillColorPicker"
-                  :model-value="current('fill', '#ffffff')"
-                  :trigger-element="fillColorTrigger"
-                  @update:show="showFillColorPicker = $event"
-                  @update:model-value="(val: string) => patch('fill', val)"
-                />
+              <div v-if="isUnitText" class="me-hint-box">
+                💡 Use para gramatura/unidade (ex: 1KG, 900ML, UN)
               </div>
-            </div>
 
-            <div class="me-grid-3">
               <div>
-                <label class="me-prop-label">Alinhamento</label>
+                <label class="me-prop-label">Fonte</label>
                 <select
                   class="me-select-input"
-                  :value="current('textAlign', 'left')"
-                  @change="patch('textAlign', ($event.target as HTMLSelectElement).value)"
+                  :value="current('fontFamily', '')"
+                  @change="patch('fontFamily', ($event.target as HTMLSelectElement).value)"
                 >
-                  <option value="left">Esq</option>
-                  <option value="center">Centro</option>
-                  <option value="right">Dir</option>
-                  <option value="justify">Just</option>
+                  <option value="">(selecionar)</option>
+                  <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
                 </select>
               </div>
-              <div>
-                <label class="me-prop-label">Estilo</label>
-                <select
-                  class="me-select-input"
-                  :value="current('fontStyle', 'normal')"
-                  @change="patch('fontStyle', ($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="normal">Normal</option>
-                  <option value="italic">Itálico</option>
-                </select>
+
+              <!-- Font Size & Weight (Figma-style inline controls) -->
+              <div class="me-font-controls">
+                <div class="me-font-control-group">
+                  <label class="me-prop-label">Tamanho</label>
+                  <div class="me-font-control-row">
+                    <input
+                      type="number"
+                      class="me-font-number"
+                      :value="Math.round(current('fontSize', 20))"
+                      @input="patch('fontSize', Number(($event.target as HTMLInputElement).value))"
+                    />
+                    <button
+                      class="me-font-btn"
+                      @click="patch('fontSize', Number(current('fontSize', 20)) - 1)"
+                    >
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                      </svg>
+                    </button>
+                    <button
+                      class="me-font-btn"
+                      @click="patch('fontSize', Number(current('fontSize', 20)) + 1)"
+                    >
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="me-font-control-group">
+                  <label class="me-prop-label">Peso</label>
+                  <select
+                    class="me-font-select"
+                    :value="String(currentFontWeight)"
+                    @change="patch('fontWeight', Number(($event.target as HTMLSelectElement).value))"
+                  >
+                    <option v-for="opt in FONT_WEIGHT_OPTIONS" :key="opt.value" :value="String(opt.value)">{{ opt.label }}</option>
+                  </select>
+                </div>
               </div>
+
+              <!-- Text Style Buttons (Figma-style) -->
+              <div class="me-text-style-buttons">
+                <button
+                  class="me-style-btn"
+                  :class="{ 'me-style-btn--active': !!current('underline', false) }"
+                  title="Sublinhado"
+                  @click="patch('underline', !current('underline', false))"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v7a5 5 0 0010 0V4M5 20h14" />
+                  </svg>
+                </button>
+                <button
+                  class="me-style-btn"
+                  :class="{ 'me-style-btn--active': !!current('linethrough', false) }"
+                  title="Riscado"
+                  @click="patch('linethrough', !current('linethrough', false))"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v7a5 5 0 0010 0V4M3 12h18" />
+                  </svg>
+                </button>
+                <button
+                  class="me-style-btn"
+                  :class="{ 'me-style-btn--active': current('fontStyle') === 'italic' }"
+                  title="Itálico"
+                  @click="patch('fontStyle', current('fontStyle') === 'italic' ? 'normal' : 'italic')"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l4-14m-4 14h6m-6 0H6m10 0h-2" />
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Text Alignment (Figma-style) -->
+              <div class="me-align-buttons">
+                <button
+                  class="me-align-btn"
+                  :class="{ 'me-align-btn--active': current('textAlign') === 'left' }"
+                  @click="patch('textAlign', 'left')"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h7" />
+                  </svg>
+                </button>
+                <button
+                  class="me-align-btn"
+                  :class="{ 'me-align-btn--active': current('textAlign') === 'center' }"
+                  @click="patch('textAlign', 'center')"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M5 18h14" />
+                  </svg>
+                </button>
+                <button
+                  class="me-align-btn"
+                  :class="{ 'me-align-btn--active': current('textAlign') === 'right' }"
+                  @click="patch('textAlign', 'right')"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M10 12h10M8 18h12" />
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Text Case -->
               <div>
-                <label class="me-prop-label">Caixa</label>
+                <label class="me-prop-label">Caixa de Texto</label>
                 <select
                   class="me-select-input"
                   :value="currentTextCase"
                   @change="setTextCase(($event.target as HTMLSelectElement).value as any)"
                 >
-                  <option value="none">Auto</option>
-                  <option value="upper">MAIÚS</option>
-                  <option value="lower">minús</option>
+                  <option value="none">Normal</option>
+                  <option value="upper">MAIÚSCULAS</option>
+                  <option value="lower">minúsculas</option>
                 </select>
               </div>
-            </div>
 
-            <div class="me-grid-2">
-              <div>
-                <label class="me-prop-label">Altura Linha</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  class="me-text-input"
-                  :value="Number(current('lineHeight', 1)).toFixed(1)"
-                  @input="patch('lineHeight', Number(($event.target as HTMLInputElement).value))"
-                />
-              </div>
-              <div>
-                <label class="me-prop-label">Espaçamento</label>
-                <input
-                  type="number"
-                  step="10"
-                  class="me-text-input"
-                  :value="Math.round(currentNumber('charSpacing', 0))"
-                  @input="patch('charSpacing', Number(($event.target as HTMLInputElement).value))"
-                />
-              </div>
-            </div>
-
-            <div class="me-checkbox-group">
-              <label class="me-checkbox-label">
-                <input
-                  type="checkbox"
-                  class="me-small-checkbox"
-                  :checked="!!current('underline', false)"
-                  @change="patch('underline', ($event.target as HTMLInputElement).checked)"
-                />
-                Sublinhado
-              </label>
-              <label class="me-checkbox-label">
-                <input
-                  type="checkbox"
-                  class="me-small-checkbox"
-                  :checked="!!current('linethrough', false)"
-                  @change="patch('linethrough', ($event.target as HTMLInputElement).checked)"
-                />
-                Riscado
-              </label>
-            </div>
-
-            <!-- Text Stroke -->
-            <div class="me-stroke-section">
-              <div class="me-stroke-header">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Contorno
-              </div>
-              <div class="me-grid-2">
+              <div class="me-props-grid me-props-grid--2">
                 <div>
-                  <label class="me-prop-label">Cor</label>
-                  <div
-                    ref="textStrokeColorTrigger"
-                    class="me-stroke-swatch"
-                    :style="{ backgroundColor: current('stroke', 'transparent') }"
-                    @click="showTextStrokeColorPicker = true"
-                  ></div>
-                  <ColorPicker
-                    :show="showTextStrokeColorPicker"
-                    :model-value="current('stroke', '#000000')"
-                    :trigger-element="textStrokeColorTrigger"
-                    @update:show="showTextStrokeColorPicker = $event"
-                    @update:model-value="(val: string) => patch('stroke', val)"
-                  />
-                </div>
-                <div>
-                  <label class="me-prop-label">Largura</label>
+                  <label class="me-prop-label">Altura de Linha</label>
                   <input
                     type="number"
-                    step="0.5"
+                    step="0.1"
                     class="me-text-input"
-                    :value="Number(current('strokeWidth', 0)).toFixed(1)"
-                    @input="patch('strokeWidth', Number(($event.target as HTMLInputElement).value))"
+                    :value="Number(current('lineHeight', 1)).toFixed(1)"
+                    @input="patch('lineHeight', Number(($event.target as HTMLInputElement).value))"
+                  />
+                </div>
+                <div>
+                  <label class="me-prop-label">Espaçamento</label>
+                  <input
+                    type="number"
+                    step="10"
+                    class="me-text-input"
+                    :value="Math.round(currentNumber('charSpacing', 0))"
+                    @input="patch('charSpacing', Number(($event.target as HTMLInputElement).value))"
                   />
                 </div>
               </div>
-            </div>
 
-            <!-- Decimal special fields -->
-            <div v-if="isDecimalText" class="me-decimal-section">
-              <div class="me-decimal-header">
-                ⚡ Ajustes Automáticos (Centavos)
-              </div>
-              <div class="me-grid-2">
-                <div>
-                  <label class="me-prop-label">Escala</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    class="me-amber-input"
-                    :value="Number(current('__fontScale', 0.42)).toFixed(2)"
-                    @input="patchCustom('__fontScale', Number(($event.target as HTMLInputElement).value))"
-                  />
+              <!-- Decimal special fields -->
+              <div v-if="isDecimalText" class="me-decimal-section">
+                <div class="me-decimal-header">
+                  ⚡ Ajustes Automáticos (Centavos)
                 </div>
-                <div>
-                  <label class="me-prop-label">Offset Y</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    class="me-amber-input"
-                    :value="Number(current('__yOffsetRatio', -0.18)).toFixed(2)"
-                    @input="patchCustom('__yOffsetRatio', Number(($event.target as HTMLInputElement).value))"
-                  />
+                <div class="me-props-grid me-props-grid--2">
+                  <div>
+                    <label class="me-prop-label">Escala</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      class="me-amber-input"
+                      :value="Number(current('__fontScale', 0.42)).toFixed(2)"
+                      @input="patchCustom('__fontScale', Number(($event.target as HTMLInputElement).value))"
+                    />
+                  </div>
+                  <div>
+                    <label class="me-prop-label">Offset Y</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      class="me-amber-input"
+                      :value="Number(current('__yOffsetRatio', -0.18)).toFixed(2)"
+                      @input="patchCustom('__yOffsetRatio', Number(($event.target as HTMLInputElement).value))"
+                    />
+                  </div>
                 </div>
+                <p class="me-decimal-hint">Controla tamanho/altura ao adaptar no card</p>
               </div>
-              <p class="me-decimal-hint">Controla tamanho/altura ao adaptar no card</p>
             </div>
           </div>
 
-          <!-- Shape Properties (Non-text) -->
-          <div v-if="!isText" class="me-shape-props">
-            <div class="me-shape-props-title">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+          <!-- Collapsible: Dimensions Section (Shapes only) -->
+          <div v-if="!isText" class="me-accordion-section">
+            <button
+              class="me-accordion-header"
+              :class="{ 'me-accordion-header--collapsed': isSectionCollapsed('dimensions') }"
+              @click="toggleSection('dimensions')"
+            >
+              <svg class="me-accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
               </svg>
-              Aparência
-            </div>
-
-            <div class="me-grid-2">
-              <div>
-                <label class="me-prop-label">Preenchimento</label>
-                <div
-                  ref="fillColorTrigger2"
-                  class="me-fill-swatch-large"
-                  :style="{ backgroundColor: current('fill', '#ffffff') }"
-                  @click="showFillColorPicker2 = !showFillColorPicker2"
-                ></div>
-                <ColorPicker
-                  :show="showFillColorPicker2"
-                  :model-value="current('fill', '#ffffff')"
-                  :trigger-element="fillColorTrigger2"
-                  @update:show="showFillColorPicker2 = $event"
-                  @update:model-value="(val: string) => patch('fill', val)"
-                />
-              </div>
-              <div>
-                <label class="me-prop-label">Contorno</label>
-                <div
-                  ref="strokeColorTrigger"
-                  class="me-stroke-swatch-large checkerboard-bg"
-                  @click="showStrokeColorPicker = true"
-                >
-                  <div
-                    class="absolute inset-0"
-                    :style="{ backgroundColor: current('stroke', null) || 'transparent' }"
-                  ></div>
-                </div>
-                <ColorPicker
-                  :show="showStrokeColorPicker"
-                  :model-value="current('stroke', '#000000')"
-                  :trigger-element="strokeColorTrigger"
-                  @update:show="showStrokeColorPicker = $event"
-                  @update:model-value="(val: string) => { patch('stroke', val); if (!currentNumber('strokeWidth', 0)) patch('strokeWidth', 2) }"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label class="me-prop-label">Largura do Contorno</label>
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                class="me-stroke-width-input"
-                :value="Number(current('strokeWidth', 0)).toFixed(1)"
-                @input="(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (!isNaN(v)) patch('strokeWidth', v) }"
-              />
-            </div>
-
-            <!-- Rect specific -->
-            <div v-if="isRect" class="me-dimensions-section">
-              <div class="me-dimensions-header">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
-                </svg>
-                Dimensões
-              </div>
-              <div class="me-grid-2">
+              <span>Dimensões</span>
+              <svg class="me-accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div v-show="!isSectionCollapsed('dimensions')" class="me-accordion-content">
+              <!-- Rect specific -->
+              <div v-if="isRect" class="me-props-grid me-props-grid--2">
                 <div>
                   <label class="me-prop-label">Largura</label>
                   <input
@@ -1454,65 +1546,30 @@ watch(
                 </div>
               </div>
 
-              <!-- Border Radius Section -->
-              <div class="me-border-radius-section">
-                <div class="me-radius-header">
-                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12V5a1 1 0 011-1h7M20 12v7a1 1 0 01-1 1h-7" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8M20 12a8 8 0 01-8 8" />
-                  </svg>
-                  Arredondamento
+              <!-- Border Radius for Rects -->
+              <div v-if="isRect">
+                <label class="me-prop-label">Arredondamento dos Cantos</label>
+                <div class="me-radius-control">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    class="me-range-slider"
+                    :value="Math.round(current('rx', 0))"
+                    @input="patch('rx', Number(($event.target as HTMLInputElement).value)); patch('ry', Number(($event.target as HTMLInputElement).value))"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    class="me-radius-number"
+                    :value="Math.round(current('rx', 0))"
+                    @input="patch('rx', Number(($event.target as HTMLInputElement).value)); patch('ry', Number(($event.target as HTMLInputElement).value))"
+                  />
                 </div>
-                <div class="me-grid-2">
-                  <div>
-                    <label class="me-prop-label">Horizontal</label>
-                    <div class="me-range-group">
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        class="me-range-input"
-                        :value="Math.round(current('rx', 0))"
-                        @input="patch('rx', Number(($event.target as HTMLInputElement).value))"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        class="me-range-number"
-                        :value="Math.round(current('rx', 0))"
-                        @input="patch('rx', Number(($event.target as HTMLInputElement).value))"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label class="me-prop-label">Vertical</label>
-                    <div class="me-range-group">
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        class="me-range-input"
-                        :value="Math.round(current('ry', 0))"
-                        @input="patch('ry', Number(($event.target as HTMLInputElement).value))"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        class="me-range-number"
-                        :value="Math.round(current('ry', 0))"
-                        @input="patch('ry', Number(($event.target as HTMLInputElement).value))"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <p class="me-radius-hint">Ajuste para cantos arredondados</p>
               </div>
-            </div>
 
-            <!-- Circle specific -->
-            <div v-if="isCircle" class="me-circle-section">
-              <div class="me-dimensions-header">Dimensões</div>
-              <div>
+              <!-- Circle specific -->
+              <div v-if="isCircle">
                 <label class="me-prop-label">Raio</label>
                 <input
                   type="number"
@@ -1521,39 +1578,79 @@ watch(
                   @input="patch('radius', Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
-            </div>
 
-            <!-- Image specific -->
-            <div v-if="isImage" class="me-image-section">
-              <div class="me-dimensions-header">Imagem</div>
-              <button
-                class="me-replace-image-btn"
-                @click="openReplaceImage"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Trocar Imagem
-              </button>
-              <div class="me-image-checkboxes">
-                <label class="me-checkbox-label">
-                  <input
-                    type="checkbox"
-                    class="me-small-checkbox"
-                    :checked="!!current('flipX', false)"
-                    @change="patch('flipX', ($event.target as HTMLInputElement).checked)"
-                  />
-                  Flip H
-                </label>
-                <label class="me-checkbox-label">
-                  <input
-                    type="checkbox"
-                    class="me-small-checkbox"
-                    :checked="!!current('flipY', false)"
-                    @change="patch('flipY', ($event.target as HTMLInputElement).checked)"
-                  />
-                  Flip V
-                </label>
+              <!-- Image specific -->
+              <div v-if="isImage" class="me-image-section">
+                <button
+                  class="me-replace-image-btn"
+                  @click="openReplaceImage"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Trocar Imagem
+                </button>
+                <div class="me-props-grid me-props-grid--2">
+                  <label class="me-checkbox-label">
+                    <input
+                      type="checkbox"
+                      class="me-small-checkbox"
+                      :checked="!!current('flipX', false)"
+                      @change="patch('flipX', ($event.target as HTMLInputElement).checked)"
+                    />
+                    Flip Horizontal
+                  </label>
+                  <label class="me-checkbox-label">
+                    <input
+                      type="checkbox"
+                      class="me-small-checkbox"
+                      :checked="!!current('flipY', false)"
+                      @change="patch('flipY', ($event.target as HTMLInputElement).checked)"
+                    />
+                    Flip Vertical
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Layer Controls -->
+          <div class="me-accordion-section">
+            <button
+              class="me-accordion-header"
+              :class="{ 'me-accordion-header--collapsed': isSectionCollapsed('layers') }"
+              @click="toggleSection('layers')"
+            >
+              <svg class="me-accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <span>Camadas</span>
+              <svg class="me-accordion-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div v-show="!isSectionCollapsed('layers')" class="me-accordion-content">
+              <div class="me-layer-controls">
+                <button
+                  class="me-layer-btn"
+                  :disabled="!selectedObj || selectedObj === group"
+                  @click="moveLayer(1)"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  </svg>
+                  Trazer para Frente
+                </button>
+                <button
+                  class="me-layer-btn"
+                  :disabled="!selectedObj || selectedObj === group"
+                  @click="moveLayer(-1)"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                  Enviar para Trás
+                </button>
               </div>
             </div>
           </div>
@@ -1578,104 +1675,83 @@ watch(
 
 /* Container */
 .me-container {
-  @apply flex flex-col h-full p-4;
+  @apply flex flex-col h-full p-2;
 }
 
-/* Header */
-.me-header {
-  @apply flex items-center justify-between pb-4 mb-4 border-b border-white/10;
+/* Floating Top Bar (compact) */
+.me-top-bar {
+  @apply flex items-center justify-between gap-3 px-3 py-2 mb-2 bg-zinc-900/80 backdrop-blur-sm rounded-xl border border-zinc-800/50;
 }
 
-.me-header-left {
-  @apply flex items-center gap-3;
+.me-top-left {
+  @apply flex-1;
 }
 
-.me-icon-wrapper {
-  @apply w-10 h-10 rounded-xl bg-linear-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20;
+.me-name-input-compact {
+  @apply w-full bg-transparent text-sm font-semibold text-white placeholder-zinc-600 focus:outline-none;
 }
 
-.me-icon {
-  @apply w-5 h-5 text-white;
+.me-top-actions {
+  @apply flex items-center gap-2;
 }
 
-.me-header-info {
-  @apply flex flex-col;
+.me-save-btn-compact {
+  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-xs font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
-.me-title {
-  @apply text-sm font-semibold text-white;
+.me-close-compact {
+  @apply w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors;
 }
 
-.me-subtitle {
-  @apply text-[10px] text-zinc-500;
+.me-close-compact svg {
+  @apply w-4 h-4;
 }
 
-.me-close {
-  @apply w-9 h-9 rounded-xl hover:bg-white/5 flex items-center justify-center text-zinc-500 hover:text-white transition-colors;
+.me-error-msg-compact {
+  @apply flex items-center gap-2 px-3 py-1.5 mx-auto mb-2 text-xs text-red-400 bg-red-500/10 rounded-lg border border-red-500/20 max-w-md;
 }
 
-.me-close svg {
-  @apply w-5 h-5;
+.me-error-msg-compact svg {
+  @apply w-3.5 h-3.5 shrink-0;
 }
 
 /* Grid Layout */
 .me-grid {
-  @apply grid grid-cols-1 lg:grid-cols-5 gap-4 flex-1 min-h-0;
+  @apply grid grid-cols-1 lg:grid-cols-6 gap-3 flex-1 min-h-0;
 }
 
 .me-main-panel {
-  @apply lg:col-span-3 flex flex-col gap-3 min-h-0;
+  @apply lg:col-span-4 flex flex-col gap-2 min-h-0 relative;
 }
 
-/* Name Input */
-.me-name-input {
-  @apply flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 rounded-xl px-3 py-2.5 transition-colors focus-within:border-violet-500/30 focus-within:ring-1 focus-within:ring-violet-500/10;
+/* Floating Toolbar */
+.me-toolbar-floating {
+  @apply absolute top-3 left-3 z-20 flex items-center gap-1 p-1.5 bg-zinc-900/90 backdrop-blur-sm rounded-xl border border-zinc-800/50 shadow-lg;
 }
 
-.me-input-icon {
-  @apply w-4 h-4 text-zinc-500 shrink-0;
+.me-tool-btn-compact {
+  @apply w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-all;
 }
 
-.me-input-field {
-  @apply flex-1 bg-transparent text-sm text-white placeholder-zinc-600 focus:outline-none;
-}
-
-/* Toolbar */
-.me-toolbar {
-  @apply flex items-center gap-1 p-1 bg-zinc-900/50 rounded-xl border border-zinc-800/50;
-}
-
-.me-toolbar-group {
-  @apply flex items-center gap-0.5;
-}
-
-.me-toolbar-divider {
-  @apply w-px h-5 bg-zinc-800 mx-1;
-}
-
-.me-tool-btn {
-  @apply flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:bg-white/5 hover:text-white transition-all;
-}
-
-.me-tool-btn svg {
+.me-tool-btn-compact svg {
   @apply w-4 h-4;
 }
 
-.me-tool-btn span {
-  @apply hidden sm:inline;
+.me-tool-btn-compact--disabled {
+  @apply opacity-30 cursor-not-allowed hover:bg-transparent hover:text-zinc-400;
 }
 
-.me-tool-btn--disabled {
-  @apply opacity-30 cursor-not-allowed;
+.me-tool-btn-compact--danger {
+  @apply text-red-400 hover:text-red-300;
 }
 
-.me-tool-btn--danger {
-  @apply text-red-400 hover:text-red-300 hover:bg-red-500/10;
+.me-toolbar-divider {
+  @apply w-px h-5 bg-zinc-700 mx-0.5;
 }
 
-/* Viewport */
+/* Viewport - now takes maximum space */
 .me-viewport {
-  @apply relative rounded-xl border border-zinc-800/50 bg-zinc-950/80 overflow-hidden flex-1 min-h-[240px];
+  @apply relative rounded-xl border border-zinc-800/50 bg-zinc-950/80 overflow-hidden flex-1;
 }
 
 .me-viewport canvas {
@@ -1686,59 +1762,30 @@ watch(
   @apply absolute bottom-3 left-3 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] text-zinc-400 font-mono;
 }
 
-/* Bottom Controls */
-.me-bottom-controls {
-  @apply flex items-center justify-between gap-3;
+/* Floating Bottom Controls */
+.me-bottom-controls-floating {
+  @apply absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-2 bg-zinc-900/90 backdrop-blur-sm rounded-xl border border-zinc-800/50 shadow-lg;
 }
 
-.me-controls-left {
-  @apply flex items-center gap-2;
+.me-control-btn-compact {
+  @apply flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors;
 }
 
-.me-control-btn {
-  @apply flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-xs text-zinc-300 transition-colors;
-}
-
-.me-control-btn svg {
-  @apply w-3.5 h-3.5;
-}
-
-.me-zoom-control {
-  @apply flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800/50;
-}
-
-.me-zoom-icon {
-  @apply w-3.5 h-3.5 text-zinc-500 shrink-0;
-}
-
-.me-zoom-slider {
-  @apply w-24 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500;
-}
-
-.me-save-btn {
-  @apply flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-violet-500/20;
-}
-
-.me-save-icon {
+.me-control-btn-compact svg {
   @apply w-4 h-4;
 }
 
-.me-save-icon--spinning {
-  @apply animate-spin;
+.me-zoom-control-compact {
+  @apply flex items-center gap-2;
 }
 
-/* Error Message */
-.me-error-msg {
-  @apply flex items-center gap-2 px-3 py-2 text-xs text-red-400 bg-red-500/10 rounded-lg border border-red-500/20;
-}
-
-.me-error-msg svg {
-  @apply w-4 h-4 shrink-0;
+.me-zoom-slider-compact {
+  @apply w-24 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500;
 }
 
 /* Properties Panel */
 .me-props-panel {
-  @apply lg:col-span-2 overflow-y-auto pr-1 max-h-[520px];
+  @apply lg:col-span-2 overflow-y-auto pr-1 min-h-[80vh];
 }
 
 /* Empty State */
@@ -1759,7 +1806,7 @@ watch(
 }
 
 .me-empty-text {
-  @apply text-[10px] text-zinc-600 max-w-[180px];
+  @apply text-[10px] text-zinc-600 max-w-45;
 }
 
 /* Props Content */
@@ -2082,5 +2129,209 @@ input[type="checkbox"] {
     linear-gradient(-45deg, transparent 75%, #3f3f46 75%);
   background-size: 8px 8px;
   background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+}
+
+/* ============================
+   Figma-inspired Components
+   ============================ */
+
+/* Quick Actions in Selection Header */
+.me-quick-actions {
+  @apply flex items-center gap-1;
+}
+
+.me-quick-btn {
+  @apply w-8 h-8 rounded-lg flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 transition-all;
+}
+
+.me-quick-btn svg {
+  @apply w-4 h-4;
+}
+
+.me-quick-btn--active {
+  @apply text-violet-400 bg-violet-500/10;
+}
+
+.me-quick-btn--danger {
+  @apply text-red-400 hover:text-red-300 hover:bg-red-500/10;
+}
+
+/* Accordion Sections (Figma-style collapsible panels) */
+.me-accordion-section {
+  @apply mb-2 rounded-xl border border-zinc-800/50 bg-zinc-900/30 overflow-hidden;
+}
+
+.me-accordion-header {
+  @apply w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 transition-colors cursor-pointer;
+}
+
+.me-accordion-header--collapsed {
+  @apply bg-zinc-900/20;
+}
+
+.me-accordion-icon {
+  @apply w-4 h-4 text-zinc-500 shrink-0;
+}
+
+.me-accordion-header span {
+  @apply flex-1 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide;
+}
+
+.me-accordion-chevron {
+  @apply w-4 h-4 text-zinc-600 transition-transform duration-200 shrink-0;
+}
+
+.me-accordion-header--collapsed .me-accordion-chevron {
+  @apply -rotate-90;
+}
+
+.me-accordion-content {
+  @apply px-3 pb-3 space-y-3;
+}
+
+/* Preset Color Swatches (Figma-style) */
+.me-preset-colors {
+  @apply flex flex-wrap gap-1.5 mb-3;
+}
+
+.me-preset-color {
+  @apply w-6 h-6 rounded-lg border border-zinc-400 hover:scale-110 hover:shadow-xl hover:border-white transition-all cursor-pointer relative overflow-hidden;
+  /* Strong shadow for better definition on all backgrounds */
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.3), inset 0 1px 2px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Inner white ring for better visibility of dark colors - stronger opacity */
+.me-preset-color::after {
+  content: '';
+  @apply absolute inset-0.5 border border-white/60 rounded-lg pointer-events-none;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+}
+
+.me-preset-color--active {
+  @apply border-violet-400 ring-2 ring-violet-500/30;
+}
+
+.me-preset-color--active::after {
+  @apply border-white/80;
+}
+
+/* Improved Color Row Layout */
+.me-color-row {
+  @apply flex items-center gap-2;
+}
+
+.me-color-swatch-large {
+  @apply w-10 h-10 rounded-lg border border-zinc-700/50 cursor-pointer relative overflow-hidden shadow-inner shrink-0;
+}
+
+.me-color-swatch--stroke {
+  @apply bg-transparent;
+}
+
+/* Font Controls (Figma-style) */
+.me-font-controls {
+  @apply space-y-2;
+}
+
+.me-font-control-group {
+  @apply space-y-1;
+}
+
+.me-font-control-row {
+  @apply flex items-center gap-1;
+}
+
+.me-font-number {
+  @apply flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50;
+}
+
+.me-font-btn {
+  @apply w-7 h-7 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-600 transition-all flex items-center justify-center;
+}
+
+.me-font-btn svg {
+  @apply w-3 h-3;
+}
+
+.me-font-select {
+  @apply w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50;
+}
+
+/* Text Style Buttons (Figma-style) */
+.me-text-style-buttons {
+  @apply flex items-center gap-1 p-1 rounded-lg bg-zinc-800/30 border border-zinc-700/30;
+}
+
+.me-style-btn {
+  @apply flex-1 h-8 rounded-md flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 transition-all;
+}
+
+.me-style-btn svg {
+  @apply w-4 h-4;
+}
+
+.me-style-btn--active {
+  @apply text-violet-400 bg-violet-500/10;
+}
+
+/* Text Alignment Buttons (Figma-style) */
+.me-align-buttons {
+  @apply flex items-center gap-1 p-1 rounded-lg bg-zinc-800/30 border border-zinc-700/30;
+}
+
+.me-align-btn {
+  @apply flex-1 h-8 rounded-md flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 transition-all;
+}
+
+.me-align-btn svg {
+  @apply w-4 h-4;
+}
+
+.me-align-btn--active {
+  @apply text-violet-400 bg-violet-500/10;
+}
+
+/* Stroke Width Control */
+.me-stroke-width-control {
+  @apply flex items-center gap-2;
+}
+
+.me-stroke-width-control input[type="range"] {
+  @apply flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500;
+}
+
+.me-stroke-width-number {
+  @apply w-16 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs text-white text-center focus:outline-none focus:border-violet-500/50;
+}
+
+/* Radius Control */
+.me-radius-control {
+  @apply flex items-center gap-2;
+}
+
+.me-range-slider {
+  @apply flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500;
+}
+
+.me-radius-number {
+  @apply w-16 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-violet-500/50;
+}
+
+/* Layer Controls */
+.me-layer-controls {
+  @apply space-y-2;
+}
+
+.me-layer-btn {
+  @apply w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-xs text-zinc-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed;
+}
+
+.me-layer-btn svg {
+  @apply w-4 h-4;
+}
+
+/* Props Grid Variants */
+.me-props-grid--3 {
+  @apply grid grid-cols-3 gap-2;
 }
 </style>

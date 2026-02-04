@@ -29,6 +29,7 @@ import { AVAILABLE_FONT_FAMILIES } from '~/utils/font-catalog'
 
 const props = defineProps<{
   selectedObject: any | null,
+  activeMode?: 'design' | 'prototype',
   pageSettings: { backgroundColor: string },
   colorStyles?: {id: string, name: string, value: string}[],
   // Product Zone Props
@@ -210,6 +211,22 @@ const applyGlobalStyle = (prop: string) => {
 
 // --- Local State for UI ---
 const activeTab = computed(() => props.activeMode || 'design') // design | prototype
+
+// Collapsible sections state (Figma-inspired)
+const collapsedSections = ref<Set<string>>(new Set(['effects', 'export', 'prototype-info'])) // Start some collapsed
+
+const toggleSection = (sectionId: string) => {
+  const newSet = new Set(collapsedSections.value)
+  if (newSet.has(sectionId)) {
+    newSet.delete(sectionId)
+  } else {
+    newSet.add(sectionId)
+  }
+  collapsedSections.value = newSet
+}
+
+const isSectionCollapsed = (sectionId: string) => collapsedSections.value.has(sectionId)
+
 const showFillColorPicker = ref(false)
 const showStrokeColorPicker = ref(false)
 const showPageColorPicker = ref(false)
@@ -370,38 +387,109 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 </script>
 
 <template>
-  <div v-if="selectedObject" class="h-full bg-[#1a1a1a] text-white min-h-0 flex flex-col font-sans select-none border-l border-white/5">
-    
+  <div v-if="selectedObject" class="h-full bg-[#1a1a1a] text-white min-h-0 flex flex-col font-sans select-none">
+
+    <!-- Tab Indicator (shows which tab is active) -->
+    <div class="flex items-center gap-2 px-3 py-2 border-b border-white/5">
+      <div class="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium" :class="activeTab === 'design' ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-500'">
+        <Palette class="w-3.5 h-3.5" />
+        <span>Design</span>
+      </div>
+      <div class="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium" :class="activeTab === 'prototype' ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-500'">
+        <MousePointer2 class="w-3.5 h-3.5" />
+        <span>Prototype</span>
+      </div>
+    </div>
 
     <!-- Scrollable Inspector -->
     <div class="flex-1 overflow-y-auto custom-scrollbar">
-      
-      <!-- PROTOTYPE TAB -->
-      <div v-if="activeTab === 'prototype'" class="p-4 space-y-4">
-          <div class="space-y-2">
-              <label class="text-[11px] font-bold text-zinc-400">Interactions</label>
-              <div class="p-3 border border-white/10 rounded-lg bg-white/5 space-y-3">
-                  <div class="flex justify-between items-center">
-                      <span class="text-xs font-bold">On Click</span>
-                      <MousePointer2 class="w-3.5 h-3.5 text-violet-400" />
-                  </div>
-                  
-                  <div class="space-y-1">
-                      <label class="text-[10px] text-zinc-500">Navigate to</label>
-                      <select :value="getVal('interactionDestination', '')" @change="e => $emit('update-property', 'interactionDestination', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-xs text-white rounded border border-black h-7 px-2">
-                          <option value="">None</option>
-                          <option v-for="page in targetPages" :key="page.id" :value="page.id">{{ page.name }}</option>
-                      </select>
-                  </div>
+
+      <!-- PROTOTYPE TAB (Figma-style interactions panel) -->
+      <div v-if="activeTab === 'prototype'" class="p-3 space-y-3">
+        <!-- Empty state for prototype -->
+        <div v-if="!getVal('interactionDestination', '')" class="text-center py-8">
+          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-800/50 flex items-center justify-center">
+            <MousePointer2 class="w-5 h-5 text-zinc-600" />
+          </div>
+          <p class="text-xs text-zinc-500 mb-1">Sem interações</p>
+          <p class="text-[10px] text-zinc-600">Adicione uma ação ao clicar neste elemento</p>
+        </div>
+
+        <!-- Interaction Card -->
+        <div v-else class="pp-interaction-card">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                <MousePointer2 class="w-3.5 h-3.5 text-violet-400" />
               </div>
+              <div>
+                <p class="text-xs font-medium text-white">Ao clicar</p>
+                <p class="text-[10px] text-zinc-500">Ação de navegação</p>
+              </div>
+            </div>
+            <button @click="$emit('update-property', 'interactionDestination', '')" class="w-6 h-6 rounded hover:bg-white/10 flex items-center justify-center text-zinc-500 hover:text-red-400 transition-colors" title="Remover interação">
+              <Trash2 class="w-3 h-3" />
+            </button>
           </div>
-          <div class="text-[10px] text-zinc-500 leading-relaxed">
-              Conecte este objeto a outra página. No modo "Apresentar", clicar nele levará ao destino escolhido.
+
+          <div class="space-y-2">
+            <label class="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Navegar para</label>
+            <select :value="getVal('interactionDestination', '')" @change="e => $emit('update-property', 'interactionDestination', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-xs text-white rounded-lg border border-zinc-800 h-9 px-3 focus:outline-none focus:border-violet-500/50">
+              <option value="">Selecionar página...</option>
+              <option v-for="page in targetPages" :key="page.id" :value="page.id">{{ page.name }}</option>
+            </select>
           </div>
+        </div>
+
+        <!-- Prototype Info Section -->
+        <div class="pp-info-box" :class="{ 'pp-info-box--collapsed': isSectionCollapsed('prototype-info') }">
+          <button @click="toggleSection('prototype-info')" class="w-full flex items-center justify-between text-left">
+            <div class="flex items-center gap-2">
+              <Zap class="w-4 h-4 text-amber-500" />
+              <span class="text-[10px] font-medium text-zinc-400">Dica Prototype</span>
+            </div>
+            <ChevronsDown class="w-4 h-4 text-zinc-600 transition-transform" :class="{ '-rotate-90': isSectionCollapsed('prototype-info') }" />
+          </button>
+          <div v-show="!isSectionCollapsed('prototype-info')" class="mt-2 text-[10px] text-zinc-500 leading-relaxed">
+            No modo <span class="text-violet-400">Apresentar</span>, clique em elementos com interações para navegar entre páginas.
+          </div>
+        </div>
       </div>
 
-      <!-- DESIGN TAB (Existing Content) -->
-      <div v-else>
+      <!-- DESIGN TAB (Figma-style design properties) -->
+      <div v-else class="pp-design-panel">
+
+      <!-- Quick Actions Bar (Visibility, Lock, Delete) -->
+      <div class="flex items-center justify-between px-3 py-2 border-b border-white/5">
+        <div class="flex items-center gap-1">
+          <button
+            class="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+            :class="getVal('visible', true) ? 'text-violet-400 bg-violet-500/10' : 'text-zinc-500 hover:text-white hover:bg-white/10'"
+            @click="$emit('update-property', 'visible', !getVal('visible', true))"
+            title="Visibilidade"
+          >
+            <Eye class="w-4 h-4" />
+          </button>
+          <button
+            class="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+            :class="getVal('lockMovement', false) ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-white hover:bg-white/10'"
+            @click="$emit('update-property', 'lockMovement', !getVal('lockMovement', false))"
+            :title="getVal('lockMovement', false) ? 'Desbloquear' : 'Bloquear'"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </button>
+        </div>
+        <button
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+          @click="$emit('action', 'delete')"
+          title="Excluir"
+        >
+          <Trash2 class="w-4 h-4" />
+        </button>
+      </div>
+
       <!-- 1. ALIGN & DISTRIBUTE (Top Bar) -->
       <div class="p-2 border-b border-white/5 flex flex-wrap gap-2 justify-between px-4 text-zinc-400">
           <div class="flex gap-1">
@@ -452,36 +540,59 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
       </div>
 
-      <!-- 2. LAYOUT & TRANSFORM -->
-      <div class="p-4 border-b border-black/20 space-y-3">
-          <div class="grid grid-cols-2 gap-2">
-              <div class="flex items-center gap-2 group">
-                  <span class="text-[10px] text-zinc-500 w-3">X</span>
-                  <input type="number" :value="displayLeft ?? Math.round(getVal('left', 0))" @focus="handleFocus('left')" @blur="handleBlur" @input="e => handlePropertyInput('left', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
-              </div>
-              <div class="flex items-center gap-2 group">
-                  <span class="text-[10px] text-zinc-500 w-3">Y</span>
-                  <input type="number" :value="displayTop ?? Math.round(getVal('top', 0))" @focus="handleFocus('top')" @blur="handleBlur" @input="e => handlePropertyInput('top', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
-              </div>
-              <div class="flex items-center gap-2 group">
-                  <span class="text-[10px] text-zinc-500 w-3">W</span>
-                  <input type="number" :value="displayWidth ?? Math.round(getScaledWidth())" @focus="handleFocus('width')" @blur="handleBlur" @input="e => handlePropertyInput('width', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
-              </div>
-              <div class="flex items-center gap-2 group">
-                  <span class="text-[10px] text-zinc-500 w-3">H</span>
-                  <input type="number" :value="displayHeight ?? Math.round(getScaledHeight())" @focus="handleFocus('height')" @blur="handleBlur" @input="e => handlePropertyInput('height', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
-              </div>
-              
-              <!-- Rotation & Corner Radius -->
-              <div class="flex items-center gap-2 group">
-                  <span class="text-[10px] text-zinc-500 w-3">∠</span>
-                  <input type="number" :value="displayAngle ?? Math.round(getVal('angle', 0))" @focus="handleFocus('angle')" @blur="handleBlur" @input="e => handlePropertyInput('angle', Number((e.target as any).value))" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
-              </div>
-              <div class="flex items-center gap-2 group" v-if="isRectLike && !isText">
-                  <span class="text-[10px] text-zinc-500 w-3">R</span>
-                  <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="bg-transparent w-full text-xs text-white focus:outline-none hover:bg-white/5 rounded px-1" />
-              </div>
+      <!-- 2. LAYOUT & TRANSFORM (Collapsible) -->
+      <div class="border-b border-white/5">
+        <button
+          class="pp-section-header"
+          :class="{ 'pp-section-header--collapsed': isSectionCollapsed('transform') }"
+          @click="toggleSection('transform')"
+        >
+          <svg class="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+          <span>Posição & Tamanho</span>
+          <svg class="pp-section-chevron" :class="{ 'pp-section-chevron--collapsed': isSectionCollapsed('transform') }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div v-show="!isSectionCollapsed('transform')" class="pp-section-content">
+          <div class="pp-grid-4">
+            <div class="pp-input-row">
+              <span class="pp-input-label">X</span>
+              <input type="number" :value="displayLeft ?? Math.round(getVal('left', 0))" @focus="handleFocus('left')" @blur="handleBlur" @input="e => handlePropertyInput('left', Number((e.target as any).value))" class="pp-number-input" />
+            </div>
+            <div class="pp-input-row">
+              <span class="pp-input-label">Y</span>
+              <input type="number" :value="displayTop ?? Math.round(getVal('top', 0))" @focus="handleFocus('top')" @blur="handleBlur" @input="e => handlePropertyInput('top', Number((e.target as any).value))" class="pp-number-input" />
+            </div>
+            <div class="pp-input-row">
+              <span class="pp-input-label">W</span>
+              <input type="number" :value="displayWidth ?? Math.round(getScaledWidth())" @focus="handleFocus('width')" @blur="handleBlur" @input="e => handlePropertyInput('width', Number((e.target as any).value))" class="pp-number-input" />
+            </div>
+            <div class="pp-input-row">
+              <span class="pp-input-label">H</span>
+              <input type="number" :value="displayHeight ?? Math.round(getScaledHeight())" @focus="handleFocus('height')" @blur="handleBlur" @input="e => handlePropertyInput('height', Number((e.target as any).value))" class="pp-number-input" />
+            </div>
           </div>
+          <div class="pp-grid-3">
+            <div class="pp-input-row">
+              <span class="pp-input-label">∠</span>
+              <input type="number" :value="displayAngle ?? Math.round(getVal('angle', 0))" @focus="handleFocus('angle')" @blur="handleBlur" @input="e => handlePropertyInput('angle', Number((e.target as any).value))" class="pp-number-input" />
+              <span class="text-[10px] text-zinc-600">°</span>
+            </div>
+            <div class="pp-input-row" v-if="isRectLike && !isText">
+              <span class="pp-input-label">R</span>
+              <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="pp-number-input" />
+            </div>
+            <div class="pp-input-row">
+              <span class="pp-input-label opacity-0">O</span>
+              <div class="flex-1 flex items-center gap-1">
+                <input type="range" min="0" max="1" step="0.05" :value="Number(getVal('opacity', 1))" @input="$emit('update-property', 'opacity', Number(($event.target as any).value))" class="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+                <span class="text-[10px] text-zinc-500 w-6 text-right">{{ Math.round(Number(getVal('opacity', 1)) * 100) }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- VECTOR PATH SECTION (Figma Style) -->
@@ -631,6 +742,44 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </div>
           </div>
 
+          <!-- Text Style Buttons (Bold, Italic, Underline) -->
+          <div class="flex gap-1 pt-1">
+            <button
+              class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+              :class="{ 'bg-violet-500/20 text-violet-400': getVal('fontWeight') === 'bold' || getVal('fontWeight') === '700' || getVal('fontWeight') === 700 }"
+              @click="$emit('update-property', 'fontWeight', getVal('fontWeight') === 'bold' || getVal('fontWeight') === '700' || getVal('fontWeight') === 700 ? 'normal' : 'bold')"
+              title="Negrito"
+            >
+              <Bold class="w-3.5 h-3.5" />
+            </button>
+            <button
+              class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+              :class="{ 'bg-violet-500/20 text-violet-400': getVal('fontStyle') === 'italic' }"
+              @click="$emit('update-property', 'fontStyle', getVal('fontStyle') === 'italic' ? 'normal' : 'italic')"
+              title="Itálico"
+            >
+              <Italic class="w-3.5 h-3.5" />
+            </button>
+            <button
+              class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+              :class="{ 'bg-violet-500/20 text-violet-400': !!getVal('underline') }"
+              @click="$emit('update-property', 'underline', !getVal('underline'))"
+              title="Sublinhado"
+            >
+              <Underline class="w-3.5 h-3.5" />
+            </button>
+            <button
+              class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+              :class="{ 'bg-violet-500/20 text-violet-400': !!getVal('linethrough') }"
+              @click="$emit('update-property', 'linethrough', !getVal('linethrough'))"
+              title="Tachado"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
           <!-- Advanced Text Props -->
           <div class="grid grid-cols-2 gap-2 pt-1">
                <div class="flex items-center bg-[#1e1e1e] rounded border border-black px-2 h-7" title="Line Height">
@@ -646,9 +795,9 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <!-- Alignment & Case -->
           <div class="flex gap-2">
             <div class="flex flex-1 bg-[#1e1e1e] rounded border border-black p-1 gap-1">
-                <button class="flex-1 h-6 flex items-center justify-center hover:bg-white/10 rounded" :class="getVal('textAlign') == 'left' ? 'bg-white/20' : ''" @click="$emit('update-property', 'textAlign', 'left')"><AlignLeft class="w-3 h-3"/></button>
-                <button class="flex-1 h-6 flex items-center justify-center hover:bg-white/10 rounded" :class="getVal('textAlign') == 'center' ? 'bg-white/20' : ''" @click="$emit('update-property', 'textAlign', 'center')"><AlignCenter class="w-3 h-3"/></button>
-                <button class="flex-1 h-6 flex items-center justify-center hover:bg-white/10 rounded" :class="getVal('textAlign') == 'right' ? 'bg-white/20' : ''" @click="$emit('update-property', 'textAlign', 'right')"><AlignRight class="w-3 h-3"/></button>
+                <button class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'left' ? 'bg-violet-500/20 text-violet-400' : ''" @click="$emit('update-property', 'textAlign', 'left')"><AlignLeft class="w-3.5 h-3.5"/></button>
+                <button class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'center' ? 'bg-violet-500/20 text-violet-400' : ''" @click="$emit('update-property', 'textAlign', 'center')"><AlignCenter class="w-3.5 h-3.5"/></button>
+                <button class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'right' ? 'bg-violet-500/20 text-violet-400' : ''" @click="$emit('update-property', 'textAlign', 'right')"><AlignRight class="w-3.5 h-3.5"/></button>
             </div>
             <div class="flex bg-[#1e1e1e] rounded border border-black p-1 gap-1">
                 <button class="w-7 h-6 flex items-center justify-center hover:bg-white/10 rounded text-[10px] font-bold" title="Uppercase" @click="$emit('action', 'text-upper')">AG</button>
@@ -1278,4 +1427,251 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ============================
+   Figma-inspired Panel Styles
+   ============================ */
+
+/* Prototype Panel */
+.pp-interaction-card {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: rgba(139, 92, 246, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pp-info-box {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(24, 24, 27, 0.5);
+}
+
+.pp-info-box--collapsed {
+  background: rgba(24, 24, 27, 0.3);
+}
+
+/* Design Panel */
+.pp-design-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Section Header (collapsible) */
+.pp-section-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  text-align: left;
+  transition: background-color 0.15s;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pp-section-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pp-section-header span {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pp-section-chevron {
+  width: 16px;
+  height: 16px;
+  color: #52525b;
+  transition: transform 0.2s;
+}
+
+.pp-section-chevron--collapsed {
+  transform: rotate(-90deg);
+}
+
+.pp-section-content {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Quick action buttons */
+.pp-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(39, 39, 42, 0.5);
+  border: 1px solid rgba(39, 39, 42, 0.8);
+}
+
+.pp-quick-btn {
+  flex: 1;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #71717a;
+  transition: all 0.15s;
+}
+
+.pp-quick-btn:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pp-quick-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pp-quick-btn--active {
+  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.1);
+}
+
+/* Input fields */
+.pp-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pp-input-label {
+  font-size: 10px;
+  color: #71717a;
+  width: 16px;
+}
+
+.pp-input-field {
+  flex: 1;
+  background: rgba(39, 39, 42, 0.5);
+  border: 1px solid rgba(39, 39, 42, 0.8);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: white;
+}
+
+.pp-input-field:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.pp-number-input {
+  width: 100%;
+  background: rgba(39, 39, 42, 0.5);
+  border: 1px solid rgba(39, 39, 42, 0.8);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: white;
+  text-align: center;
+}
+
+.pp-number-input:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+/* Color row */
+.pp-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pp-color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(39, 39, 42, 0.8);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.pp-color-hex {
+  flex: 1;
+  background: rgba(39, 39, 42, 0.5);
+  border: 1px solid rgba(39, 39, 42, 0.8);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: white;
+  font-family: ui-monospace, monospace;
+  text-transform: uppercase;
+}
+
+.pp-color-hex:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+/* Range slider with number */
+.pp-range-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pp-range-control input[type="range"] {
+  flex: 1;
+  height: 6px;
+  background: #3f3f46;
+  border-radius: 8px;
+  appearance: none;
+  cursor: pointer;
+  accent-color: #8b5cf6;
+}
+
+.pp-range-number {
+  width: 56px;
+  background: rgba(39, 39, 42, 0.5);
+  border: 1px solid rgba(39, 39, 42, 0.8);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: white;
+  text-align: center;
+}
+
+.pp-range-number:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+/* Grid layouts */
+.pp-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.pp-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.pp-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
 </style>

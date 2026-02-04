@@ -1069,6 +1069,8 @@ const applyRectCornerRadiiPatch = (rect: any) => {
     const has = !!(radii && typeof radii === 'object');
 
     if (!has) {
+        // No custom corner radii - restore original render method
+        // This allows Fabric.js's native rx/ry to work correctly
         if ((rect as any).__origRender) {
             rect._render = (rect as any).__origRender;
             delete (rect as any).__origRender;
@@ -1100,7 +1102,8 @@ const applyRectCornerRadiiPatch = (rect: any) => {
         ctx.closePath();
         this._renderPaintInOrder(ctx);
     };
-    // Avoid double rounding via rx/ry.
+    // Avoid double rounding via rx/ry - ONLY when using custom cornerRadii
+    // This ensures Fabric.js's native rx/ry works when not using custom radii
     rect.set?.({ rx: 0, ry: 0 });
     rect.dirty = true;
 };
@@ -3683,7 +3686,22 @@ const handleHotspotClick = (targetIndex: any) => {
 const exportSettings = ref({
     format: 'png',
     scale: 1,
-    quality: 0.9
+    quality: 0.9,
+    exportScope: 'canvas', // 'canvas' | 'selected-frame' | 'all-frames'
+    selectedFrameId: '' // ID of the frame to export
+})
+
+const availableFramesForExport = computed(() => {
+    if (!canvas.value) return []
+    return getAllFrames().map((f: any) => ({
+        id: f._customId || f.id || '',
+        name: f.layerName || f.name || 'Sem nome'
+    }))
+})
+
+const selectedFrameForExport = computed(() => {
+    if (!exportSettings.value.selectedFrameId || !canvas.value) return null
+    return getFrameById(exportSettings.value.selectedFrameId)
 })
 
 // Design System State
@@ -5890,9 +5908,69 @@ const decodeContaboUrls = (canvasData: any): any => {
 };
 
 /**
+ * Extrai bucket e key de uma URL da Contabo.
+ * Isso é necessário para arquivos de importação de PSD que podem estar em buckets diferentes.
+ */
+const extractContaboBucketAndKey = (url: string): { bucket: string | null; key: string | null } => {
+    try {
+        const decodedUrl = decodeURIComponent(url);
+        const urlObj = new URL(decodedUrl);
+        const decodedPathname = decodeURIComponent(urlObj.pathname);
+        const pathParts = decodedPathname.split('/').filter(p => p);
+
+        if (pathParts.length === 0) {
+            return { bucket: null, key: null };
+        }
+
+        const cfg = useRuntimeConfig()?.public?.contabo || {};
+        const configuredBucket = (cfg.bucket || '475a29e42e55430abff00915da2fa4bc:jobupload').toString();
+        const importBucket = (cfg.importBucket || '').toString();
+        const candidates = new Set<string>();
+        if (configuredBucket) candidates.add(configuredBucket);
+        if (importBucket) candidates.add(importBucket);
+
+        const first = pathParts[0] ?? '';
+        // Check if first part is bucket (may have : or match configured buckets)
+        const firstLooksLikeBucket = first.includes(':') || candidates.has(first);
+        const hostLooksLikeVirtualHost = [...candidates].some(b => b && urlObj.hostname.startsWith(`${b.toLowerCase()}.`));
+
+        // Path-style: primeira parte do path é bucket/tenant:bucket → extrair bucket
+        // Virtual-host: host já contém bucket → usar bucket configurado
+        let bucket: string | null = null;
+        let keyParts: string[];
+
+        if (firstLooksLikeBucket && !hostLooksLikeVirtualHost) {
+            bucket = first;
+            keyParts = pathParts.slice(1);
+        } else if (hostLooksLikeVirtualHost) {
+            // Extrair bucket do hostname (virtual-host style)
+            const hostParts = urlObj.hostname.split('.');
+            bucket = hostParts[0] || null;
+            keyParts = pathParts;
+        } else {
+            // Usar bucket padrão
+            bucket = null; // Deixa o proxy usar o padrão
+            keyParts = pathParts;
+        }
+
+        const key = keyParts.join('/');
+
+        if (!key || key.length === 0) {
+            return { bucket: null, key: null };
+        }
+
+        return { bucket, key };
+    } catch (err) {
+        console.error(`❌ Erro ao extrair bucket e key da URL: ${url.substring(0, 100)}`, err);
+        return { bucket: null, key: null };
+    }
+};
+
+/**
  * Converte URLs da Contabo para usar o proxy local.
  * Isso evita problemas com URLs presignadas e encoding de caracteres especiais.
  * O proxy busca a imagem diretamente do S3 no backend, sem problemas de assinatura.
+ * SUporte a buckets diferentes (ex: importBucket para arquivos PSD).
  */
 const convertContaboToProxyUrls = (canvasData: any): any => {
     const cloned = JSON.parse(JSON.stringify(canvasData));
@@ -5903,11 +5981,15 @@ const convertContaboToProxyUrls = (canvasData: any): any => {
         if (!obj) return;
         const objType = (obj.type || '').toLowerCase();
         if (objType === 'image' && typeof obj.src === 'string' && obj.src.includes('contabostorage.com')) {
-            // Extract key from Contabo URL
-            const key = extractContaboKey(obj.src);
+            // Extract bucket and key from Contabo URL
+            const { bucket, key } = extractContaboBucketAndKey(obj.src);
             if (key) {
-                // Convert to proxy URL
-                obj.src = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+                // Convert to proxy URL with bucket parameter
+                if (bucket) {
+                    obj.src = `/api/storage/proxy?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+                } else {
+                    obj.src = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+                }
                 count++;
             }
         }
@@ -5917,7 +5999,7 @@ const convertContaboToProxyUrls = (canvasData: any): any => {
     };
 
     cloned.objects.forEach((obj: any) => processObject(obj));
-    if (count > 0) console.log(`🔄 Convertido ${count} URL(s) da Contabo para proxy local`);
+    if (count > 0) console.log(`🔄 Convertido ${count} URL(s) da Contabo para proxy local (com suporte a buckets)`);
     return cloned;
 };
 
@@ -6530,7 +6612,19 @@ const setupHistory = () => {
 const handleObjectModified = (e: any) => {
     const obj = e.target;
     if (!obj) return;
-    
+
+    // 🔹 Normalizar scale de retângulos (Figma-style)
+    // Converte scaleX/scaleY em width/height reais para evitar distorção de border-radius
+    if (obj.type === 'rect') {
+        normalizeRectScale(obj);
+    }
+
+    // 🔹 Normalizar scale de grupos que contêm retângulos
+    // Smart objects, product cards, etc. são grupos com retângulos internos
+    if (obj.type === 'group') {
+        normalizeGroupRects(obj);
+    }
+
     if (isLikelyProductZone(obj)) {
         // Cache children BEFORE any zone changes to prevent losing cards
         const cachedChildren = getZoneChildren(obj);
@@ -9586,7 +9680,7 @@ const setupReactivity = () => {
         if (obj && obj.isFrame) {
             getOrCreateFrameClipRect(obj);
         }
-        
+
         // 1. Textbox Reflow
         if (obj && obj.type === 'textbox' && obj.lockScalingY) {
             const w = obj.width * obj.scaleX;
@@ -9595,22 +9689,54 @@ const setupReactivity = () => {
                 scaleX: 1
             });
         }
-        
-        // 2. Zone Auto-Layout (Realtime Resize)
+
+        // 2. Rect Border-Radius Preservation (Figma-style)
+        // Atualiza o border-radius em tempo real durante o redimensionamento
+        if (obj && obj.type === 'rect' && (obj.rx || obj.ry)) {
+            const scaledWidth = Math.abs(obj.getScaledWidth?.() ?? (obj.width * obj.scaleX));
+            const scaledHeight = Math.abs(obj.getScaledHeight?.() ?? (obj.height * obj.scaleY));
+            const maxRadius = Math.min(scaledWidth / 2, scaledHeight / 2);
+
+            // Limita o radius para não exceder metade da menor dimensão
+            if (obj.rx > maxRadius) {
+                obj.set({ rx: maxRadius, ry: maxRadius });
+            }
+        }
+
+        // 2b. Group Rect Border-Radius Preservation (Realtime)
+        // Para grupos com retângulos internos (smart objects, cards, etc.)
+        if (obj && obj.type === 'group' && obj.getObjects) {
+            const objects = obj.getObjects();
+            if (Array.isArray(objects)) {
+                objects.forEach((child: any) => {
+                    if (child.type === 'rect' && (child.rx || child.ry)) {
+                        const childScaledWidth = Math.abs(child.getScaledWidth?.() ?? (child.width * child.scaleX));
+                        const childScaledHeight = Math.abs(child.getScaledHeight?.() ?? (child.height * child.scaleY));
+                        const maxChildRadius = Math.min(childScaledWidth / 2, childScaledHeight / 2);
+
+                        if (child.rx > maxChildRadius) {
+                            child.set({ rx: maxChildRadius, ry: maxChildRadius });
+                        }
+                    }
+                });
+            }
+        }
+
+        // 3. Zone Auto-Layout (Realtime Resize)
         if (obj && isLikelyProductZone(obj)) {
             // CRITICAL: Cache children BEFORE updating zone dimensions
             // This prevents losing cards that may fall outside new bounds during resize
             const cachedChildren = getZoneChildren(obj);
-            
+
             ensureZoneSanity(obj);
             obj.setCoords();
             obj._zoneWidth = Math.abs(obj.getScaledWidth?.() ?? obj._zoneWidth ?? 0);
             obj._zoneHeight = Math.abs(obj.getScaledHeight?.() ?? obj._zoneHeight ?? 0);
-            
+
             // Use cached children to ensure they stay bound to zone during resize
             recalculateZoneLayout(obj, cachedChildren, { save: false });
         }
-        
+
         // 🔒 Apply containment after scaling
         applyContainmentConstraints(obj);
     });
@@ -10072,7 +10198,23 @@ const updateObjectProperty = (prop: string, value: any) => {
             const r = Math.max(0, Number(value || 0));
             applyToActiveOrSelection((o) => {
                 if (o && (o as any).cornerRadii) delete (o as any).cornerRadii;
-                o?.set?.({ rx: r, ry: r });
+                // Remove any custom render patch to ensure Fabric.js native rendering is used
+                if ((o as any).__origRender) {
+                    o._render = (o as any).__origRender;
+                    delete (o as any).__origRender;
+                }
+                // Set rx, ry with additional properties to ensure proper rendering
+                o?.set?.({
+                    rx: r,
+                    ry: r,
+                    strokeUniform: true,  // Ensures stroke scales properly
+                    objectCaching: false, // Disable caching for rounded corners
+                    dirty: true
+                });
+                // Force clear any clipPath that might interfere with native rx/ry rendering
+                if (o && !o.isFrame) {
+                    o.set('clipPath', undefined);
+                }
                 applyRectCornerRadiiPatch(o);
             });
             if (active.isFrame) {
@@ -11399,48 +11541,6 @@ const exportSelectedObject = (format: 'png' | 'svg' | 'jpg' = 'png') => {
     }
 }
 
-const performExport = () => {
-    if (!canvas.value) return; 
-    
-    // Deselect for clean export
-    canvas.value.discardActiveObject();
-    canvas.value.requestRenderAll();
-
-    const { format, scale, quality } = exportSettings.value;
-    const fileName = `design-export-${Date.now()}`;
-    
-    let dataURL = '';
-
-    if (format === 'svg') {
-        const svgContent = canvas.value.toSVG();
-        const blob = new Blob([svgContent], {type: "image/svg+xml;charset=utf-8"});
-        const url = URL.createObjectURL(blob);
-        downloadFile(url, `${fileName}.svg`);
-    } else if (format === 'pdf') {
-        // Simple PDF export (Canvas to Image to PDF usually requires jsPDF, 
-        // here we'll export as high-res Image and browser print or use simple dataURL if library allowed)
-        // Fabric doesn't do PDF natively without jspdf. 
-        // We will fallback to PNG for this demo or just warn.
-        console.warn("PDF requires external lib, exporting as PNG");
-        dataURL = canvas.value.toDataURL({
-            format: 'png',
-            quality: 1,
-            multiplier: scale
-        });
-        downloadFile(dataURL, `${fileName}.png`);
-    } else {
-        // PNG or JPG
-        dataURL = canvas.value.toDataURL({
-            format: format,
-            quality: quality,
-            multiplier: scale
-        });
-        downloadFile(dataURL, `${fileName}.${format}`);
-    }
-    
-    showExportModal.value = false;
-}
-
 const downloadFile = (url: string, name: string) => {
     const link = document.createElement('a');
     link.download = name;
@@ -11448,6 +11548,244 @@ const downloadFile = (url: string, name: string) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+// --- Frame Export Functions ---
+
+// Export a single frame as an image
+const exportSingleFrame = async (frame: any, format: 'png' | 'jpg' = 'png', scale: number = 1, quality: number = 0.9) => {
+    if (!canvas.value || !frame) return null;
+
+    const frameName = (frame.layerName || frame.name || 'frame').replace(/[^a-z0-9]/gi, '-').toLowerCase();
+    const fileName = `frame-${frameName}-${Date.now()}`;
+
+    // Get frame bounds
+    const bounds = {
+        left: frame.left || 0,
+        top: frame.top || 0,
+        width: (frame.getScaledWidth?.() || frame.width * (frame.scaleX || 1)),
+        height: (frame.getScaledHeight?.() || frame.height * (frame.scaleY || 1))
+    };
+
+    // Create a data URL for the frame area
+    let dataURL = '';
+    try {
+        dataURL = canvas.value.toDataURL({
+            format: format,
+            quality: quality,
+            multiplier: scale,
+            left: bounds.left,
+            top: bounds.top,
+            width: bounds.width,
+            height: bounds.height
+        });
+    } catch (err) {
+        console.error('[Export Frame] Error:', err);
+        return null;
+    }
+
+    return { dataURL, fileName };
+}
+
+// Export all frames as separate files
+const exportAllFrames = async (format: 'png' | 'jpg' = 'png', scale: number = 1, quality: number = 0.9) => {
+    const frames = getAllFrames();
+    if (!frames.length) {
+        alert('Nenhum frame encontrado para exportar.');
+        return [];
+    }
+
+    const exports: { dataURL: string; fileName: string }[] = [];
+
+    for (const frame of frames) {
+        const result = await exportSingleFrame(frame, format, scale, quality);
+        if (result) {
+            exports.push(result);
+        }
+    }
+
+    return exports;
+}
+
+// Share using Web Share API (native apps)
+const shareFile = async (dataURL: string, fileName: string, title: string = 'Design export') => {
+    // Convert data URL to blob
+    const response = await fetch(dataURL);
+    const blob = await response.blob();
+    const file = new File([blob], fileName, { type: blob.type });
+
+    // Check if Web Share API is supported
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                title: title,
+                files: [file]
+            });
+            return true;
+        } catch (err) {
+            if ((err as Error).name !== 'AbortError') {
+                console.error('[Share] Error sharing:', err);
+            }
+            return false;
+        }
+    } else {
+        console.warn('[Share] Web Share API not supported or file not shareable');
+        return false;
+    }
+}
+
+// Download multiple files (with delay to avoid browser blocking)
+const downloadMultipleFiles = async (files: { dataURL: string; fileName: string; format: string }[]) => {
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file) continue;
+        downloadFile(file.dataURL, `${file.fileName}.${file.format}`);
+        // Add delay to avoid browser blocking multiple downloads
+        if (i < files.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+    }
+}
+
+// Updated performExport with frame selection and sharing
+const performExport = async () => {
+    if (!canvas.value) return;
+
+    // Deselect for clean export
+    canvas.value.discardActiveObject();
+    canvas.value.requestRenderAll();
+
+    const { format, scale, quality, exportScope, selectedFrameId } = exportSettings.value;
+    const imgFormat = format === 'jpeg' ? 'jpg' : format;
+
+    // Export selected frame
+    if (exportScope === 'selected-frame' && selectedFrameId) {
+        const frame = getFrameById(selectedFrameId);
+        if (frame) {
+            const result = await exportSingleFrame(frame, imgFormat as 'png' | 'jpg', scale, quality);
+            if (result) {
+                downloadFile(result.dataURL, `${result.fileName}.${imgFormat}`);
+            }
+        }
+    }
+    // Export all frames
+    else if (exportScope === 'all-frames') {
+        const frames = getAllFrames();
+        if (frames.length > 0) {
+            const frameExports = await exportAllFrames(imgFormat as 'png' | 'jpg', scale, quality);
+            const filesToDownload = frameExports.map(e => ({
+                dataURL: e.dataURL,
+                fileName: e.fileName,
+                format: imgFormat
+            }));
+            await downloadMultipleFiles(filesToDownload);
+        } else {
+            alert('Nenhum frame encontrado no canvas.');
+        }
+    }
+    // Export entire canvas (default behavior)
+    else {
+        let dataURL = '';
+
+        if (format === 'svg') {
+            const svgContent = canvas.value.toSVG();
+            const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            downloadFile(url, `design-export-${Date.now()}.svg`);
+        } else {
+            dataURL = canvas.value.toDataURL({
+                format: format,
+                quality: quality,
+                multiplier: scale
+            });
+            downloadFile(dataURL, `design-export-${Date.now()}.${imgFormat}`);
+        }
+    }
+
+    showExportModal.value = false;
+}
+
+// --- Share Modal Functions ---
+
+const shareDesign = () => {
+    showShareModal.value = true;
+}
+
+const shareSettings = ref({
+    format: 'png',
+    scale: 1,
+    quality: 0.9,
+    shareScope: 'canvas', // 'canvas' | 'selected-frame' | 'all-frames'
+    selectedFrameId: '',
+    shareAsFiles: true // Share as files or use link sharing
+})
+
+const performShare = async () => {
+    if (!canvas.value) return;
+
+    // Deselect for clean export
+    canvas.value.discardActiveObject();
+    canvas.value.requestRenderAll();
+
+    const { format, scale, quality, shareScope, selectedFrameId } = shareSettings.value;
+    const imgFormat = format === 'jpeg' ? 'jpg' : format;
+
+    // Share selected frame
+    if (shareScope === 'selected-frame' && selectedFrameId) {
+        const frame = getFrameById(selectedFrameId);
+        if (frame) {
+            const result = await exportSingleFrame(frame, imgFormat as 'png' | 'jpg', scale, quality);
+            if (result) {
+                const shared = await shareFile(result.dataURL, `${result.fileName}.${imgFormat}`, (frame.layerName || frame.name || 'Frame'));
+                if (!shared) {
+                    // Fallback to download if share not available
+                    downloadFile(result.dataURL, `${result.fileName}.${imgFormat}`);
+                }
+            }
+        }
+    }
+    // Share all frames
+    else if (shareScope === 'all-frames') {
+        const frames = getAllFrames();
+        if (frames.length > 0) {
+            if (frames.length === 1) {
+                const result = await exportSingleFrame(frames[0], imgFormat as 'png' | 'jpg', scale, quality);
+                if (result) {
+                    const shared = await shareFile(result.dataURL, `${result.fileName}.${imgFormat}`, 'All Frames');
+                    if (!shared) {
+                        downloadFile(result.dataURL, `${result.fileName}.${imgFormat}`);
+                    }
+                }
+            } else {
+                // For multiple files, we need to download them (Web Share API only supports single file)
+                alert('Compartilhamento nativo suporta apenas um arquivo por vez. Os arquivos serão baixados.');
+                const frameExports = await exportAllFrames(imgFormat as 'png' | 'jpg', scale, quality);
+                const filesToDownload = frameExports.map(e => ({
+                    dataURL: e.dataURL,
+                    fileName: e.fileName,
+                    format: imgFormat
+                }));
+                await downloadMultipleFiles(filesToDownload);
+            }
+        } else {
+            alert('Nenhum frame encontrado no canvas.');
+        }
+    }
+    // Share entire canvas
+    else {
+        let dataURL = canvas.value.toDataURL({
+            format: format,
+            quality: quality,
+            multiplier: scale
+        });
+        const fileName = `design-${project.name || 'export'}-${Date.now()}.${imgFormat}`;
+        const shared = await shareFile(dataURL, fileName, project.name || 'Design');
+        if (!shared) {
+            downloadFile(dataURL, fileName);
+        }
+    }
+
+    showShareModal.value = false;
 }
 
 // --- Project Manager Helpers ---
@@ -11927,11 +12265,11 @@ onUnmounted(() => {
 })
 
 const addShape = (type: 'rect' | 'circle' | 'triangle' | 'star' | 'polygon' | 'line' | 'arrow' | 'ellipse', options: any = {}) => {
-    if (!canvas.value) return; 
+    if (!canvas.value) return;
     let shape;
     const center = getCenterOfView();
-    const opts = { left: center.x - 50, top: center.y - 50, fill: '#cccccc', stroke: '#cccccc', strokeWidth: 2, ...options };
-    
+    const opts = { left: center.x - 50, top: center.y - 50, fill: '#cccccc', stroke: '#cccccc', strokeWidth: 2, objectCaching: false, noScaleCache: true, statefullCache: false, strokeUniform: true, ...options };
+
     if (type === 'rect') {
         shape = new fabric.Rect({ ...opts, width: 100, height: 100 });
     } else if (type === 'circle') {
@@ -16288,6 +16626,74 @@ const applyZoneScaleToRect = (zone: any, minSize = 60) => {
     return { width: nextWidth, height: nextHeight };
 }
 
+/**
+ * Normaliza o scale de retângulos após redimensionamento.
+ * Converte scaleX/scaleY em width/height reais e preserva o border-radius proporcional.
+ * Igual ao Figma: usa dimensões reais em vez de scale para evitar distorção dos cantos.
+ */
+const normalizeRectScale = (obj: any, minSize = 1) => {
+    if (!obj) return;
+
+    // Apenas para retângulos (rect, Rect)
+    if (obj.type !== 'rect') return;
+
+    // Se não há scale para normalizar, retorna
+    if (obj.scaleX === 1 && obj.scaleY === 1) return;
+
+    const newWidth = Math.max(minSize, Math.abs(obj.getScaledWidth?.() ?? (obj.width * obj.scaleX)));
+    const newHeight = Math.max(minSize, Math.abs(obj.getScaledHeight?.() ?? (obj.height * obj.scaleY)));
+
+    // Calcular o novo border-radius proporcional, limitado a metade da menor dimensão
+    // Isso evita cantos quebrados e mantém a aparência visual consistente
+    const originalRx = obj.rx || 0;
+    const originalRy = obj.ry || 0;
+
+    // Fator de escala aplicado
+    const scaleFatorX = newWidth / obj.width;
+    const scaleFatorY = newHeight / obj.height;
+
+    // Novo radius proporcional (média dos fatores de escala para manter aparência)
+    const newRadius = Math.min(
+        (originalRx * Math.max(scaleFatorX, scaleFatorY)),
+        newWidth / 2,
+        newHeight / 2
+    );
+
+    obj.set({
+        width: newWidth,
+        height: newHeight,
+        rx: newRadius,
+        ry: newRadius,
+        scaleX: 1,
+        scaleY: 1,
+        flipX: false,
+        flipY: false
+    });
+
+    obj.setCoords();
+    return { width: newWidth, height: newHeight, rx: newRadius, ry: newRadius };
+};
+
+/**
+ * Normaliza o scale de grupos que contêm retângulos com border-radius.
+ * Percorre todos os objetos dentro do grupo e normaliza os retângulos.
+ */
+const normalizeGroupRects = (group: any) => {
+    if (!group || !group.getObjects || group.type !== 'group') return;
+
+    const objects = group.getObjects();
+    if (!Array.isArray(objects)) return;
+
+    objects.forEach((obj: any) => {
+        if (obj.type === 'rect') {
+            normalizeRectScale(obj);
+        } else if (obj.type === 'group') {
+            // Recursivo para grupos aninhados
+            normalizeGroupRects(obj);
+        }
+    });
+};
+
 const stableHash32 = (s: string): number => {
     // FNV-1a 32-bit hash (stable across sessions).
     let h = 0x811c9dc5;
@@ -17341,6 +17747,7 @@ const handleRecalculateLayout = () => {
       <PropertiesPanel
         v-if="selectedObjectRef"
         :selectedObject="selectedObjectRef"
+        :activeMode="activeMode"
         :pageSettings="pageSettings"
         :colorStyles="project.colorStyles"
         :productZone="productZoneState.productZone.value"
@@ -17562,17 +17969,74 @@ const handleRecalculateLayout = () => {
       />
 
       <!-- Export Modal -->
-      <UiDialog v-model="showExportModal" title="Exportar Design" @close="showExportModal = false" width="400px">
+      <UiDialog v-model="showExportModal" title="Exportar Design" @close="showExportModal = false" width="450px">
         <template #default>
           <div class="space-y-4 py-4">
-             <!-- Format -->
+             <!-- Export Scope (Canvas vs Frames) -->
              <div class="space-y-2">
+                 <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que exportar</label>
+                 <div class="grid grid-cols-3 gap-2">
+                     <button
+                         @click="exportSettings.exportScope = 'canvas'"
+                         :class="exportSettings.exportScope === 'canvas' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
+                         class="py-2.5 text-xs font-bold rounded border transition-colors flex flex-col items-center gap-1"
+                     >
+                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                         </svg>
+                         <span>Tela Inteira</span>
+                     </button>
+                     <button
+                         @click="exportSettings.exportScope = 'selected-frame'"
+                         :class="exportSettings.exportScope === 'selected-frame' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
+                         class="py-2.5 text-xs font-bold rounded border transition-colors flex flex-col items-center gap-1"
+                     >
+                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                         </svg>
+                         <span>Frame Selecionado</span>
+                     </button>
+                     <button
+                         @click="exportSettings.exportScope = 'all-frames'"
+                         :class="exportSettings.exportScope === 'all-frames' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
+                         class="py-2.5 text-xs font-bold rounded border transition-colors flex flex-col items-center gap-1"
+                     >
+                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                         </svg>
+                         <span>Todos os Frames</span>
+                     </button>
+                 </div>
+             </div>
+
+             <!-- Frame Selector (when selected-frame is chosen) -->
+             <div class="space-y-2" v-if="exportSettings.exportScope === 'selected-frame'">
+                 <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selecione o Frame</label>
+                 <select
+                     v-model="exportSettings.selectedFrameId"
+                     class="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                 >
+                     <option value="">Selecione um frame...</option>
+                     <option v-for="frame in availableFramesForExport" :key="frame.id" :value="frame.id">
+                         {{ frame.name }}
+                     </option>
+                 </select>
+                 <p v-if="availableFramesForExport.length === 0" class="text-[10px] text-amber-500">
+                     Nenhum frame encontrado no canvas. Crie um frame primeiro.
+                 </p>
+             </div>
+
+             <!-- Format -->
+             <div class="space-y-2" v-if="exportSettings.exportScope !== 'all-frames' || exportSettings.format !== 'svg'">
                  <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Formato</label>
                  <div class="flex gap-2">
                      <button @click="exportSettings.format = 'png'" :class="exportSettings.format === 'png' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">PNG</button>
                      <button @click="exportSettings.format = 'jpeg'" :class="exportSettings.format === 'jpeg' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">JPG</button>
-                     <button @click="exportSettings.format = 'svg'" :class="exportSettings.format === 'svg' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">SVG</button>
+                     <button v-if="exportSettings.exportScope === 'canvas'" @click="exportSettings.format = 'svg'" :class="exportSettings.format === 'svg' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">SVG</button>
                  </div>
+                 <p v-if="exportSettings.exportScope === 'all-frames'" class="text-[10px] text-zinc-500">
+                     A exportação de múltiplos frames suporta apenas PNG/JPG
+                 </p>
              </div>
 
              <!-- Scale -->
@@ -17587,57 +18051,179 @@ const handleRecalculateLayout = () => {
                     {{ exportSettings.scale === 1 ? '72 DPI (Tela)' : exportSettings.scale === 2 ? '144 DPI (Retina)' : '300 DPI (Impressão)' }}
                  </p>
              </div>
+
+             <!-- Info for multiple frames -->
+             <div v-if="exportSettings.exportScope === 'all-frames' && availableFramesForExport.length > 1" class="flex items-start gap-2 p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                 <svg class="w-4 h-4 text-blue-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                 </svg>
+                 <p class="text-[10px] text-blue-200">
+                     Cada frame será exportado como um arquivo separado. {{ availableFramesForExport.length }} frames serão exportados.
+                 </p>
+             </div>
           </div>
         </template>
         <template #footer>
-            <div class="flex justify-end gap-3 w-full">
-                <Button variant="ghost" @click="showExportModal = false">Cancelar</Button>
-                <Button variant="default" @click="performExport">Exportar Arquivo</Button>
+            <div class="flex justify-between items-center w-full">
+                <span class="text-[10px] text-muted-foreground">
+                    {{ exportSettings.exportScope === 'all-frames' ? `${availableFramesForExport.length} arquivos` : '1 arquivo' }}
+                </span>
+                <div class="flex gap-2">
+                    <Button variant="ghost" @click="showExportModal = false">Cancelar</Button>
+                    <Button variant="default" @click="performExport" :disabled="exportSettings.exportScope === 'selected-frame' && !exportSettings.selectedFrameId">Exportar</Button>
+                </div>
             </div>
         </template>
       </UiDialog>
 
       <!-- Share Modal -->
-      <UiDialog v-model="showShareModal" title="Compartilhar Projeto" @close="showShareModal = false" width="400px">
+      <UiDialog v-model="showShareModal" title="Compartilhar Design" @close="showShareModal = false" width="480px">
         <template #default>
           <div class="space-y-4 py-4">
-            <div class="space-y-2">
-              <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Link de Compartilhamento</label>
-              <div class="flex gap-2">
-                <input
-                  type="text"
-                  readonly
-                  class="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:outline-none"
-                  :value="shareUrl || 'Gerando link...'"
-                />
-                <button
-                  @click="copyShareUrl"
-                  class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium transition-all"
-                >
-                  Copiar
-                </button>
-              </div>
-            </div>
-            
-            <div class="space-y-2">
-              <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Permissões</label>
-              <div class="space-y-2">
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" v-model="shareCanEdit" class="w-4 h-4 rounded border-border text-violet-500" />
-                  <span class="text-xs text-foreground">Permitir edição</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" v-model="shareCanView" class="w-4 h-4 rounded border-border text-violet-500" />
-                  <span class="text-xs text-foreground">Permitir visualização</span>
-                </label>
-              </div>
-            </div>
+             <!-- Share Mode Tabs -->
+             <div class="flex gap-1 p-1 bg-muted rounded-lg">
+                 <button
+                     @click="shareSettings.shareAsFiles = true"
+                     :class="shareSettings.shareAsFiles ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                     class="flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2"
+                 >
+                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                     </svg>
+                     <span>Compartilhar Arquivo</span>
+                 </button>
+                 <button
+                     @click="shareSettings.shareAsFiles = false"
+                     :class="!shareSettings.shareAsFiles ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                     class="flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2"
+                 >
+                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                     </svg>
+                     <span>Link de Compartilhamento</span>
+                 </button>
+             </div>
+
+             <!-- File Share Mode -->
+             <div v-if="shareSettings.shareAsFiles" class="space-y-4">
+                 <!-- Export Scope -->
+                 <div class="space-y-2">
+                     <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que compartilhar</label>
+                     <div class="grid grid-cols-3 gap-2">
+                         <button
+                             @click="shareSettings.shareScope = 'canvas'"
+                             :class="shareSettings.shareScope === 'canvas' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
+                             class="py-2 text-xs font-bold rounded border transition-colors"
+                         >
+                             Tela Inteira
+                         </button>
+                         <button
+                             @click="shareSettings.shareScope = 'selected-frame'"
+                             :class="shareSettings.shareScope === 'selected-frame' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
+                             class="py-2 text-xs font-bold rounded border transition-colors"
+                         >
+                             Frame
+                         </button>
+                         <button
+                             @click="shareSettings.shareScope = 'all-frames'"
+                             :class="shareSettings.shareScope === 'all-frames' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
+                             class="py-2 text-xs font-bold rounded border transition-colors"
+                         >
+                             Todos Frames
+                         </button>
+                     </div>
+                 </div>
+
+                 <!-- Frame Selector -->
+                 <div class="space-y-2" v-if="shareSettings.shareScope === 'selected-frame'">
+                     <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selecione o Frame</label>
+                     <select
+                         v-model="shareSettings.selectedFrameId"
+                         class="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                     >
+                         <option value="">Selecione um frame...</option>
+                         <option v-for="frame in availableFramesForExport" :key="frame.id" :value="frame.id">
+                             {{ frame.name }}
+                         </option>
+                     </select>
+                 </div>
+
+                 <!-- Format -->
+                 <div class="space-y-2" v-if="shareSettings.shareScope !== 'all-frames'">
+                     <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Formato</label>
+                     <div class="flex gap-2">
+                         <button @click="shareSettings.format = 'png'" :class="shareSettings.format === 'png' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">PNG</button>
+                         <button @click="shareSettings.format = 'jpeg'" :class="shareSettings.format === 'jpeg' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">JPG</button>
+                     </div>
+                 </div>
+
+                 <!-- Scale -->
+                 <div class="space-y-2">
+                     <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Escala</label>
+                     <div class="flex gap-2">
+                         <button @click="shareSettings.scale = 1" :class="shareSettings.scale === 1 ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">1x</button>
+                         <button @click="shareSettings.scale = 2" :class="shareSettings.scale === 2 ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">2x</button>
+                         <button @click="shareSettings.scale = 3" :class="shareSettings.scale === 3 ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">3x</button>
+                     </div>
+                 </div>
+
+                 <!-- Native Share Info -->
+                 <div class="flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                     <svg class="w-4 h-4 text-green-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                     </svg>
+                     <p class="text-[10px] text-green-200">
+                         Ao clicar em compartilhar, você poderá escolher apps nativos como WhatsApp, Telegram, Email, etc.
+                     </p>
+                 </div>
+             </div>
+
+             <!-- Link Share Mode -->
+             <div v-else class="space-y-4">
+                 <div class="space-y-2">
+                   <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Link de Compartilhamento</label>
+                   <div class="flex gap-2">
+                     <input
+                       type="text"
+                       readonly
+                       class="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:outline-none"
+                       :value="shareUrl || 'Gerando link...'"
+                     />
+                     <button
+                       @click="copyShareUrl"
+                       class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium transition-all"
+                     >
+                       Copiar
+                     </button>
+                   </div>
+                 </div>
+
+                 <div class="space-y-2">
+                   <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Permissões</label>
+                   <div class="space-y-2">
+                     <label class="flex items-center gap-2 cursor-pointer">
+                       <input type="checkbox" v-model="shareCanEdit" class="w-4 h-4 rounded border-border text-violet-500" />
+                       <span class="text-xs text-foreground">Permitir edição</span>
+                     </label>
+                     <label class="flex items-center gap-2 cursor-pointer">
+                       <input type="checkbox" v-model="shareCanView" class="w-4 h-4 rounded border-border text-violet-500" />
+                       <span class="text-xs text-foreground">Permitir visualização</span>
+                     </label>
+                   </div>
+                 </div>
+             </div>
           </div>
         </template>
         <template #footer>
           <div class="flex justify-end gap-3 w-full">
-            <Button variant="ghost" @click="showShareModal = false">Fechar</Button>
-            <Button variant="default" @click="generateShareLink">Gerar Link</Button>
+            <Button variant="ghost" @click="showShareModal = false">Cancelar</Button>
+            <Button v-if="shareSettings.shareAsFiles" variant="default" @click="performShare" :disabled="shareSettings.shareScope === 'selected-frame' && !shareSettings.selectedFrameId">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                Compartilhar
+            </Button>
+            <Button v-else variant="default" @click="generateShareLink">Gerar Link</Button>
           </div>
         </template>
       </UiDialog>

@@ -14,6 +14,7 @@ export default defineEventHandler(async (event) => {
   try {
     const query = getQuery(event)
     const key = query.key as string
+    const bucketParam = query.bucket as string
 
     if (!key) {
       throw createError({
@@ -28,10 +29,11 @@ export default defineEventHandler(async (event) => {
     if (endpoint.includes('usc1')) defaultRegion = 'us-east-1'
     else if (endpoint.includes('sin1')) defaultRegion = 'ap-southeast-1'
     else if (endpoint.includes('eu2')) defaultRegion = 'eu-2'
-    
+
     const config = {
       endpoint,
-      bucket: process.env.CONTABO_BUCKET,
+      // Usar bucket do parâmetro ou o bucket principal
+      bucket: bucketParam || process.env.CONTABO_BUCKET,
       accessKey: process.env.CONTABO_ACCESS_KEY,
       secretKey: process.env.CONTABO_SECRET_KEY,
       region: process.env.CONTABO_REGION || defaultRegion

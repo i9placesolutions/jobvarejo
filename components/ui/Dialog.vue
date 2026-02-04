@@ -6,12 +6,16 @@ interface Props {
   modelValue: boolean
   title?: string
   width?: string
+  fullscreen?: boolean
+  contentClass?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modelValue: false,
   title: '',
   width: '440px',
+  fullscreen: false,
+  contentClass: '',
 })
 
 const emit = defineEmits<{
@@ -35,10 +39,11 @@ const close = () => {
       leave-from-class="opacity-100"
       leave-to-class="opacity-0"
     >
-      <div v-if="modelValue" class="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="close">
-        <div 
-          class="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 relative z-10000 pointer-events-auto"
-          :style="{ width: width, maxWidth: '100%', maxHeight: 'calc(100vh - 2rem)' }"
+      <div v-if="modelValue" class="fixed inset-0 z-9999 flex items-center justify-center bg-black/80 backdrop-blur-sm" :class="fullscreen ? 'p-0' : 'p-4'" @click.self="close">
+        <div
+          class="bg-zinc-900 border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 relative z-10000 pointer-events-auto"
+          :class="fullscreen ? 'rounded-none w-screen h-screen' : 'rounded-2xl'"
+          :style="fullscreen ? {} : { width: width, maxWidth: '100%', maxHeight: 'calc(100vh - 2rem)' }"
         >
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-zinc-900/50">
@@ -49,8 +54,10 @@ const close = () => {
           </div>
 
           <!-- Content -->
-          <div class="flex-1 overflow-y-auto p-6 text-zinc-300">
-            <slot />
+          <div class="text-zinc-300" :class="fullscreen ? 'flex-1 overflow-hidden flex items-center justify-center p-4' : 'flex-1 overflow-y-auto p-6'">
+            <div :class="contentClass">
+              <slot />
+            </div>
           </div>
 
           <!-- Footer -->

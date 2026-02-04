@@ -319,10 +319,10 @@ watch(() => props.modelValue, (newValue) => {
     hexInput.value = newValue.replace('#', '').toUpperCase()
   } else if (newValue.startsWith('rgba')) {
     const match = newValue.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-    if (match) {
-      const r = parseInt(match[1]).toString(16).padStart(2, '0')
-      const g = parseInt(match[2]).toString(16).padStart(2, '0')
-      const b = parseInt(match[3]).toString(16).padStart(2, '0')
+    if (match && match[1] && match[2] && match[3]) {
+      const r = parseInt(match[1], 10).toString(16).padStart(2, '0')
+      const g = parseInt(match[2], 10).toString(16).padStart(2, '0')
+      const b = parseInt(match[3], 10).toString(16).padStart(2, '0')
       hexInput.value = `${r}${g}${b}`.toUpperCase()
     }
   }
@@ -635,7 +635,7 @@ watch(() => props.show, (newVal) => {
               <template v-else-if="colorFormat === 'rgb'">
                 <input
                   type="number"
-                  :value="Math.round(parseInt(currentHex.value.substring(1, 3), 16))"
+                  :value="Math.round(parseInt(currentHex.substring(1, 3), 16))"
                   @input="updateFromRGB(0, Number(($event.target as HTMLInputElement).value))"
                   @blur="updateFromRGB(0, Number(($event.target as HTMLInputElement).value))"
                   class="w-14 h-7 bg-[#1a1a1a] border border-white/10 rounded text-xs text-white px-2 text-center focus:outline-none focus:border-violet-500/50"
@@ -644,7 +644,7 @@ watch(() => props.show, (newVal) => {
                 />
                 <input
                   type="number"
-                  :value="Math.round(parseInt(currentHex.value.substring(3, 5), 16))"
+                  :value="Math.round(parseInt(currentHex.substring(3, 5), 16))"
                   @input="updateFromRGB(1, Number(($event.target as HTMLInputElement).value))"
                   @blur="updateFromRGB(1, Number(($event.target as HTMLInputElement).value))"
                   class="w-14 h-7 bg-[#1a1a1a] border border-white/10 rounded text-xs text-white px-2 text-center focus:outline-none focus:border-violet-500/50"
@@ -653,7 +653,7 @@ watch(() => props.show, (newVal) => {
                 />
                 <input
                   type="number"
-                  :value="Math.round(parseInt(currentHex.value.substring(5, 7), 16))"
+                  :value="Math.round(parseInt(currentHex.substring(5, 7), 16))"
                   @input="updateFromRGB(2, Number(($event.target as HTMLInputElement).value))"
                   @blur="updateFromRGB(2, Number(($event.target as HTMLInputElement).value))"
                   class="w-14 h-7 bg-[#1a1a1a] border border-white/10 rounded text-xs text-white px-2 text-center focus:outline-none focus:border-violet-500/50"
@@ -733,11 +733,17 @@ watch(() => props.show, (newVal) => {
                   v-for="(color, idx) in filteredSavedColors"
                   :key="idx"
                   @click="selectSavedColor(color)"
-                  class="w-6 h-6 rounded border border-white/10 hover:border-white/30 transition-all relative group"
+                  class="w-6 h-6 rounded border border-zinc-400 hover:border-white hover:scale-110 transition-all relative group"
+                  style="box-shadow: 0 0 0 1px rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.2);"
                   :style="{ backgroundColor: color }"
                   :title="color"
                 >
-                  <div v-if="color === currentHex.value" class="absolute inset-0 border-2 border-white rounded"></div>
+                  <!-- Inner white ring for better visibility of dark colors -->
+                  <div class="absolute inset-0.5 border border-white/70 rounded pointer-events-none" style="box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);"></div>
+                  <!-- Selection indicator -->
+                  <div v-if="color === currentHex" class="absolute -inset-0.5 border-2 border-violet-400 rounded shadow-lg shadow-violet-500/20"></div>
+                  <!-- Hover glow -->
+                  <div class="absolute inset-0 rounded ring-1 ring-white/40 group-hover:ring-white/60"></div>
                 </button>
               </div>
             </div>
@@ -756,6 +762,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 input[type="number"] {
+  appearance: textfield;
   -moz-appearance: textfield;
 }
 </style>

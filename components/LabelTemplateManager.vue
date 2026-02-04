@@ -652,9 +652,9 @@ const formatDate = (dateStr: string) => {
   @apply bg-red-500 text-white hover:bg-red-400;
 }
 
-/* Editor Overlay */
+/* Editor Overlay - Full viewport */
 .ltm-editor-overlay {
-  @apply absolute inset-0 bg-zinc-950 rounded-2xl overflow-hidden z-40;
+  @apply fixed inset-0 bg-zinc-950 overflow-hidden z-50;
 }
 
 .ltm-editor-close {

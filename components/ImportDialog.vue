@@ -121,13 +121,11 @@ const validateAndSetFile = (file: File) => {
   const ext = file.name.toLowerCase()
   if (!ext.endsWith('.psd') && !ext.endsWith('.pdf') && !ext.endsWith('.ai')) {
     localError.value = 'Formato não suportado. Use: .psd'
-    status.value = 'error'
     return
   }
 
   if (!ext.endsWith('.psd')) {
     localError.value = 'Por enquanto, apenas arquivos .psd são suportados'
-    status.value = 'error'
     return
   }
 
@@ -135,7 +133,6 @@ const validateAndSetFile = (file: File) => {
   const maxSize = 400 * 1024 * 1024
   if (file.size > maxSize) {
     localError.value = 'Arquivo muito grande. Máximo: 400MB'
-    status.value = 'error'
     return
   }
 
@@ -191,17 +188,17 @@ const formatFileSize = (bytes: number): string => {
 
 <template>
   <Transition name="fade">
-    <div v-if="isOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div v-if="isOpen" class="fixed inset-0 z-100 flex items-center justify-center p-4">
       <!-- Backdrop -->
       <div class="absolute inset-0 bg-background/80 backdrop-blur-md" @click="emit('close')"></div>
 
       <!-- Modal Content -->
-      <div class="relative bg-card w-full max-w-lg rounded-2xl shadow-2xl border border-border flex flex-col max-h-[90vh] overflow-hidden">
+      <div class="modal-content relative bg-card w-full max-w-lg rounded-xl shadow-2xl border border-border flex flex-col max-h-[90vh]">
 
         <!-- Header -->
         <div class="flex items-center justify-between p-6 border-b border-border bg-muted/30">
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <Upload class="w-5 h-5 text-primary" />
             </div>
             <div>
@@ -219,7 +216,7 @@ const formatFileSize = (bytes: number): string => {
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-6 space-y-5">
+        <div class="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-5">
 
           <!-- Drop Zone -->
           <div
@@ -227,7 +224,7 @@ const formatFileSize = (bytes: number): string => {
             @dragover="handleDragOver"
             @dragleave="handleDragLeave"
             @drop="handleDrop"
-            class="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all"
+            class="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all"
             :class="[
               isDragging ? 'border-primary bg-primary/5 scale-[1.02]' : 'border-zinc-600 hover:border-zinc-500'
             ]"
@@ -243,7 +240,7 @@ const formatFileSize = (bytes: number): string => {
               ou clique para selecionar
             </p>
             <div class="flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
-              <span class="px-2 py-1 bg-muted rounded">PSD</span>
+              <span class="px-2 py-1 bg-muted rounded-md">PSD</span>
               <span class="text-zinc-600">•</span>
               <span>Máx. 400MB</span>
             </div>
@@ -258,9 +255,9 @@ const formatFileSize = (bytes: number): string => {
           </div>
 
           <!-- File Selected -->
-          <div v-else class="border border-border rounded-xl p-4 bg-muted/20">
+          <div v-else class="border border-border rounded-lg p-4 bg-muted/20">
             <div class="flex items-center gap-4">
-              <div class="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+              <div class="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center">
                 <FileImage class="w-6 h-6 text-primary" />
               </div>
               <div class="flex-1 min-w-0">
@@ -285,7 +282,7 @@ const formatFileSize = (bytes: number): string => {
               type="text"
               placeholder="Ex: Meu Design Importado"
               :disabled="isProcessing"
-              class="w-full h-11 px-4 bg-muted/50 border border-border rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all disabled:opacity-50"
+              class="w-full h-11 px-4 bg-muted/50 border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all disabled:opacity-50"
             />
           </div>
 
@@ -308,7 +305,7 @@ const formatFileSize = (bytes: number): string => {
           </div>
 
           <!-- Auto-center Option -->
-          <div class="flex items-start gap-3 p-4 bg-muted/30 rounded-xl border border-border">
+          <div class="flex items-start gap-3 p-4 bg-muted/30 rounded-lg border border-border">
             <label class="flex items-start gap-3 cursor-pointer">
               <input
                 v-model="autoCenter"
@@ -324,7 +321,7 @@ const formatFileSize = (bytes: number): string => {
           </div>
 
           <!-- Info Box -->
-          <div class="flex items-start gap-3 p-4 bg-muted/30 rounded-xl border border-border">
+          <div class="flex items-start gap-3 p-4 bg-muted/30 rounded-lg border border-border">
             <FileText class="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
             <div class="text-xs text-muted-foreground space-y-1">
               <p>As camadas do PSD serão convertidas para objetos editáveis:</p>
@@ -345,14 +342,14 @@ const formatFileSize = (bytes: number): string => {
             variant="ghost"
             @click="emit('close')"
             :disabled="isProcessing"
-            class="rounded-xl h-10 px-6"
+            class="rounded-lg h-10 px-6"
           >
             Cancelar
           </Button>
           <Button
             @click="handleImport"
             :disabled="!canImport"
-            class="rounded-xl h-10 px-6"
+            class="rounded-lg h-10 px-6"
           >
             <Loader2 v-if="isProcessing" class="w-4 h-4 mr-2 animate-spin" />
             {{ isProcessing ? 'Processando...' : 'Importar' }}
@@ -380,5 +377,38 @@ const formatFileSize = (bytes: number): string => {
 }
 .fade-leave-to div.relative {
   transform: scale(0.95);
+}
+
+/* Modal com cantos arredondados perfeitos - sem cortes */
+.modal-content {
+  border-radius: 0.75rem;
+  /* Clip-path garante cantos perfeitamente arredondados */
+  clip-path: inset(0 round 0.75rem);
+  /* Garante renderização correta dos cantos */
+  isolation: isolate;
+  /* Previne vazamento de conteúdo sem cortar a borda */
+  overflow: visible;
+}
+
+/* Força renderização GPU para bordas suaves */
+.modal-content * {
+  transform: translateZ(0);
+}
+
+/* Garante que filhos com scroll não quebrem o border-radius */
+.modal-content > div {
+  position: relative;
+  z-index: 1;
+}
+
+/* Header e Footer mantêm cantos arredondados do modal */
+.modal-content > div:first-child {
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+
+.modal-content > div:last-child {
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
 }
 </style>
