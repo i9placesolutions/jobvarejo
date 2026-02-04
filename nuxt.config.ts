@@ -5,19 +5,6 @@ export default defineNuxtConfig({
   nitro: {
     preset: 'vercel',
     
-    // CRÍTICO: Externalizar bibliotecas pesadas para runtime
-    // Isso evita que sejam incluídas no bundle
-    externals: {
-      external: [
-        'sharp',
-        '@imgly/background-removal-node',
-        '@imgly/background-removal',
-        'ag-psd',
-        'canvas',
-        'pngjs',
-      ]
-    },
-    
     // Minificar o output
     minify: true,
     
@@ -27,11 +14,32 @@ export default defineNuxtConfig({
       gzip: true
     },
     
-    // Configuração específica para Vercel
-    vercel: {
-      config: {
-        maxDuration: 60
-      }
+    // CRÍTICO: Externalizar bibliotecas pesadas - NÃO incluir no bundle
+    externals: {
+      external: [
+        'sharp',
+        '@imgly/background-removal-node',
+        '@imgly/background-removal',
+        'ag-psd',
+        'canvas',
+        'pngjs',
+        'onnxruntime-node',
+        '@onnxruntime/node',
+      ]
+    },
+    
+    // Rollup config para externalizar no build
+    rollupConfig: {
+      external: [
+        'sharp',
+        '@imgly/background-removal-node', 
+        '@imgly/background-removal',
+        'ag-psd',
+        'canvas',
+        'pngjs',
+        'onnxruntime-node',
+        '@onnxruntime/node',
+      ]
     }
   },
   
