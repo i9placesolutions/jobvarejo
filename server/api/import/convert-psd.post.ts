@@ -2,9 +2,17 @@ import { unlinkSync, mkdirSync, rmdirSync, existsSync, readdirSync, statSync } f
 import { join } from 'path'
 import { getS3Client } from '~/server/utils/s3'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
-import { readPsd, Psd as PsdFile, Layer } from 'ag-psd'
 // @ts-ignore - pngjs não tem tipos TypeScript oficiais
 import { PNG } from 'pngjs'
+
+// Lazy load ag-psd para reduzir bundle size
+let agPsdModule: any = null
+const getAgPsd = async () => {
+  if (!agPsdModule) {
+    agPsdModule = await import('ag-psd')
+  }
+  return agPsdModule
+}
 
 interface HTMLCanvasElement {
   width: number
@@ -786,8 +794,9 @@ export default defineEventHandler(async (event) => {
     // Converter Buffer para Uint8Array para ag-psd
     const uint8Array = new Uint8Array(fileField.data)
 
-    // Parsear PSD com ag-psd
-    let psd: PsdFile
+    // Parsear PSD com ag-psd (importação dinâmica)
+    const { readPsd } = await getAgPsd()
+    let psd: any
     try {
       psd = readPsd(uint8Array, {
         useImageData: true // Usa ImageData ao invés de Canvas para evitar premultiplicação

@@ -11,7 +11,6 @@ import AiImageStudioModal from './AiImageStudioModal.vue'
 import ContextMenu from './ui/ContextMenu.vue'
 import { useProductZone } from '~/composables/useProductZone'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
-import { removeBackground } from "@imgly/background-removal"
 import type { LabelTemplate } from '~/types/label-template'
 import {
   Undo,

@@ -5,11 +5,16 @@ export default defineNuxtConfig({
   nitro: {
     preset: 'vercel',
     
-    // Externalizar dependências pesadas para reduzir bundle size
+    // CRÍTICO: Externalizar bibliotecas pesadas para runtime
+    // Isso evita que sejam incluídas no bundle
     externals: {
-      inline: [
-        '@aws-sdk/client-s3',
-        '@aws-sdk/s3-request-presigner',
+      external: [
+        'sharp',
+        '@imgly/background-removal-node',
+        '@imgly/background-removal',
+        'ag-psd',
+        'canvas',
+        'pngjs',
       ]
     },
     
@@ -22,28 +27,10 @@ export default defineNuxtConfig({
       gzip: true
     },
     
-    // Otimizações de bundle - externalizar libs pesadas
-    rollupConfig: {
-      external: [
-        'sharp',
-        '@imgly/background-removal-node',
-        '@imgly/background-removal',
-        'ag-psd',
-        'canvas',
-        'bufferutil',
-        'utf-8-validate',
-      ],
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            // Separar vendors grandes em chunks
-            if (id.includes('openai')) return 'openai';
-            if (id.includes('fabric')) return 'fabric';
-            if (id.includes('xlsx')) return 'xlsx';
-            if (id.includes('@supabase')) return 'supabase';
-            return 'vendor';
-          }
-        }
+    // Configuração específica para Vercel
+    vercel: {
+      config: {
+        maxDuration: 60
       }
     }
   },

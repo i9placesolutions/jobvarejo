@@ -1,4 +1,15 @@
-import OpenAI from 'openai';
+// Lazy load OpenAI para reduzir bundle size
+let openaiInstance: any = null
+const getOpenAI = async () => {
+  if (!openaiInstance) {
+    const { default: OpenAI } = await import('openai')
+    const config = useRuntimeConfig()
+    openaiInstance = new OpenAI({
+      apiKey: config.openaiApiKey || ''
+    })
+  }
+  return openaiInstance
+}
 
 export default defineEventHandler(async (event) => {
     const contentType = String(getHeader(event, 'content-type') || '');
@@ -70,9 +81,8 @@ export default defineEventHandler(async (event) => {
         });
     }
 
-    const openai = new OpenAI({
-        apiKey: config.openaiApiKey,
-    });
+    // Usar instância lazy-loaded do OpenAI
+    const openai = await getOpenAI()
 
     const prompt = `
 You extract structured products from supermarket lists.
