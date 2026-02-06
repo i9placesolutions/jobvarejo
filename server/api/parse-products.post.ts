@@ -119,6 +119,26 @@ PRICE TYPES TO EXTRACT (with variations):
      "CONDITION", "OBSERVATION", "FROM", "MIN. QTY"
    - Examples: "ACIMA DE 36 UN", "ACIMA DE 2 FARDOS", "MIN 10 CX", "FROM 5 UNITS"
 
+PRODUCT TYPE DETECTION:
+The system must detect TWO types of products:
+
+1. SIMPLE PRODUCTS (single price):
+   Pattern: "PRODUCT_NAME [WEIGHT] PRICE"
+   Examples:
+   - "ARROZ CRISTAL 5KG 22,99" → name="ARROZ CRISTAL 5KG", price="22,99", priceUnit="22,99"
+   - "FEIJÃO CAMIL 1KG 8,90" → name="FEIJÃO CAMIL 1KG", price="8,90", priceUnit="8,90"
+   - "ACÚCAR REFINADO UNIÃO 1KG 4,50" → name="ACÚCAR REFINADO UNIÃO 1KG", price="4,50", priceUnit="4,50"
+
+   For simple products: populate BOTH "price" AND "priceUnit" with the same value.
+   Keep the WEIGHT/GRAMATURA as part of the NAME.
+
+2. MULTI-PRICE PRODUCTS (wholesale/atacarejo):
+   Products with multiple price columns or conditional pricing.
+   Examples:
+   - Has "PREÇO CX" and "PREÇO UND" columns → populate pricePack AND priceUnit
+   - Has "PREÇO ESPECIAL" and "PREÇO NORMAL" → populate priceSpecial AND priceUnit
+   - Has condition like "ACIMA DE 36 UN" → populate specialCondition
+
 COLUMN IDENTIFICATION STRATEGY:
 - Look for numeric values with price format (0,00 or 0.00)
 - Identify columns by HEADER names first
@@ -130,6 +150,24 @@ COLUMN IDENTIFICATION STRATEGY:
   * "CX" / "FD" / "PACK" → pack price
   * "UN" / "UND" / "UNIT" → unit price
   * "ESP" / "PROMO" / "OFERTA" → promotional price
+
+UNIT LABEL LOGIC (for the label below cents):
+- IMPORTANT: The unit label is NOT extracted from the product name
+- If product name has NUMBER before weight unit (5KG, 500G, 2L) → unitLabel = "UN" (sold by unit)
+- If product name has NO NUMBER before weight unit (KG, G, ML, L alone) → unitLabel = "KG" (sold by kilo/weight)
+- Examples:
+  * "ARROZ 5KG 22,99" → unitLabel = "UN" (has number 5 before KG)
+  * "ARROZ KG 22,99" → unitLabel = "KG" (NO number before KG)
+  * "BISCOITO MAIZENA" → unitLabel = "UN" (no weight unit at all)
+
+SPECIAL RULES FOR WEIGHT/GRAMATURA:
+- ALWAYS keep weight/gramatura IN the product name
+- Examples of CORRECT extraction:
+  * "ARROZ CRISTAL 5KG" → name="ARROZ CRISTAL 5KG" (NOT "ARROZ CRISTAL")
+  * "CAFE PILÃO 500G" → name="CAFE PILÃO 500G" (NOT "CAFE PILÃO")
+  * "OLEO DE SOJA 900ML" → name="OLEO DE SOJA 900ML" (NOT "OLEO DE SOJA")
+  * "AMACIANTE CONFORT 2L" → name="AMACIANTE CONFORT 2L" (NOT "AMACIANTE CONFORT")
+- Only populate the "weight" field if there is a SEPARATE weight column in the input table
 
 Return STRICT JSON in the shape:
 {
@@ -168,15 +206,92 @@ Return STRICT JSON in the shape:
 Rules:
 - Do not invent values; if missing, use null.
 - Prices MUST be strings with comma decimal and 2 digits (e.g. "23,40").
+- For SIMPLE products with ONE price: populate BOTH "price" AND "priceUnit" with the same value.
 - If there are both pack price and unit price columns, populate BOTH pricePack AND priceUnit.
 - If there are regular prices AND special/promotional prices, populate ALL 4 fields.
 - Extract specialCondition from observation/condition column or from price column headers.
-- IMPORTANT: Keep weight/gramatura in the product NAME. Do NOT separate it.
-  Example: "Arroz 5kg" → name="Arroz 5kg" (not "Arroz")
-- The weight field should only be filled if there is a SEPARATE weight column in the input.
+- CRITICAL: Keep weight/gramatura IN the product NAME. Do NOT separate it.
 - Normalize packaging words: FARDO→FD, CAIXA→CX, PACOTE→PCT, UNIDADE→UN.
 - Detect packQuantity/packUnit from columns like "QUANT", "QTD", "QTY" or patterns like "C/12UN", "12X350ML".
 - Be flexible with spelling: PRECO, PREÇO, PREÇO, PRECO, PÇO are all valid.
+- BRAND DETECTION: If the product name contains a known brand (Nestlé, Neste, Coca-Cola, Colgate, etc.), extract it to the brand field.
+
+COLUMN IDENTIFICATION STRATEGY:
+- Look for numeric values with price format (0,00 or 0.00)
+- Identify columns by HEADER names first
+- If no clear headers, infer from CONTEXT:
+  * Lower value in same row = promotional price
+  * Higher value in same row = regular price
+  * Value divided by quantity = unit price
+- Common patterns:
+  * "CX" / "FD" / "PACK" → pack price
+  * "UN" / "UND" / "UNIT" → unit price
+  * "ESP" / "PROMO" / "OFERTA" → promotional price
+
+SPECIAL RULES FOR WEIGHT/GRAMATURA:
+- ALWAYS keep weight/gramatura IN the product name
+- Examples of CORRECT extraction:
+  * "ARROZ CRISTAL 5KG" → name="ARROZ CRISTAL 5KG" (NOT "ARROZ CRISTAL")
+  * "CAFE PILÃO 500G" → name="CAFE PILÃO 500G" (NOT "CAFE PILÃO")
+  * "OLEO DE SOJA 900ML" → name="OLEO DE SOJA 900ML" (NOT "OLEO DE SOJA")
+  * "AMACIANTE CONFORT 2L" → name="AMACIANTE CONFORT 2L" (NOT "AMACIANTE CONFORT")
+- Only populate the "weight" field if there is a SEPARATE weight column in the input table
+
+UNIT LABEL LOGIC (for the label below cents):
+- IMPORTANT: The unit label is NOT extracted from the product name
+- If product name has NUMBER before weight unit (5KG, 500G, 2L) → unitLabel = "UN" (sold by unit)
+- If product name has NO NUMBER before weight unit (KG, G, ML, L alone) → unitLabel = "KG" (sold by kilo/weight)
+- Examples:
+  * "ARROZ 5KG 22,99" → unitLabel = "UN" (has number 5 before KG)
+  * "ARROZ KG 22,99" → unitLabel = "KG" (NO number before KG)
+  * "BISCOITO MAIZENA" → unitLabel = "UN" (no weight unit at all)
+
+Return STRICT JSON in the shape:
+{
+  "products": [
+    {
+      "name": string,
+      "brand": string|null,
+      "weight": string|null,
+
+      // ===== LEGACY PRICE FIELDS (for backward compatibility) =====
+      "price": string|null,
+
+      // ===== NEW PRICE FIELDS =====
+      "pricePack": string|null,
+      "priceUnit": string|null,
+      "priceSpecial": string|null,
+      "priceSpecialUnit": string|null,
+      "specialCondition": string|null,
+
+      // ===== LEGACY WHOLESALE (still supported) =====
+      "priceWholesale": string|null,
+      "wholesaleTrigger": number|null,
+      "wholesaleTriggerUnit": string|null,
+
+      // ===== PACK METADATA =====
+      "packQuantity": number|null,
+      "packUnit": string|null,
+      "packageLabel": string|null,
+
+      "limit": string|null,
+      "flavor": string|null
+    }
+  ]
+}
+
+Rules:
+- Do not invent values; if missing, use null.
+- Prices MUST be strings with comma decimal and 2 digits (e.g. "23,40").
+- For SIMPLE products with ONE price: populate BOTH "price" AND "priceUnit" with the same value.
+- If there are both pack price and unit price columns, populate BOTH pricePack AND priceUnit.
+- If there are regular prices AND special/promotional prices, populate ALL 4 fields.
+- Extract specialCondition from observation/condition column or from price column headers.
+- CRITICAL: Keep weight/gramatura IN the product NAME. Do NOT separate it.
+- Normalize packaging words: FARDO→FD, CAIXA→CX, PACOTE→PCT, UNIDADE→UN.
+- Detect packQuantity/packUnit from columns like "QUANT", "QTD", "QTY" or patterns like "C/12UN", "12X350ML".
+- Be flexible with spelling: PRECO, PREÇO, PREÇO, PRECO, PÇO are all valid.
+- BRAND DETECTION: If the product name contains a known brand (Nestlé, Neste, Coca-Cola, Colgate, etc.), extract it to the brand field.
 
 Source name: ${filename || 'text'}
 Source content:

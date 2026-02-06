@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Upload } from 'lucide-vue-next'
+import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown } from 'lucide-vue-next'
 import FolderTreeItem from '~/components/FolderTreeItem.vue'
 import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
-import ImportDialog from '~/components/ImportDialog.vue'
 
 // Page config - middleware handles auth check
 definePageMeta({
@@ -26,7 +25,6 @@ const filterType = ref('all')
 const filterTime = ref('all')
 const showCreateProject = ref(false)
 const showCreateFolder = ref(false)
-const showImportDialog = ref(false)
 const showFolderMenu = ref<string | null>(null)
 const folderMenuPosition = ref({ x: 0, y: 0 })
 const newProjectName = ref('')
@@ -819,7 +817,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <header class="h-14 border-b border-white/5 bg-[#1a1a1a] flex items-center justify-between px-6 shrink-0">
       <!-- Logo and App Name -->
       <div class="flex items-center gap-3">
-        <div class="w-8 h-8 bg-gradient-to-br from-violet-500/20 to-purple-500/20 rounded-lg flex items-center justify-center border border-violet-500/30">
+        <div class="w-8 h-8 bg-linear-to-br from-violet-500/20 to-purple-500/20 rounded-lg flex items-center justify-center border border-violet-500/30">
           <Sparkles class="w-4 h-4 text-violet-400" />
         </div>
         <span class="text-sm font-semibold text-white">Studio PRO</span>
@@ -827,7 +825,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
       <!-- User Avatar -->
       <div class="flex items-center gap-3">
-        <div v-if="user" class="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-semibold text-white">
+        <div v-if="user" class="w-8 h-8 bg-linear-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-semibold text-white">
           {{ user.name?.charAt(0) || 'U' }}
         </div>
       </div>
@@ -835,13 +833,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
     <div class="flex-1 flex overflow-hidden">
       <!-- Sidebar (Figma Style) -->
-      <aside class="w-[240px] border-r border-white/5 bg-[#1a1a1a] flex flex-col shrink-0">
+      <aside class="w-60 border-r border-white/5 bg-[#1a1a1a] flex flex-col shrink-0">
         <!-- Top Header (Figma Style) -->
         <div class="h-12 px-3 border-b border-white/5 flex items-center justify-between shrink-0">
           <!-- User/Workspace Selector -->
           <div class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer group hover:bg-white/5 rounded-lg px-2 py-1.5 transition-all">
             <!-- Avatar -->
-            <div v-if="user" class="w-7 h-7 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0">
+            <div v-if="user" class="w-7 h-7 bg-linear-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0">
               <img 
                 v-if="user.avatar_url" 
                 :src="user.avatar_url" 
@@ -853,7 +851,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <!-- Workspace Name -->
             <div class="flex items-center gap-1.5 flex-1 min-w-0">
               <span class="text-xs font-medium text-white truncate">{{ formatUserName(user?.name) }}</span>
-              <ChevronDown class="w-3.5 h-3.5 text-zinc-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ChevronDown class="w-3.5 h-3.5 text-zinc-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           </div>
           
@@ -1101,14 +1099,6 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <span>New Design</span>
             </button>
 
-            <!-- Import PSD Button -->
-            <button
-              @click="showImportDialog = true"
-              class="h-8 px-4 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-medium flex items-center gap-2 transition-all border border-white/10"
-            >
-              <Upload class="w-4 h-4" />
-              <span>Import PSD</span>
-            </button>
           </div>
         </div>
 
@@ -1135,7 +1125,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             >
               <!-- Thumbnail (Rounded Top) -->
               <div
-                class="aspect-video bg-gradient-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
+                class="aspect-video bg-linear-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
               >
                 <img
                   v-if="project.preview_url"
@@ -1296,7 +1286,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showFolderMenu"
-        class="folder-context-menu fixed z-[100] bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-[160px] shadow-xl"
+        class="folder-context-menu fixed z-100 bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-40 shadow-xl"
         :style="{ left: `${folderMenuPosition.x}px`, top: `${folderMenuPosition.y}px` }"
       >
         <button
@@ -1320,7 +1310,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showProjectMenu"
-        class="project-context-menu fixed z-[100] bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-[160px] shadow-xl"
+        class="project-context-menu fixed z-100 bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-40 shadow-xl"
         :style="{ left: `${projectMenuPosition.x}px`, top: `${projectMenuPosition.y}px` }"
       >
         <button
@@ -1380,7 +1370,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
       >
         <div
           v-if="showNotifications"
-          class="fixed inset-0 z-[199] bg-black/20"
+          class="fixed inset-0 z-199 bg-black/20"
           @click="showNotifications = false"
         ></div>
       </Transition>
@@ -1396,14 +1386,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
       >
         <div
           v-if="showNotifications && notificationButtonRef"
-          class="notifications-modal fixed z-[200]"
+          class="notifications-modal fixed z-200"
           :style="{
             top: `${notificationButtonRef.getBoundingClientRect().bottom + 8}px`,
             left: `${notificationButtonRef.getBoundingClientRect().right + 8}px`
           }"
           @click.stop
         >
-          <div class="w-80 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[500px]">
+          <div class="w-80 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-125">
             <!-- Header -->
             <div class="px-4 py-3 border-b border-white/5 flex items-center justify-between">
               <h3 class="text-sm font-semibold text-white">Notificações</h3>
@@ -1436,7 +1426,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   <div class="flex items-start gap-3">
                     <!-- Icon -->
                     <div :class="[
-                      'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                      'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
                       notification.type === 'success' ? 'bg-green-500/20 text-green-400' :
                       notification.type === 'share' ? 'bg-blue-500/20 text-blue-400' :
                       'bg-violet-500/20 text-violet-400'
@@ -1453,7 +1443,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     </div>
 
                     <!-- Unread Indicator -->
-                    <div v-if="!notification.read" class="w-2 h-2 bg-violet-500 rounded-full flex-shrink-0 mt-1"></div>
+                    <div v-if="!notification.read" class="w-2 h-2 bg-violet-500 rounded-full shrink-0 mt-1"></div>
                   </div>
                 </div>
               </div>
@@ -1473,12 +1463,6 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </Transition>
     </teleport>
 
-    <!-- Import PSD Dialog -->
-    <ImportDialog
-      :is-open="showImportDialog"
-      @close="showImportDialog = false"
-      @imported="() => { showImportDialog = false; loadData(); }"
-    />
   </div>
 </template>
 

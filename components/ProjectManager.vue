@@ -2,8 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import Button from './ui/Button.vue'
 import ConfirmDialog from './ui/ConfirmDialog.vue'
-import ImportDialog from './ImportDialog.vue'
-import { Trash2, FolderOpen, Clock, X, Search, FileEdit, Upload } from 'lucide-vue-next'
+import { Trash2, FolderOpen, Clock, X, Search, FileEdit } from 'lucide-vue-next'
 
 const props = defineProps<{
   isOpen: boolean
@@ -14,8 +13,6 @@ const emit = defineEmits<{
   (e: 'load', data: any): void
   (e: 'imported', data: any): void
 }>()
-
-const showImportDialog = ref(false)
 
 const projects = ref<any[]>([])
 const isLoading = ref(false)
@@ -77,7 +74,7 @@ onMounted(() => {
 
 <template>
   <Transition name="fade">
-    <div v-if="isOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div v-if="isOpen" class="fixed inset-0 z-100 flex items-center justify-center p-4">
       <!-- Backdrop -->
       <div class="absolute inset-0 bg-background/80 backdrop-blur-md" @click="$emit('close')"></div>
       
@@ -96,15 +93,6 @@ onMounted(() => {
               </div>
           </div>
           <div class="flex items-center gap-2">
-            <Button
-              @click="showImportDialog = true"
-              size="sm"
-              variant="outline"
-              class="rounded-lg gap-2"
-            >
-              <Upload class="w-4 h-4" />
-              Importar PSD
-            </Button>
             <button @click="$emit('close')" class="p-2 hover:bg-accent rounded-full transition-colors text-muted-foreground">
                 <X class="w-5 h-5 " />
             </button>
@@ -190,13 +178,6 @@ onMounted(() => {
         cancel-text="Cancelar"
         @confirm="confirmDelete"
         @cancel="showConfirmDialog = false; pendingDeleteId = null"
-    />
-
-    <!-- Import Dialog -->
-    <ImportDialog
-        :is-open="showImportDialog"
-        @close="showImportDialog = false"
-        @imported="(data) => { emit('imported', data); showImportDialog = false }"
     />
 </template>
 

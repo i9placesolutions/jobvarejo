@@ -129,120 +129,199 @@ export const useProductLayout = () => {
     });
 
     // -------------------------------------------------------------------------
-    // 4. Price Group (Bottom) - Inclui splash internamente por performance
+    // 4. Price Group (Bottom) - DINÂMICO: mostra apenas os preços que existem
     // -------------------------------------------------------------------------
-    // ===== LÓGICA DE PREÇO =====
-    // Prioridade: priceSpecial (promo embalagem) > priceSpecialUnit (promo unitário) > priceUnit > pricePack > price
-    let displayPrice = prod.price;
-    let isSpecialPrice = false;
+    // ===== FUNÇÃO AUXILIAR PARA FORMATAR PREÇO =====
+    const toPriceNumber = (value: any): number | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === 'number') return value;
+      const str = String(value).trim();
+      if (!str) return null;
+      // Converter formato brasileiro "20,99" para número
+      const cleaned = str.replace(/R\$\s*/gi, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+      const num = parseFloat(cleaned);
+      return Number.isFinite(num) ? num : null;
+    };
 
-    // Verificar se há preço especial promocional
-    if (prod.priceSpecialUnit && typeof prod.priceSpecialUnit === 'number') {
-      displayPrice = prod.priceSpecialUnit;
-      isSpecialPrice = true;
-    } else if (prod.priceSpecial && typeof prod.priceSpecial === 'number') {
-      displayPrice = prod.priceSpecial;
-      isSpecialPrice = true;
-    } else if (prod.priceUnit && typeof prod.priceUnit === 'number') {
-      displayPrice = prod.priceUnit;
-    } else if (prod.pricePack && typeof prod.pricePack === 'number') {
-      displayPrice = prod.pricePack;
+    // ===== COLETAR TODOS OS PREÇOS DISPONÍVEIS =====
+    const priceObjects: any[] = [];
+    const prices: Array<{ label: string; value: number; type: 'special' | 'regular' }> = [];
+    let hasCondition = false;
+    let conditionText = '';
+
+    // Preço especial unitário (com desconto)
+    const priceSpecialUnitNum = toPriceNumber(prod.priceSpecialUnit);
+    if (priceSpecialUnitNum !== null) {
+      prices.push({ label: '', value: priceSpecialUnitNum, type: 'special' });
+      if (prod.specialCondition) {
+        hasCondition = true;
+        conditionText = prod.specialCondition;
+      }
     }
 
-    const priceData = splitPrice(displayPrice);
-    // Se for preço especial, usar cor verde/diferente para destaque
-    const splashColor = isSpecialPrice
-      ? (styles.splashSpecialColor ?? '#16a34a')  // verde para promoção
-      : (styles.splashColor ?? '#dc2626');
-    const splashTextColor = styles.splashTextColor ?? '#ffffff';
-    const priceSize = styles.priceFontSize ?? 60;
+    // Preço especial de embalagem
+    const priceSpecialNum = toPriceNumber(prod.priceSpecial);
+    if (priceSpecialNum !== null) {
+      prices.push({ label: prod.packageLabel || 'CX', value: priceSpecialNum, type: 'special' });
+      if (prod.specialCondition) {
+        hasCondition = true;
+        conditionText = prod.specialCondition;
+      }
+    }
 
-    // Splash Shape
-    const splashShape = new fabric.Ellipse({
-      rx: 80,
-      ry: 50,
-      fill: splashColor,
-      angle: -5,
-      originX: 'center',
-      originY: 'center',
-      data: { smartType: 'product-price-splash' }
+    // Preço unitário regular (sem desconto)
+    const priceUnitNum = toPriceNumber(prod.priceUnit);
+    if (priceUnitNum !== null) {
+      const hasSpecial = prices.some(p => p.type === 'special');
+      prices.push({ label: hasSpecial ? '' : '', value: priceUnitNum, type: hasSpecial ? 'regular' : 'special' });
+    }
+
+    // Preço de embalagem regular
+    const pricePackNum = toPriceNumber(prod.pricePack);
+    if (pricePackNum !== null) {
+      prices.push({ label: prod.packageLabel || 'CX', value: pricePackNum, type: 'regular' });
+    }
+
+    // Fallback para preço legado
+    if (prices.length === 0) {
+      const priceNum = toPriceNumber(prod.price);
+      if (priceNum !== null) {
+        prices.push({ label: '', value: priceNum, type: 'special' });
+      }
+    }
+
+    // ===== RENDERIZAR PREÇOS DINAMICAMENTE =====
+    let yOffset = 0;
+    const isMultiPrice = prices.length > 1;
+
+    prices.forEach((priceInfo, index) => {
+      const priceData = splitPrice(priceInfo.value);
+      const isSpecial = priceInfo.type === 'special';
+      const isLast = index === prices.length - 1;
+
+      // Cor para preço especial vs regular
+      const splashColor = isSpecial
+        ? (styles.splashSpecialColor ?? '#16a34a')  // verde para promoção
+        : (styles.splashColor ?? '#dc2626');
+      const splashTextColor = styles.splashTextColor ?? '#ffffff';
+      const priceSize = isMultiPrice && isLast ? (styles.priceFontSize ?? 60) * 0.85 : (styles.priceFontSize ?? 60);
+
+      // Se é preço regular em multi-price, usar estilo menor e sem splash grande
+      if (!isSpecial && isMultiPrice) {
+        // Preço regular menor, sem splash
+        const regularPriceText = priceInfo.label
+          ? `${priceInfo.label}: ${priceData.integer},${priceData.decimal}`
+          : `${priceData.integer},${priceData.decimal}`;
+
+        const regularText = new fabric.Text(regularPriceText, {
+          fontSize: 11,
+          fontFamily: styles.priceFont ?? 'Arial',
+          fill: '#ffffff',
+          fontWeight: 'normal',
+          originX: 'center',
+          originY: 'top',
+          left: 0,
+          top: yOffset,
+          data: { smartType: 'product-price-regular' }
+        });
+        priceObjects.push(regularText);
+        yOffset += 14;
+      } else {
+        // Preço principal com splash
+        const splashShape = new fabric.Ellipse({
+          rx: isMultiPrice ? 70 : 80,
+          ry: isMultiPrice ? 45 : 50,
+          fill: splashColor,
+          angle: -5,
+          originX: 'center',
+          originY: 'center',
+          data: { smartType: 'product-price-splash' }
+        });
+
+        // Currency Symbol
+        const priceCurrency = new fabric.Text(styles.currencySymbol ?? 'R$', {
+          fontSize: 18,
+          fontFamily: styles.priceFont ?? 'Arial',
+          fill: splashTextColor,
+          originX: 'right',
+          originY: 'bottom',
+          left: -25,
+          top: 0,
+          data: { smartType: 'product-price-currency' }
+        });
+
+        // Main Price (Integer)
+        const priceMain = new fabric.Text(priceData.integer, {
+          fontSize: priceSize,
+          fontFamily: styles.priceFont ?? 'Arial',
+          fill: splashTextColor,
+          fontWeight: 'bold',
+          originX: 'right',
+          originY: 'center',
+          left: 8,
+          top: 5,
+          shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.3)', blur: 5, offsetX: 2, offsetY: 2 }),
+          data: { smartType: 'product-price-main' }
+        });
+
+        // Decimal Part
+        const priceDec = new fabric.Text(`,${priceData.decimal}`, {
+          fontSize: priceSize * 0.5,
+          fontFamily: styles.priceFont ?? 'Arial',
+          fill: splashTextColor,
+          fontWeight: 'bold',
+          originX: 'left',
+          originY: 'center',
+          left: 8,
+          top: -8,
+          data: { smartType: 'product-price-decimal' }
+        });
+
+        // Unit (un) - positioned UNDER the cents/decimal part
+        // Must be positioned after priceDec to measure its width
+        const priceUnitText = prod.unit ?? prod.priceUnit ?? 'un';
+        const priceUnit = new fabric.Text(priceUnitText, {
+          fontSize: 14,
+          fontFamily: styles.priceFont ?? 'Arial',
+          fill: splashTextColor,
+          fontWeight: 'normal',
+          originX: 'right',
+          originY: 'center',
+          left: 0, // Will be set after measuring decimal width
+          top: 15, // Below the cents (same as EditorCanvas unitY offset)
+          data: { smartType: 'product-price-unit' }
+        });
+
+        // Position unit at the RIGHT edge of the decimal block (same as EditorCanvas)
+        const decWidth = priceDec.getScaledWidth();
+        priceUnit.set({ left: 8 + decWidth });
+
+        const splashGroup = new fabric.Group([splashShape, priceCurrency, priceMain, priceDec, priceUnit], {
+          originX: 'center',
+          originY: 'center',
+          subTargetCheck: true,
+          data: { smartType: 'product-price-splash-group' }
+        });
+
+        priceObjects.push(splashGroup);
+        yOffset += 55;
+      }
     });
 
-    // Currency Symbol
-    const priceCurrency = new fabric.Text(styles.currencySymbol ?? 'R$', {
-      fontSize: 20,
-      fontFamily: styles.priceFont ?? 'Arial',
-      fill: splashTextColor,
-      originX: 'right',
-      originY: 'bottom',
-      left: -30,
-      top: 0,
-      data: { smartType: 'product-price-currency' }
-    });
-
-    // Main Price (Integer)
-    const priceMain = new fabric.Text(priceData.integer, {
-      fontSize: priceSize,
-      fontFamily: styles.priceFont ?? 'Arial',
-      fill: splashTextColor,
-      fontWeight: 'bold',
-      originX: 'right',
-      originY: 'center',
-      left: 10,
-      top: 5,
-      shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.3)', blur: 5, offsetX: 2, offsetY: 2 }),
-      data: { smartType: 'product-price-main' }
-    });
-
-    // Decimal Part
-    const priceDec = new fabric.Text(`,${priceData.decimal}`, {
-      fontSize: priceSize * 0.5,
-      fontFamily: styles.priceFont ?? 'Arial',
-      fill: splashTextColor,
-      fontWeight: 'bold',
-      originX: 'left',
-      originY: 'top',
-      left: 10,
-      top: -10,
-      data: { smartType: 'product-price-decimal' }
-    });
-
-    // ===== TEXTO DE CONDIÇÃO ESPECIAL (Opcional) =====
-    // Se houver condição especial (ex: "ACIMA DE 36 UN."), mostrar abaixo do preço
-    const priceObjects: any[] = [splashShape, priceCurrency, priceMain, priceDec];
-
-    if (isSpecialPrice && prod.specialCondition) {
-      const conditionText = new fabric.Text(prod.specialCondition.toUpperCase(), {
+    // ===== CONDIÇÃO ESPECIAL =====
+    if (hasCondition && conditionText) {
+      const conditionObj = new fabric.Text(conditionText.toUpperCase(), {
         fontSize: 10,
         fontFamily: styles.priceFont ?? 'Arial',
-        fill: splashTextColor,
+        fill: '#ffffff',
         fontWeight: 'normal',
         originX: 'center',
         originY: 'top',
         left: 0,
-        top: 45,
+        top: yOffset,
         data: { smartType: 'product-price-condition' }
       });
-      priceObjects.push(conditionText);
-    }
-
-    // ===== TEXTO DE PREÇO DE EMBALAGEM (se disponível) =====
-    // Se houver preço de embalagem diferente do unitário, mostrar
-    if (prod.pricePack && typeof prod.pricePack === 'number' && prod.pricePack !== displayPrice) {
-      const packPriceData = splitPrice(prod.pricePack);
-      const packLabelText = prod.packageLabel || 'CX';
-      const packText = new fabric.Text(`${packLabelText}: ${packPriceData.integer},${packPriceData.decimal}`, {
-        fontSize: 11,
-        fontFamily: styles.priceFont ?? 'Arial',
-        fill: splashTextColor,
-        fontWeight: 'normal',
-        originX: 'center',
-        originY: 'bottom',
-        left: 0,
-        top: -50,
-        data: { smartType: 'product-price-pack' }
-      });
-      priceObjects.push(packText);
+      priceObjects.push(conditionObj);
     }
 
     // Group Price Components

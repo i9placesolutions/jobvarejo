@@ -112,7 +112,30 @@ const applyPresetColor = (color: string, property: 'fill' | 'stroke') => {
   patch(property, color)
 }
 
-const TEMPLATE_EXTRA_PROPS = ['name', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__rx', '__ry']
+// Keep parity with EditorCanvas label template serialization so templates behave the same
+// when applied to product cards (proportional scaling, stroke/roundness, etc).
+const TEMPLATE_EXTRA_PROPS = [
+  'name',
+  'fontFamily',
+  '__fontScale',
+  '__yOffsetRatio',
+  '__strokeWidth',
+  '__roundness',
+  '__originalWidth',
+  '__originalHeight',
+  '__originalFontSize',
+  '__originalLeft',
+  '__originalTop',
+  '__originalOriginX',
+  '__originalOriginY',
+  '__originalScaleX',
+  '__originalScaleY',
+  '__originalRadius',
+  '__originalRx',
+  '__originalRy',
+  '__originalStrokeWidth',
+  '__shadowBlur'
+]
 
 const FONT_WEIGHT_OPTIONS: Array<{ label: string; value: number }> = [
   { label: 'Thin', value: 100 },
@@ -206,6 +229,48 @@ const serializeGroupForTemplate = (g: any) => {
 
   delete json.layoutManager
   delete json.layout
+
+  // Match the template metadata used by the main editor so proportional scaling works.
+  json.__isCustomTemplate = true
+  if (Array.isArray(json.objects)) {
+    json.objects.forEach((obj: any) => {
+      if (!obj) return
+
+      obj.__originalLeft = obj.left
+      obj.__originalTop = obj.top
+      obj.__originalOriginX = obj.originX
+      obj.__originalOriginY = obj.originY
+      obj.__originalScaleX = obj.scaleX || 1
+      obj.__originalScaleY = obj.scaleY || 1
+
+      if (obj.type === 'text') {
+        if (typeof obj.fontSize === 'number') obj.__originalFontSize = obj.fontSize
+        if (typeof obj.fontFamily === 'string') (obj as any).__originalFontFamily = obj.fontFamily
+      }
+
+      if (obj.type === 'circle' && typeof obj.radius === 'number') {
+        obj.__originalRadius = obj.radius
+      }
+
+      if (obj.type === 'rect') {
+        if (typeof obj.width === 'number') obj.__originalWidth = obj.width
+        if (typeof obj.height === 'number') obj.__originalHeight = obj.height
+        if (typeof obj.rx === 'number') obj.__originalRx = obj.rx
+        if (typeof obj.ry === 'number') obj.__originalRy = obj.ry
+
+        if (obj.name === 'price_bg') {
+          obj.__originalWidth = obj.width
+          obj.__originalHeight = obj.height
+          obj.__roundness =
+            typeof obj.rx === 'number' && obj.height > 0 ? (obj.rx * 2) / obj.height : 1
+          if (typeof obj.strokeWidth === 'number') obj.__strokeWidth = obj.strokeWidth
+          if (obj.shadow && typeof obj.shadow.blur === 'number') obj.__shadowBlur = obj.shadow.blur
+        }
+      }
+
+      if (typeof obj.strokeWidth === 'number') obj.__originalStrokeWidth = obj.strokeWidth
+    })
+  }
   return json
 }
 
@@ -229,6 +294,96 @@ const normalizeAndLayoutForEditor = (g: any) => {
   g.set({ originX: 'center', originY: 'center', left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0 })
 
   const all: any[] = g.getObjects()
+
+  // ===== ATACAREJO TEMPLATE SUPPORT =====
+  // Check if this is an atacarejo (2-price) template by looking for the retail background
+  const retailBg = all.find(o => o?.name === 'atac_retail_bg')
+  const isAtacarejo = !!retailBg
+
+  if (isAtacarejo) {
+    // This is an atacarejo template - normalize all atacarejo elements
+    const bannerBg = all.find(o => o?.name === 'atac_banner_bg')
+    const wholesaleBg = all.find(o => o?.name === 'atac_wholesale_bg')
+
+    const retailCurrency = all.find(o => o?.name === 'retail_currency_text')
+    const retailInteger = all.find(o => o?.name === 'retail_integer_text')
+    const retailDecimal = all.find(o => o?.name === 'retail_decimal_text')
+    const retailUnit = all.find(o => o?.name === 'retail_unit_text')
+    const retailPack = all.find(o => o?.name === 'retail_pack_line_text')
+
+    const bannerText = all.find(o => o?.name === 'wholesale_banner_text')
+
+    const wholesaleCurrency = all.find(o => o?.name === 'wholesale_currency_text')
+    const wholesaleInteger = all.find(o => o?.name === 'wholesale_integer_text')
+    const wholesaleDecimal = all.find(o => o?.name === 'wholesale_decimal_text')
+    const wholesaleUnit = all.find(o => o?.name === 'wholesale_unit_text')
+    const wholesalePack = all.find(o => o?.name === 'wholesale_pack_line_text')
+
+    // Use a standard preview size that matches the editor canvas
+    const previewW = 320
+    const previewH = 220
+    const totalH = previewH * 0.8  // Total height for the price tag
+
+    // Section heights (same proportions as layoutAtacarejoPriceGroup)
+    const bannerH = totalH * 0.14
+    const retailH = totalH * 0.43
+    const wholesaleH = totalH - retailH - bannerH
+
+    // Vertical positions (centered around 0)
+    const y0 = -totalH / 2
+    const retailCY = y0 + retailH / 2
+    const bannerCY = y0 + retailH + bannerH / 2
+    const wholesaleCY = y0 + retailH + bannerH + wholesaleH / 2
+
+    // Backgrounds - center horizontally, position vertically
+    if (retailBg) retailBg.set({ originX: 'center', originY: 'center', width: previewW, height: retailH, left: 0, top: retailCY })
+    if (bannerBg) bannerBg.set({ originX: 'center', originY: 'center', width: previewW, height: bannerH, left: 0, top: bannerCY })
+    if (wholesaleBg) wholesaleBg.set({ originX: 'center', originY: 'center', width: previewW, height: wholesaleH, left: 0, top: wholesaleCY })
+
+    // Helper to set font size based on block height
+    const setFontSize = (obj: any, scale: number, baseH: number) => {
+      if (obj) {
+        const fontSize = typeof obj.__fontScale === 'number' ? baseH * obj.__fontScale : baseH * scale
+        obj.set({ fontSize, scaleX: 1, scaleY: 1 })
+        if (typeof obj.initDimensions === 'function') obj.initDimensions()
+      }
+    }
+
+    // Layout retail tier (top section - red background)
+    setFontSize(retailInteger, 0.60, retailH)
+    setFontSize(retailDecimal, 0.36, retailH)
+    setFontSize(retailCurrency, 0.22, retailH)
+    setFontSize(retailUnit, 0.22, retailH)
+    setFontSize(retailPack, 0.18, retailH)
+
+    if (retailCurrency) retailCurrency.set({ originX: 'left', originY: 'center', left: -60, top: retailCY - (retailH * 0.05) })
+    if (retailInteger) retailInteger.set({ originX: 'left', originY: 'center', left: -40, top: retailCY })
+    if (retailDecimal) retailDecimal.set({ originX: 'left', originY: 'center', left: 10, top: retailCY - (retailH * 0.18) })
+    if (retailUnit) retailUnit.set({ originX: 'left', originY: 'center', left: 45, top: retailCY + (retailH * 0.18) })
+    if (retailPack) retailPack.set({ originX: 'center', originY: 'center', left: 0, top: retailCY + (retailH * 0.30) })
+
+    // Layout banner (middle section - white background)
+    setFontSize(bannerText, 0.32, bannerH)
+    if (bannerText) bannerText.set({ originX: 'center', originY: 'center', left: 0, top: bannerCY })
+
+    // Layout wholesale tier (bottom section - yellow background)
+    setFontSize(wholesaleInteger, 0.60, wholesaleH)
+    setFontSize(wholesaleDecimal, 0.36, wholesaleH)
+    setFontSize(wholesaleCurrency, 0.22, wholesaleH)
+    setFontSize(wholesaleUnit, 0.22, wholesaleH)
+    setFontSize(wholesalePack, 0.18, wholesaleH)
+
+    if (wholesaleCurrency) wholesaleCurrency.set({ originX: 'left', originY: 'center', left: -60, top: wholesaleCY - (wholesaleH * 0.05) })
+    if (wholesaleInteger) wholesaleInteger.set({ originX: 'left', originY: 'center', left: -40, top: wholesaleCY })
+    if (wholesaleDecimal) wholesaleDecimal.set({ originX: 'left', originY: 'center', left: 10, top: wholesaleCY - (wholesaleH * 0.18) })
+    if (wholesaleUnit) wholesaleUnit.set({ originX: 'left', originY: 'center', left: 45, top: wholesaleCY + (wholesaleH * 0.18) })
+    if (wholesalePack) wholesalePack.set({ originX: 'center', originY: 'center', left: 0, top: wholesaleCY + (wholesaleH * 0.30) })
+
+    safeAddWithUpdate(g)
+    return
+  }
+
+  // ===== STANDARD SINGLE-PRICE TEMPLATE =====
   const priceBg = all.find(o => o?.name === 'price_bg')
   const img = all.find(o => o?.name === 'price_bg_image' || o?.name === 'splash_image')
   const currencyCircle = all.find(o => o?.name === 'price_currency_bg' || o?.name === 'priceSymbolBg')

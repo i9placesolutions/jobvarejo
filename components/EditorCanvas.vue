@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed, nextTick } from 'vue'
+import { useRuntimeConfig } from '#imports'
 import Button from './ui/Button.vue'
 import LayersPanel from './LayersPanel.vue'
 import PropertiesPanel from './PropertiesPanel.vue'
@@ -9,6 +10,8 @@ import ProductReviewModal from './ProductReviewModal.vue'
 import LabelTemplateManager from './LabelTemplateManager.vue'
 import AiImageStudioModal from './AiImageStudioModal.vue'
 import ContextMenu from './ui/ContextMenu.vue'
+import FigmaCropOverlay from './FigmaCropOverlay.vue'
+import { useFigmaCrop } from '~/composables/useFigmaCrop'
 import { useProductZone } from '~/composables/useProductZone'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
 import type { LabelTemplate } from '~/types/label-template'
@@ -87,6 +90,33 @@ const aiStudio = useAiImageStudio()
 const aiStudioOpen = aiStudio.open
 const aiStudioOptions = aiStudio.options
 const aiStudioUploads = ref<Array<{ id: string; name: string; url: string }>>([])
+
+// === Figma-style Crop Overlay ===
+const figmaCrop = useFigmaCrop()
+
+// Handlers para eventos do crop overlay
+const handleCropRectUpdate = (rect: { x: number; y: number; width: number; height: number }) => {
+    figmaCrop.updateCropRect(rect)
+}
+
+const handleCropComplete = (rect: { x: number; y: number; width: number; height: number }) => {
+    figmaCrop.applyCrop(rect)
+    canvas.value?.requestRenderAll()
+    saveCurrentState?.()
+}
+
+// Offset do canvas para posicionar o overlay corretamente
+const cropCanvasOffset = computed(() => {
+    if (!wrapperEl.value) return { x: 0, y: 0 }
+    const rect = wrapperEl.value.getBoundingClientRect()
+    return {
+        x: rect.left,
+        y: rect.top
+    }
+})
+
+// Zoom level para o overlay
+const zoom = ref(1)
 
 const refreshAiStudioUploads = async () => {
     try {
@@ -812,143 +842,75 @@ const getOrCreateFrameClipRect = (frame: any) => {
     const hasCornerRadii = !!(frame.cornerRadii && typeof frame.cornerRadii === 'object');
     const wantPathClip = hasCornerRadii;
 
-    if (!(frame as any).__clipRect) {
-        // CRITICAL: Force originX/originY to match the frame's origin for consistent clipping
-        // Frames are created with originX='center' and originY='center', so we use those as defaults
-        const clipOriginX = frame.originX || 'center';
-        const clipOriginY = frame.originY || 'center';
+    // CRITICAL FIX: The clipPath needs to be created with proper offset calculation
+    // When using absolutePositioned: false, the clipPath is relative to the object's origin
+    // We need to calculate the offset from the object to the frame
 
-        const clip = wantPathClip
-            ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
-                left: frame.left,
-                top: frame.top,
-                originX: clipOriginX,
-                originY: clipOriginY,
-                angle: frame.angle ?? 0,
-                scaleX: frame.scaleX ?? 1,
-                scaleY: frame.scaleY ?? 1,
-                absolutePositioned: true,
-                selectable: false,
-                evented: false,
-                objectCaching: false
-            })
-            : new fabric.Rect({
-                left: frame.left,
-                top: frame.top,
-                width: frame.width,
-                height: frame.height,
-                originX: clipOriginX,
-                originY: clipOriginY,
-                angle: frame.angle ?? 0,
-                scaleX: frame.scaleX ?? 1,
-                scaleY: frame.scaleY ?? 1,
-                rx: frame.rx ?? 0,
-                ry: frame.ry ?? 0,
-                absolutePositioned: true,
-                selectable: false,
-                evented: false,
-                objectCaching: false
-            });
-
-        // CRITICAL: Initialize _objects as empty array for all clipPath objects
-        // fabric.js createClipPathLayer calls forEach on _objects without checking
-        clip._objects = [];
-
-        (frame as any).__clipRect = clip;
-    }
-
-    let clip = (frame as any).__clipRect;
-    // CRITICAL: Force originX/originY to match the frame's origin for consistent clipping
-    const clipOriginX = frame.originX || 'center';
-    const clipOriginY = frame.originY || 'center';
-
-    // If mode changed (rect -> path or path -> rect), recreate clip and let syncFrameClips refresh children.
-    const isPathClip = String(clip?.type || '').toLowerCase() === 'path';
-    if (wantPathClip && !isPathClip) {
-        clip = new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
-            left: frame.left,
-            top: frame.top,
-            originX: clipOriginX,
-            originY: clipOriginY,
-            angle: frame.angle ?? 0,
-            scaleX: frame.scaleX ?? 1,
-            scaleY: frame.scaleY ?? 1,
-            absolutePositioned: true,
+    const clip = wantPathClip
+        ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
+            originX: 'center',
+            originY: 'center',
+            left: 0,
+            top: 0,
+            scaleX: 1,
+            scaleY: 1,
+            angle: 0,
+            absolutePositioned: false,
+            selectable: false,
+            evented: false,
+            objectCaching: false
+        })
+        : new fabric.Rect({
+            originX: 'center',
+            originY: 'center',
+            left: 0,
+            top: 0,
+            width: frame.width,
+            height: frame.height,
+            rx: frame.rx ?? 0,
+            ry: frame.ry ?? 0,
+            scaleX: 1,
+            scaleY: 1,
+            angle: 0,
+            absolutePositioned: false,
             selectable: false,
             evented: false,
             objectCaching: false
         });
-        clip._objects = []; // CRITICAL: Initialize _objects
-        (frame as any).__clipRect = clip;
-    } else if (!wantPathClip && isPathClip) {
-        clip = new fabric.Rect({
-            left: frame.left,
-            top: frame.top,
-            width: frame.width,
-            height: frame.height,
-            originX: clipOriginX,
-            originY: clipOriginY,
-            angle: frame.angle ?? 0,
-            scaleX: frame.scaleX ?? 1,
-            scaleY: frame.scaleY ?? 1,
-            rx: frame.rx ?? 0,
-            ry: frame.ry ?? 0,
-            absolutePositioned: true,
-            selectable: false,
-            evented: false,
-            objectCaching: false
-        });
-        clip._objects = []; // CRITICAL: Initialize _objects
-        (frame as any).__clipRect = clip;
-    }
 
-    if (String(clip?.type || '').toLowerCase() === 'path') {
-        clip.set({
-            left: frame.left,
-            top: frame.top,
-            originX: clipOriginX,
-            originY: clipOriginY,
-            angle: frame.angle ?? 0,
-            scaleX: frame.scaleX ?? 1,
-            scaleY: frame.scaleY ?? 1,
-            absolutePositioned: true
-        });
-        if (fabric?.util?.parsePath) {
-            clip.set('path', fabric.util.parsePath(buildCornerPath(frame.width, frame.height, frame.cornerRadii)));
-        }
-        clip.dirty = true;
-    } else {
-        clip.set({
-            left: frame.left,
-            top: frame.top,
-            width: frame.width,
-            height: frame.height,
-            originX: clipOriginX,
-            originY: clipOriginY,
-            angle: frame.angle ?? 0,
-            scaleX: frame.scaleX ?? 1,
-            scaleY: frame.scaleY ?? 1,
-            rx: frame.rx ?? 0,
-            ry: frame.ry ?? 0,
-            absolutePositioned: true
-        });
-    }
+    clip._objects = [];
+    (frame as any).__clipRect = clip;
+
     if (typeof clip.setCoords === 'function') clip.setCoords();
-    // CRITICAL: Ensure _objects is always initialized, even for existing clips
-    // This can happen when clips are cached and reused
-    if (clip && clip._objects === undefined) {
-        clip._objects = [];
-    }
+    clip.dirty = true;
+
     return clip;
 };
 
 const findFrameUnderObject = (obj: any) => {
     if (!canvas.value || !obj) return null;
-    const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
-    if (!center) return null;
 
+    // First try using center point (faster)
+    const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
     const frames = getAllFrames().filter((f: any) => f !== obj);
-    const hits = frames.filter((f: any) => typeof f.containsPoint === 'function' && f.containsPoint(center));
+
+    // Check intersection using bounding box for more reliable detection
+    const objBounds = obj.getBoundingRect ? obj.getBoundingRect() : null;
+    if (!objBounds) {
+        // Fallback to center point method
+        if (!center) return null;
+        const hits = frames.filter((f: any) => typeof f.containsPoint === 'function' && f.containsPoint(center));
+        if (!hits.length) return null;
+        hits.sort((a: any, b: any) => (a.getScaledWidth() * a.getScaledHeight()) - (b.getScaledWidth() * b.getScaledHeight()));
+        return hits[0];
+    }
+
+    // Use intersection for more accurate frame detection
+    const hits = frames.filter((f: any) => {
+        if (typeof f.intersectsWithObject !== 'function') return false;
+        return f.intersectsWithObject(obj);
+    });
+
     if (!hits.length) return null;
 
     // Prefer the smallest frame (innermost) when nested.
@@ -962,34 +924,157 @@ const syncObjectFrameClip = (obj: any) => {
 
     const frameId = (obj as any).parentFrameId as (string | undefined);
     const frame = frameId ? getFrameById(frameId) : null;
-    const ownedBy = (obj as any)._frameClipOwner as (string | undefined);
 
+    // CRITICAL: If no parent frame or clipContent is disabled, remove clipPath
     if (!frame || !frame.clipContent) {
-        if (ownedBy) {
-            obj.set?.('clipPath', null);
+        if (obj.clipPath) {
+            obj.set('clipPath', null);
             delete (obj as any)._frameClipOwner;
+            obj.set('dirty', true);
+            obj.setCoords();
         }
         return;
     }
 
-    // Don't override an existing clipPath we don't own (e.g. masks/crops).
-    if (obj.clipPath && !ownedBy) return;
+    // CRITICAL FIX: For clipPath to work correctly, we need to create a clipPath
+    // that is positioned relative to the object being clipped
+    // The clipPath needs to account for the offset between the object and the frame
 
-    const clip = getOrCreateFrameClipRect(frame);
-    if (!clip) return;
+    // Calculate the offset from object center to frame center
+    const objCenter = obj.getCenterPoint ? obj.getCenterPoint() : { x: obj.left, y: obj.top };
+    const frameCenter = frame.getCenterPoint ? frame.getCenterPoint() : { x: frame.left, y: frame.top };
 
-    obj.set?.('clipPath', clip);
+    // Calculate the position of the clipPath relative to the object
+    // The clipPath should be centered at the frame's position, but relative to the object
+    const clipLeft = frameCenter.x - objCenter.x;
+    const clipTop = frameCenter.y - objCenter.y;
+
+    const kRectLocal = 1 - 0.5522847498;
+    const clampR = (n: any, w: number, h: number) => {
+        const v = Math.max(0, Number(n || 0));
+        return Math.min(v, w / 2, h / 2);
+    };
+
+    const buildCornerPath = (w: number, h: number, radii: any) => {
+        const x = -w / 2;
+        const y = -h / 2;
+        const tl = clampR(radii?.tl, w, h);
+        const tr = clampR(radii?.tr, w, h);
+        const br = clampR(radii?.br, w, h);
+        const bl = clampR(radii?.bl, w, h);
+
+        const parts = [
+            `M ${x + tl} ${y}`,
+            `L ${x + w - tr} ${y}`,
+            tr ? `C ${x + w - kRectLocal * tr} ${y} ${x + w} ${y + kRectLocal * tr} ${x + w} ${y + tr}` : '',
+            `L ${x + w} ${y + h - br}`,
+            br ? `C ${x + w} ${y + h - kRectLocal * br} ${x + w - kRectLocal * br} ${y + h} ${x + w - br} ${y + h}` : '',
+            `L ${x + bl} ${y + h}`,
+            bl ? `C ${x + kRectLocal * bl} ${y + h} ${x} ${y + h - kRectLocal * bl} ${x} ${y + h - bl}` : '',
+            `L ${x} ${y + tl}`,
+            tl ? `C ${x} ${y + kRectLocal * tl} ${x + kRectLocal * tl} ${y} ${x + tl} ${y}` : '',
+            'Z'
+        ].filter(Boolean);
+        return parts.join(' ');
+    };
+
+    const hasCornerRadii = !!(frame.cornerRadii && typeof frame.cornerRadii === 'object');
+    const wantPathClip = hasCornerRadii;
+
+    // Create clipPath positioned relative to the object (absolutePositioned: false)
+    const clip = wantPathClip
+        ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
+            originX: 'center',
+            originY: 'center',
+            left: clipLeft,
+            top: clipTop,
+            scaleX: (frame.scaleX || 1),
+            scaleY: (frame.scaleY || 1),
+            angle: (frame.angle || 0) - (obj.angle || 0),
+            absolutePositioned: false,
+            selectable: false,
+            evented: false,
+            objectCaching: false
+        })
+        : new fabric.Rect({
+            originX: 'center',
+            originY: 'center',
+            left: clipLeft,
+            top: clipTop,
+            width: frame.width,
+            height: frame.height,
+            rx: frame.rx ?? 0,
+            ry: frame.ry ?? 0,
+            scaleX: (frame.scaleX || 1),
+            scaleY: (frame.scaleY || 1),
+            angle: (frame.angle || 0) - (obj.angle || 0),
+            absolutePositioned: false,
+            selectable: false,
+            evented: false,
+            objectCaching: false
+        });
+
+    clip._objects = [];
+    (frame as any).__clipRect = clip;
+
+    if (typeof clip.setCoords === 'function') clip.setCoords();
+    clip.dirty = true;
+
+    // Apply the clipPath
+    obj.set('clipPath', clip);
     (obj as any)._frameClipOwner = frame._customId;
+    obj.set('dirty', true);
+    obj.setCoords();
+
     // Garantir que objeto dentro de frame nunca fique travado (permite mover imagem etc.)
-    obj.set?.('lockMovementX', false);
-    obj.set?.('lockMovementY', false);
+    obj.set('lockMovementX', false);
+    obj.set('lockMovementY', false);
 };
 
 const syncFrameClips = (frame: any) => {
     if (!canvas.value || !frame?._customId) return;
     getOrCreateFrameClipRect(frame);
-    const children = canvas.value.getObjects().filter((o: any) => o !== frame && o.parentFrameId === frame._customId);
-    children.forEach((child: any) => syncObjectFrameClip(child));
+
+    // Get ALL children that are inside the frame bounds, not just those with parentFrameId set
+    const allObjects = canvas.value.getObjects().filter((o: any) => o !== frame);
+    const frameBounds = frame.getBoundingRect ? frame.getBoundingRect() : null;
+
+    const children = allObjects.filter((o: any) => {
+        // First check explicit parentFrameId
+        if (o.parentFrameId === frame._customId) return true;
+
+        // Then check if object is physically inside the frame
+        if (frameBounds && typeof o.getBoundingRect === 'function') {
+            const objBounds = o.getBoundingRect();
+            // Check if object center is within frame bounds
+            const objCenterX = objBounds.left + objBounds.width / 2;
+            const objCenterY = objBounds.top + objBounds.height / 2;
+            const insideX = objCenterX >= frameBounds.left && objCenterX <= frameBounds.left + frameBounds.width;
+            const insideY = objCenterY >= frameBounds.top && objCenterY <= frameBounds.top + frameBounds.height;
+
+            if (insideX && insideY) {
+                // Auto-assign parentFrameId if not set
+                if (!o.parentFrameId) {
+                    o.parentFrameId = frame._customId;
+                }
+                return true;
+            }
+        }
+
+        return false;
+    });
+
+    let hasChanges = false;
+    children.forEach((child: any) => {
+        const beforeClip = child.clipPath;
+        syncObjectFrameClip(child);
+        if (child.clipPath !== beforeClip) hasChanges = true;
+    });
+
+    // CRITICAL: Force re-render after clipPath changes
+    if (hasChanges) {
+        canvas.value.requestRenderAll();
+    }
 };
 
 const maybeReparentToFrameOnDrop = (obj: any) => {
@@ -2005,9 +2090,10 @@ const enterNodeEditing = (obj: any) => {
 
 
 const createPriceLayout = (product: any, width: number, top: number) => {
-    // Basic Stub for Price Layout
+    // Basic Stub for Price Layout - usa preço principal dinâmico
     const group = new fabric.Group([], { left: 0, top: top });
-    const priceText = new fabric.Text(product.price || '0,00', { fontSize: 40, fill: 'red' });
+    const availablePrices = getAvailablePrices(product);
+    const priceText = new fabric.Text(availablePrices.mainPrice || '0,00', { fontSize: 40, fill: 'red' });
     safeAddWithUpdate(group, priceText);
     return group;
 }
@@ -3940,9 +4026,11 @@ const renderProducts = (products: any[]) => {
                 top: -10 
             });
 
-            const priceVal = product.price !== undefined ? product.price : 0;
-            const priceStr = typeof priceVal === 'number' 
-                ? priceVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) 
+            // Usar getAvailablePrices para determinar o preço principal
+            const availablePrices = getAvailablePrices(product);
+            const priceVal = availablePrices.mainPrice !== undefined ? availablePrices.mainPrice : 0;
+            const priceStr = typeof priceVal === 'number'
+                ? priceVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
                 : priceVal.toString();
 
             const price = new fabric.Text(`R$ ${priceStr}`, {
@@ -4012,11 +4100,13 @@ const renderProducts = (products: any[]) => {
                 });
             }
             if(items[3]) { // Price
-                const priceVal = product.price !== undefined ? product.price : 0;
-                const priceStr = typeof priceVal === 'number' 
-                   ? priceVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) 
+                // Usar getAvailablePrices para determinar o preço principal
+                const availablePrices = getAvailablePrices(product);
+                const priceVal = availablePrices.mainPrice !== undefined ? availablePrices.mainPrice : 0;
+                const priceStr = typeof priceVal === 'number'
+                   ? priceVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
                    : priceVal.toString();
-                items[3].set({ 
+                items[3].set({
                     text: `R$ ${priceStr}`,
                     fontSize: Math.min(28, product.width * 0.15),
                     top: product.height/2 - 15
@@ -5616,12 +5706,6 @@ const CANVAS_VIEWPORT_JSON_KEY = '__canvasViewport';
 const getSavedViewportTransform = (data: any): number[] | null => {
     const viewportData = data?.[CANVAS_VIEWPORT_JSON_KEY];
 
-    // Check for explicit PSD import flag - always reset viewport for PSD imports
-    if (viewportData?._psdImport) {
-        console.log('📐 PSD import detected - resetting viewport to fit content')
-        return null; // Force zoomToFit
-    }
-
     const vpt = viewportData?.vpt;
     if (!Array.isArray(vpt) || vpt.length < 6) return null;
     // Ensure all are finite numbers
@@ -5843,7 +5927,7 @@ const generatePresignedUrl = async (urlOrKey: string): Promise<string | null> =>
         
         // Request new presigned URL from backend
         console.log(`📤 Requisitando presigned URL do backend para key: ${key}`);
-        const data = await $fetch('/api/storage/presigned', {
+        const data = await $fetch<{ url?: string }>('/api/storage/presigned', {
             method: 'POST',
             body: { key, contentType: 'image/*', operation: 'get' }
         });
@@ -5908,7 +5992,6 @@ const decodeContaboUrls = (canvasData: any): any => {
 
 /**
  * Extrai bucket e key de uma URL da Contabo.
- * Isso é necessário para arquivos de importação de PSD que podem estar em buckets diferentes.
  */
 const extractContaboBucketAndKey = (url: string): { bucket: string | null; key: string | null } => {
     try {
@@ -5923,10 +6006,8 @@ const extractContaboBucketAndKey = (url: string): { bucket: string | null; key: 
 
         const cfg = useRuntimeConfig()?.public?.contabo || {};
         const configuredBucket = (cfg.bucket || '475a29e42e55430abff00915da2fa4bc:jobupload').toString();
-        const importBucket = (cfg.importBucket || '').toString();
         const candidates = new Set<string>();
         if (configuredBucket) candidates.add(configuredBucket);
-        if (importBucket) candidates.add(importBucket);
 
         const first = pathParts[0] ?? '';
         // Check if first part is bucket (may have : or match configured buckets)
@@ -5969,7 +6050,6 @@ const extractContaboBucketAndKey = (url: string): { bucket: string | null; key: 
  * Converte URLs da Contabo para usar o proxy local.
  * Isso evita problemas com URLs presignadas e encoding de caracteres especiais.
  * O proxy busca a imagem diretamente do S3 no backend, sem problemas de assinatura.
- * SUporte a buckets diferentes (ex: importBucket para arquivos PSD).
  */
 const convertContaboToProxyUrls = (canvasData: any): any => {
     const cloned = JSON.parse(JSON.stringify(canvasData));
@@ -6075,6 +6155,22 @@ const setupHistory = () => {
 
     const saveState = async (opts: SaveStateOptions = {}) => {
         if (isHistoryProcessing.value) return; // Prevent loop
+
+        // CRITICAL: Don't push/save empty canvas if the page already has data.
+        // This can happen during transient clears (page switch/load) and it pollutes undo history
+        // (Ctrl/Cmd+Z appears to "black screen" by undoing to an empty state).
+        if (project.activePageIndex >= 0 && project.pages.length > 0 && project.pages[project.activePageIndex]) {
+            const currentPage = project.pages[project.activePageIndex];
+            const existingObjectCount = currentPage?.canvasData?.objects?.length || 0;
+            const liveObjectCount = canvas.value?.getObjects?.()?.length || 0;
+            if (!opts.allowEmptyOverwrite && liveObjectCount === 0 && existingObjectCount > 0) {
+                console.warn(
+                    `⚠️ Pulando salvamento: canvas está vazio (${liveObjectCount} objetos) mas página já tem ${existingObjectCount} objetos salvos`,
+                    { pageIndex: project.activePageIndex, reason: opts.reason || 'unspecified' }
+                );
+                return;
+            }
+        }
         
         // Remove redo stack if new action happens (standard history behavior)
         if (historyIndex.value < historyStack.value.length - 1) {
@@ -6335,17 +6431,6 @@ const setupHistory = () => {
         if (project.activePageIndex >= 0 && project.pages.length > 0 && project.pages[project.activePageIndex]) {
              const objectCount = json.objects?.length || 0;
              const currentPage = project.pages[project.activePageIndex];
-             const existingObjectCount = currentPage?.canvasData?.objects?.length || 0;
-
-             // CRITICAL: Não sobrescrever canvasData existente com um canvas vazio
-             // Isso evita perder dados quando saveState é chamado acidentalmente com canvas vazio
-             if (!opts.allowEmptyOverwrite && objectCount === 0 && existingObjectCount > 0) {
-                 console.warn(`⚠️ Pulando salvamento: canvas está vazio (${objectCount} objetos) mas página já tem ${existingObjectCount} objetos salvos`, {
-                     pageIndex: project.activePageIndex,
-                     reason: opts.reason || 'unspecified'
-                 });
-                 return;
-             }
 
              console.log(`💾 Salvando estado: ${objectCount} objeto(s) para página ${project.activePageIndex}`);
 
@@ -6769,8 +6854,8 @@ const handleObjectModified = (e: any) => {
                 }
 
                 if (fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
-                    const moved = ordered.splice(fromIndex, 1)[0];
-                    ordered.splice(toIndex, 0, moved);
+                    // Swap apenas os dois cards - troca completa de posição
+                    [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
                     ordered.forEach((c: any, i: number) => ((c as any)._zoneOrder = i));
                 }
 
@@ -6838,6 +6923,10 @@ const undo = async () => {
         historyIndex.value--;
         const state = JSON.parse(historyStack.value[historyIndex.value] || '{}');
         hydrateLabelTemplatesFromProjectJson(state);
+
+        // CRITICAL: Extract viewport BEFORE loadFromJSON (it will be reset)
+        const savedViewport = getSavedViewportTransform(state);
+
         const prevRenderOnAddRemove = canvas.value.renderOnAddRemove;
         canvas.value.renderOnAddRemove = false;
 
@@ -6847,6 +6936,22 @@ const undo = async () => {
             sanitizeAllClipPaths();
             rehydrateCanvasZones();
             sanitizeAllClipPaths();
+
+            // CRITICAL: Restore viewport (zoom/pan) to prevent black screen/lost position
+            if (savedViewport) {
+                canvas.value.setViewportTransform(savedViewport);
+                updateZoomState();
+                updateScrollbars();
+            } else {
+                // Back-compat with older history entries that didn't persist viewport.
+                zoomToFit();
+                updateScrollbars();
+            }
+
+            // CRITICAL: Ensure background color is correct (loadFromJSON may reset it)
+            if (!canvas.value.backgroundColor || canvas.value.backgroundColor === 'transparent') {
+                canvas.value.backgroundColor = '#1e1e1e';
+            }
 
             // Limpar seleção após undo
             canvas.value.discardActiveObject();
@@ -6877,6 +6982,9 @@ const redo = async () => {
         const state = JSON.parse(historyStack.value[historyIndex.value] || '{}');
         hydrateLabelTemplatesFromProjectJson(state);
 
+        // CRITICAL: Extract viewport BEFORE loadFromJSON (it will be reset)
+        const savedViewport = getSavedViewportTransform(state);
+
         const prevRenderOnAddRemove = canvas.value.renderOnAddRemove;
         canvas.value.renderOnAddRemove = false;
 
@@ -6886,6 +6994,22 @@ const redo = async () => {
             sanitizeAllClipPaths();
             rehydrateCanvasZones();
             sanitizeAllClipPaths();
+
+            // CRITICAL: Restore viewport (zoom/pan) to prevent black screen/lost position
+            if (savedViewport) {
+                canvas.value.setViewportTransform(savedViewport);
+                updateZoomState();
+                updateScrollbars();
+            } else {
+                // Back-compat with older history entries that didn't persist viewport.
+                zoomToFit();
+                updateScrollbars();
+            }
+
+            // CRITICAL: Ensure background color is correct (loadFromJSON may reset it)
+            if (!canvas.value.backgroundColor || canvas.value.backgroundColor === 'transparent') {
+                canvas.value.backgroundColor = '#1e1e1e';
+            }
 
             // Limpar seleção após redo
             canvas.value.discardActiveObject();
@@ -6911,6 +7035,12 @@ const redo = async () => {
 
 const handleKeyDown = async (e: KeyboardEvent) => {
     if (!canvas.value) return;
+
+    // If editing a Fabric IText, let Fabric/browser handle undo/redo (text-level), not canvas-history.
+    try {
+        const active: any = canvas.value.getActiveObject?.();
+        if (active?.isEditing) return;
+    } catch {}
     
     // Ignore input fields so we don't trigger shortcuts while typing
     const target = e.target as HTMLElement;
@@ -10291,6 +10421,11 @@ const updateObjectProperty = (prop: string, value: any) => {
                 syncFrameClips(active);
                 canvas.value.requestRenderAll();
 
+                // CRITICAL: Force another render after a delay to ensure Fabric.js processes the clipPath
+                setTimeout(() => {
+                    if (canvas.value) canvas.value.requestRenderAll();
+                }, 10);
+
                 // Persist async to avoid UI "lag" on toggle click
                 setTimeout(() => {
                     try {
@@ -11031,6 +11166,27 @@ const handleAction = async (action: string) => {
         
         canvas.value.requestRenderAll();
         saveCurrentState();
+        return;
+    }
+
+    // === Figma-style Crop ===
+    if (action === 'activate-crop') {
+        if (!active) return;
+        figmaCrop.activateCrop(active);
+        return;
+    }
+
+    if (action === 'apply-crop') {
+        if (!figmaCrop.cropTargetObject.value) return;
+        figmaCrop.applyCrop(figmaCrop.cropFrameRect.value);
+        canvas.value?.requestRenderAll();
+        saveCurrentState();
+        return;
+    }
+
+    if (action === 'cancel-crop') {
+        figmaCrop.cancelCrop();
+        canvas.value?.requestRenderAll();
         return;
     }
 
@@ -12431,6 +12587,73 @@ const normalizeLimitText = (raw: any): string | null => {
     return s;
 };
 
+/**
+ * Converte valor de preço para string no formato brasileiro (vírgula decimal)
+ */
+const formatPriceValue = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'number') {
+        // Converter número para formato brasileiro (20.99 -> "20,99")
+        return value.toFixed(2).replace('.', ',');
+    }
+    const str = String(value).trim();
+    if (!str) return '';
+    // Se já tem vírgula como separador decimal, usar como está
+    if (str.includes(',')) return str;
+    // Se tem ponto como separador decimal, converter para vírgula
+    if (str.includes('.')) {
+        const parts = str.split('.');
+        if (parts.length === 2 && parts[1] && parts[1].length <= 2) {
+            return str.replace('.', ',');
+        }
+    }
+    return str;
+};
+
+/**
+ * Retorna TODOS os preços disponíveis para o produto, ordenados por prioridade de exibição.
+ * Retorna um objeto com informações dinâmicas baseadas no que realmente existe.
+ */
+const getAvailablePrices = (product: any) => {
+    const prices: Array<{ label: string; value: string; type: 'main' | 'special' | 'pack' }> = [];
+    const condition = product.specialCondition && String(product.specialCondition).trim() ? String(product.specialCondition).trim() : null;
+
+    // Helper para verificar e formatar preço
+    const addPrice = (value: any, label: string, type: 'main' | 'special' | 'pack') => {
+        const formatted = formatPriceValue(value);
+        if (formatted) {
+            prices.push({ label, value: formatted, type });
+            return true;
+        }
+        return false;
+    };
+
+    // Preço especial unitário (maior prioridade - preço principal com desconto)
+    addPrice(product.priceSpecialUnit, '', 'special');
+
+    // Preço especial de embalagem (promo de caixa/fardo)
+    addPrice(product.priceSpecial, product.packageLabel || 'CX', 'special');
+
+    // Preço unitário avulso (preço principal sem desconto)
+    const hasSpecial = prices.some(p => p.type === 'special');
+    addPrice(product.priceUnit, hasSpecial ? '' : '', hasSpecial ? 'main' : 'special');
+
+    // Preço de embalagem avulsa (caixa/fardo sem desconto)
+    addPrice(product.pricePack, product.packageLabel || 'CX', 'pack');
+
+    // Fallback para preço legado
+    if (prices.length === 0) {
+        addPrice(product.price, '', 'main');
+    }
+
+    return {
+        prices,
+        condition,
+        hasSpecial: prices.some(p => p.type === 'special'),
+        mainPrice: prices[0]?.value || '0,00'
+    };
+};
+
 // Smart Object Generator (Product Card)
 const createSmartObject = async (product: any, x: number, y: number, width: number, height: number, gridId: string, labelTpl?: LabelTemplate) => {
     // DEBUG: Log product data
@@ -12554,11 +12777,12 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
         });
     }
 
-    // 4. Price Tag (Bottom)
+    // 4. Price Tag (Bottom) - DINÂMICO: mostra apenas os preços que existem
     const marginBottom = cardHeight * 0.05;
 
-    // Price Value (shared)
-    const priceStr = String(product.price ?? '')
+    // Obter todos os preços disponíveis dinamicamente
+    const availablePrices = getAvailablePrices(product);
+    const priceStr = availablePrices.mainPrice
         .replace(/R\$\s*/gi, '')
         .replace(/\s+/g, '')
         .trim();
@@ -12566,16 +12790,20 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     // Unit label on the tag: ONLY "KG" or "UN" (gramatura stays in the product name).
     const unitText = inferUnitLabelFromProduct(product);
 
-    console.log('[createSmartObject] Processed values:', {
+    console.log('[createSmartObject] Available prices:', {
         priceStr,
         unitText,
+        availablePrices,
         originalPrice: product.price,
-        weight: product.weight,
-        packUnit: product.packUnit,
+        priceUnit: product.priceUnit,
+        priceSpecialUnit: product.priceSpecialUnit,
+        pricePack: product.pricePack,
+        priceSpecial: product.priceSpecial,
+        specialCondition: product.specialCondition,
         name: product.name
     });
 
-    if (!priceStr) {
+    if (!priceStr || priceStr === '0,00') {
         console.warn('[createSmartObject] PRECO VAZIO para produto:', product.name);
     }
 
@@ -12598,7 +12826,12 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
         }
     }
     if (!priceTagGroup) {
-        const hasWholesale = !!String((product as any).priceWholesale || '').trim();
+        // Verificar se tem preço especial/atacado usando o novo sistema
+        const availablePrices = getAvailablePrices(product);
+        const hasSpecial = availablePrices.prices.some(p => p.type === 'special');
+        const hasMain = availablePrices.prices.some(p => p.type === 'main' || p.type === 'pack');
+        // Atacarejo requer: preço especial (atacado) E (preço principal varejo OU condição especial)
+        const hasWholesale = hasSpecial && (hasMain || !!product.specialCondition || !!product.priceWholesale);
         priceTagGroup = hasWholesale
             ? buildAtacarejoPriceGroupForCard(product, width, cardHeight, 0)
             : buildDefaultPriceGroup();
@@ -12649,17 +12882,29 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     (group as any)._cardWidth = width;
     (group as any)._cardHeight = cardHeight;
 
-    // Persist pricing metadata on the card so label templates can be reapplied safely.
+    // Persist ALL pricing metadata on the card so label templates can be reapplied safely.
+    // This preserves ALL price information for future use.
+    (group as any).price = (product as any).price ?? null;
+    (group as any).pricePack = (product as any).pricePack ?? null;
+    (group as any).priceUnit = (product as any).priceUnit ?? null;
+    (group as any).priceSpecial = (product as any).priceSpecial ?? null;
+    (group as any).priceSpecialUnit = (product as any).priceSpecialUnit ?? null;
+    (group as any).specialCondition = (product as any).specialCondition ?? null;
+    // Wholesale (legacy)
     (group as any).priceWholesale = (product as any).priceWholesale ?? null;
     (group as any).wholesaleTrigger = (product as any).wholesaleTrigger ?? null;
     (group as any).wholesaleTriggerUnit = (product as any).wholesaleTriggerUnit ?? null;
+    // Pack metadata
     (group as any).packQuantity = (product as any).packQuantity ?? null;
     (group as any).packUnit = (product as any).packUnit ?? null;
     (group as any).packageLabel = (product as any).packageLabel ?? null;
+    // Unit label
     (group as any).unit = (product as any).unit ?? null;
     (group as any).unitLabel = unitText;
     (group as any).limit = limitTextValue ?? null;
-    
+    // Store original product data for reference
+    (group as any)._productData = { ...product };
+
     // Internal elements should be selectable for manual adjustments
     group.getObjects().forEach((obj: any) => {
         const isBackground = obj.name === 'offerBackground';
@@ -12743,7 +12988,7 @@ const handlePasteList = async () => {
                 // Build search term
                 const searchTerm = `${product.name || ''} ${product.brand || ''} ${product.weight || ''}`.trim();
                 
-                const result = await $fetch('/api/process-product-image', {
+                const result = await $fetch<{ url?: string }>('/api/process-product-image', {
                     method: 'POST',
                     body: { term: searchTerm }
                 });
@@ -13221,13 +13466,17 @@ const simulateSmartGrid = async (
                   const limitTextValue = normalizeLimitText(product?.limit ?? extractedLimit);
                   let limitFound = false;
 
+                  // Determinar preço principal (dinâmico - usa os preços disponíveis)
+                  const availablePrices = getAvailablePrices(product);
+                  const displayPrice = availablePrices.mainPrice;
+
                  objects.forEach((obj: any) => {
                     if (obj.type.includes('text')) {
                         if (obj.name === 'smart_title') {
                             obj.set('text', cleanedName);
                             titleFound = true;
                         } else if (obj.name === 'smart_price') {
-                            obj.set('text', product.price);
+                            obj.set('text', displayPrice);
                             priceFound = true;
                         } else if (
                             obj?.name === 'smart_limit' ||
@@ -13246,7 +13495,7 @@ const simulateSmartGrid = async (
                  if (!titleFound || !priceFound) {
                      const texts = objects.filter((o: any) => o.type.includes('text'));
                      if (texts.length >= 1 && !titleFound) texts[0].set('text', cleanedName);
-                     if (texts.length >= 2 && !priceFound) texts[1].set('text', product.price);
+                     if (texts.length >= 2 && !priceFound) texts[1].set('text', displayPrice);
                  }
 
                  // If template doesn't include a limit object but product has a limit, create one.
@@ -13588,7 +13837,17 @@ const handleUpdateGlobalStyles = async (prop: string, val: any) => {
     productZoneState.updateGlobalStyles({ [prop]: val });
     if (!canvas.value) return;
 
-    const zone = getCurrentZoneObject();
+    let zone = getCurrentZoneObject();
+
+    // If no zone found but a card is selected, try to find its parent zone
+    if (!zone && selectedObjectRef.value && isLikelyProductCard(selectedObjectRef.value)) {
+        const parentZoneId = selectedObjectRef.value.parentZoneId;
+        if (parentZoneId) {
+            zone = canvas.value.getObjects().find((o: any) =>
+                isLikelyProductZone(o) && o._customId === parentZoneId
+            );
+        }
+    }
 
     // Persist styles on the zone so they survive undo/redo and reload.
     if (zone) {
@@ -13600,9 +13859,11 @@ const handleUpdateGlobalStyles = async (prop: string, val: any) => {
         ? ((zone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value)
         : productZoneState.globalStyles.value;
 
-    // Special case: label template swap needs to rebuild each card's price group.
+    // Special case: label template selection - just update reference, don't rebuild existing cards
+    // The template will be used for NEW products added to the zone
     if (prop === 'splashTemplateId' && zone) {
-        await applyLabelTemplateToZone(zone, val);
+        // Just update the template reference without rebuilding existing cards
+        await applyLabelTemplateToZone(zone, val, false);
         triggerRef(selectedObjectRef);
         return;
     }
@@ -13614,6 +13875,21 @@ const handleUpdateGlobalStyles = async (prop: string, val: any) => {
         canvas.value?.requestRenderAll();
     });
     saveCurrentState();
+    triggerRef(selectedObjectRef);
+};
+
+const handleApplyTemplateToZone = async () => {
+    const zone = getCurrentZoneObject();
+    if (!zone) return;
+
+    const templateId = (zone as any)._zoneGlobalStyles?.splashTemplateId;
+    if (!templateId) {
+        console.log('⚠️ [handleApplyTemplateToZone] No template selected');
+        return;
+    }
+
+    console.log('🔍 [handleApplyTemplateToZone] Applying template to all cards:', templateId);
+    await applyLabelTemplateToZone(zone, templateId, true); // true = apply to existing cards
     triggerRef(selectedObjectRef);
 };
 
@@ -13707,9 +13983,10 @@ const normalizeUnitForLabel = (raw: any): 'KG' | 'UN' => {
 const inferUnitLabelFromProduct = (product: any): 'KG' | 'UN' => {
     // Priority:
     // 1) explicit product.unit
-    // 2) detect KG from name/weight text (common in imports)
-    // 3) packUnit if present (but never overrides a detected KG)
+    // 2) Detect based on name: if has NUMBER before weight unit → UN, else → KG
+    // 3) packUnit if present
     // 4) default UN
+
     const unitRaw = String(product?.unit ?? '').trim();
     if (unitRaw) return normalizeUnitForLabel(unitRaw);
 
@@ -13718,16 +13995,18 @@ const inferUnitLabelFromProduct = (product: any): 'KG' | 'UN' => {
     const packageLabel = String(product?.packageLabel ?? '');
     const probe = `${name} ${weight} ${packageLabel}`.toUpperCase();
 
-    const mentionsKg =
-        /\bKG\b/.test(probe) ||
-        /\bKILO\b/.test(probe) ||
-        /\bKILOS\b/.test(probe) ||
-        /\d+(?:[.,]\d+)?\s*KG\b/.test(probe);
+    // CRITICAL: Check if there's a NUMBER before the weight unit (KG, G, ML, L)
+    // Pattern like "5KG", "500G", "2L" = sold by unit → use "UN"
+    // Pattern like "KG", "G" without number = sold by kilo → use "KG"
+    const hasNumberBeforeWeightUnit = /\d+\s*(?:KG|G|ML|L)\b/.test(probe);
+    const hasWeightUnitWithoutNumber = /\b(?:KG|G|ML|L)\b/.test(probe) && !hasNumberBeforeWeightUnit;
 
+    if (hasWeightUnitWithoutNumber) return 'KG'; // Vendido por quilo (ex: "ARROZ KG")
+    if (hasNumberBeforeWeightUnit) return 'UN'; // Vendido por unidade (ex: "ARROZ 5KG")
+
+    // Fallback to packUnit
     const packUnitRaw = String(product?.packUnit ?? '').trim();
     const packUnitNorm = packUnitRaw ? normalizeUnitForLabel(packUnitRaw) : '';
-
-    if (mentionsKg) return 'KG';
     if (packUnitNorm === 'KG') return 'KG';
     if (packUnitNorm === 'UN') return 'UN';
 
@@ -13779,11 +14058,50 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     const wholesaleUnit = findByName(all, 'wholesale_unit_text');
     const wholesalePack = findByName(all, 'wholesale_pack_line_text');
 
-    const price = data?.price ?? null;
-    const priceWholesale = data?.priceWholesale ?? null;
+    // ===== NOVO SISTEMA: Obter preços disponíveis dinamicamente =====
+    const availablePrices = getAvailablePrices(data);
+    const prices = availablePrices.prices;
 
-    const hasRetail = !!String(price || '').trim();
-    const hasWholesale = !!String(priceWholesale || '').trim();
+    // DEBUG: Log para ver os preços disponíveis
+    console.log('🔍 [applyAtacarejoPricing] Produto:', data?.name);
+    console.log('🔍 [applyAtacarejoPricing] Preços disponíveis:', prices.map(p => ({ type: p.type, value: p.value, label: p.label })));
+    console.log('🔍 [applyAtacarejoPricing] Dados brutos:', {
+        priceUnit: data?.priceUnit,
+        pricePack: data?.pricePack,
+        priceSpecial: data?.priceSpecial,
+        priceSpecialUnit: data?.priceSpecialUnit,
+        priceWholesale: data?.priceWholesale,
+        specialCondition: data?.specialCondition
+    });
+
+    // Determinar preço varejo (regular) e atacado (especial)
+    let retailPrice = null;
+    let wholesalePrice = null;
+    let condition = null;
+
+    // Buscar preço regular (varejo) e preço especial (atacado)
+    // No atacarejo: special = preço menor (atacado), main/pack = preço maior (varejo)
+    for (const p of prices) {
+        if (p.type === 'main' || p.type === 'pack') {
+            retailPrice = retailPrice || p.value;
+        } else if (p.type === 'special') {
+            wholesalePrice = wholesalePrice || p.value;
+        }
+    }
+
+    // Se não encontrou, usar legado
+    if (!retailPrice) {
+        retailPrice = formatPriceValue(data?.priceUnit ?? data?.pricePack ?? data?.price);
+    }
+    if (!wholesalePrice) {
+        wholesalePrice = formatPriceValue(data?.priceSpecialUnit ?? data?.priceSpecial ?? data?.priceWholesale);
+    }
+    condition = data?.specialCondition ?? null;
+
+    console.log('🔍 [applyAtacarejoPricing] Resultado:', { retailPrice, wholesalePrice, condition, hasRetail: !!retailPrice, hasWholesale: !!wholesalePrice });
+
+    const hasRetail = !!retailPrice;
+    const hasWholesale = !!wholesalePrice;
 
     // When only one tier exists, we hide the other and the banner.
     const showBanner = hasRetail && hasWholesale;
@@ -13806,13 +14124,13 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     if (wholesaleCurrency && (!wholesaleCurrency.text || String(wholesaleCurrency.text).trim().length === 0)) setText(wholesaleCurrency, 'R$');
 
     if (hasRetail || !hasWholesale) {
-        const parts = splitPriceParts(price);
+        const parts = splitPriceParts(retailPrice);
         setText(retailInteger, parts.integer);
         setText(retailDecimal, `,${parts.dec}`);
     }
 
     if (hasWholesale) {
-        const parts = splitPriceParts(priceWholesale);
+        const parts = splitPriceParts(wholesalePrice);
         setText(wholesaleInteger, parts.integer);
         setText(wholesaleDecimal, `,${parts.dec}`);
     }
@@ -13826,8 +14144,8 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     const packQuantity = Number.parseInt(String(data?.packQuantity ?? '').replace(/[^\d]/g, ''), 10);
     const packUnit = String(data?.packUnit ?? '').trim().toUpperCase().replace(/\s+/g, '');
 
-    const retailCents = parsePriceToCents(price);
-    const wholesaleCents = parsePriceToCents(priceWholesale);
+    const retailCents = parsePriceToCents(retailPrice);
+    const wholesaleCents = parsePriceToCents(wholesalePrice);
     const retailPackPrice = (retailCents !== null && Number.isFinite(packQuantity) && packQuantity > 0)
         ? formatCentsToPrice(retailCents * packQuantity)
         : null;
@@ -13850,11 +14168,19 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     }
 
     if (bannerText) {
-        const trig = data?.wholesaleTrigger;
-        const trigN = typeof trig === 'number' ? trig : Number.parseInt(String(trig ?? '').replace(/[^\d]/g, ''), 10);
-        const unitTok = String(data?.wholesaleTriggerUnit ?? packageLabel ?? '').trim().toUpperCase().replace(/\s+/g, '');
-        const label = Number.isFinite(trigN) && trigN > 0 && unitTok ? `ACIMA ${trigN} ${unitTok}` : 'ATACADO';
-        setText(bannerText, `\u2605 ${label} \u2605`);
+        // Usar condição especial se disponível, senão usar lógica legada
+        let bannerLabel = 'ATACADO';
+        if (condition) {
+            bannerLabel = condition.toUpperCase();
+        } else {
+            const trig = data?.wholesaleTrigger;
+            const trigN = typeof trig === 'number' ? trig : Number.parseInt(String(trig ?? '').replace(/[^\d]/g, ''), 10);
+            const unitTok = String(data?.wholesaleTriggerUnit ?? packageLabel ?? '').trim().toUpperCase().replace(/\s+/g, '');
+            if (Number.isFinite(trigN) && trigN > 0 && unitTok) {
+                bannerLabel = `ACIMA ${trigN} ${unitTok}`;
+            }
+        }
+        setText(bannerText, `\u2605 ${bannerLabel} \u2605`);
     }
 
     safeAddWithUpdate(pg);
@@ -14186,7 +14512,19 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         if (typeof img.sendToBack === 'function') img.sendToBack();
     }
 
-    // Scale all text elements proportionally
+    // Identify price-related text elements for dynamic positioning
+    const priceInteger = all.find((o: any) => o.name === 'price_integer_text' || o.name === 'priceInteger' || o.name === 'price_integer');
+    const priceDecimal = all.find((o: any) => o.name === 'price_decimal_text' || o.name === 'priceDecimal' || o.name === 'price_decimal');
+    const priceUnit = all.find((o: any) => o.name === 'price_unit_text' || o.name === 'priceUnit' || o.name === 'price_unit');
+    const currencyText = all.find((o: any) => o.name === 'price_currency_text');
+    const currencyCircle = all.find((o: any) => o.name === 'price_currency_bg' || o.name === 'priceSymbolBg');
+    const priceText = all.find((o: any) => o.name === 'price_value_text' || o.name === 'smart_price');
+
+    // Check if we have split price elements (integer + decimal)
+    const hasSplitPrice = !!(priceInteger && priceDecimal);
+    const hasPriceStructure = hasSplitPrice || priceText;
+
+    // First pass: scale all text elements
     all.forEach((obj: any) => {
         if (!obj || obj.type !== 'text') return;
 
@@ -14195,33 +14533,16 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             ? obj.__originalFontSize
             : (obj.fontSize || 14);
 
-        // Get original position from metadata
-        const originalLeft = typeof obj.__originalLeft === 'number' ? obj.__originalLeft : obj.left;
-        const originalTop = typeof obj.__originalTop === 'number' ? obj.__originalTop : obj.top;
-        const originalOriginX = obj.__originalOriginX || obj.originX || 'center';
-        const originalOriginY = obj.__originalOriginY || obj.originY || 'center';
-
         // Get original fontFamily from metadata or current value
         const originalFontFamily = typeof obj.__originalFontFamily === 'string'
             ? obj.__originalFontFamily
             : obj.fontFamily;
 
-        console.log('[layoutCustomPriceGroup] Text element:', {
-            name: obj.name,
-            originalFontFamily,
-            fontFamily: obj.fontFamily,
-            fontSize: obj.fontSize,
-            scaledFontSize: originalFontSize * scale
-        });
-
-        // Apply scaled values - explicitly preserve fontFamily
+        // Apply scaled font size and preserve fontFamily
+        // Position will be set later for price elements
         obj.set({
-            fontFamily: originalFontFamily || undefined, // Preserve the font family
+            fontFamily: originalFontFamily || undefined,
             fontSize: originalFontSize * scale,
-            left: (typeof originalLeft === 'number' ? originalLeft * scale : originalLeft),
-            top: (typeof originalTop === 'number' ? originalTop * scale : originalTop),
-            originX: originalOriginX,
-            originY: originalOriginY,
             scaleX: 1,
             scaleY: 1,
             strokeWidth: (obj.strokeWidth || 0) * scale
@@ -14229,6 +14550,84 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
         if (typeof obj.initDimensions === 'function') obj.initDimensions();
     });
+
+    // Second pass: set non-price text positions proportionally
+    all.forEach((obj: any) => {
+        if (!obj || obj.type !== 'text') return;
+        // Skip price elements - they will be positioned dynamically
+        if (hasPriceStructure && (
+            obj === priceInteger || obj === priceDecimal || obj === priceUnit ||
+            obj === priceText || obj === currencyText
+        )) {
+            return;
+        }
+
+        const originalLeft = typeof obj.__originalLeft === 'number' ? obj.__originalLeft : obj.left;
+        const originalTop = typeof obj.__originalTop === 'number' ? obj.__originalTop : obj.top;
+        const originalOriginX = obj.__originalOriginX || obj.originX || 'center';
+        const originalOriginY = obj.__originalOriginY || obj.originY || 'center';
+
+        obj.set({
+            left: (typeof originalLeft === 'number' ? originalLeft * scale : originalLeft),
+            top: (typeof originalTop === 'number' ? originalTop * scale : originalTop),
+            originX: originalOriginX,
+            originY: originalOriginY
+        });
+    });
+
+    // Dynamic positioning for price elements (same logic as layoutPriceGroup)
+    if (hasPriceStructure) {
+        const getW = (t: any) => (t && typeof t.getScaledWidth === 'function' ? t.getScaledWidth() : 0);
+
+        // Calculate starting X position for price text
+        let textStartX = -(newW / 2) + (newH * 0.35 * 0.85); // Similar to circleCenterX + circleSize/2
+
+        // If we have a currency circle, adjust textStartX
+        if (currencyCircle) {
+            const circleSize = newH * 0.72;
+            const circleCenterX = -(newW / 2) + (circleSize * 0.35);
+            textStartX = circleCenterX + (circleSize / 2) + (newH * 0.18);
+        } else if (currencyText) {
+            // Use currency text width to determine start position
+            const currencyW = getW(currencyText);
+            textStartX = -(newW / 2) + currencyW + (newH * 0.1);
+        }
+
+        if (hasSplitPrice) {
+            // Position integer and decimal dynamically
+            const intY = (typeof priceInteger.__yOffsetRatio === 'number' ? priceInteger.__yOffsetRatio : 0) * newH;
+            const decY = (typeof priceDecimal.__yOffsetRatio === 'number' ? priceDecimal.__yOffsetRatio : -0.18) * newH;
+
+            const intW = getW(priceInteger);
+            priceInteger.set({ originX: 'left', originY: 'center', left: textStartX, top: intY });
+
+            priceDecimal.set({ originX: 'left', originY: 'center', left: textStartX + intW, top: decY });
+
+            // Position unit dynamically if exists
+            if (priceUnit) {
+                const unitText = String(priceUnit.text || '').trim();
+                const unitVisible = priceUnit.visible !== false && unitText.length > 0;
+                priceUnit.set({ visible: unitVisible });
+                if (unitVisible) {
+                    const unitY = (typeof priceUnit.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * newH;
+                    const decW = getW(priceDecimal);
+                    const unitRightX = textStartX + intW + decW;
+                    priceUnit.set({ originX: 'right', originY: 'center', left: unitRightX, top: unitY });
+
+                    // Shrink unit if it's wider than the cents block
+                    const unitW = getW(priceUnit);
+                    if (decW > 0 && unitW > decW) {
+                        const s = decW / unitW;
+                        priceUnit.set({ scaleX: s, scaleY: s });
+                    }
+                }
+            }
+        } else if (priceText) {
+            // Single price text
+            const priceY = (typeof priceText.__yOffsetRatio === 'number' ? priceText.__yOffsetRatio : 0) * newH;
+            priceText.set({ originX: 'left', originY: 'center', left: textStartX, top: priceY });
+        }
+    }
 
     // Scale all other objects (circles, rects, etc.)
     all.forEach((obj: any) => {
@@ -14656,6 +15055,96 @@ function normalizePriceGroupForPreview(pg: any) {
     pg.set({ originX: 'center', originY: 'center', left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0 });
 
     const all: any[] = pg.getObjects();
+
+    // ===== ATACAREJO TEMPLATE SUPPORT =====
+    // Check if this is an atacarejo (2-price) template by looking for the retail background
+    const retailBg = all.find(o => o?.name === 'atac_retail_bg');
+    const isAtacarejo = !!retailBg;
+
+    if (isAtacarejo) {
+        // This is an atacarejo template - normalize all atacarejo elements for preview
+        const bannerBg = all.find(o => o?.name === 'atac_banner_bg');
+        const wholesaleBg = all.find(o => o?.name === 'atac_wholesale_bg');
+
+        const retailCurrency = all.find(o => o?.name === 'retail_currency_text');
+        const retailInteger = all.find(o => o?.name === 'retail_integer_text');
+        const retailDecimal = all.find(o => o?.name === 'retail_decimal_text');
+        const retailUnit = all.find(o => o?.name === 'retail_unit_text');
+        const retailPack = all.find(o => o?.name === 'retail_pack_line_text');
+
+        const bannerText = all.find(o => o?.name === 'wholesale_banner_text');
+
+        const wholesaleCurrency = all.find(o => o?.name === 'wholesale_currency_text');
+        const wholesaleInteger = all.find(o => o?.name === 'wholesale_integer_text');
+        const wholesaleDecimal = all.find(o => o?.name === 'wholesale_decimal_text');
+        const wholesaleUnit = all.find(o => o?.name === 'wholesale_unit_text');
+        const wholesalePack = all.find(o => o?.name === 'wholesale_pack_line_text');
+
+        // Use a standard preview size that matches the preview thumbnail
+        const previewW = 320;
+        const previewH = 220;
+        const totalH = previewH * 0.8;  // Total height for the price tag
+
+        // Section heights (same proportions as layoutAtacarejoPriceGroup)
+        const bannerH = totalH * 0.14;
+        const retailH = totalH * 0.43;
+        const wholesaleH = totalH - retailH - bannerH;
+
+        // Vertical positions (centered around 0)
+        const y0 = -totalH / 2;
+        const retailCY = y0 + retailH / 2;
+        const bannerCY = y0 + retailH + bannerH / 2;
+        const wholesaleCY = y0 + retailH + bannerH + wholesaleH / 2;
+
+        // Backgrounds - center horizontally, position vertically
+        if (retailBg) retailBg.set({ originX: 'center', originY: 'center', width: previewW, height: retailH, left: 0, top: retailCY });
+        if (bannerBg) bannerBg.set({ originX: 'center', originY: 'center', width: previewW, height: bannerH, left: 0, top: bannerCY });
+        if (wholesaleBg) wholesaleBg.set({ originX: 'center', originY: 'center', width: previewW, height: wholesaleH, left: 0, top: wholesaleCY });
+
+        // Helper to set font size based on block height
+        const setFontSize = (obj: any, scale: number, baseH: number) => {
+            if (obj) {
+                const fontSize = typeof obj.__fontScale === 'number' ? baseH * obj.__fontScale : baseH * scale;
+                obj.set({ fontSize, scaleX: 1, scaleY: 1 });
+                if (typeof obj.initDimensions === 'function') obj.initDimensions();
+            }
+        };
+
+        // Layout retail tier (top section - red background)
+        setFontSize(retailInteger, 0.60, retailH);
+        setFontSize(retailDecimal, 0.36, retailH);
+        setFontSize(retailCurrency, 0.22, retailH);
+        setFontSize(retailUnit, 0.22, retailH);
+        setFontSize(retailPack, 0.18, retailH);
+
+        if (retailCurrency) retailCurrency.set({ originX: 'left', originY: 'center', left: -60, top: retailCY - (retailH * 0.05) });
+        if (retailInteger) retailInteger.set({ originX: 'left', originY: 'center', left: -40, top: retailCY });
+        if (retailDecimal) retailDecimal.set({ originX: 'left', originY: 'center', left: 10, top: retailCY - (retailH * 0.18) });
+        if (retailUnit) retailUnit.set({ originX: 'left', originY: 'center', left: 45, top: retailCY + (retailH * 0.18) });
+        if (retailPack) retailPack.set({ originX: 'center', originY: 'center', left: 0, top: retailCY + (retailH * 0.30) });
+
+        // Layout banner (middle section - white background)
+        setFontSize(bannerText, 0.32, bannerH);
+        if (bannerText) bannerText.set({ originX: 'center', originY: 'center', left: 0, top: bannerCY });
+
+        // Layout wholesale tier (bottom section - yellow background)
+        setFontSize(wholesaleInteger, 0.60, wholesaleH);
+        setFontSize(wholesaleDecimal, 0.36, wholesaleH);
+        setFontSize(wholesaleCurrency, 0.22, wholesaleH);
+        setFontSize(wholesaleUnit, 0.22, wholesaleH);
+        setFontSize(wholesalePack, 0.18, wholesaleH);
+
+        if (wholesaleCurrency) wholesaleCurrency.set({ originX: 'left', originY: 'center', left: -60, top: wholesaleCY - (wholesaleH * 0.05) });
+        if (wholesaleInteger) wholesaleInteger.set({ originX: 'left', originY: 'center', left: -40, top: wholesaleCY });
+        if (wholesaleDecimal) wholesaleDecimal.set({ originX: 'left', originY: 'center', left: 10, top: wholesaleCY - (wholesaleH * 0.18) });
+        if (wholesaleUnit) wholesaleUnit.set({ originX: 'left', originY: 'center', left: 45, top: wholesaleCY + (wholesaleH * 0.18) });
+        if (wholesalePack) wholesalePack.set({ originX: 'center', originY: 'center', left: 0, top: wholesaleCY + (wholesaleH * 0.30) });
+
+        safeAddWithUpdate(pg);
+        return;
+    }
+
+    // ===== STANDARD SINGLE-PRICE TEMPLATE =====
     const priceBg = all.find(o => o?.name === 'price_bg');
     const priceBgImage = all.find(o => o?.name === 'price_bg_image' || o?.name === 'splash_image');
     const currencyCircle = all.find(o => o?.name === 'price_currency_bg' || o?.name === 'priceSymbolBg');
@@ -15616,22 +16105,25 @@ async function resetCardPriceGroupToDefault(card: any) {
     card.setCoords();
 }
 
-async function applyLabelTemplateToZone(zone: any, templateId?: string) {
+async function applyLabelTemplateToZone(zone: any, templateId?: string, applyToExisting: boolean = false) {
     if (!canvas.value || !zone || !isLikelyProductZone(zone)) return;
     const id = templateId || undefined;
     const prev = (zone as any)._zoneGlobalStyles ?? {};
     (zone as any)._zoneGlobalStyles = { ...prev, splashTemplateId: id };
 
-    // Apply to every card in the zone.
-    const cards = getZoneChildren(zone);
-    for (const card of cards) {
-        if (id) await applyLabelTemplateToCard(card, id);
-        else await resetCardPriceGroupToDefault(card);
-    }
+    // Only apply to existing cards if explicitly requested (e.g., user explicitly changes template)
+    // If applyToExisting is false, just update the reference for new products
+    if (applyToExisting) {
+        const cards = getZoneChildren(zone);
+        for (const card of cards) {
+            if (id) await applyLabelTemplateToCard(card, id);
+            else await resetCardPriceGroupToDefault(card);
+        }
 
-    // Also re-apply colors/text style if the zone has global styles.
-    const styles = (zone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value;
-    applyGlobalStylesToCards(styles, zone);
+        // Also re-apply colors/text style if the zone has global styles.
+        const styles = (zone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value;
+        applyGlobalStylesToCards(styles, zone);
+    }
 
     canvas.value.requestRenderAll();
     saveCurrentState();
@@ -15896,8 +16388,20 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                  if (styles.isProdBgTransparent) bg.set('fill', 'transparent');
                  else if (styles.cardColor) bg.set('fill', styles.cardColor);
                  if (typeof styles.cardBorderRadius === 'number') bg.set({ rx: styles.cardBorderRadius, ry: styles.cardBorderRadius });
-                 if (styles.cardBorderColor) bg.set('stroke', styles.cardBorderColor);
-                 if (typeof styles.cardBorderWidth === 'number') bg.set('strokeWidth', styles.cardBorderWidth);
+
+                 // Apply border color and width - if color is set but width is 0, use minimum visible width
+                 if (styles.cardBorderColor) {
+                     bg.set('stroke', styles.cardBorderColor);
+                     const borderWidth = typeof styles.cardBorderWidth === 'number' ? styles.cardBorderWidth : 0;
+                     // If border color is set but width is 0, use minimum visible width (1px)
+                     if (borderWidth === 0 && styles.cardBorderColor) {
+                         bg.set('strokeWidth', 1);
+                     } else if (borderWidth > 0) {
+                         bg.set('strokeWidth', borderWidth);
+                     }
+                 } else if (typeof styles.cardBorderWidth === 'number') {
+                     bg.set('strokeWidth', styles.cardBorderWidth);
+                 }
              }
         } else {
              bg.set({ scaleX: w / bg.width, scaleY: h / bg.height, left: 0, top: 0, originX: 'center', originY: 'center' });
@@ -16003,35 +16507,51 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         if (typeof (limit as any).initDimensions === 'function') (limit as any).initDimensions();
         limitH = limit.visible ? ((limit.getScaledHeight?.() ?? 0) + gap) : 0;
     }
-    
+
     // 3. Bottom Element (Splash/Price)
     let bottomH = 0;
     if (splash) {
         const marginBottom = h * 0.05;
         const splashManual = isManual(splash);
-        
+
+        // Extract priceBg for later use (shadow update needs pillH from layout)
+        let priceBg: any = null;
+
         if (splash.type === 'group' && splash.name === 'priceGroup') {
             // Apply label styling overrides (local to the selected zone/design; never mutates templates).
             if (styles && typeof splash.getObjects === 'function') {
+                // When a zone uses a label template, the template should be the source of truth for
+                // styling (fill/stroke/roundness/fonts/colors). Keep only explicit overrides that
+                // are meant to be applied on top (ex: currency color).
+                const usingLabelTemplate = typeof styles.splashTemplateId === 'string' && styles.splashTemplateId.trim().length > 0;
+
                 const parts = splash.getObjects();
-                const priceBg = parts.find((o: any) => o?.name === 'price_bg');
+                priceBg = parts.find((o: any) => o?.name === 'price_bg');
                 const currencyText = parts.find((o: any) => o?.name === 'price_currency_text');
                 const priceInteger = parts.find((o: any) => o?.name === 'price_integer_text');
                 const priceDecimal = parts.find((o: any) => o?.name === 'price_decimal_text');
                 const priceUnit = parts.find((o: any) => o?.name === 'price_unit_text');
 
                 if (priceBg) {
-                    const tplStroke = typeof (priceBg as any).stroke === 'string' ? String((priceBg as any).stroke).trim() : '';
-                    const hasTemplateStroke = !!tplStroke && tplStroke.toLowerCase() !== 'transparent';
-                    const accent = styles.splashColor ?? (!hasTemplateStroke ? styles.accentColor : undefined);
-                    if (accent) priceBg.set('stroke', accent);
-                    if (styles.splashFill) priceBg.set('fill', styles.splashFill);
+                    // Apply styles to price background
+                    // Priority: explicit splashFill > template fill > default
+                    if (styles.splashFill) {
+                        priceBg.set('fill', styles.splashFill);
+                    }
                     if (typeof styles.splashRoundness === 'number') (priceBg as any).__roundness = styles.splashRoundness;
                     if (typeof styles.splashStrokeWidth === 'number') (priceBg as any).__strokeWidth = styles.splashStrokeWidth;
+
+                    // Apply accent/splash color - always apply if set, regardless of template
+                    // This allows users to override template colors with zone styles
+                    const accent = styles.splashColor ?? styles.accentColor;
+                    if (accent) {
+                        priceBg.set('stroke', accent);
+                    }
                 }
 
                 const applyTextShared = (t: any) => {
                     if (!t || !String(t.type || '').includes('text')) return;
+                    // Always apply font and weight if explicitly set (overrides template)
                     if (styles.priceFont) t.set('fontFamily', styles.priceFont);
                     if (styles.priceFontWeight !== undefined) t.set('fontWeight', styles.priceFontWeight as any);
 
@@ -16046,6 +16566,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 const applyPriceText = (t: any) => {
                     applyTextShared(t);
                     if (!t || !String(t.type || '').includes('text')) return;
+                    // Apply text color if set (explicit override)
                     if (typeof styles.priceTextColor === 'string' && styles.priceTextColor.trim()) t.set('fill', styles.priceTextColor);
                     else if (typeof styles.splashTextColor === 'string' && styles.splashTextColor.trim()) t.set('fill', styles.splashTextColor);
                 };
@@ -16053,7 +16574,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 const applyCurrencyText = (t: any) => {
                     applyTextShared(t);
                     if (!t || !String(t.type || '').includes('text')) return;
-                    // IMPORTANT: do NOT override currency fill by default; preserve the template (ex: black on yellow).
+                    // Apply currency color if explicitly set
                     if (typeof styles.priceCurrencyColor === 'string' && styles.priceCurrencyColor.trim()) t.set('fill', styles.priceCurrencyColor);
                 };
 
@@ -16063,13 +16584,21 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
 
             const layout = layoutPriceGroup(splash, w, h);
             console.log('🔍 [resizeSmartObject] layoutPriceGroup result:', !!layout, layout ? { pillH: layout.pillH } : 'null');
-            
+
             if (layout) {
                 const { pillH } = layout;
                 const scale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
                 const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
                 console.log('🔍 [resizeSmartObject] Applying styles to splash:', { scale, offsetY, splashManual });
-                
+
+                // Update shadow color to match accent (after we have pillH for proper blur calculation)
+                const accent = styles?.splashColor ?? styles?.accentColor;
+                if (accent && priceBg && fabric?.Shadow) {
+                    priceBg.set('stroke', accent);
+                    const blur = Math.max(6, Math.min(26, pillH * 0.22));
+                    priceBg.set('shadow', new fabric.Shadow({ color: accent, blur, offsetX: 0, offsetY: 0 }));
+                }
+
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
                 
@@ -16100,37 +16629,47 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 // Apply global styles even in fallback mode
                 const globalScale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
                 const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
-                
-                // Guardar o scale base na primeira vez para evitar acumulação
-                if (typeof (splash as any).__baseScaleX !== 'number') {
-                    (splash as any).__baseScaleX = splash.scaleX || 1;
-                    (splash as any).__baseScaleY = splash.scaleY || 1;
+
+                // Armazenar o scale ORIGINAL (na criação), não o scale atual
+                // Isso garante que o redimensionamento funcione corretamente em ambas direções
+                if (typeof (splash as any).__originalScaleX !== 'number') {
+                    // Primeira vez: capturar o scale atual como "original"
+                    (splash as any).__originalScaleX = splash.scaleX || 1;
+                    (splash as any).__originalScaleY = splash.scaleY || 1;
                 }
-                const baseScaleX = (splash as any).__baseScaleX;
-                const baseScaleY = (splash as any).__baseScaleY;
-                
-                let sScaleX = baseScaleX * globalScale;
-                let sScaleY = baseScaleY * globalScale;
-                
+
+                // Calcular scale baseado no tamanho do cartão relativo ao tamanho original
+                const originalW = (splash as any).__originalCardWidth || splash.width || 100;
+                const sizeRatio = w / originalW;
+
+                // Aplicar: scale_original × ratio × globalScale
+                const origScaleX = (splash as any).__originalScaleX || 1;
+                const origScaleY = (splash as any).__originalScaleY || 1;
+                let sScaleX = origScaleX * sizeRatio * globalScale;
+                let sScaleY = origScaleY * sizeRatio * globalScale;
+
+                // Armazenar largura original do cartão para próximos redimensionamentos
+                (splash as any).__originalCardWidth = w;
+
                 // Clamp para não ultrapassar limites
                 if ((splash.width * sScaleX) > w * 0.9) {
                     const clampScale = (w * 0.9) / splash.width;
                     sScaleX = clampScale;
                     sScaleY = clampScale;
                 }
-                
+
                 const maxSplashH = h * 0.35;
                 if ((splash.height * sScaleY) > maxSplashH) {
                     const clampScale = maxSplashH / splash.height;
                     sScaleX = clampScale;
                     sScaleY = clampScale;
                 }
-                
-                console.log('🔍 [resizeSmartObject] Fallback - Applying scale:', { baseScaleX, globalScale, sScaleX, sScaleY, offsetY });
-                
+
+                console.log('🔍 [resizeSmartObject] Fallback - Applying scale:', { origScaleX, sizeRatio, globalScale, sScaleX, sScaleY, offsetY });
+
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
-                
+
                 if (!splashManual) {
                     const newTop = halfH - marginBottom + offsetY;
                     console.log('🔍 [resizeSmartObject] Fallback - Setting position:', { left: 0, top: newTop, sScaleX, sScaleY });
@@ -16145,10 +16684,10 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 } else {
                     splash.set({ scaleX: sScaleX, scaleY: sScaleY });
                 }
-                
+
                 // Force coordinate update
                 splash.setCoords();
-                
+
                 bottomH = (splash.height * sScaleY) + marginBottom;
                 console.log('🔍 [resizeSmartObject] Fallback - Splash updated, bottomH:', bottomH);
             }
@@ -17759,8 +18298,9 @@ const handleRecalculateLayout = () => {
         @add-color-style="addColorStyle"
         @apply-color-style="applyColorStyle"
         @add-interaction="() => {}"
-        @update-zone="(prop, val) => productZoneState.updateZone({ [prop]: val })"
+        @update-zone="handleUpdateZone"
         @update-global-styles="handleUpdateGlobalStyles"
+        @apply-template-to-zone="handleApplyTemplateToZone"
         @apply-preset="handleApplyZonePreset"
         @sync-gaps="productZoneState.syncGapsWithPadding"
         @recalculate-layout="productZoneState.recalculateLayout"
@@ -18250,13 +18790,24 @@ const handleRecalculateLayout = () => {
               <button @click="showPresentationModal = false" class="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-white/20 transition-all z-50">
                   <X class="w-6 h-6" />
               </button>
-              
+
               <!-- Controls -->
               <div class="absolute bottom-8 left-1/2 -translate-x-1/2 bg-[#2c2c2c] px-4 py-2 rounded-full flex gap-4 border border-white/10 shadow-xl z-50">
                   <span class="text-xs text-white font-medium">Modo Apresentação Interativa</span>
               </div>
           </div>
       </div>
+
+      <!-- Figma-style Crop Overlay -->
+      <FigmaCropOverlay
+          v-model="figmaCrop.isCropActive.value"
+          :frame-rect="figmaCrop.cropFrameRect.value"
+          :frame-name="figmaCrop.cropFrameName.value"
+          :zoom="1"
+          :canvas-offset="cropCanvasOffset"
+          @update:frame-rect="handleCropRectUpdate"
+          @crop-complete="handleCropComplete"
+      />
 
   </div>
 </template>

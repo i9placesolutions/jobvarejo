@@ -61,11 +61,12 @@ const props = defineProps<{
 // Emits
 const emit = defineEmits<{
   (e: 'update:zone', prop: string, value: any): void;
-  (e: 'update:globalStyles', prop: string, value: any): void;
+  (e: 'update:global-styles', prop: string, value: any): void;
   (e: 'apply-preset', presetId: string): void;
   (e: 'sync-gaps', padding: number): void;
   (e: 'recalculate'): void;
   (e: 'manage-label-templates'): void;
+  (e: 'apply-template-to-zone'): void;
 }>();
 
 // UI State
@@ -114,8 +115,8 @@ const updateZone = (prop: string, value: any) => {
 };
 
 const updateGlobal = (prop: string, value: any) => {
-  console.log('🔍 [ProductZoneSettings] emitting update:globalStyles', prop, value);
-  emit('update:globalStyles', prop, value);
+  console.log('🔍 [ProductZoneSettings] emitting update:global-styles', prop, value);
+  emit('update:global-styles', prop, value);
 };
 
 const FONT_DATALIST_ID = 'product-zone-fonts';
@@ -664,13 +665,15 @@ const verticalAlignOptions = [
         <div class="space-y-1.5">
           <div class="flex items-center justify-between">
             <label class="text-[10px] text-zinc-500">Modelo de Etiqueta</label>
-            <button
-              type="button"
-              class="text-[10px] text-violet-300 hover:text-violet-200 transition-colors"
-              @click="emit('manage-label-templates')"
-            >
-              Gerenciar
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="text-[10px] text-violet-300 hover:text-violet-200 transition-colors"
+                @click="emit('manage-label-templates')"
+              >
+                Gerenciar
+              </button>
+            </div>
           </div>
           <select
             :value="globalStyles?.splashTemplateId ?? ''"
@@ -682,9 +685,18 @@ const verticalAlignOptions = [
               {{ tpl.name }}
             </option>
           </select>
-          <p class="text-[9px] text-zinc-500 leading-snug">
-            Dica: crie um modelo selecionando uma etiqueta no canvas e salvando no gerenciador.
-          </p>
+          <div class="flex items-center gap-2">
+            <p class="text-[9px] text-zinc-500 leading-snug flex-1">
+              Usado para novos produtos. Para aplicar aos existentes:
+            </p>
+            <button
+              type="button"
+              class="text-[9px] text-green-400 hover:text-green-300 transition-colors underline"
+              @click="emit('apply-template-to-zone')"
+            >
+              Aplicar a todos
+            </button>
+          </div>
         </div>
 
         <!-- Splash Style -->

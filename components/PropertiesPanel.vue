@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
-  AlignLeft, AlignCenter, AlignRight, 
-  Bold, Italic, Underline, 
-  Type, Palette, Layers, Box, 
+  AlignLeft, AlignCenter, AlignRight,
+  Bold, Italic, Underline,
+  Type, Palette, Layers, Box,
   Plus, Minus, Trash2, MousePointer2,
   FlipHorizontal, FlipVertical,
   Group, Ungroup,
@@ -19,7 +19,8 @@ import {
   Eye,
   Zap,
   ChevronsUp,
-  ChevronsDown
+  ChevronsDown,
+  Crop // For Crop mode
 } from 'lucide-vue-next'
 import ColorPicker from './ui/ColorPicker.vue'
 import ProductZoneSettings from './ProductZoneSettings.vue'
@@ -52,6 +53,7 @@ const emit = defineEmits<{
   (e: 'sync-gaps', padding: number): void
   (e: 'recalculate-layout'): void
   (e: 'manage-label-templates'): void
+  (e: 'apply-template-to-zone'): void
 }>()
 
 // --- Computed Helpers ---
@@ -98,6 +100,7 @@ const isSmartGroup = computed(() => props.selectedObject?.type === 'group' && pr
 const isGroup = computed(() => props.selectedObject?.type === 'group' || props.selectedObject?.type === 'activeSelection')
 const isMultiSelect = computed(() => props.selectedObject?.type === 'activeSelection')
 const canMask = computed(() => props.selectedObject && !isMultiSelect.value)
+const canCrop = computed(() => props.selectedObject && !isMultiSelect.value)
 const isComponent = computed(() => props.selectedObject?.isComponent)
 
 // Helper to detect if selected object is a ProductCard
@@ -170,6 +173,47 @@ const isLikelyProductZone = (obj: any): boolean => {
 }
 
 const isProductZone = computed(() => isLikelyProductZone(props.selectedObject))
+
+// Extract zone data directly from selected object when it's a product zone
+const currentZoneData = computed(() => {
+  if (!isProductZone.value || !props.selectedObject) return props.productZone
+
+  const obj = props.selectedObject
+  const pad = typeof obj._zonePadding === 'number' ? obj._zonePadding : (obj.padding || 20)
+
+  return {
+    columns: obj.columns ?? 0,
+    rows: obj.rows ?? 0,
+    padding: pad,
+    gapHorizontal: typeof obj.gapHorizontal === 'number' ? obj.gapHorizontal : pad,
+    gapVertical: typeof obj.gapVertical === 'number' ? obj.gapVertical : pad,
+    layoutDirection: obj.layoutDirection ?? 'horizontal',
+    cardAspectRatio: obj.cardAspectRatio ?? 'auto',
+    lastRowBehavior: obj.lastRowBehavior ?? 'fill',
+    verticalAlign: obj.verticalAlign ?? 'top',
+    highlightCount: obj.highlightCount ?? 0,
+    highlightPos: obj.highlightPos ?? 'first',
+    highlightHeight: obj.highlightHeight ?? 1.5,
+    isLocked: !!(obj.lockMovementX || obj.lockMovementY || obj.lockScalingX || obj.lockScalingY),
+    backgroundColor: obj.backgroundColor,
+    borderColor: obj.borderColor,
+    showBorder: obj.showBorder
+  }
+})
+
+// Extract global styles from selected zone object
+const currentGlobalStyles = computed(() => {
+  if (!isProductZone.value || !props.selectedObject) return props.productGlobalStyles
+
+  // Get styles from zone object, fall back to prop
+  const zoneStyles = (props.selectedObject as any)._zoneGlobalStyles
+  if (zoneStyles && typeof zoneStyles === 'object') {
+    return { ...props.productGlobalStyles, ...zoneStyles }
+  }
+
+  return props.productGlobalStyles
+})
+
 const isFrame = computed(() => props.selectedObject?.isFrame)
 const isVectorPath = computed(() => props.selectedObject?.isVectorPath || props.selectedObject?.type === 'path')
 const isRectLike = computed(() => {
@@ -530,6 +574,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <div v-if="canMask" class="w-px h-4 bg-white/10 my-auto"></div>
           <div v-if="canMask" class="flex gap-1">
              <button @click="$emit('action', 'toggle-mask')" class="hover:text-white p-1 rounded hover:bg-white/5" :class="selectedObject.isMask ? 'text-violet-400 bg-violet-500/10' : ''" title="Use as Mask"><Scan class="w-3.5 h-3.5" /></button>
+          </div>
+
+          <!-- Crop (Figma-style) -->
+          <div v-if="canCrop" class="w-px h-4 bg-white/10 my-auto"></div>
+          <div v-if="canCrop" class="flex gap-1">
+             <button @click="$emit('action', 'activate-crop')" class="hover:text-white p-1 rounded hover:bg-white/5" title="Ativar modo de recorte (Crop)"><Crop class="w-3.5 h-3.5" /></button>
           </div>
 
           <!-- Auto-Layout Spacing (Gap) -->
@@ -1174,15 +1224,15 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- 9. PRODUCT ZONE SETTINGS (If Product Zone) -->
-      <div v-if="isProductZone" class="border-b border-black/20">
+      <div v-show="isProductZone" class="border-b border-black/20">
           <div class="p-4 pb-2 flex items-center gap-2 border-b border-white/5">
              <LayoutGrid class="w-3.5 h-3.5 text-green-400" />
              <span class="text-[11px] font-bold text-green-400 uppercase tracking-widest">Zona de Produtos</span>
           </div>
           <ProductZoneSettings
-            v-if="productZone"
-            :zone="productZone"
-            :global-styles="productGlobalStyles"
+            v-if="isProductZone"
+            :zone="currentZoneData"
+            :global-styles="currentGlobalStyles"
             :label-templates="labelTemplates"
             @update:zone="(prop, val) => $emit('update-zone', prop, val)"
             @update:global-styles="(prop, val) => $emit('update-global-styles', prop, val)"
@@ -1190,6 +1240,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             @sync-gaps="padding => $emit('sync-gaps', padding)"
             @recalculate="$emit('recalculate-layout')"
             @manage-label-templates="$emit('manage-label-templates')"
+            @apply-template-to-zone="$emit('apply-template-to-zone')"
           />
       </div>
 

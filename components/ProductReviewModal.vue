@@ -372,7 +372,7 @@ const filteredProducts = computed(() => {
                     <table class="w-full text-left text-xs border-collapse">
                         <thead class="bg-zinc-800 text-zinc-400 sticky top-0 z-10">
                             <tr>
-                                <th class="p-3 w-15">Img</th>
+                                <th class="p-3 w-28">Img</th>
                                 <th class="p-3">Produto</th>
                                 <th class="p-3 w-80">Preços (Und | Emb | +Esp | Esp)</th>
                                 <th class="p-3 w-20">Status</th>
@@ -383,7 +383,7 @@ const filteredProducts = computed(() => {
                             <tr v-for="product in filteredProducts" :key="product.id" class="hover:bg-white/5 group">
                                 <!-- Image Column -->
                                 <td class="p-2">
-                                    <div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center overflow-hidden border border-zinc-700 relative">
+                                    <div class="w-24 h-24 rounded bg-zinc-800 flex items-center justify-center overflow-hidden border border-zinc-700 relative">
                                         <img v-if="product.imageUrl" :src="product.imageUrl" class="w-full h-full object-contain" />
                                         <Loader2 v-else-if="product.status === 'processing'" class="w-4 h-4 text-blue-500 animate-spin" />
                                         <AlertCircle v-else-if="product.status === 'error'" class="w-4 h-4 text-red-500" />

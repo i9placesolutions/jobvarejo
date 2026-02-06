@@ -608,7 +608,7 @@ const handleFileUpload = async (event: Event) => {
                 :key="cat.id"
                 @click="activeCategory = cat.id; currentFolderId = null"
                 :class="[
-                    'flex flex-col items-center justify-center p-2 rounded-lg min-w-[60px] h-[55px] transition-all',
+                    'flex flex-col items-center justify-center p-2 rounded-lg min-w-15 h-14 transition-all',
                     activeCategory === cat.id ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
                 ]"
             >
