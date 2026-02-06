@@ -1,9 +1,10 @@
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 
 /**
- * API Route para deletar um único asset da Contabo Storage
+ * API Route para deletar um único asset da Wasabi Storage
  *
  * Body: { key: string } - O key do arquivo a ser deletado
+ * As pastas são: imagens/, logo/, ou projects/{userId}/{projectId}/
  */
 export default defineEventHandler(async (event) => {
   try {
@@ -18,16 +19,16 @@ export default defineEventHandler(async (event) => {
     }
 
     const config = useRuntimeConfig()
-    const endpoint = config.contaboEndpoint
-    const region = config.contaboRegion || 'default'
-    const accessKeyId = config.contaboAccessKey
-    const secretAccessKey = config.contaboSecretKey
-    const bucketName = config.contaboBucket
+    const endpoint = config.wasabiEndpoint
+    const region = config.wasabiRegion || 'us-east-1'
+    const accessKeyId = config.wasabiAccessKey
+    const secretAccessKey = config.wasabiSecretKey
+    const bucketName = config.wasabiBucket
 
-    if (!accessKeyId || !secretAccessKey || !endpoint) {
+    if (!accessKeyId || !secretAccessKey || !endpoint || !bucketName) {
       throw createError({
         status: 500,
-        message: 'Contabo Storage not configured'
+        message: 'Wasabi Storage not configured'
       })
     }
 
@@ -48,13 +49,15 @@ export default defineEventHandler(async (event) => {
 
     await s3Client.send(deleteCommand)
 
+    console.log('✅ Asset deleted from Wasabi:', key)
+
     return {
       success: true,
       message: 'Asset deleted successfully'
     }
 
   } catch (error: any) {
-    console.error('Error deleting asset:', error)
+    console.error('Error deleting asset from Wasabi:', error)
     throw createError({
       status: 500,
       message: error.message || 'Failed to delete asset'

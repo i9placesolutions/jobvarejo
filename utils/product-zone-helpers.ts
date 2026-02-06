@@ -196,8 +196,9 @@ export const calculateGridLayout = (
 
   // Colunas fixas ou automáticas
   if (zone.columns && zone.columns > 0) {
-    // Never keep more columns than items; avoids empty slots/unused space for small counts.
-    cols = Math.min(zone.columns, Math.max(1, productCount));
+    // Colunas fixas: respeita o valor definido mesmo com poucos produtos
+    // Isso permite layouts como "6 colunas" funcionarem corretamente
+    cols = zone.columns;
   } else {
     // Auto-calculate: prioriza preenchimento e evita "órfãos" na ultima linha
     const minCardWidth = 60; 

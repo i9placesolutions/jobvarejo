@@ -1,7 +1,7 @@
-import { S3Client, DeleteObjectsCommand } from '@aws-sdk/client-s3'
+import { S3Client, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 
 /**
- * API Route para deletar arquivos da Contabo Storage
+ * API Route para deletar arquivos da Wasabi Storage
  *
  * Deleta múltiplos arquivos baseado em um prefixo
  */
@@ -18,38 +18,34 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Configurações da Contabo
-    const config = {
-      endpoint: process.env.CONTABO_ENDPOINT || 'eu2.contabostorage.com',
-      bucket: process.env.CONTABO_BUCKET,
-      accessKey: process.env.CONTABO_ACCESS_KEY,
-      secretKey: process.env.CONTABO_SECRET_KEY,
-      region: process.env.CONTABO_REGION || 'eu-2'
-    }
+    // Configurações da Wasabi
+    const endpoint = process.env.WASABI_ENDPOINT || 's3.wasabisys.com'
+    const bucket = process.env.WASABI_BUCKET || 'jobvarejo'
+    const accessKey = process.env.WASABI_ACCESS_KEY
+    const secretKey = process.env.WASABI_SECRET_KEY
+    const region = process.env.WASABI_REGION || 'us-east-1'
 
-    if (!config.bucket || !config.accessKey || !config.secretKey) {
+    if (!bucket || !accessKey || !secretKey) {
       throw createError({
         status: 500,
-        message: 'Contabo Storage not configured'
+        message: 'Wasabi Storage not configured'
       })
     }
 
-    // Criar cliente S3
+    // Criar cliente S3 para Wasabi
     const s3Client = new S3Client({
-      endpoint: `https://${config.endpoint}`,
-      region: config.region,
+      endpoint: `https://${endpoint}`,
+      region: region,
       credentials: {
-        accessKeyId: config.accessKey,
-        secretAccessKey: config.secretKey
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey
       },
       forcePathStyle: true
     })
 
     // Primeiro, listar objetos com o prefixo
-    const { ListObjectsV2Command } = require('@aws-sdk/client-s3')
-
     const listCommand = new ListObjectsV2Command({
-      Bucket: config.bucket,
+      Bucket: bucket,
       Prefix: prefix
     })
 
@@ -61,7 +57,7 @@ export default defineEventHandler(async (event) => {
 
     // Deletar todos os objetos encontrados
     const deleteCommand = new DeleteObjectsCommand({
-      Bucket: config.bucket,
+      Bucket: bucket,
       Delete: {
         Objects: listResult.Contents.map(obj => ({ Key: obj.Key })),
         Quiet: false
@@ -70,13 +66,15 @@ export default defineEventHandler(async (event) => {
 
     const deleteResult = await s3Client.send(deleteCommand)
 
+    console.log(`✅ Deleted ${deleteResult.Deleted?.length || 0} files from Wasabi with prefix: ${prefix}`)
+
     return {
       deleted: deleteResult.Deleted?.length || 0,
       message: `Deleted ${deleteResult.Deleted?.length || 0} files`
     }
 
   } catch (error: any) {
-    console.error('Error deleting files:', error)
+    console.error('Error deleting files from Wasabi:', error)
     throw createError({
       status: 500,
       message: error.message || 'Failed to delete files'

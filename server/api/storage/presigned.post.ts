@@ -2,10 +2,16 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 /**
- * API Route para gerar presigned URLs para Contabo Storage
+ * API Route para gerar presigned URLs para Wasabi Storage
  *
- * Contabo Object Storage é compatível com AWS S3.
+ * Wasabi Cloud Storage é compatível com AWS S3.
  * Usa presigned URLs para evitar expor credenciais no frontend.
+ *
+ * Estrutura de pastas:
+ * - projects/{userId}/{projectId}/page_{pageId}.json → Canvas JSON
+ * - projects/{userId}/{projectId}/thumb_{pageId}.png → Thumbnail
+ * - imagens/{filename} → Uploads de imagens
+ * - logo/{filename} → Logos de marcas
  */
 
 export default defineEventHandler(async (event) => {
@@ -20,68 +26,55 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Configurações da Contabo (variáveis de ambiente)
-    const endpoint = process.env.CONTABO_ENDPOINT || 'eu2.contabostorage.com'
-    // Detectar região automaticamente baseado no endpoint se não especificado
-    let defaultRegion = 'eu-2'
-    if (endpoint.includes('usc1')) defaultRegion = 'us-east-1'
-    else if (endpoint.includes('sin1')) defaultRegion = 'ap-southeast-1'
-    else if (endpoint.includes('eu2')) defaultRegion = 'eu-2'
-    
-    const config = {
-      endpoint,
-      bucket: process.env.CONTABO_BUCKET,
-      accessKey: process.env.CONTABO_ACCESS_KEY,
-      secretKey: process.env.CONTABO_SECRET_KEY,
-      region: process.env.CONTABO_REGION || defaultRegion
-    }
+    // Configurações da Wasabi (variáveis de ambiente)
+    const endpoint = process.env.WASABI_ENDPOINT || 's3.wasabisys.com'
+    const region = process.env.WASABI_REGION || 'us-east-1'
+    const bucket = process.env.WASABI_BUCKET || 'jobvarejo'
+    const accessKey = process.env.WASABI_ACCESS_KEY
+    const secretKey = process.env.WASABI_SECRET_KEY
 
     // Verificar configuração e dar mensagens específicas
-    if (!config.bucket) {
-      console.error('❌ CONTABO_BUCKET não está definido')
+    if (!bucket) {
+      console.error('❌ WASABI_BUCKET não está definido')
       throw createError({
         status: 500,
-        message: 'CONTABO_BUCKET environment variable is missing. Check your .env file.'
+        message: 'WASABI_BUCKET environment variable is missing. Check your .env file.'
       })
     }
-    if (!config.accessKey) {
-      console.error('❌ CONTABO_ACCESS_KEY não está definido')
+    if (!accessKey) {
+      console.error('❌ WASABI_ACCESS_KEY não está definido')
       throw createError({
         status: 500,
-        message: 'CONTABO_ACCESS_KEY environment variable is missing. Check your .env file.'
+        message: 'WASABI_ACCESS_KEY environment variable is missing. Check your .env file.'
       })
     }
-    if (!config.secretKey) {
-      console.error('❌ CONTABO_SECRET_KEY não está definido')
+    if (!secretKey) {
+      console.error('❌ WASABI_SECRET_KEY não está definido')
       throw createError({
         status: 500,
-        message: 'CONTABO_SECRET_KEY environment variable is missing. Check your .env file.'
+        message: 'WASABI_SECRET_KEY environment variable is missing. Check your .env file.'
       })
     }
 
-    // Criar cliente S3 para Contabo
-    // IMPORTANTE: Contabo usa formato tenant:bucket (ex: 475a29e42e55430abff00915da2fa4bc:jobupload)
-    // O bucket name no comando S3 deve ser o nome completo com tenant
+    // Criar cliente S3 para Wasabi
     const s3Client = new S3Client({
-      endpoint: `https://${config.endpoint}`,
-      region: config.region,
+      endpoint: `https://${endpoint}`,
+      region: region,
       credentials: {
-        accessKeyId: config.accessKey,
-        secretAccessKey: config.secretKey
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey
       },
-      // Importante: Contabo usa path style, não virtual host
-      // URL gerada: https://endpoint/bucket/key
-      // Com tenant:bucket, a URL fica: https://endpoint/tenant:bucket/key
+      // Wasabi usa path style (igual a Contabo)
+      // URL gerada: https://s3.wasabisys.com/bucket/key
       forcePathStyle: true
     })
-    
+
     // Log para debug (sem expor credenciais)
-    console.log('🔍 Contabo S3 Client config:', {
-      endpoint: `https://${config.endpoint}`,
-      bucket: config.bucket ? (config.bucket.includes(':') ? config.bucket.split(':')[1] : config.bucket.substring(0, 20)) + '...' : 'N/A',
-      fullBucket: config.bucket ? '***' : 'N/A',
-      region: config.region,
-      hasCredentials: !!(config.accessKey && config.secretKey),
+    console.log('🔍 Wasabi S3 Client config:', {
+      endpoint: `https://${endpoint}`,
+      bucket: bucket,
+      region: region,
+      hasCredentials: !!(accessKey && secretKey),
       operation: operation,
       key: key.substring(0, 50) + (key.length > 50 ? '...' : '')
     })
@@ -90,67 +83,56 @@ export default defineEventHandler(async (event) => {
 
     if (operation === 'put') {
       command = new PutObjectCommand({
-        Bucket: config.bucket,
+        Bucket: bucket,
         Key: key,
         ContentType: contentType || 'application/octet-stream'
       })
     } else {
-      // CRITICAL: Disable checksum mode for S3-compatible storage (e.g. Contabo)
-      // that may return 500 when x-amz-checksum-mode=ENABLED is present in the presigned URL
+      // Disable checksum mode para S3-compatible storage
       command = new GetObjectCommand({
-        Bucket: config.bucket,
+        Bucket: bucket,
         Key: key,
         ChecksumMode: 'DISABLED'
       })
     }
 
     // Gerar presigned URL válida por 1 hora
-    let url = await getSignedUrl(s3Client, command, {
+    const url = await getSignedUrl(s3Client, command, {
       expiresIn: 3600
     })
 
-    // CRITICAL: Contabo returns 500 when bucket name has encoded colon (%3A)
-    // The AWS SDK encodes special characters in the URL path, but Contabo expects
-    // the colon to be unencoded. We need to decode the bucket portion of the URL.
-    // Pattern: https://endpoint/tenant%3Abucket/key -> https://endpoint/tenant:bucket/key
-    if (config.bucket?.includes(':') && url.includes('%3A')) {
-      // Only decode the %3A that's part of the bucket name, not query params
-      const urlObj = new URL(url)
-      // Decode the pathname which contains the bucket
-      urlObj.pathname = decodeURIComponent(urlObj.pathname)
-      url = urlObj.toString()
-      console.log('🔧 URL presignada corrigida (decodificado %3A no bucket):', url.substring(0, 100) + '...')
-    }
+    console.log('✅ Presigned URL gerada com sucesso')
 
     return {
       url,
-      bucket: config.bucket,
-      region: config.region
+      bucket: bucket,
+      region: region,
+      endpoint: endpoint
     }
 
   } catch (error: any) {
-    console.error('❌ Erro ao gerar presigned URL da Contabo:', error)
+    console.error('❌ Erro ao gerar presigned URL da Wasabi:', error)
     console.error('   Detalhes:', {
       message: error.message,
       code: error.code,
-      endpoint: process.env.CONTABO_ENDPOINT,
-      bucket: process.env.CONTABO_BUCKET ? '***' : 'NÃO DEFINIDO',
-      hasAccessKey: !!process.env.CONTABO_ACCESS_KEY,
-      hasSecretKey: !!process.env.CONTABO_SECRET_KEY
+      endpoint: process.env.WASABI_ENDPOINT,
+      bucket: process.env.WASABI_BUCKET || 'NÃO DEFINIDO',
+      hasAccessKey: !!process.env.WASABI_ACCESS_KEY,
+      hasSecretKey: !!process.env.WASABI_SECRET_KEY
     })
-    
+
     // Mensagem mais amigável para o frontend
     let userMessage = 'Failed to generate presigned URL'
     if (error.message?.includes('not configured') || error.message?.includes('missing')) {
-      userMessage = 'Contabo Storage não está configurado. Verifique as variáveis de ambiente no servidor.'
+      userMessage = 'Wasabi Storage não está configurado. Verifique as variáveis de ambiente no servidor.'
     } else if (error.code === 'InvalidAccessKeyId' || error.code === 'SignatureDoesNotMatch') {
-      userMessage = 'Credenciais da Contabo inválidas. Verifique CONTABO_ACCESS_KEY e CONTABO_SECRET_KEY.'
+      userMessage = 'Credenciais da Wasabi inválidas. Verifique WASABI_ACCESS_KEY e WASABI_SECRET_KEY.'
     } else if (error.code === 'NoSuchBucket') {
-      userMessage = `Bucket "${process.env.CONTABO_BUCKET}" não existe na Contabo.`
+      userMessage = `Bucket "${process.env.WASABI_BUCKET}" não existe na Wasabi.`
     } else {
-      userMessage = error.message || 'Erro desconhecido ao conectar com Contabo Storage'
+      userMessage = error.message || 'Erro desconhecido ao conectar com Wasabi Storage'
     }
-    
+
     throw createError({
       status: 500,
       message: userMessage

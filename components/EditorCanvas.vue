@@ -2484,7 +2484,14 @@ const setupAltDragDuplicate = () => {
         if (!canvas.value) return;
         const tr: any = (canvas.value as any)._currentTransform;
         if (!tr) return;
+
+        // Preserve current transform state (action, corner) for ProductCards
+        const currentAction = tr.action;
+        const currentCorner = tr.corner;
+
+        // Swap target to clone - this makes the CLONE follow the mouse
         tr.target = clone;
+
         if (tr.original && typeof tr.original === 'object') {
             tr.original.left = clone.left;
             tr.original.top = clone.top;
@@ -2492,6 +2499,15 @@ const setupAltDragDuplicate = () => {
             tr.original.scaleY = clone.scaleY;
             tr.original.angle = clone.angle;
         }
+
+        // Restore action/corner for proper drag behavior with groups
+        tr.action = currentAction;
+        tr.corner = currentCorner;
+
+        console.log('🔄 [swapTransformToClone] Transform swapped to clone (Canva/Figma style)', {
+            cloneId: clone._customId,
+            cloneType: clone.type
+        });
     };
 
     // Helper to find parent group when in interactive editing mode (Fabric v7)
@@ -2832,27 +2848,35 @@ const setupAltDragDuplicate = () => {
                     }
 
                     if (insertionSuccessful) {
+                        // ✅ FLUID LIKE CANVA/FIGMA: Swap transform so CLONE follows mouse
+                        swapTransformToClone(cloned);
+                        canvas.value.setActiveObject(cloned);
+
+                        // ✅ Lock original in place during drag (stays at start position)
+                        original.set({
+                            left: state.start.left,
+                            top: state.start.top,
+                            lockMovementX: true,
+                            lockMovementY: true
+                        });
+                        original.setCoords?.();
+
                         // Render immediately to show the clone
                         canvas.value.requestRenderAll();
                         state.didDuplicate = true;
-                        
-                        // If the card is in a ProductZone, recalculate layout
+
+                        // If the card is in a ProductZone, mark for relayout AFTER drag (in mouse:up)
+                        // During drag, clone follows mouse freely. On drop, it integrates into grid.
                         const zoneId = (cloned as any).parentZoneId;
                         if (zoneId && !parentGroup) {
-                            const zoneObj = canvas.value.getObjects().find((o: any) => 
-                                o._customId === zoneId && isLikelyProductZone(o)
-                            );
-                            if (zoneObj) {
-                                setTimeout(() => {
-                                    recalculateZoneLayout(zoneObj, undefined, { save: false });
-                                }, 50);
-                            }
+                            (cloned as any)._pendingZoneRelayout = true;
+                            (cloned as any)._zoneId = zoneId;
                         }
-                        
-                        console.log('✅ [alt-duplicate] Complete (fluid like Canva)', {
+
+                        console.log('✅ [alt-duplicate] Clone follows mouse (Canva/Figma style)', {
                             cloneId: cloned._customId,
                             clonePosition: { left: cloned.left, top: cloned.top },
-                            originalPosition: { left: original.left, top: original.top },
+                            originalLocked: { left: original.left, top: original.top },
                             parentGroupName: parentGroup?.name || parentGroup?._customId || 'canvas'
                         });
                     }
@@ -2868,6 +2892,35 @@ const setupAltDragDuplicate = () => {
 
     canvas.value.on('mouse:up', () => {
         const shouldSave = state.didDuplicate;
+
+        // ✅ Unlock original object if we duplicated
+        if (state.didDuplicate && state.original) {
+            state.original.set({
+                lockMovementX: false,
+                lockMovementY: false
+            });
+            state.original.setCoords?.();
+        }
+
+        // ✅ Execute pending zone relayout after drag completes
+        // This integrates the clone into the zone's grid automatically
+        if (state.didDuplicate && canvas.value) {
+            const allObjects = canvas.value.getObjects();
+            allObjects.forEach((obj: any) => {
+                if (obj._pendingZoneRelayout && obj._zoneId) {
+                    const zoneObj = allObjects.find((o: any) =>
+                        o._customId === obj._zoneId && isLikelyProductZone(o)
+                    );
+                    if (zoneObj) {
+                        // Recalculate layout including the new clone in the grid
+                        recalculateZoneLayout(zoneObj, undefined, { save: false });
+                    }
+                    delete obj._pendingZoneRelayout;
+                    delete obj._zoneId;
+                }
+            });
+        }
+
         state.armed = false;
         state.inProgress = false;
         state.didDuplicate = false;
@@ -3823,6 +3876,7 @@ const historyStack = ref<string[]>([]);
 const historyIndex = ref(-1);
 const isHistoryProcessing = ref(false); // Flag to prevent loop
 let isZoneCascadeDelete = false;
+let isApplyingZoneUpdate = false; // Flag to prevent double state save when updating product zones
 
 const showDeletePageModal = ref(false)
 
@@ -5799,54 +5853,47 @@ const CANVAS_CUSTOM_PROPS = [
     'strokeMiterLimit'
 ] as const;
 
-// Helper function to extract key/path from Contabo URL (presigned or permanent)
-const extractContaboKey = (url: string): string | null => {
+// Helper function to extract key/path from Wasabi URL (presigned or permanent)
+const extractWasabiKey = (url: string): string | null => {
     try {
-        // CRITICAL: Decode URL first to handle %3A (encoded :) and other encoded characters
+        // CRITICAL: Decode URL first to handle encoded characters
         const decodedUrl = decodeURIComponent(url);
         const urlObj = new URL(decodedUrl);
-        
-        // Formatos comuns:
-        // - Path-style (nosso presigned do backend): https://endpoint/tenant:bucket/key...  (ou /bucket/key...)
-        // - Virtual-host: https://bucket.endpoint/key...
+
+        // Formatos Wasabi:
+        // - Path-style: https://s3.wasabisys.com/bucket/key...
         //
         // OBS: a "key" é SEMPRE o caminho completo do objeto no bucket (ex.: projects/{userId}/...)
 
         // Decode pathname as well to handle any encoded characters
         const decodedPathname = decodeURIComponent(urlObj.pathname);
         const pathParts = decodedPathname.split('/').filter(p => p);
-        console.log(`🔍 extractContaboKey - URL: ${url.substring(0, 100)}...`);
+        console.log(`🔍 extractWasabiKey - URL: ${url.substring(0, 100)}...`);
         console.log(`   decodedUrl: ${decodedUrl.substring(0, 100)}...`);
         console.log(`   pathname: ${decodedPathname}`);
         console.log(`   pathParts: [${pathParts.join(', ')}]`);
-        
+
         if (pathParts.length === 0) {
             console.warn(`⚠️ Não foi possível extrair chave da URL (path vazio): ${url.substring(0, 100)}`);
             return null;
         }
 
-        const cfg = useRuntimeConfig()?.public?.contabo || {};
-        const configuredBucket = (cfg.bucket || '475a29e42e55430abff00915da2fa4bc:jobupload').toString();
-        const bucketPlain = configuredBucket.includes(':') ? configuredBucket.split(':').pop()! : configuredBucket;
+        const cfg = useRuntimeConfig()?.public?.wasabi || {};
+        const configuredBucket = (cfg.bucket || 'jobvarejo').toString();
 
         console.log(`   configuredBucket: ${configuredBucket}`);
-        console.log(`   bucketPlain: ${bucketPlain}`);
-
-        const candidates = new Set<string>();
-        if (configuredBucket) candidates.add(configuredBucket);
-        if (bucketPlain) candidates.add(bucketPlain);
 
         const hostname = (urlObj.hostname || '').toLowerCase();
         const first = pathParts[0] ?? '';
-        // Check if first part is bucket (may have : or match configured bucket)
-        const firstLooksLikeBucket = first.includes(':') || candidates.has(first);
-        const hostLooksLikeVirtualHost = [...candidates].some(b => b && hostname.startsWith(`${b.toLowerCase()}.`));
+        // Check if first part is bucket
+        const firstLooksLikeBucket = first === configuredBucket || first.includes(':');
+        const hostLooksLikeVirtualHost = hostname.includes(`${configuredBucket.toLowerCase()}.`);
 
         console.log(`   first: ${first}`);
         console.log(`   firstLooksLikeBucket: ${firstLooksLikeBucket}`);
         console.log(`   hostLooksLikeVirtualHost: ${hostLooksLikeVirtualHost}`);
 
-        // Path-style: primeira parte do path é bucket/tenant:bucket → remover
+        // Path-style: primeira parte do path é bucket → remover
         // Virtual-host: host já contém bucket → NÃO remover nada do path
         const keyParts = (firstLooksLikeBucket && !hostLooksLikeVirtualHost) ? pathParts.slice(1) : pathParts;
         const key = keyParts.join('/');
@@ -5865,13 +5912,13 @@ const extractContaboKey = (url: string): string | null => {
     }
 };
 
-// Helper function to convert presigned URL to permanent URL
+// Helper function to convert presigned URL to permanent URL (Wasabi)
 const convertPresignedToPermanentUrl = (url: string): string => {
-    // If it's not a Contabo URL, return as-is
-    if (!url.includes('contabostorage.com')) {
+    // If it's not a Wasabi URL, return as-is
+    if (!url.includes('wasabisys.com')) {
         return url;
     }
-    
+
     // If it's already a permanent URL (no query params), return as-is
     try {
         const urlObj = new URL(url);
@@ -5879,20 +5926,20 @@ const convertPresignedToPermanentUrl = (url: string): string => {
             console.log(`🔗 URL já é permanente (sem query params): ${url.substring(0, 80)}...`);
             return url;
         }
-        
+
         // Extract key from presigned URL
-        const key = extractContaboKey(url);
+        const key = extractWasabiKey(url);
         if (!key) {
             console.warn(`⚠️ Não foi possível extrair key da URL presignada: ${url.substring(0, 100)}`);
             return url; // Can't extract key, return original
         }
-        
-        // Build permanent URL - CRITICAL: use full bucket name with tenant
-        const config = useRuntimeConfig().public.contabo || {};
-        const endpoint = config.endpoint || 'usc1.contabostorage.com';
-        const bucket = config.bucket || '475a29e42e55430abff00915da2fa4bc:jobupload';
+
+        // Build permanent URL for Wasabi
+        const config = useRuntimeConfig().public?.wasabi || {};
+        const endpoint = config.endpoint || 's3.wasabisys.com';
+        const bucket = config.bucket || 'jobvarejo';
         const permanentUrl = `https://${endpoint}/${bucket}/${key}`;
-        console.log(`🔄 Convertendo presigned → permanent:`);
+        console.log(`🔄 Convertendo presigned → permanent (Wasabi):`);
         console.log(`   De: ${url.substring(0, 100)}...`);
         console.log(`   Para: ${permanentUrl.substring(0, 100)}...`);
         console.log(`   Key extraída: ${key}`);
@@ -5910,10 +5957,10 @@ const generatePresignedUrl = async (urlOrKey: string): Promise<string | null> =>
         let key: string | null = null;
         
         console.log(`🔑 generatePresignedUrl chamada com: ${urlOrKey.substring(0, 100)}...`);
-        
-        if (urlOrKey.includes('contabostorage.com')) {
-            key = extractContaboKey(urlOrKey);
-            console.log(`   Key extraída da URL: ${key || '(null)'}`);
+
+        if (urlOrKey.includes('wasabisys.com')) {
+            key = extractWasabiKey(urlOrKey);
+            console.log(`   Key extraída da URL Wasabi: ${key || '(null)'}`);
         } else {
             // Assume it's already a key
             key = urlOrKey;
@@ -6636,6 +6683,8 @@ const setupHistory = () => {
     });
     canvas.value.on('object:modified', (e: any) => {
         if (isHistoryProcessing.value) return;
+        // Prevent double state save when applyZoneUpdates already saved (prevents duplicate history entries)
+        if (isApplyingZoneUpdate) return;
 
         const obj = e?.target;
         // For zones, run our normalization/layout first and save only once (prevents unstable undo states).
@@ -6921,7 +6970,36 @@ const undo = async () => {
     if (historyIndex.value > 0 && !isHistoryProcessing.value) {
         isHistoryProcessing.value = true;
         historyIndex.value--;
-        const state = JSON.parse(historyStack.value[historyIndex.value] || '{}');
+
+        // CRITICAL: Validate state before processing
+        const stateStr = historyStack.value[historyIndex.value];
+        if (!stateStr) {
+            console.error('❌ Estado vazio no histórico');
+            isHistoryProcessing.value = false;
+            return;
+        }
+
+        let state = JSON.parse(stateStr);
+
+        // CRITICAL: Check if state has objects, try to find a valid one if empty
+        if (!state.objects || state.objects.length === 0) {
+            console.warn('⚠️ Estado sem objetos - buscando próximo válido...');
+            // Try to find next valid state
+            while (historyIndex.value > 0) {
+                historyIndex.value--;
+                const nextStateStr = historyStack.value[historyIndex.value];
+                if (nextStateStr) {
+                    const nextState = JSON.parse(nextStateStr);
+                    if (nextState.objects && nextState.objects.length > 0) {
+                        // Update state to the valid one found
+                        state = nextState;
+                        console.log(`✅ Estado válido encontrado no índice ${historyIndex.value}`);
+                        break;
+                    }
+                }
+            }
+        }
+
         hydrateLabelTemplatesFromProjectJson(state);
 
         // CRITICAL: Extract viewport BEFORE loadFromJSON (it will be reset)
@@ -6937,6 +7015,22 @@ const undo = async () => {
             rehydrateCanvasZones();
             sanitizeAllClipPaths();
 
+            // CRITICAL: Verify objects were actually loaded
+            const loadedObjectCount = canvas.value.getObjects().length;
+            const expectedObjectCount = state.objects?.length || 0;
+
+            if (loadedObjectCount === 0 && expectedObjectCount > 0) {
+                console.error(`❌ loadFromJSON falhou: esperado ${expectedObjectCount} objetos, carregados ${loadedObjectCount}`);
+                // Try to recover by loading from page data
+                const currentPage = project.pages[project.activePageIndex];
+                if (currentPage && currentPage.canvasData && currentPage.canvasData.objects && currentPage.canvasData.objects.length > 0) {
+                    console.log('🔄 Recarregando canvasData da página...');
+                    await canvas.value.loadFromJSON(currentPage.canvasData);
+                    sanitizeAllClipPaths();
+                    rehydrateCanvasZones();
+                }
+            }
+
             // CRITICAL: Restore viewport (zoom/pan) to prevent black screen/lost position
             if (savedViewport) {
                 canvas.value.setViewportTransform(savedViewport);
@@ -6949,7 +7043,9 @@ const undo = async () => {
             }
 
             // CRITICAL: Ensure background color is correct (loadFromJSON may reset it)
-            if (!canvas.value.backgroundColor || canvas.value.backgroundColor === 'transparent') {
+            if (!canvas.value.backgroundColor ||
+                canvas.value.backgroundColor === 'transparent' ||
+                String(canvas.value.backgroundColor) === 'rgba(0,0,0,0)') {
                 canvas.value.backgroundColor = '#1e1e1e';
             }
 
@@ -6979,7 +7075,36 @@ const redo = async () => {
     if (historyIndex.value < historyStack.value.length - 1 && !isHistoryProcessing.value) {
         isHistoryProcessing.value = true;
         historyIndex.value++;
-        const state = JSON.parse(historyStack.value[historyIndex.value] || '{}');
+
+        // CRITICAL: Validate state before processing
+        const stateStr = historyStack.value[historyIndex.value];
+        if (!stateStr) {
+            console.error('❌ Estado vazio no histórico');
+            isHistoryProcessing.value = false;
+            return;
+        }
+
+        let state = JSON.parse(stateStr);
+
+        // CRITICAL: Check if state has objects, try to find a valid one if empty
+        if (!state.objects || state.objects.length === 0) {
+            console.warn('⚠️ Estado sem objetos - buscando próximo válido...');
+            // Try to find next valid state
+            while (historyIndex.value < historyStack.value.length - 1) {
+                historyIndex.value++;
+                const nextStateStr = historyStack.value[historyIndex.value];
+                if (nextStateStr) {
+                    const nextState = JSON.parse(nextStateStr);
+                    if (nextState.objects && nextState.objects.length > 0) {
+                        // Update state to the valid one found
+                        state = nextState;
+                        console.log(`✅ Estado válido encontrado no índice ${historyIndex.value}`);
+                        break;
+                    }
+                }
+            }
+        }
+
         hydrateLabelTemplatesFromProjectJson(state);
 
         // CRITICAL: Extract viewport BEFORE loadFromJSON (it will be reset)
@@ -6995,6 +7120,22 @@ const redo = async () => {
             rehydrateCanvasZones();
             sanitizeAllClipPaths();
 
+            // CRITICAL: Verify objects were actually loaded
+            const loadedObjectCount = canvas.value.getObjects().length;
+            const expectedObjectCount = state.objects?.length || 0;
+
+            if (loadedObjectCount === 0 && expectedObjectCount > 0) {
+                console.error(`❌ loadFromJSON falhou no redo: esperado ${expectedObjectCount} objetos, carregados ${loadedObjectCount}`);
+                // Try to recover by loading from page data
+                const currentPage = project.pages[project.activePageIndex];
+                if (currentPage && currentPage.canvasData && currentPage.canvasData.objects && currentPage.canvasData.objects.length > 0) {
+                    console.log('🔄 Recarregando canvasData da página...');
+                    await canvas.value.loadFromJSON(currentPage.canvasData);
+                    sanitizeAllClipPaths();
+                    rehydrateCanvasZones();
+                }
+            }
+
             // CRITICAL: Restore viewport (zoom/pan) to prevent black screen/lost position
             if (savedViewport) {
                 canvas.value.setViewportTransform(savedViewport);
@@ -7007,7 +7148,9 @@ const redo = async () => {
             }
 
             // CRITICAL: Ensure background color is correct (loadFromJSON may reset it)
-            if (!canvas.value.backgroundColor || canvas.value.backgroundColor === 'transparent') {
+            if (!canvas.value.backgroundColor ||
+                canvas.value.backgroundColor === 'transparent' ||
+                String(canvas.value.backgroundColor) === 'rgba(0,0,0,0)') {
                 canvas.value.backgroundColor = '#1e1e1e';
             }
 
@@ -11569,12 +11712,40 @@ const deleteObject = (id: string) => {
 }
 
 const moveLayer = (id: string, dir: 'up' | 'down') => {
-    if (!canvas.value) return; 
+    if (!canvas.value) return;
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
-        if (dir === 'up') obj.bringForward();
-        else obj.sendBackwards();
-        
+        // Verificar se o método existe antes de chamar
+        if (dir === 'up') {
+            if (typeof obj.bringForward === 'function') {
+                obj.bringForward();
+            } else if (typeof obj.bringToFront === 'function') {
+                obj.bringToFront();
+            } else {
+                // Alternativa: mover objeto manualmente no array
+                const objects = canvas.value.getObjects();
+                const index = objects.indexOf(obj);
+                if (index >= 0 && index < objects.length - 1) {
+                    canvas.value.remove(obj);
+                    canvas.value.insertAt(obj, index + 2);
+                }
+            }
+        } else {
+            if (typeof obj.sendBackwards === 'function') {
+                obj.sendBackwards();
+            } else if (typeof obj.sendToBack === 'function') {
+                obj.sendToBack();
+            } else {
+                // Alternativa: mover objeto manualmente no array
+                const objects = canvas.value.getObjects();
+                const index = objects.indexOf(obj);
+                if (index > 1) {
+                    canvas.value.remove(obj);
+                    canvas.value.insertAt(obj, index - 1);
+                }
+            }
+        }
+
         canvas.value.requestRenderAll();
         // Update list order
         canvasObjects.value = [...canvas.value.getObjects()];
@@ -13753,7 +13924,12 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
     }
 
     canvas.value.requestRenderAll();
-    if (opts.save !== false) saveCurrentState();
+    if (opts.save !== false) {
+        // Set flag to prevent object:modified event from also saving state (prevents duplicate entries)
+        isApplyingZoneUpdate = true;
+        saveCurrentState();
+        isApplyingZoneUpdate = false;
+    }
     triggerRef(selectedObjectRef);
 };
 

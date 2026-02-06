@@ -1,7 +1,7 @@
 import { processImageWithOptions, downloadImage } from "~/server/utils/image-processor";
 import { getS3Client } from "~/server/utils/s3";
 
-const extractContaboKeyFromUrl = (rawUrl: string, bucketName: string): string | null => {
+const extractWasabiKeyFromUrl = (rawUrl: string, bucketName: string): string | null => {
     try {
         const decoded = decodeURIComponent(rawUrl);
         const urlObj = new URL(decoded);
@@ -13,15 +13,9 @@ const extractContaboKeyFromUrl = (rawUrl: string, bucketName: string): string | 
             return pathParts.slice(1).join('/');
         }
 
-        // Some URLs may include encoded ":" in bucketName; compare decoded parts
-        const decodedBucket = decodeURIComponent(bucketName);
-        if (pathParts[0] === decodedBucket) {
-            return pathParts.slice(1).join('/');
-        }
-
         // Virtual-host style: https://<bucket>.<endpoint>/<key...>
         const host = urlObj.hostname;
-        if (host.startsWith(`${bucketName}.`) || host.startsWith(`${decodedBucket}.`)) {
+        if (host.startsWith(`${bucketName}.`)) {
             return pathParts.join('/');
         }
 
@@ -77,7 +71,7 @@ export default defineEventHandler(async (event) => {
 
         const config = useRuntimeConfig();
         const s3 = getS3Client();
-        const bucketName = config.contaboBucket;
+        const bucketName = config.wasabiBucket;
 
         const timestamp = Date.now();
 
@@ -87,7 +81,7 @@ export default defineEventHandler(async (event) => {
         let outputFormat: 'webp' | 'png' = 'webp';
 
         if (overwrite && imageUrl) {
-            const extractedKey = extractContaboKeyFromUrl(imageUrl, bucketName);
+            const extractedKey = extractWasabiKeyFromUrl(imageUrl, bucketName);
             if (extractedKey) {
                 key = extractedKey;
                 overwritten = true;
@@ -97,14 +91,14 @@ export default defineEventHandler(async (event) => {
         }
 
         if (!key) {
-            // Keep derived images out of the uploads library by default
-            key = `processed/bg-removed-${timestamp}.${outputFormat === 'png' ? 'png' : 'webp'}`;
+            // Keep derived images in imagens/ folder
+            key = `imagens/bg-removed-${timestamp}.${outputFormat === 'png' ? 'png' : 'webp'}`;
         }
 
         // Process (resize + remove BG + optimize)
         const processedBuffer = await processImageWithOptions(rawBuffer, { outputFormat });
 
-        // Upload to S3 (overwrite or new key)
+        // Upload to Wasabi S3 (overwrite or new key)
         const contentTypeOut = outputFormat === 'png' ? 'image/png' : 'image/webp';
 
         const { PutObjectCommand } = await import("@aws-sdk/client-s3");
@@ -113,14 +107,14 @@ export default defineEventHandler(async (event) => {
             Bucket: bucketName,
             Key: key,
             Body: processedBuffer,
-            ContentType: contentTypeOut,
-            ACL: 'public-read'
+            ContentType: contentTypeOut
         });
 
         await s3.send(putCommand);
 
         // Generate public URL
-        const canonicalUrl = `https://${config.contaboEndpoint}/${bucketName}/${key}`;
+        const endpoint = config.wasabiEndpoint || 's3.wasabisys.com';
+        const canonicalUrl = `https://${endpoint}/${bucketName}/${key}`;
         const finalUrl = `${canonicalUrl}?v=${timestamp}`;
 
         console.log('✅ [Remove BG] Fundo removido com sucesso:', finalUrl);

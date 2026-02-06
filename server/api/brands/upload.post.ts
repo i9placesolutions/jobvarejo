@@ -1,24 +1,23 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
+/**
+ * API Route para upload de logos/marcas para Wasabi Storage
+ *
+ * Usa a pasta 'logo/' dentro do bucket jobvarejo
+ */
+
 export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig();
-    const endpoint = config.contaboEndpoint;
-    const region = config.contaboRegion || "default";
-    const accessKeyId = config.contaboAccessKey;
-    const secretAccessKey = config.contaboSecretKey;
-    const brandsBucket = config.contaboBrandsBucket;
+    const endpoint = config.wasabiEndpoint;
+    const region = config.wasabiRegion || "us-east-1";
+    const accessKeyId = config.wasabiAccessKey;
+    const secretAccessKey = config.wasabiSecretKey;
+    const bucketName = config.wasabiBucket;
 
-    if (!accessKeyId || !secretAccessKey || !endpoint) {
+    if (!accessKeyId || !secretAccessKey || !endpoint || !bucketName) {
         throw createError({
             statusCode: 500,
-            statusMessage: "Contabo Storage configuration missing"
-        });
-    }
-
-    if (!brandsBucket) {
-        throw createError({
-            statusCode: 500,
-            statusMessage: "Brands bucket not configured (CONTABO_BRANDS_BUCKET)"
+            statusMessage: "Wasabi Storage configuration missing"
         });
     }
 
@@ -42,29 +41,32 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 400, statusMessage: "Filename missing" });
     }
 
-    // Usar o nome original do arquivo sem timestamp
-    const key = file.filename;
+    // Usar pasta 'logo/' conforme solicitado
+    // Manter o nome original do arquivo
+    const key = `logo/${file.filename}`;
 
     try {
         const command = new PutObjectCommand({
-            Bucket: brandsBucket,
+            Bucket: bucketName,
             Key: key,
             Body: file.data,
-            ContentType: file.type,
-            ACL: 'public-read'
+            ContentType: file.type
         });
 
         await s3Client.send(command);
 
         // Construct public URL
-        const publicUrl = `https://${endpoint}/${brandsBucket}/${key}`;
+        const publicUrl = `https://${endpoint}/${bucketName}/${key}`;
+
+        console.log('✅ Brand logo uploaded to Wasabi:', key);
 
         return {
             url: publicUrl,
+            key: key,
             success: true
         };
     } catch (error) {
-        console.error("Brand Upload Error:", error);
-        throw createError({ statusCode: 500, statusMessage: "Failed to upload brand to Contabo" });
+        console.error("Brand Upload Error to Wasabi:", error);
+        throw createError({ statusCode: 500, statusMessage: "Failed to upload brand to Wasabi" });
     }
 });

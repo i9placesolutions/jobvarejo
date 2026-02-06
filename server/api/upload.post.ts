@@ -1,24 +1,30 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
+/**
+ * API Route para upload de arquivos para Wasabi Storage
+ *
+ * Usa a pasta 'imagens/' para uploads gerais
+ */
+
 export default defineEventHandler(async (event) => {
-  // Check for configuration
+  // Check for configuration - Wasabi
   const config = useRuntimeConfig();
-  const endpoint = config.contaboEndpoint;
-  const region = config.contaboRegion || "default"; // specific region if needed
-  const accessKeyId = config.contaboAccessKey;
-  const secretAccessKey = config.contaboSecretKey;
-  const bucketName = config.contaboBucket;
+  const endpoint = config.wasabiEndpoint;
+  const region = config.wasabiRegion || "us-east-1";
+  const accessKeyId = config.wasabiAccessKey;
+  const secretAccessKey = config.wasabiSecretKey;
+  const bucketName = config.wasabiBucket;
 
   if (!accessKeyId || !secretAccessKey || !endpoint || !bucketName) {
     const missing: string[] = []
-    if (!endpoint) missing.push('CONTABO_ENDPOINT')
-    if (!bucketName) missing.push('CONTABO_BUCKET')
-    if (!accessKeyId) missing.push('CONTABO_ACCESS_KEY')
-    if (!secretAccessKey) missing.push('CONTABO_SECRET_KEY')
+    if (!endpoint) missing.push('WASABI_ENDPOINT')
+    if (!bucketName) missing.push('WASABI_BUCKET')
+    if (!accessKeyId) missing.push('WASABI_ACCESS_KEY')
+    if (!secretAccessKey) missing.push('WASABI_SECRET_KEY')
 
     throw createError({
         statusCode: 500,
-        statusMessage: `Contabo Storage configuration missing (${missing.join(', ')})`
+        statusMessage: `Wasabi Storage configuration missing (${missing.join(', ')})`
     });
   }
 
@@ -29,7 +35,7 @@ export default defineEventHandler(async (event) => {
       accessKeyId,
       secretAccessKey
     },
-    forcePathStyle: true // Usually needed for non-AWS S3
+    forcePathStyle: true // Necessário para Wasabi
   });
 
   const files = await readMultipartFormData(event);
@@ -42,29 +48,32 @@ export default defineEventHandler(async (event) => {
      throw createError({ statusCode: 400, statusMessage: "Filename missing" });
   }
 
-  const key = `uploads/${Date.now()}-${file.filename}`;
+  // Usa pasta 'imagens/' conforme solicitado
+  const key = `imagens/${Date.now()}-${file.filename}`;
 
   try {
     const command = new PutObjectCommand({
       Bucket: bucketName,
       Key: key,
       Body: file.data,
-      ContentType: file.type,
-      ACL: 'public-read' // Assuming we want it public
+      ContentType: file.type
     });
 
     await s3Client.send(command);
 
     // Construct public URL
-    // Contabo URL structure: https://<endpoint>/<bucket>/<key>
+    // Wasabi URL structure: https://s3.wasabisys.com/<bucket>/<key>
     const publicUrl = `https://${endpoint}/${bucketName}/${key}`;
+
+    console.log('✅ File uploaded to Wasabi:', key);
 
     return {
       url: publicUrl,
+      key: key,
       success: true
     };
   } catch (error) {
-    console.error("Upload Error:", error);
-    throw createError({ statusCode: 500, statusMessage: "Failed to upload to Contabo" });
+    console.error("Upload Error to Wasabi:", error);
+    throw createError({ statusCode: 500, statusMessage: "Failed to upload to Wasabi" });
   }
 });

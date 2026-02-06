@@ -229,24 +229,34 @@ export interface GlobalStyles {
 }
 
 // === LAYOUT PRESET ===
+export type LayoutPresetCategory = 'basic' | 'grid' | 'vertical' | 'horizontal' | 'special';
+
 export interface LayoutPreset {
   id: string;
   name: string;
   icon?: string;
+  category?: LayoutPresetCategory;
   columns?: number;
   rows?: number;
   layoutDirection?: 'horizontal' | 'vertical';
   cardAspectRatio?: ProductZone['cardAspectRatio'];
   lastRowBehavior?: ProductZone['lastRowBehavior'];
   description?: string;
+  // Optional extra settings for special presets
+  highlightCount?: number;
+  highlightPos?: 'first' | 'last' | 'random';
+  highlightHeight?: number;
+  highlightStyle?: 'larger' | 'featured' | 'banner';
 }
 
 // === PRESET DEFINITIONS ===
 export const LAYOUT_PRESETS: LayoutPreset[] = [
+  // ==================== BÁSICOS ====================
   {
     id: 'auto',
     name: 'Automático',
     icon: 'wand',
+    category: 'basic',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -258,6 +268,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     id: 'grid-2',
     name: '2 Colunas',
     icon: 'grid-2x2',
+    category: 'basic',
     columns: 2,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -269,6 +280,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     id: 'grid-3',
     name: '3 Colunas',
     icon: 'grid-3x3',
+    category: 'basic',
     columns: 3,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -276,21 +288,51 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     lastRowBehavior: 'fill',
     description: 'Grid com 3 colunas fixas'
   },
+
+  // ==================== GRIDS ====================
   {
     id: 'grid-4',
     name: '4 Colunas',
     icon: 'layout-grid',
+    category: 'grid',
     columns: 4,
     rows: 0,
     layoutDirection: 'horizontal',
     cardAspectRatio: 'square',
     lastRowBehavior: 'fill',
-    description: 'Grid com 4 colunas fixas'
+    description: 'Grid denso com 4 colunas'
   },
+  {
+    id: 'grid-5',
+    name: '5 Colunas',
+    icon: 'layout-grid',
+    category: 'grid',
+    columns: 5,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'square',
+    lastRowBehavior: 'fill',
+    description: 'Grid muito denso com 5 colunas'
+  },
+  {
+    id: 'grid-6',
+    name: '6 Colunas',
+    icon: 'layout-grid',
+    category: 'grid',
+    columns: 6,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'square',
+    lastRowBehavior: 'fill',
+    description: 'Máxima densidade com 6 colunas'
+  },
+
+  // ==================== VERTICAIS ====================
   {
     id: 'list',
     name: 'Lista',
     icon: 'list',
+    category: 'vertical',
     columns: 1,
     rows: 0,
     layoutDirection: 'vertical',
@@ -299,15 +341,86 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     description: 'Lista vertical com cards largos'
   },
   {
+    id: 'sidebar',
+    name: 'Barra Lateral',
+    icon: 'sidebar',
+    category: 'vertical',
+    columns: 1,
+    rows: 0,
+    layoutDirection: 'vertical',
+    cardAspectRatio: '9:16',
+    lastRowBehavior: 'fill',
+    description: 'Coluna vertical estreita'
+  },
+  {
+    id: 'cards',
+    name: 'Cartões',
+    icon: 'credit-card',
+    category: 'vertical',
+    columns: 2,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'square',
+    lastRowBehavior: 'fill',
+    description: 'Cartões quadrados organizados'
+  },
+
+  // ==================== HORIZONTAIS ====================
+  {
+    id: 'horizontal',
+    name: 'Horizontal',
+    icon: 'arrow-right',
+    category: 'horizontal',
+    columns: 0,
+    rows: 1,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: '16:9',
+    lastRowBehavior: 'stretch',
+    description: 'Linha única de produtos'
+  },
+  {
+    id: 'magazine',
+    name: 'Revista',
+    icon: 'book-open',
+    category: 'horizontal',
+    columns: 2,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: '4:3',
+    lastRowBehavior: 'fill',
+    description: 'Estilo revista/catálogo'
+  },
+
+  // ==================== ESPECIAIS ====================
+  {
     id: 'featured',
     name: 'Destaque',
     icon: 'star',
+    category: 'special',
     columns: 2,
     rows: 0,
     layoutDirection: 'horizontal',
     cardAspectRatio: '3:4',
     lastRowBehavior: 'center',
-    description: '1 produto grande + demais em grid'
+    highlightCount: 1,
+    highlightPos: 'first',
+    highlightHeight: 1.5,
+    description: '1 produto em destaque + grid'
+  },
+  {
+    id: 'showcase',
+    name: 'Vitrine',
+    icon: 'sparkles',
+    category: 'special',
+    columns: 3,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: '3:4',
+    lastRowBehavior: 'fill',
+    highlightCount: 1,
+    highlightPos: 'first',
+    highlightHeight: 2,
+    description: 'Produto grande em destaque'
   }
 ];
 

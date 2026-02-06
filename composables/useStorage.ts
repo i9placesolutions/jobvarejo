@@ -1,16 +1,18 @@
 import { ref } from 'vue'
 
 /**
- * Contabo Storage Composable
+ * Wasabi Storage Composable
  *
- * Armazena dados pesados do canvas na Contabo Storage via API.
+ * Armazena dados pesados do canvas na Wasabi Cloud Storage via API.
  * Isso reduz drasticamente o uso do banco de dados e custos.
  *
- * Contabo Object Storage é compatível com AWS S3.
+ * Wasabi é compatível com AWS S3.
  *
- * Estrutura de arquivos:
+ * Estrutura de arquivos no bucket jobvarejo:
  * - projects/{userId}/{projectId}/page_{pageId}.json  → Canvas JSON
  * - projects/{userId}/{projectId}/thumb_{pageId}.png   → Thumbnail
+ * - imagens/{filename} → Uploads de imagens
+ * - logo/{filename} → Logos de marcas
  */
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -20,72 +22,15 @@ const lastSavedAt = ref<Date | null>(null)
 const saveError = ref<string | null>(null)
 
 /**
- * Configuração da Contabo Storage
+ * Configuração da Wasabi Storage
  * Estas credenciais devem estar nas variáveis de ambiente
  */
-interface ContaboConfig {
-  endpoint: string      // e.g., 'eu2.contabostorage.com' ou endpoint personalizado
-  bucket: string        // Nome do bucket
+interface WasabiConfig {
+  endpoint: string      // e.g., 's3.wasabisys.com'
+  bucket: string        // Nome do bucket (jobvarejo)
   accessKey: string     // S3 Access Key
   secretKey: string     // S3 Secret Key
-  region: string        // e.g., 'eu-2'
-}
-
-/**
- * Gera assinatura AWS Signature V2 para autenticação S3
- */
-function generateSignature(
-  method: string,
-  contentType: string,
-  date: string,
-  resource: string,
-  secretKey: string
-): string {
-  const stringToSign = `${method}\n\n${contentType}\n${date}\n${resource}`
-  const signature = crypto.subtle
-    .importKey('raw', new TextEncoder().encode(secretKey), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign'])
-    .then(key => crypto.subtle.sign('HMAC', key, new TextEncoder().encode(stringToSign)))
-    .then(buffer => btoa(String.fromCharCode(...new Uint8Array(buffer))))
-  return signature as any
-}
-
-/**
- * Upload simples para Contabo via presigned URL ou direto
- * Para simplificar, vamos usar fetch com auth headers
- */
-async function uploadToContabo(
-  file: Blob | File,
-  key: string,
-  contentType: string,
-  config: ContaboConfig
-): Promise<string> {
-  // URL do endpoint
-  const url = `https://${config.bucket}.${config.endpoint}/${key}`
-
-  // Para upload simples, usamos presigned URL gerada no backend
-  // OU enviamos diretamente com as credenciais S3
-
-  // Opção 1: Upload via presigned URL (requisitar do backend)
-  const presignedUrl = await getPresignedUrl(key, contentType, 'put')
-
-  if (presignedUrl) {
-    // Upload usando presigned URL
-    const response = await fetch(presignedUrl, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': contentType
-      }
-    })
-
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`)
-    }
-
-    return `https://${config.bucket}.${config.endpoint}/${key}`
-  }
-
-  throw new Error('Failed to get presigned URL')
+  region: string        // e.g., 'us-east-1'
 }
 
 /**
@@ -135,8 +80,8 @@ async function getPresignedUrl(
       }
     } catch (error: any) {
       if (attempt === retries) {
-        console.error('❌ Erro ao obter presigned URL da Contabo:', error)
-        console.error('   Verifique se as variáveis de ambiente CONTABO_* estão configuradas no servidor')
+        console.error('❌ Erro ao obter presigned URL da Wasabi:', error)
+        console.error('   Verifique se as variáveis de ambiente WASABI_* estão configuradas no servidor')
         console.error('   Erro detalhado:', error?.message || error)
         return null
       }
@@ -150,7 +95,7 @@ export const useStorage = () => {
   const auth = useAuth()
 
   /**
-   * Salva dados JSON na Contabo Storage com retry automático (3 tentativas)
+   * Salva dados JSON na Wasabi Storage com retry automático (3 tentativas)
    */
   const saveCanvasData = async (
     projectId: string,
@@ -187,7 +132,7 @@ export const useStorage = () => {
         const presignedUrl = await getPresignedUrl(key, 'application/json', 'put', 2)
         if (!presignedUrl) {
           if (attempt === retries) {
-            const errorMsg = 'Failed to get upload URL from Contabo after multiple attempts.'
+            const errorMsg = 'Failed to get upload URL from Wasabi after multiple attempts.'
             console.error('❌', errorMsg)
             throw new Error(errorMsg)
           }
@@ -196,7 +141,7 @@ export const useStorage = () => {
           continue
         }
 
-        // Upload para Contabo com timeout
+        // Upload para Wasabi com timeout
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
 
@@ -215,7 +160,7 @@ export const useStorage = () => {
           if (!response.ok) {
             const errorText = await response.text().catch(() => response.statusText)
             if (attempt === retries) {
-              const errorMsg = `Contabo upload failed (${response.status}): ${errorText}`
+              const errorMsg = `Wasabi upload failed (${response.status}): ${errorText}`
               console.error('❌', errorMsg)
               throw new Error(errorMsg)
             }
@@ -227,7 +172,7 @@ export const useStorage = () => {
           // Sucesso!
           lastSavedAt.value = new Date()
           saveStatus.value = 'saved'
-          console.log(`✅ Canvas salvo na Contabo (tentativa ${attempt}/${retries}):`, key)
+          console.log(`✅ Canvas salvo na Wasabi (tentativa ${attempt}/${retries}):`, key)
           return key
 
         } catch (fetchError: any) {
@@ -246,7 +191,7 @@ export const useStorage = () => {
       } catch (error: any) {
         if (attempt === retries) {
           // Última tentativa falhou
-          console.error(`❌ Erro ao salvar na Contabo após ${retries} tentativas:`, error)
+          console.error(`❌ Erro ao salvar na Wasabi após ${retries} tentativas:`, error)
           saveStatus.value = 'error'
           saveError.value = error?.message || 'Erro desconhecido'
           return null
@@ -261,7 +206,7 @@ export const useStorage = () => {
   }
 
   /**
-   * Carrega dados JSON da Contabo Storage usando o caminho completo
+   * Carrega dados JSON da Wasabi Storage usando o caminho completo
    */
   const loadCanvasDataFromPath = async (
     canvasDataPath: string
@@ -295,13 +240,13 @@ export const useStorage = () => {
       console.log('✅ JSON carregado com sucesso, objetos:', canvasJson?.objects?.length || 0)
       return canvasJson
     } catch (error: any) {
-      console.error('❌ Erro ao carregar da Contabo:', error)
+      console.error('❌ Erro ao carregar da Wasabi:', error)
       return null
     }
   }
 
   /**
-   * Carrega dados JSON da Contabo Storage
+   * Carrega dados JSON da Wasabi Storage
    */
   const loadCanvasData = async (
     projectId: string,
@@ -339,13 +284,13 @@ export const useStorage = () => {
       const canvasJson = await response.json()
       return canvasJson
     } catch (error: any) {
-      console.error('Erro ao carregar da Contabo:', error)
+      console.error('Erro ao carregar da Wasabi:', error)
       return null
     }
   }
 
   /**
-   * Salva thumbnail na Contabo Storage
+   * Salva thumbnail na Wasabi Storage
    */
   const saveThumbnail = async (
     projectId: string,
@@ -398,23 +343,43 @@ export const useStorage = () => {
 
   /**
    * Obtém URL pública para um arquivo
-   * Contabo usa path style: https://endpoint/bucket/key
+   * Wasabi usa path style: https://s3.wasabisys.com/bucket/key
    */
   const getPublicUrl = (key: string): string => {
-    const config = useRuntimeConfig().public.contabo || {}
-    const endpoint = config.endpoint || 'usc1.contabostorage.com'
-    const bucket = config.bucket || 'jobupload'
+    const config = useRuntimeConfig().public.wasabi || {}
+    const endpoint = config.endpoint || 's3.wasabisys.com'
+    const bucket = config.bucket || 'jobvarejo'
     return `https://${endpoint}/${bucket}/${key}`
   }
 
   /**
-   * Obtém URL pública para arquivos de importação (bucket jobpsd)
+   * Obtém URL pública para arquivos de importação (bucket jobvarejo)
    */
   const getImportPublicUrl = (key: string): string => {
-    const config = useRuntimeConfig().public.contabo || {}
-    const endpoint = config.endpoint || 'usc1.contabostorage.com'
-    const bucket = config.importBucket || '475a29e42e55430abff00915da2fa4bc:jobpsd'
+    const config = useRuntimeConfig().public.wasabi || {}
+    const endpoint = config.endpoint || 's3.wasabisys.com'
+    const bucket = config.bucket || 'jobvarejo'
     return `https://${endpoint}/${bucket}/${key}`
+  }
+
+  /**
+   * Obtém URL para pasta de imagens
+   */
+  const getImagesPublicUrl = (key: string): string => {
+    const config = useRuntimeConfig().public.wasabi || {}
+    const endpoint = config.endpoint || 's3.wasabisys.com'
+    const bucket = config.bucket || 'jobvarejo'
+    return `https://${endpoint}/${bucket}/imagens/${key}`
+  }
+
+  /**
+   * Obtém URL para pasta de logos
+   */
+  const getBrandsPublicUrl = (key: string): string => {
+    const config = useRuntimeConfig().public.wasabi || {}
+    const endpoint = config.endpoint || 's3.wasabisys.com'
+    const bucket = config.bucket || 'jobvarejo'
+    return `https://${endpoint}/${bucket}/logo/${key}`
   }
 
   /**
@@ -499,90 +464,40 @@ export const useStorage = () => {
     saveProjectPages,
     loadProjectPages,
     getPublicUrl,
-    getImportPublicUrl
+    getImportPublicUrl,
+    getImagesPublicUrl,
+    getBrandsPublicUrl
   }
 }
 
 /**
  * ============================================================================
- * API ENDPOINT QUE PRECISA SER CRIADO NO BACKEND (Nuxt API Route)
+ * CONFIGURAÇÃO DO .env
  * ============================================================================
  *
- * Criar arquivo: server/api/storage/presigned.post.ts
+ * Adicionar estas variáveis ao arquivo .env:
  *
- * import crypto from 'crypto'
- *
- * export default defineEventHandler(async (event) => {
- *   const body = await readBody(event)
- *   const { key, contentType, operation = 'put' } = body
- *
- *   // Configurações da Contabo (variáveis de ambiente)
- *   const config = {
- *     endpoint: process.env.CONTABO_ENDPOINT || 'eu2.contabostorage.com',
- *     bucket: process.env.CONTABO_BUCKET || 'seu-bucket',
- *     accessKey: process.env.CONTABO_ACCESS_KEY,
- *     secretKey: process.env.CONTABO_SECRET_KEY,
- *     region: process.env.CONTABO_REGION || 'eu-2'
- *   }
- *
- *   if (!config.accessKey || !config.secretKey) {
- *     throw createError({
- *       status: 500,
- *       message: 'Storage not configured'
- *     })
- *   }
- *
- *   // Gerar presigned URL
- *   const expiration = Math.floor(Date.now() / 1000) + 3600 // 1 hora
- *   const date = new Date().toISOString().split('T')[0].replace(/-/g, '')
- *
- *   // AWS Signature V4 (ou V2 dependendo da Contabo)
- *   // Simplificando: usar SDK AWS S3
- *
- *   const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3')
- *
- *   const s3Client = new S3Client({
- *     endpoint: `https://${config.endpoint}`,
- *     region: config.region,
- *     credentials: {
- *       accessKeyId: config.accessKey,
- *       secretAccessKey: config.secretKey
- *     },
- *     forcePathStyle: true // Importante para Contabo
- *   })
- *
- *   let command
- *   if (operation === 'put') {
- *     command = new PutObjectCommand({
- *       Bucket: config.bucket,
- *       Key: key,
- *       ContentType: contentType
- *     })
- *   } else {
- *     command = new GetObjectCommand({
- *       Bucket: config.bucket,
- *       Key: key
- *     })
- *   }
- *
- *   const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 })
- *
- *   return { url }
- * })
- *
+ * WASABI_ENDPOINT=s3.wasabisys.com
+ * WASABI_BUCKET=jobvarejo
+ * WASABI_ACCESS_KEY=154MD4JFJPF61INBCUKT
+ * WASABI_SECRET_KEY=XeyNjaMt7IAzJNdG2caSGPm5yCwC4Qa6U1hAS05R
+ * WASABI_REGION=us-east-1
  *
  * ============================================================================
- * ARQUIVO: .env (adicionar variáveis)
+ * PASTAS NO BUCKET WASABI
  * ============================================================================
  *
- * CONTABO_ENDPOINT=eu2.contabostorage.com
- * CONTABO_BUCKET=seu-nome-de-bucket
- * CONTABO_ACCESS_KEY=sua-access-key
- * CONTABO_SECRET_KEY=sua-secret-key
- * CONTABO_REGION=eu-2
+ * Estrutura de pastas no bucket jobvarejo:
  *
+ * jobvarejo/
+ * ├── projects/
+ * │   └── {userId}/
+ * │       └── {projectId}/
+ * │           ├── page_{pageId}.json    → Canvas JSON
+ * │           └── thumb_{pageId}.png    → Thumbnail
+ * ├── imagens/                          → Uploads de imagens
+ * │   └── {filename}
+ * └── logo/                             → Logos de marcas
+ *     └── {filename}
  *
- * ============================================================================
- * PARA INSTALAR: npm install @aws-sdk/client-s3
- * ============================================================================
  */

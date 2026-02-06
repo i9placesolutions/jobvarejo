@@ -1,22 +1,28 @@
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getS3Client, getBrandsPublicUrl } from "../utils/s3";
 
+/**
+ * API Route para listar marcas/logos da Wasabi Storage
+ *
+ * Lista arquivos na pasta 'logo/' do bucket jobvarejo
+ */
+
 export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig();
-    const brandsBucket = config.contaboBrandsBucket;
+    const bucketName = config.wasabiBucket;
 
-    if (!brandsBucket) {
+    if (!bucketName) {
         throw createError({
             statusCode: 500,
-            statusMessage: "Brands bucket not configured (CONTABO_BRANDS_BUCKET)"
+            statusMessage: "Wasabi bucket not configured (WASABI_BUCKET)"
         });
     }
 
     try {
         const s3Client = getS3Client();
         const command = new ListObjectsV2Command({
-            Bucket: brandsBucket,
-            Prefix: '', // List all items in brands bucket
+            Bucket: bucketName,
+            Prefix: 'logo/', // List items in logo/ folder
         });
 
         const response = await s3Client.send(command);
@@ -25,14 +31,14 @@ export default defineEventHandler(async (event) => {
 
         // Map S3 objects to our asset format
         const brands = contents
-            .filter(item => item.Key && !item.Key.endsWith('/')) // Filter out folders if any
+            .filter(item => item.Key && !item.Key.endsWith('/')) // Filter out folders
             .map((item, index) => {
-                // Extract clean name from Key
-                const fileName = item.Key!;
+                // Extract clean name from Key - remove 'logo/' prefix
+                const fileName = item.Key!.replace(/^logo\//, '');
 
                 return {
                     id: item.ETag || `brand-${index}`,
-                    url: getBrandsPublicUrl(item.Key!),
+                    url: getBrandsPublicUrl(fileName),
                     name: fileName,
                     lastModified: item.LastModified
                 };
@@ -42,7 +48,7 @@ export default defineEventHandler(async (event) => {
 
         return brands;
     } catch (error) {
-        console.error("List Brands Error:", error);
-        throw createError({ statusCode: 500, statusMessage: "Failed to list brands from Contabo" });
+        console.error("List Brands Error from Wasabi:", error);
+        throw createError({ statusCode: 500, statusMessage: "Failed to list brands from Wasabi" });
     }
 });

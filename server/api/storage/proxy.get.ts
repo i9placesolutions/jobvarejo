@@ -2,19 +2,19 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { Readable } from 'stream'
 
 /**
- * API Route para servir imagens da Contabo via proxy
- * 
- * Isso evita problemas com URLs presignadas e encoding de caracteres especiais
- * no bucket name (ex: tenant:bucket onde : pode ser codificado como %3A)
- * 
- * Usage: GET /api/storage/proxy?key=uploads/filename.webp
+ * API Route para servir imagens da Wasabi via proxy
+ *
+ * Isso evita problemas com CORS e permite cache correto
+ *
+ * Usage: GET /api/storage/proxy?key=imagens/filename.webp
+ * Usage: GET /api/storage/proxy?key=logo/filename.png
+ * Usage: GET /api/storage/proxy?key=projects/{userId}/{projectId}/page_{pageId}.json
  */
 
 export default defineEventHandler(async (event) => {
   try {
     const query = getQuery(event)
     const key = query.key as string
-    const bucketParam = query.bucket as string
 
     if (!key) {
       throw createError({
@@ -23,43 +23,34 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Configurações da Contabo
-    const endpoint = process.env.CONTABO_ENDPOINT || 'eu2.contabostorage.com'
-    let defaultRegion = 'eu-2'
-    if (endpoint.includes('usc1')) defaultRegion = 'us-east-1'
-    else if (endpoint.includes('sin1')) defaultRegion = 'ap-southeast-1'
-    else if (endpoint.includes('eu2')) defaultRegion = 'eu-2'
+    // Configurações da Wasabi
+    const endpoint = process.env.WASABI_ENDPOINT || 's3.wasabisys.com'
+    const region = process.env.WASABI_REGION || 'us-east-1'
+    const bucket = process.env.WASABI_BUCKET || 'jobvarejo'
+    const accessKey = process.env.WASABI_ACCESS_KEY
+    const secretKey = process.env.WASABI_SECRET_KEY
 
-    const config = {
-      endpoint,
-      // Usar bucket do parâmetro ou o bucket principal
-      bucket: bucketParam || process.env.CONTABO_BUCKET,
-      accessKey: process.env.CONTABO_ACCESS_KEY,
-      secretKey: process.env.CONTABO_SECRET_KEY,
-      region: process.env.CONTABO_REGION || defaultRegion
-    }
-
-    if (!config.bucket || !config.accessKey || !config.secretKey) {
+    if (!bucket || !accessKey || !secretKey) {
       throw createError({
         status: 500,
-        message: 'Contabo Storage not configured'
+        message: 'Wasabi Storage not configured'
       })
     }
 
-    // Criar cliente S3
+    // Criar cliente S3 para Wasabi
     const s3Client = new S3Client({
-      endpoint: `https://${config.endpoint}`,
-      region: config.region,
+      endpoint: `https://${endpoint}`,
+      region: region,
       credentials: {
-        accessKeyId: config.accessKey,
-        secretAccessKey: config.secretKey
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey
       },
       forcePathStyle: true
     })
 
     // Buscar objeto do S3
     const command = new GetObjectCommand({
-      Bucket: config.bucket,
+      Bucket: bucket,
       Key: key
     })
 
@@ -100,26 +91,26 @@ export default defineEventHandler(async (event) => {
     // Converter ReadableStream do AWS SDK para Buffer
     const stream = response.Body as Readable
     const chunks: Buffer[] = []
-    
+
     for await (const chunk of stream) {
       chunks.push(Buffer.from(chunk))
     }
-    
+
     return Buffer.concat(chunks)
 
   } catch (error: any) {
-    console.error('❌ Erro no proxy de storage:', error)
-    
+    console.error('❌ Erro no proxy de storage Wasabi:', error)
+
     if (error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
       throw createError({
         status: 404,
         message: 'File not found'
       })
     }
-    
+
     throw createError({
       status: error.statusCode || 500,
-      message: error.message || 'Failed to fetch file from storage'
+      message: error.message || 'Failed to fetch file from Wasabi storage'
     })
   }
 })

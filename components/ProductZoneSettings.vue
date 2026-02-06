@@ -7,11 +7,11 @@
  */
 
 import { computed, ref } from 'vue';
-import { 
-  LayoutGrid, 
-  Rows3, 
-  Columns3, 
-  Wand2, 
+import {
+  LayoutGrid,
+  Rows3,
+  Columns3,
+  Wand2,
   ChevronDown,
   ChevronRight,
   Lock,
@@ -26,7 +26,13 @@ import {
   AlignStartVertical,
   AlignCenterVertical,
   AlignEndVertical,
-  List
+  List,
+  // NEW ICONS for expanded presets
+  Sidebar,
+  CreditCard,
+  ArrowRight,
+  BookOpen,
+  Sparkles
 } from 'lucide-vue-next';
 import { LAYOUT_PRESETS, SPLASH_STYLES } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
@@ -96,16 +102,69 @@ const expandedSections = ref({
   styles: false
 });
 
+// Presets expansion state
+const presetsExpanded = ref(true);
+const activePresetCategory = ref<string | null>(null);
+
 const syncGaps = ref(true);
 
 // Computed
 const currentPreset = computed(() => {
-  if (props.zone.columns === 0) return 'auto';
-  if (props.zone.columns === 2) return 'grid-2';
-  if (props.zone.columns === 3) return 'grid-3';
-  if (props.zone.columns === 4) return 'grid-4';
-  if (props.zone.columns === 1 && props.zone.layoutDirection === 'vertical') return 'list';
+  const cols = props.zone.columns ?? 0;
+  const rows = props.zone.rows ?? 0;
+  const direction = props.zone.layoutDirection;
+  const aspect = props.zone.cardAspectRatio;
+
+  // Auto
+  if (cols === 0 && rows === 0) return 'auto';
+
+  // Grids
+  if (cols === 2 && rows === 0 && aspect === '3:4') return 'grid-2';
+  if (cols === 3 && rows === 0 && aspect === '3:4') return 'grid-3';
+  if (cols === 4 && rows === 0 && aspect === 'square') return 'grid-4';
+  if (cols === 5 && rows === 0 && aspect === 'square') return 'grid-5';
+  if (cols === 6 && rows === 0 && aspect === 'square') return 'grid-6';
+
+  // Vertical
+  if (cols === 1 && direction === 'vertical') {
+    if (aspect === '16:9') return 'list';
+    if (aspect === '9:16') return 'sidebar';
+  }
+
+  // Cards (2 colunas square)
+  if (cols === 2 && aspect === 'square' && direction === 'horizontal') return 'cards';
+
+  // Horizontal
+  if (cols === 0 && rows === 1) return 'horizontal';
+  if (cols === 2 && aspect === '4:3') return 'magazine';
+
+  // Special (featured/showcase based on highlight settings)
+  if (props.zone.highlightCount === 1) {
+    if (props.zone.highlightHeight === 2) return 'showcase';
+    return 'featured';
+  }
+
   return 'auto';
+});
+
+// Organize presets by category
+const presetCategories = computed(() => {
+  const categories = {
+    basic: { label: 'Básicos', presets: [] as typeof LAYOUT_PRESETS },
+    grid: { label: 'Grids', presets: [] as typeof LAYOUT_PRESETS },
+    vertical: { label: 'Verticais', presets: [] as typeof LAYOUT_PRESETS },
+    horizontal: { label: 'Horizontais', presets: [] as typeof LAYOUT_PRESETS },
+    special: { label: 'Especiais', presets: [] as typeof LAYOUT_PRESETS }
+  };
+
+  LAYOUT_PRESETS.forEach(preset => {
+    const cat = preset.category || 'basic';
+    if (categories[cat]) {
+      categories[cat].presets.push(preset);
+    }
+  });
+
+  return categories;
 });
 
 // Handlers
@@ -180,28 +239,139 @@ const verticalAlignOptions = [
     <div class="space-y-3">
       <div class="flex items-center justify-between">
         <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Presets</span>
-        <Wand2 class="w-3.5 h-3.5 text-zinc-600" />
-      </div>
-      
-      <div class="grid grid-cols-3 gap-2">
         <button
-          v-for="preset in LAYOUT_PRESETS.slice(0, 6)"
-          :key="preset.id"
-          @click="applyPreset(preset.id)"
-          :class="[
-            'flex flex-col items-center gap-1.5 p-2.5 rounded-lg border transition-all',
-            currentPreset === preset.id 
-              ? 'bg-violet-500/20 border-violet-500 text-violet-300' 
-              : 'bg-zinc-800/50 border-zinc-700 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200'
-          ]"
-          :title="preset.description"
+          @click="presetsExpanded = !presetsExpanded"
+          class="text-zinc-500 hover:text-zinc-300 transition-colors"
         >
-          <component 
-            :is="preset.id === 'auto' ? Wand2 : preset.id === 'list' ? List : Grid3X3" 
-            class="w-4 h-4" 
+          <component
+            :is="presetsExpanded ? ChevronDown : ChevronRight"
+            class="w-3.5 h-3.5"
           />
-          <span class="text-[9px] font-medium">{{ preset.name }}</span>
         </button>
+      </div>
+
+      <div v-if="presetsExpanded" class="space-y-4">
+        <!-- Básicos -->
+        <div class="space-y-2">
+          <span class="text-[9px] font-semibold text-zinc-500 uppercase tracking-wide">Básicos</span>
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              v-for="preset in presetCategories.basic.presets"
+              :key="preset.id"
+              @click="applyPreset(preset.id)"
+              :class="[
+                'flex flex-col items-center gap-1.5 p-2.5 rounded-lg border transition-all',
+                currentPreset === preset.id
+                  ? 'bg-violet-500/20 border-violet-500 text-violet-300'
+                  : 'bg-zinc-800/50 border-zinc-700 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200'
+              ]"
+              :title="preset.description"
+            >
+              <component
+                :is="preset.id === 'auto' ? Wand2 : Columns3"
+                class="w-4 h-4"
+              />
+              <span class="text-[9px] font-medium">{{ preset.name }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Grids -->
+        <div class="space-y-2">
+          <span class="text-[9px] font-semibold text-zinc-500 uppercase tracking-wide">Grids</span>
+          <div class="grid grid-cols-4 gap-1.5">
+            <button
+              v-for="preset in presetCategories.grid.presets"
+              :key="preset.id"
+              @click="applyPreset(preset.id)"
+              :class="[
+                'flex flex-col items-center gap-1 p-2 rounded border transition-all',
+                currentPreset === preset.id
+                  ? 'bg-violet-500/20 border-violet-500 text-violet-300'
+                  : 'bg-zinc-800/30 border-zinc-700/50 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300'
+              ]"
+              :title="preset.description"
+            >
+              <LayoutGrid class="w-3.5 h-3.5" />
+              <span class="text-[8px]">{{ preset.name }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Verticais -->
+        <div class="space-y-2">
+          <span class="text-[9px] font-semibold text-zinc-500 uppercase tracking-wide">Verticais</span>
+          <div class="grid grid-cols-3 gap-1.5">
+            <button
+              v-for="preset in presetCategories.vertical.presets"
+              :key="preset.id"
+              @click="applyPreset(preset.id)"
+              :class="[
+                'flex flex-col items-center gap-1 p-2 rounded border transition-all',
+                currentPreset === preset.id
+                  ? 'bg-violet-500/20 border-violet-500 text-violet-300'
+                  : 'bg-zinc-800/30 border-zinc-700/50 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300'
+              ]"
+              :title="preset.description"
+            >
+              <component
+                :is="preset.id === 'list' ? List : preset.id === 'sidebar' ? Sidebar : CreditCard"
+                class="w-3.5 h-3.5"
+              />
+              <span class="text-[8px]">{{ preset.name }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Horizontais -->
+        <div class="space-y-2">
+          <span class="text-[9px] font-semibold text-zinc-500 uppercase tracking-wide">Horizontais</span>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              v-for="preset in presetCategories.horizontal.presets"
+              :key="preset.id"
+              @click="applyPreset(preset.id)"
+              :class="[
+                'flex items-center gap-2 p-2 rounded border transition-all',
+                currentPreset === preset.id
+                  ? 'bg-violet-500/20 border-violet-500 text-violet-300'
+                  : 'bg-zinc-800/30 border-zinc-700/50 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300'
+              ]"
+              :title="preset.description"
+            >
+              <component
+                :is="preset.id === 'horizontal' ? ArrowRight : BookOpen"
+                class="w-3.5 h-3.5"
+              />
+              <span class="text-[9px]">{{ preset.name }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Especiais -->
+        <div class="space-y-2">
+          <span class="text-[9px] font-semibold text-yellow-500/80 uppercase tracking-wide">Especiais</span>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              v-for="preset in presetCategories.special.presets"
+              :key="preset.id"
+              @click="applyPreset(preset.id)"
+              :class="[
+                'flex items-center gap-2 p-2 rounded border transition-all',
+                currentPreset === preset.id
+                  ? 'bg-yellow-500/20 border-yellow-500 text-yellow-300'
+                  : 'bg-zinc-800/30 border-zinc-700/50 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300'
+              ]"
+              :title="preset.description"
+            >
+              <component
+                :is="preset.id === 'featured' ? Star : Sparkles"
+                class="w-3.5 h-3.5"
+              />
+              <span class="text-[9px]">{{ preset.name }}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
