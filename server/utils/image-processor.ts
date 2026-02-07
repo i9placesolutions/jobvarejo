@@ -34,8 +34,8 @@ const getRemoveBackground = async () => {
     return removeBackgroundModule;
 };
 
-// Valida se a imagem resultante tem conteúdo visível (não totalmente transparente)
 // Refina o canal alpha para evitar bordas serrilhadas e remover artefatos
+// PROTEGE pixels claros/brancos do produto (não confundir com fundo branco)
 const refineAlphaChannel = async (buffer: Buffer, sharp: any): Promise<Buffer> => {
     try {
         const { data, info } = await sharp(buffer)
@@ -45,18 +45,43 @@ const refineAlphaChannel = async (buffer: Buffer, sharp: any): Promise<Buffer> =
 
         const feather = 1; // Leve suavização nas bordas
 
-        for (let i = 3; i < data.length; i += 4) {
-            const alpha = data[i];
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const alpha = data[i + 3];
 
-            // Evitar pixels semi-transparentes "fantasma" (alpha entre 10-50)
-            // Se for muito baixa transparência, zerar (remover artefato)
+            // Verificar se o pixel é claro/branco (potencialmente parte do produto)
+            const brightness = (r + g + b) / 3;
+            const isLightPixel = brightness > 200;
+
+            // Pixels com alpha muito baixo (0-25)
             if (alpha > 0 && alpha < 25) {
-                data[i] = 0;
+                // Se for um pixel claro/branco com alpha baixo, pode ser parte do produto
+                // que o modelo marcou erroneamente como fundo. Ser mais conservador.
+                if (isLightPixel) {
+                    // Manter com alpha reduzido mas não eliminar completamente
+                    // Isso preserva bordas brancas de embalagens
+                    data[i + 3] = 0; // Ainda remover, pois alpha < 25 é muito baixo
+                } else {
+                    data[i + 3] = 0;
+                }
             }
-            // Se for transparência média, aplicar leve feather
+            // Pixels com alpha médio (25-100) - zona de transição
             else if (alpha >= 25 && alpha < 100) {
-                data[i] = Math.max(0, Math.min(255, alpha - feather * 2));
+                if (isLightPixel && alpha >= 40) {
+                    // Pixel claro com alpha razoável: PRESERVAR mais (provavelmente é produto)
+                    // Aumentar alpha para evitar que produto branco fique semi-transparente
+                    data[i + 3] = Math.min(255, Math.round(alpha * 1.8));
+                } else if (isLightPixel) {
+                    // Pixel claro com alpha baixo: manter com leve redução
+                    data[i + 3] = Math.max(0, alpha - feather);
+                } else {
+                    // Pixel escuro com alpha médio: aplicar feather normal
+                    data[i + 3] = Math.max(0, Math.min(255, alpha - feather * 2));
+                }
             }
+            // Alpha >= 100: manter como está (pixel sólido do produto)
         }
 
         return sharp(data, {
@@ -78,12 +103,14 @@ const validateImageHasContent = async (buffer: Buffer, sharp: any): Promise<bool
         const { data, info } = await sharp(buffer).raw().toBuffer({ resolveWithObject: true });
         
         let opaquePixels = 0;
+        let semiTransparentPixels = 0;
         const totalPixels = info.width * info.height;
         
         // Check alpha channel (every 4th byte starting at index 3 for RGBA)
         if (info.channels === 4) {
             for (let i = 3; i < data.length; i += 4) {
-                if (data[i] > 10) opaquePixels++; // Consider pixels with alpha > 10 as opaque
+                if (data[i] > 128) opaquePixels++;
+                else if (data[i] > 10) semiTransparentPixels++;
             }
         } else {
             // No alpha channel = all pixels are opaque
@@ -91,10 +118,13 @@ const validateImageHasContent = async (buffer: Buffer, sharp: any): Promise<bool
         }
         
         const opaquePercent = (opaquePixels / totalPixels) * 100;
-        console.log(`📊 [Image Validate] Pixels opacos: ${opaquePercent.toFixed(2)}% (${opaquePixels}/${totalPixels})`);
+        const semiPercent = (semiTransparentPixels / totalPixels) * 100;
+        const visiblePercent = ((opaquePixels + semiTransparentPixels) / totalPixels) * 100;
+        console.log(`📊 [Image Validate] Opacos: ${opaquePercent.toFixed(1)}%, Semi: ${semiPercent.toFixed(1)}%, Total visível: ${visiblePercent.toFixed(1)}%`);
         
-        // If less than 1% of pixels are opaque, something is wrong
-        return opaquePercent > 1;
+        // Considerar válida se pelo menos 3% de pixels são visíveis
+        // (produtos brancos em fundo branco podem ter resultado com poucos pixels)
+        return visiblePercent > 3;
     } catch (e) {
         console.warn('⚠️ [Image Validate] Erro ao validar imagem:', e);
         return true; // Assume it's valid if we can't check
@@ -147,8 +177,9 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
 
         const removeBackground = await getRemoveBackground();
 
-        // Configurações refinadas para remover menos conteúdo
-        const modelType = bgOptions.model || 'small'; // 'small' é mais conservador
+        // Configurações refinadas - modelo 'medium' tem melhor separação
+        // entre produto e fundo, especialmente para produtos claros/brancos
+        const modelType = bgOptions.model || 'medium';
         console.log(`   📐 Modelo: ${modelType}`);
 
         const rbResult = await removeBackground(blob, {
@@ -157,16 +188,10 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
             },
             debug: false,
             model: modelType,
-            // @ts-ignore - proxy options not in types but available
-            proxy: {
-                // Configurações para ser mais conservador
-                edges: 'soft', // Bordas mais suaves
-                refine: true   // Refinar bordas
-            },
             output: {
                 format: 'image/png',
                 type: 'foreground',
-                quality: 'high' // Maior qualidade nas bordas
+                quality: 0.9
             }
         });
 

@@ -389,18 +389,64 @@ const dialogTitle = computed(() => {
 })
 
 const moveTargetId = ref('')
+
+// Build folder path label (e.g. "Background / Carnaval")
+const getFolderPathLabel = (folderId: string | undefined | null): string => {
+    const parts: string[] = []
+    let current = assets.value.folders.find(f => f.id === folderId)
+    while (current) {
+        parts.unshift(current.name)
+        current = assets.value.folders.find(f => f.id === current?.parentId)
+    }
+    return parts.join(' / ')
+}
+
+// Get folder depth for indentation
+const getFolderDepth = (folderId: string | undefined | null): number => {
+    let depth = 0
+    let current = assets.value.folders.find(f => f.id === folderId)
+    while (current?.parentId) {
+        depth++
+        current = assets.value.folders.find(f => f.id === current?.parentId)
+    }
+    return depth
+}
+
+// Get all descendant folder IDs (to prevent moving folder into its own children)
+const getDescendantIds = (folderId: string): Set<string> => {
+    const ids = new Set<string>()
+    const collect = (parentId: string) => {
+        assets.value.folders.filter(f => f.parentId === parentId).forEach(f => {
+            ids.add(f.id as string)
+            collect(f.id as string)
+        })
+    }
+    collect(folderId)
+    return ids
+}
+
 const availableMoveTargets = computed(() => {
     const item = dialog.value.targetItem
     if (!item) return []
     
+    let filtered: typeof assets.value.folders
     if (item.type === 'folder') {
-        // Cannot move folder into itself or its children
-        // Simplified check (no recursive check for children)
-        return assets.value.folders.filter(f => f.id !== item.id && f.parentId !== item.id)
+        // Cannot move folder into itself or any of its descendants
+        const descendants = getDescendantIds(item.id as string)
+        filtered = assets.value.folders.filter(f => f.id !== item.id && !descendants.has(f.id as string))
     } else {
         // File can move to any folder except current parent
-        return assets.value.folders.filter(f => f.id !== currentFolderId.value)
+        filtered = assets.value.folders.filter(f => f.id !== currentFolderId.value)
     }
+    
+    // Sort by path for hierarchical display, then add depth/label
+    return filtered
+        .map(f => ({
+            ...f,
+            pathLabel: getFolderPathLabel(f.id),
+            depth: getFolderDepth(f.id)
+        }))
+        .sort((a, b) => a.pathLabel.localeCompare(b.pathLabel))
 })
 
 const handleDialogConfirm = async () => {
@@ -575,17 +621,34 @@ const handleFileUpload = async (event: Event) => {
             const result = await $fetch(endpoint, {
                 method: 'POST',
                 body: formData
-            }) as { success: boolean, url: string }
+            }) as { success: boolean, url: string, key?: string }
 
             if (result.success) {
-                // Refresh from server to get consistent data
-                if (activeCategory.value === 'brand') {
-                    await fetchBrands()
-                } else {
-                    await fetchAssets()
+                // Optimistically add the item to the local list for instant feedback
+                const newItem = {
+                    id: result.key || `upload-${Date.now()}`,
+                    url: result.url,
+                    name: file.name.replace(/\.[^/.]+$/, ''),
+                    folderId: activeCategory.value === 'folders' ? currentFolderId.value : null,
+                    lastModified: new Date().toISOString()
                 }
-                // Always refresh recents after upload to include new items
-                await fetchRecents()
+
+                if (activeCategory.value === 'brand') {
+                    assets.value.brand = [newItem, ...assets.value.brand]
+                } else {
+                    assets.value.uploads = [newItem, ...assets.value.uploads]
+                }
+
+                // Also refresh recents
+                assets.value.recents = [{ ...newItem, type: activeCategory.value === 'brand' ? 'brand' : 'upload' }, ...assets.value.recents].slice(0, 50)
+
+                // Background refresh from server for consistent data (presigned URLs, etc.)
+                if (activeCategory.value === 'brand') {
+                    fetchBrands()
+                } else {
+                    fetchAssets()
+                }
+                fetchRecents()
             }
         } catch (e) {
             console.error(e)
@@ -600,78 +663,82 @@ const handleFileUpload = async (event: Event) => {
 </script>
 
 <template>
-    <div class="flex flex-col h-full bg-[#1e1e1e]">
-        <!-- Category Nav -->
-        <div class="flex items-center gap-1 p-2 border-b border-white/5 overflow-x-auto custom-scrollbar shrink-0">
+    <div class="flex flex-col h-full bg-[#1a1a1a]">
+        <!-- Category Nav (compact, matching PropertiesPanel) -->
+        <div class="flex items-center gap-0.5 px-2 py-1.5 border-b border-white/5 shrink-0 overflow-x-auto nav-scrollbar">
             <button 
                 v-for="cat in categories" 
                 :key="cat.id"
                 @click="activeCategory = cat.id; currentFolderId = null"
                 :class="[
-                    'flex flex-col items-center justify-center p-2 rounded-lg min-w-15 h-14 transition-all',
-                    activeCategory === cat.id ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide cursor-pointer transition-all whitespace-nowrap shrink-0',
+                    activeCategory === cat.id ? 'bg-violet-500/15 text-violet-400' : 'text-zinc-500 hover:text-zinc-400'
                 ]"
             >
-                <component :is="cat.icon" class="w-4 h-4 mb-1" />
-                <span class="text-[9px] font-medium">{{ cat.name }}</span>
+                <component :is="cat.icon" class="w-3 h-3" />
+                <span>{{ cat.name }}</span>
             </button>
         </div>
 
-        <div v-if="activeCategory === 'uploads' || activeCategory === 'brand' || (activeCategory === 'folders' && currentFolderId)" class="px-3 py-2 border-b border-white/5">
+        <div v-if="activeCategory === 'uploads' || activeCategory === 'brand' || (activeCategory === 'folders' && currentFolderId)" class="px-2 py-1.5 border-b border-white/5">
             <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleFileUpload" />
-            <div class="grid grid-cols-2 gap-2">
-                <Button size="sm" class="w-full text-xs" @click="triggerUpload" :disabled="isUploading">
-                    <template v-if="isUploading">Enviando...</template>
-                    <template v-else>
-                        <Upload class="w-3.5 h-3.5 mr-2" />
-                        {{ activeCategory === 'brand' ? 'Upload Marca' : 'Fazer Upload' }}
-                    </template>
-                </Button>
-                <Button
-                    size="sm"
-                    class="w-full text-xs"
-                    variant="secondary"
-                    @click="aiStudio.openStudio({ initial: { mode: 'generate', filenameBase: 'ai-image' }, applyMode: 'insert' })"
+            <div class="flex items-center gap-1.5">
+                <button 
+                    @click="triggerUpload" 
+                    :disabled="isUploading"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer disabled:opacity-40"
                 >
-                    <Sparkles class="w-3.5 h-3.5 mr-2" />
-                    Criar com IA
-                </Button>
+                    <template v-if="isUploading">
+                        <span class="animate-pulse">Enviando...</span>
+                    </template>
+                    <template v-else>
+                        <Upload class="w-3 h-3" />
+                        {{ activeCategory === 'brand' ? 'Marca' : 'Upload' }}
+                    </template>
+                </button>
+                <button
+                    @click="aiStudio.openStudio({ initial: { mode: 'generate', filenameBase: 'ai-image' }, applyMode: 'insert' })"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
+                >
+                    <Sparkles class="w-3 h-3" />
+                    IA
+                </button>
             </div>
             <p v-if="uploadError" class="text-[9px] text-red-400 mt-1">{{ uploadError }}</p>
         </div>
 
         <!-- Breadcrumb / Header for Folders -->
-        <div v-if="activeCategory === 'folders'" class="px-3 py-2 border-b border-white/5 flex items-center justify-between text-zinc-400">
-            <div class="flex items-center gap-2">
+        <div v-if="activeCategory === 'folders'" class="px-2 py-1.5 border-b border-white/5 flex items-center justify-between text-zinc-400">
+            <div class="flex items-center gap-1.5">
                 <template v-if="currentFolderId">
-                    <button @click="goBack" class="p-1 hover:bg-white/10 rounded">
-                        <ArrowLeft class="w-4 h-4" />
+                    <button @click="goBack" class="p-0.5 hover:bg-white/10 rounded">
+                        <ArrowLeft class="w-3.5 h-3.5" />
                     </button>
-                    <div class="flex items-center gap-1 text-xs">
+                    <div class="flex items-center gap-1 text-[10px]">
                         <span class="cursor-pointer hover:text-white" @click="currentFolderId = null">Raiz</span>
-                        <ChevronRight class="w-3 h-3" />
-                        <span class="text-white font-medium">{{ currentFolder?.name }}</span>
+                        <ChevronRight class="w-2.5 h-2.5" />
+                        <span class="text-white font-semibold uppercase tracking-wide">{{ currentFolder?.name }}</span>
                     </div>
                 </template>
                 <template v-else>
-                     <span class="text-xs font-medium pl-1">Minhas Pastas</span>
+                     <span class="text-[10px] font-semibold uppercase tracking-wide pl-0.5">Minhas Pastas</span>
                 </template>
             </div>
             <button 
                 @click="dialog = { show: true, type: 'new_folder', inputValue: '', targetItem: null }" 
-                class="p-1.5 hover:bg-white/10 rounded text-zinc-400 hover:text-white transition-colors"
+                class="p-1 hover:bg-white/10 rounded text-zinc-400 hover:text-white transition-colors"
                 title="Nova Pasta"
             >
-                <FolderInput class="w-3.5 h-3.5" />
+                <FolderInput class="w-3 h-3" />
             </button>
         </div>
 
         <!-- Grid Content -->
         <div 
-            class="flex-1 overflow-y-auto custom-scrollbar p-3"
+            class="flex-1 overflow-y-auto custom-scrollbar p-2"
             @contextmenu="handleBackgroundContextMenu"
         >
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-2 gap-1.5">
                 <!-- Folders Category View -->
                 <template v-if="activeCategory === 'folders'">
                     <!-- Render Folders First -->
@@ -685,11 +752,11 @@ const handleFileUpload = async (event: Event) => {
                         @mouseup="cancelLongPress"
                         @mouseleave="cancelLongPress"
                         @touchend="cancelLongPress"
-                        class="col-span-2 flex items-center gap-2 p-2 rounded hover:bg-white/5 cursor-pointer text-zinc-400 hover:text-white border border-transparent hover:border-zinc-700 transition-all select-none"
+                        class="col-span-2 flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer text-zinc-400 hover:text-white border border-transparent hover:border-white/10 transition-all select-none"
                     >
-                        <Folder class="w-4 h-4 text-yellow-500 fill-yellow-500/20" />
+                        <Folder class="w-3.5 h-3.5 text-yellow-500 fill-yellow-500/20" />
                         <div class="flex flex-col">
-                             <span class="text-xs font-medium">{{ item.name }}</span>
+                             <span class="text-[11px] font-medium">{{ item.name }}</span>
                              <span class="text-[9px] text-zinc-500">Pasta</span>
                         </div>
                     </div>
@@ -698,7 +765,7 @@ const handleFileUpload = async (event: Event) => {
                     <div 
                         v-for="asset in currentItems.filter(i => i.type !== 'folder')" 
                         :key="asset.id"
-                        class="aspect-square bg-zinc-800 rounded-lg overflow-hidden relative group cursor-grab active:cursor-grabbing border border-zinc-700 hover:border-zinc-500 transition-all"
+                        class="aspect-square bg-[#1e1e1e] rounded overflow-hidden relative group cursor-grab active:cursor-grabbing border border-white/5 hover:border-white/15 transition-all"
                         draggable="true"
                         @click="handleAssetClick(asset)"
                         @dragstart="(e) => handleDragStart(e, asset)"
@@ -719,16 +786,16 @@ const handleFileUpload = async (event: Event) => {
                 <!-- Assets Grid -->
                 <template v-else>
                     <!-- Empty state for recents -->
-                    <div v-if="activeCategory === 'recents' && currentItems.length === 0" class="col-span-2 flex flex-col items-center justify-center py-8 text-zinc-500">
-                        <Clock class="w-8 h-8 mb-2 opacity-50" />
-                        <p class="text-xs">Nenhum item recente</p>
-                        <p class="text-[9px] mt-1 opacity-75">Os arquivos usados recentemente aparecerão aqui</p>
+                    <div v-if="activeCategory === 'recents' && currentItems.length === 0" class="col-span-2 flex flex-col items-center justify-center py-6 text-zinc-500">
+                        <Clock class="w-6 h-6 mb-2 opacity-40" />
+                        <p class="text-[10px] font-semibold uppercase tracking-wide">Nenhum item recente</p>
+                        <p class="text-[9px] mt-1 opacity-60">Os arquivos usados aparecerão aqui</p>
                     </div>
                     
                     <div 
                         v-for="asset in currentItems" 
                         :key="asset.id"
-                        class="aspect-square bg-zinc-800 rounded-lg overflow-hidden relative group cursor-grab active:cursor-grabbing border border-zinc-700 hover:border-zinc-500 transition-all"
+                        class="aspect-square bg-[#1e1e1e] rounded overflow-hidden relative group cursor-grab active:cursor-grabbing border border-white/5 hover:border-white/15 transition-all"
                         draggable="true"
                         @click="handleAssetClick(asset)"
                         @dragstart="(e) => handleDragStart(e, asset)"
@@ -746,8 +813,8 @@ const handleFileUpload = async (event: Event) => {
                             </div>
                         </template>
                         <template v-else>
-                             <div class="w-full h-full flex flex-col items-center justify-center p-2 text-zinc-500 bg-zinc-800/50">
-                                <ShoppingCart class="w-6 h-6 mb-1 opacity-20" />
+                             <div class="w-full h-full flex flex-col items-center justify-center p-2 text-zinc-500 bg-[#1e1e1e]">
+                                <ShoppingCart class="w-5 h-5 mb-1 opacity-20" />
                                 <span class="text-[9px] text-zinc-300 font-medium text-center line-clamp-2 leading-tight">{{ asset.name }}</span>
                                 <span v-if="asset.price" class="text-[10px] text-green-400 font-bold mt-1">R$ {{ asset.price }}</span>
                             </div>
@@ -757,8 +824,8 @@ const handleFileUpload = async (event: Event) => {
             </div>
             
             <!-- Empty state (only show if not already showing empty state for recents) -->
-            <div v-if="!currentItems.length && !(activeCategory === 'recents')" class="text-center py-10 text-zinc-600">
-                <p class="text-[10px] uppercase tracking-widest">Vazio</p>
+            <div v-if="!currentItems.length && !(activeCategory === 'recents')" class="text-center py-8 text-zinc-600">
+                <p class="text-[10px] font-semibold uppercase tracking-widest">Vazio</p>
                 <p v-if="activeCategory === 'folders' && !currentFolderId" class="text-[9px] mt-2">Clique com o botão direito para criar pasta</p>
             </div>
         </div>
@@ -780,9 +847,9 @@ const handleFileUpload = async (event: Event) => {
                      <div class="flex flex-col gap-2">
                         <label class="text-xs text-zinc-400">Mover para:</label>
                         <select v-model="moveTargetId" class="bg-zinc-800 border-zinc-700 rounded text-xs p-2 text-white">
-                            <option value="">Raiz</option>
+                            <option value="">📁 Raiz</option>
                             <option v-for="target in availableMoveTargets" :key="target.id" :value="target.id">
-                                {{ target.name }}
+                                {{ '\u00A0\u00A0'.repeat(target.depth) }}{{ target.depth > 0 ? '└ ' : '' }}{{ target.name }}
                             </option>
                         </select>
                     </div>
@@ -813,34 +880,18 @@ const handleFileUpload = async (event: Event) => {
 </template>
 
 <style scoped>
-/* Barra de rolagem vertical */
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-
-/* Barra de rolagem horizontal - sempre visível */
 .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: #333 transparent;
 }
-
-/* Forçar scrollbar horizontal */
-.overflow-x-auto {
-    overflow-x: auto !important;
+.nav-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: #444 transparent;
 }
-
-.overflow-x-auto::-webkit-scrollbar {
-    height: 4px;
-}
-
-.overflow-x-auto::-webkit-scrollbar-thumb {
-    background: #444;
-    border-radius: 4px;
-}
-
-.overflow-x-auto::-webkit-scrollbar-track {
-    background: transparent;
-}
+.nav-scrollbar::-webkit-scrollbar { height: 3px; }
+.nav-scrollbar::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+.nav-scrollbar::-webkit-scrollbar-track { background: transparent; }
 </style>

@@ -134,6 +134,25 @@ export const useProject = () => {
 
     const initProject = () => {
         if (project.pages.length === 0) {
+            // Offline-safe: restore last local draft for the default (unsaved) project.
+            // Without this, `proj_default` would lose all edits (including sticker outline) on reload.
+            const local = readProjectDraft(project.id)
+            if (local?.project?.pages?.length) {
+                try {
+                    project.id = local.project.id || project.id
+                    project.name = local.project.name || project.name
+                    project.pages = local.project.pages || []
+                    project.activePageIndex = Math.min(
+                        Math.max(0, Number(local.project.activePageIndex || 0)),
+                        Math.max(0, (project.pages.length || 1) - 1)
+                    )
+                    hasUnsavedChanges.value = true
+                    console.log('📝 Projeto restaurado do rascunho local:', { id: project.id, pages: project.pages.length })
+                    return
+                } catch {
+                    // Fall through to create a fresh page
+                }
+            }
             // Cria página inicial padrão (Story)
             addPage('RETAIL_OFFER', 1080, 1920, 'Capa Story')
         }
@@ -534,9 +553,9 @@ export const useProject = () => {
                 // Validação final: garantir que temos dados válidos
                 if (canvasData) {
                     const finalObjectCount = canvasData?.objects?.length || 0
-                    console.log(`✅ CanvasData final para página ${pageMeta.id}:`, { hasData: !!canvasData, objectCount: finalObjectCount })
-                } else {
-                    console.warn(`⚠️ CanvasData é NULL para página ${pageMeta.id}`)
+                    if (finalObjectCount > 0) {
+                        console.log(`✅ CanvasData final para página ${pageMeta.id}: ${finalObjectCount} objeto(s)`)
+                    }
                 }
                 // Nota: Páginas novas podem não ter canvasData ainda, isso é normal
 

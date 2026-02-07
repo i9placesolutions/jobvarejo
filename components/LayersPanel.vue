@@ -203,7 +203,7 @@ defineExpose({
     <!-- Layers Header -->
     <div class="px-3 py-2 border-b border-white/5 shrink-0 flex items-center gap-2">
       <Layers class="w-3 h-3 text-zinc-500" />
-      <span class="text-[10px] font-semibold uppercase text-zinc-500">Layers</span>
+      <span class="text-[10px] font-semibold uppercase text-zinc-500">Camadas</span>
     </div>
 
     <div class="flex-1 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
@@ -211,7 +211,7 @@ defineExpose({
         v-for="item in buildLayerTree"
         :key="item.id"
         :class="[
-          'flex items-center gap-2 py-1.5 rounded-[2px] transition-all duration-150 group cursor-default select-none border border-transparent',
+          'flex items-center gap-2 py-1.5 rounded-xs transition-all duration-150 group cursor-default select-none border border-transparent',
           item.id === selectedId
             ? 'bg-violet-500 text-white font-medium'
             : 'hover:bg-white/5 text-zinc-400 hover:text-white'

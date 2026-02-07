@@ -36,6 +36,45 @@ export interface SmartProduct {
     raw?: any;
 }
 
+// Normaliza search term no frontend (espelha lógica do backend)
+const normalizeForDedup = (term: string): string => {
+    const unitMap: Record<string, string> = {
+        mililitros: 'ml', mililitro: 'ml', mls: 'ml',
+        gramas: 'g', grama: 'g', gs: 'g',
+        quilos: 'kg', quilo: 'kg', quilogramas: 'kg', quilograma: 'kg',
+        unidades: 'un', unidade: 'un', und: 'un', unds: 'un', uns: 'un',
+        litro: 'l', litros: 'l', lt: 'l', lts: 'l',
+        pacote: 'pct', pacotes: 'pct', pcts: 'pct',
+        caixa: 'cx', caixas: 'cx',
+        fardo: 'fd', fardos: 'fd',
+    };
+    const stopWords = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'e', 'para', 'por', 'no', 'na']);
+
+    return term
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .filter(w => !stopWords.has(w) && w.length > 0)
+        .map(w => unitMap[w] || w)
+        .sort()
+        .join(' ');
+};
+
+// Monta search term a partir do produto
+const buildSearchTerm = (product: SmartProduct): string => {
+    const parts = [product.name];
+    if (product.brand) parts.push(product.brand);
+    if (product.flavor && !['sabores', 'fragrâncias', 'fragancias', 'variados', 'sortidos', 'diversos'].includes(product.flavor.toLowerCase())) {
+        parts.push(product.flavor);
+    }
+    if (product.weight) parts.push(product.weight);
+    return parts.join(' ').trim();
+};
+
 export const useProductProcessor = () => {
     const products = ref<SmartProduct[]>([]);
     const isParsing = ref(false);
@@ -123,12 +162,16 @@ export const useProductProcessor = () => {
         product.error = undefined;
 
         try {
-            // Construct a rich search term
-            const searchTerm = `${product.name} ${product.brand || ''} ${product.flavor || ''} ${product.weight || ''}`.trim();
+            const searchTerm = buildSearchTerm(product);
             
             const result = await $fetch('/api/process-product-image', {
                 method: 'POST',
-                body: { term: searchTerm }
+                body: {
+                    term: searchTerm,
+                    brand: product.brand || undefined,
+                    flavor: product.flavor || undefined,
+                    weight: product.weight || undefined
+                }
             });
 
             if (result && result.url) {
@@ -150,18 +193,46 @@ export const useProductProcessor = () => {
     const processAllImages = async () => {
         console.log('[ProductProcessor] processAllImages called, products:', products.value.length);
         
-        // Process sequentially or parallel? Parallel might hit rate limits.
-        // Let's do a pool of 3
-        const queue = products.value
-            .map((p, i) => ({ index: i, product: p }))
-            .filter(item => !item.product.imageUrl && item.product.status !== 'processing');
+        // ===== DEDUPLICAÇÃO: agrupar produtos com mesmo search term normalizado =====
+        const dedupMap = new Map<string, number[]>(); // normalizedKey → [indices]
         
-        console.log('[ProductProcessor] Queue size:', queue.length);
+        products.value.forEach((p, i) => {
+            if (p.imageUrl || p.status === 'processing') return;
+            const searchTerm = buildSearchTerm(p);
+            const normalized = normalizeForDedup(searchTerm);
+            if (!dedupMap.has(normalized)) {
+                dedupMap.set(normalized, []);
+            }
+            dedupMap.get(normalized)!.push(i);
+        });
+        
+        const uniqueGroups = Array.from(dedupMap.entries());
+        console.log(`[ProductProcessor] ${products.value.length} produtos → ${uniqueGroups.length} buscas únicas (${products.value.length - uniqueGroups.length} duplicatas evitadas)`);
+        
+        // Processar apenas o primeiro de cada grupo, depois replicar para os demais
+        for (const [normalizedKey, indices] of uniqueGroups) {
+            const primaryIndex = indices[0];
+            const primaryProduct = products.value[primaryIndex];
+            console.log(`[ProductProcessor] Processing: ${primaryProduct.name} (${indices.length} duplicata(s))`);
             
-        // Simple sequential for MVP robustness
-        for (const item of queue) {
-            console.log('[ProductProcessor] Processing:', item.product.name);
-            await processProductImage(item.index);
+            await processProductImage(primaryIndex);
+            
+            // Replicar resultado para duplicatas
+            if (indices.length > 1 && primaryProduct.imageUrl) {
+                for (let i = 1; i < indices.length; i++) {
+                    const dupProduct = products.value[indices[i]];
+                    dupProduct.imageUrl = primaryProduct.imageUrl;
+                    dupProduct.status = 'done';
+                    console.log(`[ProductProcessor] Replicado imagem para duplicata: ${dupProduct.name}`);
+                }
+            } else if (indices.length > 1 && primaryProduct.status === 'error') {
+                // Se falhou, marcar duplicatas como erro também
+                for (let i = 1; i < indices.length; i++) {
+                    const dupProduct = products.value[indices[i]];
+                    dupProduct.status = 'error';
+                    dupProduct.error = primaryProduct.error;
+                }
+            }
         }
     }
 

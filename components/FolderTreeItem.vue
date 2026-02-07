@@ -76,7 +76,7 @@ const isChildEditing = (childId: string): boolean => {
       <span v-else class="w-5.5"></span>
 
       <!-- Folder icon -->
-      <Folder :class="['w-4 h-4 flex-shrink-0', isActive ? 'fill-violet-400 text-violet-400' : 'text-zinc-500']" />
+      <Folder :class="['w-4 h-4 shrink-0', isActive ? 'fill-violet-400 text-violet-400' : 'text-zinc-500']" />
 
       <!-- Folder name -->
       <input

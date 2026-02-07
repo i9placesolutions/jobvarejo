@@ -555,7 +555,7 @@ watch(() => props.show, (newVal) => {
             <!-- Main Color Area -->
             <div
               ref="colorAreaRef"
-              class="w-full h-45 rounded-lg relative cursor-crosshair overflow-hidden border border-white/10 bg-[#1a1a1a]"
+              class="w-full h-45 rounded-lg relative cursor-crosshair overflow-hidden"
               :style="{ background: colorAreaGradient }"
               @mousedown="handleColorAreaMouseDown"
             >

@@ -85,7 +85,8 @@ export default defineEventHandler(async (event) => {
       command = new PutObjectCommand({
         Bucket: bucket,
         Key: key,
-        ContentType: contentType || 'application/octet-stream'
+        ContentType: contentType || 'application/octet-stream',
+        ACL: 'public-read'
       })
     } else {
       // Disable checksum mode para S3-compatible storage

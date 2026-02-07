@@ -216,6 +216,23 @@ Rules:
 - Be flexible with spelling: PRECO, PREÇO, PREÇO, PRECO, PÇO are all valid.
 - BRAND DETECTION: If the product name contains a known brand (Nestlé, Neste, Coca-Cola, Colgate, etc.), extract it to the brand field.
 
+FLAVOR / FRAGRANCE / VARIANT DETECTION:
+- CRITICAL: Always extract flavors, fragrances, variants, and scents to the "flavor" field.
+- Look for keywords: "SABOR", "SABORES", "FRAGRÂNCIA", "FRAGRÂNCIAS", "AROMA", "TIPO", "VARIANTE", "ESSÊNCIA", "PERFUME".
+- Also look for the word "DIVERSOS" / "VARIADOS" / "SORTIDOS" / "VÁRIOS" / "VARIOS" — these mean "assorted flavors/variants".
+- Common flavor/fragrance patterns:
+  * "REFRIGERANTE COCA COLA 350ML SABORES" → flavor="SABORES" (assorted)
+  * "BISCOITO OREO CHOCOLATE" → flavor="CHOCOLATE"
+  * "SABONETE LUX FRAGRÂNCIAS" → flavor="FRAGRÂNCIAS" (assorted)
+  * "AMACIANTE DOWNY BRISA DE VERÃO" → flavor="BRISA DE VERÃO"
+  * "SUCO DEL VALLE UVA 1L" → flavor="UVA"
+  * "CERVEJA HEINEKEN 350ML" → flavor=null (no flavor)
+  * "IOGURTE NESTLÉ MORANGO/CHOCOLATE" → flavor="MORANGO/CHOCOLATE"
+  * "DESODORANTE REXONA VARIADOS" → flavor="VARIADOS"
+- If a product has multiple flavors separated by "/" or "," → keep them all in the flavor field.
+- The flavor/fragrance should NOT be duplicated in the product name when extracted.
+- When "SABORES" or "FRAGRÂNCIAS" appears after the product name, it means the customer wants ASSORTED variants of that product.
+
 COLUMN IDENTIFICATION STRATEGY:
 - Look for numeric values with price format (0,00 or 0.00)
 - Identify columns by HEADER names first

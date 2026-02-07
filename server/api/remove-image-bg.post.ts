@@ -107,7 +107,8 @@ export default defineEventHandler(async (event) => {
             Bucket: bucketName,
             Key: key,
             Body: processedBuffer,
-            ContentType: contentTypeOut
+            ContentType: contentTypeOut,
+            ACL: 'public-read'
         });
 
         await s3.send(putCommand);

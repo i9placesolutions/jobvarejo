@@ -1753,7 +1753,7 @@ watch(
                       :checked="!!current('flipX', false)"
                       @change="patch('flipX', ($event.target as HTMLInputElement).checked)"
                     />
-                    Flip Horizontal
+                    Espelhar Horizontal
                   </label>
                   <label class="me-checkbox-label">
                     <input
@@ -1762,7 +1762,7 @@ watch(
                       :checked="!!current('flipY', false)"
                       @change="patch('flipY', ($event.target as HTMLInputElement).checked)"
                     />
-                    Flip Vertical
+                    Espelhar Vertical
                   </label>
                 </div>
               </div>

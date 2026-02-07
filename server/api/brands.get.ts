@@ -1,10 +1,12 @@
-import { ListObjectsV2Command } from "@aws-sdk/client-s3";
-import { getS3Client, getBrandsPublicUrl } from "../utils/s3";
+import { ListObjectsV2Command, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getS3Client } from "../utils/s3";
 
 /**
  * API Route para listar marcas/logos da Wasabi Storage
  *
  * Lista arquivos na pasta 'logo/' do bucket jobvarejo
+ * Usa presigned URLs pois a conta Wasabi não permite acesso público direto
  */
 
 export default defineEventHandler(async (event) => {
@@ -29,22 +31,32 @@ export default defineEventHandler(async (event) => {
 
         const contents = response.Contents || [];
 
-        // Map S3 objects to our asset format
-        const brands = contents
-            .filter(item => item.Key && !item.Key.endsWith('/')) // Filter out folders
-            .map((item, index) => {
-                // Extract clean name from Key - remove 'logo/' prefix
-                const fileName = item.Key!.replace(/^logo\//, '');
+        // Map S3 objects to our asset format with presigned URLs
+        const brands = await Promise.all(
+            contents
+                .filter(item => item.Key && !item.Key.endsWith('/')) // Filter out folders
+                .map(async (item, index) => {
+                    const fileName = item.Key!.replace(/^logo\//, '');
 
-                return {
-                    id: item.ETag || `brand-${index}`,
-                    url: getBrandsPublicUrl(fileName),
-                    name: fileName,
-                    lastModified: item.LastModified
-                };
-            })
-            // Sort by name alphabetically
-            .sort((a, b) => a.name.localeCompare(b.name));
+                    // Generate pre-signed URL (valid for 1 hour)
+                    const getCommand = new GetObjectCommand({
+                        Bucket: bucketName,
+                        Key: item.Key!,
+                        ChecksumMode: 'DISABLED'
+                    });
+                    const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
+
+                    return {
+                        id: item.ETag || `brand-${index}`,
+                        url: signedUrl,
+                        name: fileName,
+                        lastModified: item.LastModified
+                    };
+                })
+        );
+
+        // Sort by name alphabetically
+        brands.sort((a, b) => a.name.localeCompare(b.name));
 
         return brands;
     } catch (error) {

@@ -21,8 +21,8 @@ export const uploadBufferToContabo = async (opts: {
   ext?: string
 }): Promise<UploadBufferResult> => {
   const config = useRuntimeConfig()
-  const bucketName = config.contaboBucket
-  const endpoint = config.contaboEndpoint
+  const bucketName = config.wasabiBucket
+  const endpoint = config.wasabiEndpoint
   const s3 = getS3Client()
 
   const timestamp = Date.now()

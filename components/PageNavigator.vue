@@ -96,7 +96,7 @@ const createPage = (preset: string) => {
 
           <!-- Add Button -->
            <button 
-             class="flex-shrink-0 w-16 h-16 border-2 border-dashed border-zinc-800 rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-white/5 hover:border-white/20 text-zinc-600 hover:text-white transition-all active:scale-95" 
+             class="shrink-0 w-16 h-16 border-2 border-dashed border-zinc-800 rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-white/5 hover:border-white/20 text-zinc-600 hover:text-white transition-all active:scale-95" 
              @click="createPage('story')"
            >
                <Plus class="w-5 h-5" />

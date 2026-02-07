@@ -877,7 +877,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="Search"
+              placeholder="Buscar"
               class="w-full h-9 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white pl-9 pr-3 focus:outline-none focus:border-violet-500/50 placeholder:text-zinc-500 transition-all"
             />
           </div>
@@ -890,21 +890,21 @@ const handleDropOnRoot = async (event: DragEvent) => {
             :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mb-1', activeView === 'recent' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
           >
             <Clock class="w-4 h-4" />
-            Recents
+            Recentes
           </button>
           <button 
             @click="activeView = 'all'"
             :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5', activeView === 'all' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
           >
             <FolderOpen class="w-4 h-4" />
-            All Designs
+            Todos os Projetos
           </button>
           <button 
             @click="activeView = 'shared'"
             :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mt-1', activeView === 'shared' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
           >
             <Users class="w-4 h-4" />
-            Shared
+            Compartilhados
           </button>
         </div>
 
@@ -912,11 +912,11 @@ const handleDropOnRoot = async (event: DragEvent) => {
         <div class="flex-1 overflow-y-auto">
           <div class="px-3 py-2">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-[10px] font-semibold uppercase text-zinc-500">Folders</span>
+              <span class="text-[10px] font-semibold uppercase text-zinc-500">Pastas</span>
               <button
                 @click="showCreateFolder = true"
                 class="p-1 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-all"
-                title="New folder"
+                title="Nova pasta"
               >
                 <FolderPlus class="w-3.5 h-3.5" />
               </button>
@@ -933,7 +933,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               @drop="handleDropOnRoot"
             >
               <FolderOpen class="w-4 h-4 opacity-70" />
-              <span class="text-xs font-medium truncate flex-1">All Designs</span>
+              <span class="text-xs font-medium truncate flex-1">Todos os Projetos</span>
               <span class="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">{{ rootProjects.length }}</span>
             </div>
           </div>
@@ -973,7 +973,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             :class="['w-full flex items-center gap-2.5 h-9 px-3 rounded-lg transition-all cursor-pointer', activeView === 'starred' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
           >
             <Star class="w-4 h-4" :class="{ 'fill-current': activeView === 'starred' }" />
-            <span class="text-xs font-medium">Starred</span>
+            <span class="text-xs font-medium">Favoritos</span>
             <span v-if="starredProjectsCount > 0" class="ml-auto text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">
               {{ starredProjectsCount }}
             </span>
@@ -985,10 +985,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <button
             @click="handleSignOut"
             class="w-full h-9 px-3 bg-red-600/10 hover:bg-red-600/20 text-red-400 hover:text-red-300 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-all"
-            title="Sign out"
+            title="Sair"
           >
             <LogOut class="w-4 h-4" />
-            <span>Sign out</span>
+            <span>Sair</span>
           </button>
         </div>
       </aside>
@@ -998,14 +998,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
         <!-- Section Title -->
         <div class="px-6 pt-6 pb-4">
           <h1 class="text-xl font-semibold text-white mb-1">
-            <span v-if="activeFolderId">{{ folders.find(f => f.id === activeFolderId)?.name || 'Folder' }}</span>
-            <span v-else-if="searchQuery">Search Results</span>
-            <span v-else-if="activeView === 'recent'">Recently viewed</span>
-            <span v-else-if="activeView === 'shared'">Shared files</span>
-            <span v-else-if="activeView === 'starred'">Starred</span>
-            <span v-else>All Designs</span>
+            <span v-if="activeFolderId">{{ folders.find(f => f.id === activeFolderId)?.name || 'Pasta' }}</span>
+            <span v-else-if="searchQuery">Resultados da Busca</span>
+            <span v-else-if="activeView === 'recent'">Vistos Recentemente</span>
+            <span v-else-if="activeView === 'shared'">Compartilhados</span>
+            <span v-else-if="activeView === 'starred'">Favoritos</span>
+            <span v-else>Todos os Projetos</span>
           </h1>
-          <p class="text-xs text-zinc-500">{{ filteredProjects.length }} design{{ filteredProjects.length !== 1 ? 's' : '' }}</p>
+          <p class="text-xs text-zinc-500">{{ filteredProjects.length }} projeto{{ filteredProjects.length !== 1 ? 's' : '' }}</p>
         </div>
 
         <!-- Filters and Controls (Figma Style) -->
@@ -1016,19 +1016,19 @@ const handleDropOnRoot = async (event: DragEvent) => {
               @click="activeView = 'recent'"
               :class="['px-3 py-1.5 rounded-md text-xs font-medium transition-all', activeView === 'recent' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
             >
-              Recently viewed
+              Recentes
             </button>
             <button
               @click="activeView = 'shared'"
               :class="['px-3 py-1.5 rounded-md text-xs font-medium transition-all', activeView === 'shared' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
             >
-              Shared files
+              Compartilhados
             </button>
             <button
               @click="activeView = 'all'"
               :class="['px-3 py-1.5 rounded-md text-xs font-medium transition-all', activeView === 'all' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
             >
-              Shared projects
+              Todos
             </button>
           </div>
 
@@ -1040,9 +1040,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 v-model="filterOrganization"
                 class="h-8 px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
               >
-                <option value="all">All organizations</option>
-                <option value="personal">Personal</option>
-                <option value="team">Team</option>
+                <option value="all">Todas as equipes</option>
+                <option value="personal">Pessoal</option>
+                <option value="team">Equipe</option>
               </select>
               <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
             </div>
@@ -1052,9 +1052,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 v-model="filterType"
                 class="h-8 px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
               >
-                <option value="all">All files</option>
+                <option value="all">Todos os arquivos</option>
                 <option value="design">Design</option>
-                <option value="template">Template</option>
+                <option value="template">Modelo</option>
               </select>
               <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
             </div>
@@ -1064,10 +1064,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 v-model="filterTime"
                 class="h-8 px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
               >
-                <option value="all">Last viewed</option>
-                <option value="today">Today</option>
-                <option value="week">This week</option>
-                <option value="month">This month</option>
+                <option value="all">Último acesso</option>
+                <option value="today">Hoje</option>
+                <option value="week">Esta semana</option>
+                <option value="month">Este mês</option>
               </select>
               <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
             </div>
@@ -1077,14 +1077,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <button
                 @click="viewMode = 'grid'"
                 :class="['p-1.5 rounded-md transition-all', viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
-                title="Grid view"
+                title="Visualização em grade"
               >
                 <Grid class="w-4 h-4" />
               </button>
               <button
                 @click="viewMode = 'list'"
                 :class="['p-1.5 rounded-md transition-all', viewMode === 'list' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
-                title="List view"
+                title="Visualização em lista"
               >
                 <List class="w-4 h-4" />
               </button>
@@ -1096,7 +1096,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               class="h-8 px-4 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
             >
               <Plus class="w-4 h-4" />
-              <span>New Design</span>
+              <span>Novo Projeto</span>
             </button>
 
           </div>
@@ -1128,12 +1128,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 class="aspect-video bg-linear-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
               >
                 <img
-                  v-if="project.preview_url"
+                  v-if="project.preview_url && !project._thumbError"
                   :src="project.preview_url"
                   class="w-full h-full object-cover"
                   :alt="project.name"
+                  @error="project._thumbError = true"
                 />
-                <div v-else class="w-full h-full flex items-center justify-center">
+                <div v-if="!project.preview_url || project._thumbError" class="w-full h-full flex items-center justify-center">
                   <Sparkles class="w-8 h-8 text-zinc-600" />
                 </div>
 
@@ -1141,7 +1142,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <button
                   @click.stop="showProjectContextMenu(project.id, $event)"
                   class="absolute top-2 right-2 p-2 bg-black/70 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-black/90 shadow-lg"
-                  title="Actions"
+                  title="Ações"
                 >
                   <MoreVertical class="w-4 h-4 text-white" />
                 </button>
@@ -1150,7 +1151,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <button
                   @click.stop="toggleStarred(project.id)"
                   :class="['absolute top-2 left-2 p-2 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/70 text-white hover:bg-black/90']"
-                  title="Star"
+                  title="Favoritar"
                 >
                   <Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" />
                 </button>
@@ -1172,7 +1173,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 </div>
                 <!-- Normal mode -->
                 <h3 v-else class="font-medium text-xs text-white mb-1 truncate">
-                  {{ project.name || 'Untitled' }}
+                  {{ project.name || 'Sem título' }}
                 </h3>
                 <p class="text-[10px] text-zinc-500">{{ formatDistanceToNow(project.created_at) }}</p>
               </div>
@@ -1186,13 +1187,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <FolderOpen class="w-8 h-8 text-zinc-500" />
               </div>
               <h3 class="text-base font-semibold text-white mb-2">
-                <span v-if="searchQuery">No results found</span>
-                <span v-else-if="activeFolderId">Empty folder</span>
-                <span v-else>No projects yet</span>
+                <span v-if="searchQuery">Nenhum resultado encontrado</span>
+                <span v-else-if="activeFolderId">Pasta vazia</span>
+                <span v-else>Nenhum projeto ainda</span>
               </h3>
               <p class="text-xs text-zinc-500 mb-6">
-                <span v-if="searchQuery">Try another search</span>
-                <span v-else>Create your first design to get started</span>
+                <span v-if="searchQuery">Tente outra busca</span>
+                <span v-else>Crie seu primeiro projeto para começar</span>
               </p>
               <button
                 v-if="!searchQuery"
@@ -1200,7 +1201,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 class="h-10 px-6 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium inline-flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
               >
                 <Plus class="w-4 h-4" />
-                Create Design
+                Criar Projeto
               </button>
             </div>
           </div>
@@ -1215,15 +1216,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
       @click.self="showCreateProject = false"
     >
       <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
-        <h3 class="text-base font-semibold text-white mb-2">New Design</h3>
+        <h3 class="text-base font-semibold text-white mb-2">Novo Projeto</h3>
         <p class="text-xs text-zinc-500 mb-4">
-          <span v-if="activeFolderId">Create in: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
-          <span v-else>Create in root</span>
+          <span v-if="activeFolderId">Criar em: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
+          <span v-else>Criar na raiz</span>
         </p>
         <input
           v-model="newProjectName"
           type="text"
-          placeholder="Project name..."
+          placeholder="Nome do projeto..."
           class="w-full h-10 px-3 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 mb-4 transition-all"
           @keyup.enter="createProject()"
         />
@@ -1232,14 +1233,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
             @click="showCreateProject = false"
             class="flex-1 h-10 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition-all"
           >
-            Cancel
+            Cancelar
           </button>
           <button
             @click="createProject()"
             :disabled="isLoading || !isValidProjectName"
             class="flex-1 h-10 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
           >
-            {{ isLoading ? 'Creating...' : 'Create' }}
+            {{ isLoading ? 'Criando...' : 'Criar' }}
           </button>
         </div>
       </div>
@@ -1252,15 +1253,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
       @click.self="showCreateFolder = false"
     >
       <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
-        <h3 class="text-base font-semibold text-white mb-2">New Folder</h3>
+        <h3 class="text-base font-semibold text-white mb-2">Nova Pasta</h3>
         <p class="text-xs text-zinc-500 mb-4">
-          <span v-if="activeFolderId">Create inside: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
-          <span v-else>Create in root</span>
+          <span v-if="activeFolderId">Criar dentro de: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
+          <span v-else>Criar na raiz</span>
         </p>
         <input
           v-model="newFolderName"
           type="text"
-          placeholder="Folder name..."
+          placeholder="Nome da pasta..."
           class="w-full h-10 px-3 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 mb-4 transition-all"
           @keyup.enter="handleCreateFolder()"
         />
@@ -1269,14 +1270,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
             @click="showCreateFolder = false"
             class="flex-1 h-10 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition-all"
           >
-            Cancel
+            Cancelar
           </button>
           <button
             @click="handleCreateFolder()"
             :disabled="!isValidFolderName"
             class="flex-1 h-10 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
           >
-            Create
+            Criar
           </button>
         </div>
       </div>
@@ -1294,14 +1295,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
           class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
         >
           <Pencil class="w-4 h-4" />
-          Rename
+          Renomear
         </button>
         <button
           @click="handleDeleteFolder(showFolderMenu)"
           class="w-full px-3 py-2 text-xs text-left text-red-400 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors rounded mx-1"
         >
           <Trash2 class="w-4 h-4" />
-          Delete
+          Excluir
         </button>
       </div>
     </teleport>
@@ -1318,21 +1319,21 @@ const handleDropOnRoot = async (event: DragEvent) => {
           class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
         >
           <Pencil class="w-4 h-4" />
-          Rename
+          Renomear
         </button>
         <button
           @click="duplicateProject(showProjectMenu)"
           class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
         >
           <Copy class="w-4 h-4" />
-          Duplicate
+          Duplicar
         </button>
         <button
           @click="toggleStarred(showProjectMenu)"
           class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
         >
           <Star class="w-4 h-4" :class="{ 'fill-current': projects.find(p => p.id === showProjectMenu)?.is_starred }" />
-          {{ projects.find(p => p.id === showProjectMenu)?.is_starred ? 'Unstar' : 'Star' }}
+          {{ projects.find(p => p.id === showProjectMenu)?.is_starred ? 'Desfavoritar' : 'Favoritar' }}
         </button>
         <div class="h-px bg-white/10 my-1.5 mx-2"></div>
         <button
@@ -1340,7 +1341,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           class="w-full px-3 py-2 text-xs text-left text-red-400 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors rounded mx-1"
         >
           <Trash2 class="w-4 h-4" />
-          Delete
+          Excluir
         </button>
       </div>
     </teleport>
@@ -1351,8 +1352,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
       :title="confirmDialogData.title"
       :message="confirmDialogData.message"
       :variant="confirmDialogData.variant"
-      confirm-text="Delete"
-      cancel-text="Cancel"
+      confirm-text="Excluir"
+      cancel-text="Cancelar"
       @confirm="handleConfirm"
       @cancel="handleCancelConfirm"
     />

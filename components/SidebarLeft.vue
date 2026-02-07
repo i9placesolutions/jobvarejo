@@ -22,7 +22,7 @@ const createPage = (preset: string) => {
 </script>
 
 <template>
-  <aside class="w-[240px] border-r border-white/5 bg-[#1a1a1a] flex flex-col shrink-0 z-10 text-white h-full select-none">
+  <aside class="w-60 border-r border-white/5 bg-[#1a1a1a] flex flex-col shrink-0 z-10 text-white h-full select-none">
        <!-- Top: Menu, File Name & Tabs (Figma Style) -->
        <div class="border-b border-white/5 shrink-0">
          <!-- Menu & File Name -->
@@ -30,7 +30,7 @@ const createPage = (preset: string) => {
            <!-- Menu Icon -->
            <button 
              @click="$emit('open-menu')"
-             class="w-7 h-7 hover:bg-white/10 rounded-lg flex items-center justify-center cursor-pointer transition-colors flex-shrink-0"
+             class="w-7 h-7 hover:bg-white/10 rounded-lg flex items-center justify-center cursor-pointer transition-colors shrink-0"
              title="Menu"
            >
              <Menu class="w-4 h-4 text-zinc-400" />
@@ -38,15 +38,12 @@ const createPage = (preset: string) => {
            
            <!-- File Name -->
            <div class="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer group hover:bg-white/5 rounded-lg px-2 py-1.5 transition-all">
-             <span class="text-xs font-medium text-white truncate">{{ project.name || 'Untitled' }}</span>
-             <ChevronDown class="w-3.5 h-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+             <span class="text-xs font-medium text-white truncate">{{ project.name || 'Sem título' }}</span>
+             <ChevronDown class="w-3.5 h-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
            </div>
            
            <div class="flex items-center gap-1">
-             <span class="text-[10px] text-blue-400 font-medium px-1.5 py-0.5 rounded bg-blue-500/10">Free</span>
-             <button class="w-6 h-6 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all">
-               <Search class="w-3.5 h-3.5 text-zinc-400" />
-             </button>
+             <span class="text-[10px] text-blue-400 font-medium px-1.5 py-0.5 rounded bg-blue-500/10">Grátis</span>
            </div>
          </div>
          
@@ -57,14 +54,14 @@ const createPage = (preset: string) => {
                 class="h-full px-3 border-b-2 transition-colors rounded-t-md"
                 :class="activeTab === 'layers' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'"
             >
-                File
+                Arquivo
             </button>
             <button 
                 @click="activeTab = 'assets'"
                 class="h-full px-3 border-b-2 transition-colors rounded-t-md"
                 :class="activeTab === 'assets' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'"
             >
-                Assets
+                Recursos
             </button>
        </div>
        </div>
@@ -76,7 +73,7 @@ const createPage = (preset: string) => {
                <input 
                    v-model="sidebarSearch"
                    type="text" 
-                   placeholder="Search" 
+                   placeholder="Buscar" 
                    class="w-full h-8 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white pl-8 pr-3 focus:outline-none focus:border-violet-500/50 placeholder:text-zinc-500 transition-all" 
                />
            </div>
@@ -90,7 +87,7 @@ const createPage = (preset: string) => {
                <!-- Pages Section -->
                <div class="shrink-0">
                  <div class="px-3 py-2 flex items-center justify-between border-b border-white/5">
-                   <span class="text-[10px] font-semibold uppercase text-zinc-500">Pages</span>
+                   <span class="text-[10px] font-semibold uppercase text-zinc-500">Páginas</span>
                    <button @click.stop="createPage('story')" class="w-5 h-5 hover:bg-white/10 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Nova Página">
                      <Plus class="w-3.5 h-3.5" />
                    </button>

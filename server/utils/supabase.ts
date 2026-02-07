@@ -13,8 +13,12 @@ export const createSupabaseClient = () => {
   return createClient(supabaseUrl, supabaseAnonKey)
 }
 
-// Create admin client with service role key (for server operations)
+// Singleton admin client — reutiliza a mesma instância para todas as requests
+let _adminClient: ReturnType<typeof createClient> | null = null
+
 export const createSupabaseAdmin = () => {
+  if (_adminClient) return _adminClient
+
   const config = useRuntimeConfig()
   const supabaseUrl = config.public.supabaseUrl
   const supabaseServiceKey = config.supabaseServiceRoleKey
@@ -26,12 +30,13 @@ export const createSupabaseAdmin = () => {
     throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
   }
 
-  return createClient(supabaseUrl, supabaseServiceKey, {
+  _adminClient = createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false
     }
   })
+  return _adminClient
 }
 
 // Type for profile

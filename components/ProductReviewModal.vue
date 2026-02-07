@@ -183,7 +183,7 @@ const openAssetPicker = async (index: number) => {
     }
 }
 
-const handleAssetSelect = (asset: any) => {
+const handleAssetSelect = async (asset: any) => {
     if (selectedProductIndex.value === null) return
     const product = products.value[selectedProductIndex.value]
     if (!product) return
@@ -192,9 +192,30 @@ const handleAssetSelect = (asset: any) => {
     product.error = undefined
     showAssetPicker.value = false
     selectedProductIndex.value = null
+
+    // Salvar no cache do banco para próximas buscas
+    try {
+        const searchTerm = [product.name, product.brand, product.flavor, product.weight].filter(Boolean).join(' ').trim()
+        await $fetch('/api/cache-product-image', {
+            method: 'POST',
+            body: {
+                searchTerm,
+                productName: product.name,
+                brand: product.brand || null,
+                flavor: product.flavor || null,
+                weight: product.weight || null,
+                imageUrl: asset.url,
+                s3Key: asset.key || null,
+                source: 'storage'
+            }
+        })
+    } catch (err) {
+        // Cache é opcional, não bloquear
+        console.warn('[Cache] Falha ao salvar asset no cache:', err)
+    }
 }
 
-const handleImageUpload = (event: Event, index: number) => {
+const handleImageUpload = async (event: Event, index: number) => {
     const input = event.target as HTMLInputElement
     const file = input.files?.[0]
     if (!file) return
@@ -202,10 +223,41 @@ const handleImageUpload = (event: Event, index: number) => {
     const product = products.value[index]
     if (!product) return
 
-    product.imageUrl = URL.createObjectURL(file)
-    product.status = 'done'
+    // Mostrar preview local imediato enquanto faz upload
+    const localPreview = URL.createObjectURL(file)
+    product.imageUrl = localPreview
+    product.status = 'processing'
     product.error = undefined
     input.value = ''
+
+    try {
+        // Upload para Wasabi + salvar no cache do banco
+        const form = new FormData()
+        form.append('file', file)
+        form.append('productName', product.name || 'Produto')
+        if (product.brand) form.append('brand', product.brand)
+        if (product.flavor) form.append('flavor', product.flavor)
+        if (product.weight) form.append('weight', product.weight)
+
+        const result = await $fetch('/api/upload-product-image', {
+            method: 'POST',
+            body: form
+        }) as any
+
+        if (result?.url) {
+            product.imageUrl = result.url
+            product.status = 'done'
+            console.log('[Upload Manual] Imagem salva no Wasabi:', product.name)
+        } else {
+            // Manter preview local como fallback
+            product.status = 'done'
+        }
+    } catch (err: any) {
+        console.error('[Upload Manual] Falha:', err)
+        // Manter preview local como fallback
+        product.status = 'done'
+        product.error = undefined
+    }
 }
 
 const getStatusColor = (status: string) => {

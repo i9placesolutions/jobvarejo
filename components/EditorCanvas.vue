@@ -736,8 +736,9 @@ const addFrame = () => {
         width: frameWidth,
         height: frameHeight,
         fill: '#ffffff',
-        stroke: '#0d99ff', // Figma Blue
+        stroke: 'transparent',
         strokeWidth: 2,
+        strokeUniform: true, // Stroke não afeta dimensões (1080 fica 1080, não 1082)
         isFrame: true, // Custom Flag used by after:render
         clipContent: true,
         name: getNextFrameName(),
@@ -758,6 +759,7 @@ const addFrame = () => {
     });
 
     (frame as any)._customId = Math.random().toString(36).substr(2, 9);
+    (frame as any).__strokeEnabled = false;
     
     // CRITICAL: Set layerName to ensure it persists and shows as "FRAMER" in LayersPanel
     // The name "Frame N" is for canvas display, layerName "FRAMER" is for layers panel
@@ -889,6 +891,8 @@ const getOrCreateFrameClipRect = (frame: any) => {
 
 const findFrameUnderObject = (obj: any) => {
     if (!canvas.value || !obj) return null;
+    // Frames NUNCA podem ser filhos de outros frames
+    if (obj.isFrame) return null;
 
     // First try using center point (faster)
     const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
@@ -925,7 +929,7 @@ const syncObjectFrameClip = (obj: any) => {
     const frameId = (obj as any).parentFrameId as (string | undefined);
     const frame = frameId ? getFrameById(frameId) : null;
 
-    // CRITICAL: If no parent frame or clipContent is disabled, remove clipPath
+    // Se não tem frame pai ou clipContent desativado, remove clipPath
     if (!frame || !frame.clipContent) {
         if (obj.clipPath) {
             obj.set('clipPath', null);
@@ -936,18 +940,30 @@ const syncObjectFrameClip = (obj: any) => {
         return;
     }
 
-    // CRITICAL FIX: For clipPath to work correctly, we need to create a clipPath
-    // that is positioned relative to the object being clipped
-    // The clipPath needs to account for the offset between the object and the frame
+    // ESTRATÉGIA: absolutePositioned: false (relativo ao objeto)
+    // No Fabric.js v7, o cache do objeto tem tamanho limitado.
+    // Com absolutePositioned: true, o clipPath layer canvas pode ser pequeno demais
+    // para conter o clip em coordenadas globais, fazendo o clip falhar.
+    // Com absolutePositioned: false, o clipPath fica relativo ao centro do objeto,
+    // garantindo que esteja sempre dentro dos limites do layer canvas.
 
-    // Calculate the offset from object center to frame center
-    const objCenter = obj.getCenterPoint ? obj.getCenterPoint() : { x: obj.left, y: obj.top };
     const frameCenter = frame.getCenterPoint ? frame.getCenterPoint() : { x: frame.left, y: frame.top };
+    const objCenter = obj.getCenterPoint ? obj.getCenterPoint() : { x: obj.left, y: obj.top };
 
-    // Calculate the position of the clipPath relative to the object
-    // The clipPath should be centered at the frame's position, but relative to the object
-    const clipLeft = frameCenter.x - objCenter.x;
-    const clipTop = frameCenter.y - objCenter.y;
+    // Converter offset mundo → coordenadas locais do objeto (desrotacionar e desescalar)
+    const dxWorld = frameCenter.x - objCenter.x;
+    const dyWorld = frameCenter.y - objCenter.y;
+    const objAngle = obj.angle || 0;
+    const angleRad = -objAngle * Math.PI / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    const dxLocal = (dxWorld * cos - dyWorld * sin) / (obj.scaleX || 1);
+    const dyLocal = (dxWorld * sin + dyWorld * cos) / (obj.scaleY || 1);
+
+    // Escala do clip: frame visual size / object scale
+    const clipScaleX = (frame.scaleX || 1) / (obj.scaleX || 1);
+    const clipScaleY = (frame.scaleY || 1) / (obj.scaleY || 1);
+    const clipAngle = (frame.angle || 0) - objAngle;
 
     const kRectLocal = 1 - 0.5522847498;
     const clampR = (n: any, w: number, h: number) => {
@@ -981,16 +997,15 @@ const syncObjectFrameClip = (obj: any) => {
     const hasCornerRadii = !!(frame.cornerRadii && typeof frame.cornerRadii === 'object');
     const wantPathClip = hasCornerRadii;
 
-    // Create clipPath positioned relative to the object (absolutePositioned: false)
     const clip = wantPathClip
         ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
             originX: 'center',
             originY: 'center',
-            left: clipLeft,
-            top: clipTop,
-            scaleX: (frame.scaleX || 1),
-            scaleY: (frame.scaleY || 1),
-            angle: (frame.angle || 0) - (obj.angle || 0),
+            left: dxLocal,
+            top: dyLocal,
+            scaleX: clipScaleX,
+            scaleY: clipScaleY,
+            angle: clipAngle,
             absolutePositioned: false,
             selectable: false,
             evented: false,
@@ -999,15 +1014,15 @@ const syncObjectFrameClip = (obj: any) => {
         : new fabric.Rect({
             originX: 'center',
             originY: 'center',
-            left: clipLeft,
-            top: clipTop,
+            left: dxLocal,
+            top: dyLocal,
             width: frame.width,
             height: frame.height,
             rx: frame.rx ?? 0,
             ry: frame.ry ?? 0,
-            scaleX: (frame.scaleX || 1),
-            scaleY: (frame.scaleY || 1),
-            angle: (frame.angle || 0) - (obj.angle || 0),
+            scaleX: clipScaleX,
+            scaleY: clipScaleY,
+            angle: clipAngle,
             absolutePositioned: false,
             selectable: false,
             evented: false,
@@ -1020,13 +1035,16 @@ const syncObjectFrameClip = (obj: any) => {
     if (typeof clip.setCoords === 'function') clip.setCoords();
     clip.dirty = true;
 
-    // Apply the clipPath
+    // Aplicar clipPath
     obj.set('clipPath', clip);
     (obj as any)._frameClipOwner = frame._customId;
     obj.set('dirty', true);
     obj.setCoords();
 
-    // Garantir que objeto dentro de frame nunca fique travado (permite mover imagem etc.)
+    // Forçar re-render
+    canvas.value.requestRenderAll();
+
+    // Garantir que objeto dentro de frame nunca fique travado
     obj.set('lockMovementX', false);
     obj.set('lockMovementY', false);
 };
@@ -1036,12 +1054,15 @@ const syncFrameClips = (frame: any) => {
     getOrCreateFrameClipRect(frame);
 
     // Get ALL children that are inside the frame bounds, not just those with parentFrameId set
-    const allObjects = canvas.value.getObjects().filter((o: any) => o !== frame);
+    const allObjects = canvas.value.getObjects().filter((o: any) => o !== frame && !o.isFrame);
     const frameBounds = frame.getBoundingRect ? frame.getBoundingRect() : null;
 
     const children = allObjects.filter((o: any) => {
         // First check explicit parentFrameId
         if (o.parentFrameId === frame._customId) return true;
+
+        // ISOLAMENTO: Se o objeto já pertence a OUTRO frame, NÃO roubar
+        if (o.parentFrameId && o.parentFrameId !== frame._customId) return false;
 
         // Then check if object is physically inside the frame
         if (frameBounds && typeof o.getBoundingRect === 'function') {
@@ -1232,6 +1253,274 @@ const toggleStroke = (obj: any, enabled: boolean) => {
     }
 };
 
+// ─── Sticker Outline (alpha-based contour) ───────────────────────────────
+// Generates an outline that follows the alpha channel of PNGs (not a bounding-box border).
+// Uses offscreen canvas + alpha dilation + color fill, cached for performance.
+
+/** Detect whether an image has any transparent pixel (alpha < 255). */
+const imageHasTransparency = (img: HTMLImageElement | HTMLCanvasElement): boolean => {
+    try {
+        const oc = document.createElement('canvas');
+        const w = (img as any).naturalWidth || img.width;
+        const h = (img as any).naturalHeight || img.height;
+        if (!w || !h) return false;
+        // Sample at reduced size for speed
+        const maxDim = 256;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        oc.width = Math.ceil(w * scale);
+        oc.height = Math.ceil(h * scale);
+        const octx = oc.getContext('2d', { willReadFrequently: true });
+        if (!octx) return false;
+        octx.drawImage(img, 0, 0, oc.width, oc.height);
+        const data = octx.getImageData(0, 0, oc.width, oc.height).data;
+        for (let i = 3; i < data.length; i += 4) {
+            if (data[i]! < 250) return true;
+        }
+        return false;
+    } catch { return false; }
+};
+
+/** Generate the dilated outline canvas from source alpha. */
+const generateStickerOutlineCanvas = (
+    img: HTMLImageElement | HTMLCanvasElement,
+    outlineWidth: number,
+    outlineColor: string,
+    outlineOpacity: number
+): HTMLCanvasElement | null => {
+    try {
+        // If the image element isn't ready yet, return null and let the caller retry.
+        if (img && (img as any).tagName === 'IMG') {
+            const im = img as HTMLImageElement;
+            if (!im.complete || (im.naturalWidth || 0) <= 0 || (im.naturalHeight || 0) <= 0) {
+                return null;
+            }
+        }
+
+        const srcW = (img as any).naturalWidth || img.width;
+        const srcH = (img as any).naturalHeight || img.height;
+        if (!srcW || !srcH || outlineWidth <= 0) return null;
+
+        const pad = Math.ceil(outlineWidth);
+        const cw = srcW + pad * 2;
+        const ch = srcH + pad * 2;
+
+        // 1. Draw source image to extract alpha
+        const srcCanvas = document.createElement('canvas');
+        srcCanvas.width = srcW;
+        srcCanvas.height = srcH;
+        const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
+        if (!srcCtx) return null;
+        srcCtx.drawImage(img, 0, 0, srcW, srcH);
+        const srcData = srcCtx.getImageData(0, 0, srcW, srcH);
+
+        // 2. Create binary alpha mask (1 = opaque, 0 = transparent)
+        const srcAlpha = new Uint8Array(srcW * srcH);
+        for (let i = 0; i < srcAlpha.length; i++) {
+            srcAlpha[i] = srcData.data[i * 4 + 3]! > 10 ? 1 : 0;
+        }
+
+        // 3. Dilate alpha mask by outlineWidth using distance-based approach
+        const dilated = new Uint8Array(cw * ch);
+        const r = Math.ceil(outlineWidth);
+        const r2 = outlineWidth * outlineWidth;
+        for (let dy = 0; dy < ch; dy++) {
+            for (let dx = 0; dx < cw; dx++) {
+                // Check if any source pixel within radius has alpha
+                const sx0 = dx - pad;
+                const sy0 = dy - pad;
+                let found = false;
+                const jMin = Math.max(0, sy0 - r);
+                const jMax = Math.min(srcH - 1, sy0 + r);
+                const iMin = Math.max(0, sx0 - r);
+                const iMax = Math.min(srcW - 1, sx0 + r);
+                for (let j = jMin; j <= jMax && !found; j++) {
+                    for (let i = iMin; i <= iMax && !found; i++) {
+                        if (srcAlpha[j * srcW + i]) {
+                            const ddx = i - sx0;
+                            const ddy = j - sy0;
+                            if (ddx * ddx + ddy * ddy <= r2) {
+                                found = true;
+                            }
+                        }
+                    }
+                }
+                dilated[dy * cw + dx] = found ? 1 : 0;
+            }
+        }
+
+        // 4. Subtract original alpha from dilated to get only the outline ring
+        for (let sy = 0; sy < srcH; sy++) {
+            for (let sx = 0; sx < srcW; sx++) {
+                if (srcAlpha[sy * srcW + sx]) {
+                    dilated[(sy + pad) * cw + (sx + pad)] = 0;
+                }
+            }
+        }
+
+        // 5. Render outline onto final canvas
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = cw;
+        outCanvas.height = ch;
+        const outCtx = outCanvas.getContext('2d');
+        if (!outCtx) return null;
+
+        const outImgData = outCtx.createImageData(cw, ch);
+        // Parse color
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 1; tempCanvas.height = 1;
+        const tempCtx = tempCanvas.getContext('2d')!;
+        tempCtx.fillStyle = outlineColor || '#000000';
+        tempCtx.fillRect(0, 0, 1, 1);
+        const colorData = tempCtx.getImageData(0, 0, 1, 1).data;
+        const cr = colorData[0] as number;
+        const cg = colorData[1] as number;
+        const cb = colorData[2] as number;
+        const alphaVal = Math.round(Math.min(1, Math.max(0, outlineOpacity)) * 255);
+
+        for (let i = 0; i < dilated.length; i++) {
+            if (dilated[i]!) {
+                outImgData.data[i * 4] = cr;
+                outImgData.data[i * 4 + 1] = cg;
+                outImgData.data[i * 4 + 2] = cb;
+                outImgData.data[i * 4 + 3] = alphaVal;
+            }
+        }
+        outCtx.putImageData(outImgData, 0, 0);
+        return outCanvas;
+    } catch (e) {
+        console.error('[StickerOutline] Erro ao gerar outline:', e);
+        return null;
+    }
+};
+
+/** Apply or remove the sticker outline render patch on a fabric.Image object. */
+const applyStickerOutlinePatch = (obj: any) => {
+    if (!obj || String(obj.type || '').toLowerCase() !== 'image') return;
+
+    const enabled = !!(obj as any).__stickerOutlineEnabled;
+    const width = Number((obj as any).__stickerOutlineWidth) || 4;
+    const color = (obj as any).__stickerOutlineColor || '#FFFFFF';
+    const opacity = (obj as any).__stickerOutlineOpacity ?? 1;
+
+    // Clear cache when params change
+    const cacheKey = `${enabled}|${width}|${color}|${opacity}|${obj.width}|${obj.height}`;
+    if ((obj as any).__stickerCacheKey !== cacheKey) {
+        (obj as any).__stickerOutlineCache = null;
+        (obj as any).__stickerCacheKey = cacheKey;
+    }
+
+    if (!enabled) {
+        // Remove patch, restore original drawObject
+        if ((obj as any).__origDrawObjectSticker) {
+            obj.drawObject = (obj as any).__origDrawObjectSticker;
+            delete (obj as any).__origDrawObjectSticker;
+        }
+        (obj as any).__stickerOutlineCache = null;
+        obj.dirty = true;
+        return;
+    }
+
+    // Patch drawObject — called by render() AFTER ctx transform is applied
+    // Pipeline: render() → ctx.save() → transform(ctx) → drawObject(ctx) → ctx.restore()
+    // So inside drawObject, we're in the object's local coordinate space.
+    if (!(obj as any).__origDrawObjectSticker) {
+        (obj as any).__origDrawObjectSticker = obj.drawObject;
+    }
+
+    obj.drawObject = function (ctx: CanvasRenderingContext2D, forClipping: boolean, context: any) {
+        // Draw outline BEFORE the image (so it appears behind)
+        if (!forClipping && this.__stickerOutlineEnabled && this.__stickerOutlineCache) {
+            try {
+                const pad = Math.ceil(Number(this.__stickerOutlineWidth) || 4);
+                const w = this.width;
+                const h = this.height;
+                ctx.drawImage(
+                    this.__stickerOutlineCache,
+                    -w / 2 - pad,
+                    -h / 2 - pad,
+                    w + pad * 2,
+                    h + pad * 2
+                );
+            } catch (_e) {
+                // Silent — never break image rendering
+            }
+        }
+
+        // ALWAYS call original drawObject (draws background + _render + clipPath)
+        return (this as any).__origDrawObjectSticker.call(this, ctx, forClipping, context);
+    };
+
+    obj.dirty = true;
+
+    // Generate outline canvas — with retry mechanism for images not yet loaded
+    const tryGenerate = (attempt: number) => {
+        const el = obj._element || obj.getElement?.();
+        const maxAttempts = 6;
+        const delays = [80, 180, 350, 700, 1500, 3000];
+
+        const isImgEl = el && (el as any).tagName === 'IMG';
+        const ready =
+            !!el &&
+            (!isImgEl ||
+                (((el as HTMLImageElement).complete) &&
+                    (((el as HTMLImageElement).naturalWidth || 0) > 0) &&
+                    (((el as HTMLImageElement).naturalHeight || 0) > 0)));
+
+        if (!ready) {
+            if (attempt < maxAttempts) {
+                setTimeout(() => {
+                    if ((obj as any).__stickerOutlineEnabled) tryGenerate(attempt + 1);
+                }, delays[attempt] ?? 1000);
+            }
+            return;
+        }
+
+        try {
+            const outCanvas = generateStickerOutlineCanvas(el, width, color, opacity);
+            if (outCanvas) {
+                (obj as any).__stickerOutlineCache = outCanvas;
+                obj.dirty = true;
+                canvas.value?.renderAll?.();
+                return;
+            }
+        } catch (e) {
+            console.warn('[StickerOutline] Erro ao gerar outline:', e);
+        }
+
+        // Generation can fail while the image is still decoding; retry a few times.
+        if (attempt < maxAttempts) {
+            setTimeout(() => {
+                if ((obj as any).__stickerOutlineEnabled) tryGenerate(attempt + 1);
+            }, delays[attempt] ?? 1000);
+        }
+    };
+
+    if (!(obj as any).__stickerOutlineCache) {
+        setTimeout(() => tryGenerate(0), 30);
+    }
+};
+
+/** Invalidate sticker outline cache and regenerate asynchronously. */
+const invalidateStickerOutlineCache = (obj: any) => {
+    if (!obj) return;
+    (obj as any).__stickerOutlineCache = null;
+    (obj as any).__stickerCacheKey = null;
+    obj.dirty = true;
+
+    // Regenerate async if enabled
+    if ((obj as any).__stickerOutlineEnabled) {
+        const el = obj._element || obj.getElement?.();
+        // Let `applyStickerOutlinePatch` handle retry/backoff reliably.
+        setTimeout(() => {
+            try {
+                applyStickerOutlinePatch(obj);
+            } catch {
+                // ignore
+            }
+        }, el ? 50 : 120);
+    }
+};
+
 const setTool = (tool: 'select' | 'draw' | 'pen') => {
     if (!canvas.value) return;
 
@@ -1288,6 +1577,12 @@ const setTool = (tool: 'select' | 'draw' | 'pen') => {
         canvas.value.isDrawingMode = false;
         canvas.value.discardActiveObject();
         canvas.value.defaultCursor = 'crosshair';
+        canvas.value.selection = false; // Disable rubber-band selection in pen mode
+        // Make all objects non-selectable during pen mode
+        canvas.value.getObjects().forEach((o: any) => {
+            o._prevEvented = o.evented;
+            o.evented = false;
+        });
         canvas.value.requestRenderAll();
         
     } else {
@@ -1295,6 +1590,16 @@ const setTool = (tool: 'select' | 'draw' | 'pen') => {
         isDrawing.value = false;
         canvas.value.isDrawingMode = false;
         canvas.value.defaultCursor = 'default';
+        canvas.value.selection = true; // Re-enable rubber-band selection
+        // Restore evented state for all objects
+        canvas.value.getObjects().forEach((o: any) => {
+            if (o._prevEvented !== undefined) {
+                o.evented = o._prevEvented;
+                delete o._prevEvented;
+            } else {
+                o.evented = true;
+            }
+        });
         selectedObjectRef.value = null;
         triggerRef(selectedObjectRef);
     }
@@ -1523,7 +1828,7 @@ const updatePenPreview = () => {
         return;
     }
     
-    // Create preview path for multiple points
+    // Create preview path for multiple points + live line to cursor
     let pathString = '';
     penPathPoints.value.forEach((point, index) => {
         if (index === 0) {
@@ -1542,36 +1847,44 @@ const updatePenPreview = () => {
         }
     });
     
+    // Add live preview line from last point to cursor (Figma-style)
+    if (currentMousePos.value) {
+        const endX = typeof currentMousePos.value.x === 'number' ? currentMousePos.value.x : 0;
+        const endY = typeof currentMousePos.value.y === 'number' ? currentMousePos.value.y : 0;
+        pathString += ` L ${endX} ${endY}`;
+    }
+    
     // Update existing preview OR create new one
     if (currentPenPath.value) {
-        // UPDATE existing path (no create/remove = no rastro!)
         try {
             currentPenPath.value.set('path', fabric.util.parsePath(pathString));
             currentPenPath.value.setCoords();
             safeRequestRenderAll();
         } catch (e) {
-            // If update fails, recreate the path
             canvas.value.remove(currentPenPath.value);
             currentPenPath.value = new fabric.Path(pathString, {
                 fill: 'transparent',
                 stroke: '#0d99ff',
                 strokeWidth: 2,
+                strokeDashArray: null,
                 selectable: false,
                 evented: false,
-                excludeFromExport: true
+                excludeFromExport: true,
+                objectCaching: false,
             });
             canvas.value.add(currentPenPath.value);
             safeRequestRenderAll();
         }
     } else {
-        // CREATE new preview path (only once)
         currentPenPath.value = new fabric.Path(pathString, {
             fill: 'transparent',
             stroke: '#0d99ff',
             strokeWidth: 2,
+            strokeDashArray: null,
             selectable: false,
             evented: false,
-            excludeFromExport: true
+            excludeFromExport: true,
+            objectCaching: false,
         });
         canvas.value.add(currentPenPath.value);
         safeRequestRenderAll();
@@ -2276,154 +2589,34 @@ const setupAltDragDuplicate = () => {
     if (!canvas.value || !fabric) return;
 
     const isValidFabricObject = (o: any) => {
-        // Fabric.js v7 compatibility: validate that object is a proper Fabric instance
-        // Must have essential methods and be a proper object instance (not plain JSON)
         if (!o || typeof o !== 'object') return false;
-        
-        // Check essential Fabric object methods
-        const hasSet = typeof o.set === 'function';
-        const hasRender = typeof o.render === 'function';
-        const hasSetCoords = typeof o.setCoords === 'function';
-        const hasToObject = typeof o.toObject === 'function';
-        
-        // Fabric v7 objects should have these prototype methods
-        // A plain JSON object won't have them properly bound
-        const hasType = typeof o.type === 'string' && o.type.length > 0;
-        
-        // Additional check: ensure it's not a plain object by checking constructor
-        const isProperInstance = o.constructor && o.constructor.name !== 'Object';
-        
-        return hasSet && hasRender && hasSetCoords && hasToObject && (hasType || isProperInstance);
+        return typeof o.set === 'function' && typeof o.render === 'function' && typeof o.setCoords === 'function';
     };
 
-    const sanitizeFabricJson = (json: any) => {
-        if (!json || typeof json !== 'object') return json;
-        try {
-            if (Array.isArray((json as any).objects)) {
-                (json as any).objects = (json as any).objects.filter((x: any) => x && typeof x === 'object');
-            }
-            const cp = (json as any).clipPath;
-            if (cp != null && typeof cp !== 'object') {
-                delete (json as any).clipPath;
-            }
-        } catch {
-            // ignore
-        }
-        return json;
-    };
-
-    // Fabric.js v7 compatible enliven function
-    const enlivenOne = async (json: any): Promise<any> => {
-        if (!json || typeof json !== 'object') return null;
-        if (!fabric?.util?.enlivenObjects) return null;
-        
-        try {
-            const cleaned = sanitizeFabricJson(json);
-            const fn = fabric.util.enlivenObjects;
-            
-            // Try Promise-based API first (Fabric v7)
-            try {
-                const result = fn([cleaned]);
-                if (result && typeof result.then === 'function') {
-                    const objs = await result;
-                    return Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
-                }
-            } catch {
-                // Fall through to callback-based API
-            }
-            
-            // Fallback to callback-based API (Fabric v5/v6)
-            return new Promise((resolve) => {
-                try {
-                    fn([cleaned], (objs: any[]) => {
-                        resolve(Array.isArray(objs) && objs.length > 0 ? objs[0] : null);
-                    });
-                } catch {
-                    resolve(null);
+    const assignNewIdsDeep = (obj: any) => {
+        if (!obj || typeof obj !== 'object') return;
+        if (typeof obj.set !== 'function') return;
+        obj._customId = Math.random().toString(36).substr(2, 9);
+        if (typeof obj.getObjects === 'function') {
+            (obj.getObjects() || []).forEach((c: any) => {
+                if (c && typeof c.set === 'function') {
+                    c._customId = Math.random().toString(36).substr(2, 9);
                 }
             });
-        } catch {
-            return null;
         }
-    };
-
-    const cloneFabricObjectSafe = async (source: any, propsToInclude: string[]) => {
-        if (!source) return null;
-
-        // 1) Try Fabric v7 Promise-based clone (preferred method)
-        try {
-            if (typeof source.clone === 'function') {
-                const result = source.clone(propsToInclude);
-                if (result && typeof result.then === 'function') {
-                    const cloned = await result;
-                    // Fabric v7 clone should return a proper Fabric object
-                    if (isValidFabricObject(cloned)) {
-                        console.log('✅ [cloneFabricObjectSafe] Clone via Promise-based clone() success');
-                        return cloned;
-                    }
-                    // If clone returned a plain object representation, try to enliven it
-                    if (cloned && typeof cloned === 'object' && (cloned.type || cloned.objects || cloned.src)) {
-                        console.log('⚠️ [cloneFabricObjectSafe] clone() returned JSON, enlivening...');
-                        const enlivened = await enlivenOne(cloned);
-                        if (isValidFabricObject(enlivened)) return enlivened;
-                    }
-                }
-            }
-        } catch (err) {
-            console.warn('[cloneFabricObjectSafe] Promise-based clone failed:', err);
-        }
-
-        // 2) Try Fabric v5/v6 callback-based clone
-        try {
-            if (typeof source.clone === 'function') {
-                const cloned = await new Promise<any>((resolve, reject) => {
-                    const timeout = setTimeout(() => resolve(null), 2000); // 2s timeout
-                    try {
-                        source.clone((c: any) => {
-                            clearTimeout(timeout);
-                            resolve(c);
-                        }, propsToInclude);
-                    } catch (e) {
-                        clearTimeout(timeout);
-                        reject(e);
-                    }
-                });
-                if (isValidFabricObject(cloned)) {
-                    console.log('✅ [cloneFabricObjectSafe] Clone via callback-based clone() success');
-                    return cloned;
-                }
-            }
-        } catch (err) {
-            console.warn('[cloneFabricObjectSafe] Callback-based clone failed:', err);
-        }
-
-        // 3) Fallback: serialize + enliven (most reliable for complex objects)
-        try {
-            console.log('⚠️ [cloneFabricObjectSafe] Trying serialize + enliven fallback...');
-            const json = typeof source.toObject === 'function' ? source.toObject(propsToInclude) : null;
-            if (json) {
-                const enlivened = await enlivenOne(json);
-                if (isValidFabricObject(enlivened)) {
-                    console.log('✅ [cloneFabricObjectSafe] Clone via serialize + enliven success');
-                    return enlivened;
-                }
-            }
-        } catch (err) {
-            console.warn('[cloneFabricObjectSafe] Serialize + enliven failed:', err);
-        }
-
-        console.error('❌ [cloneFabricObjectSafe] All clone methods failed');
-        return null;
     };
 
     const state = {
         armed: false,
-        inProgress: false,
+        cloning: false,
         didDuplicate: false,
-        altAtDown: false,
         original: null as any,
+        clone: null as any,
         parentGroup: null as any,
-        start: { left: 0, top: 0 } as any,
+        startLeft: 0,
+        startTop: 0,
+        origLockX: false,
+        origLockY: false,
     };
 
     const isEligibleTarget = (obj: any) => {
@@ -2431,504 +2624,244 @@ const setupAltDragDuplicate = () => {
         if (obj.excludeFromExport) return false;
         if (isPenMode.value || isNodeEditing.value || isDrawing.value) return false;
         if (isLikelyProductZone(obj)) return false;
-        if (String(obj.type || '').toLowerCase() === 'activeselection') return false; // keep simple for now
+        if (String(obj.type || '').toLowerCase() === 'activeselection') return false;
         return true;
-    };
-
-    const assignNewIdsDeep = (obj: any) => {
-        if (!obj || typeof obj !== 'object') return;
-        
-        // Validate object is a proper Fabric object (Fabric.js v7 uses 'set' instead of '_set')
-        if (typeof obj.setCoords !== 'function' || typeof obj.set !== 'function' || typeof obj.render !== 'function') {
-            console.error('❌ [assignNewIdsDeep] Objeto inválido detectado!', {
-                objectType: typeof obj,
-                hasSetCoords: typeof obj?.setCoords === 'function',
-                hasSet: typeof obj?.set === 'function',
-                hasRender: typeof obj?.render === 'function'
-            });
-            return;
-        }
-        
-        obj._customId = Math.random().toString(36).substr(2, 9);
-        if (typeof obj.getObjects === 'function') {
-            try {
-                const list = obj.getObjects() || [];
-                list.forEach((c: any) => {
-                    if (!c || c.excludeFromExport) return;
-                    
-                    // CRITICAL: Validate child is a proper Fabric object (Fabric.js v7 uses 'set')
-                    if (typeof c !== 'object' || typeof c.setCoords !== 'function' || typeof c.set !== 'function' || typeof c.render !== 'function') {
-                        console.error('❌ [assignNewIdsDeep] Filho inválido detectado e ignorado!', {
-                            childType: typeof c,
-                            childValue: c,
-                            parentId: obj._customId
-                        });
-                        return;
-                    }
-                    
-                    c._customId = Math.random().toString(36).substr(2, 9);
-                });
-            } catch (err) {
-                console.error('❌ [assignNewIdsDeep] Erro ao processar filhos:', err);
-            }
-        }
-    };
-
-    const applyNoCacheForProductCards = (obj: any) => {
-        if (!obj) return;
-        const isCard = !!(obj.isSmartObject || obj.isProductCard || String(obj.name || '').startsWith('product-card') || isLikelyProductCard(obj));
-        if (isCard) obj.set?.({ objectCaching: false, statefullCache: false, dirty: true });
-    };
-
-    const swapTransformToClone = (clone: any) => {
-        if (!canvas.value) return;
-        const tr: any = (canvas.value as any)._currentTransform;
-        if (!tr) return;
-
-        // Preserve current transform state (action, corner) for ProductCards
-        const currentAction = tr.action;
-        const currentCorner = tr.corner;
-
-        // Swap target to clone - this makes the CLONE follow the mouse
-        tr.target = clone;
-
-        if (tr.original && typeof tr.original === 'object') {
-            tr.original.left = clone.left;
-            tr.original.top = clone.top;
-            tr.original.scaleX = clone.scaleX;
-            tr.original.scaleY = clone.scaleY;
-            tr.original.angle = clone.angle;
-        }
-
-        // Restore action/corner for proper drag behavior with groups
-        tr.action = currentAction;
-        tr.corner = currentCorner;
-
-        console.log('🔄 [swapTransformToClone] Transform swapped to clone (Canva/Figma style)', {
-            cloneId: clone._customId,
-            cloneType: clone.type
-        });
-    };
-
-    // Helper to find parent group when in interactive editing mode (Fabric v7)
-    const findParentGroupForObject = (obj: any): any => {
-        if (!obj || !canvas.value) return null;
-        
-        // First check if object has direct group reference (Fabric sets this)
-        // BUT ignore ActiveSelection - it's a temporary selection, not a real parent group
-        if (obj.group) {
-            const groupType = String(obj.group.type || '').toLowerCase();
-            if (groupType !== 'activeselection') {
-                return obj.group;
-            }
-        }
-        
-        // In Fabric v7 interactive mode, the parent group has:
-        // - interactive: true
-        // - subTargetCheck: true
-        // We need to find a group that is CURRENTLY being edited (has these flags)
-        // AND contains the object we're looking for
-        
-        const allObjects = canvas.value.getObjects();
-        let foundGroup: any = null;
-        
-        // Search function that returns the MOST NESTED group containing the object
-        const searchInGroup = (group: any, depth: number = 0): { group: any, depth: number } | null => {
-            if (!group || typeof group.getObjects !== 'function') return null;
-            
-            // Skip ActiveSelection
-            const groupType = String(group.type || '').toLowerCase();
-            if (groupType === 'activeselection') return null;
-            
-            const children = group.getObjects() || [];
-            
-            for (const child of children) {
-                // Direct match
-                if (child === obj) {
-                    return { group, depth };
-                }
-                // Match by _customId
-                if (obj._customId && child._customId === obj._customId) {
-                    return { group, depth };
-                }
-                
-                // If child is also a group, search deeper
-                if (child.type === 'group' || child.type === 'Group') {
-                    const deeper = searchInGroup(child, depth + 1);
-                    if (deeper) {
-                        return deeper; // Return the deepest match
-                    }
-                }
-            }
-            
-            return null;
-        };
-        
-        // First, look for groups that are in ACTIVE edit mode (interactive: true)
-        // This is the most likely parent
-        for (const canvasObj of allObjects) {
-            const objType = String(canvasObj.type || '').toLowerCase();
-            // Skip ActiveSelection
-            if (objType === 'activeselection') continue;
-            
-            if (objType === 'group') {
-                const isInteractive = canvasObj.interactive === true || canvasObj.subTargetCheck === true;
-                
-                if (isInteractive) {
-                    const result = searchInGroup(canvasObj, 0);
-                    if (result) {
-                        // Found it in an interactive group - this is likely the correct parent
-                        return result.group;
-                    }
-                }
-            }
-        }
-        
-        // Fallback: search all groups (for non-interactive scenarios)
-        for (const canvasObj of allObjects) {
-            const objType = String(canvasObj.type || '').toLowerCase();
-            // Skip ActiveSelection
-            if (objType === 'activeselection') continue;
-            
-            if (objType === 'group') {
-                const result = searchInGroup(canvasObj, 0);
-                if (result) {
-                    if (!foundGroup || result.depth > 0) {
-                        foundGroup = result.group;
-                    }
-                }
-            }
-        }
-        
-        return foundGroup;
     };
 
     canvas.value.on('mouse:down', (opt: any) => {
         const evt: MouseEvent | undefined = opt?.e;
-        if (!evt) return;
-        if (evt.button !== 0) return;
-        if (!evt.altKey) {
+        if (!evt || evt.button !== 0 || !evt.altKey) {
             state.armed = false;
             return;
         }
-
         const active = canvas.value?.getActiveObject?.();
         if (!isEligibleTarget(active)) return;
 
         state.armed = true;
-        state.inProgress = false;
+        state.cloning = false;
         state.didDuplicate = false;
-        state.altAtDown = true;
         state.original = active;
-        
-        // Use the global helper for more robust parent detection
-        // Try multiple sources: direct .group property, global search, or local search
-        // CRITICAL: Filter out ActiveSelection - it's NOT a real parent group
-        let detectedParent = (active as any).group || findParentGroupForObjectGlobal(active) || findParentGroupForObject(active) || null;
-        if (detectedParent && String(detectedParent.type || '').toLowerCase() === 'activeselection') {
-            detectedParent = null; // Ignore ActiveSelection
-        }
-        state.parentGroup = detectedParent;
-        
-        // Store BOTH local and global coordinates for proper group handling
-        // When inside a group with interactive/subTargetCheck, coords are LOCAL to the group
-        state.start = { left: Number(active.left || 0), top: Number(active.top || 0) };
-        
-        // Also store the global position for reference
-        if (detectedParent && typeof active.getCenterPoint === 'function') {
-            const globalCenter = active.getCenterPoint();
-            (state as any).globalStart = { x: globalCenter.x, y: globalCenter.y };
-        }
-        
-        console.log('🎯 [alt-duplicate] mouse:down', {
-            objectType: active.type,
-            objectName: active.name || active._customId,
-            hasDirectGroup: !!(active as any).group,
-            foundParentGroup: !!state.parentGroup,
-            parentGroupName: state.parentGroup?.name || state.parentGroup?._customId,
-            parentGroupType: state.parentGroup?.type,
-            parentIsInteractive: state.parentGroup?.interactive,
-            parentHasSubTargetCheck: state.parentGroup?.subTargetCheck,
-            startPosition: state.start,
-            objectsInParent: state.parentGroup?.getObjects?.()?.length
-        });
+        state.startLeft = Number(active.left || 0);
+        state.startTop = Number(active.top || 0);
     });
 
     canvas.value.on('mouse:move:before', (opt: any) => {
-        if (!state.armed || state.inProgress || state.didDuplicate) return;
-        if (!state.altAtDown) return;
+        if (!state.armed || state.cloning || state.didDuplicate) return;
         if (!canvas.value) return;
 
         const tr: any = (canvas.value as any)._currentTransform;
         if (!tr || tr.target !== state.original) return;
 
-        state.inProgress = true;
-
+        // Start cloning (runs once)
+        state.cloning = true;
         const original = state.original;
-        const parentGroup = state.parentGroup;
-        const curPos = { left: Number(original.left || 0), top: Number(original.top || 0) };
+        const origLeft = state.startLeft;
+        const origTop = state.startTop;
 
-        cloneFabricObjectSafe(original, ['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name'])
-            .then((cloned: any) => {
-                try {
-                    if (!cloned || !canvas.value) return;
-
-                    if (!isValidFabricObject(cloned)) {
-                        console.error('❌ [alt-duplicate] Clone inválido (não-Fabric). Abortando para não corromper o canvas.', cloned);
-                        state.inProgress = false;
-                        return;
+        // Clone via Fabric's native clone
+        const doClone = async () => {
+            let cloned: any = null;
+            try {
+                if (typeof original.clone === 'function') {
+                    const result = original.clone(['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name', 'smartGridId', 'unitLabel', 'price', 'pricePack', 'priceUnit', 'priceSpecial', 'priceSpecialUnit', 'specialCondition', 'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel', 'unit', 'limit', '_productData', '_cardWidth', '_cardHeight']);
+                    if (result && typeof result.then === 'function') {
+                        cloned = await result;
                     }
-
-                    // COMPORTAMENTO COPIAR/COLAR: Clone fica na posição ORIGINAL, usuário continua arrastando o ORIGINAL
-                    // Configure clone at the START position (where original was before dragging)
-                    assignNewIdsDeep(cloned);
-                    
-                    // Preserve common metadata BEFORE setting position
-                    if ((original as any).parentFrameId) (cloned as any).parentFrameId = (original as any).parentFrameId;
-                    if ((original as any).parentZoneId) (cloned as any).parentZoneId = (original as any).parentZoneId;
-                    if ((original as any).isSmartObject) (cloned as any).isSmartObject = true;
-                    if ((original as any).isProductCard) (cloned as any).isProductCard = true;
-                    if ((original as any).unitLabel) (cloned as any).unitLabel = (original as any).unitLabel;
-
-                    applyNoCacheForProductCards(cloned);
-
-                    // ============ FLUIDO COMO CANVA/FIGMA ============
-                    // Clone nasce DENTRO do grupo imediatamente, na posição original
-                    // O usuário continua arrastando o ORIGINAL
-                    
-                    let insertionSuccessful = false;
-                    
-                    if (parentGroup && typeof parentGroup.add === 'function') {
-                        // ====== CLONE INSIDE GROUP (FLUID LIKE CANVA) ======
-                        try {
-                            // The clone should be at the SAME LOCAL position as the original was
-                            // state.start already has the local coordinates (left/top within group)
-                            let cloneLocalLeft = state.start.left;
-                            let cloneLocalTop = state.start.top;
-                            
-                            // FABRIC V7 FIX: When group is interactive (subTargetCheck: true),
-                            // object coordinates might be in GLOBAL space. We need to convert to LOCAL.
-                            const isInteractiveGroup = parentGroup.interactive === true || parentGroup.subTargetCheck === true;
-                            
-                            if (isInteractiveGroup && typeof parentGroup.toLocalPoint === 'function') {
-                                // Convert global coordinates to local group coordinates
-                                try {
-                                    const globalPoint = { x: state.start.left, y: state.start.top };
-                                    const localPoint = parentGroup.toLocalPoint(globalPoint, 'center', 'center');
-                                    if (localPoint && typeof localPoint.x === 'number') {
-                                        cloneLocalLeft = localPoint.x;
-                                        cloneLocalTop = localPoint.y;
-                                        console.log('🔄 [alt-duplicate] Converted to LOCAL coords for interactive group', {
-                                            globalPoint,
-                                            localPoint: { x: cloneLocalLeft, y: cloneLocalTop }
-                                        });
-                                    }
-                                } catch (convErr) {
-                                    // Keep original coordinates if conversion fails
-                                    console.log('⚠️ [alt-duplicate] Using original coords (conversion failed)');
-                                }
-                            }
-                            
-                            // CRITICAL: Set clone's position BEFORE adding to group
-                            cloned.set({
-                                left: cloneLocalLeft,
-                                top: cloneLocalTop,
-                                originX: original.originX || 'center',
-                                originY: original.originY || 'center',
-                                selectable: true,
-                                evented: true,
-                                hasControls: true,
-                                hasBorders: true,
-                                visible: true,
-                                opacity: 1
-                            });
-                            
-                            // Find where to insert (same z-index as original, so clone is BEHIND)
-                            const groupObjects = parentGroup.getObjects?.() || [];
-                            let originalIndex = groupObjects.indexOf(original);
-                            if (originalIndex < 0 && original._customId) {
-                                originalIndex = groupObjects.findIndex((o: any) => o._customId === original._customId);
-                            }
-                            
-                            // Add clone to group - it will appear IMMEDIATELY inside the group
-                            parentGroup.add(cloned);
-                            cloned.group = parentGroup; // Ensure reference is set
-                            
-                            // Move to correct z-index (at original's position, so clone is behind)
-                            if (originalIndex >= 0 && typeof (parentGroup as any)._objects !== 'undefined') {
-                                const arr = (parentGroup as any)._objects;
-                                const cloneCurrentIdx = arr.indexOf(cloned);
-                                if (cloneCurrentIdx >= 0 && cloneCurrentIdx !== originalIndex) {
-                                    const cloneItem = arr.splice(cloneCurrentIdx, 1)[0];
-                                    arr.splice(originalIndex, 0, cloneItem);
-                                }
-                            }
-                            
-                            // CRITICAL: Update group bounds and mark dirty
-                            cloned.setCoords?.();
-                            parentGroup.set('dirty', true);
-                            
-                            // Use addWithUpdate pattern for Fabric v7
-                            if (typeof (parentGroup as any)._calcBounds === 'function') {
-                                try { (parentGroup as any)._calcBounds(); } catch {}
-                            }
-                            if (typeof parentGroup.setCoords === 'function') {
-                                parentGroup.setCoords();
-                            }
-                            
-                            // Verify insertion
-                            const verifyObjects = parentGroup.getObjects?.() || [];
-                            if (verifyObjects.includes(cloned)) {
-                                insertionSuccessful = true;
-                                console.log('✅ [alt-duplicate] Clone INSIDE group (fluid)', {
-                                    cloneId: cloned._customId,
-                                    parentGroupName: parentGroup.name || parentGroup._customId,
-                                    cloneLocalPos: { left: cloneLocalLeft, top: cloneLocalTop },
-                                    groupObjectsCount: verifyObjects.length
-                                });
-                            }
-                        } catch (groupAddErr) {
-                            console.warn('[alt-duplicate] Group insertion failed, falling back to canvas:', groupAddErr);
-                        }
-                    }
-                    
-                    // If not added to group, add to canvas
-                    if (!insertionSuccessful) {
-                        try {
-                            // Set position for canvas placement
-                            cloned.set({
-                                left: state.start.left,
-                                top: state.start.top,
-                                selectable: true,
-                                evented: true,
-                                hasControls: true,
-                                hasBorders: true,
-                                visible: true,
-                                opacity: 1
-                            });
-                            
-                            // Final validation before adding to canvas
-                            if (!isValidFabricObject(cloned)) {
-                                console.error('❌ [alt-duplicate] Clone failed validation');
-                                state.inProgress = false;
-                                return;
-                            }
-                            
-                            // Find the z-index position
-                            const canvasObjects = canvas.value.getObjects();
-                            let targetIndex = canvasObjects.length;
-                            
-                            const origIndex = canvasObjects.indexOf(original);
-                            if (origIndex >= 0) {
-                                targetIndex = origIndex; // Put clone at original's position
-                            }
-                            
-                            // Add to canvas
-                            canvas.value.add(cloned);
-                            
-                            // Move to correct z-index
-                            const finalObjects = canvas.value.getObjects();
-                            const cloneCurrentIndex = finalObjects.indexOf(cloned);
-                            if (cloneCurrentIndex >= 0 && targetIndex < finalObjects.length && cloneCurrentIndex !== targetIndex) {
-                                if (typeof (canvas.value as any).moveTo === 'function') {
-                                    (canvas.value as any).moveTo(cloned, targetIndex);
-                                }
-                            }
-                            
-                            insertionSuccessful = true;
-                            console.log('✅ [alt-duplicate] Clone added to CANVAS', {
-                                cloneId: cloned._customId,
-                                insertedAt: targetIndex
-                            });
-                        } catch (addErr) {
-                            console.error('[alt-duplicate] Canvas insertion error:', addErr);
-                            state.inProgress = false;
-                            return;
-                        }
-                    }
-
-                    if (insertionSuccessful) {
-                        // ✅ FLUID LIKE CANVA/FIGMA: Swap transform so CLONE follows mouse
-                        swapTransformToClone(cloned);
-                        canvas.value.setActiveObject(cloned);
-
-                        // ✅ Lock original in place during drag (stays at start position)
-                        original.set({
-                            left: state.start.left,
-                            top: state.start.top,
-                            lockMovementX: true,
-                            lockMovementY: true
-                        });
-                        original.setCoords?.();
-
-                        // Render immediately to show the clone
-                        canvas.value.requestRenderAll();
-                        state.didDuplicate = true;
-
-                        // If the card is in a ProductZone, mark for relayout AFTER drag (in mouse:up)
-                        // During drag, clone follows mouse freely. On drop, it integrates into grid.
-                        const zoneId = (cloned as any).parentZoneId;
-                        if (zoneId && !parentGroup) {
-                            (cloned as any)._pendingZoneRelayout = true;
-                            (cloned as any)._zoneId = zoneId;
-                        }
-
-                        console.log('✅ [alt-duplicate] Clone follows mouse (Canva/Figma style)', {
-                            cloneId: cloned._customId,
-                            clonePosition: { left: cloned.left, top: cloned.top },
-                            originalLocked: { left: original.left, top: original.top },
-                            parentGroupName: parentGroup?.name || parentGroup?._customId || 'canvas'
-                        });
-                    }
-                } finally {
-                    state.inProgress = false;
                 }
-            })
-            .catch((err: any) => {
-                console.warn('[alt-duplicate] Clone failed', err);
-                state.inProgress = false;
+            } catch { /* ignore */ }
+
+            // Fallback: serialize + enliven
+            if (!isValidFabricObject(cloned)) {
+                try {
+                    const json = typeof original.toObject === 'function' ? original.toObject(['_customId', 'isSmartObject', 'isProductCard', 'name', 'parentZoneId', 'smartGridId', 'unitLabel']) : null;
+                    if (json && fabric?.util?.enlivenObjects) {
+                        const objs = await fabric.util.enlivenObjects([json]);
+                        cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
+                    }
+                } catch { /* ignore */ }
+            }
+
+            if (!isValidFabricObject(cloned) || !canvas.value) {
+                state.cloning = false;
+                return;
+            }
+
+            assignNewIdsDeep(cloned);
+
+            // Copy metadata
+            for (const k of ['parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'unitLabel', 'smartGridId', '_cardWidth', '_cardHeight']) {
+                if ((original as any)[k] != null) (cloned as any)[k] = (original as any)[k];
+            }
+
+            // Check if original is inside a group (e.g. product card inside product zone)
+            const parentGroup = (original as any).group;
+            const isInsideGroup = parentGroup && String(parentGroup.type || '').toLowerCase() !== 'activeselection';
+            state.parentGroup = isInsideGroup ? parentGroup : null;
+
+            // Clone starts at the SAME canvas-level position as the original.
+            // Use calcTransformMatrix() which gives the absolute position
+            // including all parent group transforms. m[4],m[5] = center point.
+            let canvasLeft = origLeft;
+            let canvasTop = origTop;
+            let useCenter = false;
+            try {
+                if (typeof original.calcTransformMatrix === 'function') {
+                    const m = original.calcTransformMatrix();
+                    canvasLeft = m[4];
+                    canvasTop = m[5];
+                    useCenter = true;
+                }
+            } catch { /* keep origLeft/origTop */ }
+
+            cloned.set({
+                left: canvasLeft,
+                top: canvasTop,
+                originX: useCenter ? 'center' : (original.originX || 'left'),
+                originY: useCenter ? 'center' : (original.originY || 'top'),
+                selectable: true,
+                evented: true,
+                hasControls: true,
+                hasBorders: true,
+                objectCaching: false,
+                dirty: true,
             });
+            cloned.setCoords?.();
+
+            // Always add clone at canvas level for free dragging (will be moved into group on mouse:up)
+            canvas.value.add(cloned);
+
+            // Z-order: place clone right above the group (or original)
+            const canvasObjs = canvas.value.getObjects();
+            if (isInsideGroup) {
+                const groupIdx = canvasObjs.indexOf(parentGroup);
+                if (groupIdx >= 0 && typeof (canvas.value as any).moveTo === 'function') {
+                    (canvas.value as any).moveTo(cloned, groupIdx + 1);
+                }
+            } else {
+                const origIdx = canvasObjs.indexOf(original);
+                if (origIdx >= 0 && typeof (canvas.value as any).moveTo === 'function') {
+                    (canvas.value as any).moveTo(cloned, origIdx + 1);
+                }
+            }
+
+            // FIGMA/CANVA BEHAVIOR: original stays in place, CLONE follows mouse.
+            // Swap Fabric's internal transform target from original → clone.
+            const tr: any = (canvas.value as any)._currentTransform;
+            if (tr && tr.target === original) {
+                tr.target = cloned;
+                if (tr.original && typeof tr.original === 'object') {
+                    tr.original.left = cloned.left;
+                    tr.original.top = cloned.top;
+                }
+            }
+
+            // Lock original so it doesn't move during the rest of the drag
+            state.origLockX = !!original.lockMovementX;
+            state.origLockY = !!original.lockMovementY;
+            original.set({ lockMovementX: true, lockMovementY: true });
+            original.set({ left: origLeft, top: origTop }); // ensure it stays at start position
+            original.setCoords?.();
+
+            // Select the clone (it follows the mouse)
+            canvas.value.setActiveObject(cloned);
+            
+            state.clone = cloned;
+            state.didDuplicate = true;
+            state.cloning = false;
+
+            canvas.value.requestRenderAll();
+        };
+
+        doClone();
     });
 
     canvas.value.on('mouse:up', () => {
-        const shouldSave = state.didDuplicate;
-
-        // ✅ Unlock original object if we duplicated
-        if (state.didDuplicate && state.original) {
-            state.original.set({
-                lockMovementX: false,
-                lockMovementY: false
-            });
-            state.original.setCoords?.();
+        if (!state.didDuplicate || !canvas.value) {
+            state.armed = false;
+            state.cloning = false;
+            state.didDuplicate = false;
+            state.original = null;
+            state.clone = null;
+            return;
         }
 
-        // ✅ Execute pending zone relayout after drag completes
-        // This integrates the clone into the zone's grid automatically
-        if (state.didDuplicate && canvas.value) {
-            const allObjects = canvas.value.getObjects();
-            allObjects.forEach((obj: any) => {
-                if (obj._pendingZoneRelayout && obj._zoneId) {
-                    const zoneObj = allObjects.find((o: any) =>
-                        o._customId === obj._zoneId && isLikelyProductZone(o)
-                    );
-                    if (zoneObj) {
-                        // Recalculate layout including the new clone in the grid
-                        recalculateZoneLayout(zoneObj, undefined, { save: false });
-                    }
-                    delete obj._pendingZoneRelayout;
-                    delete obj._zoneId;
+        const original = state.original;
+        const clone = state.clone;
+        const pg = state.parentGroup;
+
+        // Unlock original (restore previous lock state)
+        if (original) {
+            original.set({
+                lockMovementX: !!state.origLockX,
+                lockMovementY: !!state.origLockY,
+            });
+            original.setCoords?.();
+        }
+
+        // If the original was inside a group, move the clone INTO that group
+        if (clone && pg && typeof pg.add === 'function') {
+            // Get clone's center in canvas coords (works regardless of originX/Y)
+            let cx = clone.left;
+            let cy = clone.top;
+            try {
+                const cm = clone.calcTransformMatrix();
+                cx = cm[4];
+                cy = cm[5];
+            } catch { /* fallback to left/top */ }
+
+            // Convert canvas-level center to group-local center
+            let localLeft = cx;
+            let localTop = cy;
+            try {
+                if (typeof pg.calcTransformMatrix === 'function') {
+                    const inv = fabric.util.invertTransform(pg.calcTransformMatrix());
+                    const pt = fabric.util.transformPoint({ x: cx, y: cy }, inv);
+                    localLeft = pt.x;
+                    localTop = pt.y;
                 }
+            } catch { /* keep canvas coords as fallback */ }
+
+            // Remove from canvas, add to group with local coords and matching origin
+            canvas.value.remove(clone);
+            clone.set({
+                left: localLeft,
+                top: localTop,
+                originX: original?.originX || 'center',
+                originY: original?.originY || 'center',
             });
+            pg.add(clone);
+            clone.setCoords?.();
+            pg.set('dirty', true);
+            if (typeof pg.setCoords === 'function') pg.setCoords();
+            safeAddWithUpdate(pg);
         }
 
+        // Select the clone (the one the user just placed)
+        if (clone) {
+            clone.setCoords?.();
+            // For objects inside a group, need interactive mode to select child
+            if (pg) {
+                pg.set({ subTargetCheck: true, interactive: true });
+                canvas.value.setActiveObject(clone);
+            } else {
+                canvas.value.setActiveObject(clone);
+            }
+        }
+
+        canvas.value.requestRenderAll();
+
+        // Update objects list
+        canvasObjects.value = [...canvas.value.getObjects()];
+
+        // Reset state
         state.armed = false;
-        state.inProgress = false;
+        state.cloning = false;
         state.didDuplicate = false;
-        state.altAtDown = false;
         state.original = null;
+        state.clone = null;
         state.parentGroup = null;
-        (state as any).globalStart = null;
-        if (shouldSave) saveCurrentState();
+
+        saveCurrentState();
     });
 };
 
@@ -3193,6 +3126,144 @@ const currentZoom = ref(100) // Zoom state
 const pageSettings = ref({
     backgroundColor: '#1e1e1e' // Match default dark workspace
 })
+
+// === Frame Label Overlays (clickable HTML labels for all frames) ===
+const frameLabels = ref<Array<{ id: string; name: string; x: number; y: number; dimX: number; dimY: number; dims: string; isSelected: boolean; frameRef: any }>>([]);
+
+let frameLabelUpdatePending = false;
+const throttledUpdateFrameLabels = () => {
+    if (frameLabelUpdatePending) return;
+    frameLabelUpdatePending = true;
+    requestAnimationFrame(() => {
+        updateFrameLabels();
+        frameLabelUpdatePending = false;
+    });
+};
+
+const updateFrameLabels = () => {
+    if (!canvas.value || !wrapperEl.value || isCanvasDestroyed.value) {
+        frameLabels.value = [];
+        return;
+    }
+    const frames = getAllFrames();
+    if (!frames.length) {
+        frameLabels.value = [];
+        return;
+    }
+    const vpt = canvas.value.viewportTransform;
+    if (!vpt) { frameLabels.value = []; return; }
+    const activeObj = canvas.value.getActiveObject();
+    const fmt = (n: number) => {
+        if (!Number.isFinite(n)) return '0';
+        const rounded = Math.round(n);
+        if (Math.abs(n - rounded) < 0.01) return String(rounded);
+        return n.toFixed(2);
+    };
+    const labels: typeof frameLabels.value = [];
+    for (const frame of frames) {
+        try {
+            const bounds = typeof frame.getBoundingRect === 'function'
+                ? frame.getBoundingRect(true, true)
+                : frame.getBoundingRect();
+            const p_tl = fabric.util.transformPoint({ x: bounds.left, y: bounds.top }, vpt);
+            // Dimensões reais do frame
+            const w = frame.width * (frame.scaleX || 1);
+            const h = frame.height * (frame.scaleY || 1);
+            // Posição do badge de dimensões (center-bottom do frame)
+            const center = frame.getCenterPoint();
+            const p_bc_raw = { x: center.x, y: center.y + (h / 2) };
+            const p_bc = fabric.util.transformPoint(p_bc_raw, vpt);
+            labels.push({
+                id: frame._customId || '',
+                name: (frame.layerName || frame.name || 'Frame').toString(),
+                x: Math.max(4, p_tl.x),
+                y: Math.max(4, p_tl.y - 22),
+                dimX: p_bc.x,
+                dimY: p_bc.y + 8,
+                dims: `${fmt(w)} × ${fmt(h)}`,
+                isSelected: activeObj === frame,
+                frameRef: frame,
+            });
+        } catch { /* skip invalid frame */ }
+    }
+    frameLabels.value = labels;
+};
+
+const handleFrameLabelClick = (label: typeof frameLabels.value[0], e: MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!canvas.value || !label.frameRef) return;
+    canvas.value.setActiveObject(label.frameRef);
+    canvas.value.requestRenderAll();
+    updateSelection();
+    canvasObjects.value = [...canvas.value.getObjects()];
+};
+
+const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!canvas.value || !label.frameRef) return;
+    const frame = label.frameRef;
+
+    // Select frame first
+    canvas.value.setActiveObject(frame);
+    canvas.value.requestRenderAll();
+    updateSelection();
+
+    // Start drag tracking
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const zoom = canvas.value.getZoom() || 1;
+    const startLeft = frame.left;
+    const startTop = frame.top;
+    let moved = false;
+
+    // Get descendants once
+    const descendants = getFrameDescendants(frame);
+
+    const onMouseMove = (moveEvt: MouseEvent) => {
+        const dx = (moveEvt.clientX - startX) / zoom;
+        const dy = (moveEvt.clientY - startY) / zoom;
+        if (!moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+        moved = true;
+        frame.set({ left: startLeft + dx, top: startTop + dy });
+        frame.setCoords();
+        moveFrameDescendants(frame, dx, dy, descendants.map((d: any) => {
+            if (!(d as any).__dragStart) (d as any).__dragStart = { left: d.left, top: d.top };
+            return d;
+        }));
+        // Reset to absolute positions for descendants
+        descendants.forEach((d: any) => {
+            if ((d as any).__dragStart) {
+                d.set({ left: (d as any).__dragStart.left + dx, top: (d as any).__dragStart.top + dy });
+                d.setCoords();
+            }
+        });
+        canvas.value.requestRenderAll();
+        throttledUpdateFrameLabels();
+    };
+
+    const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        descendants.forEach((d: any) => { delete (d as any).__dragStart; });
+        if (moved) {
+            // Sync clips after move
+            if (frame.clipContent) {
+                syncFrameClips(frame);
+            }
+            canvas.value.requestRenderAll();
+            canvasObjects.value = [...canvas.value.getObjects()];
+            saveCurrentState();
+        }
+    };
+
+    // Store initial positions
+    descendants.forEach((d: any) => { (d as any).__dragStart = { left: d.left, top: d.top }; });
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+};
 
 // Virtual Scrollbars State
 const scrollV = ref({ top: 0, height: 0, visible: false })
@@ -3585,6 +3656,30 @@ const handleZoomToSelection = () => {
 const canvasObjects = shallowRef<any[]>([]) // Reactive list (shallow for performance)
 const selectedObjectId = ref<string | null>(null)
 const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
+
+/** Create a stable snapshot for the PropertiesPanel (keeps non-enumerable fields like `type`). */
+const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>) => {
+    if (!obj) return obj;
+    const snap: any = { ...obj };
+    // Some Fabric fields may live on the prototype and get lost with spread.
+    snap.type = obj.type;
+    snap.name = obj.name;
+    snap.layerName = obj.layerName;
+    snap._customId = obj._customId;
+    snap.id = obj.id;
+    return extra ? { ...snap, ...extra } : snap;
+};
+
+/** Refresh selectedObjectRef with a fresh snapshot so Vue detects changes in PropertiesPanel props */
+const refreshSelectedRef = (extra?: Record<string, any>) => {
+    const active = canvas.value?.getActiveObject?.()
+    if (active) {
+        selectedObjectRef.value = snapshotForPropertiesPanel(active, extra)
+    } else {
+        triggerRef(selectedObjectRef)
+    }
+}
+
 const selectedObjectPos = ref<{top: number, left: number, width: number, visible: boolean}>({ top: 0, left: 0, width: 0, visible: false })
 
 // Debounced save for properties panel (prevents lag during rapid input changes)
@@ -3592,7 +3687,9 @@ let propertySaveTimer: ReturnType<typeof setTimeout> | null = null;
 const debouncedSaveCurrentState = () => {
     if (propertySaveTimer) clearTimeout(propertySaveTimer);
     propertySaveTimer = setTimeout(() => {
-        saveCurrentState();
+        saveCurrentState({ reason: 'properties-panel' });
+        // Property changes do not always emit Fabric `object:modified` events, so ensure DB auto-save runs too.
+        triggerAutoSave();
     }, 150); // 150ms debounce for snappy feel but coalesces rapid changes
 };
 
@@ -3867,7 +3964,7 @@ const applyColorStyle = (styleId: string) => {
         canvas.value.requestRenderAll();
         saveCurrentState();
         // Update selection Ref
-        selectedObjectRef.value = { ...active };
+        selectedObjectRef.value = snapshotForPropertiesPanel(active);
     }
 }
 
@@ -4283,7 +4380,8 @@ watch(activePage, async (newPage, oldPage) => {
 	                        for (const imgObj of imagesToUpdate) {
 	                            try {
 	                                // Extract key from URL (works with both presigned and permanent URLs)
-	                                const key = extractContaboKey(imgObj.src);
+	                                const result = extractContaboBucketAndKey(imgObj.src);
+	                                const key = result?.key;
 	                                if (!key) {
 	                                    console.warn(`⚠️ Não foi possível extrair chave da URL: ${imgObj.src?.substring(0, 80)}...`);
 	                                    imagesToRemove.push(imgObj);
@@ -5059,76 +5157,9 @@ onMounted(async () => {
       // Force workspace to dark
       wrapperEl.value.style.backgroundColor = '#121212';
       
-      // --- Frame Label Renderer (Optimized) ---
+      // --- Frame Labels: update HTML overlay positions on every render ---
       canvas.value.on('after:render', () => {
-          const activeObj = canvas.value.getActiveObject();
-          if (!activeObj || !activeObj.isFrame) return;
-
-          const ctx = canvas.value.getContext();
-          const vpt = canvas.value.viewportTransform;
-          
-          // Only draw labels for the active object if it's a frame.
-          const obj = activeObj;
-
-          ctx.save();
-          const fmt = (n: number) => {
-              if (!Number.isFinite(n)) return '0';
-              const rounded = Math.round(n);
-              if (Math.abs(n - rounded) < 0.01) return String(rounded);
-              return n.toFixed(2);
-          };
-          // CRITICAL: Use width/height directly (not getScaledWidth/Height) to exclude stroke
-          // getScaledWidth/Height includes stroke, which causes discrepancy
-          const w = obj.width * (obj.scaleX || 1);
-          const h = obj.height * (obj.scaleY || 1);
-
-          // Name label (top-left), like Figma
-          const bounds = typeof obj.getBoundingRect === 'function'
-              ? obj.getBoundingRect(true, true)
-              : obj.getBoundingRect();
-          const p_tl = fabric.util.transformPoint({ x: bounds.left, y: bounds.top }, vpt);
-          const nameText = (obj.layerName || obj.name || 'Frame').toString();
-          ctx.font = 'bold 12px Inter, sans-serif';
-          ctx.fillStyle = '#0d99ff';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'top';
-          // Slightly above the frame border, clamped to canvas area.
-          const nameX = Math.max(6, p_tl.x);
-          const nameY = Math.max(6, p_tl.y - 20);
-          ctx.fillText(nameText, nameX, nameY);
-          
-          // Dimensions Badge - posicionado embaixo do frame, centralizado
-          const center = obj.getCenterPoint();
-          // Use height directly (not getScaledHeight) to match the displayed dimension
-          const p_bc_raw = { x: center.x, y: center.y + (h/2) };
-          const p_bc = fabric.util.transformPoint(p_bc_raw, vpt);
-          
-          const text = `${fmt(w)} × ${fmt(h)}`;
-          ctx.font = 'bold 12px Inter, sans-serif';
-          const textMetrics = ctx.measureText(text);
-          const bw = textMetrics.width + 12;
-          const bh = 20;
-          
-          ctx.beginPath();
-          const bx = p_bc.x - bw/2;
-          const by = p_bc.y + 8;
-          
-          // Badge azul com bordas arredondadas
-          ctx.fillStyle = '#0d99ff';
-          if (ctx.roundRect) {
-              ctx.roundRect(bx, by, bw, bh, 4);
-              ctx.fill();
-          } else {
-              ctx.fillRect(bx, by, bw, bh);
-          }
-          
-          // Texto branco centralizado
-          ctx.fillStyle = '#ffffff';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(text, p_bc.x, by + (bh/2));
-          
-          ctx.restore();
+          throttledUpdateFrameLabels();
       });
 
       // Update scrollbars on render
@@ -5271,8 +5302,7 @@ onMounted(async () => {
                       console.log(`📥 Carregando canvasData da página ${page.id}: ${objectCount} objeto(s)`);
                       
                       if (objectCount === 0) {
-                          console.warn('⚠️ CanvasData existe mas está vazio (0 objetos). Verificando se é um canvas válido...');
-                          // Ainda pode ser um canvas válido sem objetos, então continuamos
+                          // Página nova/vazia — canvas válido sem objetos, continua normalmente
                       }
                       
                       // CRITICAL: Ensure canvas is fully initialized before loading
@@ -5850,7 +5880,17 @@ const CANVAS_CUSTOM_PROPS = [
     'isVectorPath',
     'penPathData',
     'strokePosition',
-    'strokeMiterLimit'
+    'strokeMiterLimit',
+
+	// Sticker Outline (alpha-based contour)
+	'__stickerOutlineEnabled',
+	'__stickerOutlineWidth',
+	'__stickerOutlineColor',
+	'__stickerOutlineOpacity',
+	'__stickerNoTransparency',
+
+	// Images: ensure CORS behavior survives reload (needed for pixel-based effects like Sticker Outline)
+	'crossOrigin'
 ] as const;
 
 // Helper function to extract key/path from Wasabi URL (presigned or permanent)
@@ -6051,7 +6091,7 @@ const extractContaboBucketAndKey = (url: string): { bucket: string | null; key: 
             return { bucket: null, key: null };
         }
 
-        const cfg = useRuntimeConfig()?.public?.contabo || {};
+        const cfg = (useRuntimeConfig()?.public?.contabo as any) || {};
         const configuredBucket = (cfg.bucket || '475a29e42e55430abff00915da2fa4bc:jobupload').toString();
         const candidates = new Set<string>();
         if (configuredBucket) candidates.add(configuredBucket);
@@ -6094,29 +6134,70 @@ const extractContaboBucketAndKey = (url: string): { bucket: string | null; key: 
 };
 
 /**
- * Converte URLs da Contabo para usar o proxy local.
- * Isso evita problemas com URLs presignadas e encoding de caracteres especiais.
+ * Extrai bucket e key de uma URL do Wasabi S3.
+ * Formato esperado: https://s3.wasabisys.com/bucket/key...
+ */
+const extractWasabiBucketAndKey = (url: string): { bucket: string | null; key: string | null } => {
+    try {
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split('/').filter(p => p);
+
+        if (pathParts.length === 0) {
+            return { bucket: null, key: null };
+        }
+
+        // Wasabi path-style: /bucket/key...
+        const bucket = pathParts[0] || null;
+        const key = pathParts.slice(1).join('/');
+
+        if (!key || key.length === 0) {
+            return { bucket: null, key: null };
+        }
+
+        return { bucket, key };
+    } catch (err) {
+        console.error(`❌ Erro ao extrair bucket e key da URL Wasabi: ${url.substring(0, 100)}`, err);
+        return { bucket: null, key: null };
+    }
+};
+
+/**
+ * Converte URLs da Contabo/Wasabi para usar o proxy local.
+ * Isso evita problemas com URLs presignadas, encoding de caracteres especiais e CORS.
  * O proxy busca a imagem diretamente do S3 no backend, sem problemas de assinatura.
  */
 const convertContaboToProxyUrls = (canvasData: any): any => {
     const cloned = JSON.parse(JSON.stringify(canvasData));
     if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned;
 
-    let count = 0;
+    let contaboCount = 0;
+    let wasabiCount = 0;
     const processObject = (obj: any): void => {
         if (!obj) return;
         const objType = (obj.type || '').toLowerCase();
-        if (objType === 'image' && typeof obj.src === 'string' && obj.src.includes('contabostorage.com')) {
-            // Extract bucket and key from Contabo URL
-            const { bucket, key } = extractContaboBucketAndKey(obj.src);
-            if (key) {
-                // Convert to proxy URL with bucket parameter
-                if (bucket) {
-                    obj.src = `/api/storage/proxy?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
-                } else {
+        if (objType === 'image' && typeof obj.src === 'string') {
+            const src = obj.src;
+
+            // Converter URLs do Wasabi (bucket privado)
+            if (src.includes('wasabisys.com')) {
+                const { bucket, key } = extractWasabiBucketAndKey(src);
+                if (key) {
                     obj.src = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+                    wasabiCount++;
                 }
-                count++;
+            }
+            // Converter URLs da Contabo
+            else if (src.includes('contabostorage.com')) {
+                const { bucket, key } = extractContaboBucketAndKey(src);
+                if (key) {
+                    // Convert to proxy URL with bucket parameter
+                    if (bucket) {
+                        obj.src = `/api/storage/proxy?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+                    } else {
+                        obj.src = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+                    }
+                    contaboCount++;
+                }
             }
         }
         if (obj.objects && Array.isArray(obj.objects)) {
@@ -6125,7 +6206,8 @@ const convertContaboToProxyUrls = (canvasData: any): any => {
     };
 
     cloned.objects.forEach((obj: any) => processObject(obj));
-    if (count > 0) console.log(`🔄 Convertido ${count} URL(s) da Contabo para proxy local (com suporte a buckets)`);
+    if (contaboCount > 0) console.log(`🔄 Convertido ${contaboCount} URL(s) da Contabo para proxy local`);
+    if (wasabiCount > 0) console.log(`🔄 Convertido ${wasabiCount} URL(s) do Wasabi para proxy local`);
     return cloned;
 };
 
@@ -6334,7 +6416,8 @@ const setupHistory = () => {
                 if (canvasObj._customId) jsonObj._customId = canvasObj._customId;
                 if (canvasObj.layerName) jsonObj.layerName = canvasObj.layerName;
                 if (canvasObj.isFrame) jsonObj.isFrame = true;
-                if (canvasObj.clipContent) jsonObj.clipContent = canvasObj.clipContent;
+                if (canvasObj.isFrame) jsonObj.clipContent = canvasObj.clipContent !== false;
+                if (canvasObj.clipContent && !canvasObj.isFrame) jsonObj.clipContent = canvasObj.clipContent;
                 if (canvasObj.parentFrameId) jsonObj.parentFrameId = canvasObj.parentFrameId;
                 
                 // Also copy name if missing
@@ -6349,7 +6432,8 @@ const setupHistory = () => {
                     if (!obj.stroke || String(obj.stroke).toLowerCase() !== '#0d99ff') {
                         obj.stroke = '#0d99ff';
                     }
-                    if (obj.clipContent !== true && obj.clipContent !== 1) {
+                    // Preserve user's clipContent choice (default to true only if undefined)
+                    if (obj.clipContent === undefined || obj.clipContent === null) {
                         obj.clipContent = true;
                     }
                 }
@@ -6654,6 +6738,20 @@ const setupHistory = () => {
               }
               if (dataURL) {
                   updatePageThumbnail(project.activePageIndex, dataURL);
+              }
+
+              // CRITICAL: Restaurar clipPaths dos frames após geração do thumbnail
+              // clearAllClipPathsAggressively() removeu todos os clips - precisamos recriá-los
+              try {
+                  const allObjs = canvas.value.getObjects();
+                  const frames = allObjs.filter((o: any) => o?.isFrame);
+                  allObjs.forEach((o: any) => {
+                      if (o?.parentFrameId || o?._frameClipOwner) syncObjectFrameClip(o);
+                  });
+                  frames.forEach((f: any) => syncFrameClips(f));
+                  canvas.value.requestRenderAll();
+              } catch (restoreErr) {
+                  console.warn('[Thumbnail] Erro ao restaurar clipPaths:', restoreErr);
               }
         }
     }
@@ -8021,8 +8119,8 @@ const setupZoomPan = () => {
             }
         }
         
-        // Pen Tool Mode - Add point on click
-        if (isPenMode.value && !opt.target) {
+        // Pen Tool Mode - Add point on click (works on frames and empty areas)
+        if (isPenMode.value) {
             // Try multiple methods to get accurate pointer coordinates
             let pointer;
             
@@ -8063,7 +8161,7 @@ const setupZoomPan = () => {
     // Pen Tool: Track mouse movement for preview line - REAL-TIME with RAF for smooth updates
     let rafPending = false;
     canvas.value.on('mouse:move', (opt: any) => {
-        if (isPenMode.value && penPathPoints.value.length > 0 && penPathPoints.value.length < 2) {
+        if (isPenMode.value && penPathPoints.value.length > 0) {
             // Get pointer coordinates - try multiple methods for maximum compatibility
             let pointer: {x: number, y: number} | null = null;
             
@@ -8964,6 +9062,25 @@ const setupSnapping = () => {
         if (obj.objectCaching) {
             obj.set('objectCaching', false);
             obj.set('dirty', true);
+        }
+
+        // CRITICAL: Update clipPath for objects inside frames with clipping enabled
+        // This ensures the image stays clipped within the frame bounds while moving
+        if ((obj as any).parentFrameId) {
+            const frame = getFrameById((obj as any).parentFrameId);
+            if (frame && frame.clipContent && obj.clipPath) {
+                // Update the clipPath position/angle to match the new object position
+                const objCenter = obj.getCenterPoint ? obj.getCenterPoint() : { x: obj.left, y: obj.top };
+                const frameCenter = frame.getCenterPoint ? frame.getCenterPoint() : { x: frame.left, y: frame.top };
+
+                obj.clipPath.set({
+                    left: frameCenter.x - objCenter.x,
+                    top: frameCenter.y - objCenter.y,
+                    angle: (frame.angle || 0) - (obj.angle || 0)
+                });
+                obj.clipPath.setCoords();
+                obj.clipPath.dirty = true;
+            }
         }
 
         // SmartObject containment
@@ -9897,6 +10014,34 @@ const setupReactivity = () => {
              lastFrameState.left = target.left;
              lastFrameState.top = target.top;
              getOrCreateFrameClipRect(target);
+
+             // Update clipPath para todos os filhos (absolutePositioned: false
+             // = relativo ao objeto, mas como o frame moveu e os filhos também,
+             // precisamos recalcular o offset relativo)
+             if (target.clipContent) {
+                 const fc = target.getCenterPoint ? target.getCenterPoint() : { x: target.left, y: target.top };
+                 frameChildrenCache.forEach((child: any) => {
+                     if (child.clipPath && (child as any)._frameClipOwner === target._customId) {
+                         const childCenter = child.getCenterPoint ? child.getCenterPoint() : { x: child.left, y: child.top };
+                         const dxW = fc.x - childCenter.x;
+                         const dyW = fc.y - childCenter.y;
+                         const childAngle = child.angle || 0;
+                         const aRad = -childAngle * Math.PI / 180;
+                         const cosA = Math.cos(aRad);
+                         const sinA = Math.sin(aRad);
+                         child.clipPath.set({
+                             left: (dxW * cosA - dyW * sinA) / (child.scaleX || 1),
+                             top: (dxW * sinA + dyW * cosA) / (child.scaleY || 1),
+                             scaleX: (target.scaleX || 1) / (child.scaleX || 1),
+                             scaleY: (target.scaleY || 1) / (child.scaleY || 1),
+                             angle: (target.angle || 0) - childAngle,
+                         });
+                         child.clipPath.setCoords();
+                         child.clipPath.dirty = true;
+                         child.set('dirty', true);
+                     }
+                 });
+             }
              
              // Force full canvas render to clear previous position
              canvas.value.requestRenderAll();
@@ -9909,10 +10054,34 @@ const setupReactivity = () => {
             const frameUnder = findFrameUnderObject(target);
             const nextParentId = frameUnder?._customId as (string | undefined);
 
-            // Only update clip when parent actually changes (not on every move)
+            // Reparent quando muda de frame
             if (nextParentId !== currentParentId) {
                 (target as any).parentFrameId = nextParentId;
                 syncObjectFrameClip(target);
+            }
+
+            // Com absolutePositioned: false, o clipPath é relativo ao objeto.
+            // Precisamos recalcular o offset a cada movimento para manter o clip correto.
+            const frameId = (target as any).parentFrameId as (string | undefined);
+            if (frameId && target.clipPath) {
+                const frame = getFrameById(frameId);
+                if (frame) {
+                    const fc = frame.getCenterPoint ? frame.getCenterPoint() : { x: frame.left, y: frame.top };
+                    const tc = target.getCenterPoint ? target.getCenterPoint() : { x: target.left, y: target.top };
+                    const dxW = fc.x - tc.x;
+                    const dyW = fc.y - tc.y;
+                    const tAngle = target.angle || 0;
+                    const aRad = -tAngle * Math.PI / 180;
+                    const cosA = Math.cos(aRad);
+                    const sinA = Math.sin(aRad);
+                    target.clipPath.set({
+                        left: (dxW * cosA - dyW * sinA) / (target.scaleX || 1),
+                        top: (dxW * sinA + dyW * cosA) / (target.scaleY || 1),
+                    });
+                    target.clipPath.setCoords();
+                    target.clipPath.dirty = true;
+                    target.set('dirty', true);
+                }
             }
         }
         // Optimized Zone Move
@@ -9948,9 +10117,18 @@ const setupReactivity = () => {
         updateFloatingUI();
         const obj = e.target;
 
-        // Frames: keep clip rect synced while resizing
+        // Frames: keep clip rect synced while resizing + update children clips
         if (obj && obj.isFrame) {
             getOrCreateFrameClipRect(obj);
+            // Atualizar clips dos filhos em tempo real durante redimensionamento do frame
+            if (obj.clipContent) {
+                syncFrameClips(obj);
+            }
+        }
+
+        // Filhos de frame: recalcular clip durante scaling do objeto
+        if (obj && !obj.isFrame && obj.parentFrameId && obj.clipPath) {
+            syncObjectFrameClip(obj);
         }
 
         // 1. Textbox Reflow
@@ -10407,7 +10585,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             selectedObjectRef.value.strokeDashArray = value;
         }
         
-        triggerRef(selectedObjectRef);
+        refreshSelectedRef();
         return;
     }
 
@@ -10446,26 +10624,87 @@ const updateObjectProperty = (prop: string, value: any) => {
         // --- Shape controls (Fill/Stroke/Corner radii) ---
         if (prop === 'fillEnabled') {
             applyToActiveOrSelection((o) => toggleFill(o, !!value));
+            (active as any).__fillEnabled = !!value;
             if (active.isFrame) getOrCreateFrameClipRect(active);
             if (active.isFrame) syncFrameClips(active);
             safeAddWithUpdate(active);
             active.setCoords?.();
             canvas.value.requestRenderAll();
             debouncedSaveCurrentState();
-            triggerRef(selectedObjectRef);
+            refreshSelectedRef({ __fillEnabled: !!value });
             return;
         }
         if (prop === 'strokeEnabled') {
             applyToActiveOrSelection((o) => toggleStroke(o, !!value));
+            (active as any).__strokeEnabled = !!value;
             if (active.isFrame) getOrCreateFrameClipRect(active);
             if (active.isFrame) syncFrameClips(active);
             safeAddWithUpdate(active);
             active.setCoords?.();
             canvas.value.requestRenderAll();
             debouncedSaveCurrentState();
-            triggerRef(selectedObjectRef);
+            refreshSelectedRef({ __strokeEnabled: !!value });
             return;
         }
+
+        // --- Sticker Outline (alpha-based contour) ---
+        if (prop === 'stickerOutlineEnabled') {
+            const isImage = String(active.type || '').toLowerCase() === 'image';
+            if (!isImage) return;
+            const el = active._element || active.getElement?.();
+            (active as any).__stickerOutlineEnabled = !!value;
+            // Set defaults if first time enabling
+            if (value) {
+                if ((active as any).__stickerOutlineWidth == null) (active as any).__stickerOutlineWidth = 4;
+                if ((active as any).__stickerOutlineColor == null) (active as any).__stickerOutlineColor = '#FFFFFF';
+                if ((active as any).__stickerOutlineOpacity == null) (active as any).__stickerOutlineOpacity = 1;
+            }
+            // Detect transparency
+            if (value && el) {
+                const hasTrans = imageHasTransparency(el);
+                (active as any).__stickerNoTransparency = !hasTrans;
+            }
+            applyStickerOutlinePatch(active);
+            active.setCoords?.();
+            active.dirty = true;
+            canvas.value.renderAll();
+            // Second render to guarantee visibility after patch
+            setTimeout(() => { canvas.value?.renderAll?.(); }, 60);
+            debouncedSaveCurrentState();
+            refreshSelectedRef({
+                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
+                __stickerOutlineWidth: (active as any).__stickerOutlineWidth ?? 4,
+                __stickerOutlineColor: (active as any).__stickerOutlineColor ?? '#FFFFFF',
+                __stickerOutlineOpacity: (active as any).__stickerOutlineOpacity ?? 1,
+                __stickerNoTransparency: !!(active as any).__stickerNoTransparency
+            });
+            return;
+        }
+        if (prop === 'stickerOutlineWidth' || prop === 'stickerOutlineColor' || prop === 'stickerOutlineOpacity') {
+            const propMap = {
+                stickerOutlineWidth: '__stickerOutlineWidth',
+                stickerOutlineColor: '__stickerOutlineColor',
+                stickerOutlineOpacity: '__stickerOutlineOpacity'
+            } as const;
+            const key: string = propMap[prop as keyof typeof propMap];
+            (active as any)[key] = value;
+            invalidateStickerOutlineCache(active);
+            applyStickerOutlinePatch(active);
+            active.setCoords?.();
+            active.dirty = true;
+            canvas.value.renderAll();
+            setTimeout(() => { canvas.value?.renderAll?.(); }, 60);
+            debouncedSaveCurrentState();
+            refreshSelectedRef({
+                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
+                __stickerOutlineWidth: (active as any).__stickerOutlineWidth,
+                __stickerOutlineColor: (active as any).__stickerOutlineColor,
+                __stickerOutlineOpacity: (active as any).__stickerOutlineOpacity,
+                __stickerNoTransparency: !!(active as any).__stickerNoTransparency
+            });
+            return;
+        }
+
         if (prop === 'cornerRadius') {
             const r = Math.max(0, Number(value || 0));
             applyToActiveOrSelection((o) => {
@@ -10497,7 +10736,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             active.setCoords?.();
             canvas.value.requestRenderAll();
             debouncedSaveCurrentState();
-            triggerRef(selectedObjectRef);
+            refreshSelectedRef();
             return;
         }
         if (prop === 'cornerRadii') {
@@ -10521,7 +10760,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             active.setCoords?.();
             canvas.value.requestRenderAll();
             debouncedSaveCurrentState();
-            triggerRef(selectedObjectRef);
+            refreshSelectedRef();
             return;
         }
 
@@ -10539,7 +10778,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 getOrCreateFrameClipRect(active);
                 canvas.value.requestRenderAll();
                 debouncedSaveCurrentState();
-                triggerRef(selectedObjectRef);
+                refreshSelectedRef();
                 return;
             }
 
@@ -10551,31 +10790,25 @@ const updateObjectProperty = (prop: string, value: any) => {
                 syncFrameClips(active);
                 canvas.value.requestRenderAll();
                 debouncedSaveCurrentState();
-                triggerRef(selectedObjectRef);
+                refreshSelectedRef();
                 return;
             }
 
             if (prop === 'clipContent') {
-                active.set('clipContent', !!value);
-                // IMPORTANT: update inspector UI immediately (before any heavy serialization)
-                triggerRef(selectedObjectRef);
+                const newVal = !!value;
+                active.set('clipContent', newVal);
+                active.clipContent = newVal;
+                refreshSelectedRef({ clipContent: newVal });
 
-                // Apply clipping changes immediately on canvas
                 syncFrameClips(active);
                 canvas.value.requestRenderAll();
 
-                // CRITICAL: Force another render after a delay to ensure Fabric.js processes the clipPath
                 setTimeout(() => {
                     if (canvas.value) canvas.value.requestRenderAll();
                 }, 10);
 
-                // Persist async to avoid UI "lag" on toggle click
                 setTimeout(() => {
-                    try {
-                        saveCurrentState();
-                    } catch (err) {
-                        console.warn('[clipContent] Failed to save state', err);
-                    }
+                    try { saveCurrentState(); } catch {} 
                 }, 0);
                 return;
             }
@@ -10595,7 +10828,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 
                 canvas.value.requestRenderAll();
                 debouncedSaveCurrentState();
-                triggerRef(selectedObjectRef);
+                refreshSelectedRef();
                 return;
             }
             
@@ -10627,7 +10860,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                     recalculateZoneLayout(active, cachedChildren, { save: false });
                     canvas.value.requestRenderAll();
                     debouncedSaveCurrentState();
-                    triggerRef(selectedObjectRef);
+                    refreshSelectedRef();
                     return;
                 }
             }
@@ -10640,7 +10873,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 recalculateZoneLayout(active, cachedChildren, { save: false });
                 canvas.value.requestRenderAll();
                 debouncedSaveCurrentState();
-                triggerRef(selectedObjectRef);
+                refreshSelectedRef();
                 return;
             }
         }
@@ -10661,7 +10894,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 active.setCoords();
                 canvas.value.requestRenderAll();
                 debouncedSaveCurrentState();
-                triggerRef(selectedObjectRef);
+                refreshSelectedRef();
                 return;
             }
         }
@@ -10682,7 +10915,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 active.setCoords();
                 canvas.value.requestRenderAll();
                 debouncedSaveCurrentState();
-                triggerRef(selectedObjectRef);
+                refreshSelectedRef();
                 return;
             }
         }
@@ -10773,7 +11006,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             });
             canvas.value.requestRenderAll();
             debouncedSaveCurrentState();
-            triggerRef(selectedObjectRef);
+            refreshSelectedRef();
             return;
         }
         else if (prop === 'strokePosition' || prop === 'strokeMiterLimit') {
@@ -10782,7 +11015,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 active.set(prop, value);
                 canvas.value.requestRenderAll();
                 debouncedSaveCurrentState();
-                triggerRef(selectedObjectRef);
+                refreshSelectedRef();
             }
             return;
         }
@@ -10793,7 +11026,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             });
             canvas.value.requestRenderAll();
             debouncedSaveCurrentState();
-            triggerRef(selectedObjectRef);
+            refreshSelectedRef();
             return;
         }
         // --- Standard Props ---
@@ -10820,8 +11053,8 @@ const updateObjectProperty = (prop: string, value: any) => {
         // PERSIST: Debounced save to avoid lag during rapid input
         debouncedSaveCurrentState();
         
-        // Force update ref for UI sync
-        triggerRef(selectedObjectRef);
+        // Force update ref for UI sync — create fresh snapshot so Vue detects prop change
+        selectedObjectRef.value = snapshotForPropertiesPanel(active, { [prop]: value });
     }
 }
 
@@ -11478,7 +11711,7 @@ const handleAction = async (action: string) => {
             canvas.value.requestRenderAll();
             saveCurrentState();
             // Force Update UI
-            selectedObjectRef.value = { ...target };
+            selectedObjectRef.value = snapshotForPropertiesPanel(target);
         }
         return;
     }
@@ -12043,8 +12276,31 @@ const shareSettings = ref({
     quality: 0.9,
     shareScope: 'canvas', // 'canvas' | 'selected-frame' | 'all-frames'
     selectedFrameId: '',
+    selectedFrameIds: [] as string[],
     shareAsFiles: true // Share as files or use link sharing
 })
+
+const toggleFrameSelection = (frameId: string) => {
+    const idx = shareSettings.value.selectedFrameIds.indexOf(frameId)
+    if (idx >= 0) {
+        shareSettings.value.selectedFrameIds.splice(idx, 1)
+    } else {
+        shareSettings.value.selectedFrameIds.push(frameId)
+    }
+    // Keep legacy field in sync (first selected)
+    shareSettings.value.selectedFrameId = shareSettings.value.selectedFrameIds[0] || ''
+}
+
+const selectAllFrames = () => {
+    const all = availableFramesForExport.value.map((f: any) => f.id)
+    if (shareSettings.value.selectedFrameIds.length === all.length) {
+        shareSettings.value.selectedFrameIds = []
+        shareSettings.value.selectedFrameId = ''
+    } else {
+        shareSettings.value.selectedFrameIds = [...all]
+        shareSettings.value.selectedFrameId = all[0] || ''
+    }
+}
 
 const performShare = async () => {
     if (!canvas.value) return;
@@ -12056,17 +12312,32 @@ const performShare = async () => {
     const { format, scale, quality, shareScope, selectedFrameId } = shareSettings.value;
     const imgFormat = format === 'jpeg' ? 'jpg' : format;
 
-    // Share selected frame
-    if (shareScope === 'selected-frame' && selectedFrameId) {
-        const frame = getFrameById(selectedFrameId);
-        if (frame) {
-            const result = await exportSingleFrame(frame, imgFormat as 'png' | 'jpg', scale, quality);
-            if (result) {
-                const shared = await shareFile(result.dataURL, `${result.fileName}.${imgFormat}`, (frame.layerName || frame.name || 'Frame'));
-                if (!shared) {
-                    // Fallback to download if share not available
-                    downloadFile(result.dataURL, `${result.fileName}.${imgFormat}`);
+    // Share selected frame(s)
+    if (shareScope === 'selected-frame' && shareSettings.value.selectedFrameIds.length > 0) {
+        const frameIds = shareSettings.value.selectedFrameIds;
+        if (frameIds.length === 1) {
+            const frame = getFrameById(frameIds[0] as string);
+            if (frame) {
+                const result = await exportSingleFrame(frame, imgFormat as 'png' | 'jpg', scale, quality);
+                if (result) {
+                    const shared = await shareFile(result.dataURL, `${result.fileName}.${imgFormat}`, (frame.layerName || frame.name || 'Frame'));
+                    if (!shared) {
+                        downloadFile(result.dataURL, `${result.fileName}.${imgFormat}`);
+                    }
                 }
+            }
+        } else {
+            // Multiple frames selected - download all
+            const results = [];
+            for (const fid of frameIds) {
+                const frame = getFrameById(fid);
+                if (frame) {
+                    const result = await exportSingleFrame(frame, imgFormat as 'png' | 'jpg', scale, quality);
+                    if (result) results.push({ dataURL: result.dataURL, fileName: result.fileName, format: imgFormat });
+                }
+            }
+            if (results.length > 0) {
+                await downloadMultipleFiles(results);
             }
         }
     }
@@ -17721,6 +17992,22 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
         const patchTree = (o: any) => {
             if (!o) return;
             if (isRectObject(o) && o.cornerRadii) applyRectCornerRadiiPatch(o);
+            // Re-apply sticker outline patch for images loaded from JSON
+            if (String(o.type || '').toLowerCase() === 'image' && o.__stickerOutlineEnabled) {
+                applyStickerOutlinePatch(o);
+                // Images may not have their element loaded yet after loadFromJSON
+                // Schedule additional retries to ensure outline is generated
+                setTimeout(() => {
+                    if (o.__stickerOutlineEnabled && !o.__stickerOutlineCache) {
+                        applyStickerOutlinePatch(o);
+                    }
+                }, 1500);
+                setTimeout(() => {
+                    if (o.__stickerOutlineEnabled && !o.__stickerOutlineCache) {
+                        applyStickerOutlinePatch(o);
+                    }
+                }, 4000);
+            }
             if (o.type === 'group' && typeof o.getObjects === 'function') {
                 o.getObjects().forEach((c: any) => patchTree(c));
             }
@@ -18184,6 +18471,45 @@ const handleRecalculateLayout = () => {
                     @mousedown="handleHorizontalScrollbarDrag"
                   ></div>
 
+                  <!-- Frame Label Overlays (clickable, always visible) -->
+                  <template v-for="label in frameLabels" :key="label.id">
+                    <!-- Frame Name (top-left, clickable to select/drag) -->
+                    <div
+                      class="absolute z-40 select-none cursor-pointer whitespace-nowrap"
+                      :style="{
+                        left: label.x + 'px',
+                        top: label.y + 'px',
+                        pointerEvents: 'auto',
+                      }"
+                      @mousedown.stop.prevent="handleFrameLabelMouseDown(label, $event)"
+                      @click.stop.prevent="handleFrameLabelClick(label, $event)"
+                      @dblclick.stop.prevent
+                    >
+                      <span
+                        class="text-xs font-bold px-1 py-0.5 rounded transition-colors"
+                        :class="label.isSelected ? 'text-[#0d99ff] bg-[#0d99ff]/10' : 'text-[#0d99ff]/60 hover:text-[#0d99ff] hover:bg-[#0d99ff]/10'"
+                      >
+                        {{ label.name }}
+                      </span>
+                    </div>
+                    <!-- Frame Dimensions Badge (bottom-center) -->
+                    <div
+                      class="absolute z-40 select-none pointer-events-none whitespace-nowrap"
+                      :style="{
+                        left: label.dimX + 'px',
+                        top: label.dimY + 'px',
+                        transform: 'translateX(-50%)',
+                      }"
+                    >
+                      <span
+                        class="text-[11px] font-bold px-1.5 py-0.5 rounded"
+                        :class="label.isSelected ? 'bg-[#0d99ff] text-white' : 'bg-[#0d99ff]/60 text-white/85'"
+                      >
+                        {{ label.dims }}
+                      </span>
+                    </div>
+                  </template>
+
                   <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" accept="image/*" />
               </div>
 
@@ -18196,7 +18522,7 @@ const handleRecalculateLayout = () => {
                   <!-- Union/Subtract - Placeholder for future boolean operations -->
                   <button 
                     @click="() => console.log('Union - requires multiple selected paths')" 
-                    title="Union (requires multiple paths)"
+                    title="Unir (requer múltiplos caminhos)"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all opacity-50 cursor-not-allowed"
                   >
                     <Combine class="w-4 h-4" />
@@ -18205,7 +18531,7 @@ const handleRecalculateLayout = () => {
                   <!-- Subtract -->
                   <button 
                     @click="() => console.log('Subtract - requires multiple selected paths')" 
-                    title="Subtract (requires multiple paths)"
+                    title="Subtrair (requer múltiplos caminhos)"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all opacity-50 cursor-not-allowed"
                   >
                     <Scissors class="w-4 h-4" />
@@ -18216,7 +18542,7 @@ const handleRecalculateLayout = () => {
                   <!-- Visibility Toggle -->
                   <button 
                     @click="updateObjectProperty('visible', !selectedObjectRef.visible)" 
-                    title="Toggle Visibility"
+                    title="Alternar Visibilidade"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
                   >
                     <Eye class="w-4 h-4" />
@@ -18225,7 +18551,7 @@ const handleRecalculateLayout = () => {
                   <!-- Edit Nodes -->
                   <button 
                     @click="handleAction('toggle-handles')" 
-                    title="Edit Nodes"
+                    title="Editar Nós"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all"
                     :class="isNodeEditing ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'text-zinc-400 hover:text-white'"
                   >
@@ -18235,7 +18561,7 @@ const handleRecalculateLayout = () => {
                   <!-- Add Point -->
                   <button 
                     @click="handleAction('add-path-point')" 
-                    title="Add Point"
+                    title="Adicionar Ponto"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
                   >
                     <PlusCircle class="w-4 h-4" />
@@ -18244,7 +18570,7 @@ const handleRecalculateLayout = () => {
                   <!-- Delete Point -->
                   <button 
                     @click="handleAction('delete-path-point')" 
-                    title="Delete Point (Delete)"
+                    title="Excluir Ponto (Delete)"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
                     :class="selectedPathNodeIndex === null ? 'opacity-50 cursor-not-allowed' : ''"
                   >
@@ -18256,7 +18582,7 @@ const handleRecalculateLayout = () => {
                   <!-- Split Path -->
                   <button 
                     @click="splitPath" 
-                    title="Split Path"
+                    title="Dividir Caminho"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
                   >
                     <Scissors class="w-4 h-4" />
@@ -18265,7 +18591,7 @@ const handleRecalculateLayout = () => {
                   <!-- Simplify Path -->
                   <button 
                     @click="simplifyPath" 
-                    title="Simplify Path"
+                    title="Simplificar Caminho"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
                   >
                     <Move3D class="w-4 h-4" />
@@ -18274,7 +18600,7 @@ const handleRecalculateLayout = () => {
                   <!-- Close Path -->
                   <button 
                     @click="closePath" 
-                    title="Close Path"
+                    title="Fechar Caminho"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
                   >
                     <X class="w-4 h-4" />
@@ -18284,73 +18610,73 @@ const handleRecalculateLayout = () => {
 
               <!-- Floating Toolbar (Figma Style) - Bottom Center -->
               <div class="absolute left-1/2 -translate-x-1/2 floating-toolbar flex items-center gap-1 bg-[#2a2a2a] p-1.5 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.6)] border border-white/10 z-30 select-none backdrop-blur-sm">
-                  <button @click="setTool('select')" title="Move (V)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all" :class="!isDrawing ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'text-zinc-400 hover:text-white'">
+                  <button @click="setTool('select')" title="Mover (V)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all" :class="!isDrawing ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'text-zinc-400 hover:text-white'">
                     <MousePointer2 class="w-4 h-4" />
                   </button>
                   <div class="w-px h-6 bg-white/10 mx-0.5"></div>
                   
                   <!-- Frame Tool with Dropdown -->
                   <div class="relative group">
-                    <button @click="addFrame" title="Frame (F)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
+                    <button @click="addFrame" title="Quadro (F)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
                       <Frame class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                                         <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="addFrame" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Frame</button>
-                      <button @click="addShape('rect')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Rectangle</button>
+                      <button @click="addFrame" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Quadro</button>
+                      <button @click="addShape('rect')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Retângulo</button>
                     </div>
                   </div>
                   
                   <!-- Rectangle Tool with Dropdown -->
                   <div class="relative group">
-                    <button @click="addShape('rect')" title="Rectangle (R)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
+                    <button @click="addShape('rect')" title="Retângulo (R)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
                       <Square class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                                         <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="addShape('rect')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Rectangle</button>
-                      <button @click="addShape('rect', { rx: 20, ry: 20 })" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Rounded Rect</button>
+                      <button @click="addShape('rect')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Retângulo</button>
+                      <button @click="addShape('rect', { rx: 20, ry: 20 })" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Retângulo Arredondado</button>
                     </div>
                   </div>
                   
                   <!-- Circle Tool with Dropdown -->
                   <div class="relative group">
-                    <button @click="addShape('circle')" title="Circle (O)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
+                    <button @click="addShape('circle')" title="Círculo (O)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
                       <Circle class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                                         <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="addShape('circle')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Circle</button>
-                      <button @click="addShape('ellipse')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Ellipse</button>
+                      <button @click="addShape('circle')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Círculo</button>
+                      <button @click="addShape('ellipse')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Elipse</button>
                     </div>
                   </div>
                   
                   <!-- Text Tool with Dropdown -->
                   <div class="relative group">
-                    <button @click="() => addText()" title="Text (T)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
+                    <button @click="() => addText()" title="Texto (T)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
                       <Type class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                                         <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="() => addText()" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Text</button>
-                      <button @click="() => addText('heading')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Heading</button>
-                      <button @click="() => addText('body')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Body</button>
+                      <button @click="() => addText()" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Texto</button>
+                      <button @click="() => addText('heading')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Título</button>
+                      <button @click="() => addText('body')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Corpo</button>
                     </div>
                   </div>
                   
                   <!-- Pen Tool with Dropdown -->
                   <div class="relative group">
-                    <button @click="togglePenMode" title="Pen (P)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all relative" :class="isPenMode ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'text-zinc-400 hover:text-white'">
+                    <button @click="togglePenMode" title="Caneta (P)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all relative" :class="isPenMode ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'text-zinc-400 hover:text-white'">
                       <PenTool class="w-4 h-4" />
                       <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                                         <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="togglePenMode" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Pen Tool</button>
-                      <button @click="toggleDrawing" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Pencil</button>
+                      <button @click="togglePenMode" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Caneta</button>
+                      <button @click="toggleDrawing" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Lápis</button>
                       <div class="h-px bg-white/10 my-1"></div>
-                      <button @click="setPenWidth(5)" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Thin (5px)</button>
-                      <button @click="setPenWidth(10)" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Medium (10px)</button>
-                      <button @click="setPenWidth(20)" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Thick (20px)</button>
+                      <button @click="setPenWidth(5)" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Fino (5px)</button>
+                      <button @click="setPenWidth(10)" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Médio (10px)</button>
+                      <button @click="setPenWidth(20)" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Grosso (20px)</button>
                     </div>
                   </div>
                   
@@ -18369,27 +18695,10 @@ const handleRecalculateLayout = () => {
           <!-- Right Sidebar (Properties - Figma Style) -->
            <aside class="w-75 border-l border-white/5 h-full bg-[#1a1a1a] text-white flex flex-col shrink-0 z-10 overflow-hidden">
                <!-- Top Controls (Share, Play, Zoom, Avatar) -->
-               <div class="h-10 px-2 flex items-center justify-between border-b border-white/5 shrink-0 min-w-0">
-                 <!-- Left: Design/Prototype Tabs -->
-               <div class="flex items-center gap-0 shrink-0">
-                   <button 
-                     @click="activeMode = 'design'"
-                     class="h-full px-1.5 border-b-2 transition-colors text-[9px] font-medium"
-                     :class="activeMode === 'design' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'"
-                   >
-                     Design
-                   </button>
-                   <button 
-                     @click="activeMode = 'prototype'"
-                     class="h-full px-1.5 border-b-2 transition-colors text-[9px] font-medium"
-                     :class="activeMode === 'prototype' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'"
-                   >
-                     Prototype
-                   </button>
-                 </div>
+               <div class="h-10 px-2 flex items-center justify-end border-b border-white/5 shrink-0 min-w-0">
                  
                  <!-- Right: Controls -->
-                                 <div class="flex items-center gap-0.5 ml-auto shrink-0 min-w-0">
+                                 <div class="flex items-center gap-0.5 shrink-0 min-w-0">
                    <!-- User Avatar -->
                                      <div class="flex items-center -space-x-1 shrink-0">
                      <div 
@@ -18426,7 +18735,7 @@ const handleRecalculateLayout = () => {
                                          class="h-5 px-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-medium transition-all flex items-center gap-0.5 shrink-0 whitespace-nowrap"
                    >
                                          <Share2 class="w-2.5 h-2.5 shrink-0" />
-                     <span>Share</span>
+                     <span>Exportar</span>
                    </button>
 
                    <!-- Zoom Dropdown -->
@@ -18450,8 +18759,8 @@ const handleRecalculateLayout = () => {
                        <button @click="handleZoom200" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">200%</button>
                        <button @click="handleZoom400" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">400%</button>
                        <div class="h-px bg-white/10 my-1"></div>
-                       <button @click="zoomToFit" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Fit to Screen</button>
-                       <button @click="handleZoomToSelection" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Fit Selection</button>
+                       <button @click="zoomToFit" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Ajustar à Tela</button>
+                       <button @click="handleZoomToSelection" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Ajustar Seleção</button>
                      </div>
                    </div>
                  </div>
@@ -18481,6 +18790,7 @@ const handleRecalculateLayout = () => {
         @sync-gaps="productZoneState.syncGapsWithPadding"
         @recalculate-layout="productZoneState.recalculateLayout"
         @manage-label-templates="showLabelTemplatesModal = true"
+        @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
       />
                </div>
           </aside>
@@ -18792,161 +19102,107 @@ const handleRecalculateLayout = () => {
       </UiDialog>
 
       <!-- Share Modal -->
-      <UiDialog v-model="showShareModal" title="Compartilhar Design" @close="showShareModal = false" width="480px">
+      <UiDialog v-model="showShareModal" title="Exportar" @close="showShareModal = false" width="400px">
         <template #default>
-          <div class="space-y-4 py-4">
-             <!-- Share Mode Tabs -->
-             <div class="flex gap-1 p-1 bg-muted rounded-lg">
-                 <button
-                     @click="shareSettings.shareAsFiles = true"
-                     :class="shareSettings.shareAsFiles ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                     class="flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2"
-                 >
-                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                     </svg>
-                     <span>Compartilhar Arquivo</span>
-                 </button>
-                 <button
-                     @click="shareSettings.shareAsFiles = false"
-                     :class="!shareSettings.shareAsFiles ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                     class="flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2"
-                 >
-                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                     </svg>
-                     <span>Link de Compartilhamento</span>
-                 </button>
-             </div>
+          <div class="space-y-5 py-3">
 
-             <!-- File Share Mode -->
-             <div v-if="shareSettings.shareAsFiles" class="space-y-4">
-                 <!-- Export Scope -->
-                 <div class="space-y-2">
-                     <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que compartilhar</label>
-                     <div class="grid grid-cols-3 gap-2">
-                         <button
-                             @click="shareSettings.shareScope = 'canvas'"
-                             :class="shareSettings.shareScope === 'canvas' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
-                             class="py-2 text-xs font-bold rounded border transition-colors"
-                         >
-                             Tela Inteira
-                         </button>
-                         <button
-                             @click="shareSettings.shareScope = 'selected-frame'"
-                             :class="shareSettings.shareScope === 'selected-frame' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
-                             class="py-2 text-xs font-bold rounded border transition-colors"
-                         >
-                             Frame
-                         </button>
-                         <button
-                             @click="shareSettings.shareScope = 'all-frames'"
-                             :class="shareSettings.shareScope === 'all-frames' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
-                             class="py-2 text-xs font-bold rounded border transition-colors"
-                         >
-                             Todos Frames
-                         </button>
-                     </div>
-                 </div>
-
-                 <!-- Frame Selector -->
-                 <div class="space-y-2" v-if="shareSettings.shareScope === 'selected-frame'">
-                     <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selecione o Frame</label>
-                     <select
-                         v-model="shareSettings.selectedFrameId"
-                         class="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                     >
-                         <option value="">Selecione um frame...</option>
-                         <option v-for="frame in availableFramesForExport" :key="frame.id" :value="frame.id">
-                             {{ frame.name }}
-                         </option>
-                     </select>
-                 </div>
-
-                 <!-- Format -->
-                 <div class="space-y-2" v-if="shareSettings.shareScope !== 'all-frames'">
-                     <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Formato</label>
-                     <div class="flex gap-2">
-                         <button @click="shareSettings.format = 'png'" :class="shareSettings.format === 'png' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">PNG</button>
-                         <button @click="shareSettings.format = 'jpeg'" :class="shareSettings.format === 'jpeg' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">JPG</button>
-                     </div>
-                 </div>
-
-                 <!-- Scale -->
-                 <div class="space-y-2">
-                     <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Escala</label>
-                     <div class="flex gap-2">
-                         <button @click="shareSettings.scale = 1" :class="shareSettings.scale === 1 ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">1x</button>
-                         <button @click="shareSettings.scale = 2" :class="shareSettings.scale === 2 ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">2x</button>
-                         <button @click="shareSettings.scale = 3" :class="shareSettings.scale === 3 ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">3x</button>
-                     </div>
-                 </div>
-
-                 <!-- Native Share Info -->
-                 <div class="flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                     <svg class="w-4 h-4 text-green-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                     </svg>
-                     <p class="text-[10px] text-green-200">
-                         Ao clicar em compartilhar, você poderá escolher apps nativos como WhatsApp, Telegram, Email, etc.
-                     </p>
-                 </div>
-             </div>
-
-             <!-- Link Share Mode -->
-             <div v-else class="space-y-4">
-                 <div class="space-y-2">
-                   <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Link de Compartilhamento</label>
-                   <div class="flex gap-2">
-                     <input
-                       type="text"
-                       readonly
-                       class="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:outline-none"
-                       :value="shareUrl || 'Gerando link...'"
-                     />
+             <!-- Escopo -->
+             <div class="space-y-1.5">
+                 <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Área</label>
+                 <div class="grid grid-cols-3 gap-1.5">
                      <button
-                       @click="copyShareUrl"
-                       class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium transition-all"
-                     >
-                       Copiar
-                     </button>
-                   </div>
-                 </div>
-
-                 <div class="space-y-2">
-                   <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Permissões</label>
-                   <div class="space-y-2">
-                     <label class="flex items-center gap-2 cursor-pointer">
-                       <input type="checkbox" v-model="shareCanEdit" class="w-4 h-4 rounded border-border text-violet-500" />
-                       <span class="text-xs text-foreground">Permitir edição</span>
-                     </label>
-                     <label class="flex items-center gap-2 cursor-pointer">
-                       <input type="checkbox" v-model="shareCanView" class="w-4 h-4 rounded border-border text-violet-500" />
-                       <span class="text-xs text-foreground">Permitir visualização</span>
-                     </label>
-                   </div>
+                         @click="shareSettings.shareScope = 'canvas'"
+                         :class="shareSettings.shareScope === 'canvas' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'"
+                         class="py-2 text-[11px] font-medium rounded-lg transition-all"
+                     >Página Inteira</button>
+                     <button
+                         @click="shareSettings.shareScope = 'selected-frame'"
+                         :class="shareSettings.shareScope === 'selected-frame' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'"
+                         class="py-2 text-[11px] font-medium rounded-lg transition-all"
+                     >Frame</button>
+                     <button
+                         @click="shareSettings.shareScope = 'all-frames'"
+                         :class="shareSettings.shareScope === 'all-frames' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'"
+                         class="py-2 text-[11px] font-medium rounded-lg transition-all"
+                     >Todos Frames</button>
                  </div>
              </div>
+
+             <!-- Frame Selector (condicional) -->
+             <div class="space-y-1.5" v-if="shareSettings.shareScope === 'selected-frame'">
+                 <div class="flex items-center justify-between">
+                     <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Frames</label>
+                     <button
+                         @click="selectAllFrames"
+                         class="text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
+                     >{{ shareSettings.selectedFrameIds.length === availableFramesForExport.length ? 'Desmarcar todos' : 'Selecionar todos' }}</button>
+                 </div>
+                 <div class="bg-zinc-800 border border-zinc-700 rounded-lg max-h-32 overflow-y-auto custom-scrollbar">
+                     <label
+                         v-for="frame in availableFramesForExport"
+                         :key="frame.id"
+                         class="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-zinc-700/50 transition-colors border-b border-zinc-700/50 last:border-b-0"
+                     >
+                         <input
+                             type="checkbox"
+                             :checked="shareSettings.selectedFrameIds.includes(frame.id)"
+                             @change="toggleFrameSelection(frame.id)"
+                             class="w-3.5 h-3.5 rounded border-zinc-600 text-violet-500 focus:ring-violet-500/30 bg-zinc-700 shrink-0"
+                         />
+                         <span class="text-xs text-white truncate">{{ frame.name }}</span>
+                     </label>
+                     <div v-if="!availableFramesForExport.length" class="px-3 py-3 text-[10px] text-zinc-500 text-center">Nenhum frame encontrado</div>
+                 </div>
+             </div>
+
+             <!-- Formato + Escala lado a lado -->
+             <div class="grid grid-cols-2 gap-4" v-if="shareSettings.shareScope !== 'all-frames'">
+                 <div class="space-y-1.5">
+                     <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Formato</label>
+                     <div class="flex gap-1.5">
+                         <button @click="shareSettings.format = 'png'" :class="shareSettings.format === 'png' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">PNG</button>
+                         <button @click="shareSettings.format = 'jpeg'" :class="shareSettings.format === 'jpeg' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">JPG</button>
+                     </div>
+                 </div>
+                 <div class="space-y-1.5">
+                     <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Escala</label>
+                     <div class="flex gap-1.5">
+                         <button @click="shareSettings.scale = 1" :class="shareSettings.scale === 1 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">1x</button>
+                         <button @click="shareSettings.scale = 2" :class="shareSettings.scale === 2 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">2x</button>
+                         <button @click="shareSettings.scale = 3" :class="shareSettings.scale === 3 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">3x</button>
+                     </div>
+                 </div>
+             </div>
+
+             <!-- Escala (quando all-frames, formato não aparece) -->
+             <div class="space-y-1.5" v-if="shareSettings.shareScope === 'all-frames'">
+                 <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Escala</label>
+                 <div class="flex gap-1.5 max-w-50">
+                     <button @click="shareSettings.scale = 1" :class="shareSettings.scale === 1 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">1x</button>
+                     <button @click="shareSettings.scale = 2" :class="shareSettings.scale === 2 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">2x</button>
+                     <button @click="shareSettings.scale = 3" :class="shareSettings.scale === 3 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">3x</button>
+                 </div>
+             </div>
+
           </div>
         </template>
         <template #footer>
-          <div class="flex justify-end gap-3 w-full">
-            <Button variant="ghost" @click="showShareModal = false">Cancelar</Button>
-            <Button v-if="shareSettings.shareAsFiles" variant="default" @click="performShare" :disabled="shareSettings.shareScope === 'selected-frame' && !shareSettings.selectedFrameId">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+          <div class="flex justify-end gap-2 w-full">
+            <button @click="showShareModal = false" class="px-4 py-2 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-all">Cancelar</button>
+            <Button variant="default" size="sm" @click="performShare" :disabled="shareSettings.shareScope === 'selected-frame' && shareSettings.selectedFrameIds.length === 0">
+                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                Compartilhar
+                Exportar
             </Button>
-            <Button v-else variant="default" @click="generateShareLink">Gerar Link</Button>
           </div>
         </template>
       </UiDialog>
 
       <!-- Presentation Mode Overlay -->
       <div v-if="showPresentationModal" class="fixed inset-0 z-100 bg-black flex items-center justify-center">
-          <div class="relative w-full h-full flex items-center justify-center p-10">
-              <div class="relative shadow-2xl max-w-full max-h-full aspect-9/16">
+          <div class="relative w-full h-full flex items-center justify-center">
+              <div class="relative w-full h-full">
                   <img :src="presentationImage" class="w-full h-full object-contain" />
                   
                   <!-- Hotspots Layer -->
@@ -18957,7 +19213,7 @@ const handleRecalculateLayout = () => {
                         class="absolute cursor-pointer hover:bg-violet-500/30 transition-colors"
                         :style="{ top: hotspot.top, left: hotspot.left, width: hotspot.width, height: hotspot.height }"
                         @click="handleHotspotClick(hotspot.target)"
-                        title="Click to Navigate"
+                        title="Clique para Navegar"
                       ></div>
                   </div>
               </div>
