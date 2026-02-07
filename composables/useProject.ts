@@ -495,15 +495,8 @@ export const useProject = () => {
                 let canvasData = null
                 let serverCanvasData = null
 
-                // CRITICAL: PRIMEIRO verificar se tem canvasData direto no banco
-                // Isso é mais rápido e garante que dados recentes sejam usados
-                if ((pageMeta as any).canvasData) {
-                    serverCanvasData = (pageMeta as any).canvasData
-                    const objectCount = serverCanvasData?.objects?.length || 0
-                    console.log(`📦 CanvasData encontrado no banco: ${objectCount} objetos`)
-                }
-                // Só buscar do Storage se NÃO tiver canvasData no banco
-                else if (pageMeta.canvasDataPath) {
+                // Prefer Storage as the source of truth (DB canvasData is a backup and can get stale).
+                if (pageMeta.canvasDataPath) {
                     console.log('📥 Buscando canvasData do Storage:', pageMeta.canvasDataPath)
                     serverCanvasData = await loadCanvasDataFromPath(pageMeta.canvasDataPath)
                     if (serverCanvasData) {
@@ -512,6 +505,12 @@ export const useProject = () => {
                     } else {
                         console.warn('⚠️ CanvasData não encontrado no Storage')
                     }
+                }
+                // Fallback: use DB snapshot if Storage isn't available.
+                if (!serverCanvasData && (pageMeta as any).canvasData) {
+                    serverCanvasData = (pageMeta as any).canvasData
+                    const objectCount = serverCanvasData?.objects?.length || 0
+                    console.log(`📦 CanvasData encontrado no banco (fallback): ${objectCount} objetos`)
                 }
 
                 // Offline-safe: Verificar draft local, mas só usar se for válido e mais recente
