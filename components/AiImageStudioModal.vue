@@ -4,6 +4,7 @@ import Dialog from './ui/Dialog.vue'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
 import { Sparkles, Wand2, Scissors, Paintbrush, Link as LinkIcon, Upload as UploadIcon } from 'lucide-vue-next'
+import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 type Mode = 'generate' | 'similar' | 'edit'
 
@@ -341,14 +342,14 @@ const run = async () => {
     if (mode.value === 'generate') {
       form.append('mode', 'generate')
       const res: any = await $fetch('/api/ai/image/generate', { method: 'POST', body: form })
-      resultUrl.value = res?.url
+      resultUrl.value = toWasabiProxyUrl(res?.url) || res?.url
       emit('created', { id: String(res?.key || ''), name: filenameBase.value || 'AI', url: resultUrl.value })
     } else if (mode.value === 'similar') {
       form.append('mode', 'similar')
       if (modelFile.value) form.append('modelFile', modelFile.value)
       if (modelImageUrl.value) form.append('modelImageUrl', modelImageUrl.value)
       const res: any = await $fetch('/api/ai/image/generate', { method: 'POST', body: form })
-      resultUrl.value = res?.url
+      resultUrl.value = toWasabiProxyUrl(res?.url) || res?.url
       emit('created', { id: String(res?.key || ''), name: filenameBase.value || 'AI', url: resultUrl.value })
     } else {
       // edit
@@ -357,13 +358,15 @@ const run = async () => {
       const mask = await maskToFile()
       if (mask) form.append('maskFile', mask)
       const res: any = await $fetch('/api/ai/image/edit', { method: 'POST', body: form })
-      resultUrl.value = res?.url
+      resultUrl.value = toWasabiProxyUrl(res?.url) || res?.url
       emit('created', { id: String(res?.key || ''), name: filenameBase.value || 'AI', url: resultUrl.value })
     }
 
     if (!resultUrl.value) throw new Error('Falha ao gerar imagem')
   } catch (e: any) {
-    error.value = e?.data?.message || e?.message || 'Erro ao gerar'
+    console.error('[AiImageStudio] Erro:', e)
+    const msg = e?.data?.statusMessage || e?.data?.message || e?.statusMessage || e?.message || 'Erro ao gerar'
+    error.value = msg
   } finally {
     processing.value = false
   }
@@ -467,7 +470,7 @@ const run = async () => {
               <UploadIcon class="w-4 h-4" /> Selecionar modelo
             </label>
             <div class="text-[10px] text-zinc-500">Ou selecione um upload como modelo:</div>
-            <div class="grid grid-cols-6 gap-2 max-h-[160px] overflow-y-auto pr-1">
+            <div class="grid grid-cols-6 gap-2 max-h-40 overflow-y-auto pr-1">
               <button
                 v-for="a in uploadsForPick"
                 :key="a.id"
@@ -492,7 +495,7 @@ const run = async () => {
               <UploadIcon class="w-4 h-4" /> Selecionar base
             </label>
             <div class="text-[10px] text-zinc-500">Ou selecione um upload como base:</div>
-            <div class="grid grid-cols-6 gap-2 max-h-[160px] overflow-y-auto pr-1">
+            <div class="grid grid-cols-6 gap-2 max-h-40 overflow-y-auto pr-1">
               <button
                 v-for="a in uploadsForPick"
                 :key="a.id"
@@ -541,7 +544,7 @@ const run = async () => {
 
         <div class="space-y-3">
           <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Referências (clique para selecionar)</div>
-          <div class="grid grid-cols-4 gap-2 max-h-[360px] overflow-y-auto pr-1">
+          <div class="grid grid-cols-4 gap-2 max-h-90 overflow-y-auto pr-1">
             <button
               v-for="a in uploadsForPick"
               :key="a.id"
@@ -581,10 +584,10 @@ const run = async () => {
 
           <div class="space-y-2">
             <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Resultado</div>
-            <div class="rounded-xl border border-white/10 bg-zinc-950/30 p-3 min-h-[200px] flex items-center justify-center">
+            <div class="rounded-xl border border-white/10 bg-zinc-950/30 p-3 min-h-50 flex items-center justify-center">
               <div v-if="processing" class="text-xs text-zinc-400">Gerando…</div>
               <div v-else-if="resultUrl" class="w-full">
-                <img :src="resultUrl" class="w-full max-h-[320px] object-contain bg-black/20 rounded-lg" />
+                <img :src="resultUrl" class="w-full max-h-80 object-contain bg-black/20 rounded-lg" />
                 <div class="mt-2 text-[10px] text-zinc-500 break-all">{{ resultUrl }}</div>
               </div>
               <div v-else class="text-xs text-zinc-500">Sem preview ainda</div>

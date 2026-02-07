@@ -66,7 +66,7 @@ const createPage = (preset: string) => {
                 }"
               >
                   <!-- Image Preview -->
-                  <img v-if="page.thumbnail" :src="page.thumbnail" class="w-full h-full object-contain" />
+                  <img v-if="page.thumbnail || page.thumbnailUrl" :src="page.thumbnail || page.thumbnailUrl" class="w-full h-full object-contain" />
                   <div v-else class="w-full h-full flex items-center justify-center bg-zinc-900">
                       <FileText class="w-4 h-4 text-zinc-700" />
                   </div>

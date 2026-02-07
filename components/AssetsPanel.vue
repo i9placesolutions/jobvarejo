@@ -27,7 +27,6 @@ const categories = [
     { id: 'folders', name: 'Pastas', icon: Folder },
     { id: 'recents', name: 'Recentes', icon: Clock },
     { id: 'brand', name: 'Marca', icon: Tag },
-    { id: 'elements', name: 'Elementos', icon: ImageIcon },
 ]
 
 const activeCategory = ref('uploads')
@@ -83,21 +82,18 @@ const loadAssetFolders = async () => {
     }
 }
 
-// Reactive Data - Now fetched from API
-const assets = ref<{
-    uploads: any[],
-    brand: any[],
-    folders: Folder[],
-    recents: any[],
-    elements: any[]
-}>({
-    uploads: [],
-    brand: [],
-    folders: [], // Pastas vazias - serão carregadas do banco
-    recents: [],
-    elements: [],
-
-})
+	// Reactive Data - Now fetched from API
+	const assets = ref<{
+	    uploads: any[],
+	    brand: any[],
+	    folders: Folder[],
+	    recents: any[]
+	}>({
+	    uploads: [],
+	    brand: [],
+	    folders: [], // Pastas vazias - serão carregadas do banco
+	    recents: [],
+	})
 
 // Watch database folders and sync to assets
 watch(dbFolders, (newFolders) => {

@@ -127,23 +127,24 @@ onMounted(() => {
               <p class="text-sm text-muted-foreground/60">Comece criando sua primeira arte e salvando-a no editor.</p>
           </div>
 
-          <div 
-              v-for="project in filteredProjects" 
-              :key="project.id"
-              @click="loadProject(project)"
-              class="group flex items-center justify-between p-4 border border-border rounded-xl bg-card hover:bg-accent/5 hover:border-primary/30 transition-all cursor-pointer shadow-sm hover:shadow-md"
-          >
-              <div class="flex items-center gap-4">
-                  <div class="w-12 h-12 rounded-lg bg-muted flex items-center justify-center group-hover:bg-primary/5 transition-colors">
-                      <FileEdit class="w-6 h-6 text-muted-foreground/40 group-hover:text-primary transition-colors" />
-                  </div>
-                  <div class="flex flex-col">
-                      <span class="font-bold text-foreground group-hover:text-primary transition-colors">{{ project.name }}</span>
-                      <span class="text-[11px] text-muted-foreground/60 flex items-center gap-1 mt-0.5">
-                          <Clock class="w-3.5 h-3.5" /> {{ new Date(project.created_at).toLocaleDateString('pt-BR') }} às {{ new Date(project.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}
-                      </span>
-                  </div>
-              </div>
+	          <div 
+	              v-for="project in filteredProjects" 
+	              :key="project.id"
+	              @click="loadProject(project)"
+	              class="group flex items-center justify-between p-4 border border-border rounded-xl bg-card hover:bg-accent/5 hover:border-primary/30 transition-all cursor-pointer shadow-sm hover:shadow-md"
+	          >
+	              <div class="flex items-center gap-4">
+	                  <div class="w-12 h-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center group-hover:bg-primary/5 transition-colors">
+	                      <img v-if="project.preview_url" :src="project.preview_url" class="w-full h-full object-cover" :alt="project.name" />
+	                      <FileEdit v-else class="w-6 h-6 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+	                  </div>
+	                  <div class="flex flex-col">
+	                      <span class="font-bold text-foreground group-hover:text-primary transition-colors">{{ project.name }}</span>
+	                      <span class="text-[11px] text-muted-foreground/60 flex items-center gap-1 mt-0.5">
+	                          <Clock class="w-3.5 h-3.5" /> {{ new Date(project.created_at).toLocaleDateString('pt-BR') }} às {{ new Date(project.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}
+	                      </span>
+	                  </div>
+	              </div>
               
               <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button 

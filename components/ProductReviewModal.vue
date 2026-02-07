@@ -254,9 +254,9 @@ const handleImageUpload = async (event: Event, index: number) => {
         }
     } catch (err: any) {
         console.error('[Upload Manual] Falha:', err)
-        // Manter preview local como fallback
-        product.status = 'done'
-        product.error = undefined
+        // Manter preview local como fallback mas mostrar erro
+        product.status = 'error'
+        product.error = err?.message || 'Falha no upload'
     }
 }
 

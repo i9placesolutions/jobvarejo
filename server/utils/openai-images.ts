@@ -120,6 +120,9 @@ export const buildPromptFromInputs = (opts: {
 }
 
 export const maybeRemoveBackground = async (buffer: Buffer, enabled: boolean) => {
+  // NOTE: This should only run when the user explicitly requests post background removal.
+  // If OpenAI already returns a transparent PNG (background=transparent), running another
+  // background-removal pass can punch holes inside the subject (e.g. logos).
   if (!enabled) return { buffer, mime: 'image/png', ext: 'png' }
   const out = await processImageWithOptions(buffer, { outputFormat: 'png' })
   return { buffer: out, mime: 'image/png', ext: 'png' }
@@ -143,4 +146,3 @@ export const resolveReferenceImages = async (opts: {
   }
   return out
 }
-

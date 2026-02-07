@@ -102,12 +102,14 @@ export default defineEventHandler(async (event) => {
     mask
   })
 
-  const post = await maybeRemoveBackground(ed.buffer, removeBg || wantNoBackground)
+  // Only apply post background removal when explicitly requested.
+  const post = await maybeRemoveBackground(ed.buffer, removeBg)
   const up = await uploadBufferToContabo({
     buffer: post.buffer,
     contentType: post.mime,
     filenameBase: fields.filenameBase || 'ai-edit',
-    folder: 'uploads',
+    // Keep consistent with the main assets library (used by the "Uploads" tab in the UI)
+    folder: 'imagens',
     ext: 'png'
   })
 
@@ -118,4 +120,3 @@ export default defineEventHandler(async (event) => {
     key: up.key
   }
 })
-

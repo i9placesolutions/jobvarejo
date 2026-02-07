@@ -131,12 +131,16 @@ export default defineEventHandler(async (event) => {
     resultMime = ed.mime
   }
 
-  const post = await maybeRemoveBackground(resultBuffer, removeBg || wantNoBackground)
+  // Only apply post background removal when explicitly requested.
+  // `transparent` (OpenAI background=transparent) should not trigger bg-removal,
+  // otherwise it can remove internal parts of the subject.
+  const post = await maybeRemoveBackground(resultBuffer, removeBg)
   const up = await uploadBufferToContabo({
     buffer: post.buffer,
     contentType: post.mime,
     filenameBase: fields.filenameBase || 'ai-image',
-    folder: 'uploads',
+    // Keep consistent with the main assets library (used by the "Uploads" tab in the UI)
+    folder: 'imagens',
     ext: 'png'
   })
 

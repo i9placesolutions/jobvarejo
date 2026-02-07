@@ -3,11 +3,13 @@ import { ref } from 'vue'
 import { useProject } from '~/composables/useProject'
 import { Search, Plus, FileText, Copy, Trash2, Box, ChevronDown, Menu } from 'lucide-vue-next'
 import AssetsPanel from './AssetsPanel.vue'
+import ElementsPanel from './ElementsPanel.vue'
 
 const { project, activePage, switchPage, addPage, duplicatePage, deletePage } = useProject()
 
 const emit = defineEmits<{
     (e: 'insert-asset', asset: any): void
+    (e: 'insert-element', element: { type: string; data: any }): void
     (e: 'open-menu'): void
 }>()
 
@@ -15,6 +17,9 @@ const emit = defineEmits<{
 type Tab = 'layers' | 'pages' | 'assets';
 const activeTab = ref<Tab>('layers')
 const sidebarSearch = ref('')
+
+type AssetsSubTab = 'elements' | 'files'
+const assetsSubTab = ref<AssetsSubTab>('elements')
 
 const createPage = (preset: string) => {
     addPage('RETAIL_OFFER', 1080, 1920, `Page ${project.pages.length + 1}`);
@@ -119,9 +124,25 @@ const createPage = (preset: string) => {
                </div>
            </div>
 
-           <!-- TAB: ASSETS -->
+           <!-- TAB: ASSETS (Elementos + Meus Arquivos) -->
            <div v-else-if="activeTab === 'assets'" class="flex flex-col h-full animate-in fade-in duration-200">
-               <AssetsPanel :search-query="sidebarSearch" @insert-asset="(asset) => emit('insert-asset', asset)" />
+               <!-- Sub-tabs -->
+               <div class="px-2 pt-2 pb-1.5 flex gap-1 shrink-0">
+                   <button
+                       @click="assetsSubTab = 'elements'"
+                       class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all"
+                       :class="assetsSubTab === 'elements' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'"
+                   >Elementos</button>
+                   <button
+                       @click="assetsSubTab = 'files'"
+                       class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all"
+                       :class="assetsSubTab === 'files' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'"
+                   >Meus Arquivos</button>
+               </div>
+               <!-- Sub: Elementos -->
+               <ElementsPanel v-if="assetsSubTab === 'elements'" :search-query="sidebarSearch" @insert-element="(el) => emit('insert-element', el)" />
+               <!-- Sub: Meus Arquivos -->
+               <AssetsPanel v-else :search-query="sidebarSearch" @insert-asset="(asset) => emit('insert-asset', asset)" />
            </div>
 
        </div>

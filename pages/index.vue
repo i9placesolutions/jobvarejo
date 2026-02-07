@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown } from 'lucide-vue-next'
-import FolderTreeItem from '~/components/FolderTreeItem.vue'
-import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
+	import FolderTreeItem from '~/components/FolderTreeItem.vue'
+	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
+	import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 // Page config - middleware handles auth check
 definePageMeta({
@@ -118,16 +119,21 @@ const loadData = async () => {
       .order('last_viewed', { ascending: false, nullsFirst: false })
       .order('updated_at', { ascending: false })
 
-    if (error) {
-      console.error('Error loading projects:', error)
-      projects.value = []
-    } else {
-      projects.value = projectsData || []
-    }
-  } catch (error) {
-    console.error('Error loading data:', error)
-    projects.value = []
-  } finally {
+	    if (error) {
+	      console.error('Error loading projects:', error)
+	      projects.value = []
+	    } else {
+	      projects.value = (projectsData || []).map((p: any) => {
+	        if (p?.preview_url) p.preview_url = toWasabiProxyUrl(p.preview_url)
+	        // reset image error state if we previously failed with a non-proxied URL
+	        if (p && typeof p === 'object') p._thumbError = false
+	        return p
+	      })
+	    }
+	  } catch (error) {
+	    console.error('Error loading data:', error)
+	    projects.value = []
+	  } finally {
     isLoadingProjects.value = false
   }
 }
@@ -724,7 +730,7 @@ const formatDistanceToNow = (date: string) => {
   const diffInMs = now.getTime() - projectDate.getTime()
   const diffInMins = Math.floor(diffInMs / 60000)
   const diffInHours = Math.floor(diffInMs / 3600000)
-  const diffInDays = Math.floor(diffInMs / 864000)
+  const diffInDays = Math.floor(diffInMs / 86400000)
 
   if (diffInMins < 1) return 'Agora'
   if (diffInMins < 60) return `${diffInMins}m atrás`
@@ -1127,13 +1133,16 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <div
                 class="aspect-video bg-linear-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
               >
-                <img
-                  v-if="project.preview_url && !project._thumbError"
-                  :src="project.preview_url"
-                  class="w-full h-full object-cover"
-                  :alt="project.name"
-                  @error="project._thumbError = true"
-                />
+                <div v-if="project.preview_url && !project._thumbError" class="absolute inset-0 p-2 flex items-center justify-center">
+                  <img
+                    :src="project.preview_url"
+                    class="max-w-full max-h-full object-contain rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-[1.01]"
+                    :alt="project.name"
+                    loading="lazy"
+                    decoding="async"
+                    @error="project._thumbError = true"
+                  />
+                </div>
                 <div v-if="!project.preview_url || project._thumbError" class="w-full h-full flex items-center justify-center">
                   <Sparkles class="w-8 h-8 text-zinc-600" />
                 </div>
@@ -1175,7 +1184,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <h3 v-else class="font-medium text-xs text-white mb-1 truncate">
                   {{ project.name || 'Sem título' }}
                 </h3>
-                <p class="text-[10px] text-zinc-500">{{ formatDistanceToNow(project.created_at) }}</p>
+                <p class="text-[10px] text-zinc-500">{{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}</p>
               </div>
             </div>
           </div>

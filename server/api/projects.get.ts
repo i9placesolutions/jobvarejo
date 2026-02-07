@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig()
@@ -31,6 +32,10 @@ export default defineEventHandler(async (event) => {
         if (error) {
             throw createError({ statusCode: 500, statusMessage: error.message })
         }
-        return data
+        // Normalize preview URLs so thumbnails work even when the bucket is private.
+        return (data || []).map((p: any) => ({
+            ...p,
+            preview_url: toWasabiProxyUrl(p?.preview_url)
+        }))
     }
 })

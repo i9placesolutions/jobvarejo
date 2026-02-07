@@ -41,7 +41,9 @@ export default defineEventHandler(async (event) => {
         const command = new ListObjectsV2Command({
             Bucket: bucketName,
             Prefix: 'imagens/', // Pasta de imagens no Wasabi
-            MaxKeys: 100
+            // IMPORTANT: list enough keys so the newest uploads actually appear.
+            // S3 lists lexicographically by Key; with timestamp-based names, newest tend to be at the end.
+            MaxKeys: 1000
         });
 
         const response = await s3Client.send(command);

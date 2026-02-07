@@ -1,6 +1,18 @@
 import { createSupabaseAdmin } from "../utils/supabase";
 
-// Normaliza termo para cache
+// Normalização avançada de cache key (espelha process-product-image.post.ts)
+const UNIT_MAP: Record<string, string> = {
+    mililitros: 'ml', mililitro: 'ml', mls: 'ml',
+    gramas: 'g', grama: 'g', gs: 'g',
+    quilos: 'kg', quilo: 'kg', quilogramas: 'kg', quilograma: 'kg',
+    unidades: 'un', unidade: 'un', und: 'un', unds: 'un', uns: 'un',
+    litro: 'l', litros: 'l', lt: 'l', lts: 'l',
+    pacote: 'pct', pacotes: 'pct', pcts: 'pct',
+    caixa: 'cx', caixas: 'cx',
+    fardo: 'fd', fardos: 'fd',
+};
+const STOP_WORDS = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'e', 'para', 'por', 'no', 'na']);
+
 const normalizeSearchTerm = (term: string): string => {
     return term
         .toLowerCase()
@@ -8,7 +20,12 @@ const normalizeSearchTerm = (term: string): string => {
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9\s]/g, '')
         .replace(/\s+/g, ' ')
-        .trim();
+        .trim()
+        .split(' ')
+        .filter(w => !STOP_WORDS.has(w) && w.length > 0)
+        .map(w => UNIT_MAP[w] || w)
+        .sort()
+        .join(' ');
 };
 
 export default defineEventHandler(async (event) => {

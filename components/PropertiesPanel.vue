@@ -5,6 +5,7 @@ import {
   Bold, Italic, Underline,
   Type, Palette, Layers, Box,
   Plus, Minus, Trash2, MousePointer2,
+  Copy,
   FlipHorizontal, FlipVertical,
   Group, Ungroup,
   ArrowRightFromLine, ArrowDownFromLine,
@@ -164,6 +165,10 @@ const isLikelyProductZone = (obj: any): boolean => {
   if (!obj) return false
   if (obj.isGridZone || obj.isProductZone) return true
   if (obj.name === 'gridZone' || obj.name === 'productZoneContainer') return true
+  // CRITICAL: Detect zones via zone-specific custom properties that are ALWAYS preserved
+  // in both CANVAS_CUSTOM_PROPS (serialization) and snapshotForPropertiesPanel (reactivity).
+  // This catches legacy arts where flags may not have been serialized originally.
+  if (typeof obj._zonePadding === 'number' && typeof obj._zoneWidth === 'number' && typeof obj._zoneHeight === 'number') return true
   if (obj.type !== 'group') return false
   // Check for zone rect with dashed stroke
   const objs = typeof obj.getObjects === 'function' ? obj.getObjects() : (obj._objects || [])
@@ -226,6 +231,11 @@ const isLineLike = computed(() => {
   return t === 'line'
 })
 
+const isLocked = computed(() => {
+  const o: any = props.selectedObject
+  return !!(o && (o.lockMovementX || o.lockMovementY || o.lockScalingX || o.lockScalingY || o.lockRotation))
+})
+
 const clipContentEnabled = computed(() => {
   const v = props.selectedObject?.clipContent
   if (v === false || v === 0 || v === 'false' || v === '0') return false
@@ -258,7 +268,7 @@ const applyGlobalStyle = (prop: string) => {
 const activeTab = computed(() => props.activeMode || 'design') // design | prototype
 
 // Collapsible sections state (Figma-inspired)
-const collapsedSections = ref<Set<string>>(new Set(['effects', 'export', 'prototype-info', 'corner-radius'])) // Start some collapsed
+const collapsedSections = ref<Set<string>>(new Set(['export', 'prototype-info', 'corner-radius'])) // Start some collapsed
 
 const toggleSection = (sectionId: string) => {
   const newSet = new Set(collapsedSections.value)
@@ -276,10 +286,83 @@ const showFillColorPicker = ref(false)
 const showStrokeColorPicker = ref(false)
 const showPageColorPicker = ref(false)
 const showStickerOutlineColorPicker = ref(false)
+const showShadowColorPicker = ref(false)
 const fillColorPickerRef = ref<HTMLElement | null>(null)
 const strokeColorPickerRef = ref<HTMLElement | null>(null)
 const pageColorPickerRef = ref<HTMLElement | null>(null)
 const stickerOutlineColorPickerRef = ref<HTMLElement | null>(null)
+const shadowColorPickerRef = ref<HTMLElement | null>(null)
+
+const clamp01 = (n: any) => Math.min(1, Math.max(0, Number(n ?? 0)))
+const parseColorToRgba = (input: any) => {
+  const s = String(input ?? '').trim()
+  const m = /rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+)\s*)?\)/i.exec(s)
+  if (m) {
+    return {
+      r: Math.round(Number(m[1] || 0)),
+      g: Math.round(Number(m[2] || 0)),
+      b: Math.round(Number(m[3] || 0)),
+      a: clamp01(m[4] ?? 1)
+    }
+  }
+  if (s.startsWith('#') && (s.length === 7 || s.length === 4)) {
+    const hex = s.length === 4 ? `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}` : s
+    return {
+      r: parseInt(hex.slice(1, 3), 16),
+      g: parseInt(hex.slice(3, 5), 16),
+      b: parseInt(hex.slice(5, 7), 16),
+      a: 1
+    }
+  }
+  // fallback: default black
+  return { r: 0, g: 0, b: 0, a: 0.5 }
+}
+const rgbToHex = (r: number, g: number, b: number) => {
+  const to = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
+  return `#${to(r)}${to(g)}${to(b)}`.toUpperCase()
+}
+const rgbaString = (r: number, g: number, b: number, a: number) => `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${clamp01(a)})`
+
+const selectedShadow = computed(() => (props.selectedObject as any)?.shadow || null)
+const shadowEnabled = computed(() => !!selectedShadow.value)
+const shadowRgba = computed(() => parseColorToRgba(selectedShadow.value?.color || 'rgba(0,0,0,0.5)'))
+const shadowHex = computed(() => rgbToHex(shadowRgba.value.r, shadowRgba.value.g, shadowRgba.value.b))
+const shadowOpacity = computed(() => shadowRgba.value.a)
+const shadowType = computed<'drop' | 'glow'>(() => {
+  const sx = Number(selectedShadow.value?.offsetX || 0)
+  const sy = Number(selectedShadow.value?.offsetY || 0)
+  return (Math.abs(sx) + Math.abs(sy)) === 0 ? 'glow' : 'drop'
+})
+
+const filtersList = computed<any[]>(() => {
+  const f = getVal('filters', [])
+  return Array.isArray(f) ? f : []
+})
+const getFilter = (type: string) => filtersList.value.find((f: any) => f?.type === type)
+const filterBrightness = computed(() => Number(getFilter('Brightness')?.brightness || 0))
+const filterContrast = computed(() => Number(getFilter('Contrast')?.contrast || 0))
+const filterSaturation = computed(() => Number(getFilter('Saturation')?.saturation || 0))
+const filterHue = computed(() => Number(getFilter('HueRotation')?.rotation || 0))
+const filterBlurPx = computed(() => Math.round(Number(getFilter('Blur')?.blur || 0) * 20))
+const filterGrayscale = computed(() => !!getFilter('Grayscale'))
+const filterSepia = computed(() => !!getFilter('Sepia'))
+const filterInvert = computed(() => !!getFilter('Invert'))
+
+const effectsCount = computed(() => {
+  let n = 0
+  if (shadowEnabled.value) n++
+  if (isImage.value) {
+    if (filterBlurPx.value > 0) n++
+    if (filterBrightness.value !== 0) n++
+    if (filterContrast.value !== 0) n++
+    if (filterSaturation.value !== 0) n++
+    if (filterHue.value !== 0) n++
+    if (filterGrayscale.value) n++
+    if (filterSepia.value) n++
+    if (filterInvert.value) n++
+  }
+  return n
+})
 
 // Track which input is currently focused to prevent value override during typing
 const focusedInput = ref<string | null>(null)
@@ -405,15 +488,18 @@ const strokeEnabled = computed(() => {
   return !isTransparentColor(s) && w > 0
 })
 
-const stickerOutlineEnabled = computed(() => {
-  return !!(props.selectedObject as any)?.__stickerOutlineEnabled
-})
-const stickerOutlineWidth = computed(() => {
-  return Number((props.selectedObject as any)?.__stickerOutlineWidth) || 4
-})
-const stickerOutlineColor = computed(() => {
-  return (props.selectedObject as any)?.__stickerOutlineColor || '#FFFFFF'
-})
+	const stickerOutlineEnabled = computed(() => {
+	  return !!(props.selectedObject as any)?.__stickerOutlineEnabled
+	})
+	const stickerOutlineMode = computed(() => {
+	  return (props.selectedObject as any)?.__stickerOutlineMode === 'inside' ? 'inside' : 'outside'
+	})
+	const stickerOutlineWidth = computed(() => {
+	  return Number((props.selectedObject as any)?.__stickerOutlineWidth) || 4
+	})
+	const stickerOutlineColor = computed(() => {
+	  return (props.selectedObject as any)?.__stickerOutlineColor || '#FFFFFF'
+	})
 const stickerOutlineOpacity = computed(() => {
   const v = (props.selectedObject as any)?.__stickerOutlineOpacity
   return v != null ? Number(v) : 1
@@ -536,13 +622,20 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </button>
           <button
             class="w-6 h-6 rounded flex items-center justify-center transition-all"
-            :class="getVal('lockMovement', false) ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-white hover:bg-white/10'"
-            @click="$emit('update-property', 'lockMovement', !getVal('lockMovement', false))"
-            :title="getVal('lockMovement', false) ? 'Desbloquear movimento' : 'Bloquear movimento'"
+            :class="isLocked ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-white hover:bg-white/10'"
+            @click="$emit('update-property', 'lockMovement', !isLocked)"
+            :title="isLocked ? 'Desbloquear movimento' : 'Bloquear movimento'"
           >
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
+          </button>
+          <button
+            class="w-6 h-6 rounded flex items-center justify-center transition-all text-zinc-500 hover:text-white hover:bg-white/10"
+            @click="$emit('action', 'duplicate')"
+            title="Duplicar"
+          >
+            <Copy class="w-3.5 h-3.5" />
           </button>
         </div>
         <button
@@ -954,53 +1047,8 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
       </div>
 
-      <!-- Filtros de Imagem / Remover Fundo -->
-      <div v-if="canRemoveImageBg" class="px-3 py-2 border-b border-white/5 space-y-1.5">
-          <div class="flex items-center justify-between">
-              <div class="flex items-center gap-1.5">
-                <svg class="w-3 h-3 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                <span class="text-[10px] font-bold text-pink-400 uppercase tracking-widest">Filtros de Imagem</span>
-              </div>
-              <div class="flex items-center gap-1">
-                <button
-                    type="button"
-                    @click="$emit('action', 'ai-edit-image')"
-                    class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
-                    title="Editar imagem com IA"
-                >
-                    <Sparkles class="w-2.5 h-2.5" />
-                    IA
-                </button>
-                <button
-                    type="button"
-                    @click="$emit('action', 'remove-image-bg')"
-                    class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
-                    title="Remover fundo da imagem"
-                >
-                    <Scan class="w-2.5 h-2.5" />
-                    Fundo
-                </button>
-              </div>
-          </div>
-
-          <div v-if="isImage" class="space-y-1">
-              <div class="flex justify-between items-center"><span class="text-[9px] text-zinc-500">Brilho</span><span class="text-[9px] text-zinc-400">{{ (getVal('filters', []).find((f: any) => f.type === 'Brightness')?.brightness || 0).toFixed(2) }}</span></div>
-              <input type="range" min="-1" max="1" step="0.05" :value="getVal('filters', []).find((f: any) => f.type === 'Brightness')?.brightness || 0" @input="e => $emit('update-property', 'filter-brightness', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
-          </div>
-
-          <div v-if="isImage" class="space-y-1">
-              <div class="flex justify-between items-center"><span class="text-[9px] text-zinc-500">Contraste</span><span class="text-[9px] text-zinc-400">{{ (getVal('filters', []).find((f: any) => f.type === 'Contrast')?.contrast || 0).toFixed(2) }}</span></div>
-              <input type="range" min="-1" max="1" step="0.05" :value="getVal('filters', []).find((f: any) => f.type === 'Contrast')?.contrast || 0" @input="e => $emit('update-property', 'filter-contrast', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
-          </div>
-          
-          <div v-if="isImage" class="space-y-1">
-              <div class="flex justify-between items-center"><span class="text-[9px] text-zinc-500">Saturação</span><span class="text-[9px] text-zinc-400">{{ (getVal('filters', []).find((f: any) => f.type === 'Saturation')?.saturation || 0).toFixed(2) }}</span></div>
-              <input type="range" min="-1" max="1" step="0.05" :value="getVal('filters', []).find((f: any) => f.type === 'Saturation')?.saturation || 0" @input="e => $emit('update-property', 'filter-saturation', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
-          </div>
-      </div>
-
-      <!-- Layout Automático -->
-      <div v-if="isGroup" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+	      <!-- Layout Automático -->
+	      <div v-if="isGroup" class="px-3 py-2 border-b border-white/5 space-y-1.5">
           <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
                 <svg class="w-3 h-3 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
@@ -1051,11 +1099,35 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <span class="text-[9px] text-yellow-300">Imagem sem transparência — o contorno será retangular.</span>
           </div>
 
-          <div :class="!stickerOutlineEnabled ? 'opacity-50 pointer-events-none' : ''" class="space-y-1.5">
-              <!-- Cor + Espessura -->
-              <div class="flex items-center gap-1.5">
-                  <div
-                    ref="stickerOutlineColorPickerRef"
+	          <div :class="!stickerOutlineEnabled ? 'opacity-50 pointer-events-none' : ''" class="space-y-1.5">
+	              <!-- Posição (Interno / Externo) -->
+	              <div class="flex items-center justify-between gap-2">
+	                  <span class="text-[9px] text-zinc-500">Posição</span>
+	                  <div class="flex items-center bg-[#2a2a2a] border border-white/10 rounded overflow-hidden h-6">
+	                      <button
+	                        type="button"
+	                        class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
+	                        :class="stickerOutlineMode === 'outside' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400 hover:text-white'"
+	                        @click="$emit('update-property', 'stickerOutlineMode', 'outside')"
+	                      >
+	                        Externo
+	                      </button>
+	                      <div class="w-px h-full bg-white/10"></div>
+	                      <button
+	                        type="button"
+	                        class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
+	                        :class="stickerOutlineMode === 'inside' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400 hover:text-white'"
+	                        @click="$emit('update-property', 'stickerOutlineMode', 'inside')"
+	                      >
+	                        Interno
+	                      </button>
+	                  </div>
+	              </div>
+
+	              <!-- Cor + Espessura -->
+	              <div class="flex items-center gap-1.5">
+	                  <div
+	                    ref="stickerOutlineColorPickerRef"
                     class="relative"
                   >
                     <div
@@ -1275,52 +1347,265 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
       </div>
 
-      <!-- Efeitos (Sombra e Desfoque) -->
-      <div class="px-3 py-2 border-b border-white/5 space-y-1.5">
-          <div class="flex items-center justify-between group">
-              <div class="flex items-center gap-1.5">
-                <Sparkles class="w-3 h-3 text-zinc-400" />
-                <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Efeitos</span>
-              </div>
-              <div class="flex gap-0.5">
-                <button @click="$emit('update-property', 'shadow', {color: 'rgba(0,0,0,0.5)', blur: 10, x: 0, y: 4})" class="hover:text-white text-zinc-500" title="Adicionar sombra"><Plus class="w-3 h-3" /></button>
-                <button @click="$emit('update-property', 'blur', 10)" class="hover:text-white text-zinc-500" title="Adicionar desfoque"><Cloud class="w-3 h-3" /></button>
-              </div>
-          </div>
-          
-          <!-- Sombra -->
-          <div v-if="selectedObject.shadow" class="space-y-1 group">
-              <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-1.5">
-                      <div class="w-3 h-3 rounded-full bg-yellow-500/20 text-yellow-500 flex items-center justify-center text-[7px]">S</div>
-                      <span class="text-[11px] text-white">Sombra</span>
-                  </div>
-                  <button @click="$emit('update-property', 'shadow', null)" class="opacity-0 group-hover:opacity-100 hover:text-white text-zinc-500" title="Remover sombra"><Minus class="w-3 h-3" /></button>
-              </div>
-              <div class="grid grid-cols-3 gap-1.5 pl-4">
-                  <div class="flex items-center gap-0.5"><span class="text-[8px] text-zinc-500">X</span><input type="number" :value="selectedObject.shadow.offsetX" @input="e => $emit('update-property', 'shadow-x', Number((e.target as any).value))" class="w-full bg-transparent text-[11px] border-b border-zinc-700 text-white focus:outline-none" /></div>
-                  <div class="flex items-center gap-0.5"><span class="text-[8px] text-zinc-500">Y</span><input type="number" :value="selectedObject.shadow.offsetY" @input="e => $emit('update-property', 'shadow-y', Number((e.target as any).value))" class="w-full bg-transparent text-[11px] border-b border-zinc-700 text-white focus:outline-none" /></div>
-                  <div class="flex items-center gap-0.5"><span class="text-[8px] text-zinc-500" title="Desfoque">D</span><input type="number" :value="selectedObject.shadow.blur" @input="e => $emit('update-property', 'shadow-blur', Number((e.target as any).value))" class="w-full bg-transparent text-[11px] border-b border-zinc-700 text-white focus:outline-none" /></div>
-              </div>
-          </div>
+	      <!-- Efeitos (Geral / Texto / Imagem) -->
+	      <div class="border-b border-white/5">
+	          <button
+	            type="button"
+	            class="w-full px-3 py-2 flex items-center justify-between hover:bg-white/5 transition-colors"
+	            @click="toggleSection('effects')"
+	          >
+	              <div class="flex items-center gap-2">
+	                <Sparkles class="w-3 h-3 text-zinc-300" />
+	                <span class="text-[10px] font-bold text-zinc-200 uppercase tracking-widest">Efeitos</span>
+	                <span v-if="effectsCount > 0" class="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/20">
+	                  {{ effectsCount }}
+	                </span>
+	              </div>
+	              <div class="flex items-center gap-1">
+	                <button
+	                  v-if="effectsCount > 0"
+	                  type="button"
+	                  class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+	                  @click.stop="$emit('update-property', 'effects-reset', true)"
+	                  title="Resetar efeitos"
+	                >
+	                  Reset
+	                </button>
+	                <ChevronsDown v-if="isSectionCollapsed('effects')" class="w-3.5 h-3.5 text-zinc-500" />
+	                <ChevronsUp v-else class="w-3.5 h-3.5 text-zinc-500" />
+	              </div>
+	          </button>
 
-          <!-- Desfoque -->
-          <div v-if="selectedObject.blur" class="space-y-1 group">
-              <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-1.5">
-                      <div class="w-3 h-3 rounded-full bg-violet-500/20 text-violet-500 flex items-center justify-center text-[7px]">D</div>
-                      <span class="text-[11px] text-white">Desfoque</span>
-                  </div>
-                  <button @click="$emit('update-property', 'blur', null)" class="opacity-0 group-hover:opacity-100 hover:text-white text-zinc-500" title="Remover desfoque"><Minus class="w-3 h-3" /></button>
-              </div>
-              <div class="grid grid-cols-3 gap-1.5 pl-4">
-                  <div class="flex items-center gap-0.5 col-span-2">
-                      <span class="text-[8px] text-zinc-500">Raio</span>
-                      <input type="number" :value="selectedObject.blur" @input="e => $emit('update-property', 'blur', Number((e.target as any).value))" class="w-full bg-transparent text-[11px] border-b border-zinc-700 text-white focus:outline-none" />
-                  </div>
-              </div>
-          </div>
-      </div>
+	          <div v-show="!isSectionCollapsed('effects')" class="px-3 pb-3 space-y-3">
+	              <!-- Shadow / Glow -->
+	              <div class="bg-[#1e1e1e] border border-white/10 rounded-lg p-2 space-y-2">
+	                  <div class="flex items-center justify-between">
+	                      <div class="flex items-center gap-2">
+	                          <Zap class="w-3 h-3 text-amber-300" />
+	                          <span class="text-[10px] font-bold text-amber-200 uppercase tracking-widest">Sombra</span>
+	                          <span v-if="shadowType === 'glow'" class="text-[9px] text-amber-300/80">(Glow)</span>
+	                      </div>
+	                      <button
+	                        type="button"
+	                        class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
+	                        @click="$emit('update-property', 'shadow', shadowEnabled ? null : { color: 'rgba(0,0,0,0.35)', blur: 12, x: 0, y: 6 })"
+	                      >
+	                        <span :class="shadowEnabled ? 'text-green-400' : 'text-red-400'">{{ shadowEnabled ? 'ATIVO' : 'INATIVO' }}</span>
+	                      </button>
+	                  </div>
+
+	                  <div :class="!shadowEnabled ? 'opacity-50 pointer-events-none' : ''" class="space-y-2">
+	                      <div class="flex items-center justify-between gap-2">
+	                          <span class="text-[9px] text-zinc-500">Tipo</span>
+	                          <div class="flex items-center bg-[#2a2a2a] border border-white/10 rounded overflow-hidden h-6">
+	                              <button
+	                                type="button"
+	                                class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
+	                                :class="shadowType === 'drop' ? 'bg-amber-500/20 text-amber-200' : 'text-zinc-400 hover:text-white'"
+	                                @click="$emit('update-property', 'shadow-x', Number(selectedShadow?.offsetX || 0)); $emit('update-property', 'shadow-y', 6)"
+	                              >
+	                                Sombra
+	                              </button>
+	                              <div class="w-px h-full bg-white/10"></div>
+	                              <button
+	                                type="button"
+	                                class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
+	                                :class="shadowType === 'glow' ? 'bg-amber-500/20 text-amber-200' : 'text-zinc-400 hover:text-white'"
+	                                @click="$emit('update-property', 'shadow-x', 0); $emit('update-property', 'shadow-y', 0)"
+	                              >
+	                                Glow
+	                              </button>
+	                          </div>
+	                      </div>
+
+	                      <div class="flex items-center gap-1.5">
+	                          <div ref="shadowColorPickerRef" class="relative">
+	                              <div
+	                                class="w-5 h-5 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
+	                                :style="{ backgroundColor: shadowHex }"
+	                                @click="showShadowColorPicker = true"
+	                              ></div>
+	                              <ColorPicker
+	                                :show="showShadowColorPicker"
+	                                :model-value="shadowHex"
+	                                :trigger-element="shadowColorPickerRef"
+	                                @update:show="showShadowColorPicker = $event"
+	                                @update:model-value="(val: string) => {
+	                                  const c = parseColorToRgba(val)
+	                                  $emit('update-property', 'shadow-color', rgbaString(c.r, c.g, c.b, shadowOpacity))
+	                                }"
+	                              />
+	                          </div>
+	                          <input
+	                            type="text"
+	                            :value="shadowHex.replace('#', '')"
+	                            @change="e => {
+	                              const c = parseColorToRgba('#' + (e.target as any).value.replace('#',''))
+	                              $emit('update-property', 'shadow-color', rgbaString(c.r, c.g, c.b, shadowOpacity))
+	                            }"
+	                            class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-amber-500/40 uppercase min-w-0"
+	                            maxlength="6"
+	                          />
+	                          <div class="flex items-center gap-1">
+	                              <span class="text-[9px] text-zinc-500">Op</span>
+	                              <input
+	                                type="range"
+	                                min="0"
+	                                max="1"
+	                                step="0.05"
+	                                :value="shadowOpacity"
+	                                @input="e => $emit('update-property', 'shadow-opacity', Number((e.target as any).value))"
+	                                class="w-20 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+	                                title="Opacidade"
+	                              />
+	                          </div>
+	                      </div>
+
+	                      <div class="grid grid-cols-3 gap-2">
+	                          <div class="space-y-0.5">
+	                              <div class="flex justify-between items-center">
+	                                <span class="text-[9px] text-zinc-500">X</span>
+	                                <span class="text-[9px] text-zinc-400">{{ Number(selectedShadow?.offsetX || 0) }}</span>
+	                              </div>
+	                              <input type="range" min="-50" max="50" step="1" :value="Number(selectedShadow?.offsetX || 0)" @input="e => $emit('update-property', 'shadow-x', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+	                          </div>
+	                          <div class="space-y-0.5">
+	                              <div class="flex justify-between items-center">
+	                                <span class="text-[9px] text-zinc-500">Y</span>
+	                                <span class="text-[9px] text-zinc-400">{{ Number(selectedShadow?.offsetY || 0) }}</span>
+	                              </div>
+	                              <input type="range" min="-50" max="50" step="1" :value="Number(selectedShadow?.offsetY || 0)" @input="e => $emit('update-property', 'shadow-y', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+	                          </div>
+	                          <div class="space-y-0.5">
+	                              <div class="flex justify-between items-center">
+	                                <span class="text-[9px] text-zinc-500">Blur</span>
+	                                <span class="text-[9px] text-zinc-400">{{ Number(selectedShadow?.blur || 0) }}</span>
+	                              </div>
+	                              <input type="range" min="0" max="60" step="1" :value="Number(selectedShadow?.blur || 0)" @input="e => $emit('update-property', 'shadow-blur', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+	                          </div>
+	                      </div>
+	                  </div>
+	              </div>
+
+	              <!-- Image-only effects -->
+	              <div v-if="canRemoveImageBg" class="bg-[#1e1e1e] border border-white/10 rounded-lg p-2 space-y-2">
+	                  <div class="flex items-center justify-between">
+	                      <div class="flex items-center gap-2">
+	                          <Scan class="w-3 h-3 text-pink-300" />
+	                          <span class="text-[10px] font-bold text-pink-200 uppercase tracking-widest">Imagem</span>
+	                      </div>
+	                      <div class="flex items-center gap-1">
+	                          <button
+	                            type="button"
+	                            @click="$emit('action', 'ai-edit-image')"
+	                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+	                            title="Editar imagem com IA"
+	                          >
+	                            <Sparkles class="w-2.5 h-2.5" />
+	                            IA
+	                          </button>
+	                          <button
+	                            type="button"
+	                            @click="$emit('action', 'remove-image-bg')"
+	                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+	                            title="Remover fundo da imagem"
+	                          >
+	                            Fundo
+	                          </button>
+	                      </div>
+	                  </div>
+
+	                  <div v-if="isImage" class="space-y-2">
+	                      <div class="space-y-0.5">
+	                          <div class="flex justify-between items-center">
+	                            <span class="text-[9px] text-zinc-500">Desfoque</span>
+	                            <span class="text-[9px] text-zinc-400">{{ filterBlurPx }}px</span>
+	                          </div>
+	                          <input type="range" min="0" max="20" step="1" :value="filterBlurPx" @input="e => $emit('update-property', 'filter-blur', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                      </div>
+
+	                      <div class="space-y-0.5">
+	                          <div class="flex justify-between items-center">
+	                            <span class="text-[9px] text-zinc-500">Brilho</span>
+	                            <span class="text-[9px] text-zinc-400">{{ filterBrightness.toFixed(2) }}</span>
+	                          </div>
+	                          <input type="range" min="-1" max="1" step="0.05" :value="filterBrightness" @input="e => $emit('update-property', 'filter-brightness', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                      </div>
+
+	                      <div class="space-y-0.5">
+	                          <div class="flex justify-between items-center">
+	                            <span class="text-[9px] text-zinc-500">Contraste</span>
+	                            <span class="text-[9px] text-zinc-400">{{ filterContrast.toFixed(2) }}</span>
+	                          </div>
+	                          <input type="range" min="-1" max="1" step="0.05" :value="filterContrast" @input="e => $emit('update-property', 'filter-contrast', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                      </div>
+
+	                      <div class="space-y-0.5">
+	                          <div class="flex justify-between items-center">
+	                            <span class="text-[9px] text-zinc-500">Saturação</span>
+	                            <span class="text-[9px] text-zinc-400">{{ filterSaturation.toFixed(2) }}</span>
+	                          </div>
+	                          <input type="range" min="-1" max="1" step="0.05" :value="filterSaturation" @input="e => $emit('update-property', 'filter-saturation', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                      </div>
+
+	                      <div class="space-y-0.5">
+	                          <div class="flex justify-between items-center">
+	                            <span class="text-[9px] text-zinc-500">Matiz</span>
+	                            <span class="text-[9px] text-zinc-400">{{ filterHue.toFixed(2) }}</span>
+	                          </div>
+	                          <input type="range" min="-1" max="1" step="0.05" :value="filterHue" @input="e => $emit('update-property', 'filter-hue', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                      </div>
+
+	                      <div class="grid grid-cols-3 gap-1.5">
+	                          <button type="button" class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterGrayscale ? 'bg-violet-500/20 text-violet-200 border-violet-500/30' : 'bg-[#2a2a2a] text-zinc-400 hover:text-white'" @click="$emit('update-property', 'filter-grayscale', !filterGrayscale)">P&B</button>
+	                          <button type="button" class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterSepia ? 'bg-violet-500/20 text-violet-200 border-violet-500/30' : 'bg-[#2a2a2a] text-zinc-400 hover:text-white'" @click="$emit('update-property', 'filter-sepia', !filterSepia)">Sépia</button>
+	                          <button type="button" class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterInvert ? 'bg-violet-500/20 text-violet-200 border-violet-500/30' : 'bg-[#2a2a2a] text-zinc-400 hover:text-white'" @click="$emit('update-property', 'filter-invert', !filterInvert)">Inverter</button>
+	                      </div>
+
+	                      <div class="flex justify-end">
+	                          <button
+	                            type="button"
+	                            class="text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+	                            @click="$emit('update-property', 'filters-reset', true)"
+	                            title="Resetar ajustes da imagem"
+	                          >
+	                            Reset ajustes
+	                          </button>
+	                      </div>
+	                  </div>
+
+	                  <div v-else class="text-[10px] text-zinc-500">
+	                    Selecione uma imagem para aplicar ajustes.
+	                  </div>
+	              </div>
+
+	              <!-- Text helper effects (quick access) -->
+	              <div v-if="isText" class="bg-[#1e1e1e] border border-white/10 rounded-lg p-2 space-y-2">
+	                  <div class="flex items-center gap-2">
+	                      <Type class="w-3 h-3 text-teal-300" />
+	                      <span class="text-[10px] font-bold text-teal-200 uppercase tracking-widest">Texto</span>
+	                  </div>
+	                  <div class="grid grid-cols-2 gap-1.5">
+	                      <button
+	                        type="button"
+	                        class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors bg-[#2a2a2a] text-zinc-400 hover:text-white"
+	                        @click="$emit('update-property', 'strokeEnabled', true)"
+	                        title="Ativar contorno do texto"
+	                      >
+	                        Contorno
+	                      </button>
+	                      <button
+	                        type="button"
+	                        class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors bg-[#2a2a2a] text-zinc-400 hover:text-white"
+	                        @click="$emit('update-property', 'shadow', shadowEnabled ? null : { color: 'rgba(0,0,0,0.45)', blur: 10, x: 0, y: 4 })"
+	                        title="Alternar sombra no texto"
+	                      >
+	                        Sombra
+	                      </button>
+	                  </div>
+	              </div>
+	          </div>
+	      </div>
 
       <!-- Grade Inteligente -->
       <div v-if="isSmartGroup" class="px-3 py-2 border-b border-white/5 space-y-1.5 bg-violet-500/5">

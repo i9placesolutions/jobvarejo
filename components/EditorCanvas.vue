@@ -14,6 +14,7 @@ import FigmaCropOverlay from './FigmaCropOverlay.vue'
 import { useFigmaCrop } from '~/composables/useFigmaCrop'
 import { useProductZone } from '~/composables/useProductZone'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
+import { toWasabiProxyUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
 import {
   Undo,
@@ -261,15 +262,31 @@ const patchCanvasRenderSafety = (c: any): void => {
     const origRequest = typeof c.requestRenderAll === 'function' ? c.requestRenderAll.bind(c) : null;
     const origRender = typeof c.renderAll === 'function' ? c.renderAll.bind(c) : null;
 
+    // FIX FLICKERING: Não rodar purgeInvalidRecursive em CADA render.
+    // purgeInvalidRecursive varre todos os objetos recursivamente (incluindo clipPaths),
+    // o que é pesado e causa flickering visível. Agora só roda como fallback após erro.
+    // PERFORMANCE: Cache context validity — only re-check every 500ms or after error.
+    let contextsValid = true;
+    let lastContextCheck = 0;
+    const CONTEXT_CHECK_INTERVAL = 500; // ms
+
+    const checkContextsIfNeeded = (): boolean => {
+        const now = performance.now();
+        if (contextsValid && (now - lastContextCheck) < CONTEXT_CHECK_INTERVAL) return true;
+        contextsValid = ensureFabricContexts(c);
+        lastContextCheck = now;
+        return contextsValid;
+    };
+
     if (origRequest) {
         (c as any).__origRequestRenderAll = origRequest;
         c.requestRenderAll = () => {
-            if (!ensureFabricContexts(c)) return;
-            purgeInvalidRecursive(c);
+            if (!checkContextsIfNeeded()) return;
             try {
                 return origRequest();
             } catch (e) {
-                // Try one more time after purging
+                // Render falhou — invalidar cache, purgar objetos inválidos e tentar novamente
+                contextsValid = false;
                 try {
                     purgeInvalidRecursive(c);
                 } catch {
@@ -287,12 +304,22 @@ const patchCanvasRenderSafety = (c: any): void => {
     if (origRender) {
         (c as any).__origRenderAll = origRender;
         c.renderAll = () => {
-            if (!ensureFabricContexts(c)) return;
-            purgeInvalidRecursive(c);
+            if (!checkContextsIfNeeded()) return;
             try {
                 return origRender();
             } catch {
-                // ignore
+                // Render falhou — invalidar cache, purgar e tentar novamente
+                contextsValid = false;
+                try {
+                    purgeInvalidRecursive(c);
+                } catch {
+                    // ignore
+                }
+                try {
+                    return origRender();
+                } catch {
+                    // ignore
+                }
             }
         };
     }
@@ -797,6 +824,7 @@ const ensureFramesBelowContents = () => {
     // Put frames behind everything else (Figma-like: frame is a container/background).
     const frames = list.filter((o: any) => !!o?.isFrame);
     const rest = list.filter((o: any) => !o?.isFrame);
+    console.log(`[ensureFramesBelowContents] frames=${frames.length}, rest=${rest.length}, pinnedTop=${pinnedTop.length}, total=${all.length}`);
     applyArrangedOrder(canvas.value, [...frames, ...rest, ...pinnedTop]);
 };
 
@@ -926,6 +954,17 @@ const syncObjectFrameClip = (obj: any) => {
     if (!canvas.value || !obj) return;
     if ((obj as any).excludeFromExport) return;
 
+    // Product cards should NEVER be clipped by frames — they sit on top of frames
+    if ((obj as any).isSmartObject || (obj as any).isProductCard) {
+        if (obj.clipPath) {
+            obj.set('clipPath', null);
+            delete (obj as any)._frameClipOwner;
+            obj.set('dirty', true);
+            obj.setCoords();
+        }
+        return;
+    }
+
     const frameId = (obj as any).parentFrameId as (string | undefined);
     const frame = frameId ? getFrameById(frameId) : null;
 
@@ -965,6 +1004,41 @@ const syncObjectFrameClip = (obj: any) => {
     const clipScaleY = (frame.scaleY || 1) / (obj.scaleY || 1);
     const clipAngle = (frame.angle || 0) - objAngle;
 
+    const hasCornerRadii = !!(frame.cornerRadii && typeof frame.cornerRadii === 'object');
+    const wantPathClip = hasCornerRadii;
+
+    // FIX FLICKERING: Reutilizar o clipPath existente quando possível em vez de criar um novo.
+    // Criar um novo clipPath a cada chamada causa um "flash" porque o Fabric descarta o antigo
+    // e o objeto fica momentaneamente sem clipping durante o re-render.
+    const existingClip = obj.clipPath;
+    const existingOwner = (obj as any)._frameClipOwner;
+    const canReuseClip = existingClip && existingOwner === frame._customId &&
+        ((wantPathClip && existingClip.type === 'path') || (!wantPathClip && existingClip.type === 'rect'));
+
+    if (canReuseClip) {
+        // Apenas atualizar posição/escala/ângulo do clipPath existente (sem recriar)
+        const clipProps: any = {
+            left: dxLocal,
+            top: dyLocal,
+            scaleX: clipScaleX,
+            scaleY: clipScaleY,
+            angle: clipAngle,
+        };
+        if (!wantPathClip) {
+            clipProps.width = frame.width;
+            clipProps.height = frame.height;
+            clipProps.rx = frame.rx ?? 0;
+            clipProps.ry = frame.ry ?? 0;
+        }
+        existingClip.set(clipProps);
+        if (typeof existingClip.setCoords === 'function') existingClip.setCoords();
+        existingClip.dirty = true;
+        obj.set('dirty', true);
+        obj.setCoords();
+        return;
+    }
+
+    // Criar novo clipPath apenas quando necessário (primeiro clip ou troca de frame/tipo)
     const kRectLocal = 1 - 0.5522847498;
     const clampR = (n: any, w: number, h: number) => {
         const v = Math.max(0, Number(n || 0));
@@ -993,9 +1067,6 @@ const syncObjectFrameClip = (obj: any) => {
         ].filter(Boolean);
         return parts.join(' ');
     };
-
-    const hasCornerRadii = !!(frame.cornerRadii && typeof frame.cornerRadii === 'object');
-    const wantPathClip = hasCornerRadii;
 
     const clip = wantPathClip
         ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
@@ -1040,13 +1111,6 @@ const syncObjectFrameClip = (obj: any) => {
     (obj as any)._frameClipOwner = frame._customId;
     obj.set('dirty', true);
     obj.setCoords();
-
-    // Forçar re-render
-    canvas.value.requestRenderAll();
-
-    // Garantir que objeto dentro de frame nunca fique travado
-    obj.set('lockMovementX', false);
-    obj.set('lockMovementY', false);
 };
 
 const syncFrameClips = (frame: any) => {
@@ -1100,6 +1164,8 @@ const syncFrameClips = (frame: any) => {
 
 const maybeReparentToFrameOnDrop = (obj: any) => {
     if (!canvas.value || !obj || (obj as any).excludeFromExport) return;
+    // Product cards should NOT be parented to frames
+    if ((obj as any).isSmartObject || (obj as any).isProductCard) return;
     const frame = findFrameUnderObject(obj);
     // If dropped outside of any frame, clear parenting so clipPath is removed.
     if (!frame || !frame._customId) {
@@ -1280,12 +1346,26 @@ const imageHasTransparency = (img: HTMLImageElement | HTMLCanvasElement): boolea
     } catch { return false; }
 };
 
-/** Generate the dilated outline canvas from source alpha. */
+/**
+ * Generate a professional sticker outline canvas from source alpha.
+ *
+ * KEY TECHNIQUES for smooth, jagged-free outlines:
+ *   1. Supersampling 2x — compute distance field at double resolution, then
+ *      downsample with bilinear filtering for natural anti-aliasing.
+ *   2. Alpha-weighted initial distances — instead of a binary inside/outside mask,
+ *      use the actual alpha values (0-1) as sub-pixel offsets in the EDT.
+ *      This preserves the anti-aliasing of the source image edges.
+ *   3. Quintic smoothstep (6t⁵ − 15t⁴ + 10t³) — smoother C² transition
+ *      vs the cubic hermite (3t² − 2t³) used before.
+ *   4. Wider soft edge — the fade-out zone is proportional to the outline
+ *      width, giving thick outlines a softer, more natural look.
+ */
 const generateStickerOutlineCanvas = (
     img: HTMLImageElement | HTMLCanvasElement,
     outlineWidth: number,
     outlineColor: string,
-    outlineOpacity: number
+    outlineOpacity: number,
+    outlineMode: 'outside' | 'inside' = 'outside'
 ): HTMLCanvasElement | null => {
     try {
         // If the image element isn't ready yet, return null and let the caller retry.
@@ -1300,92 +1380,257 @@ const generateStickerOutlineCanvas = (
         const srcH = (img as any).naturalHeight || img.height;
         if (!srcW || !srcH || outlineWidth <= 0) return null;
 
-        const pad = Math.ceil(outlineWidth);
-        const cw = srcW + pad * 2;
-        const ch = srcH + pad * 2;
+        // ── Supersampling factor ──────────────────────────────────────────
+        // 2x removes visible stair-stepping; fall back to 1x for very large
+        // images to keep memory under control (< 16 M pixels in the grid).
+        let ssScale = 2;
+        const ssW = srcW * ssScale;
+        const ssH = srcH * ssScale;
+        const wSs = outlineWidth * ssScale;
+        const softSs = Math.max(1.5 * ssScale, wSs * 0.35);
+        let padSs = Math.ceil(wSs + softSs + ssScale * 3);
+        let gridW = ssW + padSs * 2;
+        let gridH = ssH + padSs * 2;
+        if (gridW * gridH > 16_000_000) {
+            // Image too large for 2x — fall back to 1x supersampling
+            ssScale = 1;
+        }
 
-        // 1. Draw source image to extract alpha
+        // Recalculate dimensions with final ssScale
+        const finalSsW = srcW * ssScale;
+        const finalSsH = srcH * ssScale;
+        const wScaled = outlineWidth * ssScale;
+        const softScaled = Math.max(1.5 * ssScale, wScaled * 0.35);
+        padSs = Math.ceil(wScaled + softScaled + ssScale * 3);
+        const cw = finalSsW + padSs * 2;
+        const ch = finalSsH + padSs * 2;
+        const size = cw * ch;
+
+        // ── 1) Draw source at supersampled resolution ─────────────────────
         const srcCanvas = document.createElement('canvas');
-        srcCanvas.width = srcW;
-        srcCanvas.height = srcH;
+        srcCanvas.width = finalSsW;
+        srcCanvas.height = finalSsH;
         const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
         if (!srcCtx) return null;
-        srcCtx.drawImage(img, 0, 0, srcW, srcH);
-        const srcData = srcCtx.getImageData(0, 0, srcW, srcH);
+        srcCtx.imageSmoothingEnabled = true;
+        srcCtx.imageSmoothingQuality = 'high';
+        srcCtx.drawImage(img, 0, 0, finalSsW, finalSsH);
+        const srcData = srcCtx.getImageData(0, 0, finalSsW, finalSsH).data;
 
-        // 2. Create binary alpha mask (1 = opaque, 0 = transparent)
-        const srcAlpha = new Uint8Array(srcW * srcH);
-        for (let i = 0; i < srcAlpha.length; i++) {
-            srcAlpha[i] = srcData.data[i * 4 + 3]! > 10 ? 1 : 0;
-        }
-
-        // 3. Dilate alpha mask by outlineWidth using distance-based approach
-        const dilated = new Uint8Array(cw * ch);
-        const r = Math.ceil(outlineWidth);
-        const r2 = outlineWidth * outlineWidth;
-        for (let dy = 0; dy < ch; dy++) {
-            for (let dx = 0; dx < cw; dx++) {
-                // Check if any source pixel within radius has alpha
-                const sx0 = dx - pad;
-                const sy0 = dy - pad;
-                let found = false;
-                const jMin = Math.max(0, sy0 - r);
-                const jMax = Math.min(srcH - 1, sy0 + r);
-                const iMin = Math.max(0, sx0 - r);
-                const iMax = Math.min(srcW - 1, sx0 + r);
-                for (let j = jMin; j <= jMax && !found; j++) {
-                    for (let i = iMin; i <= iMax && !found; i++) {
-                        if (srcAlpha[j * srcW + i]) {
-                            const ddx = i - sx0;
-                            const ddy = j - sy0;
-                            if (ddx * ddx + ddy * ddy <= r2) {
-                                found = true;
-                            }
-                        }
-                    }
-                }
-                dilated[dy * cw + dx] = found ? 1 : 0;
+        // ── 2) Build alpha map (float 0–1) preserving AA edge data ────────
+        const alphaMap = new Float32Array(size);
+        for (let y = 0; y < finalSsH; y++) {
+            const srcRow = y * finalSsW;
+            const dstRow = (y + padSs) * cw;
+            for (let x = 0; x < finalSsW; x++) {
+                alphaMap[dstRow + (x + padSs)] = (srcData[(srcRow + x) * 4 + 3] as number) / 255;
             }
         }
 
-        // 4. Subtract original alpha from dilated to get only the outline ring
-        for (let sy = 0; sy < srcH; sy++) {
-            for (let sx = 0; sx < srcW; sx++) {
-                if (srcAlpha[sy * srcW + sx]) {
-                    dilated[(sy + pad) * cw + (sx + pad)] = 0;
-                }
-            }
+	        // `inside`: any non-zero alpha counts as "inside" so the outline never bleeds
+	        // through anti-aliased edges (alpha=1 is 1/255 ≈ 0.00392).
+	        const inside = new Uint8Array(size);
+	        for (let i = 0; i < size; i++) {
+	            if (alphaMap[i]! > 0) inside[i] = 1;
+	        }
+
+	        // `barrier`: a stronger mask for flood-fill so the "outside" region can't leak
+	        // into internal holes through tiny AA gaps. We dilate by 1px to seal.
+	        const barrier = new Uint8Array(size);
+	        const barrierThreshold = 16 / 255; // ~0.0627
+	        for (let i = 0; i < size; i++) {
+	            if (alphaMap[i]! >= barrierThreshold) barrier[i] = 1;
+	        }
+	        // 1px dilation (8-neighborhood)
+	        const barrierDilated = new Uint8Array(size);
+	        for (let i = 0; i < size; i++) {
+	            if (!barrier[i]) continue;
+	            barrierDilated[i] = 1;
+	            const x = i % cw;
+	            const y = (i / cw) | 0;
+	            for (let dy = -1; dy <= 1; dy++) {
+	                const yy = y + dy;
+	                if (yy < 0 || yy >= ch) continue;
+	                const row = yy * cw;
+	                for (let dx = -1; dx <= 1; dx++) {
+	                    const xx = x + dx;
+	                    if (xx < 0 || xx >= cw) continue;
+	                    barrierDilated[row + xx] = 1;
+	                }
+	            }
+	        }
+
+        // ── 3) Flood-fill external background ─────────────────────────────
+        // Prevents outline from appearing inside internal "holes" (professional sticker style).
+	        const outside = new Uint8Array(size);
+	        const queue = new Int32Array(size);
+	        let qh = 0;
+	        let qt = 0;
+	        const tryEnqueue = (idx: number) => {
+	            if (idx < 0 || idx >= size || outside[idx] || barrierDilated[idx]) return;
+	            outside[idx] = 1;
+	            queue[qt++] = idx;
+	        };
+        for (let x = 0; x < cw; x++) { tryEnqueue(x); tryEnqueue((ch - 1) * cw + x); }
+        for (let y = 1; y < ch - 1; y++) { tryEnqueue(y * cw); tryEnqueue(y * cw + cw - 1); }
+        while (qh < qt) {
+            const idx = queue[qh++]!;
+            const x = idx % cw;
+            const y = (idx / cw) | 0;
+            if (x > 0) tryEnqueue(idx - 1);
+            if (x < cw - 1) tryEnqueue(idx + 1);
+            if (y > 0) tryEnqueue(idx - cw);
+            if (y < ch - 1) tryEnqueue(idx + cw);
         }
 
-        // 5. Render outline onto final canvas
+        // ── 4) Euclidean Distance Transform (EDT) ─────────────────────────
+        // Alpha-weighted initial distances: fully opaque → 0, semi-transparent
+        // edge → small sub-pixel offset, fully transparent → INF.
+        const INF = 1e20;
+        const maxN = Math.max(cw, ch);
+        const f = new Float64Array(maxN);
+        const d = new Float64Array(maxN);
+        const v = new Int32Array(maxN);
+        const z = new Float64Array(maxN + 1);
+
+        const edt1d = (n: number) => {
+            let k = 0;
+            v[0] = 0;
+            z[0] = -INF;
+            z[1] = INF;
+            for (let q = 1; q < n; q++) {
+                let s = ((f[q]! + q * q) - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * (q - v[k]!));
+                while (k > 0 && s <= z[k]!) {
+                    k--;
+                    s = ((f[q]! + q * q) - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * (q - v[k]!));
+                }
+                k++;
+                v[k] = q;
+                z[k] = s;
+                z[k + 1] = INF;
+            }
+            k = 0;
+            for (let q = 0; q < n; q++) {
+                while (z[k + 1]! < q) k++;
+                const dx = q - v[k]!;
+                d[q] = dx * dx + f[v[k]!]!;
+            }
+        };
+
+        const computeDistSq = (initFn: (idx: number) => number) => {
+            // Row pass
+            const rowDT = new Float32Array(size);
+            for (let y = 0; y < ch; y++) {
+                const row = y * cw;
+                for (let x = 0; x < cw; x++) f[x] = initFn(row + x);
+                edt1d(cw);
+                for (let x = 0; x < cw; x++) rowDT[row + x] = d[x] as number;
+            }
+            // Column pass
+            const distSq = new Float32Array(size);
+            for (let x = 0; x < cw; x++) {
+                for (let y = 0; y < ch; y++) f[y] = rowDT[y * cw + x] as number;
+                edt1d(ch);
+                for (let y = 0; y < ch; y++) distSq[y * cw + x] = d[y] as number;
+            }
+            return distSq;
+        };
+
+        // Distance to nearest "inside" — alpha-weighted for sub-pixel accuracy.
+        const distSqToInside = computeDistSq((idx) => {
+            const a = alphaMap[idx]!;
+            if (a >= 0.99) return 0;
+            if (a > 0.01) return (1 - a) * (1 - a); // sub-pixel offset proportional to transparency
+            return INF;
+        });
+
+        // Distance to nearest "outside-connected" pixel (for inside-mode outline).
+        const distSqToOutside = outlineMode === 'inside'
+            ? computeDistSq((idx) => outside[idx] ? 0 : INF)
+            : null;
+
+        // ── 5) Render outline at supersampled resolution ──────────────────
+        const ssOutCanvas = document.createElement('canvas');
+        ssOutCanvas.width = cw;
+        ssOutCanvas.height = ch;
+        const ssOutCtx = ssOutCanvas.getContext('2d');
+        if (!ssOutCtx) return null;
+
+        const outImgData = ssOutCtx.createImageData(cw, ch);
+
+        // Parse outline color via a 1×1 canvas (supports any CSS color string).
+        const tmpC = document.createElement('canvas');
+        tmpC.width = 1;
+        tmpC.height = 1;
+        const tmpCtx = tmpC.getContext('2d')!;
+        tmpCtx.fillStyle = outlineColor || '#000000';
+        tmpCtx.fillRect(0, 0, 1, 1);
+        const cd = tmpCtx.getImageData(0, 0, 1, 1).data;
+        const cr = cd[0] as number;
+        const cg = cd[1] as number;
+        const cb = cd[2] as number;
+        const baseAlpha = Math.min(1, Math.max(0, outlineOpacity));
+
+        const maxDist = wScaled + softScaled;
+        const maxDistSq = maxDist * maxDist;
+
+        for (let i = 0; i < size; i++) {
+            const isIn = !!inside[i];
+
+            if (outlineMode === 'outside') {
+                // Preenche TUDO que não é "inside" (inclui buracos internos de letras
+                // como R, O, D, G etc.) — efeito sticker sólido sem vazios.
+                if (isIn) continue;
+            } else {
+                if (!isIn) continue;
+            }
+
+            const dsq = outlineMode === 'inside'
+                ? (distSqToOutside ? distSqToOutside[i]! : INF)
+                : distSqToInside[i]!;
+            if (dsq > maxDistSq) continue;
+
+            const dist = Math.sqrt(dsq);
+            // Quintic smoothstep: 6t⁵ − 15t⁴ + 10t³ — C² continuous, much smoother.
+            const raw = (maxDist - dist) / softScaled;
+            const t = raw <= 0 ? 0 : raw >= 1 ? 1 : raw;
+            const smoothT = t * t * t * (t * (t * 6 - 15) + 10);
+            const a = Math.round(baseAlpha * smoothT * 255);
+            if (a <= 0) continue;
+
+            const o = i * 4;
+            outImgData.data[o] = cr;
+            outImgData.data[o + 1] = cg;
+            outImgData.data[o + 2] = cb;
+            outImgData.data[o + 3] = a;
+        }
+
+        ssOutCtx.putImageData(outImgData, 0, 0);
+
+        // ── 6) Downsample to native resolution ────────────────────────────
+        // The bilinear/bicubic downsampling acts as a free anti-aliasing pass.
+        // CRITICAL: finalPad MUST equal padSs/ssScale so that the image-to-padding
+        // ratio is identical in both the supersampled and final canvases.
+        // Using an independent formula causes the outline to be displaced.
+        const finalPad = Math.ceil(padSs / ssScale);
+        const finalW = srcW + finalPad * 2;
+        const finalH = srcH + finalPad * 2;
+
         const outCanvas = document.createElement('canvas');
-        outCanvas.width = cw;
-        outCanvas.height = ch;
-        const outCtx = outCanvas.getContext('2d');
+        outCanvas.width = finalW;
+        outCanvas.height = finalH;
+        const outCtx = outCanvas.getContext('2d')!;
         if (!outCtx) return null;
+        outCtx.imageSmoothingEnabled = true;
+        outCtx.imageSmoothingQuality = 'high';
+        outCtx.drawImage(ssOutCanvas, 0, 0, cw, ch, 0, 0, finalW, finalH);
 
-        const outImgData = outCtx.createImageData(cw, ch);
-        // Parse color
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = 1; tempCanvas.height = 1;
-        const tempCtx = tempCanvas.getContext('2d')!;
-        tempCtx.fillStyle = outlineColor || '#000000';
-        tempCtx.fillRect(0, 0, 1, 1);
-        const colorData = tempCtx.getImageData(0, 0, 1, 1).data;
-        const cr = colorData[0] as number;
-        const cg = colorData[1] as number;
-        const cb = colorData[2] as number;
-        const alphaVal = Math.round(Math.min(1, Math.max(0, outlineOpacity)) * 255);
+        // Store effective padding + source dimensions so the render patch
+        // can align the outline pixel-perfectly even if obj.width differs.
+        (outCanvas as any).__outlinePad = finalPad;
+        (outCanvas as any).__outlineSrcW = srcW;
+        (outCanvas as any).__outlineSrcH = srcH;
 
-        for (let i = 0; i < dilated.length; i++) {
-            if (dilated[i]!) {
-                outImgData.data[i * 4] = cr;
-                outImgData.data[i * 4 + 1] = cg;
-                outImgData.data[i * 4 + 2] = cb;
-                outImgData.data[i * 4 + 3] = alphaVal;
-            }
-        }
-        outCtx.putImageData(outImgData, 0, 0);
         return outCanvas;
     } catch (e) {
         console.error('[StickerOutline] Erro ao gerar outline:', e);
@@ -1394,31 +1639,65 @@ const generateStickerOutlineCanvas = (
 };
 
 /** Apply or remove the sticker outline render patch on a fabric.Image object. */
-const applyStickerOutlinePatch = (obj: any) => {
-    if (!obj || String(obj.type || '').toLowerCase() !== 'image') return;
+	const applyStickerOutlinePatch = (obj: any) => {
+	    if (!obj || String(obj.type || '').toLowerCase() !== 'image') return;
 
-    const enabled = !!(obj as any).__stickerOutlineEnabled;
-    const width = Number((obj as any).__stickerOutlineWidth) || 4;
-    const color = (obj as any).__stickerOutlineColor || '#FFFFFF';
-    const opacity = (obj as any).__stickerOutlineOpacity ?? 1;
+	    const enabled = !!(obj as any).__stickerOutlineEnabled;
+	    const width = Number((obj as any).__stickerOutlineWidth) || 4;
+	    const color = (obj as any).__stickerOutlineColor || '#FFFFFF';
+	    const opacity = (obj as any).__stickerOutlineOpacity ?? 1;
+	    const mode: 'outside' | 'inside' = ((obj as any).__stickerOutlineMode === 'inside') ? 'inside' : 'outside';
+	    if (!(obj as any).__stickerOutlineMode) (obj as any).__stickerOutlineMode = mode;
 
-    // Clear cache when params change
-    const cacheKey = `${enabled}|${width}|${color}|${opacity}|${obj.width}|${obj.height}`;
-    if ((obj as any).__stickerCacheKey !== cacheKey) {
-        (obj as any).__stickerOutlineCache = null;
-        (obj as any).__stickerCacheKey = cacheKey;
-    }
+	    // Clear cache when params change
+	    const cacheKey = `${enabled}|${mode}|${width}|${color}|${opacity}|${obj.width}|${obj.height}`;
+	    if ((obj as any).__stickerCacheKey !== cacheKey) {
+	        (obj as any).__stickerOutlineCache = null;
+	        (obj as any).__stickerCacheKey = cacheKey;
+	    }
 
-    if (!enabled) {
-        // Remove patch, restore original drawObject
-        if ((obj as any).__origDrawObjectSticker) {
-            obj.drawObject = (obj as any).__origDrawObjectSticker;
-            delete (obj as any).__origDrawObjectSticker;
-        }
-        (obj as any).__stickerOutlineCache = null;
-        obj.dirty = true;
-        return;
-    }
+	    if (!enabled) {
+	        // Restore caching behavior (outline draws outside bounds; we disable caching while enabled to avoid clipping).
+	        if ((obj as any).__stickerOrigObjectCaching !== undefined) {
+	            obj.objectCaching = (obj as any).__stickerOrigObjectCaching;
+	            delete (obj as any).__stickerOrigObjectCaching;
+	        }
+	        // Clear any stale cache canvas that may have been created while caching was enabled.
+	        try {
+	            (obj as any)._cacheCanvas = null;
+	            (obj as any)._cacheContext = null;
+	        } catch {
+	            // ignore
+	        }
+	        // Remove patch, restore original drawObject
+	        if ((obj as any).__origDrawObjectSticker) {
+	            obj.drawObject = (obj as any).__origDrawObjectSticker;
+	            delete (obj as any).__origDrawObjectSticker;
+	        }
+	        // Remove render patch, restore original render
+	        if ((obj as any).__origRenderSticker) {
+	            obj.render = (obj as any).__origRenderSticker;
+	            delete (obj as any).__origRenderSticker;
+	        }
+	        (obj as any).__stickerOutlineCache = null;
+	        obj.dirty = true;
+	        return;
+	    }
+
+	    // CRITICAL: Fabric caches objects into a bounded offscreen canvas.
+	    // Our sticker outline deliberately draws outside the image bounds and would get clipped.
+	    // Disable caching while enabled for correctness.
+	    if ((obj as any).__stickerOrigObjectCaching === undefined) {
+	        (obj as any).__stickerOrigObjectCaching = obj.objectCaching;
+	    }
+	    obj.objectCaching = false;
+	    // Ensure any previously computed cache gets dropped immediately.
+	    try {
+	        (obj as any)._cacheCanvas = null;
+	        (obj as any)._cacheContext = null;
+	    } catch {
+	        // ignore
+	    }
 
     // Patch drawObject — called by render() AFTER ctx transform is applied
     // Pipeline: render() → ctx.save() → transform(ctx) → drawObject(ctx) → ctx.restore()
@@ -1427,27 +1706,91 @@ const applyStickerOutlinePatch = (obj: any) => {
         (obj as any).__origDrawObjectSticker = obj.drawObject;
     }
 
-    obj.drawObject = function (ctx: CanvasRenderingContext2D, forClipping: boolean, context: any) {
-        // Draw outline BEFORE the image (so it appears behind)
-        if (!forClipping && this.__stickerOutlineEnabled && this.__stickerOutlineCache) {
+	    obj.drawObject = function (ctx: CanvasRenderingContext2D, forClipping: boolean, context: any) {
+	        const drawOutline = () => {
+	            if (forClipping || !this.__stickerOutlineEnabled || !this.__stickerOutlineCache) return;
+	            try {
+	                const cache = this.__stickerOutlineCache;
+	                const pad = (cache as any).__outlinePad || (Math.ceil(Number(this.__stickerOutlineWidth) || 4) + 2);
+	                const cacheW = cache.width;
+	                const cacheH = cache.height;
+	                const srcW = (cache as any).__outlineSrcW || (cacheW - pad * 2);
+	                const srcH = (cache as any).__outlineSrcH || (cacheH - pad * 2);
+	                const w = this.width;
+	                const h = this.height;
+	                const sx = w / srcW;
+	                const sy = h / srcH;
+	                const drawW = cacheW * sx;
+	                const drawH = cacheH * sy;
+	                ctx.drawImage(
+	                    cache,
+	                    -drawW / 2,
+	                    -drawH / 2,
+	                    drawW,
+	                    drawH
+	                );
+	            } catch {
+	                // Silent — never break image rendering
+	            }
+	        };
+
+	        // INSIDE mode: draw outline on top of image (dentro do clip context).
+	        // OUTSIDE mode: NÃO desenha aqui — é desenhado no render() fora do clipPath.
+	        const res = (this as any).__origDrawObjectSticker.call(this, ctx, forClipping, context);
+
+	        const mode: 'outside' | 'inside' = (this as any).__stickerOutlineMode === 'inside' ? 'inside' : 'outside';
+	        if (mode === 'inside') drawOutline();
+	        return res;
+	    };
+
+    // Patch render — para outside mode, desenha o contorno FORA do clipPath context.
+    // Isso garante que o contorno se estenda além dos limites do frame/artboard.
+    if (!(obj as any).__origRenderSticker) {
+        (obj as any).__origRenderSticker = obj.render;
+    }
+
+    obj.render = function (ctx: CanvasRenderingContext2D) {
+        // Render normal (com clipPath/frame clipping aplicado)
+        (this as any).__origRenderSticker.call(this, ctx);
+
+        // OUTSIDE mode: desenha o contorno APÓS o render completo,
+        // em seu próprio save/restore — sem herdar o clipPath.
+        // O outline cache só contém pixels onde a imagem é transparente,
+        // então desenhar por cima não cobre o conteúdo da imagem.
+        const mode: 'outside' | 'inside' = (this as any).__stickerOutlineMode === 'inside' ? 'inside' : 'outside';
+        if (mode === 'outside' && this.__stickerOutlineEnabled && this.__stickerOutlineCache) {
             try {
-                const pad = Math.ceil(Number(this.__stickerOutlineWidth) || 4);
+                const cache = this.__stickerOutlineCache;
+                const cacheW = cache.width;
+                const cacheH = cache.height;
+                const pad = (cache as any).__outlinePad || 0;
+                const srcW = (cache as any).__outlineSrcW || (cacheW - pad * 2);
+                const srcH = (cache as any).__outlineSrcH || (cacheH - pad * 2);
                 const w = this.width;
                 const h = this.height;
+                const sx = w / srcW;
+                const sy = h / srcH;
+                const drawW = cacheW * sx;
+                const drawH = cacheH * sy;
+
+                ctx.save();
+                // Aplica a mesma transformação do objeto (posição, escala, rotação)
+                const m = this.calcTransformMatrix();
+                ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+                // Respeitar opacidade do objeto
+                ctx.globalAlpha *= (this.opacity || 1);
                 ctx.drawImage(
-                    this.__stickerOutlineCache,
-                    -w / 2 - pad,
-                    -h / 2 - pad,
-                    w + pad * 2,
-                    h + pad * 2
+                    cache,
+                    -drawW / 2,
+                    -drawH / 2,
+                    drawW,
+                    drawH
                 );
-            } catch (_e) {
+                ctx.restore();
+            } catch {
                 // Silent — never break image rendering
             }
         }
-
-        // ALWAYS call original drawObject (draws background + _render + clipPath)
-        return (this as any).__origDrawObjectSticker.call(this, ctx, forClipping, context);
     };
 
     obj.dirty = true;
@@ -1475,12 +1818,12 @@ const applyStickerOutlinePatch = (obj: any) => {
             return;
         }
 
-        try {
-            const outCanvas = generateStickerOutlineCanvas(el, width, color, opacity);
-            if (outCanvas) {
-                (obj as any).__stickerOutlineCache = outCanvas;
-                obj.dirty = true;
-                canvas.value?.renderAll?.();
+	        try {
+	            const outCanvas = generateStickerOutlineCanvas(el, width, color, opacity, mode);
+	            if (outCanvas) {
+	                (obj as any).__stickerOutlineCache = outCanvas;
+	                obj.dirty = true;
+	                canvas.value?.renderAll?.();
                 return;
             }
         } catch (e) {
@@ -2613,6 +2956,7 @@ const setupAltDragDuplicate = () => {
         original: null as any,
         clone: null as any,
         parentGroup: null as any,
+        cloneInGroup: false,
         startLeft: 0,
         startTop: 0,
         origLockX: false,
@@ -2634,8 +2978,13 @@ const setupAltDragDuplicate = () => {
             state.armed = false;
             return;
         }
-        const active = canvas.value?.getActiveObject?.();
+        let active = canvas.value?.getActiveObject?.();
         if (!isEligibleTarget(active)) return;
+
+        // FIGMA BEHAVIOR: When user deep-selects a child inside a product card
+        // (e.g., product image, title text), ALT+drag should duplicate JUST that child,
+        // NOT the entire card group. The child will be cloned inside the same parent group.
+        // If the user wants to duplicate the whole card, they select the card group itself.
 
         state.armed = true;
         state.cloning = false;
@@ -2650,7 +2999,21 @@ const setupAltDragDuplicate = () => {
         if (!canvas.value) return;
 
         const tr: any = (canvas.value as any)._currentTransform;
-        if (!tr || tr.target !== state.original) return;
+        // For interactive groups (product cards with subTargetCheck=true), the _currentTransform
+        // targets the child (deep-selected element), not necessarily state.original.
+        // Accept the transform if the target IS the original or IS a child of the original's group.
+        const isChildInGroup = state.original && state.original.group && tr?.target === state.original;
+        const isDirectMatch = tr && tr.target === state.original;
+        const isGroupChildMatch = state.original && state.original.type === 'group' && tr?.target?.group === state.original;
+        
+        if (!isDirectMatch && !isChildInGroup && !isGroupChildMatch) {
+            // No valid transform found. For objects inside interactive groups, the transform
+            // may target the child. Allow if we have any active transform at all and user is 
+            // in a group context.
+            const inInteractiveGroup = state.original && state.original.group && 
+                (state.original.group.interactive || state.original.group.subTargetCheck);
+            if (!inInteractiveGroup || !tr) return;
+        }
 
         // Start cloning (runs once)
         state.cloning = true;
@@ -2663,7 +3026,7 @@ const setupAltDragDuplicate = () => {
             let cloned: any = null;
             try {
                 if (typeof original.clone === 'function') {
-                    const result = original.clone(['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name', 'smartGridId', 'unitLabel', 'price', 'pricePack', 'priceUnit', 'priceSpecial', 'priceSpecialUnit', 'specialCondition', 'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel', 'unit', 'limit', '_productData', '_cardWidth', '_cardHeight']);
+                    const result = original.clone(['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name', 'smartGridId', 'unitLabel', 'price', 'pricePack', 'priceUnit', 'priceSpecial', 'priceSpecialUnit', 'specialCondition', 'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel', 'unit', 'limit', '_productData', '_cardWidth', '_cardHeight', 'subTargetCheck', 'interactive']);
                     if (result && typeof result.then === 'function') {
                         cloned = await result;
                     }
@@ -2688,15 +3051,112 @@ const setupAltDragDuplicate = () => {
 
             assignNewIdsDeep(cloned);
 
-            // Copy metadata
-            for (const k of ['parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'unitLabel', 'smartGridId', '_cardWidth', '_cardHeight']) {
-                if ((original as any)[k] != null) (cloned as any)[k] = (original as any)[k];
+            // Copy metadata — only for top-level objects or card groups.
+            // When cloning a CHILD element inside a card (e.g., a product image),
+            // do NOT copy card-level meta to the child clone.
+            const isCloneACard = cloned.type === 'group' && (cloned.isSmartObject || cloned.isProductCard || isLikelyProductCard(cloned));
+            if (isCloneACard) {
+                for (const k of ['parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'unitLabel', 'smartGridId', '_cardWidth', '_cardHeight']) {
+                    if ((original as any)[k] != null) (cloned as any)[k] = (original as any)[k];
+                }
+            } else if (!original.group || !(original.group.isSmartObject || original.group.isProductCard || isLikelyProductCard(original.group))) {
+                // Only copy frame/zone binding for non-card-child objects
+                for (const k of ['parentFrameId']) {
+                    if ((original as any)[k] != null) (cloned as any)[k] = (original as any)[k];
+                }
+            }
+
+            // Ensure cloned product card groups have correct child flags
+            if ((cloned.isSmartObject || cloned.isProductCard) && cloned.type === 'group' && typeof cloned.getObjects === 'function') {
+                cloned.set({ subTargetCheck: true, interactive: true });
+                cloned.getObjects().forEach((child: any) => {
+                    const isBackground = child.name === 'offerBackground' || child.name === 'price_bg';
+                    child.set({
+                        selectable: !isBackground,
+                        evented: !isBackground,
+                        hasControls: !isBackground,
+                        hasBorders: !isBackground,
+                    });
+                });
             }
 
             // Check if original is inside a group (e.g. product card inside product zone)
             const parentGroup = (original as any).group;
             const isInsideGroup = parentGroup && String(parentGroup.type || '').toLowerCase() !== 'activeselection';
             state.parentGroup = isInsideGroup ? parentGroup : null;
+            state.cloneInGroup = false;
+
+            // If duplicating an object INSIDE a group (deep-select), create the clone in the SAME group
+            // so it is born in the exact same local position as the original.
+            if (isInsideGroup && parentGroup && typeof parentGroup.add === 'function') {
+                try {
+                    const origOX = original.originX || 'center';
+                    const origOY = original.originY || 'center';
+
+                    cloned.set({
+                        left: Number(original.left || 0),
+                        top: Number(original.top || 0),
+                        originX: origOX,
+                        originY: origOY,
+                        selectable: true,
+                        evented: true,
+                        hasControls: true,
+                        hasBorders: true,
+                        objectCaching: false,
+                        dirty: true,
+                    });
+                    cloned.setCoords?.();
+
+                    // Keep the group interactive so the clone can be dragged/selected.
+                    parentGroup.set({ subTargetCheck: true, interactive: true });
+
+                    // Insert right after the original when possible (keeps z-order intuitive).
+                    try {
+                        const list = typeof parentGroup.getObjects === 'function' ? parentGroup.getObjects() : [];
+                        const idx = Array.isArray(list) ? list.indexOf(original) : -1;
+                        if (typeof (parentGroup as any).insertAt === 'function' && idx >= 0) {
+                            (parentGroup as any).insertAt(cloned, idx + 1);
+                        } else {
+                            parentGroup.add(cloned);
+                        }
+                    } catch {
+                        parentGroup.add(cloned);
+                    }
+
+                    parentGroup.set('dirty', true);
+                    parentGroup.setCoords?.();
+                    safeAddWithUpdate(parentGroup);
+
+                    // FIGMA/CANVA BEHAVIOR: original stays in place, CLONE follows mouse.
+                    // Swap Fabric's internal transform target from original → clone.
+                    const tr: any = (canvas.value as any)._currentTransform;
+                    if (tr && tr.target === original) {
+                        tr.target = cloned;
+                        if (tr.original && typeof tr.original === 'object') {
+                            tr.original.left = cloned.left;
+                            tr.original.top = cloned.top;
+                        }
+                    }
+
+                    // Lock original so it doesn't move during the rest of the drag
+                    state.origLockX = !!original.lockMovementX;
+                    state.origLockY = !!original.lockMovementY;
+                    original.set({ lockMovementX: true, lockMovementY: true });
+                    original.set({ left: origLeft, top: origTop }); // ensure it stays at start position
+                    original.setCoords?.();
+
+                    canvas.value.setActiveObject(cloned);
+                    state.clone = cloned;
+                    state.didDuplicate = true;
+                    state.cloneInGroup = true;
+                    state.cloning = false;
+                    canvas.value.requestRenderAll();
+                    return;
+                } catch (e) {
+                    console.warn('[alt-drag-duplicate] Falha ao duplicar dentro do grupo, usando fallback canvas-level', e);
+                    // Fall through to the old behavior (canvas-level, then move into group on mouse:up)
+                }
+            }
 
             // Clone starts at the SAME canvas-level position as the original.
             // Use calcTransformMatrix() which gives the absolute position
@@ -2747,11 +3207,22 @@ const setupAltDragDuplicate = () => {
             // FIGMA/CANVA BEHAVIOR: original stays in place, CLONE follows mouse.
             // Swap Fabric's internal transform target from original → clone.
             const tr: any = (canvas.value as any)._currentTransform;
-            if (tr && tr.target === original) {
-                tr.target = cloned;
-                if (tr.original && typeof tr.original === 'object') {
-                    tr.original.left = cloned.left;
-                    tr.original.top = cloned.top;
+            const isCardClone = !!(original.isSmartObject || original.isProductCard);
+            if (tr) {
+                // For product card groups: tr.target is the child inside the group (not the group itself).
+                // Swap the transform target to the cloned group so it follows the mouse.
+                if (isCardClone && tr.target !== original && tr.target?.group === original) {
+                    tr.target = cloned;
+                    if (tr.original && typeof tr.original === 'object') {
+                        tr.original.left = cloned.left;
+                        tr.original.top = cloned.top;
+                    }
+                } else if (tr.target === original) {
+                    tr.target = cloned;
+                    if (tr.original && typeof tr.original === 'object') {
+                        tr.original.left = cloned.left;
+                        tr.original.top = cloned.top;
+                    }
                 }
             }
 
@@ -2798,8 +3269,15 @@ const setupAltDragDuplicate = () => {
             original.setCoords?.();
         }
 
-        // If the original was inside a group, move the clone INTO that group
-        if (clone && pg && typeof pg.add === 'function') {
+        // If the original was inside a group and the clone was created at canvas-level, move it INTO that group.
+        if (clone && pg && typeof pg.add === 'function' && !state.cloneInGroup) {
+            const cloneIsOnCanvas = canvas.value.getObjects().includes(clone);
+            if (!cloneIsOnCanvas) {
+                // Nothing to reparent (already inside group or not tracked by canvas list)
+                pg.set('dirty', true);
+                pg.setCoords?.();
+                safeAddWithUpdate(pg);
+            } else {
             // Get clone's center in canvas coords (works regardless of originX/Y)
             let cx = clone.left;
             let cy = clone.top;
@@ -2834,6 +3312,7 @@ const setupAltDragDuplicate = () => {
             pg.set('dirty', true);
             if (typeof pg.setCoords === 'function') pg.setCoords();
             safeAddWithUpdate(pg);
+            }
         }
 
         // Select the clone (the one the user just placed)
@@ -2860,8 +3339,10 @@ const setupAltDragDuplicate = () => {
         state.original = null;
         state.clone = null;
         state.parentGroup = null;
+        state.cloneInGroup = false;
 
         saveCurrentState();
+        triggerAutoSave();
     });
 };
 
@@ -3221,26 +3702,27 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
     // Get descendants once
     const descendants = getFrameDescendants(frame);
 
+    let frameLabelDragRaf = 0;
     const onMouseMove = (moveEvt: MouseEvent) => {
         const dx = (moveEvt.clientX - startX) / zoom;
         const dy = (moveEvt.clientY - startY) / zoom;
         if (!moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
         moved = true;
-        frame.set({ left: startLeft + dx, top: startTop + dy });
-        frame.setCoords();
-        moveFrameDescendants(frame, dx, dy, descendants.map((d: any) => {
-            if (!(d as any).__dragStart) (d as any).__dragStart = { left: d.left, top: d.top };
-            return d;
-        }));
-        // Reset to absolute positions for descendants
-        descendants.forEach((d: any) => {
-            if ((d as any).__dragStart) {
-                d.set({ left: (d as any).__dragStart.left + dx, top: (d as any).__dragStart.top + dy });
-                d.setCoords();
-            }
+        
+        if (frameLabelDragRaf) cancelAnimationFrame(frameLabelDragRaf);
+        frameLabelDragRaf = requestAnimationFrame(() => {
+            frame.set({ left: startLeft + dx, top: startTop + dy });
+            frame.setCoords();
+            // Reset to absolute positions for descendants
+            descendants.forEach((d: any) => {
+                if ((d as any).__dragStart) {
+                    d.set({ left: (d as any).__dragStart.left + dx, top: (d as any).__dragStart.top + dy });
+                    d.setCoords();
+                }
+            });
+            canvas.value.requestRenderAll();
+            throttledUpdateFrameLabels();
         });
-        canvas.value.requestRenderAll();
-        throttledUpdateFrameLabels();
     };
 
     const onMouseUp = () => {
@@ -3667,6 +4149,65 @@ const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>) => {
     snap.layerName = obj.layerName;
     snap._customId = obj._customId;
     snap.id = obj.id;
+
+    // CRITICAL: Preserve zone-specific properties that may be non-enumerable or on prototype.
+    // Without these, PropertiesPanel's isLikelyProductZone() fails after interactions.
+    if (obj.isGridZone != null) snap.isGridZone = obj.isGridZone;
+    if (obj.isProductZone != null) snap.isProductZone = obj.isProductZone;
+    if (obj._zoneGlobalStyles != null) snap._zoneGlobalStyles = obj._zoneGlobalStyles;
+    if (obj._zonePadding != null) snap._zonePadding = obj._zonePadding;
+    if (obj._zoneWidth != null) snap._zoneWidth = obj._zoneWidth;
+    if (obj._zoneHeight != null) snap._zoneHeight = obj._zoneHeight;
+    if (obj.columns != null) snap.columns = obj.columns;
+    if (obj.rows != null) snap.rows = obj.rows;
+    if (obj.gapHorizontal != null) snap.gapHorizontal = obj.gapHorizontal;
+    if (obj.gapVertical != null) snap.gapVertical = obj.gapVertical;
+    if (obj.layoutDirection != null) snap.layoutDirection = obj.layoutDirection;
+    if (obj.cardAspectRatio != null) snap.cardAspectRatio = obj.cardAspectRatio;
+    if (obj.lastRowBehavior != null) snap.lastRowBehavior = obj.lastRowBehavior;
+    if (obj.verticalAlign != null) snap.verticalAlign = obj.verticalAlign;
+    if (obj.highlightCount != null) snap.highlightCount = obj.highlightCount;
+    if (obj.highlightPos != null) snap.highlightPos = obj.highlightPos;
+    if (obj.highlightHeight != null) snap.highlightHeight = obj.highlightHeight;
+    if (obj.backgroundColor != null) snap.backgroundColor = obj.backgroundColor;
+    // Preserve product card properties
+    if (obj.isSmartObject != null) snap.isSmartObject = obj.isSmartObject;
+    if (obj.isProductCard != null) snap.isProductCard = obj.isProductCard;
+    if (obj.parentZoneId != null) snap.parentZoneId = obj.parentZoneId;
+    // Preserve lock state
+    if (obj.lockMovementX != null) snap.lockMovementX = obj.lockMovementX;
+    if (obj.lockMovementY != null) snap.lockMovementY = obj.lockMovementY;
+    if (obj.lockScalingX != null) snap.lockScalingX = obj.lockScalingX;
+    if (obj.lockScalingY != null) snap.lockScalingY = obj.lockScalingY;
+    // Preserve _objects reference for group detection in PropertiesPanel
+    if (obj._objects != null) snap._objects = obj._objects;
+    // Preserve getObjects method reference for PropertiesPanel zone detection
+    if (typeof obj.getObjects === 'function') snap.getObjects = () => obj.getObjects();
+
+    // CRITICAL: If the real Fabric object is a product zone (detected by ANY method including
+    // strokeDashArray fallback), ALWAYS ensure zone flags are set on the snapshot.
+    // This guarantees PropertiesPanel detection even for legacy arts where flags were not
+    // originally serialized — the rehydration sets them on the real object, and we propagate here.
+    if (!snap.isGridZone && !snap.isProductZone) {
+        // Use a lightweight zone check: flags, name, or zone-specific custom properties
+        const looksLikeZone = obj.name === 'gridZone' || obj.name === 'productZoneContainer'
+            || (typeof obj._zonePadding === 'number')
+            || (typeof obj._zoneWidth === 'number' && typeof obj._zoneHeight === 'number')
+            || (obj.type === 'group' && typeof obj.getObjects === 'function' && (() => {
+                try {
+                    const rect = (obj.getObjects() || []).find((o: any) =>
+                        o?.type === 'rect' && Array.isArray(o.strokeDashArray)
+                    );
+                    return !!rect;
+                } catch { return false; }
+            })());
+        if (looksLikeZone) {
+            snap.isGridZone = true;
+            // Also set the flag on the real object so future interactions don't need fallback
+            obj.isGridZone = true;
+        }
+    }
+
     return extra ? { ...snap, ...extra } : snap;
 };
 
@@ -4589,6 +5130,33 @@ watch(activePage, async (newPage, oldPage) => {
                 }
             });
 
+            // CRITICAL: Clear Fabric's char-width cache and recalculate text
+            // dimensions after loadFromJSON. The JSON may carry stale width/height
+            // that was measured with a fallback font. Even if fonts loaded later,
+            // Fabric caches per-char widths keyed by font name — those stale entries
+            // persist until explicitly cleared.
+            try {
+                const fabricCache = (fabric as any)?.cache;
+                if (fabricCache && typeof fabricCache.clearFontCache === 'function') {
+                    fabricCache.clearFontCache();
+                }
+            } catch (_e) { /* ignore */ }
+
+            const recalcAllText = (obj: any) => {
+                if (!obj) return;
+                const t = String(obj.type || '').toLowerCase();
+                if (t === 'i-text' || t === 'textbox' || t === 'text') {
+                    if (typeof obj.initDimensions === 'function') obj.initDimensions();
+                    obj.set('dirty', true);
+                    if (typeof obj.setCoords === 'function') obj.setCoords();
+                }
+                if (typeof obj.getObjects === 'function') {
+                    obj.getObjects().forEach(recalcAllText);
+                    obj.set('dirty', true);
+                }
+            };
+            canvas.value.getObjects().forEach(recalcAllText);
+
             safeRequestRenderAll();
         } else {
             // New Blank Page starts with default settings
@@ -4983,13 +5551,37 @@ onMounted(async () => {
   }
 
   // Dynamic import to avoid SSR issues
-  try {
-    const fabricModule = await import('fabric');
-    fabric = fabricModule; 
+	  try {
+	    const fabricModule = await import('fabric');
+	    fabric = fabricModule; 
 
-    // PATCH: Fabric v7 can call `drawObject(ctx, false, {})` (no cache path),
-    // but `_drawClipPath` assumes a DrawContext with `parentClipPaths` and will crash.
-    // We harden `_drawClipPath` to fill missing context fields.
+		    // Ensure our custom properties are always serialized/deserialized by Fabric (even if a save path forgets to pass propsToInclude).
+		    try {
+		        const stickerProps = [
+		            '__stickerOutlineEnabled',
+		            '__stickerOutlineMode',
+		            '__stickerOutlineWidth',
+		            '__stickerOutlineColor',
+		            '__stickerOutlineOpacity',
+		            '__stickerNoTransparency',
+		            'crossOrigin'
+	        ];
+	        const addCustomProps = (Ctor: any, props: string[]) => {
+	            if (!Ctor) return;
+	            const cur = Array.isArray(Ctor.customProperties) ? Ctor.customProperties : [];
+	            Ctor.customProperties = Array.from(new Set([...cur, ...props]));
+	        };
+	        addCustomProps((fabric as any).FabricObject, stickerProps);
+	        addCustomProps((fabric as any).Object, stickerProps);
+	        addCustomProps((fabric as any).Image, stickerProps);
+	        addCustomProps((fabric as any).FabricImage, stickerProps);
+	    } catch (e) {
+	        console.warn('⚠️ Falha ao registrar customProperties do Fabric (StickerOutline):', e);
+	    }
+
+	    // PATCH: Fabric v7 can call `drawObject(ctx, false, {})` (no cache path),
+	    // but `_drawClipPath` assumes a DrawContext with `parentClipPaths` and will crash.
+	    // We harden `_drawClipPath` to fill missing context fields.
     try {
         const Base = (fabric as any)?.BaseFabricObject;
         if (Base?.prototype && !(Base.prototype as any).__patchedClipPathContext) {
@@ -5821,6 +6413,12 @@ const CANVAS_CUSTOM_PROPS = [
     'parentFrameId',
     '_frameClipOwner',
 
+    // Grid cells (Canva-style grids = multiple frames linked by gridGroupId)
+    'isGridCell',
+    'gridGroupId',
+    'gridCol',
+    'gridRow',
+
     // Smart objects / cards
     'isSmartObject',
     'isProductCard',
@@ -5882,15 +6480,24 @@ const CANVAS_CUSTOM_PROPS = [
     'strokePosition',
     'strokeMiterLimit',
 
-	// Sticker Outline (alpha-based contour)
-	'__stickerOutlineEnabled',
-	'__stickerOutlineWidth',
-	'__stickerOutlineColor',
-	'__stickerOutlineOpacity',
-	'__stickerNoTransparency',
+		// Sticker Outline (alpha-based contour)
+		'__stickerOutlineEnabled',
+		'__stickerOutlineMode',
+		'__stickerOutlineWidth',
+		'__stickerOutlineColor',
+		'__stickerOutlineOpacity',
+		'__stickerNoTransparency',
 
 	// Images: ensure CORS behavior survives reload (needed for pixel-based effects like Sticker Outline)
-	'crossOrigin'
+	'crossOrigin',
+
+    // Locks (persist cadeado state across reload)
+    'lockMovementX',
+    'lockMovementY',
+    'lockScalingX',
+    'lockScalingY',
+    'lockRotation',
+    'lockScalingFlip'
 ] as const;
 
 // Helper function to extract key/path from Wasabi URL (presigned or permanent)
@@ -6176,11 +6783,18 @@ const convertContaboToProxyUrls = (canvasData: any): any => {
         if (!obj) return;
         const objType = (obj.type || '').toLowerCase();
         if (objType === 'image' && typeof obj.src === 'string') {
+            // Default crossOrigin for reliable pixel operations (Sticker Outline uses getImageData).
+            // Even when using same-origin proxy URLs, keeping this consistent avoids edge cases.
+            if (!obj.crossOrigin) obj.crossOrigin = 'anonymous';
             const src = obj.src;
 
             // Converter URLs do Wasabi (bucket privado)
-            if (src.includes('wasabisys.com')) {
-                const { bucket, key } = extractWasabiBucketAndKey(src);
+            const cfg = useRuntimeConfig()?.public?.wasabi || {};
+            const endpoint = (cfg.endpoint || 's3.wasabisys.com').toString();
+            const isWasabi = src.includes('wasabisys.com') || (endpoint && src.includes(endpoint));
+            if (isWasabi) {
+                // Use robust key extraction that supports both path-style and virtual-host style URLs.
+                const key = extractWasabiKey(src);
                 if (key) {
                     obj.src = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
                     wasabiCount++;
@@ -6463,15 +7077,6 @@ const setupHistory = () => {
                 console.log(`🧹 Filtrados ${json.objects.length - validObjects.length} objeto(s) inválido(s) do JSON`);
                 json.objects = validObjects;
             }
-
-            // Nunca persistir lock em imagens, frames etc. (apenas zones podem ter lock)
-            json.objects.forEach((obj: any) => {
-                const isZone = !!(obj?.isGridZone || obj?.isProductZone || obj?.name === 'gridZone' || obj?.name === 'productZoneContainer');
-                if (!isZone) {
-                    obj.lockMovementX = false;
-                    obj.lockMovementY = false;
-                }
-            });
             
             // DEBUG: Log final order after all processing
             console.log(`📋 Ordem FINAL dos objetos ao salvar:`, json.objects?.map((o: any, i: number) => `[${i}] ${o.type} - ${o.name || o.layerName || o._customId} (isFrame=${o.isFrame})`));
@@ -6746,6 +7351,8 @@ const setupHistory = () => {
                   const allObjs = canvas.value.getObjects();
                   const frames = allObjs.filter((o: any) => o?.isFrame);
                   allObjs.forEach((o: any) => {
+                      // Skip product cards — they should NOT be clipped by frames
+                      if (o?.isSmartObject || o?.isProductCard) return;
                       if (o?.parentFrameId || o?._frameClipOwner) syncObjectFrameClip(o);
                   });
                   frames.forEach((f: any) => syncFrameClips(f));
@@ -7147,6 +7754,26 @@ const undo = async () => {
                 canvas.value.backgroundColor = '#1e1e1e';
             }
 
+            // Recalculate text dimensions after undo (font cache may be stale)
+            try {
+                const fc = (fabric as any)?.cache;
+                if (fc && typeof fc.clearFontCache === 'function') fc.clearFontCache();
+            } catch (_e) { /* ignore */ }
+            const recalcUndoText = (obj: any) => {
+                if (!obj) return;
+                const tt = String(obj.type || '').toLowerCase();
+                if (tt === 'i-text' || tt === 'textbox' || tt === 'text') {
+                    if (typeof obj.initDimensions === 'function') obj.initDimensions();
+                    obj.set('dirty', true);
+                    if (typeof obj.setCoords === 'function') obj.setCoords();
+                }
+                if (typeof obj.getObjects === 'function') {
+                    obj.getObjects().forEach(recalcUndoText);
+                    obj.set('dirty', true);
+                }
+            };
+            canvas.value.getObjects().forEach(recalcUndoText);
+
             // Limpar seleção após undo
             canvas.value.discardActiveObject();
             safeRequestRenderAll();
@@ -7252,6 +7879,26 @@ const redo = async () => {
                 canvas.value.backgroundColor = '#1e1e1e';
             }
 
+            // Recalculate text dimensions after redo (font cache may be stale)
+            try {
+                const fc = (fabric as any)?.cache;
+                if (fc && typeof fc.clearFontCache === 'function') fc.clearFontCache();
+            } catch (_e) { /* ignore */ }
+            const recalcRedoText = (obj: any) => {
+                if (!obj) return;
+                const tt = String(obj.type || '').toLowerCase();
+                if (tt === 'i-text' || tt === 'textbox' || tt === 'text') {
+                    if (typeof obj.initDimensions === 'function') obj.initDimensions();
+                    obj.set('dirty', true);
+                    if (typeof obj.setCoords === 'function') obj.setCoords();
+                }
+                if (typeof obj.getObjects === 'function') {
+                    obj.getObjects().forEach(recalcRedoText);
+                    obj.set('dirty', true);
+                }
+            };
+            canvas.value.getObjects().forEach(recalcRedoText);
+
             // Limpar seleção após redo
             canvas.value.discardActiveObject();
             safeRequestRenderAll();
@@ -7273,6 +7920,160 @@ const redo = async () => {
         }
     }
 }
+
+const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } = {}) => {
+    if (!canvas.value || !frame) return null;
+    if (!frame.isFrame) return null;
+    const rootId = String(frame._customId || '');
+    if (!rootId) return null;
+
+    const offset = Number(opts.offset ?? 20) || 0;
+
+    const all = canvas.value.getObjects();
+    const indexById = new Map<string, number>();
+    all.forEach((o: any, i: number) => {
+        if (o?._customId) indexById.set(String(o._customId), i);
+    });
+
+    const toDuplicateIds = new Set<string>([rootId]);
+    const queue: string[] = [rootId];
+    while (queue.length) {
+        const parentId = queue.shift()!;
+        all.forEach((o: any) => {
+            if (!o || o.excludeFromExport) return;
+            if (!o._customId) return;
+            if (String((o as any).parentFrameId || '') !== parentId) return;
+            const id = String(o._customId);
+            if (toDuplicateIds.has(id)) return;
+            toDuplicateIds.add(id);
+            if ((o as any).isFrame) queue.push(id);
+        });
+    }
+
+    const originals = all.filter((o: any) => o?._customId && toDuplicateIds.has(String(o._customId)));
+    originals.sort((a: any, b: any) => (indexById.get(String(a._customId)) ?? 0) - (indexById.get(String(b._customId)) ?? 0));
+
+    if (!originals.length) return null;
+
+    const insertBaseIndex = Math.max(...originals.map((o: any) => indexById.get(String(o._customId)) ?? -1)) + 1;
+    const extraProps = Array.from(new Set([...CANVAS_CUSTOM_PROPS, 'data', 'opacity', 'flipX', 'flipY', 'filters', 'clipPath', 'src']));
+
+    const oldToNewId = new Map<string, string>();
+    const clones: any[] = [];
+    let rootClone: any = null;
+
+    // Clone everything first (preserve z-order), then fix parentFrameId references.
+    for (let i = 0; i < originals.length; i++) {
+        const original = originals[i];
+        let cloned: any = null;
+        try {
+            const res = typeof original.clone === 'function' ? original.clone(extraProps) : null;
+            cloned = res && typeof res.then === 'function' ? await res : res;
+        } catch (err) {
+            console.warn('[duplicateFrameWithContents] clone failed', err);
+        }
+        if (!cloned) continue;
+
+        const oldId = String(original._customId || '');
+        const newId = Math.random().toString(36).substr(2, 9);
+        oldToNewId.set(oldId, newId);
+
+        cloned._customId = newId;
+        cloned.set?.({
+            left: (Number(original.left) || 0) + offset,
+            top: (Number(original.top) || 0) + offset,
+            evented: true,
+            selectable: true,
+        });
+
+        // Avoid stale clip refs; we'll rebuild them from the new frame IDs.
+        try { cloned.clipPath = null; } catch {}
+        try { delete (cloned as any)._frameClipOwner; } catch {}
+        try { delete (cloned as any).__clipRect; } catch {}
+
+        // Keep the frame flag even if Fabric drops it in clone.
+        if (original.isFrame) {
+            cloned.isFrame = true;
+            cloned.clipContent = (original as any).clipContent !== false;
+            cloned.stroke = (original as any).stroke || '#0d99ff';
+            if ((original as any).layerName) cloned.layerName = (original as any).layerName;
+            if ((original as any).name) cloned.name = (original as any).name;
+        }
+
+        // Give a friendly copied name to the root frame.
+        if (String(original._customId) === rootId) {
+            rootClone = cloned;
+            const baseName = String((original as any).layerName || (original as any).name || 'Frame').trim();
+            const copiedName = baseName ? `${baseName} (cópia)` : 'Frame (cópia)';
+            if ((original as any).layerName) cloned.layerName = copiedName;
+            cloned.name = copiedName;
+        }
+
+        // Insert right above the duplicated block to keep stacking predictable.
+        try {
+            if (typeof (canvas.value as any).insertAt === 'function') {
+                (canvas.value as any).insertAt(cloned, insertBaseIndex + clones.length, false);
+            } else {
+                canvas.value.add(cloned);
+            }
+        } catch {
+            canvas.value.add(cloned);
+        }
+
+        clones.push(cloned);
+    }
+
+    if (!rootClone) {
+        // Fallback: root may not have cloned for some reason
+        rootClone = clones.find((o: any) => !!o?.isFrame) || clones[0] || null;
+    }
+    if (!rootClone) return null;
+
+    // Fix parentFrameId on all clones now that we have the id map.
+    const oldByNew = new Map<string, any>();
+    originals.forEach((o: any) => {
+        const oldId = String(o._customId || '');
+        const newId = oldToNewId.get(oldId);
+        if (!newId) return;
+        const clone = clones.find((c: any) => String(c._customId) === newId);
+        if (clone) oldByNew.set(newId, { original: o, clone });
+    });
+    clones.forEach((clone: any) => {
+        const entry = oldByNew.get(String(clone._customId));
+        const original = entry?.original;
+        if (!original) return;
+        const oldParent = String((original as any).parentFrameId || '');
+        if (!oldParent) {
+            clone.parentFrameId = undefined;
+            return;
+        }
+        const mappedParent = oldToNewId.get(oldParent);
+        clone.parentFrameId = mappedParent || undefined;
+    });
+
+    // Rebuild clipping for the new frame tree.
+    try {
+        clones.forEach((o: any) => {
+            if (o?.isFrame) getOrCreateFrameClipRect(o);
+        });
+        clones.forEach((o: any) => {
+            if (o?.parentFrameId || o?._frameClipOwner) syncObjectFrameClip(o);
+        });
+        clones.forEach((o: any) => {
+            if (o?.isFrame) syncFrameClips(o);
+        });
+    } catch (err) {
+        console.warn('[duplicateFrameWithContents] failed to rebuild frame clips', err);
+    }
+
+    canvas.value.setActiveObject(rootClone);
+    canvas.value.requestRenderAll();
+    canvasObjects.value = [...canvas.value.getObjects()];
+    updateSelection();
+    saveCurrentState({ reason: 'duplicate-frame' });
+    triggerAutoSave();
+    return rootClone;
+};
 
 const handleKeyDown = async (e: KeyboardEvent) => {
     if (!canvas.value) return;
@@ -7417,6 +8218,26 @@ const handleKeyDown = async (e: KeyboardEvent) => {
             // Delete from canvas
             for (const obj of toDeleteFromCanvas) {
                 try {
+                    // Grid cell: also delete all sibling cells and their children
+                    if ((obj as any).isGridCell && (obj as any).gridGroupId) {
+                        const gid = (obj as any).gridGroupId;
+                        const siblings = canvas.value.getObjects().filter(
+                            (o: any) => o !== obj && o.gridGroupId === gid && o.isGridCell
+                        );
+                        for (const sib of siblings) {
+                            // Remove children parented to this cell
+                            const children = canvas.value.getObjects().filter(
+                                (ch: any) => ch.parentFrameId === sib._customId
+                            );
+                            children.forEach((ch: any) => { try { canvas.value!.remove(ch); } catch {} });
+                            try { canvas.value.remove(sib); } catch {}
+                        }
+                        // Remove children of the deleted cell itself
+                        const ownChildren = canvas.value.getObjects().filter(
+                            (ch: any) => ch.parentFrameId === (obj as any)._customId
+                        );
+                        ownChildren.forEach((ch: any) => { try { canvas.value!.remove(ch); } catch {} });
+                    }
                     canvas.value.remove(obj);
                     console.log('🗑️ [Delete] Objeto removido do canvas:', obj.name || obj._customId);
                 } catch (err) {
@@ -7454,6 +8275,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
 
         // Alt+Setas = Redimensionar frame de 1 pixel
         if (active && active.isFrame && e.altKey) {
+            if (active.lockScalingX || active.lockScalingY) { e.preventDefault(); return; }
             e.preventDefault();
             const step = e.shiftKey ? 10 : 1; // Shift = 10px
 
@@ -7471,6 +8293,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
 
         // Setas normais = Mover objeto
         if (active) {
+            if (active.lockMovementX || active.lockMovementY) { e.preventDefault(); return; }
             e.preventDefault();
             const step = e.shiftKey ? 10 : 1;
             const prevLeft = active.left;
@@ -7840,6 +8663,12 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         const active = canvas.value.getActiveObject();
         if (!active) return;
 
+        // Frames: duplicate frame + everything inside it.
+        if ((active as any).isFrame) {
+            await duplicateFrameWithContents(active);
+            return;
+        }
+
         // Special case: duplicating the product image inside a product card (group).
         // When an inner image is selected (deep select), cloning it to the canvas would use group-local coords and look "broken".
         // We duplicate inside the same group so it behaves predictably.
@@ -7891,7 +8720,8 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                 canvas.value.setActiveObject(cloned);
                 canvas.value.requestRenderAll();
                 canvasObjects.value = [...canvas.value.getObjects()];
-                saveCurrentState();
+                saveCurrentState({ reason: 'duplicate-inside-card' });
+                triggerAutoSave();
             } catch (err) {
                 console.warn('[duplicate] Falha ao duplicar imagem interna', err);
             }
@@ -7900,7 +8730,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
 
         // Clone o objeto ativo
         try {
-            const cloned: any = await (active as any).clone(['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name']);
+            const cloned: any = await (active as any).clone(['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name', 'isGridCell', 'gridGroupId', 'gridCol', 'gridRow']);
             // Offset para posicionar o clone ao lado do original
             const offset = 20;
             cloned.set({
@@ -7956,7 +8786,8 @@ const handleKeyDown = async (e: KeyboardEvent) => {
             canvasObjects.value = [...canvas.value.getObjects()];
             
             // Salva o estado para histórico e persistência
-            saveCurrentState();
+            saveCurrentState({ reason: 'duplicate-selection' });
+            triggerAutoSave();
         } catch (err) {
             console.warn('[duplicate] Falha ao duplicar seleção', err);
         }
@@ -8848,8 +9679,34 @@ const loadFonts = () => {
                 },
                 active: () => {
                     console.log("Fonts loaded!");
-                    // Re-render canvas to apply fonts if any text was already rendered
-                    if (canvas.value) canvas.value.requestRenderAll();
+                    // CRITICAL: Clear Fabric's character-width cache so initDimensions()
+                    // re-measures every glyph with the REAL font instead of reusing stale
+                    // widths that were measured with the browser's fallback font.
+                    try {
+                        const fabricCache = (fabric as any)?.cache;
+                        if (fabricCache && typeof fabricCache.clearFontCache === 'function') {
+                            fabricCache.clearFontCache(); // wipe ALL font families
+                        }
+                    } catch (_e) { /* ignore */ }
+
+                    if (canvas.value) {
+                        const recalcText = (obj: any) => {
+                            if (!obj) return;
+                            const t = String(obj.type || '').toLowerCase();
+                            if (t === 'i-text' || t === 'textbox' || t === 'text') {
+                                if (typeof obj.initDimensions === 'function') obj.initDimensions();
+                                obj.set('dirty', true);
+                                if (typeof obj.setCoords === 'function') obj.setCoords();
+                            }
+                            // Recurse into groups (product cards, etc.)
+                            if (typeof obj.getObjects === 'function') {
+                                obj.getObjects().forEach(recalcText);
+                                obj.set('dirty', true);
+                            }
+                        };
+                        canvas.value.getObjects().forEach(recalcText);
+                        canvas.value.requestRenderAll();
+                    }
                 }
             });
         })
@@ -9007,12 +9864,19 @@ const setupSnapping = () => {
         return n === 'path_node' || n === 'bezier_handle' || n === 'control_point' || n === 'handle_line';
     };
 
+    // === SNAP TARGET CACHING: avoid recalculating on every mouse move ===
+    let cachedSnapTargets: any[] | null = null;
+    let cachedSnapExclude: any = null;
+
     const getSnapTargets = (exclude: any) => {
+        // Return cached targets if same object being dragged
+        if (cachedSnapTargets && cachedSnapExclude === exclude) return cachedSnapTargets;
+
         const all = canvas.value!.getObjects();
         // Get the parent frame ID of the object being moved (if any)
         const parentFrameId = (exclude as any)?.parentFrameId as string | undefined;
         
-        return all.filter((o: any) => {
+        cachedSnapTargets = all.filter((o: any) => {
             if (!o || o === exclude) return false;
             if (o.excludeFromExport || isControl(o)) return false;
             if (o.id === 'artboard-bg' || o.id === 'guide-vertical' || o.id === 'guide-horizontal') return false;
@@ -9021,6 +9885,8 @@ const setupSnapping = () => {
             if (parentFrameId && o.isFrame && o._customId === parentFrameId) return false;
             return true;
         });
+        cachedSnapExclude = exclude;
+        return cachedSnapTargets;
     };
 
     let lastPointer = { x: 0, y: 0 };
@@ -9058,11 +9924,8 @@ const setupSnapping = () => {
             obj.group.isProductCard = true;
         }
 
-        // CRITICAL: Disable caching during movement to prevent trails/ghosting/flickering
-        if (obj.objectCaching) {
-            obj.set('objectCaching', false);
-            obj.set('dirty', true);
-        }
+        // Mark object dirty to ensure fresh render (keep caching enabled for performance)
+        obj.set('dirty', true);
 
         // CRITICAL: Update clipPath for objects inside frames with clipping enabled
         // This ensures the image stays clipped within the frame bounds while moving
@@ -9231,7 +10094,7 @@ const setupSnapping = () => {
         if (evt) lastPointer = getPointer(evt);
 
         // === SMART GUIDES - Calculate on-the-fly ===
-        const targets = getSnapTargets(obj);
+        const targets = getSnapTargets(obj) || [];
         const b = getBounds(obj);
         
         // Get parent frame for snap targets (if object is inside a frame)
@@ -9327,16 +10190,23 @@ const setupSnapping = () => {
         if (vVisible) verticalGuide.set({ x1: vX, y1: -canvasHeight * 2, x2: vX, y2: canvasHeight * 3, visible: true });
         if (hVisible) horizontalGuide.set({ x1: -canvasWidth * 2, y1: hY, x2: canvasWidth * 3, y2: hY, visible: true });
 
-        // CRITICAL: Request render to show guides immediately
-        canvas.value.requestRenderAll();
+        // Fabric already renders after object:moving — only force render when guide visibility actually changed
+        if (vVisible || hVisible) {
+            canvas.value.requestRenderAll();
+        }
     });
 
     canvas.value.on('mouse:up', () => {
         verticalGuide.set({ visible: false });
         horizontalGuide.set({ visible: false });
         constrainAxis = null;
+        // Invalidate snap target cache on mouse up
+        cachedSnapTargets = null;
+        cachedSnapExclude = null;
         canvas.value!.requestRenderAll();
-        if (selectedObjectRef.value) triggerRef(selectedObjectRef);
+        // CRITICAL: Create fresh snapshot (not just triggerRef) so PropertiesPanel
+        // sees updated position/dimension/zone values after drag/resize.
+        refreshSelectedRef();
     });
 }
 
@@ -9361,13 +10231,10 @@ const updateFloatingUI = () => {
 const updateSelection = () => {
     if (!canvas.value) return;
 
-    // CRITICAL: Sanitize clipPaths before any rendering to prevent forEach errors
-    // This fixes the bug when clicking multiple times on product cards
-    try {
-        sanitizeAllClipPaths();
-    } catch (e) {
-        // Silently fail - don't break selection on sanitization error
-    }
+    // NOTA: sanitizeAllClipPaths removido daqui para evitar flickering.
+    // Era chamado a cada clique/seleção, tocando dirty flags de todos os objetos
+    // e causando re-renders desnecessários. A sanitização agora ocorre apenas
+    // em momentos críticos (loadFromJSON, thumbnail, etc).
 
     const active = canvas.value.getActiveObject();
     // Safety: make sure Fabric has fresh control coordinates for hover/cursor logic.
@@ -9378,22 +10245,10 @@ const updateSelection = () => {
     } catch {
         // ignore
     }
-    // Ensure selectedId is never undefined - always null if no active object
-    selectedObjectId.value = active ? (active._customId ?? null) : null;
-    selectedObjectRef.value = active; // Update ref for Properties Panel
-    updateFloatingUI();
-    
-    // Show contextual toolbar for vector paths
-    showPenContextualToolbar.value = !!(active && active.isVectorPath);
-    
-    // Render canvas to show frame label when frame is selected
-    if (active && active.isFrame) {
-        canvas.value.requestRenderAll();
-    }
-    
-    // Sync Product Zone State
+
+    // CRITICAL: Set zone flags BEFORE creating the snapshot so PropertiesPanel detects them.
+    // Previously, flags were set after the snapshot, causing isLikelyProductZone() to fail.
     if (active && isLikelyProductZone(active)) {
-        // CRITICAL: Ensure zone flags are set so PropertiesPanel detects it correctly
         if (!active.isGridZone && !active.isProductZone) {
             if (active.name === 'gridZone') {
                 active.isGridZone = true;
@@ -9405,6 +10260,24 @@ const updateSelection = () => {
             }
         }
         ensureZoneSanity(active);
+    }
+
+	    // Ensure selectedId is never undefined - always null if no active object
+	    selectedObjectId.value = active ? (active._customId ?? null) : null;
+	    // Always use a stable snapshot so the PropertiesPanel never "loses" sections (e.g. `type` can be non-enumerable on Fabric objects).
+	    selectedObjectRef.value = active ? snapshotForPropertiesPanel(active) : null;
+	    updateFloatingUI();
+	    
+	    // Show contextual toolbar for vector paths
+	    showPenContextualToolbar.value = !!(active && active.isVectorPath);
+    
+    // Render canvas to show frame label when frame is selected
+    // NOTA: Removido requestRenderAll extra aqui — o Fabric já re-renderiza
+    // automaticamente ao mudar seleção. O throttledUpdateFrameLabels (via after:render)
+    // cuidará de atualizar os labels HTML dos frames.
+    
+    // Sync Product Zone State
+    if (active && isLikelyProductZone(active)) {
         // Initialize state from object data
         const pad = typeof active._zonePadding === 'number' ? active._zonePadding : (active.padding || 20);
         const zoneConfig = {
@@ -9838,6 +10711,10 @@ const setupReactivity = () => {
             obj._customId = Math.random().toString(36).substr(2, 9);
         }
 
+        // Skip auto-parenting for product cards — they are managed by simulateSmartGrid
+        // and should NOT be clipped by the Frame (they sit on top of it).
+        if (obj.isSmartObject || obj.isProductCard) return;
+
         if (!obj.parentFrameId) {
             const frame = findFrameUnderObject(obj);
             if (frame && frame._customId) obj.parentFrameId = frame._customId;
@@ -9867,20 +10744,8 @@ const setupReactivity = () => {
             }
         }
 
-        // CRITICAL: Re-enable caching after movement stops to prevent trails.
-        // NOTE: Product cards (smart objects) keep caching disabled to avoid rare black-flash glitches.
-        if (
-            !obj.objectCaching &&
-            !obj.isProductZone &&
-            !obj.isGridZone &&
-            !obj.isSmartObject &&
-            !obj.isProductCard &&
-            !String(obj.name || '').startsWith('product-card')
-        ) {
-            obj.set('objectCaching', true);
-            obj.set('statefullCache', true);
-            obj.set('dirty', true);
-        }
+        // Mark dirty after modification to ensure clean render
+        obj.set('dirty', true);
 
         maybeReparentToFrameOnDrop(obj);
         syncObjectFrameClip(obj);
@@ -9896,7 +10761,11 @@ const setupReactivity = () => {
     });
 
     canvas.value.on('object:modified', () => { 
-        if(selectedObjectRef.value) triggerRef(selectedObjectRef); 
+        // CRITICAL: Create a fresh snapshot instead of just triggering the old one.
+        // After modifications (drag, scale, etc.) the Fabric object's properties may have changed
+        // (e.g. ensureZoneSanity, normalizeZoneScale). A stale snapshot causes PropertiesPanel
+        // to show outdated values or lose zone detection entirely for legacy arts.
+        refreshSelectedRef();
         updateScrollbars(); // Update scrollbars
         updateFloatingUI();
     });
@@ -9992,17 +10861,22 @@ const setupReactivity = () => {
     });
     
     // Realtime updates during interaction
+    // Throttled floating UI update (avoid expensive getBoundingRect on every move frame)
+    let floatingUIRafPending = false;
     canvas.value.on('object:moving', (e: any) => {
-        updateFloatingUI();
+        if (!floatingUIRafPending) {
+            floatingUIRafPending = true;
+            requestAnimationFrame(() => {
+                updateFloatingUI();
+                floatingUIRafPending = false;
+            });
+        }
         
         const target = e.target;
         // Frame moves its descendants (Figma-like parenting)
         if (target && target.isFrame) {
-             // CRITICAL: Disable caching during movement to prevent trails/ghosting
-             if (target.objectCaching) {
-                 target.set('objectCaching', false);
-                 target.set('dirty', true);
-             }
+             // Mark dirty to ensure fresh render (keep caching for performance)
+             target.set('dirty', true);
              
              const dx = target.left - lastFrameState.left;
              const dy = target.top - lastFrameState.top;
@@ -10015,18 +10889,39 @@ const setupReactivity = () => {
              lastFrameState.top = target.top;
              getOrCreateFrameClipRect(target);
 
+             // ─── Grid group: move sibling cells together ────────────────
+             if (target.gridGroupId && target.isGridCell && (dx || dy)) {
+                 const siblings = canvas.value.getObjects().filter(
+                     (o: any) => o !== target && o.gridGroupId === target.gridGroupId && o.isGridCell
+                 );
+                 siblings.forEach((sib: any) => {
+                     sib.set({ left: (sib.left ?? 0) + dx, top: (sib.top ?? 0) + dy });
+                     sib.setCoords?.();
+                     // Also move the sibling's frame descendants
+                     const sibDescendants = getFrameDescendants(sib);
+                     moveFrameDescendants(sib, dx, dy, sibDescendants);
+                     if (sib.clipContent) {
+                         getOrCreateFrameClipRect(sib);
+                         sibDescendants.forEach((child: any) => {
+                             syncObjectFrameClip(child);
+                         });
+                     }
+                 });
+             }
+
              // Update clipPath para todos os filhos (absolutePositioned: false
              // = relativo ao objeto, mas como o frame moveu e os filhos também,
              // precisamos recalcular o offset relativo)
              if (target.clipContent) {
                  const fc = target.getCenterPoint ? target.getCenterPoint() : { x: target.left, y: target.top };
+                 const DEG2RAD = Math.PI / 180;
                  frameChildrenCache.forEach((child: any) => {
                      if (child.clipPath && (child as any)._frameClipOwner === target._customId) {
                          const childCenter = child.getCenterPoint ? child.getCenterPoint() : { x: child.left, y: child.top };
                          const dxW = fc.x - childCenter.x;
                          const dyW = fc.y - childCenter.y;
                          const childAngle = child.angle || 0;
-                         const aRad = -childAngle * Math.PI / 180;
+                         const aRad = -childAngle * DEG2RAD;
                          const cosA = Math.cos(aRad);
                          const sinA = Math.sin(aRad);
                          child.clipPath.set({
@@ -10043,8 +10938,7 @@ const setupReactivity = () => {
                  });
              }
              
-             // Force full canvas render to clear previous position
-             canvas.value.requestRenderAll();
+             // Fabric renders after object:moving — no explicit requestRenderAll needed
              return;
         }
 
@@ -10138,6 +11032,11 @@ const setupReactivity = () => {
                 width: w,
                 scaleX: 1
             });
+
+            // Keep centered text inside product card groups
+            if (obj.originX === 'center' && obj.group && (obj.group.isSmartObject || obj.group.isProductCard || isLikelyProductCard(obj.group))) {
+                obj.set({ left: 0 });
+            }
         }
 
         // 2. Rect Border-Radius Preservation (Figma-style)
@@ -10196,6 +11095,13 @@ const setupReactivity = () => {
         const obj = e.target;
         if (obj) {
             applyContainmentConstraints(obj);
+
+            // Re-center textboxes inside product cards after resize
+            if (obj.type === 'textbox' && obj.originX === 'center' && obj.group && (obj.group.isSmartObject || obj.group.isProductCard || isLikelyProductCard(obj.group))) {
+                obj.set({ left: 0 });
+                obj.setCoords();
+                canvas.value.requestRenderAll();
+            }
         }
     });
     
@@ -10211,26 +11117,11 @@ const setupReactivity = () => {
     });
 
     // === DEEP SELECT (Figma-style) ===
-    // 1. Reset all smart objects to rigid mode (move as group)
+    // Product cards always have subTargetCheck=true (single-click deep select).
+    // resetDeepSelection is now a no-op for product cards.
     const resetDeepSelection = () => {
-        const objs = canvas.value.getObjects();
-        objs.forEach((o: any) => {
-             if ((o.isSmartObject || o.isProductCard || isLikelyProductCard(o)) && o.type === 'group') {
-                 if (o.subTargetCheck) { 
-                     // Only update if needed to avoid re-renders
-                     o.set({ subTargetCheck: false, interactive: false });
-                     if (o.getObjects) {
-                         o.getObjects().forEach((c: any) => c.set({ 
-                             selectable: false, 
-                             evented: false,
-                             hasControls: false,
-                             hasBorders: false 
-                         }));
-                     }
-                 }
-             }
-        });
-        canvas.value.requestRenderAll();
+        // No-op: product cards stay interactive at all times.
+        // Only non-product groups would be reset here if needed.
     }
 
     // 2. Enable deep select on Double Click
@@ -10370,86 +11261,12 @@ const setupReactivity = () => {
 	             return;
 	        }
 
-            if ((target.isSmartObject || target.isProductCard || isLikelyProductCard(target) || String((target as any).parentZoneId || '').trim().length) && target.type === 'group') {
-	             console.log('[DeepSelect] Entering group edit mode');
-	             target.set({
-	                 subTargetCheck: true,
-	                 interactive: true
-	             });
-	             if (target.getObjects) {
-	                 target.getObjects().forEach((child: any) => {
-	                     const name = String(child?.name || '');
-	                     const isBackground = name === 'offerBackground' || name === 'price_bg';
-	                     const isBgImage = name === 'price_bg_image' || name === 'splash_image';
-	                     const selectable = !isBackground && !isBgImage;
-	                     child.set({ 
-	                         selectable,
-	                         evented: selectable,
-	                         hasControls: selectable, // Enable resize handles
-	                         hasBorders: selectable,   // Show selection border
-	                         lockMovementX: false,
-	                         lockMovementY: false,
-	                         lockScalingX: false,
-	                         lockScalingY: false,
-	                         lockRotation: false
-	                     });
-	                     child.setCoords?.();
-	                 });
-	             }
-	             target.setCoords?.();
-	             // UX: on the same double click, try to deep-select the inner element under pointer
-	             // (so users can double click the title/image directly like Canva/Figma).
-	             try {
-	                 const c: any = canvas.value as any;
-                 const evt = opt.e || opt.originalEvent;
-                 if (evt && typeof c.getScenePoint === 'function' && typeof c.searchPossibleTargets === 'function') {
-                     const p = c.getScenePoint(evt);
-                     const info = c.searchPossibleTargets([target], p);
-                     const hit = info?.target;
-                     const hitName = String(hit?.name || '');
-                     const isCardBg = hitName === 'offerBackground' || hitName === 'price_bg' || hitName === 'price_bg_image';
-                     if (hit && hit !== target && !isCardBg) {
-                         c.setActiveObject(hit);
-                     } else {
-                         c.setActiveObject(target);
-                     }
-                 }
-             } catch (e) {
-                 // ignore
-             }
-             canvas.value.requestRenderAll();
-        }
+            // Product cards already have subTargetCheck=true, so single click selects inner elements.
+            // Double-click on a product card is now a no-op (no extra mode needed).
     });
 
-    // 3. Reset others when selecting a new object (unless it's a child of an active group)
-    canvas.value.on('selection:created', (e: any) => {
-        // If we select a group normally (single click), ensure it is rigid properly
-        // If we select a child, the parent group must remain interactive.
-        // Simple logic: Reset everything that is NOT the current parent.
-        const selected = e.selected?.[0];
-        if (selected) {
-            // Find parent if it's a child
-            const activeGroup = selected.group; 
-            
-            const objs = canvas.value.getObjects();
-            objs.forEach((o: any) => {
-                // If this object is NOT the active group and NOT the selected object
-                if (o !== selected && o !== activeGroup) {
-                    if ((o.isSmartObject || o.isProductCard || isLikelyProductCard(o)) && o.type === 'group' && o.subTargetCheck) {
-                        o.set({ subTargetCheck: false, interactive: false });
-                        if(o.getObjects) {
-                            o.getObjects().forEach((c: any) => c.set({ 
-                                selectable: false, 
-                                evented: false,
-                                hasControls: false,
-                                hasBorders: false
-                            }));
-                        }
-                    }
-                }
-            });
-        }
-    });
+    // 3. Product cards always stay interactive (single-click deep select).
+    // No need to reset other cards when selecting a new object.
     
     // Initial fetch
     updateObjects();
@@ -10514,6 +11331,7 @@ const alignSelectionHorizontally = (mode: 'left' | 'center' | 'right') => {
     if (!active) return;
 
     const alignOne = (obj: any, ref: { left: number; right: number; centerX: number }) => {
+        if (obj?.lockMovementX || obj?.lockMovementY) return;
         const br = obj.getBoundingRect(true);
         const currentCenter = obj.getCenterPoint ? obj.getCenterPoint() : { x: obj.left, y: obj.top };
         let nextCenterX = currentCenter.x;
@@ -10593,6 +11411,14 @@ const updateObjectProperty = (prop: string, value: any) => {
     const active = canvas.value.getActiveObject();
     
     if (active) {
+        // If locked, ignore position/size/rotate changes from the inspector.
+        // Lock should only block transformations, not styling/effects.
+        if (active.type !== 'activeSelection') {
+            if ((prop === 'left' || prop === 'top') && (active.lockMovementX || active.lockMovementY)) return;
+            if ((prop === 'width' || prop === 'height' || prop === 'scaleX' || prop === 'scaleY') && (active.lockScalingX || active.lockScalingY)) return;
+            if (prop === 'angle' && active.lockRotation) return;
+        }
+
         // Resolve "style target" for groups/zones (Fabric groups don't have fill/stroke/radius).
         const resolveStyleTarget = (obj: any) => {
             if (!obj) return obj;
@@ -10612,6 +11438,36 @@ const updateObjectProperty = (prop: string, value: any) => {
             }
             fn(styleTarget);
         };
+
+        // --- Lock (Cadeado) ---
+        // Blocks movement/scale/rotate but keeps the object selectable so the user can unlock.
+        if (prop === 'lockMovement') {
+            const locked = !!value;
+            const applyLock = (o: any) => {
+                if (!o || typeof o.set !== 'function') return;
+                o.set({
+                    lockMovementX: locked,
+                    lockMovementY: locked,
+                    lockScalingX: locked,
+                    lockScalingY: locked,
+                    lockRotation: locked
+                });
+                o.setCoords?.();
+            };
+
+            if (active.type === 'activeSelection' && typeof (active as any).getObjects === 'function') {
+                (active as any).getObjects().forEach((o: any) => applyLock(o));
+                safeAddWithUpdate(active);
+                active.setCoords?.();
+            } else {
+                applyLock(active);
+            }
+
+            canvas.value.requestRenderAll();
+            debouncedSaveCurrentState();
+            refreshSelectedRef();
+            return;
+        }
 
         // --- Align (Inspector) ---
         if (prop === 'alignment') {
@@ -10648,17 +11504,18 @@ const updateObjectProperty = (prop: string, value: any) => {
         }
 
         // --- Sticker Outline (alpha-based contour) ---
-        if (prop === 'stickerOutlineEnabled') {
-            const isImage = String(active.type || '').toLowerCase() === 'image';
-            if (!isImage) return;
-            const el = active._element || active.getElement?.();
-            (active as any).__stickerOutlineEnabled = !!value;
-            // Set defaults if first time enabling
-            if (value) {
-                if ((active as any).__stickerOutlineWidth == null) (active as any).__stickerOutlineWidth = 4;
-                if ((active as any).__stickerOutlineColor == null) (active as any).__stickerOutlineColor = '#FFFFFF';
-                if ((active as any).__stickerOutlineOpacity == null) (active as any).__stickerOutlineOpacity = 1;
-            }
+	        if (prop === 'stickerOutlineEnabled') {
+	            const isImage = String(active.type || '').toLowerCase() === 'image';
+	            if (!isImage) return;
+	            const el = active._element || active.getElement?.();
+	            (active as any).__stickerOutlineEnabled = !!value;
+	            // Set defaults if first time enabling
+	            if (value) {
+	                if ((active as any).__stickerOutlineWidth == null) (active as any).__stickerOutlineWidth = 4;
+	                if ((active as any).__stickerOutlineColor == null) (active as any).__stickerOutlineColor = '#FFFFFF';
+	                if ((active as any).__stickerOutlineOpacity == null) (active as any).__stickerOutlineOpacity = 1;
+	                if (!(active as any).__stickerOutlineMode) (active as any).__stickerOutlineMode = 'outside';
+	            }
             // Detect transparency
             if (value && el) {
                 const hasTrans = imageHasTransparency(el);
@@ -10671,19 +11528,42 @@ const updateObjectProperty = (prop: string, value: any) => {
             // Second render to guarantee visibility after patch
             setTimeout(() => { canvas.value?.renderAll?.(); }, 60);
             debouncedSaveCurrentState();
-            refreshSelectedRef({
-                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
-                __stickerOutlineWidth: (active as any).__stickerOutlineWidth ?? 4,
-                __stickerOutlineColor: (active as any).__stickerOutlineColor ?? '#FFFFFF',
-                __stickerOutlineOpacity: (active as any).__stickerOutlineOpacity ?? 1,
-                __stickerNoTransparency: !!(active as any).__stickerNoTransparency
-            });
-            return;
-        }
-        if (prop === 'stickerOutlineWidth' || prop === 'stickerOutlineColor' || prop === 'stickerOutlineOpacity') {
-            const propMap = {
-                stickerOutlineWidth: '__stickerOutlineWidth',
-                stickerOutlineColor: '__stickerOutlineColor',
+	            refreshSelectedRef({
+	                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
+	                __stickerOutlineMode: (active as any).__stickerOutlineMode || 'outside',
+	                __stickerOutlineWidth: (active as any).__stickerOutlineWidth ?? 4,
+	                __stickerOutlineColor: (active as any).__stickerOutlineColor ?? '#FFFFFF',
+	                __stickerOutlineOpacity: (active as any).__stickerOutlineOpacity ?? 1,
+	                __stickerNoTransparency: !!(active as any).__stickerNoTransparency
+	            });
+	            return;
+	        }
+	        if (prop === 'stickerOutlineMode') {
+	            const isImage = String(active.type || '').toLowerCase() === 'image';
+	            if (!isImage) return;
+	            const next: 'outside' | 'inside' = value === 'inside' ? 'inside' : 'outside';
+	            (active as any).__stickerOutlineMode = next;
+	            invalidateStickerOutlineCache(active);
+	            applyStickerOutlinePatch(active);
+	            active.setCoords?.();
+	            active.dirty = true;
+	            canvas.value.renderAll();
+	            setTimeout(() => { canvas.value?.renderAll?.(); }, 60);
+	            debouncedSaveCurrentState();
+	            refreshSelectedRef({
+	                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
+	                __stickerOutlineMode: (active as any).__stickerOutlineMode || 'outside',
+	                __stickerOutlineWidth: (active as any).__stickerOutlineWidth,
+	                __stickerOutlineColor: (active as any).__stickerOutlineColor,
+	                __stickerOutlineOpacity: (active as any).__stickerOutlineOpacity,
+	                __stickerNoTransparency: !!(active as any).__stickerNoTransparency
+	            });
+	            return;
+	        }
+	        if (prop === 'stickerOutlineWidth' || prop === 'stickerOutlineColor' || prop === 'stickerOutlineOpacity') {
+	            const propMap = {
+	                stickerOutlineWidth: '__stickerOutlineWidth',
+	                stickerOutlineColor: '__stickerOutlineColor',
                 stickerOutlineOpacity: '__stickerOutlineOpacity'
             } as const;
             const key: string = propMap[prop as keyof typeof propMap];
@@ -10695,15 +11575,16 @@ const updateObjectProperty = (prop: string, value: any) => {
             canvas.value.renderAll();
             setTimeout(() => { canvas.value?.renderAll?.(); }, 60);
             debouncedSaveCurrentState();
-            refreshSelectedRef({
-                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
-                __stickerOutlineWidth: (active as any).__stickerOutlineWidth,
-                __stickerOutlineColor: (active as any).__stickerOutlineColor,
-                __stickerOutlineOpacity: (active as any).__stickerOutlineOpacity,
-                __stickerNoTransparency: !!(active as any).__stickerNoTransparency
-            });
-            return;
-        }
+	            refreshSelectedRef({
+	                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
+	                __stickerOutlineMode: (active as any).__stickerOutlineMode || 'outside',
+	                __stickerOutlineWidth: (active as any).__stickerOutlineWidth,
+	                __stickerOutlineColor: (active as any).__stickerOutlineColor,
+	                __stickerOutlineOpacity: (active as any).__stickerOutlineOpacity,
+	                __stickerNoTransparency: !!(active as any).__stickerNoTransparency
+	            });
+	            return;
+	        }
 
         if (prop === 'cornerRadius') {
             const r = Math.max(0, Number(value || 0));
@@ -10940,7 +11821,43 @@ const updateObjectProperty = (prop: string, value: any) => {
             if (prop === 'shadow-x') currentShadow.offsetX = value;
             if (prop === 'shadow-y') currentShadow.offsetY = value;
             if (prop === 'shadow-blur') currentShadow.blur = value;
+            if (prop === 'shadow-color') currentShadow.color = String(value || 'rgba(0,0,0,0.5)');
+            if (prop === 'shadow-opacity') {
+                const clamp01 = (n: any) => Math.min(1, Math.max(0, Number(n ?? 0)));
+                const a = clamp01(value);
+                const c = String(currentShadow.color || 'rgba(0,0,0,0.5)');
+                const m = /rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+)\s*)?\)/i.exec(c);
+                if (m) {
+                    const r = Math.round(Number(m[1] || 0));
+                    const g = Math.round(Number(m[2] || 0));
+                    const b = Math.round(Number(m[3] || 0));
+                    currentShadow.color = `rgba(${r},${g},${b},${a})`;
+                } else if (c.startsWith('#') && (c.length === 7 || c.length === 4)) {
+                    const hex = c.length === 4
+                        ? `#${c[1]}${c[1]}${c[2]}${c[2]}${c[3]}${c[3]}`
+                        : c;
+                    const r = parseInt(hex.slice(1, 3), 16);
+                    const g = parseInt(hex.slice(3, 5), 16);
+                    const b = parseInt(hex.slice(5, 7), 16);
+                    currentShadow.color = `rgba(${r},${g},${b},${a})`;
+                } else {
+                    currentShadow.color = `rgba(0,0,0,${a})`;
+                }
+            }
             active.set('shadow', currentShadow);
+        }
+        // Reset all supported effects on the selected object.
+        else if (prop === 'effects-reset') {
+            active.set('shadow', null);
+            if (active.type === 'image' && typeof active.applyFilters === 'function') {
+                active.filters = [];
+                active.applyFilters();
+            }
+            active.dirty = true;
+            canvas.value.requestRenderAll();
+            debouncedSaveCurrentState();
+            refreshSelectedRef();
+            return;
         }
         // --- Blur Filter ---
         else if (prop === 'blur') {
@@ -10962,23 +11879,57 @@ const updateObjectProperty = (prop: string, value: any) => {
         // --- Image Filters (Brightness/Contrast/Saturation) ---
         else if (prop.startsWith('filter-')) {
             const type = prop.replace('filter-', '');
-            const filterName = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize
+            let filterName = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize
 
             if (active.type === 'image' && typeof active.applyFilters === 'function') {
                 active.filters = Array.isArray(active.filters) ? active.filters : [];
                 // Remove existing filter of same type
-                active.filters = active.filters.filter((f: any) => f.type !== filterName);
+                // Special cases:
+                // - `hue` is HueRotation (rotation: -1..1)
+                // - `blur` is Blur (blur: 0..1) but UI uses px-like 0..20
+                // - `grayscale|sepia|invert` are boolean toggles
+                let shouldAdd = value !== 0;
+                let options: any = {};
+                if (type === 'hue') {
+                    filterName = 'HueRotation';
+                    options = { rotation: Number(value) || 0 };
+                    shouldAdd = Number(value) !== 0;
+                } else if (type === 'blur') {
+                    filterName = 'Blur';
+                    const px = Math.max(0, Number(value) || 0);
+                    const normalized = Math.min(1, px / 20);
+                    options = { blur: normalized };
+                    shouldAdd = normalized !== 0;
+                } else if (type === 'grayscale' || type === 'sepia' || type === 'invert') {
+                    shouldAdd = !!value;
+                    options = {};
+                } else {
+                    options[type] = value;
+                    shouldAdd = value !== 0;
+                }
+
+                active.filters = active.filters.filter((f: any) => f?.type !== filterName);
 
                 // Add new filter if value is not 0 (or neutral)
-                if (value !== 0) {
-                    const options: any = {};
-                    options[type] = value;
+                if (shouldAdd) {
                     // Fabric.js 7: filters are in fabric.filters, not fabric.Image.filters
                     active.filters.push(new (fabric.filters as any)[filterName](options));
                 }
 
                 active.applyFilters();
+                active.dirty = true;
             }
+        }
+        else if (prop === 'filters-reset') {
+            if (active.type === 'image' && typeof active.applyFilters === 'function') {
+                active.filters = [];
+                active.applyFilters();
+                active.dirty = true;
+                canvas.value.requestRenderAll();
+                debouncedSaveCurrentState();
+                refreshSelectedRef();
+            }
+            return;
         }
         // --- Gradient Logic (Simple Linear) ---
         else if (prop === 'fill-gradient') {
@@ -11264,6 +12215,58 @@ const handleAction = async (action: string) => {
     if (!canvas.value) return;
     const active = canvas.value.getActiveObject();
 
+    // Duplicate (button/menu)
+    if (action === 'duplicate') {
+        if (!active) return;
+        if ((active as any).isFrame) {
+            await duplicateFrameWithContents(active);
+            return;
+        }
+        // Reuse Ctrl+D behavior by synthesizing a key action would be messy; just clone directly.
+        try {
+            const extra = Array.from(new Set(['_customId', ...CANVAS_CUSTOM_PROPS]));
+            const cloned: any = await (active as any).clone(extra);
+            if (!cloned) return;
+
+            // Multiple selection
+            if (String(cloned.type || '').toLowerCase() === 'activeselection') {
+                cloned.canvas = canvas.value;
+                (cloned as any).forEachObject?.((obj: any) => {
+                    if (!obj) return;
+                    obj._customId = Math.random().toString(36).substr(2, 9);
+                    obj.set?.({
+                        left: (Number(obj.left) || 0) + 20,
+                        top: (Number(obj.top) || 0) + 20,
+                        selectable: true,
+                        evented: true,
+                    });
+                    canvas.value.add(obj);
+                });
+                cloned.setCoords?.();
+                canvas.value.discardActiveObject();
+            } else {
+                cloned._customId = Math.random().toString(36).substr(2, 9);
+                cloned.set({
+                    left: (Number(active.left) || 0) + 20,
+                    top: (Number(active.top) || 0) + 20,
+                    selectable: true,
+                    evented: true,
+                });
+                canvas.value.add(cloned);
+                canvas.value.setActiveObject(cloned);
+            }
+
+            canvas.value.requestRenderAll();
+            canvasObjects.value = [...canvas.value.getObjects()];
+            updateSelection();
+            saveCurrentState({ reason: 'duplicate-action' });
+            triggerAutoSave();
+        } catch (err) {
+            console.warn('[duplicate] Falha ao duplicar (action)', err);
+        }
+        return;
+    }
+
     // AI edit current image (mask workflow) - replaces the selected image in the design.
     if (action === 'ai-edit-image') {
         const found = findImageTargetInSelection(active);
@@ -11342,7 +12345,8 @@ const handleAction = async (action: string) => {
 
             if (result?.url) {
                 // Load new image with callback to ensure it's loaded
-                fabric.Image.fromURL(result.url, (newImg: any) => {
+                const proxiedBgUrl = toWasabiProxyUrl(result.url) || result.url;
+                fabric.Image.fromURL(proxiedBgUrl, (newImg: any) => {
                     if (!newImg || !canvas.value) return;
 
                     const oldDisplayWidth = (targetImage.width || 1) * (targetImage.scaleX || 1);
@@ -11470,17 +12474,17 @@ const handleAction = async (action: string) => {
         saveCurrentState();
 
         // Update selection to the new group and preserve parentFrameId
-        const newGroup = canvas.value.getActiveObject();
-        if (newGroup) {
-            if (!newGroup._customId) newGroup._customId = Math.random().toString(36).substr(2, 9);
-            // Preserve parentFrameId from the objects (they all have the same one at this point)
-            if (parentFrames.size === 1) {
-                newGroup.parentFrameId = [...parentFrames][0];
-            }
-            selectedObjectRef.value = newGroup;
-        }
-        return;
-    }
+	        const newGroup = canvas.value.getActiveObject();
+	        if (newGroup) {
+	            if (!newGroup._customId) newGroup._customId = Math.random().toString(36).substr(2, 9);
+	            // Preserve parentFrameId from the objects (they all have the same one at this point)
+	            if (parentFrames.size === 1) {
+	                newGroup.parentFrameId = [...parentFrames][0];
+	            }
+	            selectedObjectRef.value = snapshotForPropertiesPanel(newGroup);
+	        }
+	        return;
+	    }
     if (action === 'ungroup') {
         if (!active || active.type !== 'group') return;
 
@@ -11499,12 +12503,12 @@ const handleAction = async (action: string) => {
             newSelection.getObjects().forEach((o: any) => {
                 o.parentFrameId = parentFrameId;
             });
-        }
+	        }
 
-        // Update selection
-        selectedObjectRef.value = canvas.value.getActiveObject();
-        return;
-    }
+	        // Update selection
+	        selectedObjectRef.value = snapshotForPropertiesPanel(canvas.value.getActiveObject());
+	        return;
+	    }
 
     // Flip
     if (action === 'flip-h') {
@@ -11905,15 +12909,20 @@ const toggleVisible = (id: string) => {
     if (!canvas.value) return; 
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
-        obj.visible = !obj.visible;
+        const next = !(obj.visible !== false);
+        obj.set?.('visible', next);
+        obj.visible = next;
         // Deselect if hidden
-        if (!obj.visible) canvas.value.discardActiveObject();
+        if (!next) canvas.value.discardActiveObject();
         canvas.value.requestRenderAll();
         // Trigger update to refresh UI icons
         // (Fabric doesn't emit 'modified' on property set via code usually, need to force or rely on array ref update might not catch deep prop)
         // Since canvasObjects is shallow array, deep prop change might not trigger watcher if we had one. 
         // But our LayersPanel reads directly from the object prop. We might need to force update the array reference to trigger re-render of panel items.
         canvasObjects.value = [...canvas.value.getObjects()];
+        updateSelection();
+        saveCurrentState({ reason: 'layers-toggle-visible' });
+        triggerAutoSave();
     }
 }
 
@@ -11932,6 +12941,10 @@ const toggleLock = (id: string) => {
         });
         canvas.value.requestRenderAll();
         canvasObjects.value = [...canvas.value.getObjects()];
+        // Persist lock so reload keeps it
+        saveCurrentState();
+        triggerAutoSave();
+        if (selectedObjectId.value === id) refreshSelectedRef();
     }
 }
 
@@ -11939,8 +12952,12 @@ const deleteObject = (id: string) => {
     if (!canvas.value) return; 
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
+        const active = canvas.value.getActiveObject?.();
+        if (active && active === obj) canvas.value.discardActiveObject();
         canvas.value.remove(obj);
         canvas.value.requestRenderAll();
+        canvasObjects.value = [...canvas.value.getObjects()];
+        updateSelection();
     }
 }
 
@@ -12587,7 +13604,8 @@ const insertAssetToCanvas = async (asset: any) => {
 
     try {
         const center = getCenterOfView();
-        const img: any = await fabric.Image.fromURL(asset.url, { crossOrigin: 'anonymous' });
+        const proxiedUrl = toWasabiProxyUrl(asset.url) || asset.url;
+        const img: any = await fabric.Image.fromURL(proxiedUrl, { crossOrigin: 'anonymous' });
 
         const pageW = activePage.value?.width || 1080;
         const pageH = activePage.value?.height || 1920;
@@ -12621,6 +13639,63 @@ const insertAssetToCanvas = async (asset: any) => {
         saveCurrentState();
     } catch (e) {
         console.warn('[assets] Failed to insert asset to canvas', e);
+    }
+};
+
+// ─── Insert Element from ElementsPanel ────────────────────────────────────
+const insertElementToCanvas = (element: { type: string; data: any }) => {
+    if (!canvas.value || !fabric) return;
+    const { type, data } = element;
+
+    if (type === 'shape') {
+        // Reutiliza addShape existente, passando options customizadas
+        addShape(data.shape, data.options || {});
+    } else if (type === 'path') {
+        // Cria fabric.Path a partir de pathData SVG
+        try {
+            const center = getCenterOfView();
+            const pathObj: any = new fabric.Path(data.path, {
+                fill: data.fill ?? '#cccccc',
+                stroke: data.stroke ?? '#cccccc',
+                strokeWidth: data.strokeWidth ?? 0,
+                strokeUniform: true,
+                strokeLineCap: data.strokeLineCap || 'butt',
+                strokeLineJoin: data.strokeLineJoin || 'miter',
+                fillRule: data.fillRule || 'nonzero',
+                objectCaching: false,
+                noScaleCache: true,
+                statefullCache: false,
+            });
+            // Escalar para ~100px de largura mantendo proporção
+            const bw = pathObj.width || 100;
+            const bh = pathObj.height || 100;
+            const targetSize = 120;
+            const scale = targetSize / Math.max(bw, bh);
+            pathObj.set({
+                scaleX: scale,
+                scaleY: scale,
+                left: center.x,
+                top: center.y,
+                originX: 'center',
+                originY: 'center',
+            });
+            pathObj._customId = Math.random().toString(36).substr(2, 9);
+            canvas.value.add(pathObj);
+            canvas.value.setActiveObject(pathObj);
+            canvas.value.requestRenderAll();
+            saveCurrentState();
+        } catch (err) {
+            console.warn('[elements] Failed to create path element', err);
+        }
+    } else if (type === 'frame') {
+        // Cria frame com dimensões customizadas
+        addFrame();
+    } else if (type === 'grid') {
+        // Cria grade de frames estilo Canva (cada célula é um Frame com clipPath)
+        const cols = data.columns || 2;
+        const rows = data.rows || 2;
+        const gap = data.gap ?? 8;
+        addGridFrames(cols, rows, gap);
     }
 };
 
@@ -12658,7 +13733,8 @@ const replaceImageByCustomId = async (targetId: string, newUrl: string) => {
     try {
         const oldDisplayW = Math.abs((target.width || 1) * (target.scaleX || 1));
         const oldDisplayH = Math.abs((target.height || 1) * (target.scaleY || 1));
-        const newImg: any = await fabric.Image.fromURL(newUrl, { crossOrigin: 'anonymous' });
+        const proxiedNewUrl = toWasabiProxyUrl(newUrl) || newUrl;
+        const newImg: any = await fabric.Image.fromURL(proxiedNewUrl, { crossOrigin: 'anonymous' });
         if (!newImg) return;
 
         const newW = newImg.width || 1;
@@ -12742,7 +13818,8 @@ const handlePaste = async (e: ClipboardEvent) => {
                  try {
                      const result = await uploadFile(file);
                      if (result.success) {
-                         const img = await fabric.Image.fromURL(result.url, { crossOrigin: 'anonymous' });
+                         const pasteProxyUrl = toWasabiProxyUrl(result.url) || result.url;
+                         const img = await fabric.Image.fromURL(pasteProxyUrl, { crossOrigin: 'anonymous' });
                          if (img) {
                              // Scale down if huge
                              if (img.width > 500) {
@@ -12876,20 +13953,24 @@ const addShape = (type: 'rect' | 'circle' | 'triangle' | 'star' | 'polygon' | 'l
     } else if (type === 'triangle') {
         shape = new fabric.Triangle({ ...opts, width: 100, height: 100 });
     } else if (type === 'polygon') {
-        const points = [
+        const points = opts.points || [
             { x: 50, y: 0 }, { x: 100, y: 38 }, { x: 82, y: 100 }, 
             { x: 18, y: 100 }, { x: 0, y: 38 }
         ];
-        shape = new fabric.Polygon(points, opts);
+        const { points: _pts, ...polygonOpts } = opts;
+        shape = new fabric.Polygon(points, polygonOpts);
     } else if (type === 'star') {
-        const points = [
+        const points = opts.points || [
             {x: 50, y: 0}, {x: 61, y: 35}, {x: 98, y: 35}, {x: 68, y: 57}, 
             {x: 79, y: 91}, {x: 50, y: 70}, {x: 21, y: 91}, {x: 32, y: 57}, 
             {x: 2, y: 35}, {x: 39, y: 35}
         ];
-        shape = new fabric.Polygon(points, opts);
+        const { points: _pts, ...starOpts } = opts;
+        shape = new fabric.Polygon(points, starOpts);
     } else if (type === 'line') {
-        shape = new fabric.Line([0, 0, 200, 0], { ...opts, left: center.x - 100, top: center.y });
+        const coords = opts.coords || [0, 0, 200, 0];
+        const { coords: _c, ...lineOpts } = opts;
+        shape = new fabric.Line(coords, { ...lineOpts, left: center.x - 100, top: center.y });
     } else if (type === 'arrow') {
         // Simple arrow using Path
         const path = 'M 0 0 L 200 0 M 200 0 L 180 -10 M 200 0 L 180 10';
@@ -13070,18 +14151,35 @@ const getAvailablePrices = (product: any) => {
         return false;
     };
 
-    // Preço especial unitário (maior prioridade - preço principal com desconto)
-    addPrice(product.priceSpecialUnit, '', 'special');
+    // PRIORIDADE: preços unitários são preferidos para exibição na etiqueta
+    // O atacarejo geralmente mostra: preço unitário avulso (varejo) vs preço especial unitário (atacado)
 
-    // Preço especial de embalagem (promo de caixa/fardo)
-    addPrice(product.priceSpecial, product.packageLabel || 'CX', 'special');
+    // Preço especial unitário (maior prioridade para atacado)
+    const hasSpecialUnit = addPrice(product.priceSpecialUnit, '', 'special');
 
-    // Preço unitário avulso (preço principal sem desconto)
+    // Preço especial de embalagem (só se não tem especial unitário)
+    if (!hasSpecialUnit) {
+        addPrice(product.priceSpecial, product.packageLabel || 'CX', 'special');
+    }
+
+    // Preço unitário avulso (preço principal varejo)
+    // Se já tem um preço especial (atacado), o priceUnit é o preço de varejo (main).
+    // Se NÃO tem preço especial, o priceUnit é o preço principal (main) — NUNCA classificar como 'special'
+    // pois isso faria um produto simples aparecer com etiqueta atacarejo.
     const hasSpecial = prices.some(p => p.type === 'special');
-    addPrice(product.priceUnit, hasSpecial ? '' : '', hasSpecial ? 'main' : 'special');
+    const hasUnitPrice = addPrice(product.priceUnit, '', 'main');
 
-    // Preço de embalagem avulsa (caixa/fardo sem desconto)
-    addPrice(product.pricePack, product.packageLabel || 'CX', 'pack');
+    // Preço de embalagem avulsa (só como complemento, não substitui unitário)
+    if (!hasUnitPrice) {
+        addPrice(product.pricePack, product.packageLabel || 'CX', hasSpecial ? 'main' : 'pack');
+    } else {
+        // Adicionar pricePack como info extra se diferente do priceUnit
+        const packFormatted = formatPriceValue(product.pricePack);
+        const unitFormatted = formatPriceValue(product.priceUnit);
+        if (packFormatted && packFormatted !== unitFormatted) {
+            addPrice(product.pricePack, product.packageLabel || 'CX', 'pack');
+        }
+    }
 
     // Fallback para preço legado
     if (prices.length === 0) {
@@ -13181,7 +14279,8 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     
     if (imgUrl) {
         try {
-            imgObj = await fabric.Image.fromURL(imgUrl, { crossOrigin: 'anonymous' });
+            const proxiedImgUrl = toWasabiProxyUrl(imgUrl) || imgUrl;
+            imgObj = await fabric.Image.fromURL(proxiedImgUrl, { crossOrigin: 'anonymous' });
             
             if (imgObj) {
                 // Scale image to fit middle area
@@ -13314,10 +14413,9 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
         originY: 'center',
         isSmartObject: true,
         smartGridId: gridId,
-        // Default behavior (Canva-like): select/move the whole card.
-        // Deep select is enabled only on double click.
-        subTargetCheck: false,
-        interactive: false
+        // Single-click deep select: user can click directly on inner elements.
+        subTargetCheck: true,
+        interactive: true
     });
     
     // Store card dimensions for containment checking (used by object:moving handler)
@@ -13553,6 +14651,85 @@ const handleFileUpload = (e: any) => {
     // ... Existing logic stub
 }
 
+const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
+    if (!canvas.value || !fabric) return;
+
+    const center = getCenterOfView();
+    const gridGroupId = 'grid_' + Math.random().toString(36).substr(2, 9);
+
+    // Total grid dimensions — fit nicely in view
+    const totalW = 600;
+    const totalH = 600;
+    const cellW = (totalW - gap * (cols - 1)) / cols;
+    const cellH = (totalH - gap * (rows - 1)) / rows;
+
+    // Top-left corner of the grid
+    const startX = center.x - totalW / 2;
+    const startY = center.y - totalH / 2;
+
+    const cells: any[] = [];
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const x = startX + c * (cellW + gap) + cellW / 2;
+            const y = startY + r * (cellH + gap) + cellH / 2;
+
+            const cell = new fabric.Rect({
+                left: x,
+                top: y,
+                originX: 'center',
+                originY: 'center',
+                width: cellW,
+                height: cellH,
+                fill: '#e0e0e0',
+                stroke: 'transparent',
+                strokeWidth: 0,
+                strokeUniform: true,
+                isFrame: true,
+                clipContent: true,
+                name: `Grade ${cols}×${rows} [${r + 1},${c + 1}]`,
+                objectCaching: false,
+                statefullCache: false,
+                noScaleCache: true,
+                hasBorders: true,
+                transparentCorners: false,
+                cornerColor: '#0d99ff',
+                cornerSize: 8,
+                padding: 0,
+                lockScalingX: false,
+                lockScalingY: false,
+                cornerStrokeColor: '#0d99ff',
+                borderScaleFactor: 1
+            });
+
+            (cell as any)._customId = Math.random().toString(36).substr(2, 9);
+            (cell as any).__strokeEnabled = false;
+            (cell as any).layerName = 'FRAMER';
+            (cell as any).gridGroupId = gridGroupId;
+            (cell as any).gridCol = c;
+            (cell as any).gridRow = r;
+            (cell as any).isGridCell = true;
+
+            cells.push(cell);
+        }
+    }
+
+    // Add all cells to canvas
+    cells.forEach((cell) => canvas.value!.add(cell));
+
+    // Frames must stay below content
+    ensureFramesBelowContents();
+
+    // Select the first cell
+    if (cells.length > 0) {
+        canvas.value.setActiveObject(cells[0]);
+    }
+
+    canvas.value.requestRenderAll();
+    canvasObjects.value = [...canvas.value.getObjects()];
+    saveCurrentState();
+}
+
 const addGridZone = () => {
     if (!canvas.value) return;
     
@@ -13667,6 +14844,17 @@ const simulateSmartGrid = async (
         width: activePage.value?.width || 1080, 
         height: activePage.value?.height || 1920 
     };
+
+    // When no zone is selected, try to use the first existing Frame as bounds
+    // so products are placed INSIDE the visible frame area.
+    if (!targetZone) {
+        const existingFrame = canvas.value.getObjects().find((o: any) => !!o?.isFrame);
+        if (existingFrame) {
+            const fb = existingFrame.getBoundingRect(true);
+            bounds = { left: fb.left, top: fb.top, width: fb.width, height: fb.height };
+            console.log('[simulateSmartGrid] Using Frame bounds:', bounds);
+        }
+    }
 
     if (targetZone) {
         // Use getBoundingRect with absolute=true for world coordinates
@@ -14064,10 +15252,35 @@ const simulateSmartGrid = async (
                 canvas.value.setActiveObject(smartObjects[0]);
             }
         } else {
-            // No zone - add directly to canvas (old behavior)
-            smartObjects.forEach((obj: any) => {
-                console.log('[simulateSmartGrid] Adding object to canvas:', obj);
+            // No zone - add directly to canvas and ensure they're above the Frame
+            console.log('[simulateSmartGrid] NO ZONE PATH - adding', smartObjects.length, 'cards directly. Bounds used:', JSON.stringify(bounds));
+            smartObjects.forEach((obj: any, idx: number) => {
+                console.log(`[simulateSmartGrid] Card ${idx}: left=${obj.left}, top=${obj.top}, w=${obj.width}, h=${obj.height}, visible=${obj.visible}, opacity=${obj.opacity}`);
+                // Ensure cards are NOT parented to any Frame (prevents clipPath hiding them)
+                obj.clipPath = null;
+                obj.parentFrameId = undefined;
+                delete obj._frameClipOwner;
+                obj.visible = true;
+                obj.opacity = 1;
                 canvas.value.add(obj);
+                // Bring each card to front so they sit ABOVE the white Frame
+                const c: any = canvas.value as any;
+                if (typeof c.bringObjectToFront === 'function') c.bringObjectToFront(obj);
+                else if (typeof c.bringToFront === 'function') c.bringToFront(obj);
+            });
+            // Ensure frames stay behind all content (products on top, frame at back)
+            ensureFramesBelowContents();
+
+            // Select the first created object
+            if (smartObjects.length > 0) {
+                canvas.value.setActiveObject(smartObjects[0]);
+            }
+
+            // Diagnostic: log final canvas state
+            const allObjs = canvas.value.getObjects();
+            console.log('[simulateSmartGrid] Canvas objects after import:', allObjs.length);
+            allObjs.forEach((o: any, i: number) => {
+                console.log(`  [${i}] type=${o.type} name=${o.name || o.layerName || '?'} isFrame=${!!o.isFrame} isSmartObject=${!!o.isSmartObject} left=${o.left} top=${o.top} visible=${o.visible} opacity=${o.opacity} clipPath=${!!o.clipPath} parentFrameId=${o.parentFrameId || 'none'}`);
             });
         }
         
@@ -14086,15 +15299,51 @@ const simulateSmartGrid = async (
 
 const getCurrentZoneObject = () => {
     if (!canvas.value) return null;
+    
+    // 1. Check active canvas object first (the real Fabric object)
     const active = canvas.value.getActiveObject?.();
     if (active && isLikelyProductZone(active)) return active;
-    const selected = selectedObjectRef.value as any;
-    if (selected && isLikelyProductZone(selected)) return selected;
     
-    // Se o objeto selecionado for um card de produto, tentar encontrar a zona pai
-    const target = active || selected;
-    if (target && isLikelyProductCard(target)) {
-        const parentZoneId = target.parentZoneId;
+    // 2. If active is a product card, find its parent zone on canvas
+    if (active && isLikelyProductCard(active)) {
+        const parentZoneId = (active as any).parentZoneId;
+        if (parentZoneId) {
+            const zone = canvas.value.getObjects().find((o: any) => 
+                isLikelyProductZone(o) && o._customId === parentZoneId
+            );
+            if (zone) return zone;
+        }
+    }
+    
+    // 3. If selected snapshot looks like a zone, find the REAL Fabric object by _customId
+    // CRITICAL: Use isLikelyProductZone() for FULL detection (flags, name, custom props, strokeDashArray)
+    // instead of checking individual properties. This is essential for legacy arts where flags
+    // may not have been serialized originally.
+    const selected = selectedObjectRef.value as any;
+    if (selected && (selected.isGridZone || selected.isProductZone || selected.name === 'gridZone' || selected.name === 'productZoneContainer'
+        || (typeof selected._zonePadding === 'number' && typeof selected._zoneWidth === 'number')
+    )) {
+        const zoneId = selected._customId;
+        if (zoneId) {
+            // First try with full detection
+            let zone = canvas.value.getObjects().find((o: any) => 
+                isLikelyProductZone(o) && o._customId === zoneId
+            );
+            if (zone) return zone;
+            // Fallback: find by _customId alone and set flags if it's a group
+            // (handles edge case where real object lost flags but snapshot preserved them)
+            zone = canvas.value.getObjects().find((o: any) => o._customId === zoneId && o.type === 'group');
+            if (zone) {
+                zone.isGridZone = true;
+                ensureZoneSanity(zone);
+                return zone;
+            }
+        }
+    }
+    
+    // 4. If selected snapshot is a product card, find parent zone on canvas
+    if (selected && isLikelyProductCard(selected)) {
+        const parentZoneId = selected.parentZoneId;
         if (parentZoneId) {
             const zone = canvas.value.getObjects().find((o: any) => 
                 isLikelyProductZone(o) && o._customId === parentZoneId
@@ -14201,7 +15450,8 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
         saveCurrentState();
         isApplyingZoneUpdate = false;
     }
-    triggerRef(selectedObjectRef);
+    // Refresh snapshot so PropertiesPanel picks up the new values
+    refreshSelectedRef();
 };
 
 const updateZoneOnCanvas = (prop: string, val: any) => {
@@ -14311,7 +15561,7 @@ const handleUpdateGlobalStyles = async (prop: string, val: any) => {
     if (prop === 'splashTemplateId' && zone) {
         // Just update the template reference without rebuilding existing cards
         await applyLabelTemplateToZone(zone, val, false);
-        triggerRef(selectedObjectRef);
+        refreshSelectedRef();
         return;
     }
 
@@ -14322,7 +15572,7 @@ const handleUpdateGlobalStyles = async (prop: string, val: any) => {
         canvas.value?.requestRenderAll();
     });
     saveCurrentState();
-    triggerRef(selectedObjectRef);
+    refreshSelectedRef();
 };
 
 const handleApplyTemplateToZone = async () => {
@@ -14337,7 +15587,7 @@ const handleApplyTemplateToZone = async () => {
 
     console.log('🔍 [handleApplyTemplateToZone] Applying template to all cards:', templateId);
     await applyLabelTemplateToZone(zone, templateId, true); // true = apply to existing cards
-    triggerRef(selectedObjectRef);
+    refreshSelectedRef();
 };
 
 const collectObjectsDeep = (root: any): any[] => {
@@ -14547,6 +15797,11 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
 
     console.log('🔍 [applyAtacarejoPricing] Resultado:', { retailPrice, wholesalePrice, condition, hasRetail: !!retailPrice, hasWholesale: !!wholesalePrice });
 
+    // Se retail e wholesale são iguais, é produto simples — não mostrar duas faixas
+    if (retailPrice && wholesalePrice && retailPrice === wholesalePrice && !condition) {
+        wholesalePrice = null;
+    }
+
     const hasRetail = !!retailPrice;
     const hasWholesale = !!wholesalePrice;
 
@@ -14618,7 +15873,27 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
         // Usar condição especial se disponível, senão usar lógica legada
         let bannerLabel = 'ATACADO';
         if (condition) {
-            bannerLabel = condition.toUpperCase();
+            // Limpar e formatar a condição para caber no banner
+            let cleanCondition = condition.toUpperCase().trim();
+            // Remover pontuação final desnecessária
+            cleanCondition = cleanCondition.replace(/[.;,]+$/, '').trim();
+            // Se é "ACIMA DE X UN/FD/CX" — formato compacto para o banner
+            const condMatch = cleanCondition.match(/(?:ACIMA\s+DE\s+|A\s+PARTIR\s+DE\s+|MIN\.?\s*)(\d+)\s*(.+)/i);
+            if (condMatch) {
+                const qty = condMatch[1];
+                let unit = condMatch[2].trim().replace(/\.+$/, '');
+                // Normalizar unidade para abreviatura
+                const unitNorm: Record<string, string> = {
+                    'UNIDADES': 'UN', 'UNIDADE': 'UN', 'UND': 'UN', 'UN': 'UN',
+                    'FARDOS': 'FD', 'FARDO': 'FD', 'FD': 'FD',
+                    'CAIXAS': 'CX', 'CAIXA': 'CX', 'CX': 'CX',
+                    'PACOTES': 'PCT', 'PACOTE': 'PCT', 'PCT': 'PCT',
+                };
+                unit = unitNorm[unit.toUpperCase()] || unit;
+                bannerLabel = `ACIMA ${qty} ${unit}`;
+            } else {
+                bannerLabel = cleanCondition;
+            }
         } else {
             const trig = data?.wholesaleTrigger;
             const trigN = typeof trig === 'number' ? trig : Number.parseInt(String(trig ?? '').replace(/[^\d]/g, ''), 10);
@@ -16588,7 +17863,8 @@ async function setTemplateSplashImage(templateId: string, file: File) {
         const tpl = labelTemplates.value[idx]!;
         const g = await instantiatePriceGroupFromTemplate(tpl);
 
-        const img: any = await fabric.Image.fromURL(uploaded.url, { crossOrigin: 'anonymous' });
+        const labelProxyUrl = toWasabiProxyUrl(uploaded.url) || uploaded.url;
+        const img: any = await fabric.Image.fromURL(labelProxyUrl, { crossOrigin: 'anonymous' });
         img.set({
             name: 'price_bg_image',
             originX: 'center',
@@ -17298,6 +18574,9 @@ const isLikelyProductZone = (obj: any) => {
     if (!obj) return false;
     if (obj.isGridZone || obj.isProductZone) return true;
     if (obj.name === 'gridZone' || obj.name === 'productZoneContainer') return true;
+    // CRITICAL: Detect zones via zone-specific custom properties that survive serialization.
+    // This catches legacy arts where flags were not originally in CANVAS_CUSTOM_PROPS.
+    if (typeof obj._zonePadding === 'number' && typeof obj._zoneWidth === 'number' && typeof obj._zoneHeight === 'number') return true;
     if (obj.type !== 'group') return false;
     const rect = getZoneRect(obj);
     return !!(rect && Array.isArray(rect.strokeDashArray));
@@ -17517,18 +18796,19 @@ const getZoneChildren = (zone: any) => {
         if (!o.isProductCard && !o.isSmartObject && isLikelyProductCard(o)) {
             o.isProductCard = true;
             o.isSmartObject = true;
-            // Default behavior (Canva-like): move/select the whole card.
-            // Deep-select is enabled only on double click (handled elsewhere).
-            o.subTargetCheck = false;
-            o.interactive = false;
+            // Single-click deep select: user can click directly on inner elements.
+            o.subTargetCheck = true;
+            o.interactive = true;
             o.selectable = true;
             o.evented = true;
-            // Keep inner elements selectable so deep-select can enable them instantly.
+            // Ensure inner elements are selectable with controls
             if (typeof o.getObjects === 'function') {
                 o.getObjects().forEach((child: any) => {
                     const isBackground = child.name === 'offerBackground' || child.name === 'price_bg';
                     child.selectable = !isBackground;
                     child.evented = !isBackground;
+                    child.hasControls = !isBackground;
+                    child.hasBorders = !isBackground;
                 });
             }
             if (typeof o.setCoords === 'function') o.setCoords();
@@ -17971,18 +19251,19 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
                 } catch (e) {
                     // ignore
                 }
-                // Default state = rigid card selection (deep select is opt-in via dblclick)
-                if (o.subTargetCheck !== false) o.subTargetCheck = false;
-                if (o.interactive !== false) o.interactive = false;
+                // Single-click deep select: user can click directly on inner elements.
+                if (o.subTargetCheck !== true) o.subTargetCheck = true;
+                if (o.interactive !== true) o.interactive = true;
                 if (o.selectable !== true) o.selectable = true;
                 if (o.evented !== true) o.evented = true;
-                // Ensure internal elements are selectable
+                // Ensure internal elements are selectable with controls
                 if (typeof o.getObjects === 'function') {
                     o.getObjects().forEach((child: any) => {
                         const isBackground = child.name === 'offerBackground' || child.name === 'price_bg';
-                        // Keep inner elements selectable so deep-select can enable them instantly.
                         child.selectable = !isBackground;
                         child.evented = !isBackground;
+                        child.hasControls = !isBackground;
+                        child.hasBorders = !isBackground;
                     });
                 }
             }
@@ -18144,16 +19425,6 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             if (o?.parentFrameId || o?._frameClipOwner) syncObjectFrameClip(o);
         });
         frames.forEach((f: any) => syncFrameClips(f));
-
-        // Garantir que imagens, frames etc. nunca carreguem travados (lock não persistido para não-zones)
-        objs.forEach((o: any) => {
-            if (o?.excludeFromExport) return;
-            const isZone = !!(o?.isGridZone || o?.isProductZone || o?.name === 'gridZone' || o?.name === 'productZoneContainer');
-            if (!isZone) {
-                o.lockMovementX = false;
-                o.lockMovementY = false;
-            }
-        });
 
         const zones = objs.filter((o: any) => isLikelyProductZone(o));
         zones.forEach((z: any) => {
@@ -18378,16 +19649,6 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             // Ignore stacking errors
         }
 
-        // Garantir que imagens, frames etc. nunca fiquem travados (undo/redo e load)
-        objs.forEach((o: any) => {
-            if (o?.excludeFromExport) return;
-            const isZone = !!(o?.isGridZone || o?.isProductZone || o?.name === 'gridZone' || o?.name === 'productZoneContainer');
-            if (!isZone) {
-                o.lockMovementX = false;
-                o.lockMovementY = false;
-            }
-        });
-
         // Frames sempre atrás do conteúdo (evita bloquear drag do mouse em imagens)
         ensureFramesBelowContents();
 
@@ -18427,7 +19688,7 @@ const handleRecalculateLayout = () => {
       <!-- Central Workspace -->
       <div class="flex flex-1 min-h-0 min-w-0 overflow-hidden relative bg-[#1a1a1a]">
           <!-- Left Sidebar (New Component) -->
-          <SidebarLeft @insert-asset="insertAssetToCanvas" @open-menu="showProjectManager = true">
+          <SidebarLeft @insert-asset="insertAssetToCanvas" @insert-element="insertElementToCanvas" @open-menu="showProjectManager = true">
               <template #layers-panel>
                   <LayersPanel 
                       class="flex-1"
@@ -18787,8 +20048,8 @@ const handleRecalculateLayout = () => {
         @update-global-styles="handleUpdateGlobalStyles"
         @apply-template-to-zone="handleApplyTemplateToZone"
         @apply-preset="handleApplyZonePreset"
-        @sync-gaps="productZoneState.syncGapsWithPadding"
-        @recalculate-layout="productZoneState.recalculateLayout"
+        @sync-gaps="handleSyncZoneGaps"
+        @recalculate-layout="handleRecalculateLayout"
         @manage-label-templates="showLabelTemplatesModal = true"
         @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
       />

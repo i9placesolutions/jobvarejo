@@ -34,8 +34,9 @@ const getRemoveBackground = async () => {
     return removeBackgroundModule;
 };
 
-// Refina o canal alpha para evitar bordas serrilhadas e remover artefatos
-// PROTEGE pixels claros/brancos do produto (não confundir com fundo branco)
+// Refina o canal alpha para evitar bordas serrilhadas e remover artefatos.
+// Inclui dilatação 3x3 para recuperar bordas do produto cortadas pelo modelo.
+// PROTEGE pixels claros/brancos do produto (embalagens brancas, açúcar, leite, etc.)
 const refineAlphaChannel = async (buffer: Buffer, sharp: any): Promise<Buffer> => {
     try {
         const { data, info } = await sharp(buffer)
@@ -43,53 +44,119 @@ const refineAlphaChannel = async (buffer: Buffer, sharp: any): Promise<Buffer> =
             .raw()
             .toBuffer({ resolveWithObject: true });
 
-        const feather = 1; // Leve suavização nas bordas
+        const w = info.width;
+        const h = info.height;
+        const totalPixels = w * h;
 
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const alpha = data[i + 3];
+        // ──────────────────────────────────────────────
+        // Passo 1: Extrair canal alpha original
+        // ──────────────────────────────────────────────
+        const alphaOrig = new Uint8Array(totalPixels);
+        for (let i = 0; i < totalPixels; i++) {
+            alphaOrig[i] = data[i * 4 + 3];
+        }
 
-            // Verificar se o pixel é claro/branco (potencialmente parte do produto)
+        // ──────────────────────────────────────────────
+        // Passo 2: Dilatar alpha com filtro máximo 3x3
+        //   Expande o foreground em 1 px para recuperar
+        //   bordas de produto cortadas pelo modelo.
+        // ──────────────────────────────────────────────
+        const alphaDilated = new Uint8Array(totalPixels);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                let maxA = 0;
+                for (let dy = -1; dy <= 1; dy++) {
+                    const ny = y + dy;
+                    if (ny < 0 || ny >= h) continue;
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const nx = x + dx;
+                        if (nx < 0 || nx >= w) continue;
+                        const a = alphaOrig[ny * w + nx];
+                        if (a > maxA) maxA = a;
+                    }
+                }
+                alphaDilated[y * w + x] = maxA;
+            }
+        }
+
+        // ──────────────────────────────────────────────
+        // Passo 2.1: Fechar buracos pequenos (closing)
+        //   Dilatação (acima) + erosão 3x3 (min) ajuda a
+        //   reduzir "furos" internos (logos/textos) sem
+        //   expandir muito as bordas do produto.
+        // ──────────────────────────────────────────────
+        const alphaClosed = new Uint8Array(totalPixels);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                let minA = 255;
+                for (let dy = -1; dy <= 1; dy++) {
+                    const ny = y + dy;
+                    if (ny < 0 || ny >= h) continue;
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const nx = x + dx;
+                        if (nx < 0 || nx >= w) continue;
+                        const a = alphaDilated[ny * w + nx];
+                        if (a < minA) minA = a;
+                    }
+                }
+                alphaClosed[y * w + x] = minA;
+            }
+        }
+
+        // ──────────────────────────────────────────────
+        // Passo 3: Reconstruir alpha final conservador
+        //   • Usa o maior entre original e 60 % do dilatado
+        //     para recuperar bordas sem inventar foreground.
+        //   • Threshold de corte baixo (alpha < 8) para
+        //     não cortar bordas legítimas.
+        //   • Zona de transição (8–80): pixels claros/brancos
+        //     são tratados como provável produto.
+        // ──────────────────────────────────────────────
+        for (let i = 0; i < totalPixels; i++) {
+            const px = i * 4;
+            const r = data[px];
+            const g = data[px + 1];
+            const b = data[px + 2];
+            const origA = alphaOrig[i];
+            const dilA  = alphaDilated[i];
+            const closedA = alphaClosed[i];
+
+            // Mesclar: usar o maior entre original e 60 % do dilatado
+            let alpha = Math.max(origA, Math.round(dilA * 0.6));
+
+            // Preencher "furos" internos: se o pixel era quase transparente, mas o closing indica
+            // forte presença de foreground ao redor, puxar alpha para cima de forma conservadora.
+            if (origA < 30 && closedA > 140) {
+                alpha = Math.max(alpha, Math.round(closedA * 0.7));
+            }
+
+            // Brilho do pixel (para proteger produto claro/branco)
             const brightness = (r + g + b) / 3;
-            const isLightPixel = brightness > 200;
+            const isLight = brightness > 190;
 
-            // Pixels com alpha muito baixo (0-25)
-            if (alpha > 0 && alpha < 25) {
-                // Se for um pixel claro/branco com alpha baixo, pode ser parte do produto
-                // que o modelo marcou erroneamente como fundo. Ser mais conservador.
-                if (isLightPixel) {
-                    // Manter com alpha reduzido mas não eliminar completamente
-                    // Isso preserva bordas brancas de embalagens
-                    data[i + 3] = 0; // Ainda remover, pois alpha < 25 é muito baixo
+            if (alpha < 8) {
+                // Quase invisível mesmo após dilatação → transparente
+                alpha = 0;
+            } else if (alpha < 80) {
+                // Zona de transição — ser conservador
+                if (isLight && alpha >= 15) {
+                    // Pixel claro com alpha razoável → provavelmente produto
+                    alpha = Math.min(255, Math.round(alpha * 2.2));
+                } else if (isLight) {
+                    // Pixel claro com alpha muito baixo → manter suave
+                    alpha = Math.min(255, Math.round(alpha * 1.5));
                 } else {
-                    data[i + 3] = 0;
+                    // Pixel escuro em transição → manter com leve suavização
+                    alpha = Math.max(0, alpha - 1);
                 }
             }
-            // Pixels com alpha médio (25-100) - zona de transição
-            else if (alpha >= 25 && alpha < 100) {
-                if (isLightPixel && alpha >= 40) {
-                    // Pixel claro com alpha razoável: PRESERVAR mais (provavelmente é produto)
-                    // Aumentar alpha para evitar que produto branco fique semi-transparente
-                    data[i + 3] = Math.min(255, Math.round(alpha * 1.8));
-                } else if (isLightPixel) {
-                    // Pixel claro com alpha baixo: manter com leve redução
-                    data[i + 3] = Math.max(0, alpha - feather);
-                } else {
-                    // Pixel escuro com alpha médio: aplicar feather normal
-                    data[i + 3] = Math.max(0, Math.min(255, alpha - feather * 2));
-                }
-            }
-            // Alpha >= 100: manter como está (pixel sólido do produto)
+            // alpha >= 80: manter como está (pixel sólido do produto)
+
+            data[px + 3] = alpha;
         }
 
         return sharp(data, {
-            raw: {
-                width: info.width,
-                height: info.height,
-                channels: 4
-            }
+            raw: { width: w, height: h, channels: 4 }
         }).png().toBuffer();
     } catch (e) {
         console.warn('⚠️ [Alpha Refine] Erro ao refinar alpha:', e);
@@ -149,6 +216,96 @@ type ProcessImageOptions = {
     };
 };
 
+type AlphaStats = {
+    totalPixels: number;
+    transparentPixels: number;
+    semiTransparentPixels: number;
+    opaquePixels: number;
+    transparentPercent: number;
+    semiPercent: number;
+    opaquePercent: number;
+};
+
+const getAlphaStats = async (buffer: Buffer, sharp: any): Promise<AlphaStats | null> => {
+    try {
+        const meta = await sharp(buffer).metadata();
+        if (!meta.hasAlpha) return null;
+
+        const { data, info } = await sharp(buffer)
+            .ensureAlpha()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+        const w = info.width;
+        const h = info.height;
+        const totalPixels = w * h;
+
+        let transparentPixels = 0;
+        let semiTransparentPixels = 0;
+        let opaquePixels = 0;
+
+        for (let i = 0; i < totalPixels; i++) {
+            const a = data[i * 4 + 3];
+            if (a < 8) transparentPixels++;
+            else if (a < 250) semiTransparentPixels++;
+            else opaquePixels++;
+        }
+
+        const transparentPercent = (transparentPixels / totalPixels) * 100;
+        const semiPercent = (semiTransparentPixels / totalPixels) * 100;
+        const opaquePercent = (opaquePixels / totalPixels) * 100;
+
+        return {
+            totalPixels,
+            transparentPixels,
+            semiTransparentPixels,
+            opaquePixels,
+            transparentPercent,
+            semiPercent,
+            opaquePercent
+        };
+    } catch {
+        return null;
+    }
+};
+
+const shouldSkipBackgroundRemoval = async (buffer: Buffer, sharp: any): Promise<boolean> => {
+    const stats = await getAlphaStats(buffer, sharp);
+    if (!stats) return false;
+
+    // If the image already has a meaningful transparent background, background-removal is likely to
+    // degrade quality (punch holes in logos/text). In this case, keep the original alpha.
+    //
+    // Heuristic:
+    // - Transparent background cutouts typically have a large percentage of fully transparent pixels.
+    // - Small transparency around edges should not trigger the skip.
+    const totalTransparent = stats.transparentPercent + stats.semiPercent;
+    const hasMeaningfulTransparency =
+        stats.transparentPercent >= 12 ||
+        (stats.transparentPercent >= 5 && totalTransparent >= 10);
+
+    if (hasMeaningfulTransparency) {
+        console.log(
+            `🧠 [Image Process] Skip BG removal: alpha already present (transparent=${stats.transparentPercent.toFixed(1)}%, semi=${stats.semiPercent.toFixed(1)}%)`
+        );
+        return true;
+    }
+
+    return false;
+};
+
+const isMostlyLightLowContrast = async (buffer: Buffer, sharp: any): Promise<boolean> => {
+    try {
+        const st = await sharp(buffer).stats();
+        const mean = ((st.channels?.[0]?.mean || 0) + (st.channels?.[1]?.mean || 0) + (st.channels?.[2]?.mean || 0)) / 3;
+        const stdev = ((st.channels?.[0]?.stdev || 0) + (st.channels?.[1]?.stdev || 0) + (st.channels?.[2]?.stdev || 0)) / 3;
+        // Very bright + low contrast images are risky: the model may erase a white/light subject.
+        return mean >= 220 && stdev <= 35;
+    } catch {
+        return false;
+    }
+};
+
 export const processImageWithOptions = async (imageBuffer: Buffer, options: ProcessImageOptions = {}) => {
     const sharp = await getSharp();
     const outputFormat: 'webp' | 'png' = options.outputFormat || 'webp';
@@ -171,6 +328,20 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
     console.log(`📊 [Image Process] Após resize: ${resizedBuffer.length} bytes, ${resizedMeta.width}x${resizedMeta.height}`);
 
     try {
+        // 1.5. If the input already has a transparent background, avoid running background removal.
+        // This prevents false positives that "remove" parts of the subject (e.g., text/logos).
+        if (await shouldSkipBackgroundRemoval(resizedBuffer, sharp)) {
+            const passthrough = outputFormat === 'png'
+                ? await sharp(resizedBuffer).png().toBuffer()
+                : await sharp(resizedBuffer).webp({ quality: 85, alphaQuality: 100 }).toBuffer();
+            return passthrough;
+        }
+
+        const lightRisk = await isMostlyLightLowContrast(resizedBuffer, sharp);
+        if (lightRisk) {
+            console.log('🧠 [Image Process] Detecção: imagem muito clara/baixo contraste — remoção de fundo pode ser agressiva');
+        }
+
         // 2. Remove Background usando configurações refinadas
         console.log('🎨 [Image Process] Removendo fundo da imagem...');
         const blob = new Blob([resizedBuffer], { type: 'image/png' });
@@ -179,7 +350,7 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
 
         // Configurações refinadas - modelo 'medium' tem melhor separação
         // entre produto e fundo, especialmente para produtos claros/brancos
-        const modelType = bgOptions.model || 'medium';
+        const modelType = bgOptions.model || (lightRisk ? 'large' : 'medium');
         console.log(`   📐 Modelo: ${modelType}`);
 
         const rbResult = await removeBackground(blob, {
@@ -214,6 +385,25 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
                 ? await fallbackPipeline.png().toBuffer()
                 : await fallbackPipeline.webp({ quality: 85 }).toBuffer();
             return fallbackBuffer;
+        }
+
+        // Additional guard for very light/low contrast images: if the result is mostly transparent,
+        // prefer returning the original (better than deleting the subject).
+        if (lightRisk) {
+            const outStats = await getAlphaStats(refinedBuffer, sharp);
+            if (outStats) {
+                const visiblePercent = 100 - outStats.transparentPercent;
+                if (visiblePercent < 10 || outStats.opaquePercent < 2) {
+                    console.warn(
+                        `⚠️ [Image Process] Resultado muito transparente em imagem clara (visível=${visiblePercent.toFixed(1)}%, opaco=${outStats.opaquePercent.toFixed(1)}%) — fallback`
+                    );
+                    const fallbackPipeline = sharp(imageBuffer).resize(800, 800, { fit: 'inside', withoutEnlargement: true });
+                    const fallbackBuffer = outputFormat === 'png'
+                        ? await fallbackPipeline.png().toBuffer()
+                        : await fallbackPipeline.webp({ quality: 85 }).toBuffer();
+                    return fallbackBuffer;
+                }
+            }
         }
 
         console.log('✅ [Image Process] Fundo removido com sucesso!');

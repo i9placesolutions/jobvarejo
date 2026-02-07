@@ -50,7 +50,7 @@ const normalizeForDedup = (term: string): string => {
     };
     const stopWords = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'e', 'para', 'por', 'no', 'na']);
 
-    return term
+    const words = term
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -59,9 +59,9 @@ const normalizeForDedup = (term: string): string => {
         .trim()
         .split(' ')
         .filter(w => !stopWords.has(w) && w.length > 0)
-        .map(w => unitMap[w] || w)
-        .sort()
-        .join(' ');
+        .map(w => unitMap[w] || w);
+    // Deduplicar e ordenar ("coca cola coca cola 350ml" → "350 coca cola ml")
+    return [...new Set(words)].sort().join(' ');
 };
 
 // Monta search term a partir do produto

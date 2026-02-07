@@ -1,4 +1,5 @@
 import { reactive, ref, computed, watch } from 'vue'
+import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 export interface Page {
     id: string;
@@ -309,11 +310,10 @@ export const useProject = () => {
             const storagePaths: string[] = []
             const thumbnailUrls: string[] = []
 
-            for (let i = 0; i < project.pages.length; i++) {
-                const page = project.pages[i]
+            for (const [i, page] of project.pages.entries()) {
 
                 // Salvar canvas JSON no Storage (com retry automático)
-                if (page.canvasData) {
+                if (page?.canvasData) {
                     try {
                         // Tentar salvar na Contabo (com retry interno)
                         const path = await saveCanvasData(project.id, page.id, page.canvasData, 3)
@@ -335,7 +335,7 @@ export const useProject = () => {
                 }
 
                 // Salvar thumbnail no Storage
-                if (page.thumbnail) {
+                if (page?.thumbnail) {
                     const url = await saveThumbnail(project.id, page.id, page.thumbnail)
                     if (url) {
                         thumbnailUrls[i] = url
@@ -566,7 +566,7 @@ export const useProject = () => {
                     type: pageMeta.type || 'RETAIL_OFFER',
                     canvasData,
                     canvasDataPath: pageMeta.canvasDataPath,
-                    thumbnailUrl: pageMeta.thumbnailUrl
+                    thumbnailUrl: toWasabiProxyUrl(pageMeta.thumbnailUrl) || undefined
                 }
 
                 project.pages.push(page)

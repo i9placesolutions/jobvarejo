@@ -1,5 +1,4 @@
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, getPublicUrl } from "../utils/s3";
 import { createSupabaseAdmin } from "../utils/supabase";
 
@@ -70,15 +69,7 @@ export default defineEventHandler(async (event) => {
         }));
 
         const publicUrl = getPublicUrl(key);
-
-        // Gerar pre-signed URL
-        const getCommand = new GetObjectCommand({
-            Bucket: bucketName,
-            Key: key,
-            // @ts-ignore - DISABLED necessário para Wasabi/S3-compatible storage
-            ChecksumMode: 'DISABLED'
-        });
-        const signedUrl = await getSignedUrl(s3, getCommand, { expiresIn: 3600 });
+        const proxyUrl = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
 
         // Salvar no cache do banco (fire-and-forget — não bloqueia resposta)
         const normalizedTerm = normalizeSearchTerm(
@@ -106,7 +97,7 @@ export default defineEventHandler(async (event) => {
 
         return {
             source: 'manual',
-            url: signedUrl,
+            url: proxyUrl,
             publicUrl: publicUrl,
             key: key
         };

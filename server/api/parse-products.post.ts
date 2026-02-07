@@ -100,24 +100,58 @@ The system uses AI to intelligently identify price columns even when written dif
 PRICE TYPES TO EXTRACT (with variations):
 1. Pack/Box Price → pricePack
    - Variations: "PREÇO CX", "PREÇO CAIXA", "PREÇO FARDO", "PRECO EMB", "CX AVULSA",
-     "PACOTE", "PACK", "BOX", "FARDO", "FD", "CX", "PCT"
+     "PACOTE", "PACK", "BOX", "FARDO", "FD", "CX", "PCT",
+     "PREÇO CX. AVULSA", "PREÇO CX AVULSA", "PRC CX"
 
 2. Unit Price → priceUnit
    - Variations: "PREÇO UND", "PREÇO UNIDADE", "PREÇO UNIT", "UNIDADE", "UNIT",
-     "UND AVULSA", "UN. AVULSA", "PRICE/UN", "PR. UNIT"
+     "UND AVULSA", "UN. AVULSA", "PRICE/UN", "PR. UNIT",
+     "PREÇO UND. AVULSA", "PREÇO UND AVULSA", "PRC UN",
+     "PREÇO UNID. AVULSA"
 
 3. Special/Promotional Pack Price → priceSpecial
    - Variations: "PREÇO ESPECIAL", "PREÇO PROMO", "PREÇO PROMOÇÃO", "PREÇO ACIMA",
-     "PROMOÇÃO", "PROMO", "OFERTA", "SPECIAL", "PROMO PRICE", "PROMO PACK"
+     "PROMOÇÃO", "PROMO", "OFERTA", "SPECIAL", "PROMO PRICE", "PROMO PACK",
+     "PREÇO ESPECIAL CX", "PREÇO ESPECIAL CX.", "PREÇO ESP. CX",
+     "PRC ESP CX", "PROMO CX"
 
 4. Special/Promotional Unit Price → priceSpecialUnit
    - Variations: "PREÇO ESPECIAL UN", "PREÇO UN. PROMO", "PREÇO UND PROMO",
-     "UNIT PROMO", "UN. ESPECIAL", "SPECIAL UNIT", "PROMO UNIT"
+     "UNIT PROMO", "UN. ESPECIAL", "SPECIAL UNIT", "PROMO UNIT",
+     "PREÇO ESPECIAL UN.", "PREÇO ESPECIAL UND.", "PREÇO ESP. UN",
+     "PRC ESP UN", "PROMO UN"
 
 5. Special Condition → specialCondition
-   - Variations: "OBSERVAÇÃO", "OBS", "CONDICÃO", "CONDIÇÃO", "ACIMA DE",
-     "CONDITION", "OBSERVATION", "FROM", "MIN. QTY"
-   - Examples: "ACIMA DE 36 UN", "ACIMA DE 2 FARDOS", "MIN 10 CX", "FROM 5 UNITS"
+   - Variations: "OBSERVAÇÃO", "OBSERVAÇÕES", "OBS", "OBS.", "CONDICAO", "CONDIÇÃO",
+     "ACIMA DE", "CONDITION", "OBSERVATION", "FROM", "MIN. QTY", "NOTA", "NOTAS"
+   - CRITICAL: Extract the FULL text exactly as it appears in the source.
+   - Examples: "ACIMA DE 24 UN.", "ACIMA DE 36 UN", "ACIMA DE 2 FARDOS",
+     "ACIMA DE 5 CX", "MIN 10 CX", "FROM 5 UNITS", "A PARTIR DE 3 FARDOS"
+   - If the observation column has text like "ACIMA DE 24 UN." → specialCondition = "ACIMA DE 24 UN."
+   - Do NOT parse/split the condition — keep it as a single string.
+
+PURCHASE LIMIT DETECTION (limit field):
+- Extract any purchase limit restriction from the product name, description, or a dedicated column.
+- Look for these patterns anywhere in the text:
+  * "LIMITE X UN", "LIMITE X UND", "LIMITE X UNID", "LIMITE X UNIDADES"
+  * "LIMITE X POR CLIENTE", "LIMITE X UND POR CLIENTE", "LIMITE X UN POR CLIENTE"
+  * "LIM. X UN", "LIM X UN", "LIMITADO A X"
+  * "MAX X UN", "MÁXIMO X", "MÁX. X UN", "MÁX X POR PESSOA"
+  * "ATÉ X UN POR CLIENTE", "ATÉ X UNIDADES"
+  * Just a number + "POR CLIENTE" → "X POR CLIENTE"
+- Examples:
+  * "ARROZ CRISTAL 5KG LIMITE 3UND POR CLIENTE 23,99"
+    → name="ARROZ CRISTAL 5KG", limit="LIMITE 3 UND POR CLIENTE", price="23,99"
+  * "LEITE PARMALAT 1L LIM. 5 UN 4,99"
+    → name="LEITE PARMALAT 1L", limit="LIMITE 5 UN", price="4,99"
+  * "ÓLEO SOYA 900ML 6,49 MÁXIMO 2 POR CLIENTE"
+    → name="ÓLEO SOYA 900ML", limit="MÁXIMO 2 POR CLIENTE", price="6,49"
+  * "CERVEJA BRAHMA 350ML LIMITE 12UN 2,99"
+    → name="CERVEJA BRAHMA 350ML", limit="LIMITE 12 UN", price="2,99"
+- CRITICAL: Remove the limit text from the product name — it should NOT appear in the name field.
+- CRITICAL: The limit is about PURCHASE QUANTITY restriction, NOT about product weight/size.
+- If a column header contains "LIMITE", "LIM", "LIMIT", "RESTRICAO", "RESTRIÇÃO" → extract its value.
+- Normalize: always separate number from unit ("3UND" → "3 UND", "5UN" → "5 UN").
 
 PRODUCT TYPE DETECTION:
 The system must detect TWO types of products:
@@ -138,6 +172,37 @@ The system must detect TWO types of products:
    - Has "PREÇO CX" and "PREÇO UND" columns → populate pricePack AND priceUnit
    - Has "PREÇO ESPECIAL" and "PREÇO NORMAL" → populate priceSpecial AND priceUnit
    - Has condition like "ACIMA DE 36 UN" → populate specialCondition
+
+3. ATACAREJO FORMAT (4 price columns + observations):
+   This is a COMMON format in Brazilian wholesale/retail (atacarejo) tables.
+   Headers typically include:
+   - PRODUTO | EMBALAGEM | QUANT. EMB. | PREÇO CX. AVULSA | PREÇO UND. AVULSA | PREÇO ESPECIAL CX. | PREÇO ESPECIAL UN. | OBSERVAÇÕES
+   
+   Mapping:
+   - "PREÇO CX. AVULSA" or "PREÇO CX AVULSA" → pricePack
+   - "PREÇO UND. AVULSA" or "PREÇO UND AVULSA" → priceUnit
+   - "PREÇO ESPECIAL CX." or "PREÇO ESPECIAL CX" → priceSpecial
+   - "PREÇO ESPECIAL UN." or "PREÇO ESPECIAL UND" → priceSpecialUnit
+   - "OBSERVAÇÕES" or "OBS" or "OBS." → specialCondition (extract FULL text as-is)
+   - "EMBALAGEM" → packageLabel (normalize: UNIDADE→UN, FARDO→FD, CAIXA→CX)
+   - "QUANT. EMB." or "QTD EMB" or similar → packQuantity
+
+   Example row:
+   | ENERGETICO EXTRA POWER TRADICIONAL 270 ML | UNIDADE | 01 | R$ 3,49 | R$ 3,49 | R$ 3,29 | R$ 3,29 | ACIMA DE 24 UN. |
+   → {
+       name: "ENERGETICO EXTRA POWER TRADICIONAL 270 ML",
+       pricePack: "3,49",
+       priceUnit: "3,49",
+       priceSpecial: "3,29",
+       priceSpecialUnit: "3,29",
+       specialCondition: "ACIMA DE 24 UN.",
+       packageLabel: "UN",
+       packQuantity: 1,
+       packUnit: "UN"
+   }
+   
+   IMPORTANT: When EMBALAGEM is "UNIDADE" and QUANT. EMB. is "01", it means each unit is sold individually.
+   In this case pricePack and priceUnit may be the same value. Still populate BOTH.
 
 COLUMN IDENTIFICATION STRATEGY:
 - Look for numeric values with price format (0,00 or 0.00)

@@ -333,8 +333,8 @@ export const useStorage = () => {
         throw new Error(`Upload failed: ${uploadResponse.statusText}`)
       }
 
-      // Retornar a URL pública completa
-      return getPublicUrl(key)
+      // Return a same-origin proxy URL so thumbnails work even when the bucket is private.
+      return `/api/storage/proxy?key=${encodeURIComponent(key)}`
     } catch (error: any) {
       console.error('Erro ao salvar thumbnail:', error)
       return null
