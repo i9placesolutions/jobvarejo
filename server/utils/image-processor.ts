@@ -202,8 +202,19 @@ export const processImage = async (imageBuffer: Buffer) => {
     return processImageWithOptions(imageBuffer, {});
 };
 
+/**
+ * Processa imagem COM remoção de fundo obrigatória.
+ * Diferente de processImage, este NÃO faz fallback silencioso.
+ * Se a remoção de fundo falhar ou for pulada, lança um erro.
+ */
+export const processImageStrict = async (imageBuffer: Buffer): Promise<Buffer> => {
+    return processImageWithOptions(imageBuffer, { strict: true });
+};
+
 type ProcessImageOptions = {
     outputFormat?: 'webp' | 'png';
+    /** Se true, lança erro em vez de retornar imagem original quando bg removal falha */
+    strict?: boolean;
     // Opções de refinamento do removedor de fundo
     bgRemoval?: {
         model?: 'small' | 'medium' | 'large';
@@ -280,9 +291,12 @@ const shouldSkipBackgroundRemoval = async (buffer: Buffer, sharp: any): Promise<
     // - Transparent background cutouts typically have a large percentage of fully transparent pixels.
     // - Small transparency around edges should not trigger the skip.
     const totalTransparent = stats.transparentPercent + stats.semiPercent;
+    // Thresholds mais altos para evitar falsos positivos.
+    // Muitas imagens de produto do Google têm PNG com leve transparência
+    // em artefatos de compressão, mas ainda têm fundo branco visível.
     const hasMeaningfulTransparency =
-        stats.transparentPercent >= 12 ||
-        (stats.transparentPercent >= 5 && totalTransparent >= 10);
+        stats.transparentPercent >= 25 ||
+        (stats.transparentPercent >= 15 && totalTransparent >= 25);
 
     if (hasMeaningfulTransparency) {
         console.log(
@@ -331,6 +345,10 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         // 1.5. If the input already has a transparent background, avoid running background removal.
         // This prevents false positives that "remove" parts of the subject (e.g., text/logos).
         if (await shouldSkipBackgroundRemoval(resizedBuffer, sharp)) {
+            if (options.strict) {
+                console.log('🧠 [Image Process][STRICT] Imagem já tem transparência — considerando OK');
+                // Em modo strict, retorna a imagem redimensionada (já tem alpha)
+            }
             const passthrough = outputFormat === 'png'
                 ? await sharp(resizedBuffer).png().toBuffer()
                 : await sharp(resizedBuffer).webp({ quality: 85, alphaQuality: 100 }).toBuffer();
@@ -424,6 +442,11 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         
     } catch (error: any) {
         console.error('❌ [Image Process] Erro na remoção de fundo:', error?.message || error);
+        
+        // Em modo strict, NÃO fazer fallback — propagar o erro
+        if (options.strict) {
+            throw new Error(`[Image Process][STRICT] Falha na remoção de fundo: ${error?.message || error}`);
+        }
         
         // Fallback: return resized and optimized original
         console.warn('⚠️ [Image Process] Aplicando fallback (sem remoção de fundo)...');

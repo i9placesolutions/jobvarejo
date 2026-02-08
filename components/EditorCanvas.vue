@@ -2961,6 +2961,9 @@ const setupAltDragDuplicate = () => {
         startTop: 0,
         origLockX: false,
         origLockY: false,
+        // Track current pointer during async clone for smooth positioning
+        lastPointerX: 0,
+        lastPointerY: 0,
     };
 
     const isEligibleTarget = (obj: any) => {
@@ -2992,11 +2995,26 @@ const setupAltDragDuplicate = () => {
         state.original = active;
         state.startLeft = Number(active.left || 0);
         state.startTop = Number(active.top || 0);
+        // Initialize pointer tracking at mousedown position
+        try {
+            const ptr = canvas.value?.getViewportPoint?.(evt) || canvas.value?.getScenePoint?.(evt);
+            if (ptr) { state.lastPointerX = ptr.x; state.lastPointerY = ptr.y; }
+            else { state.lastPointerX = state.startLeft; state.lastPointerY = state.startTop; }
+        } catch { state.lastPointerX = state.startLeft; state.lastPointerY = state.startTop; }
     });
 
     canvas.value.on('mouse:move:before', (opt: any) => {
         if (!state.armed || state.cloning || state.didDuplicate) return;
         if (!canvas.value) return;
+
+        // Track pointer continuously for smooth clone positioning
+        try {
+            const evt = opt?.e;
+            if (evt) {
+                const ptr = canvas.value.getViewportPoint?.(evt) || canvas.value.getScenePoint?.(evt);
+                if (ptr) { state.lastPointerX = ptr.x; state.lastPointerY = ptr.y; }
+            }
+        } catch { /* ignore */ }
 
         const tr: any = (canvas.value as any)._currentTransform;
         // For interactive groups (product cards with subTargetCheck=true), the _currentTransform
@@ -3021,27 +3039,77 @@ const setupAltDragDuplicate = () => {
         const origLeft = state.startLeft;
         const origTop = state.startTop;
 
+        // Lock original IMMEDIATELY to prevent it from moving while clone is being created.
+        // This is critical because doClone() is async (fabric.clone / enlivenObjects return Promises).
+        // Without this, the original moves with the mouse for 1-2 frames before the clone takes over.
+        state.origLockX = !!original.lockMovementX;
+        state.origLockY = !!original.lockMovementY;
+        original.set({ lockMovementX: true, lockMovementY: true });
+        original.set({ left: origLeft, top: origTop });
+        original.setCoords?.();
+
         // Clone via Fabric's native clone
+        const CLONE_PROPS = ['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name', 'smartGridId', 'unitLabel', 'price', 'pricePack', 'priceUnit', 'priceSpecial', 'priceSpecialUnit', 'specialCondition', 'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel', 'unit', 'limit', '_productData', '_cardWidth', '_cardHeight', 'subTargetCheck', 'interactive'];
+
         const doClone = async () => {
             let cloned: any = null;
-            try {
-                if (typeof original.clone === 'function') {
-                    const result = original.clone(['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name', 'smartGridId', 'unitLabel', 'price', 'pricePack', 'priceUnit', 'priceSpecial', 'priceSpecialUnit', 'specialCondition', 'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel', 'unit', 'limit', '_productData', '_cardWidth', '_cardHeight', 'subTargetCheck', 'interactive']);
-                    if (result && typeof result.then === 'function') {
-                        cloned = await result;
-                    }
-                }
-            } catch { /* ignore */ }
 
-            // Fallback: serialize + enliven
+            // For groups, prefer serialize+enliven — fabric.clone() on groups sometimes
+            // produces children that lose critical methods (getRelativeCenterPoint etc.)
+            // because prototypes don't survive a shallow copy.
+            const isGroup = original.type === 'group';
+            
+            if (isGroup) {
+                try {
+                    const json = typeof original.toObject === 'function' ? original.toObject(CLONE_PROPS) : null;
+                    if (json && fabric?.util?.enlivenObjects) {
+                        const objs = await fabric.util.enlivenObjects([json]);
+                        cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
+                    }
+                } catch (e) {
+                    console.warn('[alt-drag-duplicate] serialize+enliven fallback for group failed', e);
+                    cloned = null;
+                }
+            }
+
+            // For non-groups (or if serialize failed), try native clone
             if (!isValidFabricObject(cloned)) {
                 try {
-                    const json = typeof original.toObject === 'function' ? original.toObject(['_customId', 'isSmartObject', 'isProductCard', 'name', 'parentZoneId', 'smartGridId', 'unitLabel']) : null;
+                    if (typeof original.clone === 'function') {
+                        const result = original.clone(CLONE_PROPS);
+                        if (result && typeof result.then === 'function') {
+                            cloned = await result;
+                        }
+                    }
+                } catch { /* ignore */ }
+            }
+
+            // Final fallback: serialize + enliven (for non-groups that failed native clone)
+            if (!isValidFabricObject(cloned) && !isGroup) {
+                try {
+                    const json = typeof original.toObject === 'function' ? original.toObject(CLONE_PROPS) : null;
                     if (json && fabric?.util?.enlivenObjects) {
                         const objs = await fabric.util.enlivenObjects([json]);
                         cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
                     }
                 } catch { /* ignore */ }
+            }
+
+            // Validate group children have proper methods before proceeding
+            if (isValidFabricObject(cloned) && cloned.type === 'group' && typeof cloned.getObjects === 'function') {
+                const children = cloned.getObjects();
+                const allValid = children.every((c: any) => c && typeof c === 'object' && typeof c.getRelativeCenterPoint === 'function');
+                if (!allValid) {
+                    console.warn('[alt-drag-duplicate] Cloned group has invalid children, retrying via serialize');
+                    cloned = null;
+                    try {
+                        const json = typeof original.toObject === 'function' ? original.toObject(CLONE_PROPS) : null;
+                        if (json && fabric?.util?.enlivenObjects) {
+                            const objs = await fabric.util.enlivenObjects([json]);
+                            cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
+                        }
+                    } catch { /* ignore */ }
+                }
             }
 
             if (!isValidFabricObject(cloned) || !canvas.value) {
@@ -3086,118 +3154,62 @@ const setupAltDragDuplicate = () => {
             state.parentGroup = isInsideGroup ? parentGroup : null;
             state.cloneInGroup = false;
 
-            // If duplicating an object INSIDE a group (deep-select), create the clone in the SAME group
-            // so it is born in the exact same local position as the original.
-            if (isInsideGroup && parentGroup && typeof parentGroup.add === 'function') {
-                try {
-                    const origOX = original.originX || 'center';
-                    const origOY = original.originY || 'center';
+            // ── Position & insert the clone ──
+            if (isInsideGroup && parentGroup) {
+                // INSIDE GROUP: insert clone directly into parent group at same local coords.
+                // This keeps the clone logically inside the product card/zone.
+                cloned.set({
+                    left: origLeft,
+                    top: origTop,
+                    originX: original.originX || 'left',
+                    originY: original.originY || 'top',
+                    selectable: true,
+                    evented: true,
+                    hasControls: true,
+                    hasBorders: true,
+                    objectCaching: false,
+                    dirty: true,
+                });
 
-                    cloned.set({
-                        left: Number(original.left || 0),
-                        top: Number(original.top || 0),
-                        originX: origOX,
-                        originY: origOY,
-                        selectable: true,
-                        evented: true,
-                        hasControls: true,
-                        hasBorders: true,
-                        objectCaching: false,
-                        dirty: true,
-                    });
-                    cloned.setCoords?.();
+                // SILENT insertion: disable LayoutManager to prevent position recalculation
+                const lm = (parentGroup as any).layoutManager;
+                const origPerformLayout = lm?.performLayout;
+                if (lm) lm.performLayout = () => {};
 
-                    // Keep the group interactive so the clone can be dragged/selected.
-                    parentGroup.set({ subTargetCheck: true, interactive: true });
-
-                    // Insert right after the original when possible (keeps z-order intuitive).
-                    try {
-                        const list = typeof parentGroup.getObjects === 'function' ? parentGroup.getObjects() : [];
-                        const idx = Array.isArray(list) ? list.indexOf(original) : -1;
-                        if (typeof (parentGroup as any).insertAt === 'function' && idx >= 0) {
-                            (parentGroup as any).insertAt(cloned, idx + 1);
-                        } else {
-                            parentGroup.add(cloned);
-                        }
-                    } catch {
-                        parentGroup.add(cloned);
-                    }
-
-                    parentGroup.set('dirty', true);
-                    parentGroup.setCoords?.();
-                    safeAddWithUpdate(parentGroup);
-
-                    // FIGMA/CANVA BEHAVIOR: original stays in place, CLONE follows mouse.
-                    // Swap Fabric's internal transform target from original → clone.
-                    const tr: any = (canvas.value as any)._currentTransform;
-                    if (tr && tr.target === original) {
-                        tr.target = cloned;
-                        if (tr.original && typeof tr.original === 'object') {
-                            tr.original.left = cloned.left;
-                            tr.original.top = cloned.top;
-                        }
-                    }
-
-                    // Lock original so it doesn't move during the rest of the drag
-                    state.origLockX = !!original.lockMovementX;
-                    state.origLockY = !!original.lockMovementY;
-                    original.set({ lockMovementX: true, lockMovementY: true });
-                    original.set({ left: origLeft, top: origTop }); // ensure it stays at start position
-                    original.setCoords?.();
-
-                    canvas.value.setActiveObject(cloned);
-                    state.clone = cloned;
-                    state.didDuplicate = true;
-                    state.cloneInGroup = true;
-                    state.cloning = false;
-                    canvas.value.requestRenderAll();
-                    return;
-                } catch (e) {
-                    console.warn('[alt-drag-duplicate] Falha ao duplicar dentro do grupo, usando fallback canvas-level', e);
-                    // Fall through to the old behavior (canvas-level, then move into group on mouse:up)
+                if (Array.isArray(parentGroup._objects)) {
+                    parentGroup._objects.push(cloned);
+                    (cloned as any).group = parentGroup;
+                    cloned.canvas = canvas.value;
+                } else if (typeof parentGroup.add === 'function') {
+                    parentGroup.add(cloned);
                 }
-            }
 
-            // Clone starts at the SAME canvas-level position as the original.
-            // Use calcTransformMatrix() which gives the absolute position
-            // including all parent group transforms. m[4],m[5] = center point.
-            let canvasLeft = origLeft;
-            let canvasTop = origTop;
-            let useCenter = false;
-            try {
-                if (typeof original.calcTransformMatrix === 'function') {
-                    const m = original.calcTransformMatrix();
-                    canvasLeft = m[4];
-                    canvasTop = m[5];
-                    useCenter = true;
-                }
-            } catch { /* keep origLeft/origTop */ }
+                if (lm && origPerformLayout) lm.performLayout = origPerformLayout;
 
-            cloned.set({
-                left: canvasLeft,
-                top: canvasTop,
-                originX: useCenter ? 'center' : (original.originX || 'left'),
-                originY: useCenter ? 'center' : (original.originY || 'top'),
-                selectable: true,
-                evented: true,
-                hasControls: true,
-                hasBorders: true,
-                objectCaching: false,
-                dirty: true,
-            });
-            cloned.setCoords?.();
+                cloned.setCoords?.();
+                parentGroup.set('dirty', true);
+                state.cloneInGroup = true;
 
-            // Always add clone at canvas level for free dragging (will be moved into group on mouse:up)
-            canvas.value.add(cloned);
-
-            // Z-order: place clone right above the group (or original)
-            const canvasObjs = canvas.value.getObjects();
-            if (isInsideGroup) {
-                const groupIdx = canvasObjs.indexOf(parentGroup);
-                if (groupIdx >= 0 && typeof (canvas.value as any).moveTo === 'function') {
-                    (canvas.value as any).moveTo(cloned, groupIdx + 1);
-                }
             } else {
+                // CANVAS LEVEL: same left/top/origin
+                cloned.set({
+                    left: origLeft,
+                    top: origTop,
+                    originX: original.originX || 'left',
+                    originY: original.originY || 'top',
+                    selectable: true,
+                    evented: true,
+                    hasControls: true,
+                    hasBorders: true,
+                    objectCaching: false,
+                    dirty: true,
+                });
+                cloned.setCoords?.();
+
+                canvas.value.add(cloned);
+
+                // Z-order: place clone right above the original
+                const canvasObjs = canvas.value.getObjects();
                 const origIdx = canvasObjs.indexOf(original);
                 if (origIdx >= 0 && typeof (canvas.value as any).moveTo === 'function') {
                     (canvas.value as any).moveTo(cloned, origIdx + 1);
@@ -3207,18 +3219,15 @@ const setupAltDragDuplicate = () => {
             // FIGMA/CANVA BEHAVIOR: original stays in place, CLONE follows mouse.
             // Swap Fabric's internal transform target from original → clone.
             const tr: any = (canvas.value as any)._currentTransform;
-            const isCardClone = !!(original.isSmartObject || original.isProductCard);
             if (tr) {
-                // For product card groups: tr.target is the child inside the group (not the group itself).
-                // Swap the transform target to the cloned group so it follows the mouse.
-                if (isCardClone && tr.target !== original && tr.target?.group === original) {
+                const isCardClone = !!(original.isSmartObject || original.isProductCard);
+                const shouldSwap = tr.target === original
+                    || (isCardClone && tr.target !== original && tr.target?.group === original)
+                    || (isInsideGroup && tr.target === original);
+
+                if (shouldSwap) {
                     tr.target = cloned;
-                    if (tr.original && typeof tr.original === 'object') {
-                        tr.original.left = cloned.left;
-                        tr.original.top = cloned.top;
-                    }
-                } else if (tr.target === original) {
-                    tr.target = cloned;
+                    // offsetX/Y: keep original offsets since clone has same coords & origin
                     if (tr.original && typeof tr.original === 'object') {
                         tr.original.left = cloned.left;
                         tr.original.top = cloned.top;
@@ -3226,11 +3235,8 @@ const setupAltDragDuplicate = () => {
                 }
             }
 
-            // Lock original so it doesn't move during the rest of the drag
-            state.origLockX = !!original.lockMovementX;
-            state.origLockY = !!original.lockMovementY;
-            original.set({ lockMovementX: true, lockMovementY: true });
-            original.set({ left: origLeft, top: origTop }); // ensure it stays at start position
+            // Ensure original is still pinned (was locked before doClone, reinforce here)
+            original.set({ left: origLeft, top: origTop });
             original.setCoords?.();
 
             // Select the clone (it follows the mouse)
@@ -3269,62 +3275,19 @@ const setupAltDragDuplicate = () => {
             original.setCoords?.();
         }
 
-        // If the original was inside a group and the clone was created at canvas-level, move it INTO that group.
-        if (clone && pg && typeof pg.add === 'function' && !state.cloneInGroup) {
-            const cloneIsOnCanvas = canvas.value.getObjects().includes(clone);
-            if (!cloneIsOnCanvas) {
-                // Nothing to reparent (already inside group or not tracked by canvas list)
-                pg.set('dirty', true);
-                pg.setCoords?.();
-                safeAddWithUpdate(pg);
-            } else {
-            // Get clone's center in canvas coords (works regardless of originX/Y)
-            let cx = clone.left;
-            let cy = clone.top;
-            try {
-                const cm = clone.calcTransformMatrix();
-                cx = cm[4];
-                cy = cm[5];
-            } catch { /* fallback to left/top */ }
-
-            // Convert canvas-level center to group-local center
-            let localLeft = cx;
-            let localTop = cy;
-            try {
-                if (typeof pg.calcTransformMatrix === 'function') {
-                    const inv = fabric.util.invertTransform(pg.calcTransformMatrix());
-                    const pt = fabric.util.transformPoint({ x: cx, y: cy }, inv);
-                    localLeft = pt.x;
-                    localTop = pt.y;
-                }
-            } catch { /* keep canvas coords as fallback */ }
-
-            // Remove from canvas, add to group with local coords and matching origin
-            canvas.value.remove(clone);
-            clone.set({
-                left: localLeft,
-                top: localTop,
-                originX: original?.originX || 'center',
-                originY: original?.originY || 'center',
-            });
-            pg.add(clone);
-            clone.setCoords?.();
+        // Clone is already in the correct parent (group or canvas). Just finalize.
+        if (clone && pg) {
             pg.set('dirty', true);
             if (typeof pg.setCoords === 'function') pg.setCoords();
-            safeAddWithUpdate(pg);
-            }
         }
 
         // Select the clone (the one the user just placed)
         if (clone) {
             clone.setCoords?.();
-            // For objects inside a group, need interactive mode to select child
             if (pg) {
                 pg.set({ subTargetCheck: true, interactive: true });
-                canvas.value.setActiveObject(clone);
-            } else {
-                canvas.value.setActiveObject(clone);
             }
+            canvas.value.setActiveObject(clone);
         }
 
         canvas.value.requestRenderAll();
@@ -4217,6 +4180,21 @@ const refreshSelectedRef = (extra?: Record<string, any>) => {
     if (active) {
         selectedObjectRef.value = snapshotForPropertiesPanel(active, extra)
     } else {
+        // FIX: When Fabric v7 triggerLayout() deselects the zone during programmatic updates,
+        // the active object becomes null. Try to recover from the last known snapshot.
+        const lastSnap = selectedObjectRef.value;
+        if (lastSnap && lastSnap._customId && canvas.value) {
+            // Find the real Fabric object by its _customId
+            const realObj = canvas.value.getObjects().find((o: any) => o._customId === lastSnap._customId);
+            if (realObj) {
+                // Re-select and create fresh snapshot
+                try {
+                    canvas.value.setActiveObject(realObj);
+                } catch { /* ignore */ }
+                selectedObjectRef.value = snapshotForPropertiesPanel(realObj, extra);
+                return;
+            }
+        }
         triggerRef(selectedObjectRef)
     }
 }
@@ -15352,6 +15330,19 @@ const getCurrentZoneObject = () => {
         }
     }
     
+    // 5. FALLBACK: If snapshot has _customId, try to find any matching object on canvas
+    // This handles cases where Fabric v7 lost flags but the object still exists
+    if (selected && selected._customId) {
+        const obj = canvas.value.getObjects().find((o: any) => o._customId === selected._customId);
+        if (obj && obj.type === 'group' && isLikelyProductZone(obj)) {
+            return obj;
+        }
+    }
+    
+    // 6. LAST RESORT: Find ANY zone on canvas (for single-zone designs)
+    const anyZone = canvas.value.getObjects().find((o: any) => isLikelyProductZone(o));
+    if (anyZone) return anyZone;
+    
     return null;
 }
 
@@ -15367,6 +15358,11 @@ const handleUpdateZone = (prop: string, val: any) => {
 const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?: boolean } = {}) => {
     if (!canvas.value || !zone) return;
     ensureZoneSanity(zone);
+
+    // CRITICAL: Save zone reference BEFORE any Fabric layout operations.
+    // In Fabric v7, triggerLayout() can deselect the active object,
+    // causing refreshSelectedRef to lose the zone.
+    const zoneId = zone._customId;
 
     const zoneRect = getZoneRect(zone);
     const relayoutProps = new Set([
@@ -15434,13 +15430,29 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
         if (relayoutProps.has(prop)) shouldRelayout = true;
     });
 
-    safeAddWithUpdate(zone);
-    zone.setCoords();
-
+    // FIX Fabric v7: Avoid triggerLayout() for non-structural changes.
+    // triggerLayout() can deselect the zone group, breaking the UI loop.
+    // Only recalculate group bounds when children/structure actually changed.
     if (shouldRelayout) {
+        // Mark zone dirty and update coords (lightweight alternative to full addWithUpdate/triggerLayout)
+        zone.dirty = true;
+        zone.setCoords();
         // Cache children before relayout to prevent losing them
         const cachedChildren = getZoneChildren(zone);
         recalculateZoneLayout(zone, cachedChildren, { save: false });
+    } else {
+        // For non-relayout property changes, just update coords and mark dirty
+        zone.dirty = true;
+        if (zoneRect) zoneRect.dirty = true;
+        zone.setCoords();
+    }
+
+    // FIX Fabric v7: Re-select zone if it got deselected during layout recalculation
+    const currentActive = canvas.value.getActiveObject?.();
+    if (!currentActive || currentActive._customId !== zoneId) {
+        try {
+            canvas.value.setActiveObject(zone);
+        } catch { /* ignore */ }
     }
 
     canvas.value.requestRenderAll();
@@ -19664,6 +19676,12 @@ const handleRecalculateLayout = () => {
     if (!zone) return;
     ensureZoneSanity(zone);
     recalculateZoneLayout(zone);
+    // Re-select zone and refresh snapshot after layout recalculation
+    if (canvas.value) {
+        try { canvas.value.setActiveObject(zone); } catch { /* ignore */ }
+        canvas.value.requestRenderAll();
+    }
+    refreshSelectedRef();
 }
 
 

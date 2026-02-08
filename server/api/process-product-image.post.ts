@@ -1,6 +1,6 @@
 import { ListObjectsV2Command, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, getPublicUrl } from "../utils/s3";
-import { processImage, downloadImage } from "../utils/image-processor";
+import { processImage, processImageStrict, downloadImage } from "../utils/image-processor";
 import { createSupabaseAdmin } from "../utils/supabase";
 import { createHash } from 'crypto';
 
@@ -90,10 +90,14 @@ const termHash = (normalizedTerm: string): string => {
 };
 
 // Gera S3 key determinístico para um termo normalizado
+// VERSÃO da pipeline de processamento. Incrementar quando mudar a lógica de bg-removal
+// para forçar reprocessamento de imagens cached sem bg removal.
+const PROCESS_VERSION = 'v2';
+
 const buildDeterministicS3Key = (normalizedTerm: string): string => {
     const safeName = normalizedTerm.replace(/[^a-z0-9]/g, '-').substring(0, 50);
     const hash = termHash(normalizedTerm);
-    return `imagens/smart-${safeName}-${hash}.webp`;
+    return `imagens/smart-${safeName}-${hash}-${PROCESS_VERSION}.webp`;
 };
 
 const normalizeS3KeyForMatch = (s3Key: string): string => {
@@ -104,7 +108,8 @@ const normalizeS3KeyForMatch = (s3Key: string): string => {
         .replace(/^bg-removed-\d+$/i, '')
         .replace(/^\d+-/, '') // uploads may have timestamp prefix
         .replace(/^smart-/, '')
-        .replace(/-[0-9a-f]{10,}$/i, '') // strip hash suffix when present
+        .replace(/-v\d+$/i, '') // strip version suffix (e.g. -v2) — must run BEFORE hash strip
+        .replace(/-[0-9a-f]{10,}(-v\d+)?$/i, '') // strip hash suffix (with optional version) when present
         .replace(/[-_]+/g, ' ')
         .trim();
     return normalizeSearchTerm(cleaned);
@@ -346,6 +351,85 @@ async function s3KeyExists(s3: any, bucket: string, key: string): Promise<boolea
 }
 
 // ========================================
+// Helper: garante que imagem tem fundo removido
+// Sempre verifica se a versão processada (deterministicKey com PROCESS_VERSION)
+// já existe. Se não, baixa do sourceKey, processa (bg removal), e faz upload.
+// ========================================
+async function ensureBgRemoved(opts: {
+    s3: any;
+    bucketName: string;
+    sourceKey: string;
+    deterministicKey: string;
+    normalizedTerm: string;
+    term: string;
+    brand?: string;
+    flavor?: string;
+    weight?: string;
+}): Promise<{ key: string; processed: boolean } | null> {
+    const { s3, bucketName, sourceKey, deterministicKey, normalizedTerm, term, brand, flavor, weight } = opts;
+
+    // Se sourceKey JÁ É o deterministicKey versionado (mesma key) → já foi processado
+    if (sourceKey === deterministicKey) {
+        return { key: sourceKey, processed: false };
+    }
+
+    // Verificar se o key determinístico versionado (processado) já existe
+    const exists = await s3KeyExists(s3, bucketName, deterministicKey);
+    if (exists) {
+        console.log(`✅ [ensureBgRemoved] Key processado ${PROCESS_VERSION} já existe: "${deterministicKey}"`);
+        return { key: deterministicKey, processed: false };
+    }
+
+    // Baixar via S3 SDK diretamente (mais confiável que HTTP público), processar, e fazer upload
+    try {
+        let rawBuffer: Buffer;
+        try {
+            // Tentar via S3 SDK primeiro (evita problemas de rede/CORS)
+            const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+            const getResponse = await s3.send(new GetObjectCommand({ Bucket: bucketName, Key: sourceKey }));
+            const stream = getResponse.Body as any;
+            const chunks: Buffer[] = [];
+            for await (const chunk of stream) {
+                chunks.push(Buffer.from(chunk));
+            }
+            rawBuffer = Buffer.concat(chunks);
+            console.log(`📥 [ensureBgRemoved] Baixado via S3 SDK: "${sourceKey}" (${rawBuffer.length} bytes)`);
+        } catch (s3Err) {
+            // Fallback: tentar via URL pública
+            console.warn(`⚠️ [ensureBgRemoved] S3 SDK falhou, tentando URL pública:`, (s3Err as any)?.message);
+            const publicUrl = getPublicUrl(sourceKey);
+            rawBuffer = await downloadImage(publicUrl);
+        }
+
+        const processedBuffer = await processImageStrict(rawBuffer);
+
+        await s3.send(new PutObjectCommand({
+            Bucket: bucketName,
+            Key: deterministicKey,
+            Body: processedBuffer,
+            ContentType: 'image/webp',
+            ACL: 'public-read'
+        }));
+
+        console.log(`📤 [ensureBgRemoved] Imagem processada e salva: "${deterministicKey}" (${processedBuffer.length} bytes)`);
+
+        await saveToCacheDB({
+            searchTerm: normalizedTerm,
+            productName: term,
+            brand, flavor, weight,
+            imageUrl: getPublicUrl(deterministicKey),
+            s3Key: deterministicKey,
+            source: 'internal-processed'
+        });
+
+        return { key: deterministicKey, processed: true };
+    } catch (err) {
+        console.error('⚠️ [ensureBgRemoved] Falha ao processar imagem:', (err as any)?.message, (err as any)?.stack?.split('\n').slice(0, 3).join(' | '));
+        return null;
+    }
+}
+
+// ========================================
 // HANDLER PRINCIPAL
 // ========================================
 export default defineEventHandler(async (event) => {
@@ -438,6 +522,16 @@ export default defineEventHandler(async (event) => {
                 .catch(() => { /* ignore */ });
 
             if (cacheHit.s3_key) {
+                // Garantir que imagem do cache tem fundo removido
+                const processed = await ensureBgRemoved({
+                    s3, bucketName,
+                    sourceKey: cacheHit.s3_key,
+                    deterministicKey,
+                    normalizedTerm, term, brand, flavor, weight
+                });
+                if (processed) {
+                    return { source: 'cache-processed', url: proxyUrl(processed.key) };
+                }
                 return { source: 'cache', url: proxyUrl(cacheHit.s3_key) };
             }
             return { source: 'cache', url: cacheHit.image_url };
@@ -480,7 +574,18 @@ export default defineEventHandler(async (event) => {
         });
 
         if (found) {
-            // Salvar no cache com await para garantir persistência
+            // Garantir que imagem interna tem fundo removido
+            const processed = await ensureBgRemoved({
+                s3, bucketName,
+                sourceKey: found,
+                deterministicKey,
+                normalizedTerm, term, brand, flavor, weight
+            });
+            if (processed) {
+                return { source: processed.processed ? 'internal-processed' : 'internal', url: proxyUrl(processed.key) };
+            }
+
+            // Fallback: retornar imagem crua se processamento falhou
             await saveToCacheDB({
                 searchTerm: normalizedTerm,
                 productName: term,
@@ -597,7 +702,14 @@ export default defineEventHandler(async (event) => {
         }
 
         const rawBuffer = await downloadImage(selectedImageUrl);
-        const processedBuffer = await processImage(rawBuffer);
+        let processedBuffer: Buffer;
+        try {
+            processedBuffer = await processImageStrict(rawBuffer);
+            console.log('✅ [Serper] Background removido com sucesso');
+        } catch (bgErr) {
+            console.warn('⚠️ [Serper] processImageStrict falhou, usando processImage normal:', (bgErr as any)?.message);
+            processedBuffer = await processImage(rawBuffer);
+        }
         
         const putCommand = new PutObjectCommand({
             Bucket: bucketName,
