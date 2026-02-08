@@ -7480,7 +7480,7 @@ const handleObjectModified = (e: any) => {
                 const gapX = zone.gapHorizontal ?? padding;
                 const gapY = zone.gapVertical ?? padding;
                 const layoutDirection = zone.layoutDirection || 'horizontal';
-                const verticalAlign = zone.verticalAlign || 'top';
+                const verticalAlign = zone.verticalAlign || 'stretch';
                 const lastRowBehavior = zone.lastRowBehavior || 'fill';
                 const zoneConfig: ProductZone = {
                     x: zoneRect.left,
@@ -10267,7 +10267,7 @@ const updateSelection = () => {
             layoutDirection: active.layoutDirection || 'horizontal',
             cardAspectRatio: active.cardAspectRatio || 'auto',
             lastRowBehavior: active.lastRowBehavior || 'fill',
-            verticalAlign: active.verticalAlign || 'top',
+            verticalAlign: active.verticalAlign || 'stretch',
             highlightCount: active.highlightCount || 0,
             highlightPos: active.highlightPos || 'first',
             highlightHeight: active.highlightHeight || 1.5,
@@ -15505,7 +15505,8 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any) => 
             console.log(`🔍 [applyGlobalStylesToCards] Calling resizeSmartObject for card ${idx}`);
             resizeSmartObject(card, cardW, cardH, styles);
         }
-        safeAddWithUpdate(card);
+        // Do NOT call safeAddWithUpdate — resizeSmartObject already freezes dimensions.
+        card.dirty = true;
         card.setCoords();
     });
     
@@ -16114,7 +16115,12 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         bannerText.set({ originX: 'center', originY: 'center', left: 0, top: bannerCY });
     }
 
-    safeAddWithUpdate(priceGroup);
+    // CRITICAL: Freeze priceGroup to intended dimensions (no auto-expand).
+    priceGroup.set({ width: totalW, height: totalH });
+    const _apgParts = priceGroup.getObjects?.() || [];
+    _apgParts.forEach((o: any) => { if (o && typeof o.setCoords === 'function') o.setCoords(); });
+    priceGroup.dirty = true;
+    if (typeof priceGroup.setCoords === 'function') priceGroup.setCoords();
     return { pillW: totalW, pillH: totalH };
 };
 
@@ -16402,7 +16408,12 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         }
     });
 
-    safeAddWithUpdate(priceGroup);
+    // CRITICAL: Freeze priceGroup to intended pill dimensions (no auto-expand).
+    priceGroup.set({ width: newW, height: newH });
+    const _cpgParts = priceGroup.getObjects?.() || [];
+    _cpgParts.forEach((o: any) => { if (o && typeof o.setCoords === 'function') o.setCoords(); });
+    priceGroup.dirty = true;
+    if (typeof priceGroup.setCoords === 'function') priceGroup.setCoords();
     return { pillW: newW, pillH: newH };
 }
 
@@ -16703,7 +16714,14 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         priceText.set({ originX: 'center', originY: 'center', left: textCenterX, top: 0 });
     }
 
-    safeAddWithUpdate(priceGroup);
+    // CRITICAL: Do NOT call safeAddWithUpdate — it recalculates priceGroup bounds from
+    // children (including shadows/strokes), expanding beyond pillW×pillH and causing the
+    // card group to also expand when its bounds are recalculated.
+    priceGroup.set({ width: pillW, height: pillH });
+    const _pgParts = priceGroup.getObjects?.() || [];
+    _pgParts.forEach((o: any) => { if (o && typeof o.setCoords === 'function') o.setCoords(); });
+    priceGroup.dirty = true;
+    if (typeof priceGroup.setCoords === 'function') priceGroup.setCoords();
     return { pillW, pillH };
 }
 
@@ -17377,7 +17395,9 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
         newPg.set({ top: halfH - (hForAnchor / 2) - marginBottom });
     }
 
-    safeAddWithUpdate(card);
+    // Freeze card dimensions (do NOT call safeAddWithUpdate which expands bounds)
+    if (cardW && cardH) card.set({ width: cardW, height: cardH });
+    card.dirty = true;
     card.setCoords();
 }
 
@@ -17835,7 +17855,9 @@ async function resetCardPriceGroupToDefault(card: any) {
 
     card.remove(oldPg);
     safeAddWithUpdate(card, newPg);
-    safeAddWithUpdate(card);
+    // Freeze card dimensions (do NOT call safeAddWithUpdate which expands bounds)
+    if (cardW && cardH) card.set({ width: cardW, height: cardH });
+    card.dirty = true;
     card.setCoords();
 }
 
@@ -18567,7 +18589,17 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     
     (group as any)._cardWidth = w;
     (group as any)._cardHeight = h;
-    safeAddWithUpdate(group);
+    // CRITICAL: Do NOT call safeAddWithUpdate(group) — Fabric's LayoutManager recalculates
+    // bounds from ALL children. If splash/shadows extend beyond the intended w×h, Fabric
+    // expands the group and shifts its center, causing the background to be offset and the
+    // splash/price label to visually ESCAPE the card. Instead, freeze the group dimensions.
+    group.set({ width: w, height: h });
+    // Update coords for all children (replaces _updateObjectsCoords that safeAddWithUpdate would do)
+    objects.forEach((o: any) => {
+        if (o && typeof o.setCoords === 'function') o.setCoords();
+    });
+    group.dirty = true;
+    if (typeof group.setCoords === 'function') group.setCoords();
 }
 
 const getZoneRect = (zone: any) => {
@@ -19068,7 +19100,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
     // Default to `fill` so the grid always uses the full zone width (no empty space).
     const lastRowBehavior = zone.lastRowBehavior || 'fill'; 
     const layoutDirection = zone.layoutDirection || 'horizontal';
-    const verticalAlign = zone.verticalAlign || 'top';
+    const verticalAlign = zone.verticalAlign || 'stretch';
     const stylesToApply: Partial<GlobalStyles> = (zone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value;
     
     const count = cards.length;
