@@ -1,18 +1,20 @@
-import { createClient } from '@supabase/supabase-js'
+import { createSupabaseAdmin } from '../utils/supabase'
+import { requireAuthenticatedUser } from '../utils/auth'
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig()
+  const user = await requireAuthenticatedUser(event)
   const query = getQuery(event)
   const id = query.id as string | undefined
 
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Template id required' })
 
-  const supabase = createClient(config.public.supabaseUrl, config.public.supabaseKey)
+  const supabase = createSupabaseAdmin()
 
   const { error } = await supabase
     .from('label_templates')
     .delete()
     .eq('id', id)
+    .eq('user_id', user.id)
 
   if (error) {
     const msg = String((error as any).message || error)

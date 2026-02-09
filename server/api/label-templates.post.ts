@@ -1,4 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { createSupabaseAdmin } from '../utils/supabase'
+import { requireAuthenticatedUser } from '../utils/auth'
 
 type Body = {
   id?: string
@@ -10,7 +11,7 @@ type Body = {
 }
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig()
+  const user = await requireAuthenticatedUser(event)
   const body = (await readBody(event)) as Body
 
   if (!body?.id) throw createError({ statusCode: 400, statusMessage: 'Template id required' })
@@ -18,11 +19,11 @@ export default defineEventHandler(async (event) => {
   if (!body?.kind) throw createError({ statusCode: 400, statusMessage: 'Template kind required' })
   if (!body?.group) throw createError({ statusCode: 400, statusMessage: 'Template group required' })
 
-  const supabase = createClient(config.public.supabaseUrl, config.public.supabaseKey)
+  const supabase = createSupabaseAdmin()
 
   const payload = {
     id: body.id,
-    user_id: body.userId ?? null,
+    user_id: user.id,
     name: body.name,
     kind: body.kind,
     group: body.group,
@@ -30,8 +31,7 @@ export default defineEventHandler(async (event) => {
     updated_at: new Date().toISOString()
   }
 
-  const { data, error } = await supabase
-    .from('label_templates')
+  const { data, error } = await (supabase.from as any)('label_templates')
     .upsert(payload, { onConflict: 'id' })
     .select('id, user_id, name, kind, "group", preview_data_url, created_at, updated_at')
     .single()

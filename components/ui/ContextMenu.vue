@@ -33,6 +33,11 @@ const handleAction = (action: string) => {
   close()
 }
 
+const handleItemClick = (item: MenuItem) => {
+  if (!item.action) return
+  handleAction(item.action)
+}
+
 // Close on click outside
 const handleClickOutside = (e: MouseEvent) => {
   if (menuRef.value && !menuRef.value.contains(e.target as Node)) {
@@ -89,7 +94,7 @@ onUnmounted(() => {
         <div v-if="item.divider" class="h-px bg-white/10 my-1 mx-2" />
         <button
           v-else
-          @click.stop="handleAction(item.action)"
+          @click.stop="handleItemClick(item)"
           :class="[
             'w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors',
             item.danger

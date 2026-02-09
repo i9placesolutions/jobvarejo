@@ -8,10 +8,7 @@
 
 import { computed, ref } from 'vue';
 import {
-  LayoutGrid,
-  Rows3,
   Columns3,
-  Wand2,
   ChevronDown,
   ChevronRight,
   Lock,
@@ -20,21 +17,9 @@ import {
   AlignHorizontalSpaceAround,
   Star,
   Palette,
-  Settings2,
-  Grid3X3,
-  StretchHorizontal,
-  AlignStartVertical,
-  AlignCenterVertical,
-  AlignEndVertical,
-  List,
-  // NEW ICONS for expanded presets
-  Sidebar,
-  CreditCard,
-  ArrowRight,
-  BookOpen,
-  Sparkles
+  Settings2
 } from 'lucide-vue-next';
-import { LAYOUT_PRESETS, SPLASH_STYLES } from '~/types/product-zone';
+import { LAYOUT_PRESETS, SPLASH_STYLES, type LayoutPreset } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
 import type { GlobalStyles } from '~/types/product-zone';
 import ColorPicker from './ui/ColorPicker.vue';
@@ -96,85 +81,221 @@ const priceTextColorPickerRef = ref<HTMLElement | null>(null)
 const priceCurrencyColorPickerRef = ref<HTMLElement | null>(null)
 
 const expandedSections = ref({
-  layout: true,
-  spacing: true,
+  layout: false,
+  spacing: false,
   highlight: false,
   styles: false
 });
 
 // Presets expansion state
 const presetsExpanded = ref(true);
-const activePresetCategory = ref<string | null>(null);
 
-const syncGaps = ref(true);
+const isSpacingSynced = () => {
+  const pad = Number(props.zone.padding ?? 15);
+  const gapH = Number(props.zone.gapHorizontal ?? pad);
+  const gapV = Number(props.zone.gapVertical ?? pad);
+  return Math.abs(gapH - pad) < 0.001 && Math.abs(gapV - pad) < 0.001;
+};
 
-// Computed
+const syncGaps = ref(isSpacingSynced());
+
+type HighlightPos = 'first' | 'last' | 'random';
+type PreviewTone = 'base' | 'highlight';
+type NormalizedZonePresetState = {
+  columns: number;
+  rows: number;
+  layoutDirection: 'horizontal' | 'vertical';
+  cardAspectRatio: string;
+  lastRowBehavior: 'fill' | 'center' | 'stretch' | 'left';
+  verticalAlign: 'top' | 'center' | 'bottom' | 'stretch';
+  highlightCount: number;
+  highlightPos: HighlightPos;
+  highlightHeight: number;
+};
+type PresetPreviewCell = {
+  id: string;
+  col: number;
+  row: number;
+  colSpan: number;
+  rowSpan: number;
+  tone: PreviewTone;
+};
+
+const toSafeNumber = (value: unknown, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const normalizeHighlightPos = (value: unknown): HighlightPos => {
+  if (value === 'last' || value === 'random') return value;
+  return 'first';
+};
+
+const normalizedZoneState = computed<NormalizedZonePresetState>(() => ({
+  columns: Math.max(0, Math.round(toSafeNumber(props.zone.columns, 0))),
+  rows: Math.max(0, Math.round(toSafeNumber(props.zone.rows, 0))),
+  layoutDirection: props.zone.layoutDirection === 'vertical' ? 'vertical' : 'horizontal',
+  cardAspectRatio: props.zone.cardAspectRatio ?? 'fill',
+  lastRowBehavior: (props.zone.lastRowBehavior ?? 'fill') as NormalizedZonePresetState['lastRowBehavior'],
+  verticalAlign: (props.zone.verticalAlign ?? 'stretch') as NormalizedZonePresetState['verticalAlign'],
+  highlightCount: Math.max(0, Math.round(toSafeNumber(props.zone.highlightCount, 0))),
+  highlightPos: normalizeHighlightPos(props.zone.highlightPos),
+  highlightHeight: toSafeNumber(props.zone.highlightHeight, 1.5)
+}));
+
+const presetMatchesZone = (preset: LayoutPreset, zone: NormalizedZonePresetState) => {
+  const presetColumns = Math.max(0, Math.round(toSafeNumber(preset.columns, 0)));
+  const presetRows = Math.max(0, Math.round(toSafeNumber(preset.rows, 0)));
+  const presetLayout = (preset.layoutDirection ?? 'horizontal') as NormalizedZonePresetState['layoutDirection'];
+  const presetAspect = preset.cardAspectRatio ?? 'fill';
+  const presetLastRow = (preset.lastRowBehavior ?? 'fill') as NormalizedZonePresetState['lastRowBehavior'];
+  const presetHighlightCount = Math.max(0, Math.round(toSafeNumber(preset.highlightCount, 0)));
+
+  if (zone.columns !== presetColumns) return false;
+  if (zone.rows !== presetRows) return false;
+  if (zone.layoutDirection !== presetLayout) return false;
+  if (zone.cardAspectRatio !== presetAspect) return false;
+  if (zone.lastRowBehavior !== presetLastRow) return false;
+  if (preset.verticalAlign && zone.verticalAlign !== preset.verticalAlign) return false;
+  if (zone.highlightCount !== presetHighlightCount) return false;
+
+  if (presetHighlightCount > 0) {
+    const presetPos = normalizeHighlightPos(preset.highlightPos ?? 'first');
+    const presetHeight = toSafeNumber(preset.highlightHeight, 1.5);
+    if (zone.highlightPos !== presetPos) return false;
+    if (Math.abs(zone.highlightHeight - presetHeight) > 0.05) return false;
+  }
+
+  return true;
+};
+
+const isRightBiasedPreset = (preset: LayoutPreset) =>
+  preset.highlightPos === 'last' || preset.id.endsWith('right');
+
+const getPreviewCols = (preset: LayoutPreset) => {
+  const fallback = preset.columns && preset.columns > 0 ? preset.columns : 4;
+  return clamp(Math.round(toSafeNumber(preset.previewCols, fallback)), 1, 6);
+};
+
+const getPreviewRows = (preset: LayoutPreset) => {
+  const fallback = preset.rows && preset.rows > 0 ? preset.rows : 3;
+  return clamp(Math.round(toSafeNumber(preset.previewRows, fallback)), 2, 5);
+};
+
+const getPreviewGridStyle = (preset: LayoutPreset) => ({
+  gridTemplateColumns: `repeat(${getPreviewCols(preset)}, minmax(0, 1fr))`,
+  gridTemplateRows: `repeat(${getPreviewRows(preset)}, minmax(0, 1fr))`
+});
+
+const getPreviewCellStyle = (cell: PresetPreviewCell) => ({
+  gridColumn: `${cell.col} / span ${cell.colSpan}`,
+  gridRow: `${cell.row} / span ${cell.rowSpan}`
+});
+
+const createPreviewCells = (preset: LayoutPreset): PresetPreviewCell[] => {
+  const cols = getPreviewCols(preset);
+  const rows = getPreviewRows(preset);
+  const maxCells = clamp(
+    Math.round(toSafeNumber(preset.previewCount, cols * rows)),
+    1,
+    cols * rows
+  );
+
+  const occupied = new Set<string>();
+  const cells: PresetPreviewCell[] = [];
+
+  const addCell = (
+    id: string,
+    col: number,
+    row: number,
+    colSpan = 1,
+    rowSpan = 1,
+    tone: PreviewTone = 'base'
+  ) => {
+    const safeCol = clamp(col, 1, cols);
+    const safeRow = clamp(row, 1, rows);
+    const safeColSpan = clamp(colSpan, 1, cols - safeCol + 1);
+    const safeRowSpan = clamp(rowSpan, 1, rows - safeRow + 1);
+
+    for (let r = safeRow; r < safeRow + safeRowSpan; r += 1) {
+      for (let c = safeCol; c < safeCol + safeColSpan; c += 1) {
+        occupied.add(`${c}:${r}`);
+      }
+    }
+
+    cells.push({
+      id,
+      col: safeCol,
+      row: safeRow,
+      colSpan: safeColSpan,
+      rowSpan: safeRowSpan,
+      tone
+    });
+  };
+
+  if (preset.previewKind === 'hero') {
+    const heroWidth = cols >= 4 ? 2 : 1;
+    const heroHeight = rows >= 3 ? 2 : 1;
+    const heroCol = isRightBiasedPreset(preset)
+      ? Math.max(1, cols - heroWidth + 1)
+      : 1;
+    addCell('hero', heroCol, 1, heroWidth, heroHeight, 'highlight');
+  }
+
+  if (preset.previewKind === 'sidebar') {
+    const sideCol = isRightBiasedPreset(preset) ? cols : 1;
+    const highlights = clamp(
+      Math.round(toSafeNumber(preset.highlightCount, Math.min(rows, 3))),
+      1,
+      rows
+    );
+    for (let row = 1; row <= highlights; row += 1) {
+      addCell(`sidebar-${row}`, sideCol, row, 1, 1, 'highlight');
+    }
+  }
+
+  let seed = 0;
+  outer: for (let row = 1; row <= rows; row += 1) {
+    for (let col = 1; col <= cols; col += 1) {
+      if (cells.length >= maxCells) break outer;
+      if (occupied.has(`${col}:${row}`)) continue;
+      seed += 1;
+      addCell(`cell-${seed}`, col, row);
+    }
+  }
+
+  return cells.slice(0, maxCells);
+};
+
+const previewCellsByPreset = computed<Record<string, PresetPreviewCell[]>>(() => {
+  const map: Record<string, PresetPreviewCell[]> = {};
+  for (const preset of LAYOUT_PRESETS) {
+    map[preset.id] = createPreviewCells(preset);
+  }
+  return map;
+});
+
+const getPreviewCells = (preset: LayoutPreset) => previewCellsByPreset.value[preset.id] ?? [];
+
+// Computed - detect active preset from zone signature
 const currentPreset = computed(() => {
-  const cols = props.zone.columns ?? 0;
-  const rows = props.zone.rows ?? 0;
-  const direction = props.zone.layoutDirection;
-  const aspect = props.zone.cardAspectRatio;
-
-  // Auto
-  if (cols === 0 && rows === 0) return 'auto';
-
-  // Grids
-  if (cols === 2 && rows === 0 && aspect === '3:4') return 'grid-2';
-  if (cols === 3 && rows === 0 && aspect === '3:4') return 'grid-3';
-  if (cols === 4 && rows === 0 && aspect === 'square') return 'grid-4';
-  if (cols === 5 && rows === 0 && aspect === 'square') return 'grid-5';
-  if (cols === 6 && rows === 0 && aspect === 'square') return 'grid-6';
-
-  // Vertical
-  if (cols === 1 && direction === 'vertical') {
-    if (aspect === '16:9') return 'list';
-    if (aspect === '9:16') return 'sidebar';
-  }
-
-  // Cards (2 colunas square)
-  if (cols === 2 && aspect === 'square' && direction === 'horizontal') return 'cards';
-
-  // Horizontal
-  if (cols === 0 && rows === 1) return 'horizontal';
-  if (cols === 2 && aspect === '4:3') return 'magazine';
-
-  // Special (featured/showcase based on highlight settings)
-  if (props.zone.highlightCount === 1) {
-    if (props.zone.highlightHeight === 2) return 'showcase';
-    return 'featured';
-  }
-
-  return 'auto';
+  const zone = normalizedZoneState.value;
+  const exact = LAYOUT_PRESETS.find(preset => presetMatchesZone(preset, zone));
+  return exact?.id ?? 'auto';
 });
 
 // Organize presets by category
-const presetCategories = computed(() => {
-  const categories = {
-    basic: { label: 'Básicos', presets: [] as typeof LAYOUT_PRESETS },
-    grid: { label: 'Grids', presets: [] as typeof LAYOUT_PRESETS },
-    vertical: { label: 'Verticais', presets: [] as typeof LAYOUT_PRESETS },
-    horizontal: { label: 'Horizontais', presets: [] as typeof LAYOUT_PRESETS },
-    special: { label: 'Especiais', presets: [] as typeof LAYOUT_PRESETS }
-  };
-
-  LAYOUT_PRESETS.forEach(preset => {
-    const cat = preset.category || 'basic';
-    if (categories[cat]) {
-      categories[cat].presets.push(preset);
-    }
-  });
-
-  return categories;
-});
+const gridPresets = computed(() => LAYOUT_PRESETS.filter(p => p.category === 'grid'));
+const specialPresets = computed(() => LAYOUT_PRESETS.filter(p => p.category === 'special'));
 
 // Handlers
 const updateZone = (prop: string, value: any) => {
-  console.log('🔍 [ProductZoneSettings] emitting update:zone', prop, value);
   emit('update:zone', prop, value);
 };
 
 const updateGlobal = (prop: string, value: any) => {
-  console.log('🔍 [ProductZoneSettings] emitting update:global-styles', prop, value);
   emit('update:global-styles', prop, value);
 };
 
@@ -205,31 +326,6 @@ const applyPreset = (presetId: string) => {
 const toggleSection = (section: keyof typeof expandedSections.value) => {
   expandedSections.value[section] = !expandedSections.value[section];
 };
-
-// Aspect Ratio Options
-const aspectRatioOptions = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'square', label: '1:1' },
-  { value: '3:4', label: '3:4' },
-  { value: '4:3', label: '4:3' },
-  { value: '16:9', label: '16:9' },
-  { value: '9:16', label: '9:16' },
-  { value: 'fill', label: 'Preencher' }
-];
-
-const lastRowOptions = [
-  { value: 'center', label: 'Centralizar' },
-  { value: 'fill', label: 'Preencher' },
-  { value: 'stretch', label: 'Esticar' },
-  { value: 'left', label: 'Esquerda' }
-];
-
-const verticalAlignOptions = [
-  { value: 'top', label: 'Topo', icon: AlignStartVertical },
-  { value: 'center', label: 'Centro', icon: AlignCenterVertical },
-  { value: 'bottom', label: 'Base', icon: AlignEndVertical },
-  { value: 'stretch', label: 'Esticar', icon: StretchHorizontal }
-];
 </script>
 
 <template>
@@ -238,7 +334,7 @@ const verticalAlignOptions = [
     <!-- Presets Section -->
     <div class="space-y-3">
       <div class="flex items-center justify-between">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Presets</span>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Produtos por Linha</span>
         <button
           @click="presetsExpanded = !presetsExpanded"
           class="text-zinc-500 hover:text-zinc-300 transition-colors"
@@ -250,125 +346,68 @@ const verticalAlignOptions = [
         </button>
       </div>
 
-      <div v-if="presetsExpanded" class="space-y-4">
-        <!-- Básicos -->
-        <div class="space-y-2">
-          <span class="text-[9px] font-semibold text-zinc-500 uppercase tracking-wide">Básicos</span>
-          <div class="grid grid-cols-3 gap-2">
-            <button
-              v-for="preset in presetCategories.basic.presets"
-              :key="preset.id"
-              @click="applyPreset(preset.id)"
-              :class="[
-                'flex flex-col items-center gap-1.5 p-2.5 rounded-lg border transition-all',
-                currentPreset === preset.id
-                  ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                  : 'bg-zinc-800/50 border-zinc-700 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200'
-              ]"
-              :title="preset.description"
-            >
-              <component
-                :is="preset.id === 'auto' ? Wand2 : Columns3"
-                class="w-4 h-4"
+      <div v-if="presetsExpanded" class="space-y-3">
+        <!-- Grid Presets: mini previews -->
+        <div class="grid grid-cols-4 gap-1.5">
+          <button
+            v-for="preset in gridPresets"
+            :key="preset.id"
+            @click="applyPreset(preset.id)"
+            :class="[
+              'flex flex-col gap-1.5 p-2 rounded-lg border transition-all',
+              currentPreset === preset.id
+                ? 'bg-violet-500/20 border-violet-500 text-violet-300'
+                : 'bg-zinc-800/50 border-zinc-700/50 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200'
+            ]"
+            :title="preset.description"
+          >
+            <div class="preset-preview" :style="getPreviewGridStyle(preset)">
+              <span
+                v-for="cell in getPreviewCells(preset)"
+                :key="cell.id"
+                :class="[
+                  'preset-preview-cell',
+                  cell.tone === 'highlight'
+                    ? 'preset-preview-cell--highlight'
+                    : 'preset-preview-cell--base'
+                ]"
+                :style="getPreviewCellStyle(cell)"
               />
-              <span class="text-[9px] font-medium">{{ preset.name }}</span>
-            </button>
-          </div>
+            </div>
+            <span class="text-[8px] font-medium leading-tight text-center">{{ preset.name }}</span>
+          </button>
         </div>
 
-        <!-- Grids -->
-        <div class="space-y-2">
-          <span class="text-[9px] font-semibold text-zinc-500 uppercase tracking-wide">Grids</span>
+        <!-- Special Presets -->
+        <div class="space-y-1.5">
+          <span class="text-[9px] font-semibold text-yellow-500/80 uppercase tracking-wide">Destaques</span>
           <div class="grid grid-cols-4 gap-1.5">
             <button
-              v-for="preset in presetCategories.grid.presets"
+              v-for="preset in specialPresets"
               :key="preset.id"
               @click="applyPreset(preset.id)"
               :class="[
-                'flex flex-col items-center gap-1 p-2 rounded border transition-all',
-                currentPreset === preset.id
-                  ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                  : 'bg-zinc-800/30 border-zinc-700/50 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300'
-              ]"
-              :title="preset.description"
-            >
-              <LayoutGrid class="w-3.5 h-3.5" />
-              <span class="text-[8px]">{{ preset.name }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Verticais -->
-        <div class="space-y-2">
-          <span class="text-[9px] font-semibold text-zinc-500 uppercase tracking-wide">Verticais</span>
-          <div class="grid grid-cols-3 gap-1.5">
-            <button
-              v-for="preset in presetCategories.vertical.presets"
-              :key="preset.id"
-              @click="applyPreset(preset.id)"
-              :class="[
-                'flex flex-col items-center gap-1 p-2 rounded border transition-all',
-                currentPreset === preset.id
-                  ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                  : 'bg-zinc-800/30 border-zinc-700/50 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300'
-              ]"
-              :title="preset.description"
-            >
-              <component
-                :is="preset.id === 'list' ? List : preset.id === 'sidebar' ? Sidebar : CreditCard"
-                class="w-3.5 h-3.5"
-              />
-              <span class="text-[8px]">{{ preset.name }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Horizontais -->
-        <div class="space-y-2">
-          <span class="text-[9px] font-semibold text-zinc-500 uppercase tracking-wide">Horizontais</span>
-          <div class="grid grid-cols-2 gap-1.5">
-            <button
-              v-for="preset in presetCategories.horizontal.presets"
-              :key="preset.id"
-              @click="applyPreset(preset.id)"
-              :class="[
-                'flex items-center gap-2 p-2 rounded border transition-all',
-                currentPreset === preset.id
-                  ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                  : 'bg-zinc-800/30 border-zinc-700/50 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300'
-              ]"
-              :title="preset.description"
-            >
-              <component
-                :is="preset.id === 'horizontal' ? ArrowRight : BookOpen"
-                class="w-3.5 h-3.5"
-              />
-              <span class="text-[9px]">{{ preset.name }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Especiais -->
-        <div class="space-y-2">
-          <span class="text-[9px] font-semibold text-yellow-500/80 uppercase tracking-wide">Especiais</span>
-          <div class="grid grid-cols-2 gap-1.5">
-            <button
-              v-for="preset in presetCategories.special.presets"
-              :key="preset.id"
-              @click="applyPreset(preset.id)"
-              :class="[
-                'flex items-center gap-2 p-2 rounded border transition-all',
+                'flex flex-col gap-1.5 p-2 rounded-lg border transition-all',
                 currentPreset === preset.id
                   ? 'bg-yellow-500/20 border-yellow-500 text-yellow-300'
-                  : 'bg-zinc-800/30 border-zinc-700/50 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300'
+                  : 'bg-zinc-800/50 border-zinc-700/50 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200'
               ]"
               :title="preset.description"
             >
-              <component
-                :is="preset.id === 'featured' ? Star : Sparkles"
-                class="w-3.5 h-3.5"
-              />
-              <span class="text-[9px]">{{ preset.name }}</span>
+              <div class="preset-preview" :style="getPreviewGridStyle(preset)">
+                <span
+                  v-for="cell in getPreviewCells(preset)"
+                  :key="cell.id"
+                  :class="[
+                    'preset-preview-cell',
+                    cell.tone === 'highlight'
+                      ? 'preset-preview-cell--highlight'
+                      : 'preset-preview-cell--base'
+                  ]"
+                  :style="getPreviewCellStyle(cell)"
+                />
+              </div>
+              <span class="text-[8px] font-medium leading-tight text-center">{{ preset.name }}</span>
             </button>
           </div>
         </div>
@@ -377,7 +416,7 @@ const verticalAlignOptions = [
 
     <div class="h-px bg-white/5" />
 
-    <!-- Layout Section -->
+    <!-- Layout Avançado Section (simplified: just columns slider + highlight controls) -->
     <div class="space-y-3">
       <button 
         @click="toggleSection('layout')"
@@ -389,130 +428,43 @@ const verticalAlignOptions = [
       
       <div v-if="expandedSections.layout" class="space-y-3 animate-in slide-in-from-top-2 duration-200">
         
-        <!-- Columns & Rows -->
-        <div class="grid grid-cols-2 gap-3">
-          <div class="space-y-1.5">
-            <label class="text-[10px] text-zinc-500 flex items-center gap-1.5">
-              <Columns3 class="w-3 h-3" /> Colunas
-            </label>
-            <div class="flex items-center gap-2">
-              <input
-                type="range"
-                :value="zone.columns ?? 0"
-                @input="updateZone('columns', Number(($event.target as HTMLInputElement).value))"
-                min="0"
-                max="6"
-                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-              />
-              <span class="w-6 text-center text-[10px] font-mono text-zinc-400">
-                {{ zone.columns === 0 ? 'Auto' : zone.columns }}
-              </span>
-            </div>
-          </div>
-          
-          <div class="space-y-1.5">
-            <label class="text-[10px] text-zinc-500 flex items-center gap-1.5">
-              <Rows3 class="w-3 h-3" /> Linhas
-            </label>
-            <div class="flex items-center gap-2">
-              <input
-                type="range"
-                :value="zone.rows ?? 0"
-                @input="updateZone('rows', Number(($event.target as HTMLInputElement).value))"
-                min="0"
-                max="6"
-                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-              />
-              <span class="w-6 text-center text-[10px] font-mono text-zinc-400">
-                {{ zone.rows === 0 ? 'Auto' : zone.rows }}
-              </span>
-            </div>
+        <!-- Columns Slider -->
+        <div class="space-y-1.5">
+          <label class="text-[10px] text-zinc-500 flex items-center gap-1.5">
+            <Columns3 class="w-3 h-3" /> Colunas por Linha
+          </label>
+          <div class="flex items-center gap-2">
+            <input
+              type="range"
+              :value="zone.columns ?? 0"
+              @input="updateZone('columns', Number(($event.target as HTMLInputElement).value))"
+              min="0"
+              max="8"
+              class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+            />
+            <span class="w-8 text-center text-[10px] font-mono text-zinc-400">
+              {{ zone.columns === 0 ? 'Auto' : zone.columns }}
+            </span>
           </div>
         </div>
 
-        <!-- Aspect Ratio -->
         <div class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500">Proporção dos Cards</label>
-          <div class="flex gap-1 flex-wrap">
-            <button
-              v-for="opt in aspectRatioOptions"
-              :key="opt.value"
-              @click="updateZone('cardAspectRatio', opt.value)"
-              :class="[
-                'px-2 py-1 text-[9px] font-medium rounded transition-all',
-                zone.cardAspectRatio === opt.value
-                  ? 'bg-violet-500 text-white'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
-              ]"
-            >
-              {{ opt.label }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Last Row Behavior -->
-        <div class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500">Última Linha</label>
+          <label class="text-[10px] text-zinc-500">Última linha</label>
           <select
-            :value="zone.lastRowBehavior ?? 'center'"
+            :value="zone.lastRowBehavior ?? 'fill'"
             @change="updateZone('lastRowBehavior', ($event.target as HTMLSelectElement).value)"
             class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
           >
-            <option v-for="opt in lastRowOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
+            <option value="fill">Preencher largura</option>
+            <option value="center">Centralizar</option>
+            <option value="left">Alinhar à esquerda</option>
           </select>
         </div>
 
-        <!-- Vertical Alignment -->
-        <div class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500">Alinhamento Vertical</label>
-          <div class="flex gap-1">
-            <button
-              v-for="opt in verticalAlignOptions"
-              :key="opt.value"
-              @click="updateZone('verticalAlign', opt.value)"
-              :class="[
-                'flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[9px] font-medium transition-all',
-                zone.verticalAlign === opt.value
-                  ? 'bg-violet-500 text-white'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-              ]"
-              :title="opt.label"
-            >
-              <component :is="opt.icon" class="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Layout Direction -->
-        <div class="flex items-center gap-3">
-          <label class="text-[10px] text-zinc-500">Direção:</label>
-          <div class="flex gap-1">
-            <button
-              @click="updateZone('layoutDirection', 'horizontal')"
-              :class="[
-                'px-3 py-1 rounded text-[9px] font-medium transition-all',
-                zone.layoutDirection === 'horizontal'
-                  ? 'bg-violet-500 text-white'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-              ]"
-            >
-              Horizontal
-            </button>
-            <button
-              @click="updateZone('layoutDirection', 'vertical')"
-              :class="[
-                'px-3 py-1 rounded text-[9px] font-medium transition-all',
-                zone.layoutDirection === 'vertical'
-                  ? 'bg-violet-500 text-white'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-              ]"
-            >
-              Vertical
-            </button>
-          </div>
-        </div>
+        <p class="text-[10px] text-zinc-500 leading-relaxed">
+          Use <strong class="text-zinc-300">Auto</strong> em colunas para ajuste responsivo.
+          O sistema mantém os cards dentro da zona automaticamente.
+        </p>
       </div>
     </div>
 
@@ -1323,5 +1275,28 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 50%;
   cursor: pointer;
   border: none;
+}
+
+.preset-preview {
+  display: grid;
+  width: 100%;
+  height: 34px;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(24, 24, 27, 0.85);
+}
+
+.preset-preview-cell {
+  border-radius: 3px;
+}
+
+.preset-preview-cell--base {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.preset-preview-cell--highlight {
+  background: rgba(250, 204, 21, 0.92);
 }
 </style>

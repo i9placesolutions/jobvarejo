@@ -6,44 +6,26 @@ const publicRoutes = [
   '/auth/reset-password',
 ]
 
-// Helper to parse cookies (works on both client and server)
-const getCookie = (name: string, cookieHeader?: string): string | null => {
-  const cookies = cookieHeader || (process.client ? document.cookie : '')
-  if (!cookies) return null
-
-  const cookieArray = cookies.split(';').map(c => c.trim())
-  const found = cookieArray.find(c => c.startsWith(`${name}=`))
-  return found ? found.split('=')[1] : null
-}
-
-export default defineNuxtRouteMiddleware((to) => {
+export default defineNuxtRouteMiddleware(async (to) => {
   // Allow public routes
   const isPublicRoute = publicRoutes.some(route => to.path.startsWith(route))
   if (isPublicRoute) {
     return
   }
 
-  // Check auth cookie
-  // On server, we need to use useRequestEvent to access cookies
-  let isAuthenticated = false
-
+  // This app runs protected pages as client-side routes.
+  // Server-side checks here can be inconsistent without SSR auth helpers.
   if (import.meta.server) {
-    // Server-side: use request event (with error handling)
-    try {
-      const event = useRequestEvent()
-      const cookieHeader = event?.node?.req?.headers?.cookie
-      isAuthenticated = getCookie('authenticated', cookieHeader) === 'true'
-    } catch (error) {
-      // If we can't access the event, assume not authenticated
-      console.warn('[Auth Middleware] Could not access request event:', error)
-      isAuthenticated = false
-    }
-  } else {
-    // Client-side: use document.cookie
-    isAuthenticated = getCookie('authenticated') === 'true'
+    return
   }
 
-  if (!isAuthenticated) {
+  try {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.auth.getSession()
+    if (error || !data?.session) {
+      return navigateTo('/auth/login')
+    }
+  } catch {
     return navigateTo('/auth/login')
   }
 })

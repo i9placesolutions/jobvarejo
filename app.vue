@@ -1,22 +1,17 @@
 <script setup lang="ts">
-import { Sparkles } from 'lucide-vue-next'
+// Keep a client-side safety check for direct URL access.
+onMounted(async () => {
+  if (!process.client) return
+  if (window.location.pathname.startsWith('/auth')) return
 
-// Check authentication on mount - redirect to login if not authenticated
-onMounted(() => {
-  if (process.client) {
-    // Check for auth cookie
-    const getCookie = (name: string): string | null => {
-      const cookies = document.cookie.split(';').map(c => c.trim())
-      const found = cookies.find(c => c.startsWith(`${name}=`))
-      return found ? found.split('=')[1] : null
-    }
-
-    const authenticated = getCookie('authenticated') === 'true'
-
-    // Redirect if not authenticated and not on auth pages
-    if (!authenticated && !window.location.pathname.startsWith('/auth')) {
+  try {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.auth.getSession()
+    if (error || !data?.session) {
       window.location.href = '/auth/login'
     }
+  } catch {
+    window.location.href = '/auth/login'
   }
 })
 </script>

@@ -56,6 +56,7 @@ const emit = defineEmits<{
   (e: 'manage-label-templates'): void
   (e: 'apply-template-to-zone'): void
   (e: 'change-mode', mode: 'design' | 'prototype'): void
+  (e: 'add-interaction'): void
 }>()
 
 // --- Computed Helpers ---
@@ -163,13 +164,13 @@ const getEffectiveStrokeWidth = computed(() => {
 // Helper function to detect product zone (same logic as isLikelyProductZone in EditorCanvas)
 const isLikelyProductZone = (obj: any): boolean => {
   if (!obj) return false
+  if (obj.type !== 'group') return false
   if (obj.isGridZone || obj.isProductZone) return true
   if (obj.name === 'gridZone' || obj.name === 'productZoneContainer') return true
   // CRITICAL: Detect zones via zone-specific custom properties that are ALWAYS preserved
   // in both CANVAS_CUSTOM_PROPS (serialization) and snapshotForPropertiesPanel (reactivity).
   // This catches legacy arts where flags may not have been serialized originally.
   if (typeof obj._zonePadding === 'number' && typeof obj._zoneWidth === 'number' && typeof obj._zoneHeight === 'number') return true
-  if (obj.type !== 'group') return false
   // Check for zone rect with dashed stroke
   const objs = typeof obj.getObjects === 'function' ? obj.getObjects() : (obj._objects || [])
   const zoneRect = objs.find((o: any) => 
@@ -182,7 +183,7 @@ const isProductZone = computed(() => isLikelyProductZone(props.selectedObject))
 
 // Extract zone data directly from selected object when it's a product zone
 const currentZoneData = computed(() => {
-  if (!isProductZone.value || !props.selectedObject) return props.productZone
+  if (!isProductZone.value || !props.selectedObject) return props.productZone ?? {}
 
   const obj = props.selectedObject
   const pad = typeof obj._zonePadding === 'number' ? obj._zonePadding : (obj.padding || 20)
@@ -415,10 +416,11 @@ const getPageColorHex = () => {
   if (bg.startsWith('rgba') || bg.startsWith('rgb')) {
     const match = bg.match(/rgba?\(([^)]+)\)/)
     if (match) {
-      const parts = match[1].split(',').map(s => s.trim())
-      const r = parseInt(parts[0])
-      const g = parseInt(parts[1])
-      const b = parseInt(parts[2])
+      const rgbRaw = match[1] ?? ''
+      const [rRaw = '0', gRaw = '0', bRaw = '0'] = rgbRaw.split(',').map(s => s.trim())
+      const r = parseInt(rRaw, 10)
+      const g = parseInt(gRaw, 10)
+      const b = parseInt(bRaw, 10)
       return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
     }
   }
@@ -430,8 +432,9 @@ const getPageOpacity = () => {
   if (bg.startsWith('rgba')) {
     const match = bg.match(/rgba\(([^)]+)\)/)
     if (match) {
-      const parts = match[1].split(',').map(s => s.trim())
-      const opacity = parseFloat(parts[3] || '1')
+      const rgbaRaw = match[1] ?? ''
+      const [, , , alpha = '1'] = rgbaRaw.split(',').map(s => s.trim())
+      const opacity = parseFloat(alpha)
       return Math.round(opacity * 100)
     }
   }

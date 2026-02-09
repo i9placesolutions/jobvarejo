@@ -71,21 +71,46 @@ export const calculateOptimalImageSize = (
  */
 export const parsePrice = (value: string | number | undefined | null): number => {
   if (value === undefined || value === null) return 0;
-  if (typeof value === 'number') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
   
-  // Remove símbolos e espaços
-  let cleaned = value.toString()
+  // Remove símbolos, espaços e mantém apenas dígitos/separadores relevantes
+  const cleaned = value.toString()
     .replace(/R\$\s*/gi, '')
+    .replace(/[^\d.,-]/g, '')
     .replace(/\s/g, '')
     .trim();
+
+  if (!cleaned) return 0;
   
-  // Detecta formato brasileiro (vírgula como decimal)
-  if (cleaned.includes(',')) {
-    // Remove pontos de milhar e troca vírgula por ponto
-    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+  // Detecta o separador decimal pelo último separador presente.
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+
+  let decimalSeparator: ',' | '.' | null = null;
+  if (lastComma !== -1 && lastDot !== -1) {
+    decimalSeparator = lastComma > lastDot ? ',' : '.';
+  } else if (lastComma !== -1 || lastDot !== -1) {
+    const sep = lastComma !== -1 ? ',' : '.';
+    const parts = cleaned.split(sep);
+    const occurrences = parts.length - 1;
+    const fraction = parts[1] ?? '';
+    if (occurrences === 1 && fraction.length > 0 && fraction.length <= 2) {
+      decimalSeparator = sep;
+    }
+  }
+
+  let normalized: string;
+  if (!decimalSeparator) {
+    // Apenas separadores de milhar (ou formato inválido): remove todos.
+    normalized = cleaned.replace(/[.,]/g, '');
+  } else {
+    const decimalIndex = cleaned.lastIndexOf(decimalSeparator);
+    const integerPart = cleaned.slice(0, decimalIndex).replace(/[.,]/g, '');
+    const fractionPart = cleaned.slice(decimalIndex + 1).replace(/[.,]/g, '');
+    normalized = `${integerPart}.${fractionPart}`;
   }
   
-  const parsed = parseFloat(cleaned);
+  const parsed = parseFloat(normalized);
   return isNaN(parsed) ? 0 : parsed;
 };
 
@@ -189,8 +214,8 @@ export const calculateGridLayout = (
   const gapH = getGapHorizontal(zone);
   const gapV = getGapVertical(zone);
   
-  const availableWidth = zone.width - (padding * 2);
-  const availableHeight = zone.height - (padding * 2);
+  const availableWidth = Math.max(1, zone.width - (padding * 2));
+  const availableHeight = Math.max(1, zone.height - (padding * 2));
   let cols: number;
   let rows: number;
 
@@ -277,10 +302,11 @@ export const calculateGridLayout = (
   }
 
   // Linhas fixas ou calculadas
+  const minRowsForCount = Math.max(1, Math.ceil(Math.max(1, productCount) / Math.max(1, cols)));
   if (zone.rows && zone.rows > 0) {
-    rows = zone.rows;
+    rows = Math.max(zone.rows, minRowsForCount);
   } else {
-    rows = Math.ceil(productCount / cols);
+    rows = minRowsForCount;
   }
 
   // Calcular dimensões dos itens
@@ -380,6 +406,11 @@ export const calculateProductPosition = (
  */
 export const migrateProduct = (oldProduct: any): Product => {
   const id = oldProduct.id ?? `prod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const hasValue = (value: unknown): boolean => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') return value.trim() !== '';
+    return true;
+  };
 
   // Processar imagens
   let images: ProductImage[] = [];
@@ -415,11 +446,11 @@ export const migrateProduct = (oldProduct: any): Product => {
   // 2. price (legado) - preço principal
   // 3. pricePack (PREÇO CX. AVULSA) - preço da embalagem (como fallback)
   let finalPrice = 0;
-  if (oldProduct.priceUnit) {
+  if (hasValue(oldProduct.priceUnit)) {
     finalPrice = parsePrice(oldProduct.priceUnit);
-  } else if (oldProduct.price) {
+  } else if (hasValue(oldProduct.price)) {
     finalPrice = parsePrice(oldProduct.price);
-  } else if (oldProduct.pricePack) {
+  } else if (hasValue(oldProduct.pricePack)) {
     finalPrice = parsePrice(oldProduct.pricePack);
   }
 
@@ -449,17 +480,17 @@ export const migrateProduct = (oldProduct: any): Product => {
     status: oldProduct.status ?? 'done',
     // ===== NOVOS CAMPOS DE PREÇO =====
     // Preservar os campos extras para uso futuro
-    pricePack: oldProduct.pricePack ? parsePrice(oldProduct.pricePack) : undefined,
-    priceUnit: oldProduct.priceUnit ? parsePrice(oldProduct.priceUnit) : undefined,
-    priceSpecial: oldProduct.priceSpecial ? parsePrice(oldProduct.priceSpecial) : undefined,
-    priceSpecialUnit: oldProduct.priceSpecialUnit ? parsePrice(oldProduct.priceSpecialUnit) : undefined,
+    pricePack: hasValue(oldProduct.pricePack) ? parsePrice(oldProduct.pricePack) : undefined,
+    priceUnit: hasValue(oldProduct.priceUnit) ? parsePrice(oldProduct.priceUnit) : undefined,
+    priceSpecial: hasValue(oldProduct.priceSpecial) ? parsePrice(oldProduct.priceSpecial) : undefined,
+    priceSpecialUnit: hasValue(oldProduct.priceSpecialUnit) ? parsePrice(oldProduct.priceSpecialUnit) : undefined,
     specialCondition: oldProduct.specialCondition ?? undefined,
     // Metadata de embalagem
     packQuantity: oldProduct.packQuantity ?? undefined,
     packUnit: oldProduct.packUnit ?? undefined,
     packageLabel: oldProduct.packageLabel ?? undefined,
     // Wholesale legado
-    priceWholesale: oldProduct.priceWholesale ? parsePrice(oldProduct.priceWholesale) : undefined,
+    priceWholesale: hasValue(oldProduct.priceWholesale) ? parsePrice(oldProduct.priceWholesale) : undefined,
     wholesaleTrigger: oldProduct.wholesaleTrigger ?? undefined,
     wholesaleTriggerUnit: oldProduct.wholesaleTriggerUnit ?? undefined,
     // Raw data
@@ -471,22 +502,41 @@ export const migrateProduct = (oldProduct: any): Product => {
  * Migra ProductZone de formato antigo para novo
  */
 export const migrateProductZone = (oldZone: any): ProductZone => {
+  const padding = oldZone.padding ?? oldZone.margin ?? DEFAULT_PRODUCT_ZONE.padding;
   return {
     ...DEFAULT_PRODUCT_ZONE,
+    id: oldZone.id ?? DEFAULT_PRODUCT_ZONE.id,
+    enabled: oldZone.enabled ?? DEFAULT_PRODUCT_ZONE.enabled,
     x: oldZone.x ?? oldZone.left ?? DEFAULT_PRODUCT_ZONE.x,
     y: oldZone.y ?? oldZone.top ?? DEFAULT_PRODUCT_ZONE.y,
     width: oldZone.width ?? DEFAULT_PRODUCT_ZONE.width,
     height: oldZone.height ?? DEFAULT_PRODUCT_ZONE.height,
-    padding: oldZone.padding ?? oldZone.margin ?? DEFAULT_PRODUCT_ZONE.padding,
-    gapHorizontal: oldZone.gapHorizontal ?? oldZone.gap ?? oldZone.padding ?? DEFAULT_PRODUCT_ZONE.gapHorizontal,
-    gapVertical: oldZone.gapVertical ?? oldZone.gap ?? oldZone.padding ?? DEFAULT_PRODUCT_ZONE.gapVertical,
+    padding,
+    gapHorizontal: oldZone.gapHorizontal ?? oldZone.gap ?? padding ?? DEFAULT_PRODUCT_ZONE.gapHorizontal,
+    gapVertical: oldZone.gapVertical ?? oldZone.gap ?? padding ?? DEFAULT_PRODUCT_ZONE.gapVertical,
     columns: oldZone.columns ?? oldZone.cols ?? 0,
     rows: oldZone.rows ?? 0,
     layoutDirection: oldZone.layoutDirection ?? 'horizontal',
     cardAspectRatio: oldZone.cardAspectRatio ?? 'auto',
     lastRowBehavior: oldZone.lastRowBehavior ?? oldZone.orphanBehavior ?? 'center',
     highlightCount: oldZone.highlightCount ?? 0,
-    isLocked: oldZone.isLocked ?? false
+    highlightPos: oldZone.highlightPos ?? DEFAULT_PRODUCT_ZONE.highlightPos,
+    highlightHeight: oldZone.highlightHeight ?? DEFAULT_PRODUCT_ZONE.highlightHeight,
+    highlightStyle: oldZone.highlightStyle ?? DEFAULT_PRODUCT_ZONE.highlightStyle,
+    verticalAlign: oldZone.verticalAlign ?? DEFAULT_PRODUCT_ZONE.verticalAlign,
+    isLocked: oldZone.isLocked ?? false,
+    backgroundColor: oldZone.backgroundColor ?? DEFAULT_PRODUCT_ZONE.backgroundColor,
+    borderColor: oldZone.borderColor ?? DEFAULT_PRODUCT_ZONE.borderColor,
+    borderWidth: oldZone.borderWidth ?? DEFAULT_PRODUCT_ZONE.borderWidth,
+    borderRadius: oldZone.borderRadius ?? DEFAULT_PRODUCT_ZONE.borderRadius,
+    showBorder: oldZone.showBorder ?? DEFAULT_PRODUCT_ZONE.showBorder,
+    splashOffsetY: oldZone.splashOffsetY ?? DEFAULT_PRODUCT_ZONE.splashOffsetY,
+    splashOffsetByCol: Array.isArray(oldZone.splashOffsetByCol)
+      ? oldZone.splashOffsetByCol
+      : DEFAULT_PRODUCT_ZONE.splashOffsetByCol,
+    splashOffsetByRow: Array.isArray(oldZone.splashOffsetByRow)
+      ? oldZone.splashOffsetByRow
+      : DEFAULT_PRODUCT_ZONE.splashOffsetByRow
   };
 };
 

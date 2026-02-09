@@ -1,52 +1,31 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed, nextTick } from 'vue'
+import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed, nextTick, defineAsyncComponent } from 'vue'
 import { useRuntimeConfig } from '#imports'
-import Button from './ui/Button.vue'
-import LayersPanel from './LayersPanel.vue'
-import PropertiesPanel from './PropertiesPanel.vue'
-import ProjectManager from './ProjectManager.vue'
-import SidebarLeft from './SidebarLeft.vue'
-import ProductReviewModal from './ProductReviewModal.vue'
-import LabelTemplateManager from './LabelTemplateManager.vue'
-import AiImageStudioModal from './AiImageStudioModal.vue'
 import ContextMenu from './ui/ContextMenu.vue'
-import FigmaCropOverlay from './FigmaCropOverlay.vue'
 import { useFigmaCrop } from '~/composables/useFigmaCrop'
 import { useProductZone } from '~/composables/useProductZone'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
+
+const LayersPanel = defineAsyncComponent(() => import('./LayersPanel.vue'))
+const ProjectManager = defineAsyncComponent(() => import('./ProjectManager.vue'))
+const SidebarLeft = defineAsyncComponent(() => import('./SidebarLeft.vue'))
+const AiImageStudioModal = defineAsyncComponent(() => import('./AiImageStudioModal.vue'))
+const CanvasFloatingToolbar = defineAsyncComponent(() => import('./CanvasFloatingToolbar.vue'))
+const PenContextualToolbar = defineAsyncComponent(() => import('./PenContextualToolbar.vue'))
+const FrameLabelsOverlay = defineAsyncComponent(() => import('./FrameLabelsOverlay.vue'))
+const EditorModalsHost = defineAsyncComponent(() => import('./EditorModalsHost.vue'))
+const EditorRightSidebar = defineAsyncComponent(() => import('./EditorRightSidebar.vue'))
 import {
   Undo,
   Redo,
-  FolderOpen,
   Save,
-  Upload,
-  Plus,
-  Type,
-  Square,
   Circle,
   Triangle,
-  Star,
-  Pentagon, // New
-  Trash2,
-  Sparkles,
-  Scissors,
   Download,
-  LayoutGrid,
-  MousePointer2,
-  StickyNote,
-  Wand2,
-  RectangleHorizontal,
-  Minus,
-  Maximize,
   Search,
-  X,
-  Hand,
-  Share2,
   Play,
-  PenTool,
-  ArrowRightFromLine, // Fixed missing import
   ChevronsUp,
   ChevronsDown,
   ArrowUp,
@@ -55,15 +34,6 @@ import {
   Frame, // New Icon
   Group, // Group icon
   Ungroup, // Ungroup icon
-  Menu,
-  ChevronDown,
-  Eye,
-  Code,
-  Zap,
-  MinusCircle,
-  PlusCircle,
-  Move3D,
-  Combine
 } from 'lucide-vue-next'
 
 const isDrawing = ref(false)
@@ -79,9 +49,15 @@ const currentEditingPath = ref<any>(null) // Path object currently being edited
 const activeMode = ref<'design' | 'prototype'>('design')
 const showZoomMenu = ref(false)
 let globalMouseUpHandler: ((e: MouseEvent) => void) | null = null
+let globalEscKeyHandler: ((e: KeyboardEvent) => void) | null = null
+let globalKeyUpHandler: ((e: KeyboardEvent) => void) | null = null
+let teardownSnapping: (() => void) | null = null
 let domCanvasDblClickHandler: ((e: MouseEvent) => void) | null = null
 let lastDomDblClickAt = 0
 let wrapperResizeObserver: ResizeObserver | null = null
+let isSpacePanPressed = false
+let keyboardNudgeDirty = false
+let globalStylesSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 // Flag to track if canvas is destroyed (prevents errors after unmount)
 const isCanvasDestroyed = ref(false)
@@ -522,7 +498,7 @@ const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
 const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
 const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
 const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
-const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur']
+const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__preserveManualLayout', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur']
 
 const serializeLabelTemplatesForProject = () => {
     // Keep project JSON lean: previews can be regenerated client-side.
@@ -569,7 +545,8 @@ const loadLabelTemplatesFromDb = async () => {
 
     try {
         const userId = currentUser.value?.id || undefined;
-        const resp: any = await $fetch('/api/label-templates', { method: 'GET', query: userId ? { userId } : {} });
+        const headers = await getApiAuthHeaders();
+        const resp: any = await $fetch('/api/label-templates', { method: 'GET', headers, query: userId ? { userId } : {} });
         const rows = Array.isArray(resp?.templates) ? resp.templates : [];
         const incoming = rows.map(normalizeDbLabelTemplate).filter(Boolean) as LabelTemplate[];
         if (!incoming.length) return;
@@ -580,11 +557,15 @@ const loadLabelTemplatesFromDb = async () => {
         for (const t of incoming) {
             const prev = byId.get(String(t.id));
             if (prev) {
-                // Keep local templates local; just merge DB updates on top.
+                // Evitar sobrescrever mudanças locais/projeto com versão antiga do banco.
+                const prevTs = Date.parse(String(prev?.updatedAt || prev?.createdAt || 0));
+                const dbTs = Date.parse(String((t as any)?.updatedAt || (t as any)?.createdAt || 0));
+                const useDb = Number.isFinite(dbTs) && (!Number.isFinite(prevTs) || dbTs > prevTs);
                 byId.set(String(t.id), {
-                    ...prev,
-                    ...t,
-                    previewDataUrl: t.previewDataUrl ?? prev.previewDataUrl
+                    ...(useDb ? prev : t),
+                    ...(useDb ? t : prev),
+                    previewDataUrl: (useDb ? t.previewDataUrl : prev.previewDataUrl) ?? (useDb ? prev.previewDataUrl : t.previewDataUrl),
+                    __fromDb: true
                 });
             } else {
                 byId.set(String(t.id), { ...t, __fromDb: true });
@@ -615,13 +596,26 @@ const ensureLabelTemplatesReady = async () => {
         }
     }
     if (changed) labelTemplates.value = list as any;
+
+    // Hard guard: never keep duplicated IDs in memory.
+    const dedup = new Map<string, any>();
+    (labelTemplates.value || []).forEach((tpl: any) => {
+        const id = String(tpl?.id || '').trim();
+        if (!id) return;
+        dedup.set(id, tpl);
+    });
+    if (dedup.size !== (labelTemplates.value || []).length) {
+        labelTemplates.value = Array.from(dedup.values()) as any;
+    }
 }
 
-const upsertLabelTemplateToDb = async (tpl: LabelTemplate) => {
-    if (!tpl || (tpl as any).isBuiltIn) return;
+const upsertLabelTemplateToDb = async (tpl: LabelTemplate): Promise<boolean> => {
+    if (!tpl || (tpl as any).isBuiltIn) return true;
     try {
-        await $fetch('/api/label-templates', {
+        const headers = await getApiAuthHeaders();
+        const resp: any = await $fetch('/api/label-templates', {
             method: 'POST',
+            headers,
             body: {
                 id: tpl.id,
                 userId: currentUser.value?.id ?? null,
@@ -631,15 +625,22 @@ const upsertLabelTemplateToDb = async (tpl: LabelTemplate) => {
                 previewDataUrl: tpl.previewDataUrl ?? null
             }
         });
+        if (!resp?.success) {
+            console.warn('[labelTemplates] API retornou falha ao salvar modelo no banco', resp);
+            return false;
+        }
+        return true;
     } catch (err) {
         console.warn('[labelTemplates] Falha ao salvar modelo no banco', err);
+        return false;
     }
 }
 
 const deleteLabelTemplateFromDb = async (templateId: string) => {
     if (!templateId) return;
     try {
-        await $fetch('/api/label-templates', { method: 'DELETE', query: { id: templateId } });
+        const headers = await getApiAuthHeaders();
+        await $fetch('/api/label-templates', { method: 'DELETE', headers, query: { id: templateId } });
     } catch (err) {
         console.warn('[labelTemplates] Falha ao excluir modelo do banco', err);
     }
@@ -724,6 +725,39 @@ watch(showLabelTemplatesModal, async (open) => {
     await ensureLabelTemplatesReady();
 });
 
+const FRAME_SPAWN_GAP = 48;
+
+const getFrameBounds = (frame: any) => {
+    if (!frame) return null;
+    try {
+        const bounds = frame.getBoundingRect?.(true);
+        if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.top) && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)) {
+            return bounds;
+        }
+    } catch {}
+
+    const width = (Number(frame.width) || 0) * (Number(frame.scaleX) || 1);
+    const height = (Number(frame.height) || 0) * (Number(frame.scaleY) || 1);
+    const left = (Number(frame.left) || 0) - width / 2;
+    const top = (Number(frame.top) || 0) - height / 2;
+    if (!Number.isFinite(left) || !Number.isFinite(top) || width <= 0 || height <= 0) return null;
+    return { left, top, width, height };
+};
+
+const getFrameSpawnPosition = (referenceFrame: any, nextFrameWidth: number, nextFrameHeight: number) => {
+    const fallback = {
+        left: nextFrameWidth / 2,
+        top: nextFrameHeight / 2
+    };
+    const bounds = getFrameBounds(referenceFrame);
+    if (!bounds) return fallback;
+
+    return {
+        left: bounds.left + bounds.width + FRAME_SPAWN_GAP + nextFrameWidth / 2,
+        top: bounds.top + bounds.height / 2
+    };
+};
+
 const addFrame = () => {
     if (!canvas.value) return;
 
@@ -750,14 +784,24 @@ const addFrame = () => {
     const zoomY = (canvasHeight - padding * 2) / frameHeight;
     const fitZoom = Math.min(zoomX, zoomY, 1); // Don't zoom more than 100%
     
-    // Center position for the frame
-    const centerX = frameWidth / 2;
-    const centerY = frameHeight / 2;
+    const frames = canvas.value.getObjects().filter((o: any) => !!o?.isFrame);
+    const active = canvas.value.getActiveObject() as any;
 
-    // Create Frame Rect - CENTRALIZADO
+    const rightMostFrame = frames.reduce((best: any, candidate: any) => {
+        const bestBounds = getFrameBounds(best);
+        const candidateBounds = getFrameBounds(candidate);
+        if (!candidateBounds) return best;
+        if (!bestBounds) return candidate;
+        return (candidateBounds.left + candidateBounds.width) > (bestBounds.left + bestBounds.width) ? candidate : best;
+    }, null as any);
+
+    const referenceFrame = active?.isFrame ? active : rightMostFrame;
+    const spawn = getFrameSpawnPosition(referenceFrame, frameWidth, frameHeight);
+
+    // Create Frame Rect
     const frame = new fabric.Rect({
-        left: centerX,
-        top: centerY,
+        left: spawn.left,
+        top: spawn.top,
         originX: 'center',
         originY: 'center',
         width: frameWidth,
@@ -922,25 +966,35 @@ const findFrameUnderObject = (obj: any) => {
     // Frames NUNCA podem ser filhos de outros frames
     if (obj.isFrame) return null;
 
-    // First try using center point (faster)
-    const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
     const frames = getAllFrames().filter((f: any) => f !== obj);
+    if (!frames.length) return null;
 
-    // Check intersection using bounding box for more reliable detection
-    const objBounds = obj.getBoundingRect ? obj.getBoundingRect() : null;
-    if (!objBounds) {
-        // Fallback to center point method
-        if (!center) return null;
-        const hits = frames.filter((f: any) => typeof f.containsPoint === 'function' && f.containsPoint(center));
-        if (!hits.length) return null;
-        hits.sort((a: any, b: any) => (a.getScaledWidth() * a.getScaledHeight()) - (b.getScaledWidth() * b.getScaledHeight()));
-        return hits[0];
-    }
+    const objBounds = obj.getBoundingRect ? obj.getBoundingRect(true) : null;
+    const objArea = objBounds ? Math.max(1, objBounds.width * objBounds.height) : 1;
+    const center = typeof obj.getCenterPoint === 'function'
+        ? obj.getCenterPoint()
+        : (objBounds ? { x: objBounds.left + (objBounds.width / 2), y: objBounds.top + (objBounds.height / 2) } : null);
 
-    // Use intersection for more accurate frame detection
+    // STRICT RULE:
+    // - Prefer center-inside to avoid accidental parenting when only touching frame edge.
+    // - Fallback to substantial overlap for large objects.
     const hits = frames.filter((f: any) => {
-        if (typeof f.intersectsWithObject !== 'function') return false;
-        return f.intersectsWithObject(obj);
+        const fb = f.getBoundingRect ? f.getBoundingRect(true) : null;
+        if (!fb) return false;
+
+        const centerInside = !!(center &&
+            center.x >= fb.left &&
+            center.x <= (fb.left + fb.width) &&
+            center.y >= fb.top &&
+            center.y <= (fb.top + fb.height));
+        if (centerInside) return true;
+
+        if (!objBounds) return false;
+        const ix = Math.max(0, Math.min(objBounds.left + objBounds.width, fb.left + fb.width) - Math.max(objBounds.left, fb.left));
+        const iy = Math.max(0, Math.min(objBounds.top + objBounds.height, fb.top + fb.height) - Math.max(objBounds.top, fb.top));
+        const overlapArea = ix * iy;
+        const overlapRatio = overlapArea / objArea;
+        return overlapRatio >= 0.6;
     });
 
     if (!hits.length) return null;
@@ -1164,7 +1218,7 @@ const syncFrameClips = (frame: any) => {
 
 const maybeReparentToFrameOnDrop = (obj: any) => {
     if (!canvas.value || !obj || (obj as any).excludeFromExport) return;
-    // Product cards should NOT be parented to frames
+    // Product cards inherit frame binding from their zone (avoid direct reparent here).
     if ((obj as any).isSmartObject || (obj as any).isProductCard) return;
     const frame = findFrameUnderObject(obj);
     // If dropped outside of any frame, clear parenting so clipPath is removed.
@@ -2262,18 +2316,7 @@ watch(isPenMode, (newVal) => {
         
         // AGGRESSIVE cleanup: Remove ALL temporary/preview/control objects
         const toRemove = canvas.value.getObjects().filter((o: any) => {
-            // Remove if excludeFromExport
-            if (o.excludeFromExport) return true;
-            // Remove if it's a control object by name
-            const name = o.name || '';
-            if (name === 'path_node' || name === 'bezier_handle' || name === 'control_point' || name === 'handle_line') return true;
-            // Remove if it has control data
-            if (o.data && (o.data.parentPath || o.data.parentObj)) return true;
-            // Remove small circles without _customId (control points)
-            if (o.type === 'circle' && o.radius && o.radius <= 10 && !o._customId) return true;
-            // Remove lines without _customId
-            if (o.type === 'line' && !o._customId) return true;
-            return false;
+            return isTransientCanvasObject(o);
         });
         
         if (toRemove.length > 0) {
@@ -2763,34 +2806,7 @@ const exitNodeEditing = () => {
     
     // Remove ALL control points, handles, and orphaned objects
     const toRemove = canvas.value.getObjects().filter((o: any) => {
-        const name = o.name || '';
-        
-        // Control objects by name
-        if (name === 'control_point' || name === 'path_node' || name === 'bezier_handle' || name === 'handle_line') {
-            return true;
-        }
-        
-        // Objects marked as excludeFromExport
-        if (o.excludeFromExport) {
-            return true;
-        }
-        
-        // Small circles without _customId (likely orphaned control points)
-        if (o.type === 'circle' && o.radius && o.radius <= 10 && !o._customId) {
-            return true;
-        }
-        
-        // Lines without _customId (handle lines)
-        if (o.type === 'line' && !o._customId) {
-            return true;
-        }
-        
-        // Circles with data.parentPath or data.parentObj (control circles)
-        if (o.type === 'circle' && o.data && (o.data.parentPath || o.data.parentObj)) {
-            return true;
-        }
-        
-        return false;
+        return isTransientCanvasObject(o);
     });
     
     toRemove.forEach((ctrl: any) => {
@@ -3458,6 +3474,7 @@ const updateNodePosition = (e: any) => {
 // ... (existing code)
 import { parseProductList } from '~/lib/utils'
 import { calculateGridLayout } from '~/utils/product-zone-helpers'
+import { DEFAULT_GLOBAL_STYLES } from '~/types/product-zone'
 import type { ProductZone, GlobalStyles } from '~/types/product-zone'
 import { useProject } from '~/composables/useProject'
 import { useUpload } from '~/composables/useUpload'
@@ -3469,9 +3486,17 @@ import { GOOGLE_WEBFONT_FAMILIES } from '~/utils/font-catalog'
 // Import fabric type for TS (optional if we had types, using any for now to be fast)
 // import { fabric } from 'fabric'
 
-const { project, activePage, initProject, updatePageData, updatePageThumbnail, deletePage, resizePage, saveProjectDB, triggerAutoSave, isProjectLoaded, hasUnsavedChanges } = useProject()
+const { project, activePage, initProject, updatePageData, updatePageThumbnail, deletePage, resizePage, saveProjectDB, triggerAutoSave, cancelAutoSave, flushAutoSave, isProjectLoaded, hasUnsavedChanges } = useProject()
 const auth = useAuth()
 const supabase = useSupabase()
+const getApiAuthHeaders = async () => {
+    const { data, error } = await supabase.auth.getSession()
+    const token = data?.session?.access_token
+    if (error || !token) {
+        throw new Error('Sessão expirada. Faça login novamente.')
+    }
+    return { Authorization: `Bearer ${token}` }
+}
 
 // Users state
 const currentUser = computed(() => auth.user.value)
@@ -3511,40 +3536,62 @@ const getInitial = (name: string | null | undefined): string => {
 }
 
 // Load collaborators (users who have access to this project)
-const loadCollaborators = async () => {
-  try {
-    const usersToShow: any[] = []
-    
-    // Always include current user
-    if (currentUser.value) {
-      usersToShow.push(currentUser.value)
-    }
-    
-    // Load other users from profiles table (for now, limit to 2 more)
-    // In the future, you can add a project_collaborators table for real collaboration
-    try {
-      const { data: allUsers } = await supabase
-        .from('profiles')
-        .select('id, name, email, avatar_url')
-        .limit(3)
+let collaboratorsLoadPromise: Promise<void> | null = null
+let collaboratorsLoadedAt = 0
+let collaboratorsLoadedUserId: string | null = null
+const COLLABORATORS_CACHE_MS = 15_000
 
-      if (allUsers && allUsers.length > 0) {
-        // Filter out current user and add others
-        const otherUsers = allUsers.filter((u: any) => u.id !== currentUser.value?.id)
-        usersToShow.push(...otherUsers.slice(0, 2))
+const loadCollaborators = async (force = false) => {
+  const currentUserId = currentUser.value?.id ?? null
+  const cacheValid = !force &&
+    collaborators.value.length > 0 &&
+    collaboratorsLoadedUserId === currentUserId &&
+    (Date.now() - collaboratorsLoadedAt) < COLLABORATORS_CACHE_MS
+
+  if (cacheValid) return
+  if (collaboratorsLoadPromise) return collaboratorsLoadPromise
+
+  collaboratorsLoadPromise = (async () => {
+    try {
+      const usersToShow: any[] = []
+
+      // Always include current user
+      if (currentUser.value) {
+        usersToShow.push(currentUser.value)
       }
-    } catch (err) {
-      console.warn('Could not load other users:', err)
+
+      // Load other users from profiles table (for now, limit to 2 more)
+      // In the future, you can add a project_collaborators table for real collaboration
+      try {
+        const { data: allUsers } = await supabase
+          .from('profiles')
+          .select('id, name, email, avatar_url')
+          .limit(3)
+
+        if (allUsers && allUsers.length > 0) {
+          // Filter out current user and add others
+          const otherUsers = allUsers.filter((u: any) => u.id !== currentUser.value?.id)
+          usersToShow.push(...otherUsers.slice(0, 2))
+        }
+      } catch (err) {
+        console.warn('Could not load other users:', err)
+      }
+
+      collaborators.value = usersToShow.slice(0, 3) // Max 3 avatares
+    } catch (error) {
+      console.error('Error loading collaborators:', error)
+      // Fallback to just current user
+      if (currentUser.value) {
+        collaborators.value = [currentUser.value]
+      }
+    } finally {
+      collaboratorsLoadedAt = Date.now()
+      collaboratorsLoadedUserId = currentUser.value?.id ?? null
+      collaboratorsLoadPromise = null
     }
-    
-    collaborators.value = usersToShow.slice(0, 3) // Max 3 avatares
-  } catch (error) {
-    console.error('Error loading collaborators:', error)
-    // Fallback to just current user
-    if (currentUser.value) {
-      collaborators.value = [currentUser.value]
-    }
-  }
+  })()
+
+  return collaboratorsLoadPromise
 }
 
 // Watch for project changes to reload collaborators
@@ -3713,6 +3760,79 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
 // Virtual Scrollbars State
 const scrollV = ref({ top: 0, height: 0, visible: false })
 const scrollH = ref({ left: 0, width: 0, visible: false })
+const SCROLLBAR_PADDING = 100
+const SCROLLBAR_IGNORED_IDS = new Set(['artboard-bg', 'guide-vertical', 'guide-horizontal'])
+
+type ScrollbarContentBounds = {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+    pageWidth: number;
+    pageHeight: number;
+};
+
+let scrollbarBoundsDirty = true
+let scrollbarBoundsCache: ScrollbarContentBounds | null = null
+
+const invalidateScrollbarBounds = () => {
+    scrollbarBoundsDirty = true
+}
+
+const isScrollbarRelevantObject = (obj: any): boolean => {
+    if (!obj) return false
+    if (obj.excludeFromExport) return false
+    if (SCROLLBAR_IGNORED_IDS.has(String(obj.id || ''))) return false
+    return true
+}
+
+const getScrollbarContentBounds = (): ScrollbarContentBounds => {
+    const pageWidth = activePage.value?.width || 1080
+    const pageHeight = activePage.value?.height || 1920
+
+    if (
+        !scrollbarBoundsDirty &&
+        scrollbarBoundsCache &&
+        scrollbarBoundsCache.pageWidth === pageWidth &&
+        scrollbarBoundsCache.pageHeight === pageHeight
+    ) {
+        return scrollbarBoundsCache
+    }
+
+    const objects = canvas.value?.getObjects?.() || []
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    let hasRelevantObjects = false
+
+    for (const obj of objects) {
+        if (!isScrollbarRelevantObject(obj)) continue
+        hasRelevantObjects = true
+        const bounds = typeof obj.getBoundingRect === 'function'
+            ? obj.getBoundingRect(true, true)
+            : obj.getBoundingRect()
+        const oMinX = bounds.left
+        const oMinY = bounds.top
+        const oMaxX = bounds.left + bounds.width
+        const oMaxY = bounds.top + bounds.height
+        if (oMinX < minX) minX = oMinX
+        if (oMinY < minY) minY = oMinY
+        if (oMaxX > maxX) maxX = oMaxX
+        if (oMaxY > maxY) maxY = oMaxY
+    }
+
+    if (!hasRelevantObjects) {
+        minX = 0
+        minY = 0
+        maxX = pageWidth
+        maxY = pageHeight
+    }
+
+    scrollbarBoundsCache = { minX, minY, maxX, maxY, pageWidth, pageHeight }
+    scrollbarBoundsDirty = false
+    return scrollbarBoundsCache
+}
 
 // Throttle for scrollbar updates
 let scrollbarUpdatePending = false
@@ -3733,42 +3853,11 @@ const updateScrollbars = () => {
     const width = canvas.value.getWidth();
     const height = canvas.value.getHeight();
 
-    // Calculate logical boundaries (all objects - infinite canvas)
-    const objects = canvas.value.getObjects();
-    // Start with very large bounds to allow infinite canvas
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    
-    // If no objects, use page dimensions as base
-    if (objects.length === 0 || objects.filter((o: any) => !o.excludeFromExport && o.id !== 'artboard-bg' && o.id !== 'guide-vertical' && o.id !== 'guide-horizontal').length === 0) {
-        minX = 0;
-        minY = 0;
-        maxX = activePage.value?.width || 1080;
-        maxY = activePage.value?.height || 1920;
-    } else {
-        objects.forEach((obj: any) => {
-            // Skip non-visible objects and guides
-            if (obj.excludeFromExport || obj.id === 'artboard-bg' || obj.id === 'guide-vertical' || obj.id === 'guide-horizontal') return;
-
-            // Use world/absolute bounds to avoid viewport-dependent math.
-            const bounds = typeof obj.getBoundingRect === 'function'
-                ? obj.getBoundingRect(true, true)
-                : obj.getBoundingRect();
-            const oMinX = bounds.left;
-            const oMinY = bounds.top;
-            const oMaxX = bounds.left + bounds.width;
-            const oMaxY = bounds.top + bounds.height;
-
-            minX = Math.min(minX, oMinX);
-            minY = Math.min(minY, oMinY);
-            maxX = Math.max(maxX, oMaxX);
-            maxY = Math.max(maxY, oMaxY);
-        });
-    }
+    const { minX, minY, maxX, maxY } = getScrollbarContentBounds()
 
     // Padding for the "Infinite" feel
-    const padding = 100;
-    const contentWidth = maxX - minX + padding * 2;
-    const contentHeight = maxY - minY + padding * 2;
+    const contentWidth = maxX - minX + SCROLLBAR_PADDING * 2;
+    const contentHeight = maxY - minY + SCROLLBAR_PADDING * 2;
     
     // Viewport dimensions in canvas coordinates
     const viewportWidth = width / zoom;
@@ -3779,10 +3868,10 @@ const updateScrollbars = () => {
     const viewportBottom = viewportTop + viewportHeight;
 
     // Content boundaries with padding
-    const contentLeft = minX - padding;
-    const contentRight = maxX + padding;
-    const contentTop = minY - padding;
-    const contentBottom = maxY + padding;
+    const contentLeft = minX - SCROLLBAR_PADDING;
+    const contentRight = maxX + SCROLLBAR_PADDING;
+    const contentTop = minY - SCROLLBAR_PADDING;
+    const contentBottom = maxY + SCROLLBAR_PADDING;
 
     // VERTICAL SCROLLBAR - Show if content is taller than viewport OR viewport is panned (infinite canvas)
     const needsVerticalScroll = contentHeight > viewportHeight;
@@ -3852,27 +3941,9 @@ const handleVerticalScrollbarDrag = (e: MouseEvent) => {
     const vpt = canvas.value.viewportTransform;
     const zoom = canvas.value.getZoom();
     
-    // Calculate content bounds (infinite canvas)
-    const objects = canvas.value.getObjects();
-    let minY = Infinity, maxY = -Infinity;
-    if (objects.length === 0 || objects.filter((o: any) => !o.excludeFromExport && o.id !== 'artboard-bg' && o.id !== 'guide-vertical' && o.id !== 'guide-horizontal').length === 0) {
-        minY = 0;
-        maxY = activePage.value?.height || 1920;
-    } else {
-        objects.forEach((obj: any) => {
-            if (obj.excludeFromExport || obj.id === 'artboard-bg' || obj.id === 'guide-vertical' || obj.id === 'guide-horizontal') return;
-            const bounds = typeof obj.getBoundingRect === 'function'
-                ? obj.getBoundingRect(true, true)
-                : obj.getBoundingRect();
-            const oMinY = bounds.top;
-            const oMaxY = bounds.top + bounds.height;
-            minY = Math.min(minY, oMinY);
-            maxY = Math.max(maxY, oMaxY);
-        });
-    }
+    const { minY, maxY } = getScrollbarContentBounds()
     
-    const padding = 100;
-    const contentHeight = maxY - minY + padding * 2;
+    const contentHeight = maxY - minY + SCROLLBAR_PADDING * 2;
     const viewportHeight = height / zoom;
     const viewportTop = -vpt[5] / zoom;
     const isPannedVertically = Math.abs(vpt[5]) > 10;
@@ -3882,7 +3953,7 @@ const handleVerticalScrollbarDrag = (e: MouseEvent) => {
     const effectiveContentHeight = isPannedVertically && !needsVerticalScroll 
         ? Math.max(contentHeight, viewportHeight * 2) 
         : contentHeight;
-    const contentTop = minY - padding;
+    const contentTop = minY - SCROLLBAR_PADDING;
     const effectiveContentTop = isPannedVertically && !needsVerticalScroll
         ? contentTop - (effectiveContentHeight - contentHeight) / 2
         : contentTop;
@@ -3898,8 +3969,8 @@ const handleVerticalScrollbarDrag = (e: MouseEvent) => {
         const newViewportTop = effectiveContentTop + (scrollProgress * scrollableHeight);
         vpt[5] = -newViewportTop * zoom;
         
-        canvas.value.requestRenderAll();
-        updateScrollbars();
+        safeRequestRenderAll();
+        throttledUpdateScrollbars();
     };
     
     const onMouseUp = () => {
@@ -3923,27 +3994,9 @@ const handleHorizontalScrollbarDrag = (e: MouseEvent) => {
     const vpt = canvas.value.viewportTransform;
     const zoom = canvas.value.getZoom();
     
-    // Calculate content bounds (infinite canvas)
-    const objects = canvas.value.getObjects();
-    let minX = Infinity, maxX = -Infinity;
-    if (objects.length === 0 || objects.filter((o: any) => !o.excludeFromExport && o.id !== 'artboard-bg' && o.id !== 'guide-vertical' && o.id !== 'guide-horizontal').length === 0) {
-        minX = 0;
-        maxX = activePage.value?.width || 1080;
-    } else {
-        objects.forEach((obj: any) => {
-            if (obj.excludeFromExport || obj.id === 'artboard-bg' || obj.id === 'guide-vertical' || obj.id === 'guide-horizontal') return;
-            const bounds = typeof obj.getBoundingRect === 'function'
-                ? obj.getBoundingRect(true, true)
-                : obj.getBoundingRect();
-            const oMinX = bounds.left;
-            const oMaxX = bounds.left + bounds.width;
-            minX = Math.min(minX, oMinX);
-            maxX = Math.max(maxX, oMaxX);
-        });
-    }
+    const { minX, maxX } = getScrollbarContentBounds()
     
-    const padding = 100;
-    const contentWidth = maxX - minX + padding * 2;
+    const contentWidth = maxX - minX + SCROLLBAR_PADDING * 2;
     const viewportWidth = width / zoom;
     const viewportLeft = -vpt[4] / zoom;
     const isPannedHorizontally = Math.abs(vpt[4]) > 10;
@@ -3953,7 +4006,7 @@ const handleHorizontalScrollbarDrag = (e: MouseEvent) => {
     const effectiveContentWidth = isPannedHorizontally && !needsHorizontalScroll 
         ? Math.max(contentWidth, viewportWidth * 2) 
         : contentWidth;
-    const contentLeft = minX - padding;
+    const contentLeft = minX - SCROLLBAR_PADDING;
     const effectiveContentLeft = isPannedHorizontally && !needsHorizontalScroll
         ? contentLeft - (effectiveContentWidth - contentWidth) / 2
         : contentLeft;
@@ -3969,8 +4022,8 @@ const handleHorizontalScrollbarDrag = (e: MouseEvent) => {
         const newViewportLeft = effectiveContentLeft + (scrollProgress * scrollableWidth);
         vpt[4] = -newViewportLeft * zoom;
         
-        canvas.value.requestRenderAll();
-        updateScrollbars();
+        safeRequestRenderAll();
+        throttledUpdateScrollbars();
     };
     
     const onMouseUp = () => {
@@ -4212,6 +4265,86 @@ const debouncedSaveCurrentState = () => {
     }, 150); // 150ms debounce for snappy feel but coalesces rapid changes
 };
 
+let isLifecycleFlushInProgress = false;
+let lastLifecycleFlushAt = 0;
+
+const finalizeActiveTextEditingForPersist = () => {
+    if (!canvas.value) return;
+    try {
+        const active = canvas.value.getActiveObject() as any;
+        if (!active) return;
+        const t = String(active.type || '').toLowerCase();
+        if ((t === 'i-text' || t === 'textbox') && active.isEditing && typeof active.exitEditing === 'function') {
+            active.exitEditing();
+            active.setCoords?.();
+        }
+    } catch {
+        // ignore
+    }
+};
+
+const flushPersistenceNow = (reason: string) => {
+    const now = Date.now();
+    if (now - lastLifecycleFlushAt < 250) return;
+    lastLifecycleFlushAt = now;
+    if (isLifecycleFlushInProgress) return;
+    isLifecycleFlushInProgress = true;
+
+    try {
+        if (propertySaveTimer) {
+            clearTimeout(propertySaveTimer);
+            propertySaveTimer = null;
+        }
+
+        finalizeActiveTextEditingForPersist();
+
+        // Save to in-memory project + local draft immediately (sync path inside saveState/updatePageData).
+        try {
+            saveCurrentState({ allowEmptyOverwrite: true, reason: `lifecycle:${reason}` });
+        } catch (err) {
+            console.warn('[persist] Falha ao salvar estado em flush de lifecycle:', err);
+        }
+
+        // Also force remote save path whenever possible.
+        triggerAutoSave();
+        void flushAutoSave().catch((err: any) => {
+            console.warn('[persist] Falha no flushAutoSave:', err);
+        });
+    } finally {
+        isLifecycleFlushInProgress = false;
+    }
+};
+
+const handleEditorBeforeUnload = () => {
+    flushPersistenceNow('beforeunload');
+};
+
+const handleEditorPageHide = () => {
+    flushPersistenceNow('pagehide');
+};
+
+const handleEditorVisibilityChange = () => {
+    if (document.visibilityState === 'hidden') {
+        flushPersistenceNow('visibility-hidden');
+    }
+};
+
+onMounted(() => {
+    window.addEventListener('beforeunload', handleEditorBeforeUnload);
+    window.addEventListener('pagehide', handleEditorPageHide);
+    document.addEventListener('visibilitychange', handleEditorVisibilityChange);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('beforeunload', handleEditorBeforeUnload);
+    window.removeEventListener('pagehide', handleEditorPageHide);
+    document.removeEventListener('visibilitychange', handleEditorVisibilityChange);
+    if (propertySaveTimer) {
+        clearTimeout(propertySaveTimer);
+        propertySaveTimer = null;
+    }
+});
+
 // Enable/disable "Salvar da Selecao" in the label templates modal.
 canSaveLabelTemplateFromSelectionComputed = computed(() => {
     return !!getPriceGroupFromAny(selectedObjectRef.value);
@@ -4302,7 +4435,6 @@ const pasteListText = ref('')
 const activePasteTab = ref('text') // 'text' | 'image'
 const pastedImage = ref<string | null>(null)
 const isAnalyzingImage = ref(false)
-const listImageInput = ref<HTMLInputElement | null>(null)
 
 // Product Review State (after processing)
 const showProductReviewModal = ref(false)
@@ -4312,7 +4444,12 @@ const targetGridZone = ref<any>(null) // Reference to the Grid Zone that was dou
 
 const importZoneLabelTemplateId = computed(() => {
     const z = targetGridZone.value;
-    if (z && isLikelyProductZone(z)) return String((z as any)._zoneGlobalStyles?.splashTemplateId || '');
+    if (z && isLikelyProductZone(z)) {
+        const fromStyles = String((z as any)._zoneGlobalStyles?.splashTemplateId || '').trim();
+        if (fromStyles) return fromStyles;
+        const fromSnapshot = String((z as any)._zoneTemplateSnapshotId || '').trim();
+        if (fromSnapshot) return fromSnapshot;
+    }
     return '';
 })
 
@@ -4321,39 +4458,11 @@ watch(showProductReviewModal, async (open) => {
     await ensureLabelTemplatesReady();
 })
 
-const showManualProductModal = ref(false)
-const manualProduct = ref({
-    title: '',
-    priceInt: '',
-    priceDec: ''
-})
-
 const showAIModal = ref(false)
 const aiPrompt = ref('')
 
-const showClearConfirmModal = ref(false)
 const showExportModal = ref(false)
 const showShareModal = ref(false)
-const shareUrl = ref('')
-const shareCanEdit = ref(false)
-const shareCanView = ref(true)
-
-const generateShareLink = () => {
-    const baseUrl = window.location.origin;
-    shareUrl.value = `${baseUrl}/editor/${project.id}`;
-}
-
-const copyShareUrl = async () => {
-    if (!shareUrl.value) {
-        generateShareLink();
-    }
-    try {
-        await navigator.clipboard.writeText(shareUrl.value);
-        // Optionally show a success notification
-    } catch (err) {
-        console.error('Failed to copy URL:', err);
-    }
-}
 
 const showPresentationModal = ref(false)
 const presentationImage = ref('')
@@ -4494,6 +4603,79 @@ const isHistoryProcessing = ref(false); // Flag to prevent loop
 let isZoneCascadeDelete = false;
 let isApplyingZoneUpdate = false; // Flag to prevent double state save when updating product zones
 
+const makeCanvasObjectId = () => Math.random().toString(36).substr(2, 9);
+const TRANSIENT_CONTROL_NAMES = new Set(['path_node', 'bezier_handle', 'control_point', 'handle_line']);
+
+const isControlLikeObject = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return false;
+    const name = String(obj.name || '');
+    const id = String(obj.id || '');
+    if (TRANSIENT_CONTROL_NAMES.has(name)) return true;
+    if (id === 'guide-vertical' || id === 'guide-horizontal') return true;
+    if (obj.data && (obj.data.parentPath || obj.data.parentObj)) return true;
+    return false;
+};
+
+const ensureObjectPersistentId = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return;
+    if (obj._customId) return;
+    if (isControlLikeObject(obj)) return;
+    obj._customId = makeCanvasObjectId();
+};
+
+const isTransientCanvasObject = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return false;
+    const name = String(obj.name || '');
+    const id = String(obj.id || '');
+    const hasCustomId = typeof obj._customId === 'string' && obj._customId.trim().length > 0;
+
+    if (hasCustomId) return false;
+    if (isControlLikeObject(obj)) return true;
+    if (obj.type === 'circle' && obj.radius && obj.radius <= 10 && !hasCustomId && !!obj.excludeFromExport) return true;
+    if (obj.type === 'line' && !hasCustomId && !!obj.excludeFromExport) return true;
+    if (obj.type === 'path' && !hasCustomId && !obj.isVectorPath && !!obj.excludeFromExport) return true;
+
+    if (obj.excludeFromExport === true) {
+        const isPersistentContent =
+            !!obj.isFrame ||
+            !!obj.isSmartObject ||
+            !!obj.isProductCard ||
+            !!obj.isGridZone ||
+            !!obj.isProductZone ||
+            !!obj.parentZoneId ||
+            name === 'gridZone' ||
+            name === 'productZoneContainer' ||
+            name === 'priceGroup' ||
+            name.startsWith('product-card') ||
+            id === 'artboard-bg';
+        if (isPersistentContent) return false;
+        // Avoid removing regular user content by mistake. For non-persistent objects,
+        // only treat as transient when they look like control/guide objects.
+        return isControlLikeObject(obj);
+    }
+
+    return false;
+};
+
+const ensurePersistentContentFlags = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return;
+    ensureObjectPersistentId(obj);
+    const name = String(obj.name || '');
+    const isPersistentContent =
+        !!obj.isFrame ||
+        !!obj.isSmartObject ||
+        !!obj.isProductCard ||
+        !!obj.isGridZone ||
+        !!obj.isProductZone ||
+        !!obj.parentZoneId ||
+        name === 'gridZone' ||
+        name === 'productZoneContainer' ||
+        name.startsWith('product-card');
+    if (isPersistentContent && obj.excludeFromExport) {
+        obj.excludeFromExport = false;
+    }
+};
+
 const showDeletePageModal = ref(false)
 
 const handleDeleteCurrentPage = () => {
@@ -4514,9 +4696,13 @@ const MOCK_PRODUCTS: any[] = [];
 
 
 // --- Smart Grid Implementation ---
+// Legacy renderer (productZoneState.products -> Fabric objects) conflicts with the
+// current Product Zone engine (group + recalculateZoneLayout). Keep disabled.
+const LEGACY_PRODUCT_ZONE_RENDERER_ENABLED = false;
 
 const initProductZone = () => {
     if (!canvas.value) return;
+    if (!LEGACY_PRODUCT_ZONE_RENDERER_ENABLED) return;
 
     // watch for zone changes
     watch(() => productZoneState.productZone.value, (newZone) => {
@@ -4846,13 +5032,8 @@ watch(activePage, async (newPage, oldPage) => {
 	            // Restore label templates stored alongside the Fabric JSON (persisted per page).
 	            hydrateLabelTemplatesFromProjectJson(newPage.canvasData);
 
-                    // Pre-process images to use local proxy for Contabo images
-                    // This avoids presigned URL issues with encoding and expiration
-                    let canvasDataToLoad = JSON.parse(JSON.stringify(newPage.canvasData));
-                    // Blob URLs do not survive reload; replace early to avoid loadFromJSON errors.
-                    canvasDataToLoad = replaceBlobImagesWithPlaceholder(canvasDataToLoad);
-                    // Convert Contabo URLs to use local proxy (bypasses presigned URL issues)
-                    canvasDataToLoad = convertContaboToProxyUrls(canvasDataToLoad);
+                    // Normalize image URLs to same-origin proxy (Wasabi/Contabo) before load.
+                    let canvasDataToLoad = prepareCanvasDataForLoad(newPage.canvasData);
 
 	            // Track whether we loaded successfully and whether we had to degrade (missing images)
 	            let didLoadNewPage = false;
@@ -4875,7 +5056,7 @@ watch(activePage, async (newPage, oldPage) => {
 	                    console.warn('   Tentando gerar novas URLs presignadas para imagens da Contabo...');
 
 	                    // IMPORTANT: Use the pre-processed canvasDataToLoad instead of newPage.canvasData
-	                    const safeCanvasData = JSON.parse(JSON.stringify(canvasDataToLoad));
+	                    const safeCanvasData = prepareCanvasDataForLoad(canvasDataToLoad);
 	                    if (safeCanvasData?.objects && Array.isArray(safeCanvasData.objects)) {
 	                        const imagesToUpdate: any[] = [];
 	                        
@@ -5008,9 +5189,17 @@ watch(activePage, async (newPage, oldPage) => {
             const seenIds = new Set<string>();
             const duplicates: any[] = [];
             allObjsBefore.forEach((obj: any) => {
+                if (isTransientCanvasObject(obj)) return;
                 const id = obj._customId || obj.id;
                 if (id && seenIds.has(id)) {
-                    duplicates.push(obj);
+                    if (obj._customId) {
+                        const old = obj._customId;
+                        obj._customId = makeCanvasObjectId();
+                        seenIds.add(obj._customId);
+                        console.warn(`⚠️ _customId duplicado detectado após load. Regenerado ${old} -> ${obj._customId}`);
+                    } else {
+                        duplicates.push(obj);
+                    }
                 } else if (id) {
                     seenIds.add(id);
                 }
@@ -5175,37 +5364,33 @@ watch(activePage, async (newPage, oldPage) => {
     const toRemove: any[] = [];
     
     objsInOrder.forEach((o: any) => {
-        // Skip control objects - don't assign _customId
-        const name = o.name || '';
-        const isControlObject = name === 'path_node' || name === 'bezier_handle' || name === 'control_point' || name === 'handle_line';
-        const isSmallControlCircle = o.type === 'circle' && o.radius && o.radius <= 7;
-        const hasControlData = o.data && (o.data.parentPath || o.data.parentObj);
-        
-        if (isControlObject || o.excludeFromExport || isSmallControlCircle || hasControlData) {
+        if (isTransientCanvasObject(o)) {
             // Mark for removal (remove later to preserve order)
             toRemove.push(o);
             return;
         }
-        
+
+        ensurePersistentContentFlags(o);
+
         // Ensure _customId exists for real objects
-        if (!o._customId) o._customId = Math.random().toString(36).substr(2, 9);
+        if (!o._customId) o._customId = makeCanvasObjectId();
         
         // Check for duplicates by _customId or id
         const customId = o._customId;
         const id = o.id;
         
         if (customId && seenCustomIds.has(customId)) {
-            console.warn(`⚠️ Removendo objeto duplicado por _customId: ${customId}`, o);
-            toRemove.push(o);
-            return;
+            const old = customId;
+            o._customId = makeCanvasObjectId();
+            console.warn(`⚠️ _customId duplicado no load. Regenerado ${old} -> ${o._customId}`);
         }
-        if (id && id !== 'artboard-bg' && seenIds.has(id)) {
+        if (id && id !== 'artboard-bg' && seenIds.has(id) && !String(o._customId || '').trim()) {
             console.warn(`⚠️ Removendo objeto duplicado por id: ${id}`, o);
             toRemove.push(o);
             return;
         }
         
-        if (customId) seenCustomIds.add(customId);
+        if (o._customId) seenCustomIds.add(o._customId);
         if (id) seenIds.add(id);
         finalObjs.push(o);
     });
@@ -5238,8 +5423,6 @@ const zoomToFit = () => {
     // Infinite Canvas Logic: Fit to ALL Objects
     const objects = canvas.value.getObjects().filter((o: any) => o.id !== 'artboard-bg' && !o.excludeFromExport);
 
-    console.log('🔍 zoomToFit: objects count:', objects.length, 'viewport:', vWidth, 'x', vHeight);
-
     if (objects.length === 0) {
         // Empty Canvas? Center at (0,0) with zoom 1 or default zoom
         canvas.value.setViewportTransform([1, 0, 0, 1, vWidth / 2, vHeight / 2]);
@@ -5266,8 +5449,6 @@ const zoomToFit = () => {
     const contentWidth = maxX - minX;
     const contentHeight = maxY - minY;
 
-    console.log('🔍 zoomToFit: bounding box:', { minX, minY, maxX, maxY, contentWidth, contentHeight });
-
     // Safety check
     if (contentWidth <= 0 || contentHeight <= 0) {
          canvas.value.setViewportTransform([1, 0, 0, 1, vWidth / 2, vHeight / 2]);
@@ -5283,16 +5464,12 @@ const zoomToFit = () => {
     const scaleY = (vHeight - padding * 2) / contentHeight;
     const scale = Math.min(scaleX, scaleY, 1); // Max zoom 1 to avoid too close
 
-    console.log('🔍 zoomToFit: scale calculations:', { scaleX, scaleY, finalScale: scale });
-
     // Center Logic
     const contentCenterX = minX + contentWidth / 2;
     const contentCenterY = minY + contentHeight / 2;
 
     const viewportX = (vWidth / 2) - (contentCenterX * scale);
     const viewportY = (vHeight / 2) - (contentCenterY * scale);
-
-    console.log('🔍 zoomToFit: viewport transform:', { scale, viewportX, viewportY });
 
     canvas.value.setViewportTransform([scale, 0, 0, scale, viewportX, viewportY]);
     updateZoomState();
@@ -5360,47 +5537,78 @@ const resizeCanvas = () => {
 // 2. Product images stay INSIDE product cards
 // 3. Works on load, move, and scale
 // MUST be declared at component scope to be accessible in all event handlers
+let containmentZoneByIdCache: Map<string, any> | null = null;
+
+const invalidateContainmentZoneCache = () => {
+    containmentZoneByIdCache = null;
+};
+
+const hasParentZoneBinding = (obj: any) => {
+    return String((obj as any)?.parentZoneId || '').trim().length > 0;
+};
+
+const shouldApplyContainmentConstraints = (obj: any) => {
+    if (!obj) return false;
+    if (obj.type === 'image') return !!obj.group;
+    if (obj.type === 'group') return hasParentZoneBinding(obj);
+    return false;
+};
+
+const getContainmentZoneById = (zoneId: any) => {
+    if (!canvas.value) return null;
+    const id = String(zoneId || '').trim();
+    if (!id) return null;
+    if (!containmentZoneByIdCache) {
+        const map = new Map<string, any>();
+        canvas.value.getObjects().forEach((o: any) => {
+            if (!isLikelyProductZone(o)) return;
+            const zid = String(o?._customId || '').trim();
+            if (zid) map.set(zid, o);
+        });
+        containmentZoneByIdCache = map;
+    }
+    return containmentZoneByIdCache.get(id) || null;
+};
+
+const getCardBaseSizeForContainment = (card: any): { w: number; h: number } | null => {
+    if (!card) return null;
+    const w0 = Number((card as any)._cardWidth);
+    const h0 = Number((card as any)._cardHeight);
+    if (Number.isFinite(w0) && w0 > 0 && Number.isFinite(h0) && h0 > 0) {
+        return { w: w0, h: h0 };
+    }
+    try {
+        if (card.type === 'group' && typeof card.getObjects === 'function') {
+            const bg = card.getObjects().find((c: any) => c?.name === 'offerBackground' && (c?.type === 'rect' || c?.type === 'Rect'));
+            const bw = Number(bg?.width);
+            const bh = Number(bg?.height);
+            if (Number.isFinite(bw) && bw > 0 && Number.isFinite(bh) && bh > 0) {
+                return { w: bw, h: bh };
+            }
+        }
+    } catch {
+        // ignore
+    }
+
+    const w1 = Number(card?.width);
+    const h1 = Number(card?.height);
+    if (Number.isFinite(w1) && w1 > 0 && Number.isFinite(h1) && h1 > 0) {
+        return { w: w1, h: h1 };
+    }
+    return null;
+};
+
 const applyContainmentConstraints = (obj: any) => {
     if (!obj || !canvas.value) return;
-
-    const getCardBaseSize = (card: any): { w: number; h: number } | null => {
-        if (!card) return null;
-        const w0 = Number((card as any)._cardWidth);
-        const h0 = Number((card as any)._cardHeight);
-        if (Number.isFinite(w0) && w0 > 0 && Number.isFinite(h0) && h0 > 0) {
-            return { w: w0, h: h0 };
-        }
-        try {
-            if (card.type === 'group' && typeof card.getObjects === 'function') {
-                const bg = card.getObjects().find((c: any) => c?.name === 'offerBackground' && (c?.type === 'rect' || c?.type === 'Rect'));
-                const bw = Number(bg?.width);
-                const bh = Number(bg?.height);
-                if (Number.isFinite(bw) && bw > 0 && Number.isFinite(bh) && bh > 0) {
-                    return { w: bw, h: bh };
-                }
-            }
-        } catch (e) {
-            // ignore
-        }
-
-        const w1 = Number(card?.width);
-        const h1 = Number(card?.height);
-        if (Number.isFinite(w1) && w1 > 0 && Number.isFinite(h1) && h1 > 0) {
-            return { w: w1, h: h1 };
-        }
-        return null;
-    };
+    if (!shouldApplyContainmentConstraints(obj)) return;
     
     // CONSTRAINT 1: Product Card must stay inside Product Zone
-    if (obj.type === 'group' && (obj.isSmartObject || obj.isProductCard || isLikelyProductCard(obj))) {
+    if (obj.type === 'group' && hasParentZoneBinding(obj)) {
         const parentZoneId = obj.parentZoneId;
         if (!parentZoneId) return;
         
         // Find parent zone
-        const zone = canvas.value.getObjects().find((o: any) => 
-            o._customId === parentZoneId && 
-            (o.isProductZone || o.name === 'productZoneContainer')
-        );
+        const zone = getContainmentZoneById(parentZoneId);
         
         if (!zone) return;
         
@@ -5412,7 +5620,7 @@ const applyContainmentConstraints = (obj: any) => {
         const zoneBottom = zm.top + zm.height;
         
         // Get card boundaries (prefer the real card container size, not the group bounding box)
-        const base = getCardBaseSize(obj);
+        const base = getCardBaseSizeForContainment(obj);
         const baseW = base?.w ?? (Number(obj.width) || 0);
         const baseH = base?.h ?? (Number(obj.height) || 0);
         const cardWidth = Math.abs(baseW * Number(obj.scaleX || 1));
@@ -5459,14 +5667,33 @@ const applyContainmentConstraints = (obj: any) => {
     // CONSTRAINT 2: Product Images must stay inside Product Card (when in deep-select mode)
     if (obj.type === 'image' && obj.group) {
         const parentCard = obj.group;
+        const parentLikelyCard = !!(
+            parentCard.isSmartObject ||
+            parentCard.isProductCard ||
+            hasParentZoneBinding(parentCard) ||
+            String(parentCard.name || '').startsWith('product-card')
+        );
         
         // Only constrain if parent is a product card
-        if (!parentCard.isSmartObject && !parentCard.isProductCard && !isLikelyProductCard(parentCard)) {
+        if (!parentLikelyCard && !isLikelyProductCard(parentCard)) {
             return;
         }
+
+        // Harden product-image transforms so scale gestures cannot leave the image flipped.
+        const nextScaleX = Math.abs(Number(obj.scaleX ?? 1)) || 1;
+        const nextScaleY = Math.abs(Number(obj.scaleY ?? 1)) || 1;
+        obj.set({
+            scaleX: nextScaleX,
+            scaleY: nextScaleY,
+            flipX: false,
+            flipY: false,
+            lockScalingFlip: true,
+            lockSkewingX: true,
+            lockSkewingY: true
+        });
         
         // Get card boundaries in GROUP-LOCAL coordinates (do not use scaled group bounds)
-        const base = getCardBaseSize(parentCard);
+        const base = getCardBaseSizeForContainment(parentCard);
         const cardW = Number(base?.w ?? parentCard.width ?? 0);
         const cardH = Number(base?.h ?? parentCard.height ?? 0);
         if (!Number.isFinite(cardW) || cardW <= 0 || !Number.isFinite(cardH) || cardH <= 0) return;
@@ -5515,11 +5742,26 @@ const applyContainmentConstraints = (obj: any) => {
 };
 
 onMounted(async () => {
-  // Load collaborators
-  await auth.getSession()
-  await loadLabelTemplatesFromDb()
-  await refreshAiStudioUploads()
-  loadCollaborators()
+  // Run non-critical network warmups in background.
+  // Do not block canvas/Fabric boot on auth/templates/uploads.
+  void (async () => {
+      try {
+          await auth.getSession()
+      } catch (err) {
+          console.warn('[boot] auth.getSession falhou:', err)
+      }
+
+      await Promise.allSettled([
+          loadLabelTemplatesFromDb(),
+          refreshAiStudioUploads()
+      ])
+
+      try {
+          await loadCollaborators()
+      } catch (err) {
+          console.warn('[boot] loadCollaborators falhou:', err)
+      }
+  })()
   
   // Initialize Project Store ONLY if it's a new project (default ID)
   // If loading existing project, editor/[id].vue will call loadProjectDB first
@@ -5783,18 +6025,41 @@ onMounted(async () => {
       window.addEventListener('keydown', handleKeyDown);
       
       // ESC key handler for Pen Tool and Node Editing
-      const handleEsc = (e: KeyboardEvent) => {
-          if (e.key === 'Escape') {
-              if (isPenMode.value) {
-                  finishPenPath();
-                  setTool('select');
+      if (!globalEscKeyHandler) {
+          globalEscKeyHandler = (e: KeyboardEvent) => {
+              if (e.key === 'Escape') {
+                  if (isPenMode.value) {
+                      finishPenPath();
+                      setTool('select');
+                  }
+                  if (isNodeEditing.value) {
+                      exitNodeEditing();
+                  }
               }
-              if (isNodeEditing.value) {
-                  exitNodeEditing();
+          };
+          window.addEventListener('keydown', globalEscKeyHandler);
+      }
+
+      if (!globalKeyUpHandler) {
+          globalKeyUpHandler = (e: KeyboardEvent) => {
+              if (e.code === 'Space') {
+                  isSpacePanPressed = false;
+                  if (canvas.value && canvas.value.defaultCursor === 'grab') {
+                      canvas.value.defaultCursor = 'default';
+                  }
               }
-          }
-      };
-      window.addEventListener('keydown', handleEsc);
+
+              if (
+                  keyboardNudgeDirty &&
+                  (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+              ) {
+                  keyboardNudgeDirty = false;
+                  saveCurrentState({ reason: 'keyboard-nudge' });
+                  triggerAutoSave();
+              }
+          };
+          window.addEventListener('keyup', globalKeyUpHandler);
+      }
       if (!globalMouseUpHandler) {
           globalMouseUpHandler = (evt: MouseEvent) => {
               if (!canvas.value) return;
@@ -5841,7 +6106,11 @@ onMounted(async () => {
           if (loaded && page && pagesLen > 0) {
               // Check if canvas is already loaded to avoid reloading
               const objects = canvas.value.getObjects();
-              const alreadyLoaded = objects.length > 0;
+              const alreadyLoaded = objects.some((o: any) => {
+                  if (!o || o.id === 'artboard-bg') return false;
+                  if (isTransientCanvasObject(o)) return false;
+                  return true;
+              });
 
               if (alreadyLoaded && page.canvasData) {
                   console.log('⏭️ Canvas já carregado, parando watch');
@@ -5896,13 +6165,8 @@ onMounted(async () => {
                       const expectedObjects = page.canvasData?.objects?.length || 0;
                       console.log(`📥 Preparando para carregar ${expectedObjects} objeto(s) do canvasData`);
                       
-                      // Pre-process images to use local proxy for Contabo images
-                      // This avoids presigned URL issues with encoding and expiration
-                      let canvasDataToLoad = JSON.parse(JSON.stringify(page.canvasData));
-                      // Blob URLs do not survive reload; replace early to avoid loadFromJSON errors.
-                      canvasDataToLoad = replaceBlobImagesWithPlaceholder(canvasDataToLoad);
-                      // Convert Contabo URLs to use local proxy (bypasses presigned URL issues)
-                      canvasDataToLoad = convertContaboToProxyUrls(canvasDataToLoad);
+                      // Normalize image URLs to same-origin proxy (Wasabi/Contabo) before load.
+                      let canvasDataToLoad = prepareCanvasDataForLoad(page.canvasData);
                       
                       // DEBUG: Log all objects being loaded with order
                       console.log(`📦 CanvasData carregado - ${canvasDataToLoad?.objects?.length || 0} objeto(s):`);
@@ -5921,7 +6185,7 @@ onMounted(async () => {
                               console.warn('⚠️ Erro ao carregar canvas:', imageLoadErr);
                               
                               // Try again with failed images replaced by placeholders
-                              const safeCanvasData = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
+                              const safeCanvasData = replaceContaboImagesWithPlaceholder(prepareCanvasDataForLoad(canvasDataToLoad));
                               await canvas.value.loadFromJSON(safeCanvasData);
                               didLoadPage = true;
                               degradedPage = true;
@@ -6030,9 +6294,17 @@ onMounted(async () => {
                       // Iterate in reverse to remove duplicates from the end, preserving order
                       for (let i = allObjsBefore.length - 1; i >= 0; i--) {
                           const obj = allObjsBefore[i];
+                          if (isTransientCanvasObject(obj)) continue;
                           const id = obj._customId || obj.id;
                           if (id && seenIds.has(id)) {
-                              duplicates.push(obj);
+                              if (obj._customId) {
+                                  const old = obj._customId;
+                                  obj._customId = makeCanvasObjectId();
+                                  seenIds.add(obj._customId);
+                                  console.warn(`⚠️ _customId duplicado detectado no watchEffect load. Regenerado ${old} -> ${obj._customId}`);
+                              } else {
+                                  duplicates.push(obj);
+                              }
                           } else if (id) {
                               seenIds.add(id);
                           }
@@ -6224,16 +6496,9 @@ onMounted(async () => {
                       // Iterate in reverse to remove from end, preserving order
                       for (let i = allObjsForCleanup.length - 1; i >= 0; i--) {
                           const o = allObjsForCleanup[i];
-                          const name = o.name || '';
-                          if (name === 'control_point' || name === 'path_node' || name === 'bezier_handle' || name === 'handle_line') {
-                              orphanedToRemove.push(o);
-                          } else if (o.excludeFromExport) {
-                              orphanedToRemove.push(o);
-                          } else if (o.type === 'circle' && o.radius && o.radius <= 7 && !o._customId) {
-                              orphanedToRemove.push(o);
-                          } else if (o.type === 'circle' && o.data && (o.data.parentPath || o.data.parentObj)) {
-                              orphanedToRemove.push(o);
-                          } else if (o.type === 'line' && !o._customId) {
+                          ensurePersistentContentFlags(o);
+                          ensureObjectPersistentId(o);
+                          if (isTransientCanvasObject(o)) {
                               orphanedToRemove.push(o);
                           }
                       }
@@ -6250,7 +6515,9 @@ onMounted(async () => {
                       console.log('🔒 Aplicando constraints de contenção...');
                       const allLoadedObjects = canvas.value.getObjects();
                       allLoadedObjects.forEach((obj: any) => {
-                          applyContainmentConstraints(obj);
+                          if (shouldApplyContainmentConstraints(obj)) {
+                              applyContainmentConstraints(obj);
+                          }
                       });
                       
                       // CRITICAL: Preserve exact order from JSON - don't reorder objects
@@ -6316,9 +6583,25 @@ onMounted(async () => {
   }
 })
 onUnmounted(() => {
+  if (globalStylesSaveTimer) {
+    clearTimeout(globalStylesSaveTimer);
+    globalStylesSaveTimer = null;
+  }
+  flushPersistenceNow('unmount');
+  cancelAutoSave();
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
   window.removeEventListener('resize', resizeCanvas);
   window.removeEventListener('keydown', handleKeyDown);
+  if (globalEscKeyHandler) {
+    window.removeEventListener('keydown', globalEscKeyHandler);
+    globalEscKeyHandler = null;
+  }
+  if (globalKeyUpHandler) {
+    window.removeEventListener('keyup', globalKeyUpHandler);
+    globalKeyUpHandler = null;
+  }
+  isSpacePanPressed = false;
+  keyboardNudgeDirty = false;
     if (wrapperResizeObserver) {
         try {
             wrapperResizeObserver.disconnect();
@@ -6339,6 +6622,10 @@ onUnmounted(() => {
   if (globalMouseUpHandler) {
     window.removeEventListener('mouseup', globalMouseUpHandler);
     globalMouseUpHandler = null;
+  }
+  if (teardownSnapping) {
+    teardownSnapping();
+    teardownSnapping = null;
   }
   if (canvas.value) {
     canvas.value.dispose();
@@ -6419,6 +6706,8 @@ const CANVAS_CUSTOM_PROPS = [
     '_zoneHeight',
     '_zonePadding',
     '_zoneGlobalStyles',
+    '_zoneTemplateSnapshotId',
+    '_zoneTemplateSnapshot',
     'backgroundColor', // Zone background color
     'gapHorizontal',
     'gapVertical',
@@ -6753,55 +7042,59 @@ const extractWasabiBucketAndKey = (url: string): { bucket: string | null; key: s
  */
 const convertContaboToProxyUrls = (canvasData: any): any => {
     const cloned = JSON.parse(JSON.stringify(canvasData));
-    if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned;
+    if (!cloned || typeof cloned !== 'object') return cloned;
 
     let contaboCount = 0;
     let wasabiCount = 0;
-    const processObject = (obj: any): void => {
-        if (!obj) return;
-        const objType = (obj.type || '').toLowerCase();
-        if (objType === 'image' && typeof obj.src === 'string') {
-            // Default crossOrigin for reliable pixel operations (Sticker Outline uses getImageData).
-            // Even when using same-origin proxy URLs, keeping this consistent avoids edge cases.
-            if (!obj.crossOrigin) obj.crossOrigin = 'anonymous';
-            const src = obj.src;
+    const walkAny = (node: any): void => {
+        if (!node || typeof node !== 'object') return;
 
-            // Converter URLs do Wasabi (bucket privado)
-            const cfg = useRuntimeConfig()?.public?.wasabi || {};
-            const endpoint = (cfg.endpoint || 's3.wasabisys.com').toString();
-            const isWasabi = src.includes('wasabisys.com') || (endpoint && src.includes(endpoint));
-            if (isWasabi) {
-                // Use robust key extraction that supports both path-style and virtual-host style URLs.
-                const key = extractWasabiKey(src);
-                if (key) {
-                    obj.src = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
-                    wasabiCount++;
-                }
-            }
-            // Converter URLs da Contabo
-            else if (src.includes('contabostorage.com')) {
+        const objType = String(node.type || '').toLowerCase();
+        if (objType === 'image' && !node.crossOrigin) {
+            // Keep consistent CORS mode for Fabric image processing.
+            node.crossOrigin = 'anonymous';
+        }
+
+        if (typeof node.src === 'string' && node.src.trim()) {
+            const src = node.src;
+            const wasabiProxy = toWasabiProxyUrl(src);
+
+            if (wasabiProxy && wasabiProxy !== src) {
+                node.src = wasabiProxy;
+                wasabiCount++;
+            } else if (src.includes('contabostorage.com')) {
                 const { bucket, key } = extractContaboBucketAndKey(src);
                 if (key) {
-                    // Convert to proxy URL with bucket parameter
-                    if (bucket) {
-                        obj.src = `/api/storage/proxy?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
-                    } else {
-                        obj.src = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
-                    }
+                    if (bucket) node.src = `/api/storage/proxy?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+                    else node.src = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
                     contaboCount++;
                 }
             }
         }
-        if (obj.objects && Array.isArray(obj.objects)) {
-            obj.objects.forEach((child: any) => processObject(child));
-        }
+
+        Object.values(node).forEach((value: any) => {
+            if (!value) return;
+            if (Array.isArray(value)) value.forEach((item: any) => walkAny(item));
+            else if (typeof value === 'object') walkAny(value);
+        });
     };
 
-    cloned.objects.forEach((obj: any) => processObject(obj));
+    walkAny(cloned);
     if (contaboCount > 0) console.log(`🔄 Convertido ${contaboCount} URL(s) da Contabo para proxy local`);
     if (wasabiCount > 0) console.log(`🔄 Convertido ${wasabiCount} URL(s) do Wasabi para proxy local`);
     return cloned;
 };
+
+const prepareCanvasDataForLoad = (raw: any): any => {
+    try {
+        let out = JSON.parse(JSON.stringify(raw));
+        out = replaceBlobImagesWithPlaceholder(out);
+        out = convertContaboToProxyUrls(out);
+        return out;
+    } catch {
+        return raw;
+    }
+}
 
 /**
  * Substitui src de imagens blob: (sessão/local) por placeholder.
@@ -6873,6 +7166,55 @@ const missingFramesLogged = new Set<string>();
 
 const setupHistory = () => {
     if (!canvas.value) return;
+    let lastThumbnailAt = 0;
+    let thumbnailTicket = 0;
+
+    const stripClipPathsFromJson = (node: any): void => {
+        if (!node || typeof node !== 'object') return;
+        if (Object.prototype.hasOwnProperty.call(node, 'clipPath')) {
+            delete node.clipPath;
+        }
+        if (Object.prototype.hasOwnProperty.call(node, '_frameClipOwner')) {
+            delete node._frameClipOwner;
+        }
+        Object.values(node).forEach((value: any) => {
+            if (!value) return;
+            if (Array.isArray(value)) value.forEach((item: any) => stripClipPathsFromJson(item));
+            else if (typeof value === 'object') stripClipPathsFromJson(value);
+        });
+    };
+
+    const generateThumbnailFromJson = async (sourceJson: any): Promise<string> => {
+        if (!fabric || typeof document === 'undefined') return '';
+        const width = Math.max(1, Math.round(Number(activePage.value?.width || canvas.value?.getWidth?.() || 1080)));
+        const height = Math.max(1, Math.round(Number(activePage.value?.height || canvas.value?.getHeight?.() || 1920)));
+        const el = document.createElement('canvas');
+        el.width = width;
+        el.height = height;
+        const sc = new fabric.StaticCanvas(el, {
+            width,
+            height,
+            backgroundColor: '#ffffff',
+            renderOnAddRemove: false
+        });
+
+        try {
+            const thumbJson = JSON.parse(JSON.stringify(sourceJson || {}));
+            stripClipPathsFromJson(thumbJson);
+            await sc.loadFromJSON(thumbJson);
+            sc.renderAll();
+            return sc.toDataURL({
+                format: 'jpeg',
+                quality: 0.5,
+                multiplier: 0.1
+            });
+        } catch (err) {
+            console.warn('[Thumbnail] Falha ao gerar thumbnail em canvas offscreen:', err);
+            return '';
+        } finally {
+            try { sc.dispose?.(); } catch { /* ignore */ }
+        }
+    };
 
     const saveState = async (opts: SaveStateOptions = {}) => {
         if (isHistoryProcessing.value) return; // Prevent loop
@@ -6901,6 +7243,8 @@ const setupHistory = () => {
         // CRITICAL: Before saving, ensure all frames have layerName and isFrame set
         const allObjs = canvas.value.getObjects();
         allObjs.forEach((obj: any) => {
+            ensurePersistentContentFlags(obj);
+            ensureObjectPersistentId(obj);
             if (obj?.isFrame) {
                 // Ensure isFrame is explicitly set
                 obj.isFrame = true;
@@ -6979,6 +7323,44 @@ const setupHistory = () => {
         // Serialize with custom props
         const json = canvas.value.toJSON([...CANVAS_CUSTOM_PROPS]);
 
+        // ═══════════════════════════════════════════════════════════════════════════════════
+        // CRITICAL FIX: Sync custom properties recursively for nested objects inside groups.
+        // Fabric's toJSON(propsToInclude) only affects top-level objects; nested objects in
+        // groups lose custom properties like 'name', '_customId', '_zoneGlobalStyles', etc.
+        // This function walks the canvas and JSON trees in parallel and copies missing props.
+        // ═══════════════════════════════════════════════════════════════════════════════════
+        const syncNestedProps = (canvasObj: any, jsonObj: any) => {
+            if (!canvasObj || !jsonObj) return;
+            
+            // Copy custom properties from canvas object to JSON object
+            CANVAS_CUSTOM_PROPS.forEach((prop: string) => {
+                const val = (canvasObj as any)[prop];
+                if (val !== undefined && val !== null && jsonObj[prop] === undefined) {
+                    jsonObj[prop] = val;
+                }
+            });
+            
+            // Recursively process children if this is a group
+            if (canvasObj.type === 'group' && typeof canvasObj.getObjects === 'function' && Array.isArray(jsonObj.objects)) {
+                const canvasChildren = canvasObj.getObjects() || [];
+                const jsonChildren = jsonObj.objects || [];
+                // Process each child by index (Fabric preserves order)
+                const minLen = Math.min(canvasChildren.length, jsonChildren.length);
+                for (let i = 0; i < minLen; i++) {
+                    syncNestedProps(canvasChildren[i], jsonChildren[i]);
+                }
+            }
+        };
+        
+        // Apply recursive sync to all top-level objects
+        if (json.objects && Array.isArray(json.objects)) {
+            const canvasObjs = canvas.value.getObjects();
+            const minLen = Math.min(canvasObjs.length, json.objects.length);
+            for (let i = 0; i < minLen; i++) {
+                syncNestedProps(canvasObjs[i], json.objects[i]);
+            }
+        }
+
         // CRITICAL: Remove clipPath from all product zones in JSON to prevent rendering errors
         if (json.objects && Array.isArray(json.objects)) {
             json.objects.forEach((obj: any) => {
@@ -7034,19 +7416,18 @@ const setupHistory = () => {
             // CRITICAL: Remove invalid objects that shouldn't be saved
             // (objects without _customId that are not special objects like artboard-bg)
             const validObjects = json.objects.filter((obj: any) => {
+                // Keep objects with explicit id (artboard-bg, guides)
+                if (obj?.id === 'artboard-bg' || obj?.id?.startsWith('guide-')) return true;
                 // Keep objects with _customId
                 if (obj?._customId) return true;
                 // Keep images (they have src)
                 if ((obj?.type || '').toLowerCase() === 'image' && obj?.src) return true;
                 // Keep frames (they have isFrame)
                 if (obj?.isFrame) return true;
-                // Keep objects with explicit id (artboard-bg, guides)
-                if (obj?.id === 'artboard-bg' || obj?.id?.startsWith('guide-')) return true;
-                // Filter out orphaned rects without any identifier
-                if ((obj?.type || '').toLowerCase() === 'rect' && !obj?.name && !obj?.layerName && !obj?.isFrame) {
-                    console.log(`🗑️ Removendo Rect órfão do JSON (sem _customId, name, ou isFrame):`, obj);
-                    return false;
-                }
+                // Drop only explicit transient control objects
+                const n = String(obj?.name || '');
+                if (TRANSIENT_CONTROL_NAMES.has(n)) return false;
+                if (obj?.data && (obj.data.parentPath || obj.data.parentObj)) return false;
                 // Keep everything else by default
                 return true;
             });
@@ -7149,6 +7530,9 @@ const setupHistory = () => {
              console.log(`💾 Salvando estado: ${objectCount} objeto(s) para página ${project.activePageIndex}`);
 
              updatePageData(project.activePageIndex, json);
+             if (String(opts.reason || '') !== 'initial-history-capture') {
+                 triggerAutoSave();
+             }
 
              // Verificar se os dados foram salvos corretamente
              const savedPage = project.pages[project.activePageIndex];
@@ -7162,181 +7546,20 @@ const setupHistory = () => {
                  console.error(`❌ PROBLEMA: Estado não foi salvo! Página ${project.activePageIndex} não tem canvasData`);
              }
              
-              // Generate Thumbnail (Debounced ideally, but simplistic here)
-              // We use a small multiplier to keep it light
+              // Generate thumbnail from an offscreen canvas (never mutate the live editor canvas).
+              const reason = String(opts.reason || '');
+              const isModifiedReason = reason === 'object:modified' || reason === 'object:modified(zone)';
+              const now = Date.now();
+              const minInterval = isModifiedReason ? 3000 : 600;
+              const canGenerate = (now - lastThumbnailAt) >= minInterval;
 
-              // CRITICAL: Aggressively clear ALL clipPaths before thumbnail generation
-              // This prevents "Cannot read properties of undefined (reading 'forEach')" errors in fabric.js
-              const clearAllClipPathsAggressively = () => {
-                  if (!canvas.value) return;
-                  try {
-                      const objects = canvas.value.getObjects();
-                      let cleared = 0;
-                      objects.forEach((obj: any) => {
-                          // Clear direct clipPath - use multiple methods to ensure it's removed
-                          if (obj.clipPath) {
-                              try {
-                                  obj.set('clipPath', null);
-                              } catch (e) {}
-                              try {
-                                  delete obj.clipPath;
-                              } catch (e) {}
-                              delete obj._frameClipOwner;
-                              cleared++;
-                          }
-                          // Clear nested clipPaths in groups
-                          if (obj._objects && Array.isArray(obj._objects)) {
-                              obj._objects.forEach((child: any) => {
-                                  if (child.clipPath) {
-                                      try { child.set('clipPath', null); } catch (e) {}
-                                      try { delete child.clipPath; } catch (e) {}
-                                      delete child._frameClipOwner;
-                                      cleared++;
-                                  }
-                              });
-                          }
-                          // Also check via getObjects() for groups
-                          if (typeof obj.getObjects === 'function') {
-                              const children = obj.getObjects();
-                              if (Array.isArray(children)) {
-                                  children.forEach((child: any) => {
-                                      if (child.clipPath) {
-                                          try { child.set('clipPath', null); } catch (e) {}
-                                          try { delete child.clipPath; } catch (e) {}
-                                          delete child._frameClipOwner;
-                                          cleared++;
-                                      }
-                                  });
-                              }
-                          }
-                      });
-                      console.log(`[Thumbnail] Cleared ${cleared} clipPaths before generation`);
-                  } catch (e) {
-                      console.warn('[Thumbnail] Error clearing clipPaths:', e);
+              if (canGenerate) {
+                  const myTicket = ++thumbnailTicket;
+                  const dataURL = await generateThumbnailFromJson(json);
+                  if (dataURL && myTicket === thumbnailTicket) {
+                      updatePageThumbnail(project.activePageIndex, dataURL);
+                      lastThumbnailAt = Date.now();
                   }
-              };
-
-              // Clear all clipPaths aggressively
-              clearAllClipPathsAggressively();
-
-              // SANITIZE: Ensure any remaining clipPaths have valid _objects arrays
-              // This prevents "Cannot read properties of undefined (reading 'forEach')" in fabric.js
-              const sanitizeClipPaths = () => {
-                  if (!canvas.value) return;
-                  try {
-                      const objects = canvas.value.getObjects();
-                      let sanitized = 0;
-
-                      const sanitizeClipPath = (clipPath: any) => {
-                          if (!clipPath) return;
-                          // Ensure _objects is always an array, never undefined
-                          if (clipPath._objects === undefined || clipPath._objects === null) {
-                              clipPath._objects = [];
-                              sanitized++;
-                          }
-                          // Recursively sanitize nested clipPaths
-                          if (clipPath.clipPath) {
-                              sanitizeClipPath(clipPath.clipPath);
-                          }
-                      };
-
-                      objects.forEach((obj: any) => {
-                          // Sanitize direct clipPath
-                          if (obj.clipPath) {
-                              sanitizeClipPath(obj.clipPath);
-                          }
-                          // Sanitize nested clipPaths
-                          if (obj._objects && Array.isArray(obj._objects)) {
-                              obj._objects.forEach((child: any) => {
-                                  if (child.clipPath) {
-                                      sanitizeClipPath(child.clipPath);
-                                  }
-                              });
-                          }
-                          if (typeof obj.getObjects === 'function') {
-                              const children = obj.getObjects();
-                              if (Array.isArray(children)) {
-                                  children.forEach((child: any) => {
-                                      if (child.clipPath) {
-                                          sanitizeClipPath(child.clipPath);
-                                      }
-                                  });
-                              }
-                          }
-                      });
-
-                      if (sanitized > 0) {
-                          console.log(`[Thumbnail] Sanitized ${sanitized} clipPath _objects arrays`);
-                      }
-                  } catch (e) {
-                      console.warn('[Thumbnail] Error sanitizing clipPaths:', e);
-                  }
-              };
-
-              // Sanitize any remaining clipPaths
-              sanitizeClipPaths();
-
-              // Force canvas to update its internal state before thumbnail generation
-              if (canvas.value && canvas.value.renderAll) {
-                  canvas.value.renderAll();
-              }
-
-              // Wait for fabric.js to complete internal updates
-              await new Promise(resolve => setTimeout(resolve, 10));
-
-              let dataURL = '';
-              try {
-                  // Check if canvas is valid before generating thumbnail
-                  if (!canvas.value || !canvas.value.getElement()) {
-                      console.warn('[Thumbnail] Canvas not available, skipping thumbnail');
-                      dataURL = '';
-                  } else {
-                      dataURL = canvas.value.toDataURL({
-                          format: 'jpeg',
-                          quality: 0.5,
-                          multiplier: 0.1 // 10% size
-                      });
-                  }
-              } catch (thumbErr) {
-                  console.warn('[Thumbnail] Erro ao gerar thumbnail:', thumbErr);
-                  // Try one more time with complete clipPath removal and sanitization
-                  try {
-                      clearAllClipPathsAggressively();
-                      sanitizeClipPaths();
-                      // Force canvas to update
-                      if (canvas.value && canvas.value.renderAll) {
-                          canvas.value.renderAll();
-                      }
-                      // Wait for fabric.js to complete internal updates
-                      await new Promise(resolve => setTimeout(resolve, 10));
-                      dataURL = canvas.value.toDataURL({
-                          format: 'jpeg',
-                          quality: 0.5,
-                          multiplier: 0.1
-                      });
-                  } catch (fallbackErr) {
-                      console.error('[Thumbnail] Falha definitiva ao gerar thumbnail:', fallbackErr);
-                      dataURL = '';
-                  }
-              }
-              if (dataURL) {
-                  updatePageThumbnail(project.activePageIndex, dataURL);
-              }
-
-              // CRITICAL: Restaurar clipPaths dos frames após geração do thumbnail
-              // clearAllClipPathsAggressively() removeu todos os clips - precisamos recriá-los
-              try {
-                  const allObjs = canvas.value.getObjects();
-                  const frames = allObjs.filter((o: any) => o?.isFrame);
-                  allObjs.forEach((o: any) => {
-                      // Skip product cards — they should NOT be clipped by frames
-                      if (o?.isSmartObject || o?.isProductCard) return;
-                      if (o?.parentFrameId || o?._frameClipOwner) syncObjectFrameClip(o);
-                  });
-                  frames.forEach((f: any) => syncFrameClips(f));
-                  canvas.value.requestRenderAll();
-              } catch (restoreErr) {
-                  console.warn('[Thumbnail] Erro ao restaurar clipPaths:', restoreErr);
               }
         }
     }
@@ -7358,6 +7581,8 @@ const setupHistory = () => {
 
     // Fabric Events to trigger Save
     canvas.value.on('object:added', (e: any) => {
+        invalidateScrollbarBounds();
+        invalidateContainmentZoneCache();
         if (!isHistoryProcessing.value) {
             saveState({ allowEmptyOverwrite: true, reason: 'object:added' });
             triggerAutoSave(); // Auto-save to Contabo
@@ -7365,6 +7590,8 @@ const setupHistory = () => {
         updateScrollbars();
     });
     canvas.value.on('object:modified', (e: any) => {
+        invalidateScrollbarBounds();
+        invalidateContainmentZoneCache();
         if (isHistoryProcessing.value) return;
         // Prevent double state save when applyZoneUpdates already saved (prevents duplicate history entries)
         if (isApplyingZoneUpdate) return;
@@ -7384,6 +7611,8 @@ const setupHistory = () => {
         triggerAutoSave(); // Auto-save to Contabo
     });
     canvas.value.on('object:removed', (e: any) => {
+        invalidateScrollbarBounds();
+        invalidateContainmentZoneCache();
         if (isHistoryProcessing.value) {
             updateScrollbars();
             return;
@@ -7429,6 +7658,38 @@ const handleObjectModified = (e: any) => {
     const obj = e.target;
     if (!obj) return;
 
+    // Multi-selection: keep each member attached/contained and then relayout affected zones.
+    if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
+        const members = (obj.getObjects() || []).slice();
+        const affectedZones = new Map<string, any>();
+
+        members.forEach((member: any) => {
+            if (!member) return;
+
+            if (shouldApplyContainmentConstraints(member)) {
+                applyContainmentConstraints(member);
+            }
+
+            try { maybeReparentToFrameOnDrop(member); } catch {}
+            try { syncObjectFrameClip(member); } catch {}
+
+            const zoneId = String((member as any)?.parentZoneId || '').trim();
+            if (!zoneId || !canvas.value) return;
+            const zone = getContainmentZoneById(zoneId) || canvas.value.getObjects().find((o: any) => (
+                isLikelyProductZone(o) && String((o as any)?._customId || '').trim() === zoneId
+            ));
+            if (!zone) return;
+            applyCardFrameBinding(member, getResolvedZoneFrameId(zone));
+            affectedZones.set(zoneId, zone);
+        });
+
+        affectedZones.forEach((zone: any) => {
+            ensureZoneSanity(zone);
+            recalculateZoneLayout(zone, getZoneChildren(zone), { save: false });
+        });
+        return;
+    }
+
     // 🔹 Normalizar scale de retângulos (Figma-style)
     // Converte scaleX/scaleY em width/height reais para evitar distorção de border-radius
     if (obj.type === 'rect') {
@@ -7444,6 +7705,7 @@ const handleObjectModified = (e: any) => {
     if (isLikelyProductZone(obj)) {
         // Cache children BEFORE any zone changes to prevent losing cards
         const cachedChildren = getZoneChildren(obj);
+        syncZoneCardFrameBindings(obj, cachedChildren);
         ensureZoneSanity(obj);
         normalizeZoneScale(obj);
         recalculateZoneLayout(obj, cachedChildren, { save: false });
@@ -7452,12 +7714,22 @@ const handleObjectModified = (e: any) => {
 
     // Product zone: dragging a card reorders the grid (snap back into slots on drop).
     if ((obj.isSmartObject || obj.isProductCard || String(obj.name || '').startsWith('product-card') || isLikelyProductCard(obj)) && (obj as any).parentZoneId && canvas.value) {
-        const zoneId = (obj as any).parentZoneId as string;
-        const zone = canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && o?._customId === zoneId);
+        const zoneId = String((obj as any).parentZoneId || '').trim();
+        const zone = getContainmentZoneById(zoneId) || canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String(o?._customId || '').trim() === zoneId);
         if (zone) {
             ensureZoneSanity(zone);
             const cards = getZoneChildren(zone);
             if (cards.length > 0) {
+                const action = String(e?.transform?.action || '');
+                const didScale = action.includes('scale');
+                const rawHighlightCount = Number((zone as any)?.highlightCount ?? 0);
+                const highlightCount = Math.max(0, Math.min(cards.length, Math.round(Number.isFinite(rawHighlightCount) ? rawHighlightCount : 0)));
+                const rawHighlightHeight = Number((zone as any)?.highlightHeight ?? 1);
+                const highlightHeight = Math.max(1, Math.min(4, Number.isFinite(rawHighlightHeight) ? rawHighlightHeight : 1));
+                const hasFeaturedLayout = highlightCount > 0 && highlightHeight > 1;
+                const zoneFrameId = getResolvedZoneFrameId(zone);
+                const stylesToApply: Partial<GlobalStyles> = getZoneGlobalStyles(zone);
+
                 // Ensure a stable order index exists.
                 const hasAllOrders = cards.every((c: any) => Number.isFinite((c as any)._zoneOrder));
                 if (!hasAllOrders) {
@@ -7472,110 +7744,24 @@ const handleObjectModified = (e: any) => {
                 }
 
                 const ordered = cards.slice().sort((a: any, b: any) => ((a as any)._zoneOrder ?? 0) - ((b as any)._zoneOrder ?? 0));
-                const fromIndex = ordered.indexOf(obj);
+                let fromIndex = Number((obj as any)._zoneOrder);
+                if (!Number.isFinite(fromIndex) || fromIndex < 0 || fromIndex >= ordered.length || ordered[fromIndex] !== obj) {
+                    fromIndex = ordered.indexOf(obj);
+                }
 
                 // Find nearest slot index for the drop position.
-                const zoneRect = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
-                const padding = typeof zone._zonePadding === 'number' ? zone._zonePadding : (zone.padding ?? 20);
-                const gapX = zone.gapHorizontal ?? padding;
-                const gapY = zone.gapVertical ?? padding;
-                const layoutDirection = zone.layoutDirection || 'horizontal';
-                const verticalAlign = zone.verticalAlign || 'stretch';
-                const lastRowBehavior = zone.lastRowBehavior || 'fill';
-                const zoneConfig: ProductZone = {
-                    x: zoneRect.left,
-                    y: zoneRect.top,
-                    width: zoneRect.width,
-                    height: zoneRect.height,
-                    padding,
-                    gapHorizontal: gapX,
-                    gapVertical: gapY,
-                    columns: typeof zone.columns === 'number' ? zone.columns : 0,
-                    rows: typeof zone.rows === 'number' ? zone.rows : 0,
-                    cardAspectRatio: zone.cardAspectRatio ?? 'auto',
-                    lastRowBehavior
-                };
-
-                const { cols, rows, itemWidth, itemHeight } = calculateGridLayout(zoneConfig, ordered.length);
-                const usableW = Math.max(0, zoneRect.width - (padding * 2));
-                const usableH = Math.max(0, zoneRect.height - (padding * 2));
-                let itemW = Math.max(50, itemWidth);
-                let itemH = Math.max(50, itemHeight);
-
-                let startX = zoneRect.left + padding;
-                let startY = zoneRect.top + padding;
-
-                // Keep slot math consistent with `recalculateZoneLayout` (including highlights).
-                const safeRows = Math.max(1, rows);
-                const hl = getZoneHighlightPredicate(zone, ordered);
-                const rowHasHighlight = new Array<boolean>(rows).fill(false);
-                if (hl.count > 0 && hl.mult > 1) {
-                    for (let i = 0; i < ordered.length; i++) {
-                        if (!hl.isHighlighted(ordered[i], i)) continue;
-                        const r = layoutDirection === 'vertical' ? (i % safeRows) : Math.floor(i / cols);
-                        if (r >= 0 && r < rows) rowHasHighlight[r] = true;
-                    }
-                }
-                const highlightRowCount = rowHasHighlight.filter(Boolean).length;
-
-                const gapTotalH = (rows - 1) * gapY;
-                const denom = rows + (highlightRowCount * (hl.mult - 1));
-                const maxBaseH = (rows > 0 && denom > 0) ? ((usableH - gapTotalH) / denom) : itemH;
-
-                let baseH = itemH;
-                if (verticalAlign === 'stretch') baseH = maxBaseH;
-                else baseH = Math.min(baseH, maxBaseH);
-                baseH = Math.max(50, baseH);
-
-                const rowHeights = new Array<number>(rows).fill(baseH);
-                for (let r = 0; r < rows; r++) {
-                    if (rowHasHighlight[r]) rowHeights[r] = baseH * hl.mult;
-                }
-
-                const usedGridH = rowHeights.reduce((sum, h) => sum + h, 0) + gapTotalH;
-                if (verticalAlign === 'center') startY += Math.max(0, (usableH - usedGridH) / 2);
-                else if (verticalAlign === 'bottom') startY += Math.max(0, usableH - usedGridH);
-
-                const rowTops: number[] = [startY];
-                for (let r = 1; r < rows; r++) {
-                    rowTops[r] = rowTops[r - 1]! + (rowHeights[r - 1] ?? baseH) + gapY;
-                }
-
-                const centers: Array<{ x: number; y: number }> = [];
-                for (let i = 0; i < ordered.length; i++) {
-                    const col = layoutDirection === 'vertical' ? Math.floor(i / safeRows) : (i % cols);
-                    const row = layoutDirection === 'vertical' ? (i % safeRows) : Math.floor(i / cols);
-                    const isHighlighted = hl.isHighlighted(ordered[i], i);
-                    const cardH = isHighlighted ? (baseH * hl.mult) : baseH;
-                    const rowTop = rowTops[row] ?? startY;
-
-                    const isLastRow = layoutDirection !== 'vertical' && row === rows - 1;
-                    const itemsInRow = isLastRow ? (ordered.length % cols || cols) : cols;
-                    const shouldFillRow = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < cols;
-                    const rowItemW = shouldFillRow
-                        ? Math.max(50, (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow))
-                        : itemW;
-                    const slotW = (layoutDirection === 'vertical' ? itemW : rowItemW);
-
-                    let x = startX + (col * (slotW + gapX));
-                    if (isLastRow && lastRowBehavior === 'center' && itemsInRow < cols) {
-                        const rowWidth = (itemsInRow * itemW) + ((itemsInRow - 1) * gapX);
-                        const remainingSpace = usableW - rowWidth;
-                        x += remainingSpace / 2;
-                    }
-                    const cx = x + (slotW / 2);
-                    const cy = rowTop + (cardH / 2);
-                    centers.push({ x: cx, y: cy });
-                }
-
                 let toIndex = fromIndex;
                 const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
-                if (center && centers.length) {
-                    let best = 0;
+                if (center && ordered.length) {
+                    let best = Math.max(0, fromIndex);
                     let bestD = Number.POSITIVE_INFINITY;
-                    for (let i = 0; i < centers.length; i++) {
-                        const dx = centers[i]!.x - center.x;
-                        const dy = centers[i]!.y - center.y;
+                    for (let i = 0; i < ordered.length; i++) {
+                        const card = ordered[i];
+                        const slot = (card as any)?._zoneSlot;
+                        const cx = slot ? (slot.left + (slot.width / 2)) : Number(card?.left || 0);
+                        const cy = slot ? (slot.top + (slot.height / 2)) : Number(card?.top || 0);
+                        const dx = cx - center.x;
+                        const dy = cy - center.y;
                         const d = (dx * dx) + (dy * dy);
                         if (d < bestD) {
                             bestD = d;
@@ -7583,6 +7769,78 @@ const handleObjectModified = (e: any) => {
                         }
                     }
                     toIndex = best;
+                }
+
+                const applyCardToSlot = (card: any, rawSlot: any, order: number) => {
+                    if (!card || !rawSlot) return false;
+                    const slotZoneId = String(rawSlot?.zoneId || '').trim();
+                    if (slotZoneId && slotZoneId !== zoneId) return false;
+                    const slotW = Math.max(2, Number(rawSlot?.width) || 0);
+                    const slotH = Math.max(2, Number(rawSlot?.height) || 0);
+                    const slotLeft = Number(rawSlot?.left);
+                    const slotTop = Number(rawSlot?.top);
+                    if (!Number.isFinite(slotLeft) || !Number.isFinite(slotTop) || !Number.isFinite(slotW) || !Number.isFinite(slotH)) return false;
+
+                    const cx = slotLeft + (slotW / 2);
+                    const cy = slotTop + (slotH / 2);
+
+                    card.parentZoneId = zone._customId;
+                    applyCardFrameBinding(card, zoneFrameId);
+                    card._zoneOrder = order;
+                    (card as any)._zoneSlot = { zoneId: zone._customId, left: slotLeft, top: slotTop, width: slotW, height: slotH };
+
+                    if (card.isSmartObject || card.name?.startsWith('product-card')) {
+                        resizeSmartObject(card, slotW, slotH, stylesToApply);
+                        card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
+                    } else {
+                        card.set({
+                            left: cx,
+                            top: cy,
+                            originX: 'center',
+                            originY: 'center',
+                            scaleX: slotW / (card.width || 1),
+                            scaleY: slotH / (card.height || 1)
+                        });
+                    }
+                    card.setCoords?.();
+                    return true;
+                };
+
+                // Fast path: same slot index and no scaling => snap only this card back to its slot.
+                if (!didScale && fromIndex !== -1 && toIndex === fromIndex) {
+                    const slot = (obj as any)?._zoneSlot;
+                    const slotZoneId = String(slot?.zoneId || '').trim();
+                    if (slot && slotZoneId === zoneId) {
+                        const targetCx = slot.left + (slot.width / 2);
+                        const targetCy = slot.top + (slot.height / 2);
+                        const currentCenter = center || { x: Number(obj.left || 0), y: Number(obj.top || 0) };
+                        if (Math.abs(currentCenter.x - targetCx) > 0.25 || Math.abs(currentCenter.y - targetCy) > 0.25) {
+                            if (fabric?.Point && typeof obj.setPositionByOrigin === 'function') {
+                                obj.setPositionByOrigin(new fabric.Point(targetCx, targetCy), 'center', 'center');
+                            } else {
+                                obj.set({ left: targetCx, top: targetCy, originX: 'center', originY: 'center' });
+                            }
+                            obj.setCoords?.();
+                        }
+                        canvas.value.requestRenderAll();
+                        return;
+                    }
+                }
+
+                // Fast path: simple 2-card swap in standard grid (no featured layout) without full zone relayout.
+                if (!didScale && !hasFeaturedLayout && fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
+                    const fromCard = ordered[fromIndex];
+                    const toCard = ordered[toIndex];
+                    const fromSlot = (fromCard as any)?._zoneSlot;
+                    const toSlot = (toCard as any)?._zoneSlot;
+                    if (
+                        applyCardToSlot(fromCard, toSlot, toIndex) &&
+                        applyCardToSlot(toCard, fromSlot, fromIndex)
+                    ) {
+                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
+                        canvas.value.requestRenderAll();
+                        return;
+                    }
                 }
 
                 if (fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
@@ -7648,6 +7906,68 @@ const syncSmartGridStyles = (sourceObj: any, property: string, value: any) => {
     });
 }
 
+const repairZoneCardsAfterHistoryRestore = () => {
+    if (!canvas.value) return;
+    const objs = canvas.value.getObjects() || [];
+    const zones = objs.filter((o: any) => isLikelyProductZone(o));
+    if (!zones.length) return;
+
+    const cardLike = (o: any) => {
+        if (!o || o.type !== 'group') return false;
+        return !!(o.isSmartObject || o.isProductCard || isLikelyProductCard(o));
+    };
+
+    let repairedZones = 0;
+
+    zones.forEach((zone: any) => {
+        const zoneId = String((zone as any)?._customId || '').trim();
+        if (!zoneId) return;
+        const cards = objs.filter((o: any) => cardLike(o) && String((o as any)?.parentZoneId || '').trim() === zoneId);
+        if (!cards.length) return;
+
+        cards.forEach((card: any) => {
+            if (card.visible === false) card.visible = true;
+            if (!Number.isFinite(Number(card.opacity)) || Number(card.opacity) <= 0) card.opacity = 1;
+            card.set?.({ objectCaching: false, statefullCache: false, dirty: true });
+            card.setCoords?.();
+        });
+
+        const zm = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
+        const margin = Math.max(40, Math.min(zm.width, zm.height) * 0.08);
+        const hasAnyCardNearZone = cards.some((card: any) => {
+            const center = typeof card.getCenterPoint === 'function'
+                ? card.getCenterPoint()
+                : { x: Number(card.left || 0), y: Number(card.top || 0) };
+            const nearByCenter =
+                center.x >= (zm.left - margin) &&
+                center.x <= (zm.left + zm.width + margin) &&
+                center.y >= (zm.top - margin) &&
+                center.y <= (zm.top + zm.height + margin);
+            if (nearByCenter) return true;
+            try {
+                return typeof zone.intersectsWithObject === 'function' && zone.intersectsWithObject(card);
+            } catch {
+                return false;
+            }
+        });
+
+        if (!hasAnyCardNearZone) {
+            try {
+                recalculateZoneLayout(zone, cards, { save: false });
+                repairedZones += 1;
+            } catch (err) {
+                console.warn('[history-repair] Failed to relayout zone after undo/redo', err);
+            }
+        }
+    });
+
+    if (repairedZones > 0) {
+        canvas.value.requestRenderAll();
+        canvasObjects.value = [...canvas.value.getObjects()];
+        console.log(`[history-repair] Repaired ${repairedZones} zone(s) after undo/redo`);
+    }
+};
+
 
 const undo = async () => {
     if (historyIndex.value > 0 && !isHistoryProcessing.value) {
@@ -7662,7 +7982,7 @@ const undo = async () => {
             return;
         }
 
-        let state = JSON.parse(stateStr);
+        let state = prepareCanvasDataForLoad(JSON.parse(stateStr));
 
         // CRITICAL: Check if state has objects, try to find a valid one if empty
         if (!state.objects || state.objects.length === 0) {
@@ -7695,7 +8015,8 @@ const undo = async () => {
             await canvas.value.loadFromJSON(state);
             // CRITICAL: sanitize clipPaths BEFORE any render to avoid fabric crash (forEach of undefined)
             sanitizeAllClipPaths();
-            rehydrateCanvasZones();
+            rehydrateCanvasZones({ relayout: false, applyZoneStyles: false });
+            repairZoneCardsAfterHistoryRestore();
             sanitizeAllClipPaths();
 
             // CRITICAL: Verify objects were actually loaded
@@ -7708,9 +8029,10 @@ const undo = async () => {
                 const currentPage = project.pages[project.activePageIndex];
                 if (currentPage && currentPage.canvasData && currentPage.canvasData.objects && currentPage.canvasData.objects.length > 0) {
                     console.log('🔄 Recarregando canvasData da página...');
-                    await canvas.value.loadFromJSON(currentPage.canvasData);
+                    await canvas.value.loadFromJSON(prepareCanvasDataForLoad(currentPage.canvasData));
                     sanitizeAllClipPaths();
-                    rehydrateCanvasZones();
+                    rehydrateCanvasZones({ relayout: false, applyZoneStyles: false });
+                    repairZoneCardsAfterHistoryRestore();
                 }
             }
 
@@ -7787,7 +8109,7 @@ const redo = async () => {
             return;
         }
 
-        let state = JSON.parse(stateStr);
+        let state = prepareCanvasDataForLoad(JSON.parse(stateStr));
 
         // CRITICAL: Check if state has objects, try to find a valid one if empty
         if (!state.objects || state.objects.length === 0) {
@@ -7820,7 +8142,8 @@ const redo = async () => {
             await canvas.value.loadFromJSON(state);
             // CRITICAL: sanitize clipPaths BEFORE any render to avoid fabric crash (forEach of undefined)
             sanitizeAllClipPaths();
-            rehydrateCanvasZones();
+            rehydrateCanvasZones({ relayout: false, applyZoneStyles: false });
+            repairZoneCardsAfterHistoryRestore();
             sanitizeAllClipPaths();
 
             // CRITICAL: Verify objects were actually loaded
@@ -7833,9 +8156,10 @@ const redo = async () => {
                 const currentPage = project.pages[project.activePageIndex];
                 if (currentPage && currentPage.canvasData && currentPage.canvasData.objects && currentPage.canvasData.objects.length > 0) {
                     console.log('🔄 Recarregando canvasData da página...');
-                    await canvas.value.loadFromJSON(currentPage.canvasData);
+                    await canvas.value.loadFromJSON(prepareCanvasDataForLoad(currentPage.canvasData));
                     sanitizeAllClipPaths();
-                    rehydrateCanvasZones();
+                    rehydrateCanvasZones({ relayout: false, applyZoneStyles: false });
+                    repairZoneCardsAfterHistoryRestore();
                 }
             }
 
@@ -7905,7 +8229,12 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     const rootId = String(frame._customId || '');
     if (!rootId) return null;
 
-    const offset = Number(opts.offset ?? 20) || 0;
+    const rootBounds = getFrameBounds(frame);
+    const fallbackRootWidth = (Number(frame.width) || 0) * (Number(frame.scaleX) || 1);
+    const rootWidth = Number(rootBounds?.width) || fallbackRootWidth || 1080;
+    const gap = Number(opts.offset ?? FRAME_SPAWN_GAP) || FRAME_SPAWN_GAP;
+    const offsetX = rootWidth + gap;
+    const offsetY = 0;
 
     const all = canvas.value.getObjects();
     const indexById = new Map<string, number>();
@@ -7958,8 +8287,8 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
 
         cloned._customId = newId;
         cloned.set?.({
-            left: (Number(original.left) || 0) + offset,
-            top: (Number(original.top) || 0) + offset,
+            left: (Number(original.left) || 0) + offsetX,
+            top: (Number(original.top) || 0) + offsetY,
             evented: true,
             selectable: true,
         });
@@ -8053,6 +8382,219 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     return rootClone;
 };
 
+const DUPLICATE_OFFSET = 20;
+const DUPLICATE_CLONE_PROPS = Array.from(new Set([
+    ...CANVAS_CUSTOM_PROPS,
+    'data',
+    'opacity',
+    'flipX',
+    'flipY',
+    'filters',
+    'clipPath',
+    'src',
+    'originX',
+    'originY',
+    'angle',
+    'scaleX',
+    'scaleY',
+    'parentFrameId',
+    'parentZoneId',
+    'isSmartObject',
+    'isProductCard',
+    'name',
+    'layerName',
+    'clipContent',
+    'smartGridId',
+    '_cardWidth',
+    '_cardHeight',
+    '_zoneOrder',
+    '_zoneSlot',
+    'subTargetCheck',
+    'interactive',
+]));
+
+const isActiveSelectionObject = (obj: any) => String(obj?.type || '').toLowerCase() === 'activeselection';
+
+const isProductCardContainer = (group: any) => {
+    if (!group) return false;
+    if (String(group.type || '').toLowerCase() !== 'group') return false;
+    return !!(
+        group.isSmartObject ||
+        group.isProductCard ||
+        String(group.name || '').startsWith('product-card') ||
+        isLikelyProductCard(group)
+    );
+};
+
+const assignNewCustomIdsDeep = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return;
+    obj._customId = Math.random().toString(36).substr(2, 9);
+    if (typeof obj.getObjects === 'function') {
+        (obj.getObjects() || []).forEach((child: any) => assignNewCustomIdsDeep(child));
+    }
+};
+
+const findProductCardParentGroup = (obj: any) => {
+    if (!obj || !canvas.value) return null;
+    const direct = (obj as any).group;
+    if (isProductCardContainer(direct)) return direct;
+
+    const targetId = String((obj as any)?._customId || '').trim();
+    const all = canvas.value.getObjects();
+    for (const candidate of all) {
+        if (!isProductCardContainer(candidate) || typeof candidate.getObjects !== 'function') continue;
+        const children = candidate.getObjects() || [];
+        const contains = children.some((child: any) => (
+            child === obj ||
+            (targetId && String(child?._customId || '').trim() === targetId)
+        ));
+        if (contains) return candidate;
+    }
+    return null;
+};
+
+const duplicateObjectWithContext = async (
+    original: any,
+    opts: { offsetX?: number; offsetY?: number } = {}
+) => {
+    if (!canvas.value || !original) return null;
+    const offsetX = Number(opts.offsetX ?? DUPLICATE_OFFSET) || 0;
+    const offsetY = Number(opts.offsetY ?? DUPLICATE_OFFSET) || 0;
+
+    let cloned: any = null;
+    try {
+        cloned = await (original as any).clone(DUPLICATE_CLONE_PROPS);
+    } catch (err) {
+        console.warn('[duplicate] Falha ao clonar objeto', err);
+        return null;
+    }
+    if (!cloned) return null;
+
+    assignNewCustomIdsDeep(cloned);
+
+    const parentCardGroup = findProductCardParentGroup(original);
+    const cloneInsideCard =
+        !!parentCardGroup &&
+        original !== parentCardGroup &&
+        !isProductCardContainer(original) &&
+        !isActiveSelectionObject(original);
+
+    if (cloneInsideCard && parentCardGroup) {
+        const localLeft = Number((original as any).left) || 0;
+        const localTop = Number((original as any).top) || 0;
+        const targetCanvas = groupLocalToCanvasPoint(parentCardGroup, localLeft + offsetX, localTop + offsetY);
+
+        cloned.set({
+            left: targetCanvas.x,
+            top: targetCanvas.y,
+            originX: (original as any).originX || 'center',
+            originY: (original as any).originY || 'center',
+            angle: (original as any).angle || 0,
+            scaleX: (original as any).scaleX || 1,
+            scaleY: (original as any).scaleY || 1,
+            flipX: !!(original as any).flipX,
+            flipY: !!(original as any).flipY,
+            opacity: (original as any).opacity ?? 1,
+            selectable: true,
+            evented: true,
+            hasControls: true,
+            hasBorders: true,
+        });
+
+        // Child clones inside product cards should not carry top-level zone/frame bindings.
+        cloned.parentZoneId = undefined;
+        cloned.parentFrameId = undefined;
+        safeAddWithUpdate(parentCardGroup, cloned);
+        parentCardGroup.set({ subTargetCheck: true, interactive: true });
+        parentCardGroup.setCoords?.();
+        return cloned;
+    }
+
+    cloned.set({
+        left: (Number((original as any).left) || 0) + offsetX,
+        top: (Number((original as any).top) || 0) + offsetY,
+        originX: (original as any).originX || cloned.originX || 'center',
+        originY: (original as any).originY || cloned.originY || 'center',
+        angle: (original as any).angle || cloned.angle || 0,
+        scaleX: (original as any).scaleX || cloned.scaleX || 1,
+        scaleY: (original as any).scaleY || cloned.scaleY || 1,
+        flipX: !!(original as any).flipX,
+        flipY: !!(original as any).flipY,
+        opacity: (original as any).opacity ?? cloned.opacity ?? 1,
+        selectable: true,
+        evented: true,
+    });
+    canvas.value.add(cloned);
+
+    return cloned;
+};
+
+const duplicateActiveObjectWithContext = async (
+    active: any,
+    opts: { offsetX?: number; offsetY?: number } = {}
+) => {
+    if (!canvas.value || !active) return [] as any[];
+
+    if (isActiveSelectionObject(active) && typeof (active as any).getObjects === 'function') {
+        const members = ((active as any).getObjects?.() || []).slice();
+        canvas.value.discardActiveObject();
+        const clones: any[] = [];
+        for (const member of members) {
+            const cloned = await duplicateObjectWithContext(member, opts);
+            if (cloned) clones.push(cloned);
+        }
+        return clones;
+    }
+
+    const cloned = await duplicateObjectWithContext(active, opts);
+    return cloned ? [cloned] : [];
+};
+
+const finalizeDuplicatedObjects = (clones: any[]) => {
+    if (!canvas.value || !Array.isArray(clones) || clones.length === 0) return;
+
+    const affectedZones = new Map<string, any>();
+    clones.forEach((obj: any) => {
+        if (!obj) return;
+        if (obj?.isFrame) {
+            getOrCreateFrameClipRect(obj);
+            syncFrameClips(obj);
+        } else if (obj?.parentFrameId || obj?._frameClipOwner) {
+            syncObjectFrameClip(obj);
+        }
+
+        if (shouldApplyContainmentConstraints(obj)) {
+            applyContainmentConstraints(obj);
+        }
+
+        const zoneId = String((obj as any)?.parentZoneId || '').trim();
+        if (!zoneId) return;
+        const zone = getContainmentZoneById(zoneId) || canvas.value?.getObjects()?.find((o: any) => (
+            isLikelyProductZone(o) && String((o as any)?._customId || '').trim() === zoneId
+        ));
+        if (!zone) return;
+        applyCardFrameBinding(obj, getResolvedZoneFrameId(zone));
+        affectedZones.set(zoneId, zone);
+    });
+
+    affectedZones.forEach((zone: any) => {
+        ensureZoneSanity(zone);
+        recalculateZoneLayout(zone, getZoneChildren(zone), { save: false });
+    });
+
+    const topLevelClones = clones.filter((obj: any) => !obj?.group);
+    if (topLevelClones.length > 1 && fabric?.ActiveSelection) {
+        const selection = new fabric.ActiveSelection(topLevelClones, { canvas: canvas.value });
+        canvas.value.setActiveObject(selection);
+    } else {
+        canvas.value.setActiveObject(clones[0]);
+    }
+
+    canvas.value.requestRenderAll();
+    canvasObjects.value = [...canvas.value.getObjects()];
+    updateSelection();
+};
+
 const handleKeyDown = async (e: KeyboardEvent) => {
     if (!canvas.value) return;
 
@@ -8068,6 +8610,15 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         target.tagName === 'TEXTAREA' || 
         target.isContentEditable ||
         target.closest('input, textarea, [contenteditable="true"]')) {
+        return;
+    }
+
+    if (e.code === 'Space') {
+        isSpacePanPressed = true;
+        if (!isPenMode.value && !isNodeEditing.value && !isDrawing.value) {
+            canvas.value.defaultCursor = 'grab';
+        }
+        e.preventDefault();
         return;
     }
 
@@ -8106,7 +8657,15 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         handleZoom100();
         return;
     }
-    if (e.shiftKey && e.key === '1') {
+    // Fit to screen (enquadrar área de design inteira na viewport)
+    // Use `code` because on many layouts Shift+1 yields `!` (not `1`).
+    if (e.shiftKey && (e.code === 'Digit1' || e.key === '1' || e.key === '!')) {
+        e.preventDefault();
+        zoomToFit();
+        return;
+    }
+    // Extra shortcut: `F` (when not using Ctrl/Cmd) for quick fit-to-screen.
+    if (!isCtrl && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault();
         zoomToFit();
         return;
@@ -8183,10 +8742,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                     group.remove(obj);
                     group.set('dirty', true);
                     if (typeof group.setCoords === 'function') group.setCoords();
-                    console.log('🗑️ [Delete] Objeto removido do grupo:', {
-                        objectName: obj.name || obj._customId,
-                        parentGroupName: group.name || group._customId
-                    });
                 } catch (err) {
                     console.warn('[Delete] Erro ao remover do grupo, tentando canvas:', err);
                     try { canvas.value.remove(obj); } catch {}
@@ -8217,7 +8772,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                         ownChildren.forEach((ch: any) => { try { canvas.value!.remove(ch); } catch {} });
                     }
                     canvas.value.remove(obj);
-                    console.log('🗑️ [Delete] Objeto removido do canvas:', obj.name || obj._customId);
                 } catch (err) {
                     console.warn('[Delete] Erro ao remover do canvas:', err);
                 }
@@ -8264,8 +8818,9 @@ const handleKeyDown = async (e: KeyboardEvent) => {
 
             active.setCoords();
             getOrCreateFrameClipRect(active);
+            invalidateScrollbarBounds();
             canvas.value.requestRenderAll();
-            saveCurrentState();
+            keyboardNudgeDirty = true;
             return;
         }
 
@@ -8287,6 +8842,8 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                 const dx = active.left - prevLeft;
                 const dy = active.top - prevTop;
                 moveZoneChildren(active, dx, dy);
+                maybeReparentToFrameOnDrop(active);
+                syncZoneCardFrameBindings(active);
             }
             if (active.isFrame) {
                 const dx = active.left - prevLeft;
@@ -8294,8 +8851,10 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                 moveFrameDescendants(active, dx, dy);
                 getOrCreateFrameClipRect(active);
             }
+            invalidateScrollbarBounds();
             canvas.value.requestRenderAll();
-            updateScrollbars(); // Update bars when moving via keys
+            throttledUpdateScrollbars();
+            keyboardNudgeDirty = true;
         } else {
             // If no object selected, arrows pan the canvas
             e.preventDefault();
@@ -8306,7 +8865,8 @@ const handleKeyDown = async (e: KeyboardEvent) => {
             if (e.key === 'ArrowLeft') vpt[4] += step;
             if (e.key === 'ArrowRight') vpt[4] -= step;
             canvas.value.requestRenderAll();
-            updateScrollbars();
+            throttledUpdateScrollbars();
+            keyboardNudgeDirty = true;
         }
     }
 
@@ -8362,7 +8922,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                                 if (containsImage) {
                                     (cloned as any)._sourceGroupRef = obj;
                                     (cloned as any)._sourceGroupId = obj._customId;
-                                    console.log('📋 [copy] Found parent group via canvas search:', obj._customId || obj.name);
                                     break;
                                 }
                             }
@@ -8371,11 +8930,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                 }
                 
                 (window as any)._clipboard = cloned;
-                console.log('📋 [copy] Stored clipboard:', {
-                    sourceGroupId: (cloned as any)._sourceGroupId,
-                    sourceLeft: (cloned as any)._sourceLeft,
-                    sourceTop: (cloned as any)._sourceTop
-                });
             } catch (err) {
                 console.warn('[clipboard] Falha ao copiar (clone)', err);
             }
@@ -8437,9 +8991,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                         ) || null;
                     }
                     
-                    if (originalParentGroup) {
-                        console.log('📦 [paste] Found source group from clipboard:', originalParentGroup._customId || originalParentGroup.name);
-                    }
                 }
                 
                 // SECOND PRIORITY: Check if activeBeforePaste is an image inside a product card
@@ -8457,7 +9008,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                                 );
                                 if (containsActiveImage) {
                                     originalParentGroup = obj;
-                                    console.log('📦 [paste] Found group via active image:', obj._customId || obj.name);
                                     break;
                                 }
                             }
@@ -8469,12 +9019,10 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                 if (!originalParentGroup && activeBeforePaste) {
                     if (activeBeforePaste.type === 'group' && (activeBeforePaste.isSmartObject || activeBeforePaste.isProductCard || isLikelyProductCard(activeBeforePaste))) {
                         originalParentGroup = activeBeforePaste;
-                        console.log('📦 [paste] Active object is a product card group:', activeBeforePaste._customId || activeBeforePaste.name);
                     } else if ((activeBeforePaste as any).group) {
                         const parentGroup = (activeBeforePaste as any).group;
                         if (parentGroup.isSmartObject || parentGroup.isProductCard || isLikelyProductCard(parentGroup)) {
                             originalParentGroup = parentGroup;
-                            console.log('📦 [paste] Found via activeBeforePaste.group:', parentGroup._customId || parentGroup.name);
                         }
                     }
                 }
@@ -8489,17 +9037,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                 const isPastingProductCard = 
                     String(cloned.type || '').toLowerCase() === 'group' &&
                     (cloned.isSmartObject || cloned.isProductCard || String(cloned.name || '').startsWith('product-card') || isLikelyProductCard(cloned));
-
-                console.log('🔍 Paste check:', {
-                    hasParentGroup: !!originalParentGroup,
-                    isProductCardGroup,
-                    isInnerImage,
-                    isPastingProductCard,
-                    clipType: clip.type,
-                    activeObjType: activeBeforePaste?.type,
-                    parentGroupName: originalParentGroup?.name || originalParentGroup?._customId,
-                    groupChildrenCount: originalParentGroup ? (typeof originalParentGroup.getObjects === 'function' ? originalParentGroup.getObjects().length : 0) : 0
-                });
 
                 canvas.value.discardActiveObject();
 
@@ -8522,15 +9059,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                     targetLeft += 20;
                     targetTop += 20;
                     
-                    console.log('📍 Paste coordinates (from clipboard source):', {
-                        sourceLeft: (clip as any)._sourceLeft,
-                        sourceTop: (clip as any)._sourceTop,
-                        targetLeft,
-                        targetTop,
-                        groupWidth: originalParentGroup.width,
-                        groupHeight: originalParentGroup.height
-                    });
-                    
                     // IMPORTANT: When adding an object into an existing group, Fabric expects object coords in CANVAS space.
                     // It will convert them into group-local space when entering the group.
                     const targetCanvas = groupLocalToCanvasPoint(originalParentGroup, targetLeft, targetTop);
@@ -8552,12 +9080,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                         hasBorders: true,
                     });
 
-                    console.log('📦 Adicionando imagem ao grupo:', {
-                        groupName: originalParentGroup.name || originalParentGroup._customId,
-                        childrenBefore: originalParentGroup.getObjects().length,
-                        clonedCoords: { left: cloned.left, top: cloned.top }
-                    });
-                    
                     // CRITICAL: Add via safeAddWithUpdate(group, obj) so Fabric enters group coordinate system correctly.
                     // This prevents the object from rendering using canvas coords ("nasce fora").
                     safeAddWithUpdate(originalParentGroup, cloned);
@@ -8566,13 +9088,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                     originalParentGroup.set({ subTargetCheck: true, interactive: true });
                     originalParentGroup.setCoords?.();
                     
-                    console.log('✅ Imagem adicionada ao grupo:', {
-                        groupName: originalParentGroup.name || originalParentGroup._customId,
-                        childrenAfter: originalParentGroup.getObjects().length,
-                        clonedId: cloned._customId,
-                        clonedFinalCoords: { left: cloned.left, top: cloned.top }
-                    });
-
                     // Select the cloned image (important: select within the group context)
                     canvas.value.setActiveObject(cloned);
                     canvas.value.requestRenderAll();
@@ -8647,128 +9162,17 @@ const handleKeyDown = async (e: KeyboardEvent) => {
             return;
         }
 
-        // Special case: duplicating the product image inside a product card (group).
-        // When an inner image is selected (deep select), cloning it to the canvas would use group-local coords and look "broken".
-        // We duplicate inside the same group so it behaves predictably.
-        const parentGroup = (active as any).group;
-        const isProductCardGroup =
-            parentGroup &&
-            String(parentGroup.type || '').toLowerCase() === 'group' &&
-            (parentGroup.isSmartObject || parentGroup.isProductCard || String(parentGroup.name || '').startsWith('product-card') || isLikelyProductCard(parentGroup));
-        const isInnerImage = String((active as any).type || '').toLowerCase() === 'image' && !!parentGroup;
-
-        if (isProductCardGroup && isInnerImage) {
-            try {
-                const cloned: any = await (active as any).clone(['_customId', 'name', 'opacity', 'flipX', 'flipY', 'clipPath', 'filters']);
-                if (!cloned) return;
-                cloned._customId = Math.random().toString(36).substr(2, 9);
-                cloned.set({
-                    left: (Number(active.left) || 0) + 20,
-                    top: (Number(active.top) || 0) + 20,
-                    originX: active.originX || 'center',
-                    originY: active.originY || 'center',
-                    angle: active.angle || 0,
-                    scaleX: active.scaleX || 1,
-                    scaleY: active.scaleY || 1,
-                    flipX: !!active.flipX,
-                    flipY: !!active.flipY,
-                    opacity: active.opacity ?? 1,
-                    selectable: true,
-                    evented: true,
-                    hasControls: true,
-                    hasBorders: true,
-                });
-
-                // Insert right after the original when possible
-                try {
-                    const list = typeof parentGroup.getObjects === 'function' ? parentGroup.getObjects() : [];
-                    const idx = Array.isArray(list) ? list.indexOf(active) : -1;
-                    if (typeof parentGroup.insertAt === 'function' && idx >= 0) parentGroup.insertAt(cloned, idx + 1);
-                    else parentGroup.add(cloned);
-                } catch {
-                    parentGroup.add(cloned);
-                }
-
-                // Ensure parent stays in deep-select mode so the new image can be selected/moved.
-                parentGroup.set({ subTargetCheck: true, interactive: true });
-                safeAddWithUpdate(parentGroup);
-                parentGroup.setCoords?.();
-
-                // Select the clone
-                canvas.value.setActiveObject(cloned);
-                canvas.value.requestRenderAll();
-                canvasObjects.value = [...canvas.value.getObjects()];
-                saveCurrentState({ reason: 'duplicate-inside-card' });
-                triggerAutoSave();
-            } catch (err) {
-                console.warn('[duplicate] Falha ao duplicar imagem interna', err);
-            }
-            return;
-        }
-
-        // Clone o objeto ativo
         try {
-            const cloned: any = await (active as any).clone(['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name', 'isGridCell', 'gridGroupId', 'gridCol', 'gridRow']);
-            // Offset para posicionar o clone ao lado do original
-            const offset = 20;
-            cloned.set({
-                left: (cloned.left || active.left) + offset,
-                top: (cloned.top || active.top) + offset,
-                evented: true,
-                selectable: true,
-            });
-
-            // Se for uma seleção múltipla (activeSelection)
-            if (cloned.type === 'activeSelection') {
-                cloned.canvas = canvas.value;
-                // Adiciona cada objeto do grupo e atribui novos IDs
-                cloned.forEachObject((obj: any) => {
-                    obj._customId = Math.random().toString(36).substr(2, 9);
-                    // Se o objeto tinha parentFrameId, mantém a referência
-                    if (active.parentFrameId && !obj.parentFrameId) {
-                        obj.parentFrameId = active.parentFrameId;
-                    }
-                    canvas.value.add(obj);
-                });
-                cloned.setCoords();
-            } else {
-                // Objeto único - atribui novo ID
-                cloned._customId = Math.random().toString(36).substr(2, 9);
-                
-                // Preserva propriedades customizadas importantes
-                if (active.isFrame) {
-                    cloned.isFrame = true;
-                    cloned.layerName = active.layerName || 'FRAMER';
-                    cloned.clipContent = active.clipContent !== false;
-                    cloned.stroke = active.stroke || '#0d99ff';
-                }
-                
-                // Se tinha parentFrameId, mantém a referência
-                if (active.parentFrameId) {
-                    cloned.parentFrameId = active.parentFrameId;
-                }
-                
-                // Se tinha parentZoneId (para cards de produtos), mantém
-                if (active.parentZoneId) {
-                    cloned.parentZoneId = active.parentZoneId;
-                }
-                
-                canvas.value.add(cloned);
-            }
-
-            // Seleciona o clone e atualiza o canvas
-            canvas.value.setActiveObject(cloned);
-            canvas.value.requestRenderAll();
-            
-            // Atualiza a lista de objetos para o LayersPanel
-            canvasObjects.value = [...canvas.value.getObjects()];
-            
-            // Salva o estado para histórico e persistência
-            saveCurrentState({ reason: 'duplicate-selection' });
+            const clones = await duplicateActiveObjectWithContext(active, { offsetX: DUPLICATE_OFFSET, offsetY: DUPLICATE_OFFSET });
+            if (!clones.length) return;
+            finalizeDuplicatedObjects(clones);
+            const reason = isActiveSelectionObject(active) ? 'duplicate-selection-multi' : 'duplicate-selection';
+            saveCurrentState({ reason });
             triggerAutoSave();
         } catch (err) {
             console.warn('[duplicate] Falha ao duplicar seleção', err);
         }
+        return;
     }
 
     // Group / Ungroup (Ctrl+G, Ctrl+Shift+G)
@@ -8842,8 +9246,8 @@ const setupZoomPan = () => {
                      vpt[4] -= (evt.deltaX || delta); // Use deltaX if available, otherwise use delta
                  }
                  
-                 canvas.value.requestRenderAll();
-                 updateScrollbars();
+                 safeRequestRenderAll();
+                 throttledUpdateScrollbars();
             }
         }
         
@@ -8855,9 +9259,48 @@ const setupZoomPan = () => {
     let isDragging = false;
     let lastPosX = 0;
     let lastPosY = 0;
+    let panDxPending = 0;
+    let panDyPending = 0;
+    let panRafPending = false;
+    const flushPan = () => {
+        if (!canvas.value || !canvas.value.viewportTransform) return;
+        if (panDxPending !== 0 || panDyPending !== 0) {
+            canvas.value.viewportTransform[4] += panDxPending;
+            canvas.value.viewportTransform[5] += panDyPending;
+            panDxPending = 0;
+            panDyPending = 0;
+        }
+        safeRequestRenderAll();
+        throttledUpdateScrollbars();
+    };
+    const schedulePanFlush = () => {
+        if (panRafPending) return;
+        panRafPending = true;
+        requestAnimationFrame(() => {
+            panRafPending = false;
+            flushPan();
+        });
+    };
 
     canvas.value.on('mouse:down', (opt: any) => {
         const evt = opt.e;
+
+        // Pan with middle mouse button OR Space + left click.
+        if (
+            (evt?.button === 1 || (evt?.button === 0 && isSpacePanPressed)) &&
+            !isPenMode.value &&
+            !isNodeEditing.value &&
+            !isDrawing.value
+        ) {
+            isDragging = true;
+            lastPosX = evt.clientX;
+            lastPosY = evt.clientY;
+            canvas.value.selection = false;
+            canvas.value.defaultCursor = 'grabbing';
+            evt.preventDefault();
+            evt.stopPropagation();
+            return;
+        }
         
         // Handle node selection during path editing (before pen tool check)
         if (isNodeEditing.value && opt.target && opt.target.name === 'path_node') {
@@ -8970,6 +9413,24 @@ const setupZoomPan = () => {
     // Pen Tool: Track mouse movement for preview line - REAL-TIME with RAF for smooth updates
     let rafPending = false;
     canvas.value.on('mouse:move', (opt: any) => {
+        if (isDragging) {
+            const evt = opt?.e;
+            if (!evt) return;
+            if (evt.buttons === 0) {
+                isDragging = false;
+                canvas.value.selection = true;
+                canvas.value.defaultCursor = isSpacePanPressed ? 'grab' : 'default';
+                flushPan();
+                return;
+            }
+            panDxPending += evt.clientX - lastPosX;
+            panDyPending += evt.clientY - lastPosY;
+            lastPosX = evt.clientX;
+            lastPosY = evt.clientY;
+            schedulePanFlush();
+            return;
+        }
+
         if (isPenMode.value && penPathPoints.value.length > 0) {
             // Get pointer coordinates - try multiple methods for maximum compatibility
             let pointer: {x: number, y: number} | null = null;
@@ -9155,13 +9616,12 @@ const setupZoomPan = () => {
     });
     
     canvas.value.on('mouse:up', (opt: any) => {
-        isDragging = false;
-        
         if (isDragging) {
-             canvas.value.setViewportTransform(canvas.value.viewportTransform);
-             isDragging = false;
-             canvas.value.selection = true;
-             canvas.value.defaultCursor = 'default';
+            isDragging = false;
+            canvas.value.selection = true;
+            canvas.value.defaultCursor = isSpacePanPressed ? 'grab' : 'default';
+            flushPan();
+            return;
         }
         
         // Commit Node Changes for polygons/polylines
@@ -9698,6 +10158,25 @@ const SNAP_RANGE = 10;
 const setupSnapping = () => {
     if (!canvas.value) return;
 
+    if (teardownSnapping) {
+        teardownSnapping();
+        teardownSnapping = null;
+    }
+    if (!canvas.value) return;
+    const canvasInstance = canvas.value;
+
+    // Defensive cleanup for old guide instances left from prior setup runs.
+    const staleGuides = canvasInstance
+        .getObjects()
+        .filter((o: any) => o?.id === 'guide-vertical' || o?.id === 'guide-horizontal');
+    staleGuides.forEach((g: any) => {
+        try {
+            canvasInstance.remove(g);
+        } catch {
+            // ignore stale guide removal errors
+        }
+    });
+
     const verticalGuide = new fabric.Line([0, 0, 0, 10000], {
         stroke: GUIDE_COLOR,
         strokeWidth: 1,
@@ -9721,12 +10200,23 @@ const setupSnapping = () => {
         excludeFromExport: true
     });
 
-    canvas.value.add(verticalGuide);
-    canvas.value.add(horizontalGuide);
+    canvasInstance.add(verticalGuide);
+    canvasInstance.add(horizontalGuide);
+
+    type SnapBounds = {
+        left: number;
+        right: number;
+        top: number;
+        bottom: number;
+        centerX: number;
+        centerY: number;
+        width: number;
+        height: number;
+    };
 
     // FIXED: Use local coordinates to avoid jump/snap issues
     // getBoundingRect(true, true) returns world coordinates which conflict with local positioning
-    const getBounds = (o: any) => {
+    const getBounds = (o: any): SnapBounds => {
         // For objects inside groups, we need to calculate bounds relative to the canvas
         // Use origin-aware calculations to get consistent bounds
         const width = (o.width || 0) * (o.scaleX || 1);
@@ -9845,54 +10335,155 @@ const setupSnapping = () => {
     // === SNAP TARGET CACHING: avoid recalculating on every mouse move ===
     let cachedSnapTargets: any[] | null = null;
     let cachedSnapExclude: any = null;
+    let cachedTargetBounds: Map<any, SnapBounds> | null = null;
+    const frameLookup = new Map<string, any | null>();
+    let cachedZones: any[] | null = null;
+    let cachedZoneById: Map<string, any> | null = null;
+    let cachedZoneMetrics: Map<any, any> | null = null;
+
+    const invalidateSnapCache = () => {
+        cachedSnapTargets = null;
+        cachedSnapExclude = null;
+        cachedTargetBounds = null;
+        cachedZones = null;
+        cachedZoneById = null;
+        cachedZoneMetrics = null;
+        frameLookup.clear();
+    };
 
     const getSnapTargets = (exclude: any) => {
         // Return cached targets if same object being dragged
-        if (cachedSnapTargets && cachedSnapExclude === exclude) return cachedSnapTargets;
+        if (cachedSnapTargets && cachedSnapExclude === exclude && cachedTargetBounds) return cachedSnapTargets;
 
-        const all = canvas.value!.getObjects();
+        const all = canvasInstance.getObjects();
         // Get the parent frame ID of the object being moved (if any)
         const parentFrameId = (exclude as any)?.parentFrameId as string | undefined;
-        
-        cachedSnapTargets = all.filter((o: any) => {
-            if (!o || o === exclude) return false;
-            if (o.excludeFromExport || isControl(o)) return false;
-            if (o.id === 'artboard-bg' || o.id === 'guide-vertical' || o.id === 'guide-horizontal') return false;
+        const nextTargets: any[] = [];
+        const nextBounds = new Map<any, SnapBounds>();
+
+        for (const o of all) {
+            if (!o || o === exclude) continue;
+            if (o.excludeFromExport || isControl(o)) continue;
+            if (o.id === 'artboard-bg' || o.id === 'guide-vertical' || o.id === 'guide-horizontal') continue;
             // CRITICAL: Exclude the parent frame from snap targets to prevent the object
             // from being "stuck" snapping to its own container
-            if (parentFrameId && o.isFrame && o._customId === parentFrameId) return false;
-            return true;
-        });
+            if (parentFrameId && o.isFrame && o._customId === parentFrameId) continue;
+            nextTargets.push(o);
+            nextBounds.set(o, getBounds(o));
+        }
+
+        cachedSnapTargets = nextTargets;
+        cachedTargetBounds = nextBounds;
         cachedSnapExclude = exclude;
         return cachedSnapTargets;
+    };
+
+    const getCachedBounds = (o: any): SnapBounds => {
+        const cached = cachedTargetBounds?.get(o);
+        if (cached) return cached;
+        const fresh = getBounds(o);
+        if (cachedTargetBounds) cachedTargetBounds.set(o, fresh);
+        return fresh;
+    };
+
+    const getSnapFrameById = (frameId: string | undefined) => {
+        if (!frameId) return null;
+        if (frameLookup.has(frameId)) return frameLookup.get(frameId) || null;
+        const frame = canvasInstance.getObjects().find((o: any) => o.isFrame && o._customId === frameId) || null;
+        frameLookup.set(frameId, frame);
+        return frame;
+    };
+
+    const getCachedZoneMetrics = (zone: any) => {
+        if (!zone) return null;
+        if (!cachedZoneMetrics) cachedZoneMetrics = new Map<any, any>();
+        if (cachedZoneMetrics.has(zone)) return cachedZoneMetrics.get(zone) || null;
+        const metrics = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
+        cachedZoneMetrics.set(zone, metrics);
+        return metrics;
+    };
+
+    const getCachedZones = () => {
+        if (cachedZones && cachedZoneById && cachedZoneMetrics) return cachedZones;
+        const zones = canvasInstance.getObjects().filter((o: any) => isLikelyProductZone(o));
+        const byId = new Map<string, any>();
+        const metricsMap = new Map<any, any>();
+        zones.forEach((zone: any) => {
+            const id = String(zone?._customId || '').trim();
+            if (id) byId.set(id, zone);
+            metricsMap.set(zone, getZoneMetrics(zone) ?? zone.getBoundingRect(true));
+        });
+        cachedZones = zones;
+        cachedZoneById = byId;
+        cachedZoneMetrics = metricsMap;
+        return zones;
+    };
+
+    const getCachedZoneById = (zoneId: string) => {
+        const id = String(zoneId || '').trim();
+        if (!id) return null;
+        if (!cachedZoneById) getCachedZones();
+        return cachedZoneById?.get(id) || null;
     };
 
     let lastPointer = { x: 0, y: 0 };
     let constrainAxis: 'x' | 'y' | null = null;
     let constrainRef = { left: 0, top: 0 };
+    const hideGuides = () => {
+        if (verticalGuide.visible) verticalGuide.set({ visible: false });
+        if (horizontalGuide.visible) horizontalGuide.set({ visible: false });
+    };
+    const syncMovingFrameClip = (target: any) => {
+        if (!target || target.isFrame || target.excludeFromExport) return;
+        if (!(target as any).parentFrameId) return;
+        try {
+            syncObjectFrameClip(target);
+        } catch {
+            // ignore clip sync errors during drag
+        }
+    };
 
     const getPointer = (evt: MouseEvent) => {
-        const el = canvasEl.value || canvas.value?.getElement?.();
-        if (!el || !canvas.value) return { x: 0, y: 0 };
+        const el = canvasEl.value || canvasInstance.getElement?.();
+        if (!el) return { x: 0, y: 0 };
         const rect = el.getBoundingClientRect();
-        const vpt = canvas.value.viewportTransform || [1, 0, 0, 1, 0, 0];
-        const z = canvas.value.getZoom() || 1;
+        const vpt = canvasInstance.viewportTransform || [1, 0, 0, 1, 0, 0];
+        const z = canvasInstance.getZoom() || 1;
         return {
             x: (evt.clientX - rect.left - vpt[4]) / z,
             y: (evt.clientY - rect.top - vpt[5]) / z
         };
     };
 
-    canvas.value.on('object:moving', (e: any) => {
+    const objectMovingHandler = (e: any) => {
         const obj = e.target;
         const evt = e.e as MouseEvent | undefined;
-        
-        // Hide guides by default
-        verticalGuide.set({ visible: false });
-        horizontalGuide.set({ visible: false });
-        
+
         // Skip for frames and controls
         if (!obj || obj.isFrame || isControl(obj)) {
+            hideGuides();
+            return;
+        }
+
+        // Multi-selection: enforce containment/bindings per member.
+        if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
+            const members = (obj.getObjects() || []).slice();
+            members.forEach((member: any) => {
+                if (!member) return;
+                if (member.group && !member.group.isSmartObject && !member.group.isProductCard && isLikelyProductCard(member.group)) {
+                    member.group.isSmartObject = true;
+                    member.group.isProductCard = true;
+                }
+                if (shouldApplyContainmentConstraints(member)) {
+                    applyContainmentConstraints(member);
+                }
+                try {
+                    if (member.parentFrameId) syncObjectFrameClip(member);
+                } catch {
+                    // ignore clip sync errors during drag
+                }
+            });
+            hideGuides();
             return;
         }
 
@@ -9902,30 +10493,9 @@ const setupSnapping = () => {
             obj.group.isProductCard = true;
         }
 
-        // Mark object dirty to ensure fresh render (keep caching enabled for performance)
-        obj.set('dirty', true);
-
-        // CRITICAL: Update clipPath for objects inside frames with clipping enabled
-        // This ensures the image stays clipped within the frame bounds while moving
-        if ((obj as any).parentFrameId) {
-            const frame = getFrameById((obj as any).parentFrameId);
-            if (frame && frame.clipContent && obj.clipPath) {
-                // Update the clipPath position/angle to match the new object position
-                const objCenter = obj.getCenterPoint ? obj.getCenterPoint() : { x: obj.left, y: obj.top };
-                const frameCenter = frame.getCenterPoint ? frame.getCenterPoint() : { x: frame.left, y: frame.top };
-
-                obj.clipPath.set({
-                    left: frameCenter.x - objCenter.x,
-                    top: frameCenter.y - objCenter.y,
-                    angle: (frame.angle || 0) - (obj.angle || 0)
-                });
-                obj.clipPath.setCoords();
-                obj.clipPath.dirty = true;
-            }
-        }
-
         // SmartObject containment
         if (obj.group && (obj.group as any).isSmartObject) {
+            hideGuides();
             const parentGroup = obj.group;
             const cardW = (parentGroup as any)._cardWidth || parentGroup.width;
             const cardH = (parentGroup as any)._cardHeight || parentGroup.height;
@@ -9948,6 +10518,7 @@ const setupSnapping = () => {
             if (obj.left < minX) obj.set('left', minX); if (obj.left > maxX) obj.set('left', maxX);
             if (obj.top < minY) obj.set('top', minY); if (obj.top > maxY) obj.set('top', maxY);
             obj.setCoords?.();
+            syncMovingFrameClip(obj);
             return;
         }
 
@@ -9968,14 +10539,14 @@ const setupSnapping = () => {
             }
 
             let zone: any = null;
-            const zoneId = String((obj as any).parentZoneId || '');
+            const zoneId = String((obj as any).parentZoneId || '').trim();
             if (zoneId) {
-                zone = canvas.value!.getObjects().find((o: any) => isLikelyProductZone(o) && o?._customId === zoneId);
+                zone = getCachedZoneById(zoneId);
             }
 
             // If zone is missing, try to find one by intersection/nearest.
             if (!zone) {
-                const zones = canvas.value!.getObjects().filter((o: any) => isLikelyProductZone(o));
+                const zones = getCachedZones();
                 const center = typeof obj.getCenterPoint === 'function'
                     ? obj.getCenterPoint()
                     : { x: Number(obj.left || 0), y: Number(obj.top || 0) };
@@ -9992,7 +10563,7 @@ const setupSnapping = () => {
                     } catch {
                         // ignore
                     }
-                    const zm = getZoneMetrics(z) ?? z.getBoundingRect(true);
+                    const zm = getCachedZoneMetrics(z) ?? z.getBoundingRect(true);
                     const zx = (zm.centerX ?? (zm.left + zm.width / 2));
                     const zy = (zm.centerY ?? (zm.top + zm.height / 2));
                     const dx = center.x - zx;
@@ -10006,7 +10577,7 @@ const setupSnapping = () => {
 
                 if (bestZone) {
                     // Only bind if reasonably close; avoids snapping random groups into a zone.
-                    const zm = getZoneMetrics(bestZone) ?? bestZone.getBoundingRect(true);
+                    const zm = getCachedZoneMetrics(bestZone) ?? bestZone.getBoundingRect(true);
                     const maxDim = Math.max(zm.width || 0, zm.height || 0);
                     const maxD = Math.max(120, maxDim * 1.75);
                     if (bestD2 <= (maxD * maxD)) {
@@ -10017,6 +10588,8 @@ const setupSnapping = () => {
             }
 
             if (zone) {
+                const zoneFrameId = getResolvedZoneFrameId(zone);
+                applyCardFrameBinding(obj, zoneFrameId);
                 const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
                 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
                 const objW = obj.getScaledWidth?.() ?? 0;
@@ -10024,12 +10597,22 @@ const setupSnapping = () => {
 
                 // Zone bounds constraint while dragging (reorder happens on drop).
                 if (center) {
-                    const zr = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
+                    const zr = getCachedZoneMetrics(zone) ?? zone.getBoundingRect(true);
                     const pad = typeof (zone as any)._zonePadding === 'number' ? (zone as any)._zonePadding : 20;
-                    const minCx = zr.left + pad + (objW / 2);
-                    const maxCx = (zr.left + zr.width) - pad - (objW / 2);
-                    const minCy = zr.top + pad + (objH / 2);
-                    const maxCy = (zr.top + zr.height) - pad - (objH / 2);
+                    let minCx = zr.left + pad + (objW / 2);
+                    let maxCx = (zr.left + zr.width) - pad - (objW / 2);
+                    let minCy = zr.top + pad + (objH / 2);
+                    let maxCy = (zr.top + zr.height) - pad - (objH / 2);
+                    if (minCx > maxCx) {
+                        const centerX = zr.left + (zr.width / 2);
+                        minCx = centerX;
+                        maxCx = centerX;
+                    }
+                    if (minCy > maxCy) {
+                        const centerY = zr.top + (zr.height / 2);
+                        minCy = centerY;
+                        maxCy = centerY;
+                    }
                     const cx = clamp(center.x, minCx, maxCx);
                     const cy = clamp(center.y, minCy, maxCy);
                     setObjCenterX(obj, cx);
@@ -10041,6 +10624,7 @@ const setupSnapping = () => {
 
         // ProductZone containment
         if (obj.group && (obj.group as any).isProductZone) {
+            hideGuides();
             const zone = obj.group;
             const zoneW = (zone as any)._zoneWidth || zone.width;
             const zoneH = (zone as any)._zoneHeight || zone.height;
@@ -10051,11 +10635,13 @@ const setupSnapping = () => {
             if (obj.originY === 'center') { minY = -halfH + cardH / 2; maxY = halfH - cardH / 2; }
             if (obj.left < minX) obj.set('left', minX); if (obj.left > maxX) obj.set('left', maxX);
             if (obj.top < minY) obj.set('top', minY); if (obj.top > maxY) obj.set('top', maxY);
+            syncMovingFrameClip(obj);
             return;
         }
 
         // SHIFT: constrain to axis
         if (evt?.shiftKey) {
+            hideGuides();
             const ptr = getPointer(evt);
             const dx = Math.abs(ptr.x - lastPointer.x);
             const dy = Math.abs(ptr.y - lastPointer.y);
@@ -10066,6 +10652,7 @@ const setupSnapping = () => {
             if (constrainAxis === 'x') obj.set('top', constrainRef.top);
             if (constrainAxis === 'y') obj.set('left', constrainRef.left);
             lastPointer = ptr;
+            syncMovingFrameClip(obj);
             return;
         }
         constrainAxis = null;
@@ -10074,16 +10661,16 @@ const setupSnapping = () => {
         // === SMART GUIDES - Calculate on-the-fly ===
         const targets = getSnapTargets(obj) || [];
         const b = getBounds(obj);
-        
+
         // Get parent frame for snap targets (if object is inside a frame)
         const parentFrameId = (obj as any).parentFrameId as string | undefined;
-        const parentFrame = parentFrameId ? canvas.value!.getObjects().find((o: any) => o.isFrame && o._customId === parentFrameId) : null;
-        
+        const parentFrame = getSnapFrameById(parentFrameId);
+
         // Page/frame dimensions for center snap
         let pageCX: number, pageCY: number;
         if (parentFrame) {
             // Snap to parent frame center
-            const fb = getBounds(parentFrame);
+            const fb = getCachedBounds(parentFrame);
             pageCX = fb.centerX;
             pageCY = fb.centerY;
         } else {
@@ -10109,28 +10696,28 @@ const setupSnapping = () => {
 
         // Check snap against other objects
         for (const t of targets) {
-            const tb = getBounds(t);
-            
+            const tb = getCachedBounds(t);
+
             // Vertical snaps (left-left, right-right, left-right, right-left, center-center)
             const dl = Math.abs(b.left - tb.left);
             const dr = Math.abs(b.right - tb.right);
             const dlr = Math.abs(b.left - tb.right);
             const drl = Math.abs(b.right - tb.left);
             const dc = Math.abs(b.centerX - tb.centerX);
-            
+
             if (dl < bestVDist) { bestVDist = dl; vX = tb.left; snapVType = 'left'; }
             if (dr < bestVDist) { bestVDist = dr; vX = tb.right; snapVType = 'right'; }
             if (dlr < bestVDist) { bestVDist = dlr; vX = tb.right; snapVType = 'left'; }
             if (drl < bestVDist) { bestVDist = drl; vX = tb.left; snapVType = 'right'; }
             if (dc < bestVDist) { bestVDist = dc; vX = tb.centerX; snapVType = 'center'; }
-            
+
             // Horizontal snaps (top-top, bottom-bottom, top-bottom, bottom-top, center-center)
             const dt = Math.abs(b.top - tb.top);
             const dbo = Math.abs(b.bottom - tb.bottom);
             const dtb = Math.abs(b.top - tb.bottom);
             const dbt = Math.abs(b.bottom - tb.top);
             const dcy2 = Math.abs(b.centerY - tb.centerY);
-            
+
             if (dt < bestHDist) { bestHDist = dt; hY = tb.top; snapHType = 'top'; }
             if (dbo < bestHDist) { bestHDist = dbo; hY = tb.bottom; snapHType = 'bottom'; }
             if (dtb < bestHDist) { bestHDist = dtb; hY = tb.bottom; snapHType = 'top'; }
@@ -10160,32 +10747,55 @@ const setupSnapping = () => {
 
         // Show guides with proper viewport-aware coordinates
         // Use canvas viewport bounds to draw guides across visible area
-        const vpt = canvas.value.viewportTransform;
+        const vpt = canvasInstance.viewportTransform;
         const zoom = vpt ? vpt[0] : 1;
-        const canvasWidth = (canvas.value.width || 1080) / zoom;
-        const canvasHeight = (canvas.value.height || 1920) / zoom;
+        const canvasWidth = (canvasInstance.width || 1080) / zoom;
+        const canvasHeight = (canvasInstance.height || 1920) / zoom;
 
         if (vVisible) verticalGuide.set({ x1: vX, y1: -canvasHeight * 2, x2: vX, y2: canvasHeight * 3, visible: true });
+        else if (verticalGuide.visible) verticalGuide.set({ visible: false });
         if (hVisible) horizontalGuide.set({ x1: -canvasWidth * 2, y1: hY, x2: canvasWidth * 3, y2: hY, visible: true });
+        else if (horizontalGuide.visible) horizontalGuide.set({ visible: false });
 
-        // Fabric already renders after object:moving — only force render when guide visibility actually changed
-        if (vVisible || hVisible) {
-            canvas.value.requestRenderAll();
-        }
-    });
+        // Keep clipping in sync after all snapping/containment adjustments.
+        syncMovingFrameClip(obj);
+    };
 
-    canvas.value.on('mouse:up', () => {
-        verticalGuide.set({ visible: false });
-        horizontalGuide.set({ visible: false });
+    const mouseUpHandler = () => {
+        hideGuides();
         constrainAxis = null;
-        // Invalidate snap target cache on mouse up
-        cachedSnapTargets = null;
-        cachedSnapExclude = null;
-        canvas.value!.requestRenderAll();
+        invalidateSnapCache();
+        safeRequestRenderAll(canvasInstance);
         // CRITICAL: Create fresh snapshot (not just triggerRef) so PropertiesPanel
         // sees updated position/dimension/zone values after drag/resize.
         refreshSelectedRef();
-    });
+    };
+
+    canvasInstance.on('object:moving', objectMovingHandler);
+    canvasInstance.on('mouse:up', mouseUpHandler);
+    canvasInstance.on('object:added', invalidateSnapCache);
+    canvasInstance.on('object:removed', invalidateSnapCache);
+    canvasInstance.on('object:modified', invalidateSnapCache);
+
+    teardownSnapping = () => {
+        try {
+            canvasInstance.off('object:moving', objectMovingHandler);
+            canvasInstance.off('mouse:up', mouseUpHandler);
+            canvasInstance.off('object:added', invalidateSnapCache);
+            canvasInstance.off('object:removed', invalidateSnapCache);
+            canvasInstance.off('object:modified', invalidateSnapCache);
+        } catch {
+            // ignore teardown errors
+        }
+        hideGuides();
+        try {
+            if (verticalGuide.canvas === canvasInstance) canvasInstance.remove(verticalGuide);
+            if (horizontalGuide.canvas === canvasInstance) canvasInstance.remove(horizontalGuide);
+        } catch {
+            // ignore guide cleanup errors
+        }
+        invalidateSnapCache();
+    };
 }
 
 // Global updateFloatingUI function
@@ -10274,8 +10884,7 @@ const updateSelection = () => {
             isLocked: !!(active.lockMovementX || active.lockMovementY || active.lockScalingX || active.lockScalingY),
         };
         productZoneState.updateZone(zoneConfig);
-        const zoneStyles = (active as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value ?? {};
-        productZoneState.updateGlobalStyles(zoneStyles);
+        productZoneState.updateGlobalStyles(getZoneGlobalStyles(active));
     }
     // Se um card de produto for selecionado, carregar os estilos da zona pai
     else if (active && isLikelyProductCard(active)) {
@@ -10285,8 +10894,7 @@ const updateSelection = () => {
                 isLikelyProductZone(o) && o._customId === parentZoneId
             );
             if (parentZone) {
-                const zoneStyles = (parentZone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value ?? {};
-                productZoneState.updateGlobalStyles(zoneStyles);
+                productZoneState.updateGlobalStyles(getZoneGlobalStyles(parentZone));
             }
         }
     }
@@ -10300,40 +10908,8 @@ const cleanupOrphanedObjects = () => {
     const toRemove: any[] = [];
     
     objs.forEach((o: any) => {
-        const name = o.name || '';
-        
-        // Remove control objects that shouldn't exist outside editing mode
-        if (name === 'path_node' || name === 'bezier_handle' || name === 'control_point' || name === 'handle_line') {
-            toRemove.push(o);
-            return;
-        }
-        
-        // Remove preview objects
-        if (o.excludeFromExport) {
-            toRemove.push(o);
-            return;
-        }
-        
-        // Remove ALL small circles (radius <= 7) without _customId - these are control points
-        if (o.type === 'circle' && o.radius && o.radius <= 7 && !o._customId) {
-            toRemove.push(o);
-            return;
-        }
-        
-        // Remove circles without _customId that have data (parentPath, parentObj) - control circles
-        if (o.type === 'circle' && !o._customId && o.data) {
-            toRemove.push(o);
-            return;
-        }
-        
-        // Remove lines without _customId (handle lines)
-        if (o.type === 'line' && !o._customId) {
-            toRemove.push(o);
-            return;
-        }
-        
-        // Remove paths without _customId and marked as preview
-        if (o.type === 'path' && !o._customId && !o.isVectorPath) {
+        ensurePersistentContentFlags(o);
+        if (isTransientCanvasObject(o)) {
             toRemove.push(o);
             return;
         }
@@ -10367,13 +10943,56 @@ const setupReactivity = () => {
     };
 
     const getStylesForCard = (card: any): Partial<GlobalStyles> => {
-        if (!canvas.value) return productZoneState.globalStyles.value;
+        if (!canvas.value) return normalizeGlobalStyles(productZoneState.globalStyles.value);
         const zoneId = card?.parentZoneId;
         if (zoneId) {
             const zone = canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && (o as any)._customId === zoneId);
-            if (zone && (zone as any)._zoneGlobalStyles) return (zone as any)._zoneGlobalStyles as any;
+            if (zone) return getZoneGlobalStyles(zone);
         }
-        return productZoneState.globalStyles.value;
+        return normalizeGlobalStyles(productZoneState.globalStyles.value);
+    };
+
+    const isProductCardImage = (img: any) => {
+        if (!img || String(img.type || '').toLowerCase() !== 'image') return false;
+        const parent = img.group;
+        if (!parent) return false;
+        return !!(
+            parent.isSmartObject ||
+            parent.isProductCard ||
+            hasParentZoneBinding(parent) ||
+            String(parent.name || '').startsWith('product-card') ||
+            isLikelyProductCard(parent)
+        );
+    };
+
+    const sanitizeProductCardImageTransform = (img: any, opts: { clampWithinCard?: boolean } = {}) => {
+        if (!img || !isProductCardImage(img)) return false;
+        const clampWithinCard = opts.clampWithinCard !== false;
+        const nextScaleX = Math.abs(Number(img.scaleX ?? 1)) || 1;
+        const nextScaleY = Math.abs(Number(img.scaleY ?? 1)) || 1;
+
+        img.set({
+            scaleX: nextScaleX,
+            scaleY: nextScaleY,
+            flipX: false,
+            flipY: false,
+            lockScalingFlip: true,
+            lockSkewingX: true,
+            lockSkewingY: true
+        });
+        img.setCoords?.();
+
+        if (clampWithinCard) {
+            applyContainmentConstraints(img);
+        }
+
+        const parent = img.group;
+        if (parent) {
+            parent.dirty = true;
+            parent.setCoords?.();
+        }
+
+        return true;
     };
 
     const normalizeCardScaleAndRelayout = (card: any, opts: { save?: boolean } = {}) => {
@@ -10463,9 +11082,15 @@ const setupReactivity = () => {
             width: cropW,
             height: cropH,
             cropX: nextCropX,
-            cropY: nextCropY
+            cropY: nextCropY,
+            flipX: false,
+            flipY: false,
+            lockScalingFlip: true,
+            lockSkewingX: true,
+            lockSkewingY: true
         });
 
+        sanitizeProductCardImageTransform(img, { clampWithinCard: true });
         safeAddWithUpdate(img);
         img.setCoords?.();
         canvas.value.requestRenderAll();
@@ -10568,13 +11193,19 @@ const setupReactivity = () => {
             width: nextCropW,
             height: nextCropH,
             cropX: nextCropX,
-            cropY: nextCropY
+            cropY: nextCropY,
+            flipX: false,
+            flipY: false,
+            lockScalingFlip: true,
+            lockSkewingX: true,
+            lockSkewingY: true
         });
 
         if (anchorPoint && typeof img.setPositionByOrigin === 'function') {
             img.setPositionByOrigin(anchorPoint, anchorOriginX, anchorOriginY);
         }
 
+        sanitizeProductCardImageTransform(img, { clampWithinCard: true });
         safeAddWithUpdate(img);
         img.setCoords?.();
         canvas.value.requestRenderAll();
@@ -10606,6 +11237,7 @@ const setupReactivity = () => {
                 console.error('❌ [updateObjects] Objeto inválido detectado no canvas (será ignorado/purgado):', o);
                 return;
             }
+            ensurePersistentContentFlags(o);
             const name = o.name || '';
             
             // Clean up orphaned control objects that shouldn't be visible
@@ -10615,7 +11247,7 @@ const setupReactivity = () => {
             }
             
             // Clean up preview objects if not in pen mode
-            if (o.excludeFromExport && !isPenMode.value && !isNodeEditing.value) {
+            if (isTransientCanvasObject(o) && !isPenMode.value && !isNodeEditing.value) {
                 toRemove.push(o);
                 return;
             }
@@ -10637,8 +11269,8 @@ const setupReactivity = () => {
             const isSmallControlCircle = o.type === 'circle' && o.radius && o.radius <= 7;
             const hasControlData = o.data && (o.data.parentPath || o.data.parentObj);
             
-            if (!o._customId && !o.excludeFromExport && !isControlObject && !isSmallControlCircle && !hasControlData) {
-                o._customId = Math.random().toString(36).substr(2, 9);
+            if (!o._customId && !isTransientCanvasObject(o) && !isControlObject && !isSmallControlCircle && !hasControlData) {
+                o._customId = makeCanvasObjectId();
             }
         });
 
@@ -10677,7 +11309,8 @@ const setupReactivity = () => {
     // Frames: auto-parent new objects when created inside a frame + keep clipPaths in sync
     canvas.value.on('object:added', (e: any) => {
         const obj = e?.target;
-        if (!obj || typeof obj !== 'object' || obj.excludeFromExport) return;
+        if (!obj || typeof obj !== 'object' || isTransientCanvasObject(obj)) return;
+        ensurePersistentContentFlags(obj);
         
         // Don't assign _customId to control objects
         const name = obj.name || '';
@@ -10686,7 +11319,7 @@ const setupReactivity = () => {
         const hasControlData = obj.data && (obj.data.parentPath || obj.data.parentObj);
         
         if (!obj._customId && !isControlObject && !isSmallControlCircle && !hasControlData) {
-            obj._customId = Math.random().toString(36).substr(2, 9);
+            obj._customId = makeCanvasObjectId();
         }
 
         // Skip auto-parenting for product cards — they are managed by simulateSmartGrid
@@ -10702,12 +11335,40 @@ const setupReactivity = () => {
 
     canvas.value.on('object:modified', (e: any) => {
         const obj = e?.target;
-        if (!obj || obj.excludeFromExport) return;
+        if (!obj || isTransientCanvasObject(obj)) return;
+        ensurePersistentContentFlags(obj);
+        const action = e?.transform?.action || '';
+        const didScale = typeof action === 'string' && action.includes('scale');
+
+        if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
+            const members = (obj.getObjects() || []).slice();
+            members.forEach((member: any) => {
+                if (!member || isTransientCanvasObject(member)) return;
+                ensurePersistentContentFlags(member);
+                try { maybeReparentToFrameOnDrop(member); } catch {}
+                try {
+                    if (isLikelyProductCard(member) && (member as any).parentZoneId && canvas.value) {
+                        const zoneId = String((member as any).parentZoneId || '').trim();
+                        const zone = canvas.value.getObjects().find((o: any) => (
+                            isLikelyProductZone(o) && String((o as any)._customId || '') === zoneId
+                        ));
+                        if (zone) applyCardFrameBinding(member, getResolvedZoneFrameId(zone));
+                    }
+                } catch {}
+                try { syncObjectFrameClip(member); } catch {}
+                if (didScale && String(member.type || '').toLowerCase() === 'image' && ((member.scaleX ?? 1) !== 1 || (member.scaleY ?? 1) !== 1)) {
+                    normalizeImageScaleAndCrop(member, { save: false });
+                }
+                sanitizeProductCardImageTransform(member, { clampWithinCard: true });
+                if (shouldApplyContainmentConstraints(member)) {
+                    applyContainmentConstraints(member);
+                }
+            });
+            return;
+        }
 
         // If a product card was resized (scaled), convert scale into width/height and reflow internals (image/title/limit/label).
         // This keeps layout crisp and responsive instead of just stretching the whole group.
-        const action = e?.transform?.action || '';
-        const didScale = typeof action === 'string' && action.includes('scale');
         if (didScale && isLikelyProductCard(obj) && ((obj.scaleX ?? 1) !== 1 || (obj.scaleY ?? 1) !== 1)) {
             normalizeCardScaleAndRelayout(obj, { save: false });
         }
@@ -10719,21 +11380,35 @@ const setupReactivity = () => {
             const isSide = corner === 'ml' || corner === 'mr' || corner === 'mt' || corner === 'mb';
             if (isSide) {
                 normalizeImageCropBySideHandle(obj, e?.transform, { save: false });
+            } else {
+                normalizeImageScaleAndCrop(obj, { save: false });
             }
         }
+        sanitizeProductCardImageTransform(obj, { clampWithinCard: true });
 
         // Mark dirty after modification to ensure clean render
         obj.set('dirty', true);
 
         maybeReparentToFrameOnDrop(obj);
+        if (isLikelyProductZone(obj)) {
+            syncZoneCardFrameBindings(obj);
+        } else if (isLikelyProductCard(obj) && (obj as any).parentZoneId && canvas.value) {
+            const zoneId = String((obj as any).parentZoneId || '').trim();
+            const zone = canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String((o as any)._customId || '') === zoneId);
+            if (zone) {
+                const zoneFrameId = getResolvedZoneFrameId(zone);
+                applyCardFrameBinding(obj, zoneFrameId);
+            }
+        }
         syncObjectFrameClip(obj);
 
         if (obj.isFrame) {
             getOrCreateFrameClipRect(obj);
             syncFrameClips(obj);
         }
-        // Sempre manter frames atrás do conteúdo (especialmente após reparent/clip)
-        if (obj.isFrame || (obj as any).parentFrameId || (obj as any)._frameClipOwner) {
+        // Keep frame stacking stable only when a frame itself changed.
+        // Reordering on every child drop can cause visual "stomp" on clipped backgrounds.
+        if (obj.isFrame) {
             ensureFramesBelowContents();
         }
     });
@@ -10744,6 +11419,7 @@ const setupReactivity = () => {
         // (e.g. ensureZoneSanity, normalizeZoneScale). A stale snapshot causes PropertiesPanel
         // to show outdated values or lose zone detection entirely for legacy arts.
         refreshSelectedRef();
+        invalidateScrollbarBounds();
         updateScrollbars(); // Update scrollbars
         updateFloatingUI();
     });
@@ -10764,6 +11440,8 @@ const setupReactivity = () => {
             if (zone.intersectsWithObject(obj)) {
                 // Bind to zone
                 obj.parentZoneId = zone._customId;
+                const zoneFrameId = getResolvedZoneFrameId(zone);
+                applyCardFrameBinding(obj, zoneFrameId);
                 pendingZones.add(zone);
                 break;
             }
@@ -10783,6 +11461,8 @@ const setupReactivity = () => {
     // === PERFORMANCE CACHE ===
     let frameChildrenCache: any[] = [];
     let lastFrameState = { left: 0, top: 0 };
+    let gridGroupSiblingCache: any[] = [];
+    let gridGroupSiblingCacheId: string | null = null;
     let zoneChildrenCache: any[] = [];
     let lastZoneState = { left: 0, top: 0 };
 
@@ -10820,10 +11500,21 @@ const setupReactivity = () => {
             frameChildrenCache = getFrameDescendants(target);
             lastFrameState = { left: target.left, top: target.top };
             getOrCreateFrameClipRect(target);
+            if (target.gridGroupId && target.isGridCell) {
+                gridGroupSiblingCacheId = String(target.gridGroupId);
+                gridGroupSiblingCache = canvas.value.getObjects().filter(
+                    (o: any) => o !== target && o.gridGroupId === target.gridGroupId && o.isGridCell
+                );
+            } else {
+                gridGroupSiblingCache = [];
+                gridGroupSiblingCacheId = null;
+            }
             // Renderizar canvas para mostrar o label do frame
             canvas.value.requestRenderAll();
         } else {
             if (!e.e?.shiftKey) frameChildrenCache = [];
+            gridGroupSiblingCache = [];
+            gridGroupSiblingCacheId = null;
         }
 
          if (target && isLikelyProductZone(target)) {
@@ -10842,15 +11533,28 @@ const setupReactivity = () => {
     // Throttled floating UI update (avoid expensive getBoundingRect on every move frame)
     let floatingUIRafPending = false;
     canvas.value.on('object:moving', (e: any) => {
-        if (!floatingUIRafPending) {
+        const target = e.target;
+        const activeObj = canvas.value.getActiveObject?.();
+        const shouldUpdateFloatingUI = !!(
+            target &&
+            activeObj &&
+            (
+                activeObj === target ||
+                (
+                    activeObj.type === 'activeSelection' &&
+                    typeof (activeObj as any).getObjects === 'function' &&
+                    (activeObj as any).getObjects().includes(target)
+                )
+            )
+        );
+        if (shouldUpdateFloatingUI && !floatingUIRafPending) {
             floatingUIRafPending = true;
             requestAnimationFrame(() => {
                 updateFloatingUI();
                 floatingUIRafPending = false;
             });
         }
-        
-        const target = e.target;
+
         // Frame moves its descendants (Figma-like parenting)
         if (target && target.isFrame) {
              // Mark dirty to ensure fresh render (keep caching for performance)
@@ -10869,9 +11573,15 @@ const setupReactivity = () => {
 
              // ─── Grid group: move sibling cells together ────────────────
              if (target.gridGroupId && target.isGridCell && (dx || dy)) {
-                 const siblings = canvas.value.getObjects().filter(
-                     (o: any) => o !== target && o.gridGroupId === target.gridGroupId && o.isGridCell
-                 );
+                 const gridId = String(target.gridGroupId);
+                 let siblings = (gridGroupSiblingCacheId === gridId) ? gridGroupSiblingCache : [];
+                 if (siblings.length === 0) {
+                     siblings = canvas.value.getObjects().filter(
+                         (o: any) => o !== target && o.gridGroupId === target.gridGroupId && o.isGridCell
+                     );
+                     gridGroupSiblingCache = siblings;
+                     gridGroupSiblingCacheId = gridId;
+                 }
                  siblings.forEach((sib: any) => {
                      sib.set({ left: (sib.left ?? 0) + dx, top: (sib.top ?? 0) + dy });
                      sib.setCoords?.();
@@ -10920,40 +11630,12 @@ const setupReactivity = () => {
              return;
         }
 
-        // Frame clipping: update parentFrameId when object enters/leaves a frame
+        // Frame clipping during drag:
+        // keep current clip in sync, but DO NOT reparent here (reparent happens on drop).
         if (target && !target.isFrame && !target.excludeFromExport) {
-            const currentParentId = (target as any).parentFrameId as (string | undefined);
-            const frameUnder = findFrameUnderObject(target);
-            const nextParentId = frameUnder?._customId as (string | undefined);
-
-            // Reparent quando muda de frame
-            if (nextParentId !== currentParentId) {
-                (target as any).parentFrameId = nextParentId;
-                syncObjectFrameClip(target);
-            }
-
-            // Com absolutePositioned: false, o clipPath é relativo ao objeto.
-            // Precisamos recalcular o offset a cada movimento para manter o clip correto.
             const frameId = (target as any).parentFrameId as (string | undefined);
-            if (frameId && target.clipPath) {
-                const frame = getFrameById(frameId);
-                if (frame) {
-                    const fc = frame.getCenterPoint ? frame.getCenterPoint() : { x: frame.left, y: frame.top };
-                    const tc = target.getCenterPoint ? target.getCenterPoint() : { x: target.left, y: target.top };
-                    const dxW = fc.x - tc.x;
-                    const dyW = fc.y - tc.y;
-                    const tAngle = target.angle || 0;
-                    const aRad = -tAngle * Math.PI / 180;
-                    const cosA = Math.cos(aRad);
-                    const sinA = Math.sin(aRad);
-                    target.clipPath.set({
-                        left: (dxW * cosA - dyW * sinA) / (target.scaleX || 1),
-                        top: (dxW * sinA + dyW * cosA) / (target.scaleY || 1),
-                    });
-                    target.clipPath.setCoords();
-                    target.clipPath.dirty = true;
-                    target.set('dirty', true);
-                }
+            if (frameId) {
+                syncObjectFrameClip(target);
             }
         }
         // Optimized Zone Move
@@ -10981,7 +11663,9 @@ const setupReactivity = () => {
         }
         
         // 🔒 CONTAINMENT CONSTRAINTS: Keep objects inside their parents
-        applyContainmentConstraints(target);
+        if (shouldApplyContainmentConstraints(target)) {
+            applyContainmentConstraints(target);
+        }
     });
 
     // Smart Scaling for Textbox Reflow & Product Zone AutoLayout
@@ -11065,14 +11749,19 @@ const setupReactivity = () => {
         }
 
         // 🔒 Apply containment after scaling
-        applyContainmentConstraints(obj);
+        sanitizeProductCardImageTransform(obj, { clampWithinCard: true });
+        if (shouldApplyContainmentConstraints(obj)) {
+            applyContainmentConstraints(obj);
+        }
     });
     
     // 🔒 Apply containment after modification (drag end)
     canvas.value.on('object:modified', (e: any) => {
         const obj = e.target;
         if (obj) {
-            applyContainmentConstraints(obj);
+            if (shouldApplyContainmentConstraints(obj)) {
+                applyContainmentConstraints(obj);
+            }
 
             // Re-center textboxes inside product cards after resize
             if (obj.type === 'textbox' && obj.originX === 'center' && obj.group && (obj.group.isSmartObject || obj.group.isProductCard || isLikelyProductCard(obj.group))) {
@@ -11275,7 +11964,10 @@ const updatePageSettings = (prop: string, value: any) => {
         // Also update activePage background
         if (activePage.value) {
             (activePage.value as any).backgroundColor = value;
-            updatePageData(project.activePageIndex, { backgroundColor: value });
+            const currentCanvasData = project.pages?.[project.activePageIndex]?.canvasData;
+            if (currentCanvasData && typeof currentCanvasData === 'object') {
+                updatePageData(project.activePageIndex, { ...currentCanvasData, backgroundColor: value });
+            }
         }
     }
 }
@@ -11684,6 +12376,8 @@ const updateObjectProperty = (prop: string, value: any) => {
                 const dx = active.left - prevLeft;
                 const dy = active.top - prevTop;
                 moveZoneChildren(active, dx, dy);
+                maybeReparentToFrameOnDrop(active);
+                syncZoneCardFrameBindings(active);
                 
                 canvas.value.requestRenderAll();
                 debouncedSaveCurrentState();
@@ -11970,6 +12664,23 @@ const updateObjectProperty = (prop: string, value: any) => {
                  }
              }
              active.set(prop, value);
+             if (
+                String(active.type || '').toLowerCase() === 'image' &&
+                active.group &&
+                (active.group.isSmartObject || active.group.isProductCard || isLikelyProductCard(active.group)) &&
+                (prop === 'scaleX' || prop === 'scaleY' || prop === 'flipX' || prop === 'flipY')
+             ) {
+                active.set({
+                    scaleX: Math.abs(Number(active.scaleX ?? 1)) || 1,
+                    scaleY: Math.abs(Number(active.scaleY ?? 1)) || 1,
+                    flipX: false,
+                    flipY: false,
+                    lockScalingFlip: true,
+                    lockSkewingX: true,
+                    lockSkewingY: true
+                });
+                applyContainmentConstraints(active);
+             }
         }
         
         // If it's a group, we might want to dirty it
@@ -12186,7 +12897,30 @@ const buildRemoveBgRequest = async (imageUrl: string) => {
         formData.append('overwrite', '1');
         return { body: formData as any };
     }
-    return { body: { imageUrl, overwrite: true } as any };
+
+    // Garantir URL absoluta para o backend (Node fetch não aceita URL relativa).
+    let normalizedUrl = imageUrl;
+    if (imageUrl.startsWith('/')) {
+        normalizedUrl = new URL(imageUrl, window.location.origin).toString();
+    }
+
+    let sourceKey: string | null = null;
+    try {
+        const parsed = new URL(normalizedUrl);
+        if (parsed.pathname.endsWith('/api/storage/proxy')) {
+            sourceKey = parsed.searchParams.get('key');
+        }
+    } catch {
+        // ignore
+    }
+
+    return {
+        body: {
+            imageUrl: normalizedUrl,
+            sourceKey: sourceKey || undefined,
+            overwrite: true
+        } as any
+    };
 };
 
 const handleAction = async (action: string) => {
@@ -12200,43 +12934,10 @@ const handleAction = async (action: string) => {
             await duplicateFrameWithContents(active);
             return;
         }
-        // Reuse Ctrl+D behavior by synthesizing a key action would be messy; just clone directly.
         try {
-            const extra = Array.from(new Set(['_customId', ...CANVAS_CUSTOM_PROPS]));
-            const cloned: any = await (active as any).clone(extra);
-            if (!cloned) return;
-
-            // Multiple selection
-            if (String(cloned.type || '').toLowerCase() === 'activeselection') {
-                cloned.canvas = canvas.value;
-                (cloned as any).forEachObject?.((obj: any) => {
-                    if (!obj) return;
-                    obj._customId = Math.random().toString(36).substr(2, 9);
-                    obj.set?.({
-                        left: (Number(obj.left) || 0) + 20,
-                        top: (Number(obj.top) || 0) + 20,
-                        selectable: true,
-                        evented: true,
-                    });
-                    canvas.value.add(obj);
-                });
-                cloned.setCoords?.();
-                canvas.value.discardActiveObject();
-            } else {
-                cloned._customId = Math.random().toString(36).substr(2, 9);
-                cloned.set({
-                    left: (Number(active.left) || 0) + 20,
-                    top: (Number(active.top) || 0) + 20,
-                    selectable: true,
-                    evented: true,
-                });
-                canvas.value.add(cloned);
-                canvas.value.setActiveObject(cloned);
-            }
-
-            canvas.value.requestRenderAll();
-            canvasObjects.value = [...canvas.value.getObjects()];
-            updateSelection();
+            const clones = await duplicateActiveObjectWithContext(active, { offsetX: DUPLICATE_OFFSET, offsetY: DUPLICATE_OFFSET });
+            if (!clones.length) return;
+            finalizeDuplicatedObjects(clones);
             saveCurrentState({ reason: 'duplicate-action' });
             triggerAutoSave();
         } catch (err) {
@@ -12316,8 +13017,10 @@ const handleAction = async (action: string) => {
 
         try {
             const request = await buildRemoveBgRequest(imageUrl);
+            const headers = await getApiAuthHeaders();
             const result = await $fetch('/api/remove-image-bg', {
                 method: 'POST',
+                headers,
                 ...(request as any)
             }) as any;
 
@@ -12491,6 +13194,16 @@ const handleAction = async (action: string) => {
     // Flip
     if (action === 'flip-h') {
         if (!active) return;
+        if (
+            String(active.type || '').toLowerCase() === 'image' &&
+            active.group &&
+            (active.group.isSmartObject || active.group.isProductCard || isLikelyProductCard(active.group))
+        ) {
+            active.set({ flipX: false, flipY: false, lockScalingFlip: true });
+            canvas.value.requestRenderAll();
+            saveCurrentState();
+            return;
+        }
         active.set('flipX', !active.flipX);
         canvas.value.requestRenderAll();
         saveCurrentState();
@@ -12498,6 +13211,16 @@ const handleAction = async (action: string) => {
     }
     if (action === 'flip-v') {
         if (!active) return;
+        if (
+            String(active.type || '').toLowerCase() === 'image' &&
+            active.group &&
+            (active.group.isSmartObject || active.group.isProductCard || isLikelyProductCard(active.group))
+        ) {
+            active.set({ flipX: false, flipY: false, lockScalingFlip: true });
+            canvas.value.requestRenderAll();
+            saveCurrentState();
+            return;
+        }
         active.set('flipY', !active.flipY);
         canvas.value.requestRenderAll();
         saveCurrentState();
@@ -13427,19 +14150,8 @@ const loadCanvasData = async (data: any) => {
         }
     }
     
-    // Blob URLs do not survive reload; replace early to avoid loadFromJSON errors.
-    try {
-        json = replaceBlobImagesWithPlaceholder(json);
-    } catch (e) {
-        // ignore
-    }
-    
-    // Convert Contabo URLs to use local proxy (bypasses presigned URL issues)
-    try {
-        json = convertContaboToProxyUrls(json);
-    } catch (e) {
-        // ignore
-    }
+    // Normalize image URLs to same-origin proxy (Wasabi/Contabo) before load.
+    json = prepareCanvasDataForLoad(json);
 
     isHistoryProcessing.value = true;
     hydrateLabelTemplatesFromProjectJson(json);
@@ -13582,7 +14294,7 @@ const insertAssetToCanvas = async (asset: any) => {
 
     try {
         const center = getCenterOfView();
-        const proxiedUrl = toWasabiProxyUrl(asset.url) || asset.url;
+        const proxiedUrl = toWasabiProxyUrl(asset.url, { version: asset?.lastModified || asset?.updatedAt || null }) || asset.url;
         const img: any = await fabric.Image.fromURL(proxiedUrl, { crossOrigin: 'anonymous' });
 
         const pageW = activePage.value?.width || 1080;
@@ -14058,7 +14770,6 @@ const clearCanvas = () => {
     setupSnapping();
     setupReactivity();
     
-    showClearConfirmModal.value = false;
     saveCurrentState();
 }
 
@@ -14086,6 +14797,44 @@ const normalizeLimitText = (raw: any): string | null => {
     // "3UN" -> "3 UN"
     s = s.replace(/(\d)(UN|KG)\b/g, '$1 $2');
     return s;
+};
+
+const stripAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const normalizeSpecialCondition = (raw: any): string | null => {
+    const txt = String(raw ?? '').replace(/\s+/g, ' ').trim();
+    if (!txt) return null;
+    const cleaned = txt.replace(/^[\-:;,.\s]+/, '').replace(/[\-:;,.\s]+$/, '').trim();
+    return cleaned || null;
+};
+
+const getSpecialConditionFromProduct = (product: any): string | null => {
+    if (!product || typeof product !== 'object') return null;
+
+    const directCandidates = [
+        product.specialCondition,
+        product.condition,
+        product.observation,
+        product.observations,
+        product.observacao,
+        product.observacoes,
+        product.obs
+    ];
+
+    for (const c of directCandidates) {
+        const normalized = normalizeSpecialCondition(c);
+        if (normalized) return normalized;
+    }
+
+    for (const [k, v] of Object.entries(product)) {
+        const nk = stripAccents(String(k || '').toUpperCase());
+        if (!nk) continue;
+        if (!nk.includes('OBSERV') && !nk.includes('CONDI') && nk !== 'OBS') continue;
+        const normalized = normalizeSpecialCondition(v);
+        if (normalized) return normalized;
+    }
+
+    return null;
 };
 
 /**
@@ -14117,7 +14866,7 @@ const formatPriceValue = (value: any): string => {
  */
 const getAvailablePrices = (product: any) => {
     const prices: Array<{ label: string; value: string; type: 'main' | 'special' | 'pack' }> = [];
-    const condition = product.specialCondition && String(product.specialCondition).trim() ? String(product.specialCondition).trim() : null;
+    const condition = getSpecialConditionFromProduct(product);
 
     // Helper para verificar e formatar preço
     const addPrice = (value: any, label: string, type: 'main' | 'special' | 'pack') => {
@@ -14173,21 +14922,22 @@ const getAvailablePrices = (product: any) => {
 };
 
 // Smart Object Generator (Product Card)
-const createSmartObject = async (product: any, x: number, y: number, width: number, height: number, gridId: string, labelTpl?: LabelTemplate) => {
-    // DEBUG: Log product data
-    console.log('[createSmartObject] Product data:', {
-        name: product.name,
-        price: product.price,
-        weight: product.weight,
-        packUnit: product.packUnit,
-        priceWholesale: product.priceWholesale
-    });
-
+const createSmartObject = async (
+    product: any,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    gridId: string,
+    labelTpl?: LabelTemplate,
+    zoneStyles?: Partial<GlobalStyles>
+) => {
     // Layout Constants
     const cardHeight = height || width * 1.4; // Aspect ratio 1:1.4 (fallback)
     const halfW = width / 2;
     const halfH = cardHeight / 2;
     const baseSize = Math.min(width, cardHeight);
+    const effectiveStyles = normalizeGlobalStyles(zoneStyles);
     const { cleanedName, extractedLimit } = extractLimitFromName(product?.name);
     const limitTextValue = normalizeLimitText(product?.limit ?? extractedLimit);
     
@@ -14197,7 +14947,11 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     const bg = new fabric.Rect({
         width: width, 
         height: cardHeight, 
-        fill: 'transparent',
+        fill: effectiveStyles.isProdBgTransparent ? 'transparent' : (effectiveStyles.cardColor || '#ffffff'),
+        rx: typeof effectiveStyles.cardBorderRadius === 'number' ? effectiveStyles.cardBorderRadius : 8,
+        ry: typeof effectiveStyles.cardBorderRadius === 'number' ? effectiveStyles.cardBorderRadius : 8,
+        stroke: effectiveStyles.cardBorderColor || undefined,
+        strokeWidth: Math.max(0, Number(effectiveStyles.cardBorderWidth ?? 0)),
         originX: 'center',
         originY: 'center',
         left: 0,
@@ -14273,7 +15027,10 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
                     originY: 'center',
                     left: 0, // Centered
                     top: imageY, // Centered
-                    name: 'smart_image'
+                    name: 'smart_image',
+                    lockScalingFlip: true,
+                    lockSkewingX: true,
+                    lockSkewingY: true
                 });
             }
         } catch (e) {
@@ -14309,19 +15066,6 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     // Unit label on the tag: ONLY "KG" or "UN" (gramatura stays in the product name).
     const unitText = inferUnitLabelFromProduct(product);
 
-    console.log('[createSmartObject] Available prices:', {
-        priceStr,
-        unitText,
-        availablePrices,
-        originalPrice: product.price,
-        priceUnit: product.priceUnit,
-        priceSpecialUnit: product.priceSpecialUnit,
-        pricePack: product.pricePack,
-        priceSpecial: product.priceSpecial,
-        specialCondition: product.specialCondition,
-        name: product.name
-    });
-
     if (!priceStr || priceStr === '0,00') {
         console.warn('[createSmartObject] PRECO VAZIO para produto:', product.name);
     }
@@ -14333,12 +15077,18 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     };
 
     let priceTagGroup: any = null;
+    const buildPriceGroupFromTemplate = async (tpl: LabelTemplate | undefined | null) => {
+        if (!tpl) return null;
+        const pg = await instantiatePriceGroupFromTemplate(tpl);
+        pg.set({ left: 0, top: 0, name: 'priceGroup' });
+        setPriceOnPriceGroup(pg, priceStr, unitText);
+        applyAtacarejoPricingToPriceGroup(pg, product);
+        return pg;
+    };
+
     if (labelTpl) {
         try {
-            priceTagGroup = await instantiatePriceGroupFromTemplate(labelTpl);
-            priceTagGroup.set({ left: 0, top: 0, name: 'priceGroup' });
-            setPriceOnPriceGroup(priceTagGroup, priceStr, unitText);
-            applyAtacarejoPricingToPriceGroup(priceTagGroup, product);
+            priceTagGroup = await buildPriceGroupFromTemplate(labelTpl);
         } catch (e) {
             console.warn('[createSmartObject] Failed to use label template, falling back', e);
             priceTagGroup = null;
@@ -14349,11 +15099,26 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
         const availablePrices = getAvailablePrices(product);
         const hasSpecial = availablePrices.prices.some(p => p.type === 'special');
         const hasMain = availablePrices.prices.some(p => p.type === 'main' || p.type === 'pack');
-        // Atacarejo requer: preço especial (atacado) E (preço principal varejo OU condição especial)
-        const hasWholesale = hasSpecial && (hasMain || !!product.specialCondition || !!product.priceWholesale);
-        priceTagGroup = hasWholesale
-            ? buildAtacarejoPriceGroupForCard(product, width, cardHeight, 0)
-            : buildDefaultPriceGroup();
+        const hasCondition = !!availablePrices.condition;
+        const hasWholesalePrice = hasSpecial && hasMain;
+        // Mesmo com 1 preço, se houver condição/observação o card deve manter o template atacarejo e colapsar.
+        const shouldUseAtacarejoTemplate = hasWholesalePrice || hasCondition || !!formatPriceValue(product.priceWholesale);
+        if (shouldUseAtacarejoTemplate) {
+            // Prefer template-driven atacarejo (edited in Mini Editor) over hardcoded fallback.
+            const builtInAtacTpl = labelTemplates.value.find((t: any) => String(t?.id || '') === BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID);
+            if (builtInAtacTpl) {
+                try {
+                    priceTagGroup = await buildPriceGroupFromTemplate(builtInAtacTpl);
+                } catch (e) {
+                    console.warn('[createSmartObject] Failed to build atacarejo from template, using hardcoded fallback', e);
+                }
+            }
+        }
+        if (!priceTagGroup) {
+            priceTagGroup = shouldUseAtacarejoTemplate
+                ? buildAtacarejoPriceGroupForCard(product, width, cardHeight, 0)
+                : buildDefaultPriceGroup();
+        }
     }
 
     // Fill atacarejo fields even for the default group (no-op unless the template supports it).
@@ -14391,6 +15156,7 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
         originY: 'center',
         isSmartObject: true,
         smartGridId: gridId,
+        excludeFromExport: false,
         // Single-click deep select: user can click directly on inner elements.
         subTargetCheck: true,
         interactive: true
@@ -14407,7 +15173,7 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     (group as any).priceUnit = (product as any).priceUnit ?? null;
     (group as any).priceSpecial = (product as any).priceSpecial ?? null;
     (group as any).priceSpecialUnit = (product as any).priceSpecialUnit ?? null;
-    (group as any).specialCondition = (product as any).specialCondition ?? null;
+    (group as any).specialCondition = getSpecialConditionFromProduct(product) ?? null;
     // Wholesale (legacy)
     (group as any).priceWholesale = (product as any).priceWholesale ?? null;
     (group as any).wholesaleTrigger = (product as any).wholesaleTrigger ?? null;
@@ -14435,7 +15201,7 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
     });
     
     // Add custom ID
-    (group as any)._customId = Math.random().toString(36).substr(2, 9);
+    (group as any)._customId = makeCanvasObjectId();
 
     // ESSENTIAL: Force group to calculate proper coordinates and cache
     group.setCoords();
@@ -14445,17 +15211,6 @@ const createSmartObject = async (product: any, x: number, y: number, width: numb
         statefullCache: false,
         dirty: true,
         strokeWidth: 0 // Ensure no weird borders affect layout
-    });
-
-    // DEBUG: Log group creation details
-    console.log('[createSmartObject] Group created:', {
-        id: (group as any)._customId,
-        objectsCount: group.getObjects().length,
-        objects: group.getObjects().map((o: any) => ({ type: o.type, name: o.name, left: o.left, top: o.top })),
-        groupLeft: group.left,
-        groupTop: group.top,
-        groupWidth: group.width,
-        groupHeight: group.height
     });
 
     return group;
@@ -14505,9 +15260,11 @@ const handlePasteList = async () => {
             try {
                 // Build search term
                 const searchTerm = `${product.name || ''} ${product.brand || ''} ${product.weight || ''}`.trim();
+                const headers = await getApiAuthHeaders();
                 
                 const result = await $fetch<{ url?: string }>('/api/process-product-image', {
                     method: 'POST',
+                    headers,
                     body: { term: searchTerm }
                 });
                 
@@ -14531,8 +15288,6 @@ const handlePasteList = async () => {
         })
     );
 
-    console.log('[handlePasteList] Products with images:', productsWithImages);
-
     isProcessing.value = false;
     
     // Store in review state and open review modal
@@ -14552,9 +15307,6 @@ const handlePasteList = async () => {
 
 // Confirm import from review modal
 const confirmProductImport = async (products: any[], opts?: { mode?: 'replace' | 'append'; labelTemplateId?: string }) => {
-    console.log('[confirmProductImport] Called with products:', products);
-    console.log('[confirmProductImport] targetGridZone:', targetGridZone.value);
-    
     showProductReviewModal.value = false;
     
     if (!products || products.length === 0) {
@@ -14564,7 +15316,6 @@ const confirmProductImport = async (products: any[], opts?: { mode?: 'replace' |
     
     // Get the saved zone reference and pass it to simulateSmartGrid
     const zone = targetGridZone.value;
-    console.log('[confirmProductImport] Using zone:', zone);
     
     // Add to canvas using the products received from the modal (with edits applied)
     const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace';
@@ -14579,49 +15330,6 @@ const confirmProductImport = async (products: any[], opts?: { mode?: 'replace' |
     // Update layer panel
     if (canvas.value) {
         canvasObjects.value = [...canvas.value.getObjects()];
-        console.log('[confirmProductImport] Canvas objects after import:', canvasObjects.value.length);
-    }
-}
-
-const triggerListImageUpload = () => {
-    listImageInput.value?.click();
-}
-
-const handleListImageUpload = (event: Event) => {
-    const file = (event.target as HTMLInputElement).files?.[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            pastedImage.value = e.target?.result as string;
-        };
-        reader.readAsDataURL(file);
-    }
-}
-
-const analyzeImageWithAI = () => {
-    isAnalyzingImage.value = true;
-    setTimeout(() => {
-        isAnalyzingImage.value = false;
-        // Mock AI result
-        pasteListText.value = "Picanha Bovina - 69.90\nCerveja Heineken - 5.99\nCarvão 5kg - 15.00";
-        activePasteTab.value = 'text';
-    }, 2000);
-}
-
-const handleImagePaste = (event: ClipboardEvent) => {
-    const items = event.clipboardData?.items;
-    if (items) {
-        for (const item of items) {
-            if (item.type.indexOf('image') !== -1) {
-                const blob = item.getAsFile();
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    pastedImage.value = event.target?.result as string;
-                    activePasteTab.value = 'image';
-                };
-                if(blob) reader.readAsDataURL(blob);
-            }
-        }
     }
 }
 
@@ -14732,6 +15440,7 @@ const addGridZone = () => {
         originX: 'center',
         originY: 'center',
         isGridZone: true, // Marker flag
+        isProductZone: true,
         name: 'gridZone',
         // Default layout behavior (matches ProductZoneSettings defaults)
         columns: 0,
@@ -14741,7 +15450,7 @@ const addGridZone = () => {
         cardAspectRatio: 'auto',
         lastRowBehavior: 'fill',
         layoutDirection: 'horizontal',
-        verticalAlign: 'top',
+        verticalAlign: 'stretch',
         subTargetCheck: false,
         hoverCursor: 'move',
         moveCursor: 'move',
@@ -14757,20 +15466,24 @@ const addGridZone = () => {
         cornerStyle: 'circle',
         cornerSize: 10,
         padding: 0,
+        excludeFromExport: false,
         objectCaching: false,
         statefullCache: false
     });
     
     // Add Custom ID
-    (group as any)._customId = Math.random().toString(36).substr(2, 9);
+    (group as any)._customId = makeCanvasObjectId();
     (group as any)._zonePadding = 20;
     // CRITICAL: Initialize zone dimensions for persistence
     (group as any)._zoneWidth = 400;
     (group as any)._zoneHeight = 600;
 
     canvas.value.add(group);
+    getResolvedZoneFrameId(group);
     canvas.value.setActiveObject(group);
     canvas.value.requestRenderAll();
+    saveCurrentState({ allowEmptyOverwrite: true, reason: 'add-grid-zone' });
+    flushPersistenceNow('add-grid-zone');
 }
 
 const simulateSmartGrid = async (
@@ -14779,14 +15492,11 @@ const simulateSmartGrid = async (
     zone: any = null,
     opts: { mode?: 'replace' | 'append'; labelTemplateId?: string } = {}
 ) => {
-    console.log('[simulateSmartGrid] === START ===');
-    console.log('[simulateSmartGrid] customData:', customData);
-    console.log('[simulateSmartGrid] zone passed:', zone);
-    
     if (!canvas.value || !fabric) {
         console.error('[simulateSmartGrid] Canvas or fabric not available!');
         return;
     }
+    await ensureLabelTemplatesReady();
 
     // 1. Identify Target Context (Zone vs Page) and Template
     // Use the passed zone if available, otherwise try to get from active selection
@@ -14795,7 +15505,6 @@ const simulateSmartGrid = async (
 
     if (!targetZone) {
         const activeObj = canvas.value.getActiveObject();
-        console.log('[simulateSmartGrid] No zone passed, checking activeObject:', activeObj);
         if (activeObj) {
             // Check for product zone using isLikelyProductZone to handle both isGridZone and isProductZone
             if (isLikelyProductZone(activeObj)) {
@@ -14812,9 +15521,6 @@ const simulateSmartGrid = async (
         }
     }
     
-    console.log('[simulateSmartGrid] Final targetZone:', targetZone);
-    console.log('[simulateSmartGrid] templateObject:', templateObject);
-
     // 2. Setup Bounds
     let bounds = { 
         left: 0, 
@@ -14830,7 +15536,6 @@ const simulateSmartGrid = async (
         if (existingFrame) {
             const fb = existingFrame.getBoundingRect(true);
             bounds = { left: fb.left, top: fb.top, width: fb.width, height: fb.height };
-            console.log('[simulateSmartGrid] Using Frame bounds:', bounds);
         }
     }
 
@@ -14859,10 +15564,7 @@ const simulateSmartGrid = async (
             height: boundingRect.height 
         };
         
-        console.log('[simulateSmartGrid] Zone boundingRect (absolute):', boundingRect);
     }
-    
-    console.log('[simulateSmartGrid] bounds:', bounds);
 
     const mode: 'replace' | 'append' = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace';
     const requestedTplId = typeof opts?.labelTemplateId === 'string' && opts.labelTemplateId.trim().length ? opts.labelTemplateId.trim() : undefined;
@@ -14870,7 +15572,6 @@ const simulateSmartGrid = async (
     // 3. Prepare Data
     let products = Array.isArray(customData) && customData.length > 0 ? customData : MOCK_PRODUCTS;
     const count = products.length;
-    console.log('[simulateSmartGrid] products count:', count);
     if (count === 0) {
         console.warn('[simulateSmartGrid] No products to render!');
         return;
@@ -14959,7 +15660,8 @@ const simulateSmartGrid = async (
             gapVertical: gapY,
             lastRowBehavior: lastRowBehavior,
             columns: hasFixedColumns ? targetZone.columns : 0,
-            rows: hasFixedColumns ? totalRows : 0,
+            // Keep rows in auto mode. Persisting computed rows causes stale gaps after reload.
+            rows: 0,
             // Ensure both flags are set for consistency
             isGridZone: true,
             isProductZone: true
@@ -14972,19 +15674,63 @@ const simulateSmartGrid = async (
         // Allow import-time override of the label template.
         const prevZoneTplId = targetZone ? String((targetZone as any)._zoneGlobalStyles?.splashTemplateId || '').trim() : '';
         const prevZoneTplIdNormalized = prevZoneTplId.length ? prevZoneTplId : undefined;
-        const zoneTplId = requestedTplId ?? prevZoneTplIdNormalized;
-        const zoneTpl = zoneTplId ? labelTemplates.value.find(t => t.id === zoneTplId) : undefined;
+        const snapshotId = targetZone ? String((targetZone as any)?._zoneTemplateSnapshotId || '').trim() : '';
+        const snapshotGroup = targetZone ? (targetZone as any)?._zoneTemplateSnapshot : null;
+        const snapshotIdNormalized = snapshotId.length ? snapshotId : undefined;
+        // Prefer snapshot as source-of-truth when available.
+        // This prevents stale/default template lookup when zone global styles are temporarily missing after reload.
+        const zoneTplId = requestedTplId ?? prevZoneTplIdNormalized ?? snapshotIdNormalized;
+        const snapshotAvailable = !!(snapshotGroup && typeof snapshotGroup === 'object');
+        const shouldUseSnapshot = snapshotAvailable && (!zoneTplId || !snapshotIdNormalized || zoneTplId === snapshotIdNormalized);
+        const zoneTpl = shouldUseSnapshot
+            ? ({
+                id: zoneTplId || snapshotIdNormalized || 'zone-template-snapshot',
+                name: 'Zone Template Snapshot',
+                kind: 'priceGroup-v1',
+                group: snapshotGroup
+            } as any as LabelTemplate)
+            : (zoneTplId ? labelTemplates.value.find(t => t.id === zoneTplId) : undefined);
+        let effectiveZoneTpl = zoneTpl;
+        if (!effectiveZoneTpl && targetZone) {
+            // Last-resort source of truth: if the zone already has cards, inherit the exact template
+            // from the first card priceGroup so new cards are guaranteed to match visual layout.
+            const existingCards = getZoneChildren(targetZone);
+            const donorCard = existingCards.find((c: any) => !!getPriceGroupFromAny(c));
+            const donorPg = donorCard ? getPriceGroupFromAny(donorCard) : null;
+            if (donorPg) {
+                const donorGroupJson = serializePriceGroupForTemplate(donorPg);
+                if (donorGroupJson) {
+                    effectiveZoneTpl = {
+                        id: 'zone-card-snapshot',
+                        name: 'Zone Card Snapshot',
+                        kind: 'priceGroup-v1',
+                        group: donorGroupJson
+                    } as any as LabelTemplate;
+                    // Keep zone snapshot aligned with what is effectively being rendered.
+                    const zoneSnapshotId = zoneTplId || snapshotIdNormalized || String((targetZone as any)._zoneGlobalStyles?.splashTemplateId || '').trim() || 'zone-card-snapshot';
+                    (targetZone as any)._zoneTemplateSnapshotId = zoneSnapshotId;
+                    (targetZone as any)._zoneTemplateSnapshot = cloneTemplateGroupJson(donorGroupJson) || donorGroupJson;
+                }
+            }
+        }
 
         // Persist override on the zone so future imports use the same template.
         if (targetZone && requestedTplId && requestedTplId !== prevZoneTplIdNormalized) {
-            const prev = (targetZone as any)._zoneGlobalStyles ?? {};
+            const prev = getZoneGlobalStyles(targetZone);
             (targetZone as any)._zoneGlobalStyles = { ...prev, splashTemplateId: requestedTplId };
+            const requestedTpl = labelTemplates.value.find((t: any) => String(t?.id || '') === String(requestedTplId));
+            (targetZone as any)._zoneTemplateSnapshotId = requestedTplId;
+            (targetZone as any)._zoneTemplateSnapshot = cloneTemplateGroupJson((requestedTpl as any)?.group) || null;
         }
 
         // If the user picked a template while appending, keep the zone consistent (apply to existing cards too).
         if (targetZone && mode === 'append' && requestedTplId && requestedTplId !== prevZoneTplIdNormalized && existingCount > 0) {
             await applyLabelTemplateToZone(targetZone, requestedTplId);
         }
+
+        const zoneStylesForNewCards = targetZone
+            ? getZoneGlobalStyles(targetZone)
+            : normalizeGlobalStyles(productZoneState.globalStyles.value);
 
         const promises = products.map(async (product: any, index: number) => {
             const slotIndex = existingCount + index;
@@ -15007,8 +15753,6 @@ const simulateSmartGrid = async (
             const finalX = bounds.left + xOffset + (itemWidth / 2);
             const finalY = bounds.top + yOffset + (itemHeight / 2);
             
-            console.log(`[simulateSmartGrid] Product ${index}: slotIndex=${slotIndex}, xOffset=${xOffset}, yOffset=${yOffset}, finalX=${finalX}, finalY=${finalY}, itemW=${itemWidth}, itemH=${itemHeight}`);
-
             // Generate Object
             if (templateObject) {
                   // Clone using Promise API (Fabric v6+)
@@ -15028,7 +15772,6 @@ const simulateSmartGrid = async (
                               const sourceChild = sourceChildren[idx];
                               if (sourceChild && sourceChild.name && !child.name) {
                                   child.set('name', sourceChild.name);
-                                  console.log(`[simulateSmartGrid] Fixed name for child ${idx}: ${sourceChild.name}`);
                               }
                               
                               // Recursively fix nested groups
@@ -15131,20 +15874,29 @@ const simulateSmartGrid = async (
                      safeAddWithUpdate(cloned, limitObj);
                  }
                 
-                 if (!cloned._customId) cloned._customId = Math.random().toString(36).substr(2, 9);
+                 cloned._customId = makeCanvasObjectId();
+                 cloned.excludeFromExport = false;
                  return cloned;
 
                  } else {
-                  return await createSmartObject(product, finalX, finalY, itemWidth, itemHeight, batchGridId, zoneTpl);
+                  return await createSmartObject(
+                      product,
+                      finalX,
+                      finalY,
+                      itemWidth,
+                      itemHeight,
+                      batchGridId,
+                      effectiveZoneTpl,
+                      zoneStylesForNewCards
+                  );
             }
         });
 
         const smartObjects = await Promise.all(promises);
-        console.log('[simulateSmartGrid] Created objects:', smartObjects.length, smartObjects);
         
         // If we have a target zone, update it in place
         if (targetZone && canvas.value) {
-            console.log('[simulateSmartGrid] Adding cards to zone group');
+            const zoneFrameId = getResolvedZoneFrameId(targetZone);
 
             // Get existing objects from zone (like background rect, labels)
             const existingZoneObjects = targetZone.getObjects ? targetZone.getObjects() : [];
@@ -15183,6 +15935,10 @@ const simulateSmartGrid = async (
             smartObjects.forEach((obj: any) => {
                 obj.isProductCard = true;
                 obj.parentZoneId = targetZone._customId;
+                obj.parentFrameId = zoneFrameId;
+                obj.excludeFromExport = false;
+                obj.clipPath = null;
+                delete obj._frameClipOwner;
                 // Preserve stable ordering when adding to an existing zone.
                 if (mode === 'append') {
                     (obj as any)._zoneOrder = maxOrder + 1;
@@ -15220,6 +15976,7 @@ const simulateSmartGrid = async (
             // We pass smartObjects explicitly so it doesn't have to search
             try {
                 const cache = (mode === 'append') ? [...existingCards, ...smartObjects] : smartObjects;
+                syncZoneCardFrameBindings(targetZone, cache);
                 recalculateZoneLayout(targetZone, cache);
             } catch (calcErr) {
                 console.warn('Grid layout recalc error:', calcErr);
@@ -15231,9 +15988,7 @@ const simulateSmartGrid = async (
             }
         } else {
             // No zone - add directly to canvas and ensure they're above the Frame
-            console.log('[simulateSmartGrid] NO ZONE PATH - adding', smartObjects.length, 'cards directly. Bounds used:', JSON.stringify(bounds));
-            smartObjects.forEach((obj: any, idx: number) => {
-                console.log(`[simulateSmartGrid] Card ${idx}: left=${obj.left}, top=${obj.top}, w=${obj.width}, h=${obj.height}, visible=${obj.visible}, opacity=${obj.opacity}`);
+            smartObjects.forEach((obj: any) => {
                 // Ensure cards are NOT parented to any Frame (prevents clipPath hiding them)
                 obj.clipPath = null;
                 obj.parentFrameId = undefined;
@@ -15254,26 +16009,170 @@ const simulateSmartGrid = async (
                 canvas.value.setActiveObject(smartObjects[0]);
             }
 
-            // Diagnostic: log final canvas state
-            const allObjs = canvas.value.getObjects();
-            console.log('[simulateSmartGrid] Canvas objects after import:', allObjs.length);
-            allObjs.forEach((o: any, i: number) => {
-                console.log(`  [${i}] type=${o.type} name=${o.name || o.layerName || '?'} isFrame=${!!o.isFrame} isSmartObject=${!!o.isSmartObject} left=${o.left} top=${o.top} visible=${o.visible} opacity=${o.opacity} clipPath=${!!o.clipPath} parentFrameId=${o.parentFrameId || 'none'}`);
-            });
         }
-        
-        console.log('[simulateSmartGrid] === DONE ===');
 
     } catch (err) {
         console.error("Grid Generation Failed:", err);
     } finally {
         isProcessing.value = false;
         canvas.value.requestRenderAll();
-        saveCurrentState();
+        saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid' });
+        flushPersistenceNow('simulate-smart-grid');
     }
 }
 
 // === ZONE LOGIC ===
+
+function normalizeGlobalStyles(styles?: Partial<GlobalStyles> | null): GlobalStyles {
+    const source = (styles && typeof styles === 'object') ? styles : {};
+    const merged = {
+        ...DEFAULT_GLOBAL_STYLES,
+        ...source
+    };
+    const defaultColor = {
+        cardColor: DEFAULT_GLOBAL_STYLES.cardColor || '#ffffff',
+        cardBorderColor: DEFAULT_GLOBAL_STYLES.cardBorderColor || '#000000',
+        accentColor: DEFAULT_GLOBAL_STYLES.accentColor || '#dc2626',
+        prodNameColor: DEFAULT_GLOBAL_STYLES.prodNameColor || '#000000',
+        limitColor: DEFAULT_GLOBAL_STYLES.limitColor || '#ef4444',
+        splashColor: DEFAULT_GLOBAL_STYLES.splashColor || '#dc2626',
+        splashTextColor: DEFAULT_GLOBAL_STYLES.splashTextColor || '#ffffff',
+        splashFill: DEFAULT_GLOBAL_STYLES.splashFill || '#000000'
+    };
+    const defaultNumber = {
+        cardBorderRadius: DEFAULT_GLOBAL_STYLES.cardBorderRadius ?? 8,
+        cardBorderWidth: DEFAULT_GLOBAL_STYLES.cardBorderWidth ?? 0,
+        prodNameScale: DEFAULT_GLOBAL_STYLES.prodNameScale ?? 1,
+        prodNameLineHeight: DEFAULT_GLOBAL_STYLES.prodNameLineHeight ?? 1.05,
+        splashScale: DEFAULT_GLOBAL_STYLES.splashScale ?? 1,
+        splashTextScale: DEFAULT_GLOBAL_STYLES.splashTextScale ?? 1,
+        splashRoundness: DEFAULT_GLOBAL_STYLES.splashRoundness ?? 1,
+        splashOffsetY: DEFAULT_GLOBAL_STYLES.splashOffsetY ?? 0
+    };
+
+    const normalizeHexColor = (
+        value: any,
+        fallback: string,
+        opts: { allowTransparent?: boolean; allowUndefined?: boolean } = {}
+    ): string | undefined => {
+        if (value === undefined || value === null || value === '') {
+            return opts.allowUndefined ? undefined : fallback;
+        }
+        const raw = String(value).trim();
+        if (!raw) return opts.allowUndefined ? undefined : fallback;
+        if (opts.allowTransparent && raw.toLowerCase() === 'transparent') return 'transparent';
+
+        const prefixed = raw.startsWith('#') ? raw : `#${raw}`;
+        const short = /^#([0-9a-f]{3})$/i.exec(prefixed);
+        if (short) {
+            const shortToken = String(short[1] || '');
+            const expanded = shortToken.split('').map((ch) => ch + ch).join('').toLowerCase();
+            return `#${expanded}`;
+        }
+        if (/^#[0-9a-f]{6}$/i.test(prefixed)) {
+            return prefixed.toLowerCase();
+        }
+        return opts.allowUndefined ? undefined : fallback;
+    };
+
+    const toFinite = (value: any, fallback: number, min?: number, max?: number): number => {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        if (typeof min === 'number' && n < min) return min;
+        if (typeof max === 'number' && n > max) return max;
+        return n;
+    };
+
+    const normalized: GlobalStyles = {
+        ...merged,
+        cardColor: normalizeHexColor(merged.cardColor, defaultColor.cardColor, { allowTransparent: true }),
+        cardBorderColor: normalizeHexColor(merged.cardBorderColor, defaultColor.cardBorderColor),
+        accentColor: normalizeHexColor(merged.accentColor, defaultColor.accentColor),
+        prodNameColor: normalizeHexColor(merged.prodNameColor, defaultColor.prodNameColor),
+        limitColor: normalizeHexColor(merged.limitColor, defaultColor.limitColor),
+        splashColor: normalizeHexColor(merged.splashColor, defaultColor.splashColor),
+        splashTextColor: normalizeHexColor(merged.splashTextColor, defaultColor.splashTextColor),
+        splashFill: normalizeHexColor(merged.splashFill, defaultColor.splashFill),
+        isProdBgTransparent: !!merged.isProdBgTransparent,
+        cardBorderRadius: toFinite(merged.cardBorderRadius, defaultNumber.cardBorderRadius, 0, 120),
+        cardBorderWidth: toFinite(merged.cardBorderWidth, defaultNumber.cardBorderWidth, 0, 24),
+        prodNameScale: toFinite(merged.prodNameScale, defaultNumber.prodNameScale, 0.5, 2.5),
+        prodNameLineHeight: toFinite(merged.prodNameLineHeight, defaultNumber.prodNameLineHeight, 0.7, 2.2),
+        splashScale: toFinite(merged.splashScale, defaultNumber.splashScale, 0.35, 2.5),
+        splashTextScale: toFinite(merged.splashTextScale, defaultNumber.splashTextScale, 0.4, 2.8),
+        splashRoundness: toFinite(merged.splashRoundness, defaultNumber.splashRoundness, 0, 1),
+        splashOffsetY: toFinite(merged.splashOffsetY, defaultNumber.splashOffsetY, -300, 300),
+        priceTextColor: normalizeHexColor(merged.priceTextColor, defaultColor.splashTextColor, { allowUndefined: true }),
+        priceCurrencyColor: normalizeHexColor(merged.priceCurrencyColor, defaultColor.splashTextColor, { allowUndefined: true }),
+        priceFontWeight: merged.priceFontWeight === '' || merged.priceFontWeight === null ? undefined : merged.priceFontWeight
+    };
+
+    const align = String(normalized.prodNameAlign || '').toLowerCase();
+    if (align !== 'left' && align !== 'center' && align !== 'right') {
+        normalized.prodNameAlign = DEFAULT_GLOBAL_STYLES.prodNameAlign;
+    }
+    const transform = String(normalized.prodNameTransform || '').toLowerCase();
+    if (transform !== 'none' && transform !== 'upper' && transform !== 'lower') {
+        normalized.prodNameTransform = DEFAULT_GLOBAL_STYLES.prodNameTransform;
+    }
+    if (typeof normalized.priceFont !== 'string' || !normalized.priceFont.trim()) {
+        normalized.priceFont = DEFAULT_GLOBAL_STYLES.priceFont;
+    }
+    if (typeof normalized.prodNameFont !== 'string' || !normalized.prodNameFont.trim()) {
+        normalized.prodNameFont = DEFAULT_GLOBAL_STYLES.prodNameFont;
+    }
+
+    return normalized;
+}
+
+function getZoneGlobalStyles(zone?: any): GlobalStyles {
+    if (zone && typeof (zone as any)._zoneGlobalStyles === 'object' && (zone as any)._zoneGlobalStyles !== null) {
+        return normalizeGlobalStyles((zone as any)._zoneGlobalStyles as Partial<GlobalStyles>);
+    }
+    return normalizeGlobalStyles(productZoneState.globalStyles.value);
+}
+
+const HIGH_FREQUENCY_GLOBAL_STYLE_PROPS = new Set<string>([
+    'cardColor',
+    'isProdBgTransparent',
+    'cardBorderColor',
+    'cardBorderRadius',
+    'cardBorderWidth',
+    'prodNameColor',
+    'limitColor',
+    'splashColor',
+    'accentColor',
+    'splashTextColor',
+    'priceTextColor',
+    'priceCurrencyColor',
+    'splashFill',
+    'splashScale',
+    'splashTextScale',
+    'splashRoundness',
+    'splashOffsetY',
+    'prodNameScale',
+    'prodNameLineHeight'
+]);
+
+const isHighFrequencyGlobalStyleProp = (prop: string) => HIGH_FREQUENCY_GLOBAL_STYLE_PROPS.has(String(prop || ''));
+
+const scheduleGlobalStylesStateSave = (prop: string) => {
+    const immediate = !isHighFrequencyGlobalStyleProp(prop);
+    if (globalStylesSaveTimer) {
+        clearTimeout(globalStylesSaveTimer);
+        globalStylesSaveTimer = null;
+    }
+
+    if (immediate) {
+        saveCurrentState({ reason: `global-style:${prop}` });
+        return;
+    }
+
+    globalStylesSaveTimer = setTimeout(() => {
+        globalStylesSaveTimer = null;
+        saveCurrentState({ reason: 'global-style:debounced' });
+    }, 220);
+};
 
 const getCurrentZoneObject = () => {
     if (!canvas.value) return null;
@@ -15339,20 +16238,79 @@ const getCurrentZoneObject = () => {
         }
     }
     
-    // 6. LAST RESORT: Find ANY zone on canvas (for single-zone designs)
-    const anyZone = canvas.value.getObjects().find((o: any) => isLikelyProductZone(o));
-    if (anyZone) return anyZone;
+    // 6. LAST RESORT: only auto-pick when there is exactly one zone.
+    const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+    if (zones.length === 1) return zones[0];
     
     return null;
 }
 
-const handleUpdateZone = (prop: string, val: any) => {
-    console.log('🔍 [handleUpdateZone] CALLED with prop:', prop, 'val:', val);
+const resolveZoneTargetsForUpdates = (opts: { allowAllFallback?: boolean } = {}) => {
+    if (!canvas.value) return [] as any[];
+
+    const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+    const byId = new Map<string, any>();
+    zones.forEach((z: any) => {
+        const id = String(z?._customId || '').trim();
+        if (id) byId.set(id, z);
+    });
+
+    const resolved: any[] = [];
+    const pushZone = (z: any) => {
+        if (!z || !isLikelyProductZone(z)) return;
+        if (!resolved.includes(z)) resolved.push(z);
+    };
+
+    // 1) Primary source: currently resolved zone (active/snapshot/card parent).
+    pushZone(getCurrentZoneObject());
+
+    // 2) Snapshot selected zone id.
+    const snap = selectedObjectRef.value as any;
+    const snapId = String(snap?._customId || '').trim();
+    if (snapId && byId.has(snapId)) pushZone(byId.get(snapId));
+
+    // 3) Snapshot selected card parent zone.
+    const parentId = String(snap?.parentZoneId || '').trim();
+    if (parentId && byId.has(parentId)) pushZone(byId.get(parentId));
+
+    // 4) If still unresolved and there is only one zone in canvas, use it.
+    if (!resolved.length && zones.length === 1) pushZone(zones[0]);
+
+    // 5) Emergency fallback: apply to all zones (prevents silent no-op).
+    if (!resolved.length && opts.allowAllFallback && zones.length > 0) {
+        zones.forEach((z: any) => pushZone(z));
+    }
+
+    return resolved;
+}
+
+const resolveZoneUpdatesPayload = (propOrPayload: any, val: any): Record<string, any> => {
+    if (typeof propOrPayload === 'string' && propOrPayload.trim()) {
+        return { [propOrPayload]: val };
+    }
+    if (propOrPayload && typeof propOrPayload === 'object' && !Array.isArray(propOrPayload)) {
+        const payload = propOrPayload as Record<string, any>;
+        if (typeof payload.prop === 'string' && payload.prop.trim()) {
+            return { [payload.prop]: payload.value };
+        }
+        return { ...payload };
+    }
+    return {};
+};
+
+const handleUpdateZone = (propOrPayload: string | Record<string, any>, val?: any) => {
+    const updates = resolveZoneUpdatesPayload(propOrPayload, val);
+    const entries = Object.entries(updates).filter(([key]) => key && key !== 'prop' && key !== 'value');
+    if (!entries.length) {
+        console.warn('⚠️ [handleUpdateZone] Invalid payload received:', propOrPayload);
+        return;
+    }
+
     // 1. Update Reactive State
-    productZoneState.updateZone({ [prop]: val });
-    
+    productZoneState.updateZone(Object.fromEntries(entries));
+
     // 2. Apply to Canvas Object
-    updateZoneOnCanvas(prop, val);
+    entries.forEach(([prop, value]) => updateZoneOnCanvas(prop, value));
 }
 
 const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?: boolean } = {}) => {
@@ -15467,65 +16425,400 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
 };
 
 const updateZoneOnCanvas = (prop: string, val: any) => {
-    const zone = getCurrentZoneObject();
-    console.log('🔍 [updateZoneOnCanvas] zone found:', !!zone, zone?._customId, 'prop:', prop);
-    if (!zone) {
+    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false });
+    if (!targets.length) {
         console.warn('⚠️ [updateZoneOnCanvas] No zone found! Cannot update canvas.');
         return;
     }
-    applyZoneUpdates(zone, { [prop]: val });
-}
-
-const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any) => {
-    console.log('🔍 [applyGlobalStylesToCards] CALLED', { hasZone: !!zone, stylesKeys: Object.keys(styles || {}) });
-    if (!canvas.value) {
-        console.warn('⚠️ [applyGlobalStylesToCards] No canvas!');
+    if (targets.length === 1) {
+        applyZoneUpdates(targets[0], { [prop]: val });
         return;
     }
-    const list = zone && isLikelyProductZone(zone)
-        ? getZoneChildren(zone)
-        : canvas.value.getObjects().filter((o: any) => o?.type === 'group' && (o.isSmartObject || o.isProductCard || isLikelyProductCard(o)));
+
+    // Multiple target fallback (rare): apply without intermediate saves and commit once.
+    targets.forEach((z: any) => applyZoneUpdates(z, { [prop]: val }, { save: false }));
+    canvas.value?.requestRenderAll();
+    saveCurrentState();
+    refreshSelectedRef();
+}
+
+const LIGHTWEIGHT_GLOBAL_STYLE_PROPS = new Set<string>([
+    'cardColor',
+    'isProdBgTransparent',
+    'cardBorderColor',
+    'cardBorderWidth',
+    'cardBorderRadius',
+    'limitFont',
+    'limitColor',
+    'splashColor',
+    'accentColor',
+    'splashTextColor',
+    'priceTextColor',
+    'priceCurrencyColor',
+    'splashFill'
+]);
+
+const isLightweightGlobalStyleProp = (prop: string) => LIGHTWEIGHT_GLOBAL_STYLE_PROPS.has(String(prop || '').trim());
+
+const getCardBackgroundRect = (card: any) => {
+    if (!card || typeof card.getObjects !== 'function') return null;
+    const objects = card.getObjects() || [];
+    const byName = objects.find((o: any) => String(o?.name || '') === 'offerBackground' && String(o?.type || '').toLowerCase() === 'rect');
+    if (byName) return byName;
+    const byPattern = objects.find((o: any) => String(o?.type || '').toLowerCase() === 'rect' && /(offerBackground|background|bg)/i.test(String(o?.name || '')));
+    if (byPattern) return byPattern;
+    let largestRect: any = null;
+    let largestArea = -1;
+    objects.forEach((o: any) => {
+        if (String(o?.type || '').toLowerCase() !== 'rect') return;
+        const area = Number(o?.width || 0) * Number(o?.height || 0) * Number(o?.scaleX || 1) * Number(o?.scaleY || 1);
+        if (area > largestArea) {
+            largestArea = area;
+            largestRect = o;
+        }
+    });
+    return largestRect;
+};
+
+const getCardTitleText = (card: any) => {
+    if (!card || typeof card.getObjects !== 'function') return null;
+    const objects = card.getObjects() || [];
+    const named = objects.find((o: any) => String(o?.name || '') === 'smart_title');
+    if (named) return named;
+    let topMostText: any = null;
+    let topMost = Number.POSITIVE_INFINITY;
+    objects.forEach((o: any) => {
+        const t = String(o?.type || '').toLowerCase();
+        const isText = t === 'text' || t === 'i-text' || t === 'textbox';
+        if (!isText) return;
+        const top = Number.isFinite(Number(o?.top)) ? Number(o.top) : Number.POSITIVE_INFINITY;
+        if (top <= topMost) {
+            topMost = top;
+            topMostText = o;
+        }
+    });
+    return topMostText;
+};
+
+const getCardLimitText = (card: any) => {
+    if (!card || typeof card.getObjects !== 'function') return null;
+    const objects = card.getObjects() || [];
+    return objects.find((o: any) =>
+        String(o?.name || '') === 'smart_limit' ||
+        String(o?.name || '') === 'limitText' ||
+        String(o?.name || '') === 'product_limit' ||
+        String(o?.data?.smartType || '') === 'product-limit'
+    ) || null;
+};
+
+const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalStyles): boolean => {
+    if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') return false;
+    const p = String(prop || '').trim();
+    if (!p || !isLightweightGlobalStyleProp(p)) return false;
+
+    const bg = getCardBackgroundRect(card);
+    const title = getCardTitleText(card);
+    const limit = getCardLimitText(card);
+    const priceGroup = getPriceGroupFromAny(card);
+    const cardBounds = typeof card.getBoundingRect === 'function' ? card.getBoundingRect(true) : null;
+    const cardW = Number(card?._cardWidth ?? card?.width ?? card?.getScaledWidth?.() ?? cardBounds?.width ?? 0) || 0;
+    const cardH = Number(card?._cardHeight ?? card?.height ?? card?.getScaledHeight?.() ?? cardBounds?.height ?? 0) || 0;
+    let changed = false;
+
+    if ((p === 'cardColor' || p === 'isProdBgTransparent') && bg && String(bg?.type || '').toLowerCase() === 'rect') {
+        bg.set('fill', styles.isProdBgTransparent ? 'transparent' : (styles.cardColor || '#ffffff'));
+        changed = true;
+    } else if (p === 'cardBorderRadius' && bg && String(bg?.type || '').toLowerCase() === 'rect') {
+        const r = Number.isFinite(Number(styles.cardBorderRadius)) ? Number(styles.cardBorderRadius) : 0;
+        bg.set({ rx: r, ry: r });
+        changed = true;
+    } else if (p === 'cardBorderColor' && bg && String(bg?.type || '').toLowerCase() === 'rect') {
+        if (styles.cardBorderColor) {
+            bg.set('stroke', styles.cardBorderColor);
+            const borderWidth = Number.isFinite(Number(styles.cardBorderWidth)) ? Number(styles.cardBorderWidth) : 0;
+            bg.set('strokeWidth', borderWidth === 0 ? 1 : Math.max(0, borderWidth));
+        } else {
+            bg.set('stroke', undefined);
+        }
+        changed = true;
+    } else if (p === 'cardBorderWidth' && bg && String(bg?.type || '').toLowerCase() === 'rect') {
+        const borderWidth = Math.max(0, Number(styles.cardBorderWidth ?? 0));
+        if (styles.cardBorderColor) bg.set('strokeWidth', borderWidth === 0 ? 1 : borderWidth);
+        else bg.set('strokeWidth', borderWidth);
+        changed = true;
+    } else if (
+        (p === 'prodNameColor' || p === 'prodNameFont' || p === 'prodNameWeight' || p === 'prodNameAlign' || p === 'prodNameTransform') &&
+        title &&
+        isTextLikeObject(title)
+    ) {
+        if (styles.prodNameColor) title.set('fill', styles.prodNameColor);
+        if (styles.prodNameFont) title.set('fontFamily', styles.prodNameFont);
+        if (styles.prodNameWeight !== undefined) title.set('fontWeight', styles.prodNameWeight as any);
+        if (styles.prodNameAlign) title.set('textAlign', styles.prodNameAlign);
+
+        const rawKey = '__rawText';
+        const curText = String((title as any).text ?? '');
+        if (typeof (title as any)[rawKey] !== 'string') (title as any)[rawKey] = curText;
+        const mode = styles.prodNameTransform ?? 'none';
+        if (mode === 'none') {
+            (title as any)[rawKey] = curText;
+        } else {
+            const baseText = String((title as any)[rawKey] ?? curText);
+            const nextText = mode === 'upper'
+                ? baseText.toUpperCase()
+                : mode === 'lower'
+                    ? baseText.toLowerCase()
+                    : baseText;
+            if (nextText !== curText) title.set('text', nextText);
+        }
+
+        if (String(title.type || '').toLowerCase() === 'textbox' && cardW > 0) {
+            title.set({ width: Math.max(20, cardW * 0.9) });
+        }
+        if (typeof title.initDimensions === 'function') title.initDimensions();
+        changed = true;
+    } else if ((p === 'limitColor' || p === 'limitFont') && limit && isTextLikeObject(limit)) {
+        if (styles.limitColor) limit.set('fill', styles.limitColor);
+        if (styles.limitFont) limit.set('fontFamily', styles.limitFont);
+        if (typeof limit.initDimensions === 'function') limit.initDimensions();
+        changed = true;
+    } else if (
+        (
+            p === 'splashColor' ||
+            p === 'accentColor' ||
+            p === 'splashFill' ||
+            p === 'priceTextColor' ||
+            p === 'priceCurrencyColor' ||
+            p === 'splashTextColor' ||
+            p === 'priceFont' ||
+            p === 'priceFontWeight' ||
+            p === 'splashTextScale'
+        ) &&
+        priceGroup &&
+        String(priceGroup?.type || '').toLowerCase() === 'group' &&
+        typeof priceGroup.getObjects === 'function'
+    ) {
+        const preserveTemplateVisual =
+            (priceGroup as any).__preserveManualLayout === true ||
+            (priceGroup as any).__isCustomTemplate === true;
+        if (preserveTemplateVisual) {
+            // Respect Mini Editor template geometry/typography for manual templates.
+            // Price-layer global tweaks should not override authored label internals.
+            return false;
+        }
+
+        const parts = priceGroup.getObjects() || [];
+        const priceBg = parts.find((o: any) => o?.name === 'price_bg');
+        const currencyText = parts.find((o: any) => o?.name === 'price_currency_text');
+        const priceTexts = parts.filter((o: any) => ['price_integer_text', 'price_decimal_text', 'price_unit_text', 'price_value_text'].includes(String(o?.name || '')));
+
+        if ((p === 'splashColor' || p === 'accentColor') && priceBg) {
+            const accent = styles.splashColor ?? styles.accentColor;
+            if (accent) priceBg.set('stroke', accent);
+            changed = true;
+        }
+        if (p === 'splashFill' && priceBg) {
+            if (styles.splashFill) priceBg.set('fill', styles.splashFill);
+            changed = true;
+        }
+        if (p === 'priceCurrencyColor' && currencyText && isTextLikeObject(currencyText)) {
+            const nextCurrency = styles.priceCurrencyColor ?? styles.priceTextColor ?? styles.splashTextColor;
+            if (nextCurrency) currencyText.set('fill', nextCurrency);
+            if (typeof currencyText.initDimensions === 'function') currencyText.initDimensions();
+            changed = true;
+        }
+        if (p === 'priceTextColor' || p === 'splashTextColor') {
+            const nextTextColor = styles.priceTextColor ?? styles.splashTextColor;
+            if (nextTextColor) {
+                priceTexts.forEach((txt: any) => {
+                    if (!isTextLikeObject(txt)) return;
+                    txt.set('fill', nextTextColor);
+                    if (typeof txt.initDimensions === 'function') txt.initDimensions();
+                });
+                changed = true;
+            }
+        }
+
+        if (p === 'priceFont' || p === 'priceFontWeight' || p === 'splashTextScale') {
+            const allPriceTexts = [currencyText, ...priceTexts];
+            allPriceTexts.forEach((txt: any) => {
+                if (!isTextLikeObject(txt)) return;
+                if (styles.priceFont) txt.set('fontFamily', styles.priceFont);
+                if (styles.priceFontWeight !== undefined) txt.set('fontWeight', styles.priceFontWeight as any);
+
+                const mult = typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
+                if (typeof txt.__fontScale === 'number') {
+                    if (typeof txt.__fontScaleBase !== 'number') txt.__fontScaleBase = txt.__fontScale;
+                    txt.__fontScale = txt.__fontScaleBase * mult;
+                }
+                if (typeof txt.initDimensions === 'function') txt.initDimensions();
+            });
+
+            if (cardW > 0 && cardH > 0) {
+                layoutPriceGroup(priceGroup, cardW, cardH);
+            }
+            changed = true;
+        }
+    }
+
+    return changed;
+};
+
+const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opts: { prop?: string } = {}) => {
+    const summary = { cardsTouched: 0, fastApplied: 0, fullRelayout: 0 };
+    if (!canvas.value) {
+        console.warn('⚠️ [applyGlobalStylesToCards] No canvas!');
+        return summary;
+    }
+    const effectiveStyles = normalizeGlobalStyles(styles);
+    const objs = canvas.value.getObjects();
+    const isCardCandidate = (o: any) => {
+        if (!o || o.type !== 'group') return false;
+        if ((o as any).excludeFromExport) return false;
+        if ((o as any).isFrame) return false;
+        if (isLikelyProductZone(o)) return false;
+        if (String(o.name || '') === 'priceGroup') return false;
+        return !!(
+            o.isSmartObject ||
+            o.isProductCard ||
+            isLikelyProductCard(o) ||
+            String((o as any).parentZoneId || '').trim().length ||
+            String((o as any).smartGridId || '').trim().length ||
+            (Number.isFinite((o as any)._cardWidth) && Number((o as any)._cardWidth) > 0) ||
+            (Number.isFinite((o as any)._cardHeight) && Number((o as any)._cardHeight) > 0)
+        );
+    };
+
+    // Product cards are top-level canvas objects by design. Avoid deep traversal to prevent
+    // false positives on nested groups (e.g., priceGroup inside cards).
+    const allCards = objs.filter((o: any) => isCardCandidate(o));
+    const dedupeCards = (arr: any[]) => {
+        const map = new Map<any, any>();
+        arr.forEach((c: any) => {
+            const key = c?._customId ?? c?.id ?? c;
+            map.set(key, c);
+        });
+        return Array.from(map.values());
+    };
+
+    let list: any[] = allCards;
+    if (zone && isLikelyProductZone(zone)) {
+        const zoneId = String((zone as any)?._customId || '').trim();
+        const zoneBounds = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
+        const margin = (() => {
+            const pad = typeof (zone as any)._zonePadding === 'number' ? (zone as any)._zonePadding : 20;
+            const base = Math.min(zoneBounds.width || 0, zoneBounds.height || 0);
+            return Math.max(80, Math.min(260, pad + base * 0.14));
+        })();
+
+        const fromBinding = zoneId
+            ? allCards.filter((c: any) => String((c as any)?.parentZoneId || '').trim() === zoneId)
+            : [];
+        const fromSlot = zoneId
+            ? allCards.filter((c: any) => String((c as any)?._zoneSlot?.zoneId || '').trim() === zoneId)
+            : [];
+        const fromHeuristic = getZoneChildren(zone);
+        const fromIntersection = allCards.filter((c: any) => {
+            const center = typeof c.getCenterPoint === 'function'
+                ? c.getCenterPoint()
+                : { x: Number(c.left || 0), y: Number(c.top || 0) };
+            const nearInside =
+                center.x >= (zoneBounds.left - margin) &&
+                center.x <= (zoneBounds.left + zoneBounds.width + margin) &&
+                center.y >= (zoneBounds.top - margin) &&
+                center.y <= (zoneBounds.top + zoneBounds.height + margin);
+            if (nearInside) return true;
+            try {
+                return typeof zone.intersectsWithObject === 'function' && zone.intersectsWithObject(c);
+            } catch {
+                return false;
+            }
+        });
+
+        list = dedupeCards([...fromBinding, ...fromSlot, ...fromHeuristic, ...fromIntersection]);
+
+        // Multi-zone safety: never bleed a zone style into every card.
+        if (!list.length) {
+            const zones = objs.filter((o: any) => isLikelyProductZone(o));
+            if (zones.length <= 1) {
+                console.warn('⚠️ [applyGlobalStylesToCards] No cards resolved for zone; fallback to all cards (single-zone canvas)');
+                list = allCards;
+            } else {
+                console.warn('⚠️ [applyGlobalStylesToCards] No cards resolved for zone; aborting global-style apply to avoid cross-zone pollution');
+                return summary;
+            }
+        }
+    }
     
-    console.log('🔍 [applyGlobalStylesToCards] Found cards:', list.length);
+    const fastProp = String(opts?.prop || '').trim();
+    const allowFastPath = !!fastProp && isLightweightGlobalStyleProp(fastProp);
 
     list.forEach((card: any, idx: number) => {
-        console.log(`🔍 [applyGlobalStylesToCards] Processing card ${idx}:`, { 
-            type: card?.type, 
-            name: card?.name,
-            hasGetObjects: typeof card?.getObjects === 'function'
-        });
+        try {
         if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') {
-            console.log(`⚠️ [applyGlobalStylesToCards] Skipping card ${idx} - invalid`);
             return;
         }
-        const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0;
-        const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0;
-        console.log(`🔍 [applyGlobalStylesToCards] Card ${idx} dimensions:`, { cardW, cardH });
-        if (cardW && cardH) {
-            console.log(`🔍 [applyGlobalStylesToCards] Calling resizeSmartObject for card ${idx}`);
-            resizeSmartObject(card, cardW, cardH, styles);
+        // CRITICAL: Recursively mark ALL children dirty and disable objectCaching.
+        // After loadFromJSON, objectCaching defaults to true on cards/nested groups,
+        // which can prevent visual updates from appearing until the cache is invalidated.
+        const markDirtyRecursive = (obj: any) => {
+            if (!obj) return;
+            obj.dirty = true;
+            if (obj.objectCaching) obj.objectCaching = false;
+            if (obj.statefullCache) obj.statefullCache = false;
+            if (typeof obj.getObjects === 'function') {
+                (obj.getObjects() || []).forEach((child: any) => markDirtyRecursive(child));
+            }
+        };
+
+        if (allowFastPath && applyGlobalStylePropToCardFast(card, fastProp, effectiveStyles)) {
+            summary.cardsTouched += 1;
+            summary.fastApplied += 1;
+            markDirtyRecursive(card);
+            card.setCoords();
+            return;
         }
+
+        const cardBounds = typeof card.getBoundingRect === 'function' ? card.getBoundingRect(true) : null;
+        const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? cardBounds?.width ?? 0;
+        const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? cardBounds?.height ?? 0;
+        if (cardW && cardH) {
+            resizeSmartObject(card, cardW, cardH, effectiveStyles);
+        } else {
+            // Final fallback prevents dead cards after corrupted reload states.
+            resizeSmartObject(card, 180, 260, effectiveStyles);
+        }
+        summary.cardsTouched += 1;
+        summary.fullRelayout += 1;
         // Do NOT call safeAddWithUpdate — resizeSmartObject already freezes dimensions.
-        card.dirty = true;
+        markDirtyRecursive(card);
         card.setCoords();
+        } catch (err) {
+            console.warn(`⚠️ [applyGlobalStylesToCards] Failed on card ${idx}`, err);
+        }
     });
-    
-    console.log('🔍 [applyGlobalStylesToCards] DONE');
+    return summary;
 };
 
 const handleApplyZonePreset = (presetId: string) => {
-    console.log('🔍 [handleApplyZonePreset] CALLED with presetId:', presetId);
     productZoneState.applyPreset(presetId);
     if (!canvas.value) return;
     const active = getCurrentZoneObject();
     if (!active) return;
     const z = productZoneState.productZone.value;
     applyZoneUpdates(active, {
+        padding: z.padding ?? 15,
+        gapHorizontal: z.gapHorizontal ?? z.padding ?? 15,
+        gapVertical: z.gapVertical ?? z.padding ?? 15,
         columns: z.columns ?? 0,
         rows: z.rows ?? 0,
         layoutDirection: z.layoutDirection ?? 'horizontal',
-        cardAspectRatio: z.cardAspectRatio ?? 'auto',
-        lastRowBehavior: z.lastRowBehavior ?? 'fill'
+        cardAspectRatio: z.cardAspectRatio ?? 'fill',
+        lastRowBehavior: z.lastRowBehavior ?? 'fill',
+        verticalAlign: z.verticalAlign ?? 'stretch',
+        highlightCount: z.highlightCount ?? 0,
+        highlightPos: z.highlightPos ?? 'first',
+        highlightHeight: z.highlightHeight ?? 1.5
     });
 };
 
@@ -15542,14 +16835,55 @@ const handleSyncZoneGaps = (padding: number) => {
     });
 };
 
-const handleUpdateGlobalStyles = async (prop: string, val: any) => {
-    console.log('🔍 [handleUpdateGlobalStyles] CALLED with prop:', prop, 'val:', val);
-    productZoneState.updateGlobalStyles({ [prop]: val });
-    if (!canvas.value) return;
+const ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS = new Set<string>([
+    'splashTemplateId',
+    'priceTextColor',
+    'priceCurrencyColor',
+    'priceFontWeight'
+]);
 
-    let zone = getCurrentZoneObject();
+const resolveGlobalStyleUpdatePayload = (propOrPayload: any, val: any): { prop: string; value: any } | null => {
+    if (typeof propOrPayload === 'string' && propOrPayload.trim()) {
+        return { prop: propOrPayload, value: val };
+    }
+    if (propOrPayload && typeof propOrPayload === 'object' && !Array.isArray(propOrPayload)) {
+        const payload = propOrPayload as Record<string, any>;
+        if (typeof payload.prop === 'string' && payload.prop.trim()) {
+            return { prop: payload.prop, value: payload.value };
+        }
+        const keys = Object.keys(payload);
+        if (keys.length === 1 && keys[0]) {
+            return { prop: keys[0], value: payload[keys[0]] };
+        }
+    }
+    return null;
+};
+
+const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, any>, val?: any) => {
+    if (!canvas.value) return;
+    const parsed = resolveGlobalStyleUpdatePayload(propOrPayload, val);
+    if (!parsed) {
+        console.warn('⚠️ [handleUpdateGlobalStyles] Invalid payload received:', propOrPayload);
+        return;
+    }
+
+    const prop = parsed.prop;
+    const value = parsed.value;
+    if (value === undefined && !ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS.has(prop)) {
+        console.warn(`⚠️ [handleUpdateGlobalStyles] Ignoring undefined value for "${prop}" to avoid unintended resets.`);
+        return;
+    }
+
+    const perfStart = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
+
+    // Gather ALL zones in canvas first (for fallback).
+    const allZones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+
+    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false });
+    const primaryZone = targets[0];
 
     // If no zone found but a card is selected, try to find its parent zone
+    let zone = primaryZone;
     if (!zone && selectedObjectRef.value && isLikelyProductCard(selectedObjectRef.value)) {
         const parentZoneId = selectedObjectRef.value.parentZoneId;
         if (parentZoneId) {
@@ -15559,32 +16893,106 @@ const handleUpdateGlobalStyles = async (prop: string, val: any) => {
         }
     }
 
-    // Persist styles on the zone so they survive undo/redo and reload.
-    if (zone) {
-        const prev = (zone as any)._zoneGlobalStyles ?? {};
-        (zone as any)._zoneGlobalStyles = { ...prev, [prop]: val };
+    // Reload safety: if a zone snapshot is selected but Fabric lost activeObject,
+    // resolve the real zone directly by _customId.
+    if (!zone && selectedObjectRef.value?._customId) {
+        const selectedId = String(selectedObjectRef.value._customId).trim();
+        if (selectedId) {
+            zone = canvas.value.getObjects().find((o: any) =>
+                String((o as any)?._customId || '').trim() === selectedId && isLikelyProductZone(o)
+            );
+        }
     }
 
-    const stylesToApply: Partial<GlobalStyles> = zone
-        ? ((zone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value)
-        : productZoneState.globalStyles.value;
+    // Last deterministic fallback: pick the single zone if there's only one.
+    // IMPORTANT: For global styles this is safe (applies to the whole canvas).
+    if (!zone && allZones.length === 1) {
+        zone = allZones[0];
+    }
 
-    // Special case: label template selection - just update reference, don't rebuild existing cards
-    // The template will be used for NEW products added to the zone
-    if (prop === 'splashTemplateId' && zone) {
-        // Just update the template reference without rebuilding existing cards
-        await applyLabelTemplateToZone(zone, val, false);
+    // Keep composable synchronized with EFFECTIVE styles (defaults + zone overrides),
+    // so controls always operate on a complete style object.
+    const baseStylesForState = zone
+        ? getZoneGlobalStyles(zone)
+        : normalizeGlobalStyles(productZoneState.globalStyles.value);
+    const nextStylesForState = normalizeGlobalStyles({ ...baseStylesForState, [prop]: value });
+    productZoneState.updateGlobalStyles(nextStylesForState);
+
+    // Persist styles on the zone so they survive undo/redo and reload.
+    const effectiveTargets = targets.length > 0
+        ? targets
+        : (zone ? [zone] : (allZones.length === 1 ? [allZones[0]] : []));
+    
+    if (effectiveTargets.length > 0) {
+        effectiveTargets.forEach((z: any) => {
+            const prev = getZoneGlobalStyles(z);
+            (z as any)._zoneGlobalStyles = normalizeGlobalStyles({ ...prev, [prop]: value });
+        });
+    }
+
+    // Special case: label template selection.
+    // Apply to existing cards immediately so the preview/canvas always matches the chosen template.
+    if (prop === 'splashTemplateId' && effectiveTargets.length > 0) {
+        for (const z of effectiveTargets) {
+            // Keep UI and canvas consistent: when the user picks a template,
+            // apply it to existing cards in the zone as well.
+            await applyLabelTemplateToZone(z, value, true);
+        }
         refreshSelectedRef();
         return;
     }
 
-    applyGlobalStylesToCards(stylesToApply, zone || undefined);
+    if (effectiveTargets.length > 0) {
+        let totalCardsTouched = 0;
+        let totalFastApplied = 0;
+        let totalFullRelayout = 0;
+        effectiveTargets.forEach((z: any) => {
+            const zStyles = getZoneGlobalStyles(z);
+            const stats = applyGlobalStylesToCards(zStyles, z, { prop });
+            totalCardsTouched += Number(stats?.cardsTouched || 0);
+            totalFastApplied += Number(stats?.fastApplied || 0);
+            totalFullRelayout += Number(stats?.fullRelayout || 0);
+        });
+        if (import.meta.dev) {
+            const perfEnd = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
+            const elapsedMs = Math.max(0, perfEnd - perfStart);
+            console.log('[perf:global-styles]', {
+                prop,
+                zones: effectiveTargets.length,
+                cardsTouched: totalCardsTouched,
+                fastApplied: totalFastApplied,
+                fullRelayout: totalFullRelayout,
+                elapsedMs: Number(elapsedMs.toFixed(2))
+            });
+        }
+    } else {
+        console.warn('⚠️ [handleUpdateGlobalStyles] No target zone resolved; skipping apply to avoid cross-zone pollution');
+        return;
+    }
+
+    // CRITICAL: Force aggressive re-render. After loadFromJSON, Fabric v7 groups
+    // may cache stale renders. Clearing renderCache on all affected cards ensures
+    // the new styles are visually applied.
     canvas.value.requestRenderAll();
-    // Força a atualização visual adicional para garantir que mudanças sejam visíveis
-    nextTick(() => {
-        canvas.value?.requestRenderAll();
-    });
-    saveCurrentState();
+    if (!isHighFrequencyGlobalStyleProp(prop)) {
+        nextTick(() => {
+            if (canvas.value) {
+                // Force dirty on entire canvas to guarantee re-render
+                canvas.value.getObjects().forEach((o: any) => {
+                    if (o?.isSmartObject || o?.isProductCard) {
+                        o.dirty = true;
+                        if (typeof o.getObjects === 'function') {
+                            (o.getObjects() || []).forEach((child: any) => {
+                                if (child) child.dirty = true;
+                            });
+                        }
+                    }
+                });
+                canvas.value.requestRenderAll();
+            }
+        });
+    }
+    scheduleGlobalStylesStateSave(prop);
     refreshSelectedRef();
 };
 
@@ -15594,11 +17002,9 @@ const handleApplyTemplateToZone = async () => {
 
     const templateId = (zone as any)._zoneGlobalStyles?.splashTemplateId;
     if (!templateId) {
-        console.log('⚠️ [handleApplyTemplateToZone] No template selected');
         return;
     }
 
-    console.log('🔍 [handleApplyTemplateToZone] Applying template to all cards:', templateId);
     await applyLabelTemplateToZone(zone, templateId, true); // true = apply to existing cards
     refreshSelectedRef();
 };
@@ -15620,6 +17026,10 @@ const collectObjectsDeep = (root: any): any[] => {
 };
 
 const findByName = (objects: any[], name: string) => objects.find((o: any) => o?.name === name);
+const isTextLikeObject = (obj: any) => {
+    const t = String(obj?.type || '').toLowerCase();
+    return t === 'text' || t === 'i-text' || t === 'textbox';
+};
 
 const parsePriceToCents = (v: any): number | null => {
     if (v === null || v === undefined) return null;
@@ -15649,29 +17059,32 @@ const formatCentsToPrice = (cents: number | null): string | null => {
 };
 
 const splitPriceParts = (raw: any): { integer: string; dec: string } => {
-    const s0 = String(raw ?? '')
+    const parsed = parsePriceBR(String(raw ?? ''));
+    return { integer: parsed.inteiro, dec: parsed.centavos };
+};
+
+// Parse de preço brasileiro (ex: "129,99" => { inteiro: "129", centavos: "99" })
+const parsePriceBR = (preco: string): { inteiro: string; centavos: string } => {
+    const s0 = String(preco ?? '')
         .replace(/R\$\s*/gi, '')
         .replace(/\s+/g, '')
         .trim();
-    if (!s0) return { integer: '0', dec: '00' };
+    if (!s0) return { inteiro: '0', centavos: '00' };
 
-    // Support thousands separators:
-    // - "1.999,99" (pt-BR)
-    // - "1,999.99" (en-US)
     const lastComma = s0.lastIndexOf(',');
     const lastDot = s0.lastIndexOf('.');
     const sepIdx = Math.max(lastComma, lastDot);
 
     if (sepIdx === -1) {
-        const integer = s0.replace(/[^\d]/g, '') || '0';
-        return { integer, dec: '00' };
+        const inteiro = s0.replace(/[^\d]/g, '') || '0';
+        return { inteiro, centavos: '00' };
     }
 
     const rawInt = s0.slice(0, sepIdx);
     const rawDec = s0.slice(sepIdx + 1);
-    const integer = rawInt.replace(/[^\d]/g, '') || '0';
-    const dec = rawDec.replace(/[^\d]/g, '').padEnd(2, '0').slice(0, 2) || '00';
-    return { integer, dec };
+    const inteiro = rawInt.replace(/[^\d]/g, '') || '0';
+    const centavos = rawDec.replace(/[^\d]/g, '').padEnd(2, '0').slice(0, 2) || '00';
+    return { inteiro, centavos };
 };
 
 const normalizeUnitForLabel = (raw: any): 'KG' | 'UN' => {
@@ -15688,6 +17101,343 @@ const normalizeUnitForLabel = (raw: any): 'KG' | 'UN' => {
 
     // Everything else (ML/L/G/etc) becomes "UN" (gramatura stays in the product name).
     return 'UN';
+};
+
+const layoutPrice = (opts: {
+    priceInteger: any;
+    priceDecimal: any;
+    priceUnit?: any;
+    intX: number;
+    intY: number;
+    decY: number;
+    unitY: number;
+    maxWidth?: number;
+    gapPx?: number;
+    minGapPx?: number;
+    maxGapPx?: number;
+    targetCenterX?: number;
+}) => {
+    const integer = opts.priceInteger;
+    const decimal = opts.priceDecimal;
+    if (!integer || !decimal) return null;
+
+    const getW = (t: any) => (t && typeof t.getScaledWidth === 'function' ? t.getScaledWidth() : 0);
+    const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : -8;
+    const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : 6;
+    const digitsCount = String(integer?.text || '').replace(/[^\d]/g, '').length || 1;
+    const autoGap = digitsCount <= 1 ? -6 : (digitsCount === 2 ? -4 : (digitsCount === 3 ? -3 : -2));
+    let gap = Number.isFinite(Number(opts.gapPx)) ? Number(opts.gapPx) : autoGap;
+    gap = Math.min(maxGap, Math.max(minGap, gap));
+
+    integer.set?.({ originX: 'left', originY: 'center' });
+    decimal.set?.({ originX: 'left', originY: 'center' });
+
+    // Keep UN/KG only.
+    const unitObj = opts.priceUnit;
+    const rawUnit = String(unitObj?.text || '').trim();
+    const hasUnit = !!(unitObj && rawUnit.length > 0);
+    if (unitObj) {
+        // Respect explicit hidden state (used by collapsed atacarejo tiers).
+        // Avoid auto-reactivating hidden unit texts.
+        if (unitObj.visible === false) {
+            unitObj.set?.({ visible: false });
+        } else if (hasUnit) {
+            const unitNorm = normalizeUnitForLabel(rawUnit);
+            if (unitNorm !== rawUnit.toUpperCase().replace(/\s+/g, '')) {
+                unitObj.set?.('text', unitNorm);
+                unitObj.initDimensions?.();
+            }
+            unitObj.set?.({ visible: true });
+        } else {
+            unitObj.set?.({ visible: false });
+        }
+    }
+
+    const maxWidth = Number.isFinite(Number(opts.maxWidth)) ? Number(opts.maxWidth) : 0;
+    let intW = getW(integer);
+    const decWInitial = getW(decimal);
+
+    // If the value is too wide, shrink the integer only (preserves design hierarchy).
+    if (maxWidth > 0 && intW > 0) {
+        const allowedIntW = Math.max(8, maxWidth - decWInitial - gap);
+        if (intW > allowedIntW) {
+            const baseScaleX = Number(integer.scaleX || 1);
+            const baseScaleY = Number(integer.scaleY || 1);
+            const shrink = Math.min(1, Math.max(0.35, allowedIntW / intW));
+            integer.set?.({
+                scaleX: baseScaleX * shrink,
+                scaleY: baseScaleY * shrink
+            });
+            integer.initDimensions?.();
+            intW = getW(integer);
+        }
+    }
+
+    integer.set?.({
+        left: opts.intX,
+        top: opts.intY
+    });
+
+    const centsX = opts.intX + intW + gap; // regra pedida: depende da largura renderizada do inteiro
+    decimal.set?.({
+        left: centsX,
+        top: opts.decY
+    });
+
+    const decW = getW(decimal);
+    if (unitObj && unitObj.visible !== false) {
+        const decCenterX = centsX + (decW / 2);
+        unitObj.set?.({
+            originX: 'center',
+            originY: 'center',
+            left: decCenterX,
+            top: opts.unitY
+        });
+
+        const unitW = getW(unitObj);
+        if (decW > 0 && unitW > decW) {
+            const s = decW / unitW;
+            unitObj.set?.({ scaleX: s, scaleY: s });
+            unitObj.set?.({ left: decCenterX });
+        } else {
+            unitObj.set?.({ scaleX: 1, scaleY: 1 });
+            unitObj.set?.({ left: decCenterX });
+        }
+    }
+
+    // Keep the "inteiro + centavos (+ unidade)" block visually centered when requested.
+    const toFinite = (v: any) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+    };
+    const edgeLR = (obj: any): { left: number; right: number } | null => {
+        if (!obj) return null;
+        const w = getW(obj);
+        if (!Number.isFinite(w) || w <= 0) return null;
+        const x = Number(obj.left || 0);
+        const ox = String(obj.originX || 'left');
+        if (ox === 'center') return { left: x - (w / 2), right: x + (w / 2) };
+        if (ox === 'right') return { left: x - w, right: x };
+        return { left: x, right: x + w };
+    };
+    const targetCenterX = toFinite(opts.targetCenterX);
+    if (targetCenterX !== null) {
+        const edges = [edgeLR(integer), edgeLR(decimal), (unitObj?.visible !== false ? edgeLR(unitObj) : null)]
+            .filter(Boolean) as Array<{ left: number; right: number }>;
+        if (edges.length > 0) {
+            const minX = Math.min(...edges.map((e) => e.left));
+            const maxX = Math.max(...edges.map((e) => e.right));
+            const currentCenter = (minX + maxX) / 2;
+            const dx = targetCenterX - currentCenter;
+            if (Math.abs(dx) > 0.001) {
+                integer.set?.({ left: Number(integer.left || 0) + dx });
+                decimal.set?.({ left: Number(decimal.left || 0) + dx });
+                if (unitObj && unitObj.visible !== false) {
+                    unitObj.set?.({ left: Number(unitObj.left || 0) + dx });
+                }
+            }
+        }
+    }
+
+    return {
+        intX: opts.intX,
+        centsX,
+        intW,
+        decW,
+        gap
+    };
+};
+
+const isObjectShownForBounds = (obj: any) => {
+    if (!obj) return false;
+    if (obj.visible === false) return false;
+    const sx = Number(obj.scaleX ?? 1);
+    const sy = Number(obj.scaleY ?? 1);
+    return sx !== 0 && sy !== 0;
+};
+
+const getObjectHorizontalBoundsLocal = (obj: any): { left: number; right: number } | null => {
+    if (!isObjectShownForBounds(obj)) return null;
+    const widthRaw = Number(obj?.width ?? 0);
+    const scaleX = Math.abs(Number(obj?.scaleX ?? 1)) || 1;
+    const width = widthRaw * scaleX;
+    if (!Number.isFinite(width) || width <= 0) return null;
+    const x = Number(obj?.left ?? 0);
+    const ox = String(obj?.originX || 'left');
+    if (ox === 'center') return { left: x - (width / 2), right: x + (width / 2) };
+    if (ox === 'right') return { left: x - width, right: x };
+    return { left: x, right: x + width };
+};
+
+const measureHorizontalBoundsLocal = (objects: any[]): { left: number; right: number; width: number } | null => {
+    const bounds = (objects || [])
+        .map((o) => getObjectHorizontalBoundsLocal(o))
+        .filter(Boolean) as Array<{ left: number; right: number }>;
+    if (!bounds.length) return null;
+    const left = Math.min(...bounds.map((b) => b.left));
+    const right = Math.max(...bounds.map((b) => b.right));
+    return { left, right, width: Math.max(0, right - left) };
+};
+
+const normalizeManualPriceChain = (group: any, cacheKey: string, integer: any, decimal: any, unit: any) => {
+    if (!group || !integer || !decimal) return;
+    const intBounds = getObjectHorizontalBoundsLocal(integer);
+    const decBounds = getObjectHorizontalBoundsLocal(decimal);
+    const intX = intBounds ? intBounds.left : Number(integer?.left ?? 0);
+    const intY = Number(integer?.top ?? 0);
+    const decY = Number(decimal?.top ?? 0);
+    const unitY = Number(unit?.top ?? decY);
+
+    let gap = Number((group as any)[cacheKey]);
+    if (!Number.isFinite(gap)) {
+        const fallbackIntRight = intBounds?.right ?? intX;
+        const fallbackDecLeft = decBounds?.left ?? Number(decimal?.left ?? fallbackIntRight);
+        gap = fallbackDecLeft - fallbackIntRight;
+    }
+    gap = Math.max(-20, Math.min(28, gap));
+    (group as any)[cacheKey] = gap;
+
+    layoutPrice({
+        priceInteger: integer,
+        priceDecimal: decimal,
+        priceUnit: unit,
+        intX,
+        intY,
+        decY,
+        unitY,
+        gapPx: gap,
+        minGapPx: -20,
+        maxGapPx: 28
+    });
+};
+
+const expandManualTemplateWidthForDynamicPrice = (priceGroup: any) => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return;
+    const preserveTemplateVisual =
+        !!((priceGroup as any).__preserveManualLayout) ||
+        !!((priceGroup as any).__isCustomTemplate);
+    if (!preserveTemplateVisual) return;
+
+    const all = collectObjectsDeep(priceGroup);
+    const retailBg = findByName(all, 'atac_retail_bg');
+    const wholesaleBg = findByName(all, 'atac_wholesale_bg');
+    const bannerBg = findByName(all, 'atac_banner_bg');
+    const hasAtacarejo = !!retailBg;
+    let widthChanged = false;
+
+    const applyWidthToRect = (rect: any, width: number) => {
+        if (!rect || !Number.isFinite(width) || width <= 0) return;
+        const currentW = Number(rect.width || 0);
+        if (!(width > currentW + 0.5)) return;
+        rect.set({ width });
+        widthChanged = true;
+    };
+
+    if (hasAtacarejo) {
+        normalizeManualPriceChain(
+            priceGroup,
+            '__manualGapRetail',
+            findByName(all, 'retail_integer_text'),
+            findByName(all, 'retail_decimal_text'),
+            findByName(all, 'retail_unit_text')
+        );
+        normalizeManualPriceChain(
+            priceGroup,
+            '__manualGapWholesale',
+            findByName(all, 'wholesale_integer_text'),
+            findByName(all, 'wholesale_decimal_text'),
+            findByName(all, 'wholesale_unit_text')
+        );
+
+        const requiredWidthForTier = (bg: any, textObjects: any[]) => {
+            if (!bg || !isObjectShownForBounds(bg)) return 0;
+            const bgBounds = getObjectHorizontalBoundsLocal(bg);
+            const textBounds = measureHorizontalBoundsLocal(textObjects.filter((o: any) => isObjectShownForBounds(o)));
+            if (!bgBounds || !textBounds) return Number(bg.width || 0);
+            const leftPad = Math.max(10, textBounds.left - bgBounds.left);
+            const rightPad = Math.max(10, bgBounds.right - textBounds.right);
+            return Math.max(Number(bg.width || 0), textBounds.width + leftPad + rightPad);
+        };
+
+        const retailRequired = requiredWidthForTier(retailBg, [
+            findByName(all, 'retail_currency_text'),
+            findByName(all, 'retail_integer_text'),
+            findByName(all, 'retail_decimal_text'),
+            findByName(all, 'retail_unit_text'),
+            findByName(all, 'retail_pack_line_text')
+        ]);
+        const wholesaleRequired = requiredWidthForTier(wholesaleBg, [
+            findByName(all, 'wholesale_currency_text'),
+            findByName(all, 'wholesale_integer_text'),
+            findByName(all, 'wholesale_decimal_text'),
+            findByName(all, 'wholesale_unit_text'),
+            findByName(all, 'wholesale_pack_line_text')
+        ]);
+        const bannerRequired = requiredWidthForTier(bannerBg, [
+            findByName(all, 'wholesale_banner_text')
+        ]);
+
+        const currentWidths = [retailBg, wholesaleBg, bannerBg]
+            .filter(Boolean)
+            .map((o: any) => Number(o.width || 0));
+        const targetW = Math.max(
+            ...(currentWidths.length ? currentWidths : [0]),
+            retailRequired,
+            wholesaleRequired,
+            bannerRequired
+        );
+
+        if (targetW > 0) {
+            applyWidthToRect(retailBg, targetW);
+            applyWidthToRect(wholesaleBg, targetW);
+            applyWidthToRect(bannerBg, targetW);
+        }
+    } else {
+        const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer');
+        const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
+        const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
+        normalizeManualPriceChain(priceGroup, '__manualGapSingle', integer, decimal, unit);
+
+        const priceBg = findByName(all, 'price_bg');
+        const textBounds = measureHorizontalBoundsLocal([
+            findByName(all, 'price_currency_text'),
+            integer,
+            decimal,
+            unit,
+            findByName(all, 'price_value_text'),
+            findByName(all, 'smart_price')
+        ].filter(Boolean));
+        const bgBounds = getObjectHorizontalBoundsLocal(priceBg);
+        if (priceBg && textBounds && bgBounds) {
+            const leftPad = Math.max(8, textBounds.left - bgBounds.left);
+            const rightPad = Math.max(8, bgBounds.right - textBounds.right);
+            const requiredW = Math.max(Number(priceBg.width || 0), textBounds.width + leftPad + rightPad);
+            if (requiredW > Number(priceBg.width || 0) + 0.5) {
+                const roundness =
+                    typeof (priceBg as any).__roundness === 'number'
+                        ? Math.max(0, Math.min(1, Number((priceBg as any).__roundness)))
+                        : null;
+                const nextRadius = roundness !== null
+                    ? ((Number(priceBg.height || 0) / 2) * roundness)
+                    : Number(priceBg.rx || 0);
+                priceBg.set({
+                    width: requiredW,
+                    rx: nextRadius,
+                    ry: nextRadius
+                });
+                widthChanged = true;
+            }
+        }
+    }
+
+    if (widthChanged) {
+        safeAddWithUpdate(priceGroup);
+    } else {
+        const parts = priceGroup.getObjects?.() || [];
+        parts.forEach((o: any) => o?.setCoords?.());
+        priceGroup.dirty = true;
+        priceGroup.setCoords?.();
+    }
 };
 
 const inferUnitLabelFromProduct = (product: any): 'KG' | 'UN' => {
@@ -15729,6 +17479,8 @@ const computePackLine = (opts: { packageLabel?: any; packQuantity?: any; packUni
     const unit = String(opts.packUnit ?? '').trim().toUpperCase().replace(/\s+/g, '');
     const price = String(opts.packPrice ?? '').trim();
     if (!label || !Number.isFinite(q) || q <= 0 || !unit || !price) return null;
+    if (q === 1) return `1 ${unit}: R$ ${price}`;
+    if (label === unit) return `${q} ${unit}: R$ ${price}`;
     return `${label} C/${q}${unit}: R$ ${price}`;
 };
 
@@ -15740,13 +17492,38 @@ const setText = (obj: any, text: string) => {
 
 const setVisible = (obj: any, visible: boolean) => {
     if (!obj || typeof obj.set !== 'function') return;
+    const toFinite = (v: any) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : undefined;
+    };
+
+    if (visible) {
+        const restoreScaleX =
+            toFinite((obj as any).__visibleScaleX) ??
+            toFinite((obj as any).__originalScaleX) ??
+            (toFinite(obj.scaleX) && Math.abs(Number(obj.scaleX)) > 0 ? Number(obj.scaleX) : 1);
+        const restoreScaleY =
+            toFinite((obj as any).__visibleScaleY) ??
+            toFinite((obj as any).__originalScaleY) ??
+            (toFinite(obj.scaleY) && Math.abs(Number(obj.scaleY)) > 0 ? Number(obj.scaleY) : 1);
+        obj.set({ visible: true, scaleX: restoreScaleX, scaleY: restoreScaleY });
+        return;
+    }
+
+    // Preserve the current visual scale so showing again does not reset manual edits.
+    const sx = toFinite(obj.scaleX);
+    const sy = toFinite(obj.scaleY);
+    if (sx != null && Math.abs(sx) > 0) (obj as any).__visibleScaleX = sx;
+    if (sy != null && Math.abs(sy) > 0) (obj as any).__visibleScaleY = sy;
+
     // `visible=false` can still affect group bounds in Fabric; scale-to-zero avoids giant selections.
-    obj.set({ visible, scaleX: visible ? 1 : 0, scaleY: visible ? 1 : 0 });
+    obj.set({ visible: false, scaleX: 0, scaleY: 0 });
 };
 
 const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     if (!pg || typeof pg.getObjects !== 'function') return;
     const all = collectObjectsDeep(pg);
+    const byName = (name: string) => all.filter((o: any) => o?.name === name);
 
     const retailBg = findByName(all, 'atac_retail_bg');
     const bannerBg = findByName(all, 'atac_banner_bg');
@@ -15767,6 +17544,28 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     const wholesaleDecimal = findByName(all, 'wholesale_decimal_text');
     const wholesaleUnit = findByName(all, 'wholesale_unit_text');
     const wholesalePack = findByName(all, 'wholesale_pack_line_text');
+
+    // Hide legacy single-price artifacts that may exist in older/custom templates.
+    // This prevents stray "UN" text from appearing when atacarejo collapses to one tier.
+    const legacySinglePriceNames = [
+        'price_unit_text',
+        'priceUnit',
+        'price_unit',
+        'price_integer_text',
+        'priceInteger',
+        'price_integer',
+        'price_decimal_text',
+        'priceDecimal',
+        'price_decimal',
+        'price_currency_text',
+        'price_currency',
+        'priceSymbol',
+        'price_value_text',
+        'smart_price'
+    ];
+    legacySinglePriceNames.forEach((n) => {
+        byName(n).forEach((obj: any) => setVisible(obj, false));
+    });
 
     // ===== NOVO SISTEMA: Obter preços disponíveis dinamicamente =====
     const availablePrices = getAvailablePrices(data);
@@ -15806,7 +17605,7 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     if (!wholesalePrice) {
         wholesalePrice = formatPriceValue(data?.priceSpecialUnit ?? data?.priceSpecial ?? data?.priceWholesale);
     }
-    condition = data?.specialCondition ?? null;
+    condition = availablePrices.condition ?? getSpecialConditionFromProduct(data);
 
     console.log('🔍 [applyAtacarejoPricing] Resultado:', { retailPrice, wholesalePrice, condition, hasRetail: !!retailPrice, hasWholesale: !!wholesalePrice });
 
@@ -15818,8 +17617,9 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     const hasRetail = !!retailPrice;
     const hasWholesale = !!wholesalePrice;
 
-    // When only one tier exists, we hide the other and the banner.
-    const showBanner = hasRetail && hasWholesale;
+    // Mostrar banner também quando existe observação/condição, mesmo com 1 único preço.
+    const hasCondition = !!condition;
+    const showBanner = (hasRetail && hasWholesale) || (hasCondition && (hasRetail || hasWholesale));
     setVisible(bannerBg, showBanner);
     setVisible(bannerText, showBanner);
     setVisible(wholesaleBg, hasWholesale);
@@ -15834,6 +17634,29 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     setVisible(retailDecimal, hasRetail || !hasWholesale);
     setVisible(retailUnit, hasRetail || !hasWholesale);
     setVisible(retailPack, hasRetail || !hasWholesale);
+
+    // Hard-sync tier visibility for duplicated/legacy nodes:
+    // prevents orphan "UN" texts when only one tier exists.
+    const hideWholesaleTier = !hasWholesale;
+    const hideRetailTier = !(hasRetail || !hasWholesale);
+    if (hideWholesaleTier) {
+        all.forEach((obj: any) => {
+            const n = String(obj?.name || '');
+            if (!n) return;
+            if (n.startsWith('wholesale_') && n !== 'wholesale_banner_text') {
+                setVisible(obj, false);
+            }
+        });
+    }
+    if (hideRetailTier) {
+        all.forEach((obj: any) => {
+            const n = String(obj?.name || '');
+            if (!n) return;
+            if (n.startsWith('retail_')) {
+                setVisible(obj, false);
+            }
+        });
+    }
 
     if (retailCurrency && (!retailCurrency.text || String(retailCurrency.text).trim().length === 0)) setText(retailCurrency, 'R$');
     if (wholesaleCurrency && (!wholesaleCurrency.text || String(wholesaleCurrency.text).trim().length === 0)) setText(wholesaleCurrency, 'R$');
@@ -15894,7 +17717,7 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
             const condMatch = cleanCondition.match(/(?:ACIMA\s+DE\s+|A\s+PARTIR\s+DE\s+|MIN\.?\s*)(\d+)\s*(.+)/i);
             if (condMatch) {
                 const qty = condMatch[1];
-                let unit = condMatch[2].trim().replace(/\.+$/, '');
+                let unit = (condMatch[2] ?? '').trim().replace(/\.+$/, '');
                 // Normalizar unidade para abreviatura
                 const unitNorm: Record<string, string> = {
                     'UNIDADES': 'UN', 'UNIDADE': 'UN', 'UND': 'UN', 'UN': 'UN',
@@ -15918,7 +17741,21 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
         setText(bannerText, `\u2605 ${bannerLabel} \u2605`);
     }
 
-    safeAddWithUpdate(pg);
+    // Manual templates keep typography/layout authored in Mini Editor, but
+    // must still widen horizontally when price digits grow (e.g. 19,99 -> 139,99).
+    expandManualTemplateWidthForDynamicPrice(pg);
+
+    const preserveTemplateVisual =
+        !!((pg as any)?.__preserveManualLayout) ||
+        !!((pg as any)?.__isCustomTemplate);
+    if (preserveTemplateVisual) {
+        const parts = typeof pg.getObjects === 'function' ? (pg.getObjects() || []) : [];
+        parts.forEach((o: any) => o?.setCoords?.());
+        pg.dirty = true;
+        pg.setCoords?.();
+    } else {
+        safeAddWithUpdate(pg);
+    }
 };
 
 const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number) => {
@@ -15950,33 +17787,81 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
     const showWholesale = isShown(wholesaleBg);
     const showBanner = isShown(bannerBg) && isShown(bannerText);
 
+    // Guarantee collapsed tiers stay fully hidden (including duplicated text nodes).
+    if (!showWholesale) {
+        all.forEach((obj: any) => {
+            const n = String(obj?.name || '');
+            if (!n) return;
+            if (n.startsWith('wholesale_') && n !== 'wholesale_banner_text') {
+                setVisible(obj, false);
+            }
+        });
+    }
+    if (!showRetail) {
+        all.forEach((obj: any) => {
+            const n = String(obj?.name || '');
+            if (!n) return;
+            if (n.startsWith('retail_')) {
+                setVisible(obj, false);
+            }
+        });
+    }
+
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+    const isCustom = !!((priceGroup as any).__preserveManualLayout || (priceGroup as any).__isCustomTemplate);
 
     // Keep width content-driven (prevents "stretch wide" tags when cards are wide).
     // We'll compute it after we size texts.
     let totalW = clamp(cardW * 0.9, 160, cardW);
-    const ratio = (showRetail && showWholesale) ? 0.30 : 0.22;
-    const totalH = clamp(cardH * ratio, 70, Math.max(70, cardH * 0.45));
     const padX = clamp(cardW * 0.04, 10, 28);
 
     // Section heights
     let retailH = 0;
     let bannerH = 0;
     let wholesaleH = 0;
-    if (showRetail && showWholesale) {
-        bannerH = totalH * 0.14;
-        retailH = totalH * 0.43;
-        wholesaleH = totalH - retailH - bannerH;
-    } else if (showWholesale && !showRetail) {
-        wholesaleH = totalH;
+    let totalH: number;
+
+    if (isCustom) {
+        // For custom templates: compute section heights using FULL-template proportions
+        // so that font sizes (baseH * scale) remain identical regardless of collapsed tiers.
+        // totalH is then the sum of ONLY visible sections — collapses empty space.
+        const fullTotalH = clamp(cardH * 0.30, 70, Math.max(70, cardH * 0.45));
+        const fullRetailH = fullTotalH * 0.43;
+        const fullBannerH = fullTotalH * 0.14;
+        const fullWholesaleH = fullTotalH - fullRetailH - fullBannerH;
+        retailH = showRetail ? fullRetailH : 0;
+        bannerH = showBanner ? fullBannerH : 0;
+        wholesaleH = showWholesale ? fullWholesaleH : 0;
+        totalH = retailH + bannerH + wholesaleH;
     } else {
-        retailH = totalH;
+        const ratio = (showRetail && showWholesale) ? 0.30 : (showBanner ? 0.26 : 0.22);
+        totalH = clamp(cardH * ratio, 70, Math.max(70, cardH * 0.45));
+        if (showRetail && showWholesale) {
+            bannerH = totalH * 0.14;
+            retailH = totalH * 0.43;
+            wholesaleH = totalH - retailH - bannerH;
+        } else if (showRetail && showBanner) {
+            bannerH = totalH * 0.18;
+            retailH = totalH - bannerH;
+        } else if (showWholesale && showBanner) {
+            bannerH = totalH * 0.18;
+            wholesaleH = totalH - bannerH;
+        } else if (showWholesale && !showRetail) {
+            wholesaleH = totalH;
+        } else {
+            retailH = totalH;
+        }
     }
 
     const y0 = -totalH / 2;
     const retailCY = showRetail ? (y0 + retailH / 2) : 0;
-    const bannerCY = (showRetail && showWholesale && showBanner) ? (y0 + retailH + bannerH / 2) : 0;
-    const wholesaleCY = showWholesale ? (y0 + retailH + bannerH + wholesaleH / 2) : 0;
+    const bannerCY = showBanner
+        ? (showRetail ? (y0 + retailH + (bannerH / 2)) : (y0 + wholesaleH + (bannerH / 2)))
+        : 0;
+    const wholesaleCY = showWholesale
+        ? (showRetail ? (y0 + retailH + bannerH + (wholesaleH / 2)) : (y0 + (wholesaleH / 2)))
+        : 0;
 
     const setBg = (bg: any, h: number, cy: number, rx: number) => {
         if (!bg || typeof bg.set !== 'function') return;
@@ -16011,7 +17896,7 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         const { blockH, currency, integer, decimal, unit, pack } = tier;
         if (!blockH || !Number.isFinite(blockH)) return 0;
 
-        const gapX = Math.max(4, blockH * 0.06);
+        const gapX = clamp(blockH * 0.03, 2, 8);
         setTextSizing(integer, 0.60, blockH);
         setTextSizing(decimal, 0.36, blockH);
         setTextSizing(currency, 0.22, blockH);
@@ -16021,8 +17906,12 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         const packVisible = isShown(pack) && String(pack?.text || '').trim().length > 0;
         const unitVisible = isShown(unit) && String(unit?.text || '').trim().length > 0;
 
-        let w = getW(currency) + gapX + getW(integer) + getW(decimal);
-        if (unitVisible) w += gapX + getW(unit);
+        const digitsCount = String(integer?.text || '').replace(/[^\d]/g, '').length || 1;
+        const gapPrice = digitsCount <= 1 ? -6
+                       : digitsCount === 2 ? -4
+                       : digitsCount === 3 ? -3 : -2;
+        const centsBlockW = unitVisible ? Math.max(getW(decimal), getW(unit)) : getW(decimal);
+        let w = getW(currency) + gapX + getW(integer) + gapPrice + centsBlockW;
         if (packVisible) w = Math.max(w, getW(pack));
         return w;
     };
@@ -16055,7 +17944,7 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         if (!blockH || !Number.isFinite(blockH)) return;
 
         const maxPriceW = totalW - (padX * 2);
-        const gapX = Math.max(4, blockH * 0.06);
+        const gapX = clamp(blockH * 0.03, 2, 8);
 
         setTextSizing(integer, 0.60, blockH);
         setTextSizing(decimal, 0.36, blockH);
@@ -16066,12 +17955,19 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         const packVisible = isShown(pack) && String(pack?.text || '').trim().length > 0;
         const unitVisible = isShown(unit) && String(unit?.text || '').trim().length > 0;
 
-        // Center the full "R$ + price" horizontally.
-        let priceW = getW(currency) + gapX + getW(integer) + getW(decimal);
+        // Compute dynamic gap between integer and decimal based on digit count.
+        // Use tight negative gaps for fewer digits (matches layoutPrice's autoGap defaults).
+        const digitsCount = String(integer?.text || '').replace(/[^\d]/g, '').length || 1;
+        const autoGapPx = digitsCount <= 1 ? -6
+                        : digitsCount === 2 ? -4
+                        : digitsCount === 3 ? -3 : -2;
+
+        // Center the full "R$ + price" horizontally (include the dynamic gap in width calc).
+        let priceW = getW(currency) + gapX + getW(integer) + autoGapPx + getW(decimal);
         if (priceW > maxPriceW && priceW > 0) {
             const s = maxPriceW / priceW;
             [currency, integer, decimal].forEach((t: any) => t?.set?.({ scaleX: s, scaleY: s }));
-            priceW = getW(currency) + gapX + getW(integer) + getW(decimal);
+            priceW = getW(currency) + gapX + getW(integer) + autoGapPx + getW(decimal);
         }
 
         const startX = -priceW / 2;
@@ -16084,14 +17980,19 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         currency?.set?.({ originX: 'left', originY: 'center', left: startX, top: curY });
 
         const intX = startX + curW + gapX;
-        integer?.set?.({ originX: 'left', originY: 'center', left: intX, top: intY });
-
-        const intW = getW(integer);
-        decimal?.set?.({ originX: 'left', originY: 'center', left: intX + intW, top: decY });
-
-        if (unit && unitVisible) {
-            unit.set({ originX: 'left', originY: 'center', left: intX + intW + getW(decimal) + gapX, top: intY + (blockH * 0.22) });
-        }
+        layoutPrice({
+            priceInteger: integer,
+            priceDecimal: decimal,
+            priceUnit: unitVisible ? unit : undefined,
+            intX,
+            intY,
+            decY,
+            unitY: intY + (blockH * 0.22),
+            maxWidth: Math.max(20, maxPriceW - (curW + gapX)),
+            gapPx: autoGapPx,
+            minGapPx: -6,
+            maxGapPx: 10
+        });
 
         if (pack && packVisible) {
             // Fit pack line within block width if needed.
@@ -16122,6 +18023,158 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
     priceGroup.dirty = true;
     if (typeof priceGroup.setCoords === 'function') priceGroup.setCoords();
     return { pillW: totalW, pillH: totalH };
+};
+
+/**
+ * Preserve manual layout edits from mini editor:
+ * scales the entire template proportionally without reflowing text blocks.
+ */
+const layoutManualTemplateGroup = (priceGroup: any, cardW: number, cardH: number) => {
+    if (!priceGroup) return null;
+
+    const all = collectObjectsDeep(priceGroup);
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+    const toFinite = (v: any, fb: number) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : fb;
+    };
+
+    // Keep the exact Mini Editor geometry. We only apply a UNIFORM scale to fit card bounds.
+    // Never recalculate child text/object positions here.
+    let baseW = Number((priceGroup as any).__manualTemplateBaseW);
+    let baseH = Number((priceGroup as any).__manualTemplateBaseH);
+    const sx = Math.abs(toFinite(priceGroup.scaleX, 1)) || 1;
+    const sy = Math.abs(toFinite(priceGroup.scaleY, 1)) || 1;
+    const rawW = toFinite(priceGroup.width, 0);
+    const rawH = toFinite(priceGroup.height, 0);
+    const scaledW = toFinite(priceGroup.getScaledWidth?.(), rawW * sx);
+    const scaledH = toFinite(priceGroup.getScaledHeight?.(), rawH * sy);
+    const inferredBaseW = rawW > 0 ? rawW : (scaledW > 0 ? scaledW / sx : 1);
+    const inferredBaseH = rawH > 0 ? rawH : (scaledH > 0 ? scaledH / sy : 1);
+    const shouldRefreshBase =
+        !Number.isFinite(baseW) || baseW <= 0 ||
+        !Number.isFinite(baseH) || baseH <= 0 ||
+        inferredBaseW > (baseW * 1.001) ||
+        inferredBaseH > (baseH * 1.001);
+    if (shouldRefreshBase) {
+        baseW = inferredBaseW;
+        baseH = inferredBaseH;
+        baseW = Math.max(1, baseW);
+        baseH = Math.max(1, baseH);
+        (priceGroup as any).__manualTemplateBaseW = baseW;
+        (priceGroup as any).__manualTemplateBaseH = baseH;
+    }
+
+    const getSize = (obj: any, axis: 'x' | 'y') => {
+        if (!obj) return 0;
+        const fallback = axis === 'x'
+            ? (Number(obj.width || 0) * Math.abs(Number(obj.scaleX ?? 1) || 1))
+            : (Number(obj.height || 0) * Math.abs(Number(obj.scaleY ?? 1) || 1));
+        const measured = axis === 'x'
+            ? Number(obj.getScaledWidth?.() || 0)
+            : Number(obj.getScaledHeight?.() || 0);
+        const size = Number.isFinite(measured) && measured > 0 ? measured : fallback;
+        return Number.isFinite(size) && size > 0 ? size : 0;
+    };
+    const edgeX = (obj: any) => {
+        if (!obj) return null;
+        const w = getSize(obj, 'x');
+        if (!w) return null;
+        const x = Number(obj.left || 0);
+        const ox = String(obj.originX || 'left');
+        if (ox === 'center') return { min: x - (w / 2), max: x + (w / 2) };
+        if (ox === 'right') return { min: x - w, max: x };
+        return { min: x, max: x + w };
+    };
+    const edgeY = (obj: any) => {
+        if (!obj) return null;
+        const h = getSize(obj, 'y');
+        if (!h) return null;
+        const y = Number(obj.top || 0);
+        const oy = String(obj.originY || 'top');
+        if (oy === 'center') return { min: y - (h / 2), max: y + (h / 2) };
+        if (oy === 'bottom') return { min: y - h, max: y };
+        return { min: y, max: y + h };
+    };
+    const isShown = (obj: any) => !!(obj && obj.visible !== false && Number(obj.scaleX ?? 1) !== 0 && Number(obj.scaleY ?? 1) !== 0);
+    const visibleBounds = (objects: any[]) => {
+        const xs: Array<{ min: number; max: number }> = [];
+        const ys: Array<{ min: number; max: number }> = [];
+        (objects || []).forEach((obj: any) => {
+            if (!isShown(obj)) return;
+            if (isTextLikeObject(obj) && typeof obj.initDimensions === 'function') obj.initDimensions();
+            const ex = edgeX(obj);
+            const ey = edgeY(obj);
+            if (ex) xs.push(ex);
+            if (ey) ys.push(ey);
+        });
+        if (!xs.length || !ys.length) return null;
+        const minX = Math.min(...xs.map((e) => e.min));
+        const maxX = Math.max(...xs.map((e) => e.max));
+        const minY = Math.min(...ys.map((e) => e.min));
+        const maxY = Math.max(...ys.map((e) => e.max));
+        return {
+            minX,
+            maxX,
+            minY,
+            maxY,
+            width: Math.max(1, maxX - minX),
+            height: Math.max(1, maxY - minY),
+            centerX: (minX + maxX) / 2,
+            centerY: (minY + maxY) / 2
+        };
+    };
+
+    // Reserve enough space for Atacarejo manual templates so the visual hierarchy is preserved,
+    // but collapse unused vertical tiers when only one price is present.
+    const hasAtacarejoStructure = !!findByName(all, 'atac_retail_bg');
+    let effectiveW = baseW;
+    let effectiveH = baseH;
+    if (hasAtacarejoStructure) {
+        const directChildren = typeof priceGroup.getObjects === 'function' ? (priceGroup.getObjects() || []) : [];
+        let bounds = visibleBounds(directChildren);
+        if (bounds && (Math.abs(bounds.centerX) > 0.001 || Math.abs(bounds.centerY) > 0.001)) {
+            directChildren.forEach((obj: any) => {
+                if (!obj || typeof obj.set !== 'function') return;
+                obj.set({
+                    left: Number(obj.left || 0) - bounds!.centerX,
+                    top: Number(obj.top || 0) - bounds!.centerY
+                });
+                obj.setCoords?.();
+            });
+            bounds = visibleBounds(directChildren);
+        }
+        if (bounds) {
+            effectiveW = Math.max(1, bounds.width);
+            effectiveH = Math.max(1, bounds.height);
+        }
+    }
+
+    const wholesaleBg = findByName(all, 'atac_wholesale_bg');
+    const bannerBg = findByName(all, 'atac_banner_bg');
+    const bannerText = findByName(all, 'wholesale_banner_text');
+    const atacHeightRatio = hasAtacarejoStructure
+        ? (isShown(wholesaleBg) ? 0.62 : ((isShown(bannerBg) && isShown(bannerText)) ? 0.5 : 0.44))
+        : 0.44;
+    const maxW = Math.max(120, cardW * 0.98);
+    const maxH = Math.max(42, cardH * atacHeightRatio);
+    const fitScale = clamp(Math.min(maxW / Math.max(1, effectiveW), maxH / Math.max(1, effectiveH)), 0.2, 6);
+
+    priceGroup.set({
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: 0,
+        angle: 0,
+        width: Math.max(1, effectiveW),
+        height: Math.max(1, effectiveH),
+        scaleX: fitScale,
+        scaleY: fitScale
+    });
+
+    priceGroup.dirty = true;
+    priceGroup.setCoords?.();
+    return { pillW: Math.max(1, effectiveW) * fitScale, pillH: Math.max(1, effectiveH) * fitScale };
 };
 
 
@@ -16266,7 +18319,7 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
     // First pass: scale all text elements
     all.forEach((obj: any) => {
-        if (!obj || obj.type !== 'text') return;
+        if (!isTextLikeObject(obj)) return;
 
         // Get original font size from metadata or current value
         const originalFontSize = typeof obj.__originalFontSize === 'number'
@@ -16293,7 +18346,7 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
     // Second pass: set non-price text positions proportionally
     all.forEach((obj: any) => {
-        if (!obj || obj.type !== 'text') return;
+        if (!isTextLikeObject(obj)) return;
         // Skip price elements - they will be positioned dynamically
         if (hasPriceStructure && (
             obj === priceInteger || obj === priceDecimal || obj === priceUnit ||
@@ -16335,33 +18388,24 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
         if (hasSplitPrice) {
             // Position integer and decimal dynamically
-            const intY = (typeof priceInteger.__yOffsetRatio === 'number' ? priceInteger.__yOffsetRatio : 0) * newH;
-            const decY = (typeof priceDecimal.__yOffsetRatio === 'number' ? priceDecimal.__yOffsetRatio : -0.18) * newH;
-
-            const intW = getW(priceInteger);
-            priceInteger.set({ originX: 'left', originY: 'center', left: textStartX, top: intY });
-
-            priceDecimal.set({ originX: 'left', originY: 'center', left: textStartX + intW, top: decY });
-
-            // Position unit dynamically if exists
-            if (priceUnit) {
-                const unitText = String(priceUnit.text || '').trim();
-                const unitVisible = priceUnit.visible !== false && unitText.length > 0;
-                priceUnit.set({ visible: unitVisible });
-                if (unitVisible) {
-                    const unitY = (typeof priceUnit.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * newH;
-                    const decW = getW(priceDecimal);
-                    const unitRightX = textStartX + intW + decW;
-                    priceUnit.set({ originX: 'right', originY: 'center', left: unitRightX, top: unitY });
-
-                    // Shrink unit if it's wider than the cents block
-                    const unitW = getW(priceUnit);
-                    if (decW > 0 && unitW > decW) {
-                        const s = decW / unitW;
-                        priceUnit.set({ scaleX: s, scaleY: s });
-                    }
-                }
-            }
+        const intY = (typeof priceInteger.__yOffsetRatio === 'number' ? priceInteger.__yOffsetRatio : 0) * newH;
+        const decY = (typeof priceDecimal.__yOffsetRatio === 'number' ? priceDecimal.__yOffsetRatio : -0.18) * newH;
+            const unitY = (typeof priceUnit?.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * newH;
+            const rightPad = newH * 0.35;
+            const maxTextW = Math.max(20, (newW / 2) - rightPad - textStartX);
+            layoutPrice({
+                priceInteger,
+                priceDecimal,
+                priceUnit,
+                intX: textStartX,
+                intY,
+                decY,
+                unitY,
+                maxWidth: maxTextW,
+                gapPx: clamp(newH * 0.02, -1, 4),
+                minGapPx: -2,
+                maxGapPx: 6
+            });
         } else if (priceText) {
             // Single price text
             const priceY = (typeof priceText.__yOffsetRatio === 'number' ? priceText.__yOffsetRatio : 0) * newH;
@@ -16371,7 +18415,7 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
     // Scale all other objects (circles, rects, etc.)
     all.forEach((obj: any) => {
-        if (!obj || obj.type === 'text') return;
+        if (!obj || isTextLikeObject(obj)) return;
         if (obj.name === 'price_bg' || obj.name === 'price_bg_image' || obj.name === 'splash_image') return;
 
         // Get original dimensions
@@ -16417,29 +18461,48 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     return { pillW: newW, pillH: newH };
 }
 
+const priceGroupAtacarejoProbeCache = new WeakMap<any, { childCount: number; hasAtacarejo: boolean }>();
+
 
 function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
-    console.log('🔍 [layoutPriceGroup] CALLED', { hasPriceGroup: !!priceGroup, hasGetObjects: !!priceGroup?.getObjects, cardW, cardH });
     if (!priceGroup || !priceGroup.getObjects) {
-        console.log('🔍 [layoutPriceGroup] Returning null - no priceGroup or getObjects');
         return null;
     }
+    const preserveManualLayout = (priceGroup as any).__preserveManualLayout === true;
+    const hasCustomTemplateFlag = (priceGroup as any).__isCustomTemplate === true;
+    const preferManualTemplateLayout = preserveManualLayout || hasCustomTemplateFlag;
 
     // Atacarejo template (2-tier label)
     try {
-        const deep = collectObjectsDeep(priceGroup);
-        const hasAtacarejo = findByName(deep, 'atac_retail_bg');
-        console.log('🔍 [layoutPriceGroup] Atacarejo check:', hasAtacarejo);
+        let deep: any[] | null = null;
+        let hasAtacarejo = false;
+        const childCount = Array.isArray((priceGroup as any)._objects)
+            ? (priceGroup as any)._objects.length
+            : (priceGroup.getObjects?.() || []).length;
+        const cachedProbe = priceGroupAtacarejoProbeCache.get(priceGroup);
+        if (cachedProbe && cachedProbe.childCount === childCount) {
+            hasAtacarejo = cachedProbe.hasAtacarejo;
+        } else {
+            deep = collectObjectsDeep(priceGroup);
+            hasAtacarejo = !!findByName(deep, 'atac_retail_bg');
+            priceGroupAtacarejoProbeCache.set(priceGroup, { childCount, hasAtacarejo });
+        }
+
         if (hasAtacarejo) {
+            if (!deep) deep = collectObjectsDeep(priceGroup);
+            if (preferManualTemplateLayout) {
+                // Manual templates from Mini Editor must keep authored geometry
+                // (font weight, sizes and object positions). Do not collapse/reflow.
+                const manual = layoutManualTemplateGroup(priceGroup, cardW, cardH);
+                if (manual) return manual;
+            }
             return layoutAtacarejoPriceGroup(priceGroup, cardW, cardH);
         }
-    } catch (e) {
-        console.log('🔍 [layoutPriceGroup] Atacarejo check error:', e);
+    } catch {
         // fall through to legacy layout
     }
 
     const all = priceGroup.getObjects();
-    console.log('🔍 [layoutPriceGroup] Objects in priceGroup:', all.length, all.map((o: any) => o?.name || 'unnamed'));
 
     const priceBg = all.find((o: any) => o.name === 'price_bg');
     const priceBgImage = all.find((o: any) => o.name === 'price_bg_image' || o.name === 'splash_image');
@@ -16464,14 +18527,14 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
     // For custom templates, use proportional scaling to preserve original design
     if (isCustomTemplate && priceBg) {
-        console.log('🔍 [layoutPriceGroup] Using custom template layout (standard structure:', hasStandardStructure, ')');
+        if (preferManualTemplateLayout) {
+            const manual = layoutManualTemplateGroup(priceGroup, cardW, cardH);
+            if (manual) return manual;
+        }
         return layoutCustomPriceGroup(priceGroup, cardW, cardH);
     }
-
-    console.log('🔍 [layoutPriceGroup] Found elements:', { priceBg: !!priceBg, currencyCircle: !!currencyCircle, currencyText: !!currencyText, priceText: !!priceText, priceInteger: !!priceInteger, priceDecimal: !!priceDecimal });
     
     if (!priceBg || !currencyCircle || !currencyText) {
-        console.log('🔍 [layoutPriceGroup] Returning null - missing required elements');
         return null;
     }
     
@@ -16680,34 +18743,21 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     if (hasSplit) {
         const intY = (typeof priceInteger.__yOffsetRatio === 'number' ? priceInteger.__yOffsetRatio : 0) * pillH;
         const decY = (typeof priceDecimal.__yOffsetRatio === 'number' ? priceDecimal.__yOffsetRatio : -0.18) * pillH;
-
-        const intW = getW(priceInteger);
-        priceInteger.set({ originX: 'left', originY: 'center', left: textStartX, top: intY });
-
-        priceDecimal.set({ originX: 'left', originY: 'center', left: textStartX + intW, top: decY });
-
-        if (priceUnit) {
-            const unitText = String(priceUnit.text || '').trim();
-            const unitVisible = priceUnit.visible !== false && unitText.length > 0;
-            priceUnit.set({ visible: unitVisible });
-            if (unitVisible) {
-                const unitY = (typeof priceUnit.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * pillH;
-                const decW = getW(priceDecimal);
-
-                // Place unit UNDER the cents (centavos), aligned to the right edge of the decimal block.
-                const unitRightX = textStartX + intW + decW;
-                priceUnit.set({ originX: 'right', originY: 'center', left: unitRightX, top: unitY });
-
-                // If unit becomes wider than the cents block, shrink it to fit under the cents.
-                const unitW = getW(priceUnit);
-                if (decW > 0 && unitW > decW) {
-                    const s = decW / unitW;
-                    priceUnit.set({ scaleX: s, scaleY: s });
-                } else {
-                    priceUnit.set({ scaleX: 1, scaleY: 1 });
-                }
-            }
-        }
+        const unitY = (typeof priceUnit?.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * pillH;
+        const maxTextW = Math.max(20, (pillW / 2) - rightPad - textStartX);
+        layoutPrice({
+            priceInteger,
+            priceDecimal,
+            priceUnit,
+            intX: textStartX,
+            intY,
+            decY,
+            unitY,
+            maxWidth: maxTextW,
+            gapPx: clamp(pillH * 0.02, -1, 4),
+            minGapPx: -2,
+            maxGapPx: 6
+        });
     } else if (priceText) {
         const scaledTextWidth = priceText.getScaledWidth();
         const textCenterX = textStartX + (scaledTextWidth / 2);
@@ -16728,13 +18778,48 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 function getPriceGroupFromAny(obj: any): any | null {
     if (!obj) return null;
 
-    // Direct selection (group)
+    // Helper: Check if a group looks like a priceGroup by its structure (heuristic).
+    // PriceGroups typically contain: a rect (pill background), 1-4 text elements (price digits),
+    // and optionally a circle/ellipse (currency symbol).
+    const looksLikePriceGroup = (g: any): boolean => {
+        if (!g || g.type !== 'group' || typeof g.getObjects !== 'function') return false;
+        const kids = g.getObjects() || [];
+        if (kids.length < 2 || kids.length > 10) return false;
+        
+        let hasRect = false;
+        let textCount = 0;
+        let hasCircleOrEllipse = false;
+        
+        for (const k of kids) {
+            const t = String(k?.type || '').toLowerCase();
+            if (t === 'rect') hasRect = true;
+            if (t === 'text' || t === 'i-text' || t === 'itext' || t === 'textbox') textCount++;
+            if (t === 'circle' || t === 'ellipse') hasCircleOrEllipse = true;
+        }
+        
+        // Heuristic: a priceGroup has at least a rect and some text, or circle/ellipse for currency
+        return hasRect && (textCount >= 1 || hasCircleOrEllipse);
+    };
+
+    // Direct selection (group by name)
     if (obj.type === 'group' && obj.name === 'priceGroup') return obj;
+    
+    // Heuristic fallback for direct selection when name is missing
+    if (obj.type === 'group' && !obj.name && looksLikePriceGroup(obj)) {
+        // Repair the name for future operations
+        obj.name = 'priceGroup';
+        return obj;
+    }
 
     // If user selected a child inside the price group, walk up the group chain.
     let cur: any = obj;
     while (cur && cur.group) {
         if (cur.group.type === 'group' && cur.group.name === 'priceGroup') return cur.group;
+        // Heuristic fallback
+        if (cur.group.type === 'group' && !cur.group.name && looksLikePriceGroup(cur.group)) {
+            cur.group.name = 'priceGroup';
+            return cur.group;
+        }
         cur = cur.group;
     }
 
@@ -16745,6 +18830,11 @@ function getPriceGroupFromAny(obj: any): any | null {
             const cur = queue.shift();
             if (!cur) continue;
             if (cur.type === 'group' && cur.name === 'priceGroup') return cur;
+            // Heuristic fallback for nested groups
+            if (cur.type === 'group' && !cur.name && looksLikePriceGroup(cur)) {
+                cur.name = 'priceGroup';
+                return cur;
+            }
             if (cur.type === 'group' && typeof cur.getObjects === 'function') {
                 const kids = cur.getObjects() || [];
                 for (const k of kids) queue.push(k);
@@ -16784,6 +18874,56 @@ const enlivenObjectsAsync = (objectsJson: any[]) => {
     });
 };
 
+const seedManualTemplateOriginalMetrics = (group: any) => {
+    if (!group || typeof group.getObjects !== 'function') return;
+    const all = collectObjectsDeep(group);
+    all.forEach((obj: any) => {
+        if (!obj) return;
+
+        const asNum = (v: any) => {
+            const n = Number(v);
+            return Number.isFinite(n) ? n : undefined;
+        };
+
+        if (asNum(obj.__originalLeft) == null) obj.__originalLeft = asNum(obj.left) ?? 0;
+        if (asNum(obj.__originalTop) == null) obj.__originalTop = asNum(obj.top) ?? 0;
+        if (!obj.__originalOriginX) obj.__originalOriginX = obj.originX ?? 'center';
+        if (!obj.__originalOriginY) obj.__originalOriginY = obj.originY ?? 'center';
+        if (asNum(obj.__originalScaleX) == null) obj.__originalScaleX = asNum(obj.scaleX) ?? 1;
+        if (asNum(obj.__originalScaleY) == null) obj.__originalScaleY = asNum(obj.scaleY) ?? 1;
+        if (asNum(obj.__originalStrokeWidth) == null) obj.__originalStrokeWidth = asNum(obj.strokeWidth) ?? 0;
+
+        if (isTextLikeObject(obj)) {
+            if (typeof obj.initDimensions === 'function') obj.initDimensions();
+            if (asNum(obj.__originalFontSize) == null) obj.__originalFontSize = asNum(obj.fontSize) ?? 14;
+            if (typeof obj.__originalFontFamily !== 'string' && typeof obj.fontFamily === 'string') {
+                obj.__originalFontFamily = obj.fontFamily;
+            }
+            if (asNum(obj.__originalWidth) == null) {
+                const w = asNum(obj.width) ?? asNum(obj.getScaledWidth?.());
+                obj.__originalWidth = Math.max(1, w ?? 1);
+            }
+            if (asNum(obj.__originalHeight) == null) {
+                const h = asNum(obj.height) ?? asNum(obj.getScaledHeight?.());
+                obj.__originalHeight = Math.max(1, h ?? (asNum(obj.fontSize) ?? 14));
+            }
+            return;
+        }
+
+        if (obj.type === 'rect') {
+            if (asNum(obj.__originalWidth) == null) obj.__originalWidth = Math.max(1, asNum(obj.width) ?? 1);
+            if (asNum(obj.__originalHeight) == null) obj.__originalHeight = Math.max(1, asNum(obj.height) ?? 1);
+            if (asNum(obj.__originalRx) == null) obj.__originalRx = asNum(obj.rx) ?? 0;
+            if (asNum(obj.__originalRy) == null) obj.__originalRy = asNum(obj.ry) ?? 0;
+            return;
+        }
+
+        if (obj.type === 'circle' && asNum(obj.__originalRadius) == null) {
+            obj.__originalRadius = Math.max(1, asNum(obj.radius) ?? 1);
+        }
+    });
+};
+
 async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate): Promise<any> {
     const groupJson: any = tpl?.group;
     if (!fabric || !groupJson) throw new Error('Template missing group JSON');
@@ -16797,8 +18937,17 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate): Promise<an
     delete (opts as any).layout;
     const enlivened = await enlivenObjectsAsync(objectsJson);
     const g = new fabric.Group(enlivened, opts);
+    // IMPORTANT: Any label template coming from the template system must preserve
+    // the geometry authored in Mini Editor. Automatic reflow is only for legacy/default
+    // programmatic groups, not for user template instances.
+    const preserveManualLayout = typeof (opts as any).__preserveManualLayout === 'boolean'
+        ? !!(opts as any).__preserveManualLayout
+        : true;
     // Ensure templates always start from a normalized transform.
     g.set({ name: 'priceGroup', originX: 'center', originY: 'center', left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0 });
+    (g as any).__preserveManualLayout = preserveManualLayout;
+    (g as any).__isCustomTemplate = true;
+    if (preserveManualLayout) seedManualTemplateOriginalMetrics(g);
     return g;
 }
 
@@ -17002,12 +19151,18 @@ function serializePriceGroupForTemplate(pg: any) {
             obj.__originalScaleY = obj.scaleY || 1;
 
             // For text objects, store original font size and font family
-            if (obj.type === 'text') {
+            if (isTextLikeObject(obj)) {
                 if (typeof obj.fontSize === 'number') {
                     obj.__originalFontSize = obj.fontSize;
                 }
                 if (typeof obj.fontFamily === 'string') {
                     obj.__originalFontFamily = obj.fontFamily;
+                }
+                if (typeof obj.width === 'number') {
+                    obj.__originalWidth = obj.width;
+                }
+                if (typeof obj.height === 'number') {
+                    obj.__originalHeight = obj.height;
                 }
             }
 
@@ -17077,10 +19232,15 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
             unitTxt.set?.('text', u);
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
         }
+        expandManualTemplateWidthForDynamicPrice(pg);
         return;
     }
 
-    if (legacy) legacy.set?.('text', `${integer}${decimalText}`);
+    if (legacy) {
+        legacy.set?.('text', `${integer}${decimalText}`);
+        if (typeof legacy.initDimensions === 'function') legacy.initDimensions();
+    }
+    expandManualTemplateWidthForDynamicPrice(pg);
 }
 
 function inferUnitFromCard(card: any): string | undefined {
@@ -17151,7 +19311,10 @@ async function createLabelTemplateFromSelection(name: string) {
     tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     labelTemplates.value = [...labelTemplates.value, tpl];
     saveCurrentState();
-    await upsertLabelTemplateToDb(tpl);
+    const saved = await upsertLabelTemplateToDb(tpl);
+    if (!saved) {
+        console.warn('[labelTemplates] Modelo criado localmente, mas não foi persistido no banco');
+    }
 }
 
 async function createDefaultLabelTemplate(name: string) {
@@ -17176,7 +19339,10 @@ async function createDefaultLabelTemplate(name: string) {
         tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
         labelTemplates.value = [...labelTemplates.value, tpl];
         saveCurrentState();
-        await upsertLabelTemplateToDb(tpl);
+        const saved = await upsertLabelTemplateToDb(tpl);
+        if (!saved) {
+            console.warn('[labelTemplates] Modelo padrão criado localmente, mas não foi persistido no banco');
+        }
     } catch (err) {
         console.warn('[labelTemplates] Failed to create default template', err);
     }
@@ -17290,7 +19456,10 @@ async function updateLabelTemplateFromSelection(templateId: string) {
     copy[idx] = next;
     labelTemplates.value = copy;
     saveCurrentState();
-    await upsertLabelTemplateToDb(next);
+    const saved = await upsertLabelTemplateToDb(next);
+    if (!saved) {
+        console.warn('[labelTemplates] Atualização salva localmente, mas não foi persistida no banco');
+    }
 }
 
 function deleteLabelTemplateById(templateId: string) {
@@ -17315,12 +19484,32 @@ async function duplicateLabelTemplateById(templateId: string) {
     if (!copy.previewDataUrl) copy.previewDataUrl = await renderLabelTemplatePreview(copy);
     labelTemplates.value = [...labelTemplates.value, copy];
     saveCurrentState();
-    await upsertLabelTemplateToDb(copy);
+    const saved = await upsertLabelTemplateToDb(copy);
+    if (!saved) {
+        console.warn('[labelTemplates] Cópia criada localmente, mas não foi persistida no banco');
+    }
 }
 
 async function applyLabelTemplateToCard(card: any, templateId: string) {
     if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') return;
-    const tpl = labelTemplates.value.find(t => t.id === templateId);
+    let tpl = labelTemplates.value.find(t => t.id === templateId);
+    if (!tpl) {
+        // Fallback for reload/race conditions: use the immutable snapshot already
+        // stored on the zone so cards always follow the Mini Editor template.
+        const zoneId = String((card as any)?.parentZoneId || '').trim();
+        const zone = zoneId && canvas.value
+            ? canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String((o as any)?._customId || '').trim() === zoneId)
+            : null;
+        const snapshotGroup = zone ? (zone as any)?._zoneTemplateSnapshot : null;
+        if (snapshotGroup && typeof snapshotGroup === 'object') {
+            tpl = {
+                id: String(templateId || (zone as any)?._zoneTemplateSnapshotId || 'zone-template-snapshot'),
+                name: 'Zone Template Snapshot',
+                kind: 'priceGroup-v1',
+                group: snapshotGroup
+            } as any as LabelTemplate;
+        }
+    }
     if (!tpl) return;
 
     const objs = card.getObjects();
@@ -17341,6 +19530,9 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
         : inferUnitFromCard(card);
 
     const newPg = await instantiatePriceGroupFromTemplate(tpl);
+    const preserveManualTemplateLayout =
+        (newPg as any).__preserveManualLayout === true ||
+        (newPg as any).__isCustomTemplate === true;
     if (typeof oldPriceText === 'string') setPriceOnPriceGroup(newPg, oldPriceText, typeof inferredUnit === 'string' ? inferredUnit : undefined);
     if (typeof oldCurrencyText === 'string') {
         const c = newPg.getObjects?.().find((o: any) => o.name === 'price_currency_text');
@@ -17389,10 +19581,12 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
     const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0;
     if (cardW && cardH) {
         const layout = layoutPriceGroup(newPg, cardW, cardH);
-        const marginBottom = cardH * 0.05;
-        const halfH = cardH / 2;
-        const hForAnchor = layout?.pillH ?? (newPg.getScaledHeight?.() ?? newPg.height ?? (cardH * 0.18));
-        newPg.set({ top: halfH - (hForAnchor / 2) - marginBottom });
+        if (!preserveManualTemplateLayout) {
+            const marginBottom = cardH * 0.05;
+            const halfH = cardH / 2;
+            const hForAnchor = layout?.pillH ?? (newPg.getScaledHeight?.() ?? newPg.height ?? (cardH * 0.18));
+            newPg.set({ top: halfH - (hForAnchor / 2) - marginBottom });
+        }
     }
 
     // Freeze card dimensions (do NOT call safeAddWithUpdate which expands bounds)
@@ -17861,11 +20055,34 @@ async function resetCardPriceGroupToDefault(card: any) {
     card.setCoords();
 }
 
+const cloneTemplateGroupJson = (group: any) => {
+    if (!group || typeof group !== 'object') return null;
+    try {
+        return (typeof structuredClone === 'function')
+            ? structuredClone(group)
+            : JSON.parse(JSON.stringify(group));
+    } catch {
+        return null;
+    }
+};
+
 async function applyLabelTemplateToZone(zone: any, templateId?: string, applyToExisting: boolean = false) {
     if (!canvas.value || !zone || !isLikelyProductZone(zone)) return;
     const id = templateId || undefined;
-    const prev = (zone as any)._zoneGlobalStyles ?? {};
+    const prev = getZoneGlobalStyles(zone);
     (zone as any)._zoneGlobalStyles = { ...prev, splashTemplateId: id };
+
+    // Persist an immutable snapshot of the selected template group on the zone.
+    // New cards should always use this exact JSON from mini editor to avoid stale/incorrect matches.
+    if (id) {
+        const tpl = labelTemplates.value.find((t: any) => String(t?.id || '') === String(id));
+        const snapshot = cloneTemplateGroupJson((tpl as any)?.group);
+        (zone as any)._zoneTemplateSnapshotId = id;
+        (zone as any)._zoneTemplateSnapshot = snapshot || null;
+    } else {
+        (zone as any)._zoneTemplateSnapshotId = undefined;
+        (zone as any)._zoneTemplateSnapshot = undefined;
+    }
 
     // Only apply to existing cards if explicitly requested (e.g., user explicitly changes template)
     // If applyToExisting is false, just update the reference for new products
@@ -17877,12 +20094,19 @@ async function applyLabelTemplateToZone(zone: any, templateId?: string, applyToE
         }
 
         // Also re-apply colors/text style if the zone has global styles.
-        const styles = (zone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value;
+        const styles = getZoneGlobalStyles(zone);
         applyGlobalStylesToCards(styles, zone);
     }
 
     canvas.value.requestRenderAll();
     saveCurrentState();
+}
+
+const applyTemplateToActiveZone = (templateId?: string) => {
+    const zone = canvas.value?.getActiveObject?.();
+    if (zone && isLikelyProductZone(zone)) {
+        void applyLabelTemplateToZone(zone, templateId, true);
+    }
 }
 
 async function setTemplateSplashImage(templateId: string, file: File) {
@@ -18031,14 +20255,26 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
     const idx = labelTemplates.value.findIndex(t => t.id === templateId);
     if (idx === -1) return;
     const prev = labelTemplates.value[idx]!;
+    const rawGroup: any = (updates.group ?? prev.group);
+    let nextGroup: any = rawGroup;
+    try {
+        nextGroup = (typeof structuredClone === 'function')
+            ? structuredClone(rawGroup)
+            : JSON.parse(JSON.stringify(rawGroup));
+    } catch {
+        // Fallback to raw object if cloning is not possible.
+        nextGroup = rawGroup;
+    }
+    if (nextGroup && typeof nextGroup === 'object') {
+        delete nextGroup.layoutManager;
+        delete nextGroup.layout;
+        // Mini editor is explicit manual mode: preserve exact element layout on cards/reload.
+        nextGroup.__preserveManualLayout = true;
+    }
     const next: LabelTemplate = {
         ...prev,
         name: (updates.name ?? prev.name),
-        group: (() => {
-            const j: any = (updates.group ?? prev.group);
-            if (j && typeof j === 'object') { delete j.layoutManager; delete j.layout; }
-            return j;
-        })(),
+        group: nextGroup,
         previewDataUrl: updates.previewDataUrl ?? prev.previewDataUrl,
         updatedAt: new Date().toISOString()
     };
@@ -18046,7 +20282,10 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
     list[idx] = next;
     labelTemplates.value = list;
     saveCurrentState();
-    await upsertLabelTemplateToDb(next);
+    const saved = await upsertLabelTemplateToDb(next);
+    if (!saved) {
+        console.warn('[labelTemplates] Edição salva localmente, mas não foi persistida no banco');
+    }
 
     // If this template is in use by any zone, re-apply it to keep cards in sync.
     if (canvas.value) {
@@ -18054,7 +20293,8 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
         for (const z of zones) {
             const used = (z as any)._zoneGlobalStyles?.splashTemplateId;
             if (used === templateId) {
-                await applyLabelTemplateToZone(z, templateId);
+                // Template edited in mini editor: refresh existing cards that already use it.
+                await applyLabelTemplateToZone(z, templateId, true);
             }
         }
     }
@@ -18062,8 +20302,6 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
 
 // Helper for Responsive Card Layout
 const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
-    console.log('🔍 [resizeSmartObject] CALLED', { groupName: group?.name, w, h, hasStyles: !!styles, splashScale: styles?.splashScale, splashOffsetY: styles?.splashOffsetY });
-    
     // Reset Group Scale/Skew to ensure clean internal layout
     group.scale(1);
     group.set({ width: w, height: h });
@@ -18073,22 +20311,95 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     const baseSize = Math.min(w, h);
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const objects = group.getObjects();
-    console.log('🔍 [resizeSmartObject] Objects in group:', objects.length, objects.map((o: any) => o?.name));
-    
-    const bg = objects.find((o: any) => o.name === 'offerBackground');
-    const title = objects.find((o: any) => o.name === 'smart_title');
-    const limit = objects.find((o: any) =>
-        o?.name === 'smart_limit' ||
-        o?.name === 'limitText' ||
-        o?.name === 'product_limit' ||
-        o?.data?.smartType === 'product-limit'
-    );
-    const img = objects.find((o: any) => o.name === 'smart_image');
+    let bg: any = null;
+    let title: any = null;
+    let limit: any = null;
+    let img: any = null;
+    let namedSplash: any = null;
+    let fallbackSplashGroup: any = null;
+    let directPriceGroup: any = null;
+    let topMostText: any = null;
+    let topMostTextTop = Infinity;
+    let largestRect: any = null;
+    let largestRectArea = -1;
+    let rectCount = 0;
+    let imageCount = 0;
+    let loneImage: any = null;
+
+    // Single-pass lookup to keep relayout fast when many cards are updated.
+    for (const obj of objects) {
+        if (!obj) continue;
+        const name = String(obj.name || '');
+        const type = String(obj.type || '').toLowerCase();
+
+        if (!bg && name === 'offerBackground') bg = obj;
+        if (!title && name === 'smart_title') title = obj;
+        if (!img && name === 'smart_image') img = obj;
+        if (!namedSplash && (name === 'smart_price' || name === 'smart_splash')) namedSplash = obj;
+        if (!directPriceGroup && type === 'group' && name === 'priceGroup') directPriceGroup = obj;
+        if (!fallbackSplashGroup && type === 'group') fallbackSplashGroup = obj;
+        if (!limit && (name === 'smart_limit' || name === 'limitText' || name === 'product_limit' || obj?.data?.smartType === 'product-limit')) {
+            limit = obj;
+        }
+
+        if (type === 'rect') {
+            rectCount += 1;
+            const area = (obj?.width || 0) * (obj?.height || 0) * (obj?.scaleX || 1) * (obj?.scaleY || 1);
+            if (area >= largestRectArea) {
+                largestRectArea = area;
+                largestRect = obj;
+            }
+        }
+
+        if (isTextLikeObject(obj)) {
+            const top = typeof obj?.top === 'number' ? obj.top : Infinity;
+            if (top <= topMostTextTop) {
+                topMostTextTop = top;
+                topMostText = obj;
+            }
+        }
+
+        if (type === 'image') {
+            imageCount += 1;
+            loneImage = obj;
+        }
+    }
+
+    // Fallback: The background is usually the largest rect that fills most of the card.
+    if (!bg && largestRect && rectCount > 0) {
+        bg = largestRect;
+        bg.name = 'offerBackground'; // Repair name
+    }
+
+    // Fallback: title is usually the top-most text object.
+    if (!title && topMostText) {
+        title = topMostText;
+        title.name = 'smart_title';
+    }
+
+    // Fallback: image is often the only image in the card.
+    if (!img && imageCount === 1 && loneImage) {
+        img = loneImage;
+        img.name = 'smart_image';
+    }
+
     // Splash can vary names; prefer the canonical price label group when present (even when nested).
-    const priceGroup = getPriceGroupFromAny(group);
-    console.log('🔍 [resizeSmartObject] priceGroup found:', !!priceGroup, priceGroup?.name);
-    const splash = priceGroup ?? objects.find((o: any) => o.name === 'smart_price' || o.name === 'smart_splash' || (o.type === 'group' && o !== bg));
-    console.log('🔍 [resizeSmartObject] splash found:', !!splash, splash?.name, splash?.type);
+    const isDescendantOfGroup = (candidate: any, root: any) => {
+        let current = candidate;
+        while (current) {
+            if (current === root) return true;
+            current = current.group;
+        }
+        return false;
+    };
+
+    let priceGroup = (group as any).__priceGroupRef;
+    if (!(priceGroup && priceGroup.type === 'group' && isDescendantOfGroup(priceGroup, group))) {
+        priceGroup = directPriceGroup ?? getPriceGroupFromAny(group);
+        (group as any).__priceGroupRef = priceGroup ?? null;
+    }
+
+    const splash = priceGroup ?? namedSplash ?? fallbackSplashGroup;
 
     // When the user moves an inner element (deep select), we mark it with `__manualTransform`.
     // During zone relayout (and on reload), we must NOT override these user placements.
@@ -18270,18 +20581,19 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     if (splash) {
         const marginBottom = h * 0.05;
         const splashManual = isManual(splash);
+        let preserveTemplateVisual = false;
+        let layoutScaleX = 1;
+        let layoutScaleY = 1;
 
         // Extract priceBg for later use (shadow update needs pillH from layout)
         let priceBg: any = null;
 
         if (splash.type === 'group' && splash.name === 'priceGroup') {
+            preserveTemplateVisual =
+                (splash as any).__preserveManualLayout === true ||
+                (splash as any).__isCustomTemplate === true;
             // Apply label styling overrides (local to the selected zone/design; never mutates templates).
-            if (styles && typeof splash.getObjects === 'function') {
-                // When a zone uses a label template, the template should be the source of truth for
-                // styling (fill/stroke/roundness/fonts/colors). Keep only explicit overrides that
-                // are meant to be applied on top (ex: currency color).
-                const usingLabelTemplate = typeof styles.splashTemplateId === 'string' && styles.splashTemplateId.trim().length > 0;
-
+            if (styles && typeof splash.getObjects === 'function' && !preserveTemplateVisual) {
                 const parts = splash.getObjects();
                 priceBg = parts.find((o: any) => o?.name === 'price_bg');
                 const currencyText = parts.find((o: any) => o?.name === 'price_currency_text');
@@ -18340,17 +20652,17 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
             }
 
             const layout = layoutPriceGroup(splash, w, h);
-            console.log('🔍 [resizeSmartObject] layoutPriceGroup result:', !!layout, layout ? { pillH: layout.pillH } : 'null');
 
             if (layout) {
                 const { pillH } = layout;
+                layoutScaleX = Number(splash.scaleX) || 1;
+                layoutScaleY = Number(splash.scaleY) || 1;
                 const scale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
                 const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
-                console.log('🔍 [resizeSmartObject] Applying styles to splash:', { scale, offsetY, splashManual });
 
                 // Update shadow color to match accent (after we have pillH for proper blur calculation)
                 const accent = styles?.splashColor ?? styles?.accentColor;
-                if (accent && priceBg && fabric?.Shadow) {
+                if (!preserveTemplateVisual && accent && priceBg && fabric?.Shadow) {
                     priceBg.set('stroke', accent);
                     const blur = Math.max(6, Math.min(26, pillH * 0.22));
                     priceBg.set('shadow', new fabric.Shadow({ color: accent, blur, offsetX: 0, offsetY: 0 }));
@@ -18361,10 +20673,11 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 
                 if (!splashManual) {
                     const newTop = halfH - ((pillH * scale) / 2) - marginBottom + offsetY;
-                    console.log('🔍 [resizeSmartObject] Setting splash position:', { left: 0, top: newTop, scale });
+                    const finalScaleX = preserveTemplateVisual ? (layoutScaleX * scale) : scale;
+                    const finalScaleY = preserveTemplateVisual ? (layoutScaleY * scale) : scale;
                     splash.set({
-                        scaleX: scale,
-                        scaleY: scale,
+                        scaleX: finalScaleX,
+                        scaleY: finalScaleY,
                         originX: 'center',
                         originY: 'center',
                         left: 0,
@@ -18372,15 +20685,15 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     });
                 } else {
                     // Manual positioning: keep left/top, but still apply the zone-level scale.
-                    console.log('🔍 [resizeSmartObject] Manual mode - applying only scale:', scale);
-                    splash.set({ scaleX: scale, scaleY: scale });
+                    const finalScaleX = preserveTemplateVisual ? (layoutScaleX * scale) : scale;
+                    const finalScaleY = preserveTemplateVisual ? (layoutScaleY * scale) : scale;
+                    splash.set({ scaleX: finalScaleX, scaleY: finalScaleY });
                 }
                 
                 // Force coordinate update
                 splash.setCoords();
                 
                 bottomH = (pillH * scale) + marginBottom;
-                console.log('🔍 [resizeSmartObject] Splash updated, bottomH:', bottomH);
             } else {
                 // Fallback to generic scaling for older cards without named parts
                 // Apply global styles even in fallback mode
@@ -18422,14 +20735,11 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     sScaleY = clampScale;
                 }
 
-                console.log('🔍 [resizeSmartObject] Fallback - Applying scale:', { origScaleX, sizeRatio, globalScale, sScaleX, sScaleY, offsetY });
-
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
 
                 if (!splashManual) {
                     const newTop = halfH - marginBottom + offsetY;
-                    console.log('🔍 [resizeSmartObject] Fallback - Setting position:', { left: 0, top: newTop, sScaleX, sScaleY });
                     splash.set({
                         scaleX: sScaleX,
                         scaleY: sScaleY,
@@ -18446,7 +20756,6 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 splash.setCoords();
 
                 bottomH = (splash.height * sScaleY) + marginBottom;
-                console.log('🔍 [resizeSmartObject] Fallback - Splash updated, bottomH:', bottomH);
             }
         } else {
             // Max height for splash: 30% of card
@@ -18497,6 +20806,17 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         const imgManual = isManual(img);
         const availH = h - titleH - limitH - bottomH - 20; // 20px buffer
         const availW = w * 0.9;
+
+        // Product images inside cards should never flip during resize interactions.
+        img.set({
+            lockScalingFlip: true,
+            lockSkewingX: true,
+            lockSkewingY: true,
+            flipX: false,
+            flipY: false
+        });
+        if ((Number(img.scaleX ?? 1) || 1) < 0) img.set('scaleX', Math.abs(Number(img.scaleX ?? 1)) || 1);
+        if ((Number(img.scaleY ?? 1) || 1) < 0) img.set('scaleY', Math.abs(Number(img.scaleY ?? 1)) || 1);
         
         if (availH > 20) {
             // Restore scale 1 to measure
@@ -18616,12 +20936,12 @@ const getZoneRect = (zone: any) => {
 
 const isLikelyProductZone = (obj: any) => {
     if (!obj) return false;
+    if (obj.type !== 'group') return false;
     if (obj.isGridZone || obj.isProductZone) return true;
     if (obj.name === 'gridZone' || obj.name === 'productZoneContainer') return true;
     // CRITICAL: Detect zones via zone-specific custom properties that survive serialization.
     // This catches legacy arts where flags were not originally in CANVAS_CUSTOM_PROPS.
     if (typeof obj._zonePadding === 'number' && typeof obj._zoneWidth === 'number' && typeof obj._zoneHeight === 'number') return true;
-    if (obj.type !== 'group') return false;
     const rect = getZoneRect(obj);
     return !!(rect && Array.isArray(rect.strokeDashArray));
 }
@@ -18678,6 +20998,103 @@ const isLikelyProductCard = (obj: any) => {
     return signals >= 3 || (hasAnyPriceText && textCount >= 2);
 }
 
+const repairLegacyProductCardImageTransforms = (
+    cards: any[],
+    opts: { verbose?: boolean } = {}
+): { cardsScanned: number; imagesScanned: number; imagesRepaired: number } => {
+    const verbose = opts.verbose === true;
+    if (!Array.isArray(cards) || cards.length === 0) {
+        return { cardsScanned: 0, imagesScanned: 0, imagesRepaired: 0 };
+    }
+
+    let cardsScanned = 0;
+    let imagesScanned = 0;
+    let imagesRepaired = 0;
+
+    cards.forEach((card: any) => {
+        if (!card || card.type !== 'group') return;
+        if (String(card.name || '') === 'priceGroup') return;
+
+        cardsScanned += 1;
+        const descendants = typeof card.getObjects === 'function' ? collectObjectsDeep(card) : [];
+        const images = descendants.filter((o: any) => String(o?.type || '').toLowerCase() === 'image');
+
+        images.forEach((img: any) => {
+            imagesScanned += 1;
+            let changed = false;
+
+            let nextScaleX = Number(img.scaleX ?? 1);
+            let nextScaleY = Number(img.scaleY ?? 1);
+            if (!Number.isFinite(nextScaleX) || nextScaleX === 0) {
+                nextScaleX = 1;
+                changed = true;
+            }
+            if (!Number.isFinite(nextScaleY) || nextScaleY === 0) {
+                nextScaleY = 1;
+                changed = true;
+            }
+            if (nextScaleX < 0 || nextScaleY < 0) {
+                nextScaleX = Math.abs(nextScaleX) || 1;
+                nextScaleY = Math.abs(nextScaleY) || 1;
+                changed = true;
+            }
+
+            if (img.flipX || img.flipY) changed = true;
+            if (img.lockScalingFlip !== true) changed = true;
+            if (img.lockSkewingX !== true || img.lockSkewingY !== true) changed = true;
+
+            // Repair invalid intrinsic dimensions when legacy/corrupted state has zero or NaN sizes.
+            const rawW = Number(img.width ?? 0);
+            const rawH = Number(img.height ?? 0);
+            let nextWidth = rawW;
+            let nextHeight = rawH;
+            if (!Number.isFinite(rawW) || rawW <= 0 || !Number.isFinite(rawH) || rawH <= 0) {
+                const el: any = (img as any)._originalElement || (img as any)._element || null;
+                const naturalW = Number(el?.naturalWidth ?? el?.width ?? 0);
+                const naturalH = Number(el?.naturalHeight ?? el?.height ?? 0);
+                if (Number.isFinite(naturalW) && naturalW > 0 && Number.isFinite(naturalH) && naturalH > 0) {
+                    nextWidth = naturalW;
+                    nextHeight = naturalH;
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                img.set({
+                    scaleX: nextScaleX,
+                    scaleY: nextScaleY,
+                    flipX: false,
+                    flipY: false,
+                    lockScalingFlip: true,
+                    lockSkewingX: true,
+                    lockSkewingY: true
+                });
+                if (Number.isFinite(nextWidth) && nextWidth > 0 && Number.isFinite(nextHeight) && nextHeight > 0) {
+                    img.set({
+                        width: nextWidth,
+                        height: nextHeight
+                    });
+                }
+                img.setCoords?.();
+                imagesRepaired += 1;
+            }
+
+            // Always clamp inside card after load to prevent detached images from legacy states.
+            applyContainmentConstraints(img);
+        });
+    });
+
+    if (verbose && imagesRepaired > 0) {
+        console.log('[repairLegacyProductCardImageTransforms] repaired:', {
+            cardsScanned,
+            imagesScanned,
+            imagesRepaired
+        });
+    }
+
+    return { cardsScanned, imagesScanned, imagesRepaired };
+}
+
 const ensureZoneSanity = (zone: any) => {
     if (!zone) return;
     if (!zone._customId) zone._customId = Math.random().toString(36).substr(2, 9);
@@ -18699,6 +21116,14 @@ const ensureZoneSanity = (zone: any) => {
     if (zone.padding !== 0) {
         zone.set('padding', 0);
         needsBoundsUpdate = true;
+    }
+
+    // Rows are auto-calculated in the current UX. Legacy saved fixed rows create holes after reload.
+    if (typeof (zone as any).rows !== 'number' || !Number.isFinite((zone as any).rows) || (zone as any).rows < 0) {
+        (zone as any).rows = 0;
+    }
+    if ((zone as any).rows > 0) {
+        (zone as any).rows = 0;
     }
 
     // CRITICAL: Initialize _zoneWidth and _zoneHeight if missing (for persistence after reload)
@@ -18804,11 +21229,102 @@ const getZoneMetrics = (zone: any) => {
     };
 }
 
+const getResolvedZoneFrameId = (zone: any): string | undefined => {
+    if (!canvas.value || !zone) return undefined;
+
+    let frameId = String((zone as any).parentFrameId || '').trim() || undefined;
+    if (frameId && !getFrameById(frameId)) {
+        frameId = undefined;
+    }
+
+    if (!frameId) {
+        const detected = findFrameUnderObject(zone);
+        if (detected && detected._customId) {
+            frameId = String(detected._customId);
+        }
+    }
+
+    if ((zone as any).parentFrameId !== frameId) {
+        (zone as any).parentFrameId = frameId;
+    }
+
+    return frameId;
+}
+
+const applyCardFrameBinding = (card: any, frameId?: string) => {
+    if (!card || card.excludeFromExport || card.isFrame) return;
+    const isCardLike = !!(card.isSmartObject || card.isProductCard || isLikelyProductCard(card));
+    if (!isCardLike) return;
+
+    const nextFrameId = String(frameId || '').trim() || undefined;
+    if ((card as any).parentFrameId !== nextFrameId) {
+        (card as any).parentFrameId = nextFrameId;
+    }
+
+    // Product cards are never clipped by frame clipPath.
+    const hadClip = !!card.clipPath || !!(card as any)._frameClipOwner;
+    if (card.clipPath) {
+        card.set?.('clipPath', null);
+    }
+    if ((card as any)._frameClipOwner) {
+        delete (card as any)._frameClipOwner;
+    }
+    if (hadClip) {
+        card.set?.('dirty', true);
+        card.setCoords?.();
+    }
+}
+
+const syncZoneCardFrameBindings = (zone: any, cards?: any[]) => {
+    if (!zone) return;
+    const zoneFrameId = getResolvedZoneFrameId(zone);
+    const list = Array.isArray(cards) ? cards : getZoneChildren(zone);
+    list.forEach((card: any) => applyCardFrameBinding(card, zoneFrameId));
+}
+
+const getZoneChildCandidates = (zone: any) => {
+    if (!canvas.value || !zone) return [];
+    const topLevel = canvas.value.getObjects() || [];
+    const isCandidateGroup = (o: any) => {
+        if (!o || o === zone) return false;
+        if (o.visible === false) return false;
+        if ((o as any).excludeFromExport) return false;
+        if ((o as any).isFrame) return false;
+        if (isLikelyProductZone(o)) return false;
+        if (o.type !== 'group' || typeof o.getObjects !== 'function') return false;
+        if (String(o.name || '') === 'priceGroup') return false;
+        return true;
+    };
+
+    const topCandidates = topLevel.filter(isCandidateGroup);
+    if (topCandidates.length > 0) return topCandidates;
+
+    // Legacy fallback: in rare old states cards can be nested. Scan only group nodes.
+    const deepCandidates: any[] = [];
+    const seen = new Set<any>();
+    const stack = [...topLevel];
+    while (stack.length > 0) {
+        const cur = stack.pop();
+        if (!cur || seen.has(cur)) continue;
+        seen.add(cur);
+        if (cur.type === 'group' && typeof cur.getObjects === 'function') {
+            if (isCandidateGroup(cur)) deepCandidates.push(cur);
+            const children = cur.getObjects() || [];
+            for (const child of children) {
+                if (child?.type === 'group') stack.push(child);
+            }
+        }
+    }
+    return deepCandidates;
+};
+
 const getZoneChildren = (zone: any) => {
     if (!canvas.value || !zone) return [];
-    
-    const objs = canvas.value.getObjects();
+    const candidates = getZoneChildCandidates(zone);
+
     const zoneBounds = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
+    const zoneFrameId = getResolvedZoneFrameId(zone);
+    const zoneId = String((zone as any)?._customId || '').trim();
     const margin = (() => {
         const pad = typeof (zone as any)._zonePadding === 'number' ? (zone as any)._zonePadding : 20;
         const base = Math.min(zoneBounds.width || 0, zoneBounds.height || 0);
@@ -18816,52 +21332,69 @@ const getZoneChildren = (zone: any) => {
         return Math.max(60, Math.min(220, pad + base * 0.12));
     })();
     
-    return objs.filter((o: any) => {
-        if (o === zone) return false;
+    const normalizeLegacyCard = (o: any, explicitCard: boolean) => {
+        if (explicitCard) return;
+        // Upgrade legacy card objects (old saves) so the rest of the engine can rely on flags.
+        o.isProductCard = true;
+        o.isSmartObject = true;
+        // Single-click deep select: user can click directly on inner elements.
+        o.subTargetCheck = true;
+        o.interactive = true;
+        o.selectable = true;
+        o.evented = true;
+        // Ensure inner elements are selectable with controls
+        if (typeof o.getObjects === 'function') {
+            o.getObjects().forEach((child: any) => {
+                const isBackground = child.name === 'offerBackground' || child.name === 'price_bg';
+                child.selectable = !isBackground;
+                child.evented = !isBackground;
+                child.hasControls = !isBackground;
+                child.hasBorders = !isBackground;
+            });
+        }
+        if (typeof o.setCoords === 'function') o.setCoords();
+    };
 
-        if (o.visible === false) return false;
+    const explicitBound: any[] = [];
+    const slotBound: any[] = [];
+    const legacyCandidates: any[] = [];
 
-        // If object is explicitly bound to this zone, accept it even if flags/heuristics are missing.
-        const zoneId = String((zone as any)?._customId || '').trim();
+    candidates.forEach((o: any) => {
+        const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
+        const likelyCard = explicitCard ? true : isLikelyProductCard(o);
+        if (!likelyCard) return;
+
         const boundId = String((o as any)?.parentZoneId || '').trim();
         if (zoneId && boundId && boundId === zoneId) {
-            if ((o as any).excludeFromExport) return false;
-            if ((o as any).isFrame) return false;
-            if (isLikelyProductZone(o)) return false;
-            if (o.type !== 'group' || typeof o.getObjects !== 'function') return false;
-            if (String(o.name || '') === 'priceGroup') return false;
-            return true;
+            normalizeLegacyCard(o, explicitCard);
+            applyCardFrameBinding(o, zoneFrameId);
+            explicitBound.push(o);
+            return;
         }
 
-        const isCard = !!(o.isProductCard || o.isSmartObject || isLikelyProductCard(o));
-        if (!isCard) return false;
-
-        // Upgrade legacy card objects (old saves) so the rest of the engine can rely on flags.
-        if (!o.isProductCard && !o.isSmartObject && isLikelyProductCard(o)) {
-            o.isProductCard = true;
-            o.isSmartObject = true;
-            // Single-click deep select: user can click directly on inner elements.
-            o.subTargetCheck = true;
-            o.interactive = true;
-            o.selectable = true;
-            o.evented = true;
-            // Ensure inner elements are selectable with controls
-            if (typeof o.getObjects === 'function') {
-                o.getObjects().forEach((child: any) => {
-                    const isBackground = child.name === 'offerBackground' || child.name === 'price_bg';
-                    child.selectable = !isBackground;
-                    child.evented = !isBackground;
-                    child.hasControls = !isBackground;
-                    child.hasBorders = !isBackground;
-                });
-            }
-            if (typeof o.setCoords === 'function') o.setCoords();
+        // Keep deterministic binding when slot metadata exists (important after undo/reload).
+        const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
+        if (zoneId && slotZoneId && slotZoneId === zoneId) {
+            normalizeLegacyCard(o, explicitCard);
+            o.parentZoneId = zoneId;
+            applyCardFrameBinding(o, zoneFrameId);
+            slotBound.push(o);
+            return;
         }
-        
-        if (o.parentZoneId === zone._customId) return true;
-        
+
+        legacyCandidates.push(o);
+    });
+
+    // If the zone already has explicit bindings, do NOT auto-capture nearby groups.
+    // This prevents false positives (mini-cards/soltos) when changing spacing/layout.
+    if (explicitBound.length > 0 || slotBound.length > 0) {
+        return [...explicitBound, ...slotBound];
+    }
+
+    // Legacy rescue mode: only when no explicit cards exist for the zone.
+    return legacyCandidates.filter((o: any) => {
         const objBounds = o.getBoundingRect();
-        const isInside = 
+        const isInside =
             objBounds.left >= zoneBounds.left &&
             objBounds.top >= zoneBounds.top &&
             objBounds.left + objBounds.width <= zoneBounds.left + zoneBounds.width &&
@@ -18876,13 +21409,16 @@ const getZoneChildren = (zone: any) => {
             center.x <= (zoneBounds.left + zoneBounds.width + margin) &&
             center.y >= (zoneBounds.top - margin) &&
             center.y <= (zoneBounds.top + zoneBounds.height + margin);
-        
+
         const intersects = zone.intersectsWithObject(o);
         if (isInside || intersects || nearInside) {
+            const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
+            normalizeLegacyCard(o, explicitCard);
             o.parentZoneId = zone._customId;
+            applyCardFrameBinding(o, zoneFrameId);
             return true;
         }
-        
+
         return false;
     });
 }
@@ -19093,15 +21629,17 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
     
     // 3. Setup Grid Vars
     const zoneRect = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
-    
-    const padding = typeof zone._zonePadding === 'number' ? zone._zonePadding : (zone.padding ?? 20);
-    const gapX = zone.gapHorizontal ?? padding;
-    const gapY = zone.gapVertical ?? padding;
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+    const minSlotSize = 12;
+
+    const rawPadding = Math.max(0, Number(typeof zone._zonePadding === 'number' ? zone._zonePadding : (zone.padding ?? 20)) || 0);
+    const rawGapX = Math.max(0, Number(zone.gapHorizontal ?? rawPadding) || 0);
+    const rawGapY = Math.max(0, Number(zone.gapVertical ?? rawPadding) || 0);
     // Default to `fill` so the grid always uses the full zone width (no empty space).
     const lastRowBehavior = zone.lastRowBehavior || 'fill'; 
     const layoutDirection = zone.layoutDirection || 'horizontal';
-    const verticalAlign = zone.verticalAlign || 'stretch';
-    const stylesToApply: Partial<GlobalStyles> = (zone as any)._zoneGlobalStyles ?? productZoneState.globalStyles.value;
+    const stylesToApply: Partial<GlobalStyles> = getZoneGlobalStyles(zone);
+    const zoneFrameId = getResolvedZoneFrameId(zone);
     
     const count = cards.length;
     
@@ -19110,151 +21648,242 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
         y: zoneRect.top,
         width: zoneRect.width,
         height: zoneRect.height,
-        padding,
-        gapHorizontal: gapX,
-        gapVertical: gapY,
+        padding: rawPadding,
+        gapHorizontal: rawGapX,
+        gapVertical: rawGapY,
         columns: typeof zone.columns === 'number' ? zone.columns : 0,
         rows: typeof zone.rows === 'number' ? zone.rows : 0,
         cardAspectRatio: zone.cardAspectRatio ?? 'auto',
         lastRowBehavior: lastRowBehavior
     };
     
-    const { cols, rows, itemWidth, itemHeight } = calculateGridLayout(zoneConfig, count);
-    let itemW = itemWidth;
-    let itemH = itemHeight;
-    
-    // Effective usable area
-    const usableW = Math.max(0, zoneRect.width - (padding * 2));
-    const usableH = Math.max(0, zoneRect.height - (padding * 2));
-    
-    // Safety Limits
-    itemW = Math.max(50, itemW);
-    itemH = Math.max(50, itemH);
+    const { cols: computedCols, rows: computedRows } = calculateGridLayout(zoneConfig, count);
+    const cols = Math.max(1, Math.round(Number(computedCols) || 1));
+    const rows = Math.max(1, Math.round(Number(computedRows) || 1));
+    const effectiveRows = Math.max(rows, Math.ceil(count / cols));
+
+    // Fit spacing to available area so cards never overflow the product zone.
+    const fitSpacing = (colCount: number, rowCount: number) => {
+        let padding = rawPadding;
+        let gapX = rawGapX;
+        let gapY = rawGapY;
+
+        if (colCount > 1) {
+            const maxGapForMinWidth = (zoneRect.width - (padding * 2) - (colCount * minSlotSize)) / (colCount - 1);
+            gapX = clamp(gapX, 0, Math.max(0, maxGapForMinWidth));
+        }
+        if (rowCount > 1) {
+            const maxGapForMinHeight = (zoneRect.height - (padding * 2) - (rowCount * minSlotSize)) / (rowCount - 1);
+            gapY = clamp(gapY, 0, Math.max(0, maxGapForMinHeight));
+        }
+
+        const maxPadByWidth = (zoneRect.width - (colCount * minSlotSize) - ((colCount - 1) * gapX)) / 2;
+        const maxPadByHeight = (zoneRect.height - (rowCount * minSlotSize) - ((rowCount - 1) * gapY)) / 2;
+        const padLimit = Math.max(0, Math.min(maxPadByWidth, maxPadByHeight));
+        padding = clamp(padding, 0, padLimit);
+
+        const usableW = Math.max(2, zoneRect.width - (padding * 2));
+        const usableH = Math.max(2, zoneRect.height - (padding * 2));
+
+        if (colCount > 1) {
+            const maxGapByUsableWidth = (usableW - (colCount * minSlotSize)) / (colCount - 1);
+            gapX = clamp(gapX, 0, Math.max(0, maxGapByUsableWidth));
+        }
+        if (rowCount > 1) {
+            const maxGapByUsableHeight = (usableH - (rowCount * minSlotSize)) / (rowCount - 1);
+            gapY = clamp(gapY, 0, Math.max(0, maxGapByUsableHeight));
+        }
+
+        return {
+            padding,
+            gapX,
+            gapY,
+            usableW,
+            usableH,
+            startX: zoneRect.left + padding,
+            startY: zoneRect.top + padding
+        };
+    };
+
+    const spacing = fitSpacing(cols, effectiveRows);
+    const padding = spacing.padding;
+    const gapX = spacing.gapX;
+    const gapY = spacing.gapY;
+    const usableW = spacing.usableW;
+    const usableH = spacing.usableH;
     
     // 4. Layout Execution
-    const startX = zoneRect.left + padding;
-    let startY = zoneRect.top + padding;
+    const startX = spacing.startX;
+    const startY = spacing.startY;
+    const maxSlotX = zoneRect.left + zoneRect.width - padding;
+    const maxSlotY = zoneRect.top + zoneRect.height - padding;
 
-    // Highlights: allow a few items to be taller (featured) without breaking the grid.
-    // Rows that contain any highlighted card get a taller row height, but only the highlighted cards expand.
-    const safeRows = Math.max(1, rows);
+    // Helper: resize & position a single card in its slot
+    const placeCard = (card: any, x: number, y: number, w: number, h: number, order: number) => {
+        const slotW = Math.max(2, w);
+        const slotH = Math.max(2, h);
+        const boundedX = clamp(x, startX, Math.max(startX, maxSlotX - slotW));
+        const boundedY = clamp(y, startY, Math.max(startY, maxSlotY - slotH));
+        card.parentZoneId = zone._customId;
+        applyCardFrameBinding(card, zoneFrameId);
+        card._zoneOrder = order;
+        (card as any)._zoneSlot = { zoneId: zone._customId, left: boundedX, top: boundedY, width: slotW, height: slotH };
+        const cx = boundedX + slotW / 2;
+        const cy = boundedY + slotH / 2;
+        if (card.isSmartObject || card.name?.startsWith('product-card')) {
+            resizeSmartObject(card, slotW, slotH, stylesToApply);
+            card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
+        } else {
+            card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: slotW / (card.width || 1), scaleY: slotH / (card.height || 1) });
+        }
+        card.setCoords();
+    };
+
+    // Highlight detection
     const hl = getZoneHighlightPredicate(zone, cards);
-    const rowHasHighlight = new Array<boolean>(rows).fill(false);
+
     if (hl.count > 0 && hl.mult > 1) {
-        for (let i = 0; i < count; i++) {
-            if (!hl.isHighlighted(cards[i], i)) continue;
-            const r = layoutDirection === 'vertical' ? (i % safeRows) : Math.floor(i / cols);
-            if (r >= 0 && r < rows) rowHasHighlight[r] = true;
+        // ══════════════ FEATURED LAYOUT ══════════════
+        // Highlighted cards get their own COLUMN SECTION (spanning full height).
+        // Normal cards fill the remaining width as a sub-grid.
+        const hlCards: any[] = [];
+        const normCards: any[] = [];
+        cards.forEach((card, i) => {
+            if (hl.isHighlighted(card, i)) hlCards.push(card);
+            else normCards.push(card);
+        });
+
+        // Edge case: all cards highlighted → fall through to standard grid
+        if (normCards.length > 0) {
+            const hlOnLeft = (zone.highlightPos ?? 'first') !== 'last';
+
+            // Column distribution for normal section
+            const normalCols = Math.max(1, (zone.columns && zone.columns > 0)
+                ? cols - 1
+                : Math.max(1, Math.round(Math.sqrt(normCards.length * (usableW / Math.max(1, usableH)))))
+            );
+
+            // Width: highlight section = hl.mult units, normal cols = 1 unit each
+            // Total gaps: 1 between hl and normal + (normalCols - 1) between normal cols = normalCols gaps
+            const totalGapsX = normalCols * gapX;
+            const totalUnits = normalCols + hl.mult;
+            const unitW = (usableW - totalGapsX) / Math.max(1, totalUnits);
+
+            if (Number.isFinite(unitW) && unitW > 2) {
+                const hlW = unitW * hl.mult;
+                const normSectionW = usableW - hlW - gapX;
+
+                // Heights (each section fills full height independently)
+                const hlRowCount = hlCards.length;
+                const hlGapH = Math.max(0, hlRowCount - 1) * gapY;
+                const hlCardH = (usableH - hlGapH) / Math.max(1, hlRowCount);
+
+                const normRowCount = Math.max(1, Math.ceil(normCards.length / normalCols));
+                const normGapH = Math.max(0, normRowCount - 1) * gapY;
+                const normCardH = (usableH - normGapH) / normRowCount;
+                const baseNormCellW = (normSectionW - ((normalCols - 1) * gapX)) / Math.max(1, normalCols);
+
+                const canApplyFeatured =
+                    normSectionW > 2 &&
+                    hlCardH > 2 &&
+                    normCardH > 2 &&
+                    baseNormCellW > 2;
+
+                if (canApplyFeatured) {
+                    // Position highlight cards (full-height column section)
+                    const hlSectionX = hlOnLeft ? startX : (startX + usableW - hlW);
+                    hlCards.forEach((card: any, i: number) => {
+                        const y = startY + i * (hlCardH + gapY);
+                        placeCard(card, hlSectionX, y, hlW, hlCardH, cards.indexOf(card));
+                    });
+
+                    // Position normal cards in sub-grid
+                    const normSectionX = hlOnLeft ? (startX + hlW + gapX) : startX;
+
+                    normCards.forEach((card: any, i: number) => {
+                        const col = i % normalCols;
+                        const row = Math.floor(i / normalCols);
+
+                        // Last row fill
+                        const isLastRow = row === normRowCount - 1;
+                        const itemsInRow = isLastRow ? (normCards.length % normalCols || normalCols) : normalCols;
+                        const shouldFill = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < normalCols;
+                        const cellW = shouldFill
+                            ? (normSectionW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow)
+                            : baseNormCellW;
+
+                        let x = normSectionX + col * (cellW + gapX);
+
+                        // Center last row if needed
+                        if (isLastRow && lastRowBehavior === 'center' && itemsInRow < normalCols) {
+                            const rowW = (itemsInRow * cellW) + ((itemsInRow - 1) * gapX);
+                            x = normSectionX + (normSectionW - rowW) / 2 + col * (cellW + gapX);
+                        }
+
+                        const y = startY + row * (normCardH + gapY);
+                        placeCard(card, x, y, cellW, normCardH, cards.indexOf(card));
+                    });
+
+                    canvas.value.requestRenderAll();
+                    if (shouldSave) saveCurrentState();
+                    return;
+                }
+            }
         }
     }
-    const highlightRowCount = rowHasHighlight.filter(Boolean).length;
 
-    const gapTotalH = (rows - 1) * gapY;
-    const denom = rows + (highlightRowCount * (hl.mult - 1));
-    const maxBaseH = (rows > 0 && denom > 0) ? ((usableH - gapTotalH) / denom) : itemH;
+    // ══════════════ STANDARD GRID LAYOUT ══════════════
+    const totalGapW = (cols - 1) * gapX;
+    const totalGapH = (effectiveRows - 1) * gapY;
+    const itemW = (usableW - totalGapW) / cols;
+    const itemH = (usableH - totalGapH) / effectiveRows;
 
-    // Base height is the "normal" card height (non-highlight). Highlighted cards are baseH * hl.mult.
-    // - `stretch`: fill the vertical space.
-    // - others: never exceed the computed itemHeight (keeps aspect ratio preference when possible).
-    let baseH = itemH;
-    if (verticalAlign === 'stretch') baseH = maxBaseH;
-    else baseH = Math.min(baseH, maxBaseH);
-    baseH = Math.max(50, baseH);
-
-    const rowHeights = new Array<number>(rows).fill(baseH);
-    for (let r = 0; r < rows; r++) {
-        if (rowHasHighlight[r]) rowHeights[r] = baseH * hl.mult;
+    if (!Number.isFinite(itemW) || !Number.isFinite(itemH) || itemW <= 0 || itemH <= 0) {
+        return;
     }
 
-    // Align the full grid vertically inside the zone when there's leftover space (e.g., fixed aspect ratio).
-    const usedGridH = rowHeights.reduce((sum, h) => sum + h, 0) + gapTotalH;
-    if (verticalAlign === 'center') {
-        startY += Math.max(0, (usableH - usedGridH) / 2);
-    } else if (verticalAlign === 'bottom') {
-        startY += Math.max(0, usableH - usedGridH);
-    }
-
-    const rowTops: number[] = [startY];
-    for (let r = 1; r < rows; r++) {
-        rowTops[r] = rowTops[r - 1]! + (rowHeights[r - 1] ?? baseH) + gapY;
-    }
-    
     cards.forEach((card: any, index: number) => {
-        // Bind to zone
-        card.parentZoneId = zone._customId;
         const col = layoutDirection === 'vertical'
-            ? Math.floor(index / safeRows)
+            ? Math.floor(index / Math.max(1, effectiveRows))
             : (index % cols);
         const row = layoutDirection === 'vertical'
-            ? (index % safeRows)
+            ? (index % Math.max(1, effectiveRows))
             : Math.floor(index / cols);
-        const isHighlighted = hl.isHighlighted(card, index);
-        const slotH = rowHeights[row] ?? baseH;
-        const cardH = isHighlighted ? (baseH * hl.mult) : baseH;
-        const rowTop = rowTops[row] ?? startY;
 
-        const isLastRow = layoutDirection !== 'vertical' && row === rows - 1;
+        const isLastRow = layoutDirection !== 'vertical' && row === effectiveRows - 1;
         const itemsInRow = isLastRow ? (count % cols || cols) : cols;
         const shouldFillRow = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < cols;
         const rowItemW = shouldFillRow
-            ? Math.max(50, (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow))
+            ? (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow)
             : itemW;
-        const slotW = (layoutDirection === 'vertical' ? itemW : rowItemW);
 
-        // Base Position
-        let x = startX + (col * (slotW + gapX));
+        let x = startX + (col * (rowItemW + gapX));
+        let y = startY + (row * (itemH + gapY));
 
-        // Last Row Logic (Horizontal Fill Order)
+        // Center last row if needed
         if (isLastRow && lastRowBehavior === 'center' && itemsInRow < cols) {
-            const rowWidth = (itemsInRow * itemW) + ((itemsInRow - 1) * gapX);
-            const remainingSpace = usableW - rowWidth;
-            x += remainingSpace / 2;
+            const rowWidth = (itemsInRow * rowItemW) + ((itemsInRow - 1) * gapX);
+            x = startX + (usableW - rowWidth) / 2 + (col * (rowItemW + gapX));
         }
 
-        const centerX = x + (slotW / 2);
-        // Align cards to the top of the row so highlights feel like true "featured" items.
-        const centerY = rowTop + (cardH / 2);
-
-        // Store slot bounds for optional tooling/debugging and future constraints.
-        (card as any)._zoneSlot = { zoneId: zone._customId, left: x, top: rowTop, width: slotW, height: slotH };
-        
-        // Resize & Position
-        if (card.isSmartObject || card.name?.startsWith('product-card')) {
-             resizeSmartObject(card, rowItemW, cardH, stylesToApply);
-             card.set({
-                 left: centerX,
-                 top: centerY,
-                 originX: 'center',
-                 originY: 'center',
-                 scaleX: 1, 
-                 scaleY: 1
-             });
-        } else {
-             card.set({
-                 left: centerX,
-                 top: centerY,
-                 originX: 'center',
-                 originY: 'center',
-                 scaleX: itemW / card.width,
-                 scaleY: cardH / card.height
-             });
-        }
-
-        card.setCoords();
+        x = clamp(x, startX, Math.max(startX, maxSlotX - rowItemW));
+        y = clamp(y, startY, Math.max(startY, maxSlotY - itemH));
+        placeCard(card, x, y, rowItemW, itemH, index);
     });
-    
+
     canvas.value.requestRenderAll();
     if (shouldSave) saveCurrentState();
 }
 
-const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
+const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: boolean } = {}) => {
     if (!canvas.value) return;
     const relayout = opts.relayout !== false;
+    const applyZoneStyles = opts.applyZoneStyles !== false;
 
     const prevHistory = isHistoryProcessing.value;
     isHistoryProcessing.value = true;
     try {
-        const objs = canvas.value.getObjects();
+        let objs = canvas.value.getObjects();
 
         // Ensure IDs exist (used for parentZoneId mapping and selection)
         objs.forEach((o: any) => {
@@ -19470,11 +22099,50 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
         });
         frames.forEach((f: any) => syncFrameClips(f));
 
-        const zones = objs.filter((o: any) => isLikelyProductZone(o));
+        // Remove legacy zone rectangles from the deprecated renderer.
+        // Keeping them causes duplicate/overlapping zone behaviors after spacing edits.
+        if (!LEGACY_PRODUCT_ZONE_RENDERER_ENABLED) {
+            const legacyZoneRects = objs.filter((o: any) =>
+                o?.type === 'rect' &&
+                (
+                    o?.id === 'product_zone_container' ||
+                    o?.name === 'product_zone_container' ||
+                    (o?.isZone === true && o?.isProductZone === true)
+                )
+            );
+            if (legacyZoneRects.length > 0) {
+                legacyZoneRects.forEach((o: any) => {
+                    if (zoneObjectRef.value === o) zoneObjectRef.value = null;
+                    canvas.value.remove(o);
+                });
+                console.log(`[rehydrateCanvasZones] Removed ${legacyZoneRects.length} legacy zone rect(s)`);
+                objs = canvas.value.getObjects();
+            }
+        }
+
+        const zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
+        
+        if (LEGACY_PRODUCT_ZONE_RENDERER_ENABLED) {
+            // Legacy only: reconnect zone rect reference used by renderProductZone().
+            const existingProductZoneRect = objs.find((o: any) =>
+                o?.type === 'rect' &&
+                (
+                    o?.isProductZone === true ||
+                    o?.id === 'product_zone_container' ||
+                    o?.name === 'product_zone_container'
+                )
+            );
+            if (existingProductZoneRect && !zoneObjectRef.value) {
+                console.log('[rehydrateCanvasZones] Reconnecting zoneObjectRef to existing product zone from JSON');
+                zoneObjectRef.value = existingProductZoneRect;
+            }
+        }
+        
         zones.forEach((z: any) => {
             if (z.name === 'gridZone') z.isGridZone = true;
             if (z.name === 'productZoneContainer') z.isProductZone = true;
             if (!z.isGridZone && !z.isProductZone) z.isGridZone = true;
+            getResolvedZoneFrameId(z);
 
             // CRITICAL: Clear clipPath from zone AND all its children
             if (z.clipPath) {
@@ -19509,11 +22177,59 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             normalizeZoneScale(z);
             // Ensure Fabric v7 group bounds match the inner rect (prevents the "outer container" selection bug).
             safeAddWithUpdate(z);
-            const zoneStyles = (z as any)._zoneGlobalStyles;
-            if (zoneStyles && typeof zoneStyles === 'object') {
+            
+            // Normalize zone styles to a complete object (defaults + overrides) so
+            // cards never render "unstyled" after reload when persisted styles are partial/empty.
+            (z as any)._zoneGlobalStyles = normalizeGlobalStyles((z as any)._zoneGlobalStyles as Partial<GlobalStyles>);
+            const zoneStyles = getZoneGlobalStyles(z);
+            console.log('[rehydrateCanvasZones] Zone has normalized _zoneGlobalStyles:', Object.keys(zoneStyles));
+            if (applyZoneStyles) {
+                console.log('[rehydrateCanvasZones] Applying global styles to cards for zone:', z._customId);
                 applyGlobalStylesToCards(zoneStyles, z);
             }
         });
+
+        // ═══════════════════════════════════════════════════════════════════
+        // CRITICAL FIX: Sync composable state from persisted zone data.
+        // After reload the composable starts with DEFAULT_GLOBAL_STYLES / DEFAULT_PRODUCT_ZONE.
+        // The real source of truth lives on the Fabric zone object (_zoneGlobalStyles + zone props).
+        // Without this sync, the ProductZoneSettings UI shows stale defaults until the user
+        // manually clicks the zone (which triggers refreshSelectedRef).
+        // ═══════════════════════════════════════════════════════════════════
+        if (zones.length > 0) {
+            const zonesWithCounts = zones.map((z: any) => ({ zone: z, count: getZoneChildren(z).length }));
+            const primaryZone =
+                zonesWithCounts
+                    .filter((item: any) => item.count > 0)
+                    .sort((a: any, b: any) => b.count - a.count)[0]?.zone ??
+                zones.find((z: any) => z?.isProductZone || String(z?.name || '') === 'productZoneContainer') ??
+                zones[0];
+
+            // Sync global styles
+            productZoneState.updateGlobalStyles(getZoneGlobalStyles(primaryZone));
+
+            // Sync zone config (columns, rows, gaps, padding, layout settings, highlights)
+            const pad = typeof primaryZone._zonePadding === 'number'
+                ? primaryZone._zonePadding
+                : (primaryZone.padding || 20);
+            const zoneConfig: Partial<ProductZone> = {
+                enabled: true,
+                columns: primaryZone.columns || 0,
+                rows: primaryZone.rows || 0,
+                padding: pad,
+                gapHorizontal: typeof primaryZone.gapHorizontal === 'number' ? primaryZone.gapHorizontal : pad,
+                gapVertical: typeof primaryZone.gapVertical === 'number' ? primaryZone.gapVertical : pad,
+                layoutDirection: primaryZone.layoutDirection || 'horizontal',
+                cardAspectRatio: primaryZone.cardAspectRatio || 'auto',
+                lastRowBehavior: primaryZone.lastRowBehavior || 'fill',
+                verticalAlign: primaryZone.verticalAlign || 'stretch',
+                highlightCount: primaryZone.highlightCount || 0,
+                highlightPos: primaryZone.highlightPos || 'first',
+                highlightHeight: primaryZone.highlightHeight || 1.5,
+            };
+            productZoneState.updateZone(zoneConfig);
+            console.log('[rehydrateCanvasZones] Synced composable from zone:', { styles: true, config: zoneConfig });
+        }
 
         const zonesById = new Map<string, any>();
         zones.forEach((z: any) => zonesById.set(z._customId, z));
@@ -19536,6 +22252,20 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             if (card.visible === false) card.visible = true;
             if (card.opacity === 0 || card.opacity === undefined) card.opacity = 1;
 
+            // CRITICAL: Disable objectCaching on cards after reload.
+            // During creation, cards get objectCaching:false, but this prop is NOT
+            // in CANVAS_CUSTOM_PROPS so it reverts to true after loadFromJSON.
+            // Without this, style changes via resizeSmartObject may not render.
+            card.set({ objectCaching: false, statefullCache: false, dirty: true });
+            // Also disable caching on nested groups (e.g. priceGroup)
+            if (typeof card.getObjects === 'function') {
+                card.getObjects().forEach((child: any) => {
+                    if (child && child.type === 'group') {
+                        child.set({ objectCaching: false, statefullCache: false, dirty: true });
+                    }
+                });
+            }
+
             // Prevent random black rectangles: Fabric defaults rect fill to black when fill is unset/undefined.
             // If a card's background fill becomes invalid, restore a safe default.
             if (card.type === 'group' && typeof card.getObjects === 'function') {
@@ -19549,9 +22279,14 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             if (typeof card.setCoords === 'function') card.setCoords();
         });
 
+        // Auto-repair legacy/corrupted image transforms inside product cards
+        // (negative scales, flips, invalid dimensions) before reflowing zone layout.
+        const repairStats = repairLegacyProductCardImageTransforms(cards, { verbose: import.meta.dev });
+        if (import.meta.dev && repairStats.imagesRepaired > 0) {
+            console.log('[rehydrateCanvasZones] Legacy image repair applied:', repairStats);
+        }
+
         // Repair missing parentZoneId by intersection (helps after old history/undo states)
-        // CRITICAL: Preserve card positions from saved data - only repair missing parentZoneId
-        const cardsWithSavedParentZone = new Set<any>();
         cards.forEach((card: any) => {
             if (!card._customId) card._customId = Math.random().toString(36).substr(2, 9);
             if (card._cardWidth == null) card._cardWidth = card.width;
@@ -19559,7 +22294,6 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
 
             // If card already has a valid parentZoneId from saved data, preserve it
             if (card.parentZoneId && zonesById.has(card.parentZoneId)) {
-                cardsWithSavedParentZone.add(card);
                 return;
             }
             
@@ -19621,6 +22355,16 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             }
         });
 
+        // Keep card → frame binding aligned with its zone frame.
+        cards.forEach((card: any) => {
+            const zoneId = String((card as any)?.parentZoneId || '').trim();
+            if (!zoneId) return;
+            const zone = zonesById.get(zoneId);
+            if (!zone) return;
+            const zoneFrameId = getResolvedZoneFrameId(zone);
+            applyCardFrameBinding(card, zoneFrameId);
+        });
+
         const zoneIdsWithCards = new Set<string>();
         cards.forEach((c: any) => {
             if (typeof c.parentZoneId === 'string') zoneIdsWithCards.add(c.parentZoneId);
@@ -19633,21 +22377,9 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean } = {}) => {
             zones.forEach((z: any) => {
                 if (z.isProductZone || zoneIdsWithCards.has(z._customId)) {
                     try {
-                        // CRITICAL: Only relayout if cards don't have saved positions
-                        // Check if cards in this zone have valid positions from saved data
-                        const zoneCards = cards.filter((c: any) => c.parentZoneId === z._customId);
-                        const hasAllSavedPositions = zoneCards.every((c: any) => 
-                            cardsWithSavedParentZone.has(c) && 
-                            typeof c.left === 'number' && 
-                            typeof c.top === 'number'
-                        );
-                        
-                        // Skip relayout if all cards have saved positions (preserve loaded layout)
-                        if (!hasAllSavedPositions) {
-                            recalculateZoneLayout(z);
-                        } else {
-                            console.log(`📍 Preservando posições salvas dos cards na zona ${z.name || z._customId}`);
-                        }
+                        // Always normalize zone grid after reload. This prevents stale layouts
+                        // (holes/cards outside) when old coordinates were persisted from buggy states.
+                        recalculateZoneLayout(z);
                     } catch (err) {
                         console.warn('[rehydrateCanvasZones] Failed to relayout zone', err);
                     }
@@ -19722,13 +22454,15 @@ const handleRecalculateLayout = () => {
 <template>
   <div class="flex flex-col h-full min-h-0 min-w-0 w-full bg-background text-foreground antialiased font-sans overflow-hidden">
       
-      <ProjectManager 
+      <ProjectManager
+        v-if="showProjectManager"
         :isOpen="showProjectManager" 
         @close="showProjectManager = false"
         @load="(data) => loadCanvasData(data)"
       />
 
       <AiImageStudioModal
+        v-if="aiStudioOpen"
         v-model="aiStudioOpen"
         :uploads="aiStudioUploads"
         :initial="aiStudioOptions.initial"
@@ -19783,773 +22517,158 @@ const handleRecalculateLayout = () => {
                   ></div>
 
                   <!-- Frame Label Overlays (clickable, always visible) -->
-                  <template v-for="label in frameLabels" :key="label.id">
-                    <!-- Frame Name (top-left, clickable to select/drag) -->
-                    <div
-                      class="absolute z-40 select-none cursor-pointer whitespace-nowrap"
-                      :style="{
-                        left: label.x + 'px',
-                        top: label.y + 'px',
-                        pointerEvents: 'auto',
-                      }"
-                      @mousedown.stop.prevent="handleFrameLabelMouseDown(label, $event)"
-                      @click.stop.prevent="handleFrameLabelClick(label, $event)"
-                      @dblclick.stop.prevent
-                    >
-                      <span
-                        class="text-xs font-bold px-1 py-0.5 rounded transition-colors"
-                        :class="label.isSelected ? 'text-[#0d99ff] bg-[#0d99ff]/10' : 'text-[#0d99ff]/60 hover:text-[#0d99ff] hover:bg-[#0d99ff]/10'"
-                      >
-                        {{ label.name }}
-                      </span>
-                    </div>
-                    <!-- Frame Dimensions Badge (bottom-center) -->
-                    <div
-                      class="absolute z-40 select-none pointer-events-none whitespace-nowrap"
-                      :style="{
-                        left: label.dimX + 'px',
-                        top: label.dimY + 'px',
-                        transform: 'translateX(-50%)',
-                      }"
-                    >
-                      <span
-                        class="text-[11px] font-bold px-1.5 py-0.5 rounded"
-                        :class="label.isSelected ? 'bg-[#0d99ff] text-white' : 'bg-[#0d99ff]/60 text-white/85'"
-                      >
-                        {{ label.dims }}
-                      </span>
-                    </div>
-                  </template>
+                  <FrameLabelsOverlay
+                    :labels="frameLabels"
+                    @label-click="handleFrameLabelClick"
+                    @label-mousedown="handleFrameLabelMouseDown"
+                  />
 
                   <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" accept="image/*" />
               </div>
 
               <!-- Contextual Toolbar for Vector Paths (Above Main Toolbar) -->
-              <Transition>
-                <div 
-                  v-if="showPenContextualToolbar && selectedObjectRef?.isVectorPath"
-                  class="absolute left-1/2 -translate-x-1/2 bottom-20 contextual-toolbar flex items-center gap-1 bg-[#2a2a2a] p-1.5 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.6)] border border-white/10 z-40 select-none backdrop-blur-sm"
-                >
-                  <!-- Union/Subtract - Placeholder for future boolean operations -->
-                  <button 
-                    @click="() => console.log('Union - requires multiple selected paths')" 
-                    title="Unir (requer múltiplos caminhos)"
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all opacity-50 cursor-not-allowed"
-                  >
-                    <Combine class="w-4 h-4" />
-                  </button>
-                  
-                  <!-- Subtract -->
-                  <button 
-                    @click="() => console.log('Subtract - requires multiple selected paths')" 
-                    title="Subtrair (requer múltiplos caminhos)"
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all opacity-50 cursor-not-allowed"
-                  >
-                    <Scissors class="w-4 h-4" />
-                  </button>
-                  
-                  <div class="w-px h-6 bg-white/10 mx-0.5"></div>
-                  
-                  <!-- Visibility Toggle -->
-                  <button 
-                    @click="updateObjectProperty('visible', !selectedObjectRef.visible)" 
-                    title="Alternar Visibilidade"
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
-                  >
-                    <Eye class="w-4 h-4" />
-                  </button>
-                  
-                  <!-- Edit Nodes -->
-                  <button 
-                    @click="handleAction('toggle-handles')" 
-                    title="Editar Nós"
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all"
-                    :class="isNodeEditing ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'text-zinc-400 hover:text-white'"
-                  >
-                    <PenTool class="w-4 h-4" />
-                  </button>
-                  
-                  <!-- Add Point -->
-                  <button 
-                    @click="handleAction('add-path-point')" 
-                    title="Adicionar Ponto"
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
-                  >
-                    <PlusCircle class="w-4 h-4" />
-                  </button>
-                  
-                  <!-- Delete Point -->
-                  <button 
-                    @click="handleAction('delete-path-point')" 
-                    title="Excluir Ponto (Delete)"
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
-                    :class="selectedPathNodeIndex === null ? 'opacity-50 cursor-not-allowed' : ''"
-                  >
-                    <MinusCircle class="w-4 h-4" />
-                  </button>
-                  
-                  <div class="w-px h-6 bg-white/10 mx-0.5"></div>
-                  
-                  <!-- Split Path -->
-                  <button 
-                    @click="splitPath" 
-                    title="Dividir Caminho"
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
-                  >
-                    <Scissors class="w-4 h-4" />
-                  </button>
-                  
-                  <!-- Simplify Path -->
-                  <button 
-                    @click="simplifyPath" 
-                    title="Simplificar Caminho"
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
-                  >
-                    <Move3D class="w-4 h-4" />
-                  </button>
-                  
-                  <!-- Close Path -->
-                  <button 
-                    @click="closePath" 
-                    title="Fechar Caminho"
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
-                  >
-                    <X class="w-4 h-4" />
-                  </button>
-                </div>
-              </Transition>
+              <PenContextualToolbar
+                :visible="showPenContextualToolbar"
+                :is-vector-path="!!selectedObjectRef?.isVectorPath"
+                :is-node-editing="isNodeEditing"
+                :can-delete-point="selectedPathNodeIndex !== null"
+                @toggle-visible="selectedObjectRef && updateObjectProperty('visible', !selectedObjectRef.visible)"
+                @toggle-handles="handleAction('toggle-handles')"
+                @add-point="handleAction('add-path-point')"
+                @delete-point="handleAction('delete-path-point')"
+                @split-path="splitPath"
+                @simplify-path="simplifyPath"
+                @close-path="closePath"
+              />
 
               <!-- Floating Toolbar (Figma Style) - Bottom Center -->
-              <div class="absolute left-1/2 -translate-x-1/2 floating-toolbar flex items-center gap-1 bg-[#2a2a2a] p-1.5 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.6)] border border-white/10 z-30 select-none backdrop-blur-sm">
-                  <button @click="setTool('select')" title="Mover (V)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all" :class="!isDrawing ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'text-zinc-400 hover:text-white'">
-                    <MousePointer2 class="w-4 h-4" />
-                  </button>
-                  <div class="w-px h-6 bg-white/10 mx-0.5"></div>
-                  
-                  <!-- Frame Tool with Dropdown -->
-                  <div class="relative group">
-                    <button @click="addFrame" title="Quadro (F)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
-                      <Frame class="w-4 h-4" />
-                      <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="addFrame" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Quadro</button>
-                      <button @click="addShape('rect')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Retângulo</button>
-                    </div>
-                  </div>
-                  
-                  <!-- Rectangle Tool with Dropdown -->
-                  <div class="relative group">
-                    <button @click="addShape('rect')" title="Retângulo (R)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
-                      <Square class="w-4 h-4" />
-                      <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="addShape('rect')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Retângulo</button>
-                      <button @click="addShape('rect', { rx: 20, ry: 20 })" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Retângulo Arredondado</button>
-                    </div>
-                  </div>
-                  
-                  <!-- Circle Tool with Dropdown -->
-                  <div class="relative group">
-                    <button @click="addShape('circle')" title="Círculo (O)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
-                      <Circle class="w-4 h-4" />
-                      <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="addShape('circle')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Círculo</button>
-                      <button @click="addShape('ellipse')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Elipse</button>
-                    </div>
-                  </div>
-                  
-                  <!-- Text Tool with Dropdown -->
-                  <div class="relative group">
-                    <button @click="() => addText()" title="Texto (T)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all relative">
-                      <Type class="w-4 h-4" />
-                      <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="() => addText()" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Texto</button>
-                      <button @click="() => addText('heading')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Título</button>
-                      <button @click="() => addText('body')" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Corpo</button>
-                    </div>
-                  </div>
-                  
-                  <!-- Pen Tool with Dropdown -->
-                  <div class="relative group">
-                    <button @click="togglePenMode" title="Caneta (P)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all relative" :class="isPenMode ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'text-zinc-400 hover:text-white'">
-                      <PenTool class="w-4 h-4" />
-                      <ChevronDown class="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                                        <div class="absolute top-full left-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-35 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <button @click="togglePenMode" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Caneta</button>
-                      <button @click="toggleDrawing" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Lápis</button>
-                      <div class="h-px bg-white/10 my-1"></div>
-                      <button @click="setPenWidth(5)" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Fino (5px)</button>
-                      <button @click="setPenWidth(10)" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Médio (10px)</button>
-                      <button @click="setPenWidth(20)" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Grosso (20px)</button>
-                    </div>
-                  </div>
-                  
-                  <div class="w-px h-6 bg-white/10 mx-0.5"></div>
-                  
-                  <button @click="addGridZone" title="Zona de Produtos" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all">
-                    <LayoutGrid class="w-4 h-4" />
-                  </button>
-                  
-                  <button @click="showLabelTemplatesModal = true" title="Modelos de Etiqueta" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-all">
-                    <Tag class="w-4 h-4" />
-                  </button>
-              </div>
+              <CanvasFloatingToolbar
+                :is-drawing="isDrawing"
+                :is-pen-mode="isPenMode"
+                @select-tool="setTool('select')"
+                @add-frame="addFrame"
+                @add-shape="(type, options) => addShape(type as any, options as any)"
+                @add-text="(variant) => addText(variant as any)"
+                @toggle-pen-mode="togglePenMode"
+                @toggle-drawing="toggleDrawing"
+                @set-pen-width="setPenWidth"
+                @add-grid-zone="addGridZone"
+                @open-label-templates="showLabelTemplatesModal = true"
+              />
           </main>
 
-          <!-- Right Sidebar (Properties - Figma Style) -->
-           <aside class="w-75 border-l border-white/5 h-full bg-[#1a1a1a] text-white flex flex-col shrink-0 z-10 overflow-hidden">
-               <!-- Top Controls (Share, Play, Zoom, Avatar) -->
-               <div class="h-10 px-2 flex items-center justify-end border-b border-white/5 shrink-0 min-w-0">
-                 
-                 <!-- Right: Controls -->
-                                 <div class="flex items-center gap-0.5 shrink-0 min-w-0">
-                   <!-- User Avatar -->
-                                     <div class="flex items-center -space-x-1 shrink-0">
-                     <div 
-                       v-for="(user, index) in (collaborators.length > 0 ? collaborators : (currentUser ? [currentUser] : [])).slice(0, 1)" 
-                       :key="user.id || index"
-                       :class="[
-                         'w-5 h-5 rounded-full border-2 border-[#1a1a1a] flex items-center justify-center text-[8px] font-semibold text-white',
-                         getColorFromString(user.email || user.name || 'user')
-                       ]"
-                       :title="user.name || user.email || 'Usuário'"
-                     >
-                       <img 
-                         v-if="user.avatar_url" 
-                         :src="user.avatar_url" 
-                         :alt="user.name || 'User'"
-                         class="w-full h-full rounded-full object-cover"
-                       />
-                       <span v-else>{{ getInitial(user.name) }}</span>
-                     </div>
-                   </div>
-                   
-                   <!-- Play Button -->
-                   <button
-                     @click="() => startPresentation()"
-                                         class="w-5 h-5 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all shrink-0"
-                     title="Apresentar"
-                   >
-                     <Play class="w-2.5 h-2.5" />
-                   </button>
-
-                   <!-- Share Button -->
-                   <button
-                     @click="showShareModal = true"
-                                         class="h-5 px-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-medium transition-all flex items-center gap-0.5 shrink-0 whitespace-nowrap"
-                   >
-                                         <Share2 class="w-2.5 h-2.5 shrink-0" />
-                     <span>Exportar</span>
-                   </button>
-
-                   <!-- Zoom Dropdown -->
-                   <div class="relative shrink-0 pr-0.5">
-                     <button 
-                       @click="showZoomMenu = !showZoomMenu"
-                       class="h-5 px-1 hover:bg-white/10 rounded text-[9px] font-medium text-white flex items-center gap-0.5 transition-all whitespace-nowrap"
-                     >
-                       <span>{{ currentZoom }}%</span>
-                                             <ChevronDown class="w-2 h-2 text-zinc-400 shrink-0" />
-                     </button>
-                     
-                     <!-- Zoom Menu -->
-                     <div 
-                       v-if="showZoomMenu"
-                                             class="absolute top-full right-0 mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl py-1 min-w-30 z-50"
-                       @click.stop
-                     >
-                       <button @click="handleZoom50" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">50%</button>
-                       <button @click="handleZoom100" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">100%</button>
-                       <button @click="handleZoom200" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">200%</button>
-                       <button @click="handleZoom400" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">400%</button>
-                       <div class="h-px bg-white/10 my-1"></div>
-                       <button @click="zoomToFit" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Ajustar à Tela</button>
-                       <button @click="handleZoomToSelection" class="w-full px-3 py-1.5 text-left text-xs text-white hover:bg-white/10 transition-all">Ajustar Seleção</button>
-                     </div>
-                   </div>
-                 </div>
-               </div>
-               
-               <div class="min-h-0 flex-1 flex flex-col">
-      <PropertiesPanel
-        v-if="selectedObjectRef"
-        :selectedObject="selectedObjectRef"
-        :activeMode="activeMode"
-        :pageSettings="pageSettings"
-        :colorStyles="project.colorStyles"
-        :productZone="productZoneState.productZone.value"
-        :productGlobalStyles="productZoneState.globalStyles.value"
-        :labelTemplates="labelTemplates"
-        @update-property="updateObjectProperty"
-        @update-smart-group="updateSmartGroup"
-        @update-page-settings="updatePageSettings"
-        @action="handleAction"
-        @add-color-style="addColorStyle"
-        @apply-color-style="applyColorStyle"
-        @add-interaction="() => {}"
-        @update-zone="handleUpdateZone"
-        @update-global-styles="handleUpdateGlobalStyles"
-        @apply-template-to-zone="handleApplyTemplateToZone"
-        @apply-preset="handleApplyZonePreset"
-        @sync-gaps="handleSyncZoneGaps"
-        @recalculate-layout="handleRecalculateLayout"
-        @manage-label-templates="showLabelTemplatesModal = true"
-        @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
-      />
-               </div>
-          </aside>
+          <EditorRightSidebar
+            :collaborators="collaborators || []"
+            :current-user="currentUser"
+            :show-zoom-menu="showZoomMenu"
+            :current-zoom="currentZoom"
+            :get-color-from-string="getColorFromString"
+            :get-initial="getInitial"
+            :selected-object="selectedObjectRef"
+            :active-mode="activeMode"
+            :page-settings="pageSettings"
+            :color-styles="project.colorStyles || []"
+            :product-zone="productZoneState.productZone.value"
+            :product-global-styles="productZoneState.globalStyles.value"
+            :label-templates="labelTemplates"
+            @update:show-zoom-menu="showZoomMenu = $event"
+            @present="startPresentation()"
+            @open-share="showShareModal = true"
+            @zoom-50="handleZoom50"
+            @zoom-100="handleZoom100"
+            @zoom-200="handleZoom200"
+            @zoom-400="handleZoom400"
+            @zoom-fit="zoomToFit"
+            @zoom-selection="handleZoomToSelection"
+            @update-property="updateObjectProperty"
+            @update-smart-group="updateSmartGroup"
+            @update-page-settings="updatePageSettings"
+            @action="handleAction"
+            @add-color-style="addColorStyle"
+            @apply-color-style="applyColorStyle"
+            @update-zone="handleUpdateZone"
+            @update-global-styles="handleUpdateGlobalStyles"
+            @apply-template-to-zone="handleApplyTemplateToZone"
+            @apply-preset="handleApplyZonePreset"
+            @sync-gaps="handleSyncZoneGaps"
+            @recalculate-layout="handleRecalculateLayout"
+            @manage-label-templates="showLabelTemplatesModal = true"
+            @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
+          />
       </div>
 
       <!-- MODALS SYSTEM (Internal Dialogs) -->
-      
-      <!-- Save Project Modal -->
-      <UiDialog v-model="showSaveModal" title="Salvar Projeto" @close="showSaveModal = false">
-        <template #default>
-          <div class="space-y-4 py-2">
-            <p class="text-sm text-muted-foreground">Escolha um nome para identificar seu projeto na galeria.</p>
-            <div class="space-y-2">
-              <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nome do Projeto</label>
-              <input 
-                v-model="saveProjectName" 
-                type="text" 
-                placeholder="Ex: Ofertas de Verão 2024"
-                class="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                @keyup.enter="saveProject"
-              />
-            </div>
-          </div>
-        </template>
-        <template #footer>
-          <div class="flex justify-end gap-3 w-full">
-            <Button variant="ghost" @click="showSaveModal = false">Cancelar</Button>
-            <Button variant="default" :disabled="!saveProjectName" @click="saveProject">Salvar Alterações</Button>
-          </div>
-        </template>
-      </UiDialog>
-
-      <!-- Label Templates Modal -->
-      <UiDialog v-model="showLabelTemplatesModal" title="Modelos de Etiqueta" @close="showLabelTemplatesModal = false" width="min(920px, 96vw)">
-        <template #default>
-          <LabelTemplateManager
-            :templates="labelTemplates"
-            :selected-template-id="activeZoneTemplateId()"
-            :can-save-from-selection="canSaveLabelTemplateFromSelectionComputed"
-            @close="showLabelTemplatesModal = false"
-            @edit-selection="beginEditSelectedLabel"
-            @create-from-selection="createLabelTemplateFromSelection"
-            @create-default="createDefaultLabelTemplate"
-            @update-from-selection="updateLabelTemplateFromSelection"
-            @insert-to-canvas="insertLabelTemplateToCanvas"
-            @update-template="handleUpdateTemplateFromMiniEditor"
-            @duplicate="duplicateLabelTemplateById"
-            @delete="deleteLabelTemplateById"
-            @apply-to-zone="(id) => { const z = canvas?.getActiveObject?.(); if (z && isLikelyProductZone(z)) applyLabelTemplateToZone(z, id); }"
-            @set-splash-image="(id, file) => setTemplateSplashImage(id, file)"
-          />
-        </template>
-      </UiDialog>
-
-      <!-- AI Prompt Modal -->
-      <UiDialog v-model="showAIModal" title="Assistente Criativo" @close="showAIModal = false" width="460px">
-        <template #default>
-          <div class="space-y-5 py-2">
-            <div class="relative group">
-                            <div class="absolute -inset-1 bg-linear-to-r from-violet-600 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
-              <div class="relative flex items-center gap-4 p-4 bg-white dark:bg-zinc-900 border border-border/50 rounded-2xl shadow-sm">
-                <div class="w-10 h-10 bg-violet-500/10 rounded-xl flex items-center justify-center shrink-0">
-                  <Sparkles class="w-5 h-5 text-violet-600" />
-                </div>
-                <p class="text-[11px] text-foreground/80 leading-relaxed font-medium">
-                  Descreva o conceito do seu encarte. A IA irá configurar cores, fontes e layout base inspirados no seu briefing.
-                </p>
-              </div>
-            </div>
-
-            <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <label class="text-[10px] font-black uppercase tracking-[0.15em] text-muted-foreground/70">Instruções de Design</label>
-                <span class="text-[9px] font-bold text-violet-600 px-2 py-0.5 bg-violet-500/5 rounded-full uppercase tracking-widest">GPT-4o Vision</span>
-              </div>
-              <textarea 
-                v-model="aiPrompt" 
-                rows="5"
-                placeholder="Ex: Crie um folheto de hortifruti com tons verdes, fonte rústica e clean, estilo minimalista para Instagram..."
-                class="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none transition-all placeholder:opacity-30"
-              ></textarea>
-            </div>
-            
-            <div class="flex flex-wrap gap-2">
-               <button @click="aiPrompt = 'Encarte de Supermercado, cores vibrantes, estilo varejo popular'" class="px-3 py-1.5 rounded-full border border-border text-[9px] font-bold uppercase tracking-widest hover:bg-black/5 transition-colors">Varejo Popular</button>
-               <button @click="aiPrompt = 'Banner minimalista de eletrônicos, cores dark, neon azul'" class="px-3 py-1.5 rounded-full border border-border text-[9px] font-bold uppercase tracking-widest hover:bg-black/5 transition-colors">Tech Dark</button>
-               <button @click="aiPrompt = 'Folheto de padaria, tons pastéis, estilo artesanal'" class="px-3 py-1.5 rounded-full border border-border text-[9px] font-bold uppercase tracking-widest hover:bg-black/5 transition-colors">Artesanal</button>
-            </div>
-          </div>
-        </template>
-        <template #footer>
-          <div class="flex items-center justify-between w-full">
-            <button @click="showAIModal = false" class="text-[11px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors">Fechar</button>
-            <Button variant="default" class="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-8 h-10 text-xs font-black uppercase tracking-[0.15em] shadow-lg shadow-violet-500/20 active:scale-95 transition-all" :disabled="!aiPrompt" @click="generateFlyerWithAI">
-              <Wand2 class="w-4 h-4 mr-2" />
-              Gerar Design
-            </Button>
-          </div>
-        </template>
-      </UiDialog>
-
-      <!-- Paste List Modal -->
-      <UiDialog v-model="showPasteListModal" title="Importar Lista de Produtos" @close="showPasteListModal = false" width="500px">
-        <template #default>
-          <div class="space-y-4 py-2" @paste="handleImagePaste">
-            <!-- Tabs Header (Studio Style) -->
-            <div class="flex p-1 bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg w-full mb-4">
-              <button 
-                @click="activePasteTab = 'text'" 
-                :class="['flex-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded transition-all', activePasteTab === 'text' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200']"
-              >
-                Lista de Texto
-              </button>
-              <button 
-                @click="activePasteTab = 'image'" 
-                :class="['flex-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded transition-all', activePasteTab === 'image' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200']"
-              >
-                Scan por Imagem (IA)
-              </button>
-            </div>
-
-            <!-- Text Tab -->
-            <div v-if="activePasteTab === 'text'" class="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div class="flex items-start gap-3 p-3 bg-violet-500/5 rounded-lg border border-violet-500/10">
-                <StickyNote class="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
-                <p class="text-[11px] text-violet-600/80 dark:text-violet-400 leading-relaxed font-medium">Cole uma lista de produtos (um por linha) com nome e preço. Nossa IA cuidará da formatação automática ao adicionar no palco.</p>
-              </div>
-              <textarea 
-                v-model="pasteListText" 
-                rows="8"
-                placeholder="Exemplo:&#10;Arroz Tio João 5kg - 29,90&#10;Feijão Carioca 1kg - 7,50&#10;Óleo de Soja 900ml - 5,99"
-                class="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-3 text-[13px] font-mono text-zinc-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none transition-all placeholder:text-zinc-600"
-              ></textarea>
-            </div>
-
-            <!-- Image Tab -->
-            <div v-else class="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div class="flex items-start gap-3 p-3 bg-violet-500/5 rounded-xl border border-violet-500/10">
-                <Wand2 class="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
-                <p class="text-[11px] text-violet-600/80 leading-relaxed font-medium">Capture ofertas de folhetos, fotos de gôndolas ou prints. A IA Vision vai extrair os produtos e preços automaticamente para você.</p>
-              </div>
-              
-              <div 
-                v-if="!pastedImage"
-                class="group relative border-2 border-dashed border-zinc-700 hover:border-violet-500/50 rounded-2xl p-12 flex flex-col items-center justify-center gap-4 transition-all cursor-pointer bg-zinc-800/30 hover:bg-violet-500/10"
-                @click="triggerListImageUpload"
-              >
-                <div class="w-14 h-14 rounded-full bg-violet-500/10 flex items-center justify-center group-hover:scale-110 group-hover:bg-violet-500/20 transition-all duration-500">
-                  <Upload class="w-7 h-7 text-violet-400" />
-                </div>
-                <div class="text-center">
-                  <p class="text-[13px] font-bold text-white">Clique para Upload ou Cole (Ctrl+V)</p>
-                  <p class="text-[11px] text-zinc-400 mt-1">Suporta Excel, PDF, CSV, Imagens e Texto</p>
-                </div>
-                <input ref="listImageInput" type="file" hidden accept="image/*" @change="handleListImageUpload" />
-              </div>
-
-                            <div v-else class="relative rounded-2xl overflow-hidden border border-border bg-black/2 p-2">
-                <div class="aspect-video w-full rounded-xl overflow-hidden bg-black/5 flex items-center justify-center relative group">
-                  <img :src="pastedImage" class="max-w-full max-h-full object-contain shadow-2xl" />
-                  <button @click="pastedImage = null" class="absolute top-2 right-2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full backdrop-blur-sm transition-all">
-                    <X class="w-4 h-4" />
-                  </button>
-                </div>
-                <Button class="w-full mt-2" :disabled="isAnalyzingImage" @click="analyzeImageWithAI">
-                   <span v-if="isAnalyzingImage" class="flex items-center gap-2"><div class="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin"></div> Analisando...</span>
-                   <span v-else>Extrair Produtos com IA</span>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </template>
-        <template #footer>
-          <div class="flex justify-between items-center w-full pt-2">
-            <Button variant="ghost" class="text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground" @click="showPasteListModal = false">Cancelar</Button>
-            <Button variant="default" class="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-6 h-9 text-xs font-bold uppercase tracking-wider shadow-md active:scale-95 transition-all" :disabled="!pasteListText && activePasteTab === 'text'" @click="handlePasteList">Adicionar ao Palco</Button>
-          </div>
-        </template>
-      </UiDialog>
-
-      <!-- Delete Page Confirmation Modal -->
-      <UiDialog v-model="showDeletePageModal" title="Excluir Página?" @close="showDeletePageModal = false">
-          <p class="py-4 text-sm text-muted-foreground">Tem certeza que deseja excluir esta página? Esta ação não pode ser desfeita.</p>
-          <template #footer>
-              <div class="flex justify-end gap-3 w-full">
-                  <Button variant="ghost" @click="showDeletePageModal = false">Cancelar</Button>
-                  <Button variant="destructive" @click="confirmDeletePage">Sim, Excluir</Button>
-              </div>
-          </template>
-      </UiDialog>
-
-      <!-- Product Review Modal for List Import -->
-      <ProductReviewModal 
-          v-model="showProductReviewModal"
-          :initial-products="reviewProducts"
-          :show-import-mode="!!(targetGridZone && isLikelyProductZone(targetGridZone))"
-          :existing-count="productImportExistingCount"
-          :label-templates="labelTemplates"
-          :initial-label-template-id="importZoneLabelTemplateId"
-          @import="confirmProductImport"
-      />
-
-      <!-- Export Modal -->
-      <UiDialog v-model="showExportModal" title="Exportar Design" @close="showExportModal = false" width="450px">
-        <template #default>
-          <div class="space-y-4 py-4">
-             <!-- Export Scope (Canvas vs Frames) -->
-             <div class="space-y-2">
-                 <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que exportar</label>
-                 <div class="grid grid-cols-3 gap-2">
-                     <button
-                         @click="exportSettings.exportScope = 'canvas'"
-                         :class="exportSettings.exportScope === 'canvas' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
-                         class="py-2.5 text-xs font-bold rounded border transition-colors flex flex-col items-center gap-1"
-                     >
-                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                         </svg>
-                         <span>Tela Inteira</span>
-                     </button>
-                     <button
-                         @click="exportSettings.exportScope = 'selected-frame'"
-                         :class="exportSettings.exportScope === 'selected-frame' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
-                         class="py-2.5 text-xs font-bold rounded border transition-colors flex flex-col items-center gap-1"
-                     >
-                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                         </svg>
-                         <span>Frame Selecionado</span>
-                     </button>
-                     <button
-                         @click="exportSettings.exportScope = 'all-frames'"
-                         :class="exportSettings.exportScope === 'all-frames' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent hover:bg-zinc-800'"
-                         class="py-2.5 text-xs font-bold rounded border transition-colors flex flex-col items-center gap-1"
-                     >
-                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                         </svg>
-                         <span>Todos os Frames</span>
-                     </button>
-                 </div>
-             </div>
-
-             <!-- Frame Selector (when selected-frame is chosen) -->
-             <div class="space-y-2" v-if="exportSettings.exportScope === 'selected-frame'">
-                 <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selecione o Frame</label>
-                 <select
-                     v-model="exportSettings.selectedFrameId"
-                     class="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                 >
-                     <option value="">Selecione um frame...</option>
-                     <option v-for="frame in availableFramesForExport" :key="frame.id" :value="frame.id">
-                         {{ frame.name }}
-                     </option>
-                 </select>
-                 <p v-if="availableFramesForExport.length === 0" class="text-[10px] text-amber-500">
-                     Nenhum frame encontrado no canvas. Crie um frame primeiro.
-                 </p>
-             </div>
-
-             <!-- Format -->
-             <div class="space-y-2" v-if="exportSettings.exportScope !== 'all-frames' || exportSettings.format !== 'svg'">
-                 <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Formato</label>
-                 <div class="flex gap-2">
-                     <button @click="exportSettings.format = 'png'" :class="exportSettings.format === 'png' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">PNG</button>
-                     <button @click="exportSettings.format = 'jpeg'" :class="exportSettings.format === 'jpeg' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">JPG</button>
-                     <button v-if="exportSettings.exportScope === 'canvas'" @click="exportSettings.format = 'svg'" :class="exportSettings.format === 'svg' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">SVG</button>
-                 </div>
-                 <p v-if="exportSettings.exportScope === 'all-frames'" class="text-[10px] text-zinc-500">
-                     A exportação de múltiplos frames suporta apenas PNG/JPG
-                 </p>
-             </div>
-
-             <!-- Scale -->
-             <div class="space-y-2" v-if="exportSettings.format !== 'svg'">
-                 <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Escala (Resolução)</label>
-                 <div class="flex gap-2">
-                     <button @click="exportSettings.scale = 1" :class="exportSettings.scale === 1 ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">1x</button>
-                     <button @click="exportSettings.scale = 2" :class="exportSettings.scale === 2 ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">2x</button>
-                     <button @click="exportSettings.scale = 3" :class="exportSettings.scale === 3 ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">3x</button>
-                 </div>
-                 <p class="text-[10px] text-zinc-500 text-right">
-                    {{ exportSettings.scale === 1 ? '72 DPI (Tela)' : exportSettings.scale === 2 ? '144 DPI (Retina)' : '300 DPI (Impressão)' }}
-                 </p>
-             </div>
-
-             <!-- Info for multiple frames -->
-             <div v-if="exportSettings.exportScope === 'all-frames' && availableFramesForExport.length > 1" class="flex items-start gap-2 p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                 <svg class="w-4 h-4 text-blue-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                 </svg>
-                 <p class="text-[10px] text-blue-200">
-                     Cada frame será exportado como um arquivo separado. {{ availableFramesForExport.length }} frames serão exportados.
-                 </p>
-             </div>
-          </div>
-        </template>
-        <template #footer>
-            <div class="flex justify-between items-center w-full">
-                <span class="text-[10px] text-muted-foreground">
-                    {{ exportSettings.exportScope === 'all-frames' ? `${availableFramesForExport.length} arquivos` : '1 arquivo' }}
-                </span>
-                <div class="flex gap-2">
-                    <Button variant="ghost" @click="showExportModal = false">Cancelar</Button>
-                    <Button variant="default" @click="performExport" :disabled="exportSettings.exportScope === 'selected-frame' && !exportSettings.selectedFrameId">Exportar</Button>
-                </div>
-            </div>
-        </template>
-      </UiDialog>
-
-      <!-- Share Modal -->
-      <UiDialog v-model="showShareModal" title="Exportar" @close="showShareModal = false" width="400px">
-        <template #default>
-          <div class="space-y-5 py-3">
-
-             <!-- Escopo -->
-             <div class="space-y-1.5">
-                 <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Área</label>
-                 <div class="grid grid-cols-3 gap-1.5">
-                     <button
-                         @click="shareSettings.shareScope = 'canvas'"
-                         :class="shareSettings.shareScope === 'canvas' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'"
-                         class="py-2 text-[11px] font-medium rounded-lg transition-all"
-                     >Página Inteira</button>
-                     <button
-                         @click="shareSettings.shareScope = 'selected-frame'"
-                         :class="shareSettings.shareScope === 'selected-frame' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'"
-                         class="py-2 text-[11px] font-medium rounded-lg transition-all"
-                     >Frame</button>
-                     <button
-                         @click="shareSettings.shareScope = 'all-frames'"
-                         :class="shareSettings.shareScope === 'all-frames' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'"
-                         class="py-2 text-[11px] font-medium rounded-lg transition-all"
-                     >Todos Frames</button>
-                 </div>
-             </div>
-
-             <!-- Frame Selector (condicional) -->
-             <div class="space-y-1.5" v-if="shareSettings.shareScope === 'selected-frame'">
-                 <div class="flex items-center justify-between">
-                     <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Frames</label>
-                     <button
-                         @click="selectAllFrames"
-                         class="text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
-                     >{{ shareSettings.selectedFrameIds.length === availableFramesForExport.length ? 'Desmarcar todos' : 'Selecionar todos' }}</button>
-                 </div>
-                 <div class="bg-zinc-800 border border-zinc-700 rounded-lg max-h-32 overflow-y-auto custom-scrollbar">
-                     <label
-                         v-for="frame in availableFramesForExport"
-                         :key="frame.id"
-                         class="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-zinc-700/50 transition-colors border-b border-zinc-700/50 last:border-b-0"
-                     >
-                         <input
-                             type="checkbox"
-                             :checked="shareSettings.selectedFrameIds.includes(frame.id)"
-                             @change="toggleFrameSelection(frame.id)"
-                             class="w-3.5 h-3.5 rounded border-zinc-600 text-violet-500 focus:ring-violet-500/30 bg-zinc-700 shrink-0"
-                         />
-                         <span class="text-xs text-white truncate">{{ frame.name }}</span>
-                     </label>
-                     <div v-if="!availableFramesForExport.length" class="px-3 py-3 text-[10px] text-zinc-500 text-center">Nenhum frame encontrado</div>
-                 </div>
-             </div>
-
-             <!-- Formato + Escala lado a lado -->
-             <div class="grid grid-cols-2 gap-4" v-if="shareSettings.shareScope !== 'all-frames'">
-                 <div class="space-y-1.5">
-                     <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Formato</label>
-                     <div class="flex gap-1.5">
-                         <button @click="shareSettings.format = 'png'" :class="shareSettings.format === 'png' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">PNG</button>
-                         <button @click="shareSettings.format = 'jpeg'" :class="shareSettings.format === 'jpeg' ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">JPG</button>
-                     </div>
-                 </div>
-                 <div class="space-y-1.5">
-                     <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Escala</label>
-                     <div class="flex gap-1.5">
-                         <button @click="shareSettings.scale = 1" :class="shareSettings.scale === 1 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">1x</button>
-                         <button @click="shareSettings.scale = 2" :class="shareSettings.scale === 2 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">2x</button>
-                         <button @click="shareSettings.scale = 3" :class="shareSettings.scale === 3 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">3x</button>
-                     </div>
-                 </div>
-             </div>
-
-             <!-- Escala (quando all-frames, formato não aparece) -->
-             <div class="space-y-1.5" v-if="shareSettings.shareScope === 'all-frames'">
-                 <label class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Escala</label>
-                 <div class="flex gap-1.5 max-w-50">
-                     <button @click="shareSettings.scale = 1" :class="shareSettings.scale === 1 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">1x</button>
-                     <button @click="shareSettings.scale = 2" :class="shareSettings.scale === 2 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">2x</button>
-                     <button @click="shareSettings.scale = 3" :class="shareSettings.scale === 3 ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'" class="flex-1 py-1.5 text-[11px] font-medium rounded-lg transition-all">3x</button>
-                 </div>
-             </div>
-
-          </div>
-        </template>
-        <template #footer>
-          <div class="flex justify-end gap-2 w-full">
-            <button @click="showShareModal = false" class="px-4 py-2 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-all">Cancelar</button>
-            <Button variant="default" size="sm" @click="performShare" :disabled="shareSettings.shareScope === 'selected-frame' && shareSettings.selectedFrameIds.length === 0">
-                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Exportar
-            </Button>
-          </div>
-        </template>
-      </UiDialog>
-
-      <!-- Presentation Mode Overlay -->
-      <div v-if="showPresentationModal" class="fixed inset-0 z-100 bg-black flex items-center justify-center">
-          <div class="relative w-full h-full flex items-center justify-center">
-              <div class="relative w-full h-full">
-                  <img :src="presentationImage" class="w-full h-full object-contain" />
-                  
-                  <!-- Hotspots Layer -->
-                  <div class="absolute inset-0 w-full h-full">
-                      <div 
-                        v-for="(hotspot, i) in presentationHotspots" 
-                        :key="i"
-                        class="absolute cursor-pointer hover:bg-violet-500/30 transition-colors"
-                        :style="{ top: hotspot.top, left: hotspot.left, width: hotspot.width, height: hotspot.height }"
-                        @click="handleHotspotClick(hotspot.target)"
-                        title="Clique para Navegar"
-                      ></div>
-                  </div>
-              </div>
-              
-              <!-- Close Button -->
-              <button @click="showPresentationModal = false" class="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-white/20 transition-all z-50">
-                  <X class="w-6 h-6" />
-              </button>
-
-              <!-- Controls -->
-              <div class="absolute bottom-8 left-1/2 -translate-x-1/2 bg-[#2c2c2c] px-4 py-2 rounded-full flex gap-4 border border-white/10 shadow-xl z-50">
-                  <span class="text-xs text-white font-medium">Modo Apresentação Interativa</span>
-              </div>
-          </div>
-      </div>
-
-      <!-- Figma-style Crop Overlay -->
-      <FigmaCropOverlay
-          v-model="figmaCrop.isCropActive.value"
-          :frame-rect="figmaCrop.cropFrameRect.value"
-          :frame-name="figmaCrop.cropFrameName.value"
-          :zoom="1"
-          :canvas-offset="cropCanvasOffset"
-          @update:frame-rect="handleCropRectUpdate"
-          @crop-complete="handleCropComplete"
+      <EditorModalsHost
+        :show-save-modal="showSaveModal"
+        :save-project-name="saveProjectName"
+        :show-label-templates-modal="showLabelTemplatesModal"
+        :label-templates="labelTemplates"
+        :selected-template-id="activeZoneTemplateId()"
+        :can-save-label-template-from-selection="canSaveLabelTemplateFromSelectionComputed"
+        :show-a-i-modal="showAIModal"
+        :ai-prompt="aiPrompt"
+        :is-processing="isProcessing"
+        :show-paste-list-modal="showPasteListModal"
+        :active-paste-tab="activePasteTab"
+        :paste-list-text="pasteListText"
+        :pasted-image="pastedImage"
+        :is-analyzing-image="isAnalyzingImage"
+        :show-delete-page-modal="showDeletePageModal"
+        :show-product-review-modal="showProductReviewModal"
+        :review-products="reviewProducts"
+        :show-import-mode="!!(targetGridZone && isLikelyProductZone(targetGridZone))"
+        :product-import-existing-count="productImportExistingCount"
+        :import-zone-label-template-id="importZoneLabelTemplateId"
+        :show-export-modal="showExportModal"
+        :export-settings="exportSettings"
+        :available-frames-for-export="availableFramesForExport"
+        :show-share-modal="showShareModal"
+        :share-settings="shareSettings"
+        :show-presentation-modal="showPresentationModal"
+        :presentation-image="presentationImage"
+        :presentation-hotspots="presentationHotspots"
+        :figma-crop-active="figmaCrop.isCropActive.value"
+        :crop-frame-rect="figmaCrop.cropFrameRect.value"
+        :crop-frame-name="figmaCrop.cropFrameName.value"
+        :crop-canvas-offset="cropCanvasOffset"
+        @update:show-save-modal="showSaveModal = $event"
+        @update:save-project-name="saveProjectName = $event"
+        @save="saveProject"
+        @update:show-label-templates-modal="showLabelTemplatesModal = $event"
+        @edit-selection="beginEditSelectedLabel"
+        @create-from-selection="createLabelTemplateFromSelection"
+        @create-default="createDefaultLabelTemplate"
+        @update-from-selection="updateLabelTemplateFromSelection"
+        @insert-to-canvas="insertLabelTemplateToCanvas"
+        @update-template="handleUpdateTemplateFromMiniEditor"
+        @duplicate-template="duplicateLabelTemplateById"
+        @delete-template="deleteLabelTemplateById"
+        @apply-template-to-zone="applyTemplateToActiveZone"
+        @set-template-splash-image="setTemplateSplashImage"
+        @update:show-a-i-modal="showAIModal = $event"
+        @update:ai-prompt="aiPrompt = $event"
+        @generate-ai="generateFlyerWithAI"
+        @update:show-paste-list-modal="showPasteListModal = $event"
+        @update:active-paste-tab="activePasteTab = $event"
+        @update:paste-list-text="pasteListText = $event"
+        @update:pasted-image="pastedImage = $event"
+        @update:is-analyzing-image="isAnalyzingImage = $event"
+        @submit-paste-list="handlePasteList"
+        @update:show-delete-page-modal="showDeletePageModal = $event"
+        @confirm-delete-page="confirmDeletePage"
+        @update:show-product-review-modal="showProductReviewModal = $event"
+        @import-products="confirmProductImport"
+        @update:show-export-modal="showExportModal = $event"
+        @export="performExport"
+        @update:show-share-modal="showShareModal = $event"
+        @toggle-share-frame="toggleFrameSelection"
+        @select-all-share-frames="selectAllFrames"
+        @share="performShare"
+        @update:show-presentation-modal="showPresentationModal = $event"
+        @hotspot-click="handleHotspotClick"
+        @update:figma-crop-active="figmaCrop.isCropActive.value = $event"
+        @update:crop-frame-rect="handleCropRectUpdate"
+        @crop-complete="handleCropComplete"
       />
 
   </div>

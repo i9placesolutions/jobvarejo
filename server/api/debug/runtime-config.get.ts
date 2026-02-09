@@ -1,4 +1,8 @@
-export default defineEventHandler(() => {
+import { requireAuthenticatedUser } from '../../utils/auth'
+
+export default defineEventHandler(async (event) => {
+  await requireAuthenticatedUser(event)
+
   const nodeEnv = process.env.NODE_ENV
 
   // Avoid exposing anything in prod

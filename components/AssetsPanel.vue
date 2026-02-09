@@ -439,8 +439,8 @@ const availableMoveTargets = computed(() => {
     return filtered
         .map(f => ({
             ...f,
-            pathLabel: getFolderPathLabel(f.id),
-            depth: getFolderDepth(f.id)
+            pathLabel: getFolderPathLabel(String(f.id)),
+            depth: getFolderDepth(String(f.id))
         }))
         .sort((a, b) => a.pathLabel.localeCompare(b.pathLabel))
 })
@@ -614,7 +614,7 @@ const handleFileUpload = async (event: Event) => {
             const formData = new FormData()
             formData.append('file', file)
 
-            const result = await $fetch(endpoint, {
+            const result = await ($fetch as any)(endpoint, {
                 method: 'POST',
                 body: formData
             }) as { success: boolean, url: string, key?: string }

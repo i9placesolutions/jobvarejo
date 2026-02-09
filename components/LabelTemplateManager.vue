@@ -45,6 +45,14 @@ const onFileChange = (e: Event) => {
   imageTargetId.value = null
 }
 
+const handleMiniEditorSave = (id: string, updates: { group: any; previewDataUrl?: string; name?: string }) => {
+  emit('update-template', id, updates)
+  // Close after the update event has been dispatched to the parent.
+  Promise.resolve().then(() => {
+    editingTemplateId.value = null
+  })
+}
+
 const formatDate = (dateStr: string) => {
   const date = new Date(dateStr)
   const now = new Date()
@@ -201,7 +209,7 @@ const formatDate = (dateStr: string) => {
           <!-- Preview -->
           <div class="ltm-template-preview">
             <div v-if="tpl.previewDataUrl" class="ltm-template-preview-image">
-              <img :src="tpl.previewDataUrl" :alt="tpl.name" />
+              <img :src="tpl.previewDataUrl" :alt="tpl.name" loading="lazy" decoding="async" />
             </div>
             <div v-else class="ltm-template-preview-placeholder">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -335,7 +343,7 @@ const formatDate = (dateStr: string) => {
         <LabelTemplateMiniEditor
           :template="templates.find(t => t.id === editingTemplateId) || null"
           @close="editingTemplateId = null"
-          @save="(id, updates) => { emit('update-template', id, updates); editingTemplateId = null }"
+          @save="handleMiniEditorSave"
         />
       </div>
     </transition>
@@ -343,7 +351,7 @@ const formatDate = (dateStr: string) => {
 </template>
 
 <style scoped>
-@import "tailwindcss";
+@reference "tailwindcss";
 
 .label-template-manager {
   @apply flex flex-col h-full;

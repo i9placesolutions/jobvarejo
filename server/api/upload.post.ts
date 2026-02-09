@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const file = files[0];
-  if (!file.filename) {
+  if (!file?.filename || !file.data) {
      throw createError({ statusCode: 400, statusMessage: "Filename missing" });
   }
 
@@ -66,8 +66,7 @@ export default defineEventHandler(async (event) => {
     // Generate pre-signed URL (valid for 1 hour) since Wasabi account doesn't allow public access
     const getCommand = new GetObjectCommand({
       Bucket: bucketName,
-      Key: key,
-      ChecksumMode: 'DISABLED'
+      Key: key
     });
     const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
 

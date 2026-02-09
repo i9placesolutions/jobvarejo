@@ -1,8 +1,11 @@
-import { ListObjectsV2Command, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, getPublicUrl } from "../utils/s3";
 import { processImage, processImageStrict, downloadImage } from "../utils/image-processor";
 import { createSupabaseAdmin } from "../utils/supabase";
 import { createHash } from 'crypto';
+import { requireAuthenticatedUser } from "../utils/auth";
+import { enforceRateLimit } from "../utils/rate-limit";
+import { getCachedS3Objects } from "../utils/s3-object-cache";
 
 /** Build a same-origin proxy URL for a given S3 key (avoids CORS + no expiration) */
 const proxyUrl = (key: string) => `/api/storage/proxy?key=${encodeURIComponent(key)}`;
@@ -12,10 +15,10 @@ const proxyUrl = (key: string) => `/api/storage/proxy?key=${encodeURIComponent(k
 // ========================================
 const UNIT_MAP: Record<string, string> = {
     mililitros: 'ml', mililitro: 'ml', mls: 'ml',
-    gramas: 'g', grama: 'g', gs: 'g',
-    quilos: 'kg', quilo: 'kg', quilogramas: 'kg', quilograma: 'kg',
+    gramas: 'g', grama: 'g', gram: 'g', gr: 'g', grs: 'g', gs: 'g',
+    quilos: 'kg', quilo: 'kg', quilogramas: 'kg', quilograma: 'kg', kgs: 'kg',
     unidades: 'un', unidade: 'un', und: 'un', unds: 'un', uns: 'un',
-    litro: 'l', litros: 'l', lt: 'l', lts: 'l',
+    litro: 'l', litros: 'l', lt: 'l', lts: 'l', litr: 'l', litrs: 'l',
     pacote: 'pct', pacotes: 'pct', pcts: 'pct',
     caixa: 'cx', caixas: 'cx',
     fardo: 'fd', fardos: 'fd',
@@ -23,12 +26,64 @@ const UNIT_MAP: Record<string, string> = {
 
 const STOP_WORDS = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'e', 'para', 'por', 'no', 'na']);
 
+const normalizeWeightNumber = (value: string): string => {
+    const n = Number(String(value || '').replace(',', '.'));
+    if (!Number.isFinite(n)) return String(value || '').replace(',', '.');
+    const normalized = String(n);
+    return normalized.includes('.') ? normalized.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1') : normalized;
+};
+
+const normalizeWeightToken = (rawWeight: string): string => {
+    const compact = String(rawWeight || '')
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/,/g, '.')
+        .replace(/grs?\b/g, 'g')
+        .replace(/lt\b/g, 'l');
+
+    const multipack = compact.match(/^(\d+)x(\d+(?:\.\d+)?)(kg|kgs|g|gr|grs|mg|ml|mls|l|lt|lts|un)$/);
+    if (multipack) {
+        const multiplier = String(Number(multipack[1] || '0'));
+        const qty = normalizeWeightNumber(multipack[2] || '0');
+        const unitRaw = multipack[3] || '';
+        const unit = unitRaw === 'gr' || unitRaw === 'grs'
+            ? 'g'
+            : unitRaw === 'lt' || unitRaw === 'lts'
+                ? 'l'
+                : unitRaw === 'kgs'
+                    ? 'kg'
+                    : unitRaw === 'mls'
+                        ? 'ml'
+                        : unitRaw;
+        return `${multiplier}x${qty}${unit}`;
+    }
+
+    const single = compact.match(/^(\d+(?:\.\d+)?)(kg|kgs|g|gr|grs|mg|ml|mls|l|lt|lts|un)$/);
+    if (single) {
+        const qty = normalizeWeightNumber(single[1] || '0');
+        const unitRaw = single[2] || '';
+        const unit = unitRaw === 'gr' || unitRaw === 'grs'
+            ? 'g'
+            : unitRaw === 'lt' || unitRaw === 'lts'
+                ? 'l'
+                : unitRaw === 'kgs'
+                    ? 'kg'
+                    : unitRaw === 'mls'
+                        ? 'ml'
+                        : unitRaw;
+        return `${qty}${unit}`;
+    }
+
+    return compact;
+};
+
 const normalizeSearchTerm = (term: string): string => {
     const words = term
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '') // remove acentos
-        .replace(/[^a-z0-9\s]/g, '')     // remove especiais
+        .replace(/(\d)[,](\d)/g, '$1.$2') // normaliza decimal brasileiro
+        .replace(/[^a-z0-9.\s]/g, ' ')     // remove especiais
         .replace(/\s+/g, ' ')
         .trim()
         .split(' ')
@@ -39,14 +94,16 @@ const normalizeSearchTerm = (term: string): string => {
     return [...new Set(words)].sort().join(' ');
 };
 
-const WEIGHT_TOKENS = new Set(['kg', 'g', 'ml', 'l', 'un', 'pct', 'cx', 'fd']);
+const WEIGHT_TOKENS = new Set(['kg', 'kgs', 'g', 'gr', 'grs', 'mg', 'ml', 'mls', 'l', 'lt', 'lts', 'un', 'pct', 'cx', 'fd']);
 const stripWeightLikeTokens = (normalizedTerm: string): string => {
     const tokens = normalizedTerm.split(' ').filter(Boolean);
     const filtered = tokens.filter((t) => {
         if (WEIGHT_TOKENS.has(t)) return false;
-        if (/^\d+$/.test(t)) return false;
+        if (/^\d+(?:[.,]\d+)?$/.test(t)) return false;
         // e.g. 500ml, 2l, 1kg, 12un
-        if (/^\d+(kg|g|ml|l|un|pct|cx|fd)$/.test(t)) return false;
+        if (/^\d+(?:[.,]\d+)?(kg|kgs|g|gr|grs|mg|ml|mls|l|lt|lts|un|pct|cx|fd)$/.test(t)) return false;
+        // e.g. 12x500ml
+        if (/^\d+x\d+(?:[.,]\d+)?(kg|kgs|g|gr|grs|mg|ml|mls|l|lt|lts|un|pct|cx|fd)$/.test(t)) return false;
         return true;
     });
     return [...new Set(filtered)].sort().join(' ');
@@ -66,22 +123,96 @@ const VARIANT_KEYWORDS = new Set([
     'coco', 'amendoim', 'cafe', 'leite', 'mel',
 ]);
 
+// Extrai tokens de peso/volume de um conjunto de palavras normalizadas.
+// Retorna tokens como "250ml", "500g", "2l" ou pares separados ["250", "ml"].
+const extractWeightTokens = (words: Set<string>): string[] => {
+    const weightParts: string[] = [];
+    const unitTokens = new Set(['kg', 'kgs', 'g', 'gr', 'grs', 'mg', 'ml', 'mls', 'l', 'lt', 'lts', 'un']);
+    
+    for (const w of words) {
+        const token = String(w || '').trim().toLowerCase();
+        if (!token) continue;
+
+        // Multipack/combo: 12x500ml, 6x1l, 2x5kg
+        if (/^\d+x\d+(?:[.,]\d+)?(?:kg|kgs|g|gr|grs|mg|ml|mls|l|lt|lts|un)$/i.test(token)) {
+            weightParts.push(normalizeWeightToken(token));
+            continue;
+        }
+        // Token combinado: "250ml", "500g", "2l", "1kg"
+        if (/^\d+(?:[.,]\d+)?\s*(?:kg|kgs|g|gr|grs|mg|ml|mls|l|lt|lts|un)$/i.test(token)) {
+            weightParts.push(normalizeWeightToken(token));
+            continue;
+        }
+        // Token puramente numérico adjacente a uma unidade
+        if (/^\d+(?:[.,]\d+)?$/.test(token)) {
+            // Verificar se existe um token de unidade no mesmo set
+            for (const u of unitTokens) {
+                if (words.has(u)) {
+                    weightParts.push(normalizeWeightToken(`${token}${u}`));
+                    break;
+                }
+            }
+        }
+    }
+    return [...new Set(weightParts)].sort();
+};
+
+type FuzzyRejectReason = 'variant' | 'weight_mismatch' | 'weight_missing';
+type FuzzyRejectMeta = { reason: FuzzyRejectReason; message: string };
+type FuzzyRejectCollector = (meta: FuzzyRejectMeta) => void;
+
 // Valida se um fuzzy match é realmente compatível com o termo buscado
 // Rejeita se o resultado tem variantes que a busca não tem (e vice-versa)
-const isFuzzyMatchValid = (searchNormalized: string, matchSearchTerm: string): boolean => {
+// TAMBÉM rejeita se peso/gramatura difere entre busca e match
+const isFuzzyMatchValid = (searchNormalized: string, matchSearchTerm: string, onReject?: FuzzyRejectCollector): boolean => {
     const searchWords = new Set(searchNormalized.split(' '));
-    const matchWords = new Set(normalizeSearchTerm(matchSearchTerm).split(' '));
+    const matchNormalized = normalizeSearchTerm(matchSearchTerm);
+    const matchWords = new Set(matchNormalized.split(' '));
     
-    // Verificar variantes presentes em um mas ausentes no outro
+    // 1. Verificar variantes presentes em um mas ausentes no outro
     for (const variant of VARIANT_KEYWORDS) {
         const inSearch = searchWords.has(variant);
         const inMatch = matchWords.has(variant);
         if (inSearch !== inMatch) {
-            console.log(`⚠️ [Fuzzy] Rejeitado: variante "${variant}" presente em ${inSearch ? 'busca' : 'match'} mas não no ${inSearch ? 'match' : 'busca'}`);
+            onReject?.({
+                reason: 'variant',
+                message: `variante "${variant}" presente em ${inSearch ? 'busca' : 'match'} mas não no ${inSearch ? 'match' : 'busca'}`
+            });
             return false;
         }
     }
+    
+    // 2. Verificar peso/gramatura: se ambos têm tokens de peso, devem ser iguais
+    const searchWeights = extractWeightTokens(searchWords);
+    const matchWeights = extractWeightTokens(matchWords);
+    
+    if (searchWeights.length > 0 && matchWeights.length > 0) {
+        const searchWeightStr = searchWeights.join('|');
+        const matchWeightStr = matchWeights.join('|');
+        if (searchWeightStr !== matchWeightStr) {
+            onReject?.({
+                reason: 'weight_mismatch',
+                message: `peso/gramatura difere — busca="${searchWeightStr}" vs match="${matchWeightStr}"`
+            });
+            return false;
+        }
+    }
+    
+    // 3. Verificar se um tem peso e outro não (provável produto diferente)
+    if (searchWeights.length > 0 && matchWeights.length === 0) {
+        onReject?.({
+            reason: 'weight_missing',
+            message: `busca tem peso "${searchWeights.join('|')}" mas match não tem`
+        });
+        return false;
+    }
+    
     return true;
+};
+
+const hasWeightInNormalized = (normalized: string): boolean => {
+    const words = tokenSet(normalized);
+    return extractWeightTokens(words).length > 0;
 };
 
 // Hash determinístico para S3 key (evita duplicatas com timestamp)
@@ -101,7 +232,12 @@ const buildDeterministicS3Key = (normalizedTerm: string): string => {
 };
 
 const normalizeS3KeyForMatch = (s3Key: string): string => {
-    const file = decodeURIComponent(String(s3Key).split('/').pop() || '');
+    let file = String(s3Key).split('/').pop() || '';
+    try {
+        file = decodeURIComponent(file);
+    } catch {
+        // keep raw filename if malformed URI component
+    }
     const noExt = file.replace(/\.(webp|png|jpe?g|gif|svg)$/i, '');
     // remove typical prefixes/noise
     const cleaned = noExt
@@ -113,6 +249,28 @@ const normalizeS3KeyForMatch = (s3Key: string): string => {
         .replace(/[-_]+/g, ' ')
         .trim();
     return normalizeSearchTerm(cleaned);
+};
+
+const normalizedS3KeyMemo = new Map<string, string>();
+const getNormalizedS3KeyForMatch = (s3Key: string): string => {
+    const cached = normalizedS3KeyMemo.get(s3Key);
+    if (cached !== undefined) return cached;
+    const normalized = normalizeS3KeyForMatch(s3Key);
+    if (normalizedS3KeyMemo.size > 20_000) normalizedS3KeyMemo.clear();
+    normalizedS3KeyMemo.set(s3Key, normalized);
+    return normalized;
+};
+
+type BestS3MatchCacheEntry = {
+    expiresAt: number;
+    result: string | null;
+};
+const bestS3MatchMemo = new Map<string, BestS3MatchCacheEntry>();
+const buildBestS3MatchCacheKey = (opts: { bucketName: string; prefixes: string[]; normalizedCandidates: string[] }) => {
+    const bucket = String(opts.bucketName || '').trim();
+    const prefixes = [...new Set((opts.prefixes || []).map((p) => String(p || '').trim()).filter(Boolean))].sort();
+    const candidates = [...new Set((opts.normalizedCandidates || []).map((p) => String(p || '').trim()).filter(Boolean))].sort();
+    return `${bucket}::${prefixes.join('|')}::${candidates.join('|')}`;
 };
 
 const tokenSet = (normalized: string): Set<string> => new Set(normalized.split(' ').filter(Boolean));
@@ -137,61 +295,105 @@ const findBestS3Match = async (opts: {
     prefixes: string[];
     normalizedCandidates: string[];
 }): Promise<string | null> => {
-    const queryTokenVariants = opts.normalizedCandidates
-        .filter(Boolean)
-        .map((c) => getQueryTokens(c))
-        .filter((t) => t.length > 0);
+    const bestMatchCacheKey = buildBestS3MatchCacheKey(opts);
+    const now = Date.now();
+    const cachedBest = bestS3MatchMemo.get(bestMatchCacheKey);
+    if (cachedBest && cachedBest.expiresAt > now) {
+        return cachedBest.result;
+    }
 
-    if (!queryTokenVariants.length) return null;
+    const queryVariants = opts.normalizedCandidates
+        .filter(Boolean)
+        .map((normalized) => ({ normalized, tokens: getQueryTokens(normalized) }))
+        .filter((entry) => entry.tokens.length > 0);
+
+    if (!queryVariants.length) {
+        bestS3MatchMemo.set(bestMatchCacheKey, { expiresAt: now + 20_000, result: null });
+        return null;
+    }
 
     let best: { key: string; ratio: number; overlap: number } | null = null;
+    const fuzzyRejectStats = {
+        total: 0,
+        variant: 0,
+        weight_mismatch: 0,
+        weight_missing: 0
+    };
+    const fuzzyRejectSamples: string[] = [];
+    const verboseFuzzy = process.env.DEBUG_FUZZY === '1';
+    const collectFuzzyReject: FuzzyRejectCollector = (meta) => {
+        fuzzyRejectStats.total++;
+        fuzzyRejectStats[meta.reason]++;
+        if (verboseFuzzy && fuzzyRejectSamples.length < 6) {
+            fuzzyRejectSamples.push(meta.message);
+        }
+    };
 
-    for (const prefix of opts.prefixes) {
-        let continuationToken: string | undefined;
-        do {
-            const listCommand = new ListObjectsV2Command({
-                Bucket: opts.bucketName,
-                Prefix: prefix,
-                MaxKeys: 1000,
-                ContinuationToken: continuationToken
-            });
+    const listedObjects = await getCachedS3Objects({
+        s3: opts.s3,
+        bucket: opts.bucketName,
+        prefixes: opts.prefixes,
+        ttlMs: 60_000,
+        maxKeysPerPrefix: 8_000,
+        excludeKeyPrefixes: ['uploads/bg-removed-']
+    });
 
-            const data = await opts.s3.send(listCommand);
-            const contents = data.Contents || [];
+    for (const item of listedObjects) {
+        const key = item.key;
+        if (!key) continue;
 
-            for (const item of contents) {
-                const key = item.Key;
-                if (!key || key.endsWith('/')) continue;
-                // avoid using derived assets as originals
-                if (key.startsWith('uploads/bg-removed-')) continue;
+        const normalizedKey = getNormalizedS3KeyForMatch(key);
+        if (!normalizedKey) continue;
+        const keyTokens = tokenSet(normalizedKey);
 
-                const normalizedKey = normalizeS3KeyForMatch(key);
-                if (!normalizedKey) continue;
-                const keyTokens = tokenSet(normalizedKey);
+        for (let idx = 0; idx < queryVariants.length; idx++) {
+            const queryNormalized = queryVariants[idx]!.normalized;
+            // Hard validation first: variant/gramatura/weight compatibility.
+            if (!isFuzzyMatchValid(queryNormalized, normalizedKey, collectFuzzyReject)) continue;
 
-                for (const queryTokens of queryTokenVariants) {
-                    const { ratio, overlap } = scoreKeyMatch(queryTokens, keyTokens);
-                    // Strict acceptance: high overlap ratio, avoid partial matches.
-                    // For short queries, require near perfect.
-                    const minRatio = queryTokens.length <= 3 ? 0.95 : 0.75;
-                    const minOverlap = Math.min(3, queryTokens.length);
-                    if (ratio >= minRatio && overlap >= minOverlap) {
-                        if (!best || ratio > best.ratio || (ratio === best.ratio && overlap > best.overlap)) {
-                            best = { key, ratio, overlap };
-                        }
-                    }
+            const queryTokens = queryVariants[idx]!.tokens;
+            const { ratio, overlap } = scoreKeyMatch(queryTokens, keyTokens);
+            // Strict acceptance: high overlap ratio, avoid partial matches.
+            // For short queries, require near perfect.
+            const requiresWeightStrict = hasWeightInNormalized(queryNormalized);
+            const minRatio = requiresWeightStrict
+                ? (queryTokens.length <= 3 ? 1 : 0.85)
+                : (queryTokens.length <= 3 ? 0.95 : 0.75);
+            const minOverlap = Math.min(3, queryTokens.length);
+            if (ratio >= minRatio && overlap >= minOverlap) {
+                if (!best || ratio > best.ratio || (ratio === best.ratio && overlap > best.overlap)) {
+                    best = { key, ratio, overlap };
                 }
             }
-
-            continuationToken = data.IsTruncated ? data.NextContinuationToken : undefined;
-        } while (continuationToken);
+        }
     }
 
     if (best) {
+        if (verboseFuzzy && fuzzyRejectStats.total > 0) {
+            console.log(`ℹ️ [Fuzzy] Resumo: total=${fuzzyRejectStats.total}, variante=${fuzzyRejectStats.variant}, peso_diferente=${fuzzyRejectStats.weight_mismatch}, peso_ausente=${fuzzyRejectStats.weight_missing}`);
+            if (fuzzyRejectSamples.length > 0) {
+                fuzzyRejectSamples.forEach((sample) => console.log(`   • ${sample}`));
+            }
+        }
         console.log(`✅ [S3 Match] Reuso: "${best.key}" (ratio=${best.ratio.toFixed(2)} overlap=${best.overlap})`);
+        bestS3MatchMemo.set(bestMatchCacheKey, { expiresAt: Date.now() + 45_000, result: best.key });
+        if (bestS3MatchMemo.size > 5000) {
+            bestS3MatchMemo.clear();
+        }
         return best.key;
     }
 
+    if (verboseFuzzy && fuzzyRejectStats.total > 0) {
+        console.log(`ℹ️ [Fuzzy] Resumo: total=${fuzzyRejectStats.total}, variante=${fuzzyRejectStats.variant}, peso_diferente=${fuzzyRejectStats.weight_mismatch}, peso_ausente=${fuzzyRejectStats.weight_missing}`);
+        if (fuzzyRejectSamples.length > 0) {
+            fuzzyRejectSamples.forEach((sample) => console.log(`   • ${sample}`));
+        }
+    }
+
+    bestS3MatchMemo.set(bestMatchCacheKey, { expiresAt: Date.now() + 20_000, result: null });
+    if (bestS3MatchMemo.size > 5000) {
+        bestS3MatchMemo.clear();
+    }
     return null;
 };
 
@@ -212,8 +414,8 @@ const getOpenAI = async () => {
 // Validação por IA: GPT-4o Vision valida imagens candidatas
 // ========================================
 async function validateImageWithAI(
-    imageUrls: string[],
-    productInfo: { name: string; brand?: string; flavor?: string; weight?: string }
+    candidates: Array<{ url: string; title?: string; source?: string }>,
+    productInfo: { name: string; brand?: string; flavor?: string; weight?: string; normalizedQuery?: string }
 ): Promise<{ bestIndex: number; confidence: number; reason: string }> {
     try {
         const openai = await getOpenAI();
@@ -223,12 +425,13 @@ async function validateImageWithAI(
         if (productInfo.brand) desc.push(`Marca: ${productInfo.brand}`);
         if (productInfo.flavor) desc.push(`Sabor/Variante: ${productInfo.flavor}`);
         if (productInfo.weight) desc.push(`Peso/Volume: ${productInfo.weight}`);
+        if (productInfo.normalizedQuery) desc.push(`Consulta Normalizada: ${productInfo.normalizedQuery}`);
         const productDescription = desc.join(' | ');
 
         // Montar conteúdo multimodal com as imagens candidatas
-        const imageContents = imageUrls.map((url, i) => ([
-            { type: 'text' as const, text: `--- Imagem ${i + 1} ---` },
-            { type: 'image_url' as const, image_url: { url, detail: 'low' as const } }
+        const imageContents = candidates.map((entry, i) => ([
+            { type: 'text' as const, text: `--- Imagem ${i + 1} ---\nTítulo: ${entry.title || 'N/A'}\nFonte: ${entry.source || 'N/A'}` },
+            { type: 'image_url' as const, image_url: { url: entry.url, detail: 'low' as const } }
         ])).flat();
 
         const response = await openai.chat.completions.create({
@@ -245,8 +448,8 @@ Analise as imagens candidatas e determine qual melhor corresponde ao produto des
 CRITÉRIOS DE AVALIAÇÃO (em ordem de importância):
 1. A imagem mostra a EMBALAGEM real do produto (não uma foto genérica ou banner publicitário)
 2. A MARCA na embalagem corresponde à marca informada
-3. O SABOR/VARIANTE corresponde (se aplicável)
-4. O PESO/VOLUME corresponde (se aplicável)
+3. O PESO/VOLUME/GRAMATURA deve bater exatamente quando informado (ex.: 500ml != 1L, 12x500ml != 6x1L)
+4. O SABOR/VARIANTE corresponde (se aplicável)
 5. A imagem tem boa qualidade e mostra o produto claramente
 
 Responda EXCLUSIVAMENTE em JSON:
@@ -279,7 +482,7 @@ Responda EXCLUSIVAMENTE em JSON:
         const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0.5;
         const reason = parsed.reason || '';
 
-        console.log(`🤖 [AI Validate] Produto: "${productInfo.name}" | Melhor: imagem ${bestIndex + 1}/${imageUrls.length} | Confiança: ${(confidence * 100).toFixed(0)}% | ${reason}`);
+        console.log(`🤖 [AI Validate] Produto: "${productInfo.name}" | Melhor: imagem ${bestIndex + 1}/${candidates.length} | Confiança: ${(confidence * 100).toFixed(0)}% | ${reason}`);
         
         return { bestIndex, confidence, reason };
     } catch (err: any) {
@@ -433,6 +636,9 @@ async function ensureBgRemoved(opts: {
 // HANDLER PRINCIPAL
 // ========================================
 export default defineEventHandler(async (event) => {
+    const user = await requireAuthenticatedUser(event);
+    enforceRateLimit(event, `process-product-image:${user.id}`, 30, 60_000);
+
     const body = await readBody(event);
     const { term, brand, flavor, weight } = body;
 
@@ -459,89 +665,18 @@ export default defineEventHandler(async (event) => {
     const normalizedTerm = normalizeSearchTerm(combined);
     const deterministicKey = buildDeterministicS3Key(normalizedTerm);
     const normalizedNoWeight = stripWeightLikeTokens(normalizedTerm);
-    const candidateNormalizedTerms = normalizedNoWeight && normalizedNoWeight !== normalizedTerm
-        ? [normalizedTerm, normalizedNoWeight]
-        : [normalizedTerm];
+    // Se a consulta tem gramatura/peso explícito, NUNCA relaxar para versão "sem peso".
+    const candidateNormalizedTerms = hasWeightInNormalized(normalizedTerm)
+        ? [normalizedTerm]
+        : (normalizedNoWeight && normalizedNoWeight !== normalizedTerm
+            ? [normalizedTerm, normalizedNoWeight]
+            : [normalizedTerm]);
     const candidateKeys = [...new Set(candidateNormalizedTerms.map(buildDeterministicS3Key))];
 
     console.log(`🔍 [Search] Termo: "${term}" → Normalizado: "${normalizedTerm}" → Key: "${deterministicKey}"`);
 
     // ========================================
-    // 0. CACHE DATABASE (Supabase) - Consulta primeiro
-    // ========================================
-    try {
-        const supabase = createSupabaseAdmin();
-
-        // Busca exata pelos termos normalizados candidatos
-        let cacheHit: any = null;
-        for (const candidate of candidateNormalizedTerms) {
-            const { data } = await supabase
-                .from('product_image_cache' as any)
-                .select('id, image_url, s3_key, source')
-                .eq('search_term', candidate)
-                .order('usage_count', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-            if (data?.image_url) {
-                cacheHit = data;
-                break;
-            }
-        }
-
-        // Se não encontrou exato, tenta busca fuzzy pelo nome do produto
-        if (!cacheHit) {
-            const words = normalizedTerm.split(' ').filter(w => w.length > 1);
-            if (words.length >= 2) {
-                const searchQuery = words.slice(0, 5).join(' & ');
-                const { data: fuzzyHits } = await supabase
-                    .from('product_image_cache' as any)
-                    .select('id, image_url, s3_key, source, search_term')
-                    .textSearch('product_name', searchQuery, { type: 'plain', config: 'portuguese' })
-                    .order('usage_count', { ascending: false })
-                    .limit(5); // buscar mais candidatos para validar variantes
-                
-                if (fuzzyHits && fuzzyHits.length > 0) {
-                    // Validar cada candidato — rejeitar se variante difere
-                    const validHit = fuzzyHits.find((hit: any) => 
-                        isFuzzyMatchValid(normalizedTerm, hit.search_term || '')
-                    );
-                    if (validHit) {
-                        cacheHit = validHit;
-                    } else {
-                        console.log(`⚠️ [Cache DB] ${fuzzyHits.length} fuzzy hits rejeitados por variante incompatível`);
-                    }
-                }
-            }
-        }
-
-        if (cacheHit && cacheHit.image_url) {
-            console.log(`✅ [Cache DB] Hit para "${term}" (source: ${cacheHit.source})`);
-            
-            // Incrementar usage_count (fire-and-forget — OK para counter)
-            supabase.rpc('increment_product_image_usage', { row_id: cacheHit.id })
-                .catch(() => { /* ignore */ });
-
-            if (cacheHit.s3_key) {
-                // Garantir que imagem do cache tem fundo removido
-                const processed = await ensureBgRemoved({
-                    s3, bucketName,
-                    sourceKey: cacheHit.s3_key,
-                    deterministicKey,
-                    normalizedTerm, term, brand, flavor, weight
-                });
-                if (processed) {
-                    return { source: 'cache-processed', url: proxyUrl(processed.key) };
-                }
-                return { source: 'cache', url: proxyUrl(cacheHit.s3_key) };
-            }
-            return { source: 'cache', url: cacheHit.image_url };
-        }
-    } catch (err) {
-        console.warn("⚠️ [Cache DB] Falha na consulta:", (err as any)?.message);
-    }
-
-    // ========================================
-    // 0.5 GUARD: S3 key determinístico já existe?
+    // 0. GUARD: S3 key determinístico já existe?
     // ========================================
     for (const candidateKey of candidateKeys) {
         const keyAlreadyExists = await s3KeyExists(s3, bucketName, candidateKey);
@@ -563,7 +698,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // ========================================
-    // 1. INTERNAL SEARCH (Wasabi S3) - consulta uploads/ e imagens/ antes do Google
+    // 1. INTERNAL SEARCH (Wasabi S3) - consulta uploads/ e imagens/ antes de cache DB/Google
     // ========================================
     try {
         const found = await findBestS3Match({
@@ -602,6 +737,54 @@ export default defineEventHandler(async (event) => {
     }
 
     // ========================================
+    // 1.5 CACHE DATABASE (Supabase) - fallback exato com s3_key
+    // ========================================
+    try {
+        const supabase = createSupabaseAdmin();
+
+        // Busca exata pelos termos normalizados candidatos (sem fuzzy para evitar imagem errada)
+        let cacheHit: any = null;
+        for (const candidate of candidateNormalizedTerms) {
+            const { data } = await (supabase.from as any)('product_image_cache')
+                .select('id, image_url, s3_key, source')
+                .eq('search_term', candidate)
+                .order('usage_count', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            const row = data as any;
+            if (row?.s3_key) {
+                cacheHit = row;
+                break;
+            }
+        }
+
+        if (cacheHit?.s3_key) {
+            const exists = await s3KeyExists(s3, bucketName, cacheHit.s3_key);
+            if (!exists) {
+                console.warn(`⚠️ [Cache DB] s3_key inexistente, ignorando cache: ${cacheHit.s3_key}`);
+            } else {
+                console.log(`✅ [Cache DB] Hit exato para "${term}" (source: ${cacheHit.source})`);
+                // Incrementar usage_count (fire-and-forget — OK para counter)
+                void (supabase.rpc as any)('increment_product_image_usage', { row_id: cacheHit.id });
+
+                // Garantir que imagem do cache tem fundo removido
+                const processed = await ensureBgRemoved({
+                    s3, bucketName,
+                    sourceKey: cacheHit.s3_key,
+                    deterministicKey,
+                    normalizedTerm, term, brand, flavor, weight
+                });
+                if (processed) {
+                    return { source: 'cache-processed', url: proxyUrl(processed.key) };
+                }
+                return { source: 'cache', url: proxyUrl(cacheHit.s3_key) };
+            }
+        }
+    } catch (err) {
+        console.warn("⚠️ [Cache DB] Falha na consulta:", (err as any)?.message);
+    }
+
+    // ========================================
     // 2. EXTERNAL SEARCH (Serper.dev) + VALIDAÇÃO IA
     // ========================================
     if (!config.serperApiKey) {
@@ -618,7 +801,7 @@ export default defineEventHandler(async (event) => {
     }
     const searchQuery = searchQueryParts.filter(Boolean).join(' ').trim();
 
-    let candidateUrls: string[] = [];
+    let candidates: Array<{ url: string; title?: string; source?: string }> = [];
     try {
         const response = await fetch('https://google.serper.dev/images', {
             method: 'POST',
@@ -637,48 +820,66 @@ export default defineEventHandler(async (event) => {
         const result = await response.json();
         if (result.images && result.images.length > 0) {
             // Pegar top 5 candidatas para validação por IA
-            candidateUrls = result.images
+            const seen = new Set<string>();
+            candidates = result.images
                 .slice(0, 5)
-                .map((img: any) => img.imageUrl)
-                .filter(Boolean);
+                .map((img: any) => ({
+                    url: String(img.imageUrl || '').trim(),
+                    title: String(img.title || '').trim(),
+                    source: String(img.source || img.link || '').trim()
+                }))
+                .filter((img: any) => img.url)
+                .filter((img: any) => {
+                    if (seen.has(img.url)) return false;
+                    seen.add(img.url);
+                    return true;
+                });
         }
     } catch (err) {
         console.error("Serper API error:", err);
         throw createError({ statusCode: 500, statusMessage: "External search failed" });
     }
 
-    if (candidateUrls.length === 0) {
+    if (candidates.length === 0) {
         throw createError({ statusCode: 404, statusMessage: "No image found" });
     }
 
     // ========================================
     // 2.5 VALIDAÇÃO IA: GPT-4o Vision escolhe a melhor imagem
     // ========================================
-    let selectedImageUrl = candidateUrls[0]; // fallback
+    let selectedImageUrl = candidates[0]!.url; // fallback
 
-    if (config.openaiApiKey && candidateUrls.length > 1) {
+    if (config.openaiApiKey && candidates.length > 1) {
         try {
-            const validation = await validateImageWithAI(candidateUrls, {
+            const validation = await validateImageWithAI(candidates, {
                 name: term,
                 brand: brand || undefined,
                 flavor: flavor || undefined,
-                weight: weight || undefined
+                weight: weight || undefined,
+                normalizedQuery: normalizedTerm
             });
 
-            if (validation.bestIndex >= 0 && validation.bestIndex < candidateUrls.length) {
-                if (validation.confidence >= 0.4) {
-                    selectedImageUrl = candidateUrls[validation.bestIndex];
-                    console.log(`🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidateUrls.length} com ${(validation.confidence * 100).toFixed(0)}% confiança`);
+            if (validation.bestIndex >= 0 && validation.bestIndex < candidates.length) {
+                if (validation.confidence >= 0.55) {
+                    selectedImageUrl = candidates[validation.bestIndex]!.url;
+                    console.log(`🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidates.length} com ${(validation.confidence * 100).toFixed(0)}% confiança`);
                 } else {
-                    console.warn(`⚠️ [AI] Confiança baixa (${(validation.confidence * 100).toFixed(0)}%), usando primeira imagem como fallback`);
+                    throw createError({
+                        statusCode: 404,
+                        statusMessage: `No reliable image found for "${term}" (AI confidence ${(validation.confidence * 100).toFixed(0)}%)`
+                    });
                 }
             } else if (validation.bestIndex === -1) {
-                console.warn(`⚠️ [AI] Nenhuma imagem corresponde ao produto "${term}" — usando primeira como fallback`);
+                throw createError({
+                    statusCode: 404,
+                    statusMessage: `No matching image found for "${term}" (AI rejected candidates)`
+                });
             }
         } catch (err) {
+            if ((err as any)?.statusCode === 404) throw err;
             console.warn('⚠️ [AI] Validação falhou, usando primeira imagem:', (err as any)?.message);
         }
-    } else if (candidateUrls.length === 1) {
+    } else if (candidates.length === 1) {
         console.log('📷 [Serper] Apenas 1 candidata, pulando validação IA');
     }
 

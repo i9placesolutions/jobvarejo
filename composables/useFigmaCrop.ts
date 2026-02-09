@@ -26,8 +26,8 @@ export const useFigmaCrop = () => {
     const bounds = getBoundingRect(obj)
     if (bounds) {
       cropFrameRect.value = {
-        x: bounds.left,
-        y: bounds.top,
+        x: bounds.x,
+        y: bounds.y,
         width: bounds.width,
         height: bounds.height
       }

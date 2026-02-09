@@ -1,4 +1,7 @@
 // Lazy load OpenAI para reduzir bundle size
+import { requireAuthenticatedUser } from '../utils/auth'
+import { enforceRateLimit } from '../utils/rate-limit'
+
 let openaiInstance: any = null
 const getOpenAI = async () => {
   if (!openaiInstance) {
@@ -11,7 +14,51 @@ const getOpenAI = async () => {
   return openaiInstance
 }
 
+const parsePdfBufferToText = async (buf: Buffer): Promise<string> => {
+    process.env.PDF2JSON_DISABLE_LOGS = process.env.PDF2JSON_DISABLE_LOGS || '1'
+    const mod: any = await import('pdf2json')
+    const PDFParser = mod?.default || mod
+    const parser = new PDFParser(undefined, 1)
+
+    return await new Promise<string>((resolve, reject) => {
+        let settled = false
+
+        const done = (cb: () => void) => {
+            if (settled) return
+            settled = true
+            try {
+                parser.removeAllListeners?.()
+            } catch {
+                // ignore cleanup errors
+            }
+            cb()
+        }
+
+        parser.on('pdfParser_dataError', (errData: any) => {
+            done(() => reject(errData?.parserError || errData || new Error('Failed to parse PDF')))
+        })
+
+        parser.on('pdfParser_dataReady', () => {
+            done(() => {
+                const rawText = typeof parser.getRawTextContent === 'function'
+                    ? parser.getRawTextContent()
+                    : ''
+                resolve(String(rawText || ''))
+            })
+        })
+
+        try {
+            parser.parseBuffer(buf, 0)
+        } catch (err) {
+            done(() => reject(err))
+        }
+    })
+}
+
 export default defineEventHandler(async (event) => {
+    const user = await requireAuthenticatedUser(event)
+    enforceRateLimit(event, `parse-products:${user.id}`, 20, 60_000)
+
     const contentType = String(getHeader(event, 'content-type') || '');
 
     let text: string | undefined;
@@ -37,17 +84,16 @@ export default defineEventHandler(async (event) => {
                 const ext = (filename || '').toLowerCase().split('.').pop() || '';
 
                 if (mime === 'application/pdf' || ext === 'pdf') {
-                    const mod: any = await import('pdf-parse');
-                    const pdfParse = mod?.default || mod;
-                    const out = await pdfParse(buf);
-                    text = String(out?.text || '').trim();
+                    text = String(await parsePdfBufferToText(buf)).trim();
                 } else if (
                     mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
                     mime === 'application/vnd.ms-excel' ||
                     ext === 'xlsx' ||
                     ext === 'xls'
                 ) {
-                    const mod: any = await import('xlsx');
+                    // xlsx does not ship a typed declaration for this ESM subpath.
+                    // @ts-expect-error subpath import is intentional to avoid heavier CJS bundle.
+                    const mod: any = await import('xlsx/xlsx.mjs');
                     const XLSX = mod?.default || mod;
                     const wb = XLSX.read(buf, { type: 'buffer' });
                     const sheetName = wb.SheetNames?.[0];
@@ -496,6 +542,38 @@ ${text ? `"${text}"` : '(image attached)'}
                 flavor: p?.flavor ? String(p.flavor).trim() : null
             };
         });
+
+        // ===== PÓS-PROCESSAMENTO: preencher campos recíprocos de preço =====
+        // Quando a IA não extrai todos os campos (ex: gpt-4o-mini pode pular pricePack quando = priceUnit),
+        // inferimos os valores faltantes com base na lógica de embalagem/unidade.
+        for (const prod of products) {
+            const isUnitPackaging = prod.packageLabel === 'UN' || prod.packageLabel === 'UND' || prod.packageLabel === 'UNIDADE';
+            const isSingleUnit = (prod.packQuantity === 1 || prod.packQuantity === null) && isUnitPackaging;
+            
+            // Quando embalagem = UNIDADE e quantidade = 1, CX e UN são iguais
+            if (isSingleUnit) {
+                if (prod.priceUnit && !prod.pricePack) prod.pricePack = prod.priceUnit;
+                if (prod.pricePack && !prod.priceUnit) prod.priceUnit = prod.pricePack;
+                if (prod.priceSpecial && !prod.priceSpecialUnit) prod.priceSpecialUnit = prod.priceSpecial;
+                if (prod.priceSpecialUnit && !prod.priceSpecial) prod.priceSpecial = prod.priceSpecialUnit;
+                // Normalizar packQuantity para 1 se era null
+                if (prod.packQuantity === null) prod.packQuantity = 1;
+            }
+            
+            // Fallback genérico: se tem preço especial mas não informou a unidade,
+            // e a embalagem é simples, copiar o valor
+            if (prod.priceSpecial && !prod.priceSpecialUnit && prod.packQuantity === 1) {
+                prod.priceSpecialUnit = prod.priceSpecial;
+            }
+            if (prod.priceSpecialUnit && !prod.priceSpecial && prod.packQuantity === 1) {
+                prod.priceSpecial = prod.priceSpecialUnit;
+            }
+            
+            // Se nenhum preço principal foi definido, mas tem priceUnit ou pricePack
+            if (!prod.price) {
+                prod.price = prod.priceUnit || prod.pricePack || null;
+            }
+        }
 
         return { products };
     } catch (error: any) {

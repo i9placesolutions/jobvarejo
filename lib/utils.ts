@@ -19,7 +19,10 @@ export function parseProductList(text: string) {
     let unit = 'UN';
 
     if (priceMatch) {
-        price = priceMatch[1].replace('.', ','); // Standardize decimal
+        const matchedPrice = priceMatch[1];
+        if (matchedPrice) {
+            price = matchedPrice.replace('.', ','); // Standardize decimal
+        }
         // Remove price from name
         name = line.replace(priceMatch[0], '').trim();
     }

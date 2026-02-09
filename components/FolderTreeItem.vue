@@ -125,7 +125,7 @@ const isChildEditing = (childId: string): boolean => {
         @toggle="emit('toggle', $event)"
         @context-menu="emit('contextMenu', $event, child.id)"
         @update-name="emit('updateName', $event)"
-        @drop-on-folder="emit('dropOnFolder', $event, child.id)"
+        @drop-on-folder="(folderId, event) => emit('dropOnFolder', folderId, event)"
         @save-edit="emit('saveEdit')"
         @cancel-edit="emit('cancelEdit')"
       />

@@ -15,7 +15,7 @@ interface Props {
   viewMode: 'grid' | 'list'
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   open: [projectId: string]

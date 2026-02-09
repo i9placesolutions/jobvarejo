@@ -1,12 +1,13 @@
 import { createSupabaseAdmin } from "../utils/supabase";
+import { requireAuthenticatedUser } from "../utils/auth";
 
 // Normalização avançada de cache key (espelha process-product-image.post.ts)
 const UNIT_MAP: Record<string, string> = {
     mililitros: 'ml', mililitro: 'ml', mls: 'ml',
-    gramas: 'g', grama: 'g', gs: 'g',
-    quilos: 'kg', quilo: 'kg', quilogramas: 'kg', quilograma: 'kg',
+    gramas: 'g', grama: 'g', gram: 'g', gr: 'g', grs: 'g', gs: 'g',
+    quilos: 'kg', quilo: 'kg', quilogramas: 'kg', quilograma: 'kg', kgs: 'kg',
     unidades: 'un', unidade: 'un', und: 'un', unds: 'un', uns: 'un',
-    litro: 'l', litros: 'l', lt: 'l', lts: 'l',
+    litro: 'l', litros: 'l', lt: 'l', lts: 'l', litr: 'l', litrs: 'l',
     pacote: 'pct', pacotes: 'pct', pcts: 'pct',
     caixa: 'cx', caixas: 'cx',
     fardo: 'fd', fardos: 'fd',
@@ -14,21 +15,22 @@ const UNIT_MAP: Record<string, string> = {
 const STOP_WORDS = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'e', 'para', 'por', 'no', 'na']);
 
 const normalizeSearchTerm = (term: string): string => {
-    return term
+    const words = term
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/(\d)[,](\d)/g, '$1.$2')
+        .replace(/[^a-z0-9.\s]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
         .split(' ')
         .filter(w => !STOP_WORDS.has(w) && w.length > 0)
-        .map(w => UNIT_MAP[w] || w)
-        .sort()
-        .join(' ');
+        .map(w => UNIT_MAP[w] || w);
+    return [...new Set(words)].sort().join(' ');
 };
 
 export default defineEventHandler(async (event) => {
+    await requireAuthenticatedUser(event);
     const body = await readBody(event);
     const { searchTerm, productName, brand, flavor, weight, imageUrl, s3Key, source } = body;
 

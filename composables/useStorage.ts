@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 /**
  * Wasabi Storage Composable
@@ -88,6 +89,62 @@ async function getPresignedUrl(
       await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
     }
   }
+  return null
+}
+
+const fetchJsonWithRetry = async (url: string, retries = 3): Promise<any | null> => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
+
+      const response = await fetch(url, { signal: controller.signal })
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        if (response.status === 404) return null
+        if (attempt === retries) {
+          throw new Error(`Falha ao carregar JSON (${response.status})`)
+        }
+      } else {
+        return await response.json()
+      }
+    } catch (error: any) {
+      const msg = String(error?.message || '')
+      const isTransient =
+        error?.name === 'AbortError' ||
+        msg.includes('ERR_NETWORK_CHANGED') ||
+        msg.includes('Failed to fetch') ||
+        msg.includes('NetworkError')
+
+      if (attempt === retries || !isTransient) {
+        throw error
+      }
+    }
+
+    await new Promise(resolve => setTimeout(resolve, attempt * 700))
+  }
+
+  return null
+}
+
+const resolveProxyGetUrl = (keyOrUrl: string): string | null => {
+  if (!keyOrUrl || typeof keyOrUrl !== 'string') return null
+  const trimmed = keyOrUrl.trim()
+  if (!trimmed) return null
+
+  const proxied = toWasabiProxyUrl(trimmed)
+  if (proxied && proxied !== trimmed) return proxied
+
+  if (
+    trimmed.startsWith('projects/') ||
+    trimmed.startsWith('imagens/') ||
+    trimmed.startsWith('uploads/') ||
+    trimmed.startsWith('logo/')
+  ) {
+    return `/api/storage/proxy?key=${encodeURIComponent(trimmed.replace(/^\/+/, ''))}`
+  }
+
   return null
 }
 
@@ -218,26 +275,26 @@ export const useStorage = () => {
 
     try {
       console.log('📥 loadCanvasDataFromPath:', canvasDataPath)
+      const proxyUrl = resolveProxyGetUrl(canvasDataPath)
+      if (proxyUrl) {
+        const canvasJson = await fetchJsonWithRetry(proxyUrl, 3)
+        if (canvasJson) {
+          console.log('✅ JSON carregado via proxy, objetos:', canvasJson?.objects?.length || 0)
+          return canvasJson
+        }
+        return null
+      }
 
-      // Obter presigned URL para download
+      // Fallback legado: presigned GET
       const presignedUrl = await getPresignedUrl(canvasDataPath, undefined, 'get')
       if (!presignedUrl) {
         console.log('⚠️ Presigned URL não retornada')
         return null
       }
-
-      // Buscar o JSON
-      const response = await fetch(presignedUrl)
-      if (!response.ok) {
-        console.log('⚠️ Resposta não OK:', response.status)
-        if (response.status === 404) {
-          return null // Arquivo não existe ainda
-        }
-        throw new Error('Falha ao carregar dados do canvas')
+      const canvasJson = await fetchJsonWithRetry(presignedUrl, 2)
+      if (canvasJson) {
+        console.log('✅ JSON carregado via presigned URL, objetos:', canvasJson?.objects?.length || 0)
       }
-
-      const canvasJson = await response.json()
-      console.log('✅ JSON carregado com sucesso, objetos:', canvasJson?.objects?.length || 0)
       return canvasJson
     } catch (error: any) {
       console.error('❌ Erro ao carregar da Wasabi:', error)
@@ -264,25 +321,15 @@ export const useStorage = () => {
 
     try {
       const key = `projects/${userId}/${projectId}/page_${pageId}.json`
+      const proxyUrl = resolveProxyGetUrl(key)
+      if (proxyUrl) {
+        return await fetchJsonWithRetry(proxyUrl, 3)
+      }
 
-      // Obter presigned URL para download
+      // Fallback legado: presigned GET
       const presignedUrl = await getPresignedUrl(key, undefined, 'get')
-      if (!presignedUrl) {
-        // Arquivo pode não existir
-        return null
-      }
-
-      // Buscar o JSON
-      const response = await fetch(presignedUrl)
-      if (!response.ok) {
-        if (response.status === 404) {
-          return null // Arquivo não existe ainda
-        }
-        throw new Error('Falha ao carregar dados do canvas')
-      }
-
-      const canvasJson = await response.json()
-      return canvasJson
+      if (!presignedUrl) return null
+      return await fetchJsonWithRetry(presignedUrl, 2)
     } catch (error: any) {
       console.error('Erro ao carregar da Wasabi:', error)
       return null

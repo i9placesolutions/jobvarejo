@@ -1,20 +1,21 @@
-import { createClient } from '@supabase/supabase-js'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
+import { createSupabaseAdmin } from '../utils/supabase'
+import { requireAuthenticatedUser } from '../utils/auth'
 
 export default defineEventHandler(async (event) => {
-    const config = useRuntimeConfig()
+    const user = await requireAuthenticatedUser(event)
     const query = getQuery(event)
     const id = query.id as string
 
-    // Initialize Supabase Client (Server-side)
-    const supabase = createClient(config.public.supabaseUrl, config.public.supabaseKey)
+    const supabase = createSupabaseAdmin()
 
     if (id) {
-        // Get Single Project
+        // Get only project owned by current user
         const { data, error } = await supabase
             .from('projects')
             .select('*')
             .eq('id', id)
+            .eq('user_id', user.id)
             .single()
 
         if (error) {
@@ -22,10 +23,11 @@ export default defineEventHandler(async (event) => {
         }
         return data
     } else {
-        // List Projects (Limit 10 for now)
+        // List only projects from current user (Limit 10 for now)
         const { data, error } = await supabase
             .from('projects')
             .select('id, name, created_at, preview_url') // Don't fetch heavy canvas_data for list
+            .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(10)
 

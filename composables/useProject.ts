@@ -49,6 +49,49 @@ type DraftPayload = { updatedAt: number; canvasData: any }
 const DRAFT_PROJECT_KEY_PREFIX = 'jobvarejo:draft:project:'
 const getProjectDraftKey = (projectId: string) => `${DRAFT_PROJECT_KEY_PREFIX}${projectId}`
 type ProjectDraftPayload = { updatedAt: number; project: { id: string; name: string; pages: Page[]; activePageIndex: number } }
+
+const getCanvasSavedAt = (canvasData: any): number => {
+    if (!canvasData || typeof canvasData !== 'object') return 0
+    const direct = [
+        (canvasData as any).__savedAt,
+        (canvasData as any)._savedAt,
+        (canvasData as any).savedAt,
+        (canvasData as any).updatedAt
+    ]
+    for (const v of direct) {
+        const n = Number(v)
+        if (Number.isFinite(n) && n > 0) return n
+    }
+    const metaTs = Number((canvasData as any)?.meta?.savedAt)
+    if (Number.isFinite(metaTs) && metaTs > 0) return metaTs
+    return 0
+}
+
+const getCanvasObjectCount = (canvasData: any): number => {
+    const n = Number(canvasData?.objects?.length || 0)
+    return Number.isFinite(n) ? n : 0
+}
+
+const pickBestRemoteCanvasData = (storageCanvasData: any, dbCanvasData: any) => {
+    if (!storageCanvasData && !dbCanvasData) return { data: null, source: 'none' as const }
+    if (storageCanvasData && !dbCanvasData) return { data: storageCanvasData, source: 'storage' as const }
+    if (!storageCanvasData && dbCanvasData) return { data: dbCanvasData, source: 'db' as const }
+
+    const storageTs = getCanvasSavedAt(storageCanvasData)
+    const dbTs = getCanvasSavedAt(dbCanvasData)
+    if (storageTs > 0 || dbTs > 0) {
+        if (dbTs > storageTs) return { data: dbCanvasData, source: 'db(newer-ts)' as const }
+        return { data: storageCanvasData, source: 'storage(newer-ts)' as const }
+    }
+
+    // Legacy payloads sem timestamp: preserva comportamento atual (Storage), mas evita
+    // regressão quando Storage vier vazio e o banco tiver conteúdo.
+    const storageCount = getCanvasObjectCount(storageCanvasData)
+    const dbCount = getCanvasObjectCount(dbCanvasData)
+    if (storageCount === 0 && dbCount > 0) return { data: dbCanvasData, source: 'db(non-empty)' as const }
+    return { data: storageCanvasData, source: 'storage(legacy-default)' as const }
+}
+
 const readDraft = (projectId: string, pageId: string): DraftPayload | null => {
     if (import.meta.server) return null
     try {
@@ -192,10 +235,13 @@ export const useProject = () => {
 
     const updatePageData = (index: number, json: any) => {
         if (project.pages[index]) {
-            const objectCount = json?.objects?.length || 0;
+            const stampedJson = (json && typeof json === 'object')
+                ? { ...json, __savedAt: Date.now() }
+                : json
+            const objectCount = stampedJson?.objects?.length || 0;
             console.log(`💾 updatePageData: salvando ${objectCount} objeto(s) na página ${index} (${project.pages[index].id})`);
             
-            project.pages[index].canvasData = json
+            project.pages[index].canvasData = stampedJson
             
             // Verificar se foi salvo corretamente
             const savedObjectCount = project.pages[index].canvasData?.objects?.length || 0;
@@ -209,7 +255,7 @@ export const useProject = () => {
             // Also persist a local draft to survive reloads/offline.
             const p = project.pages[index]
             if (p?.id && project.id) {
-                writeDraft(project.id, p.id, json)
+                writeDraft(project.id, p.id, stampedJson)
                 console.log(`📝 Draft local salvo para página ${p.id}`);
             }
             writeProjectDraft()
@@ -441,6 +487,18 @@ export const useProject = () => {
     }
 
     /**
+     * Força execução imediata do auto-save pendente.
+     * Útil para eventos de lifecycle (reload/aba em background/fechar página).
+     */
+    const flushAutoSave = async () => {
+        clearTimeout(saveTimeout)
+        if (!hasUnsavedChanges.value) return
+        if (!project.id || project.id.startsWith('proj_')) return
+        if (isSaving.value) return
+        await saveProjectDB()
+    }
+
+    /**
      * Carrega o projeto, buscando dados do Storage quando necessário
      */
     const loadProjectDB = async (id: string) => {
@@ -494,6 +552,7 @@ export const useProject = () => {
 
                 let canvasData = null
                 let serverCanvasData = null
+                const dbCanvasData = (pageMeta as any).canvasData || null
 
                 // Prefer Storage as the source of truth (DB canvasData is a backup and can get stale).
                 if (pageMeta.canvasDataPath) {
@@ -506,11 +565,11 @@ export const useProject = () => {
                         console.warn('⚠️ CanvasData não encontrado no Storage')
                     }
                 }
-                // Fallback: use DB snapshot if Storage isn't available.
-                if (!serverCanvasData && (pageMeta as any).canvasData) {
-                    serverCanvasData = (pageMeta as any).canvasData
+                const bestRemote = pickBestRemoteCanvasData(serverCanvasData, dbCanvasData)
+                serverCanvasData = bestRemote.data
+                if (bestRemote.source !== 'none') {
                     const objectCount = serverCanvasData?.objects?.length || 0
-                    console.log(`📦 CanvasData encontrado no banco (fallback): ${objectCount} objetos`)
+                    console.log(`📦 CanvasData remoto selecionado: ${bestRemote.source} (${objectCount} objetos)`)
                 }
 
                 // Offline-safe: Verificar draft local, mas só usar se for válido e mais recente
@@ -523,6 +582,8 @@ export const useProject = () => {
                     // Verificar se o draft tem conteúdo válido (deve ter objetos > 0)
                     const draftIsValid = draftObjectCount > 0
                     const serverObjectCount = serverCanvasData?.objects?.length || 0
+                    const serverTs = getCanvasSavedAt(serverCanvasData)
+                    const draftTs = Number(draft.updatedAt || 0)
 
                     console.log(`📝 Draft encontrado para página ${pageMeta.id}: ${draftObjectCount} objetos (idade: ${draftAgeMin}min)`)
                     console.log(`📝 Servidor tem: ${serverObjectCount} objetos`)
@@ -530,7 +591,10 @@ export const useProject = () => {
                     // CRITICAL: Só usar draft se ele tiver objetos válidos E se o servidor não tiver dados melhores
                     // Se o servidor tem dados mas o draft está vazio, sempre usar o servidor
                     // Se o servidor tem mais objetos que o draft, usar o servidor
-                    if (draftIsValid && serverObjectCount > 0 && draftObjectCount < serverObjectCount) {
+                    if (draftIsValid && serverTs > 0 && draftTs > 0 && (draftTs + 1000) < serverTs) {
+                        console.log(`⚠️ Draft mais antigo (${draftTs}) que servidor (${serverTs}) - usando servidor`)
+                        canvasData = serverCanvasData
+                    } else if (draftIsValid && serverObjectCount > 0 && draftObjectCount < serverObjectCount) {
                         console.log(`⚠️ Draft tem ${draftObjectCount} objetos, servidor tem ${serverObjectCount} - usando servidor`)
                         canvasData = serverCanvasData
                     } else if (draftIsValid && (serverObjectCount === 0 || draftObjectCount >= serverObjectCount)) {
@@ -641,6 +705,7 @@ export const useProject = () => {
         saveProjectDB,
         triggerAutoSave,
         cancelAutoSave,
+        flushAutoSave,
         loadProjectDB,
         deleteProjectDB,
         isSaving,

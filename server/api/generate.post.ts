@@ -1,5 +1,11 @@
 // server/api/generate.post.ts
+import { requireAuthenticatedUser } from '../utils/auth'
+import { enforceRateLimit } from '../utils/rate-limit'
+
 export default defineEventHandler(async (event) => {
+  const user = await requireAuthenticatedUser(event)
+  enforceRateLimit(event, `generate:${user.id}`, 20, 60_000)
+
   const config = useRuntimeConfig()
   const apiKey = config.openaiApiKey
 

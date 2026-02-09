@@ -15,6 +15,7 @@ export default defineEventHandler(async (event) => {
   try {
     const query = getQuery(event)
     const key = query.key as string
+    const version = typeof query.v === 'string' && query.v.trim() ? query.v.trim() : null
 
     if (!key) {
       throw createError({
@@ -77,15 +78,20 @@ export default defineEventHandler(async (event) => {
     }
     const contentType = response.ContentType || contentTypes[ext || ''] || 'application/octet-stream'
 
+    const isJson = (ext || '').toLowerCase() === 'json'
+    const cacheControl = isJson
+      ? 'no-store'
+      : (version ? 'public, max-age=31536000, immutable' : 'public, max-age=60, must-revalidate')
+
     // Configurar headers de resposta
     setResponseHeaders(event, {
       'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=86400', // Cache por 1 dia
+      'Cache-Control': cacheControl,
       'Access-Control-Allow-Origin': '*'
     })
 
     if (response.ContentLength) {
-      setResponseHeader(event, 'Content-Length', response.ContentLength.toString())
+      setResponseHeader(event, 'Content-Length', response.ContentLength)
     }
 
     // Converter ReadableStream do AWS SDK para Buffer

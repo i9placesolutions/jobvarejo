@@ -1,5 +1,6 @@
-import { S3Client, ListObjectsV2Command, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getCachedS3Objects } from "../utils/s3-object-cache";
 
 /**
  * API Route para listar assets da Wasabi Storage
@@ -37,49 +38,81 @@ export default defineEventHandler(async (event) => {
         forcePathStyle: true
     });
 
+    const normalizeText = (value: string) =>
+        String(value || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9.\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+    const query = getQuery(event);
+    const rawSearch = typeof query.q === 'string' ? query.q.trim() : '';
+    const normalizedSearch = normalizeText(rawSearch);
+    const searchMode = normalizedSearch.length >= 2;
+    const requestedLimit = Number(query.limit ?? 200);
+    const resultLimit = Number.isFinite(requestedLimit)
+        ? Math.min(200, Math.max(1, Math.floor(requestedLimit)))
+        : 200;
+
     try {
-        const command = new ListObjectsV2Command({
-            Bucket: bucketName,
-            Prefix: 'imagens/', // Pasta de imagens no Wasabi
-            // IMPORTANT: list enough keys so the newest uploads actually appear.
-            // S3 lists lexicographically by Key; with timestamp-based names, newest tend to be at the end.
-            MaxKeys: 1000
+        const listedObjects = await getCachedS3Objects({
+            s3: s3Client,
+            bucket: String(bucketName),
+            prefixes: ['imagens/'],
+            ttlMs: 120_000,
+            maxKeysPerPrefix: searchMode ? 8000 : 1000,
+            excludeKeyPrefixes: ['imagens/bg-removed-']
         });
 
-        const response = await s3Client.send(command);
+        const listEntries: Array<{ key: string; name: string; normalizedName: string; size?: number; lastModified?: Date }> = [];
+        for (const item of listedObjects) {
+            const key = item.key;
+            const rawName = key.split('/').pop()?.replace(/^\d+-/, '') || key;
+            const baseName = rawName.replace(/\.[^/.]+$/, '');
+            let decodedName = baseName;
+            try {
+                decodedName = decodeURIComponent(baseName);
+            } catch {
+                // Keep original token when filename has malformed URI encoding.
+                decodedName = baseName;
+            }
+            const normalizedName = normalizeText(decodedName);
+            if (searchMode && !normalizedName.includes(normalizedSearch)) continue;
+            listEntries.push({
+                key,
+                name: decodedName,
+                normalizedName,
+                size: item.size,
+                lastModified: item.lastModified
+            });
+        }
 
-        const assets = await Promise.all(
-            (response.Contents || [])
-                .filter(item => item.Key && !item.Key.endsWith('/'))
-                .filter(item => !String(item.Key).startsWith('imagens/bg-removed-')) // Hide derived assets from library
-                .map(async (item) => {
-                    const key = item.Key!;
-                    const name = key.split('/').pop()?.replace(/^\d+-/, '') || key;
-
-                    // Generate pre-signed URL (valid for 1 hour)
-                    const getCommand = new GetObjectCommand({
-                        Bucket: bucketName,
-                        Key: key,
-                        ChecksumMode: 'DISABLED'
-                    });
-                    const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
-
-                    return {
-                        id: key,
-                        name: decodeURIComponent(name.replace(/\.[^/.]+$/, '')), // Decode URL chars (e.g. %20 -> space)
-                        url: signedUrl,
-                        size: item.Size,
-                        lastModified: item.LastModified
-                    };
-                })
-        );
-
-        // Sort by most recent
-        assets.sort((a, b) => {
+        listEntries.sort((a, b) => {
             const dateA = a.lastModified ? new Date(a.lastModified).getTime() : 0;
             const dateB = b.lastModified ? new Date(b.lastModified).getTime() : 0;
             return dateB - dateA;
         });
+
+        const finalEntries = searchMode ? listEntries.slice(0, resultLimit) : listEntries;
+        const assets = await Promise.all(
+            finalEntries.map(async (item) => {
+                const getCommand = new GetObjectCommand({
+                    Bucket: bucketName,
+                    Key: item.key
+                });
+                const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
+
+                return {
+                    id: item.key,
+                    name: item.name,
+                    url: signedUrl,
+                    size: item.size,
+                    lastModified: item.lastModified
+                };
+            })
+        );
 
         return assets;
     } catch (error: any) {

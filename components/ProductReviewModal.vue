@@ -21,6 +21,16 @@ const emit = defineEmits<{
     (e: 'import', products: SmartProduct[], opts?: { mode?: 'replace' | 'append'; labelTemplateId?: string }): void
 }>()
 
+const supabase = useSupabase()
+const getApiAuthHeaders = async () => {
+    const { data, error } = await supabase.auth.getSession()
+    const token = data?.session?.access_token
+    if (error || !token) {
+        throw new Error('Sessão expirada. Faça login novamente.')
+    }
+    return { Authorization: `Bearer ${token}` }
+}
+
 const textInput = ref('')
 const step = ref<'input' | 'review'>('input')
 const listFileInput = ref<HTMLInputElement | null>(null)
@@ -121,6 +131,7 @@ const assets = ref<any[]>([])
 const assetSearch = ref('')
 const selectedProductIndex = ref<number | null>(null)
 const showLabelPreview = ref(false)
+const MIN_ASSET_SEARCH_CHARS = 2
 
 const reviewSearch = ref('')
 const selectedLabelTemplateId = ref<string>('')
@@ -154,34 +165,119 @@ const selectedLabelTemplate = computed(() => {
 })
 
 const normalizeText = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+const normalizeWeightNumber = (value: string): string => {
+    const n = Number(String(value || '').replace(',', '.'))
+    if (!Number.isFinite(n)) return String(value || '').replace(',', '.')
+    const normalized = String(n)
+    return normalized.includes('.') ? normalized.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1') : normalized
+}
+const canonicalizeWeightUnit = (rawUnit: string): string => {
+    const u = String(rawUnit || '').toUpperCase()
+    if (u === 'GR' || u === 'GRS') return 'G'
+    if (u === 'LT' || u === 'LTS') return 'L'
+    if (u === 'KGS') return 'KG'
+    if (u === 'MLS') return 'ML'
+    return u
+}
+const normalizeWeightToken = (rawWeight: string): string => {
+    const compact = String(rawWeight || '')
+        .toUpperCase()
+        .replace(/\s+/g, '')
+        .replace(/,/g, '.')
+        .replace(/GRS?\b/g, 'G')
+        .replace(/LTS?\b/g, 'L')
+        .replace(/KGS\b/g, 'KG')
+        .replace(/MLS\b/g, 'ML')
+
+    const multipack = compact.match(/^(\d+)X(\d+(?:\.\d+)?)(KG|KGS|G|GR|GRS|MG|ML|MLS|L|LT|LTS|UN)$/)
+    if (multipack) {
+        const mult = String(Number(multipack[1] || '0'))
+        const qty = normalizeWeightNumber(multipack[2] || '0')
+        const unit = canonicalizeWeightUnit(multipack[3] || '')
+        return `${mult}X${qty}${unit}`
+    }
+
+    const single = compact.match(/^(\d+(?:\.\d+)?)(KG|KGS|G|GR|GRS|MG|ML|MLS|L|LT|LTS|UN)$/)
+    if (single) {
+        const qty = normalizeWeightNumber(single[1] || '0')
+        const unit = canonicalizeWeightUnit(single[2] || '')
+        return `${qty}${unit}`
+    }
+
+    return compact
+}
+const extractWeightFromName = (name: string) => {
+    const match = String(name || '').match(/(\d+\s*[x×]\s*\d+(?:[.,]\d+)?\s*(?:ML|MLS|G|GR|GRS|KG|KGS|L|LT|LTS|MG|UN)\b|\d+(?:[.,]\d+)?\s*(?:ML|MLS|G|GR|GRS|KG|KGS|L|LT|LTS|MG|UN)\b)/i)
+    if (!match) return ''
+    return normalizeWeightToken(String(match[0] || ''))
+}
+
+const buildCacheSearchTerm = (product: any) => {
+    const name = String(product?.name || '').trim()
+    const parts = [name]
+    if (product?.brand) parts.push(String(product.brand).trim())
+    if (product?.flavor) parts.push(String(product.flavor).trim())
+
+    const weightFromName = extractWeightFromName(name)
+    const rawWeight = normalizeWeightToken(String(product?.weight || '').trim())
+    const effectiveWeight = weightFromName || rawWeight
+    if (effectiveWeight) {
+        const normalizedName = normalizeText(name)
+        const normalizedWeight = normalizeText(effectiveWeight)
+        if (!normalizedWeight || !normalizedName.includes(normalizedWeight)) {
+            parts.push(effectiveWeight)
+        }
+    }
+
+    return parts.filter(Boolean).join(' ').trim()
+}
 
 const filteredAssets = computed(() => {
-    if (!assetSearch.value.trim()) return assets.value
-    const query = normalizeText(assetSearch.value)
-    return assets.value.filter((item) => normalizeText(item.name || '').includes(query))
+    return assets.value
 })
 
 const fetchAssets = async () => {
+    const query = String(assetSearch.value || '').trim()
+    if (query.length < MIN_ASSET_SEARCH_CHARS) {
+        assets.value = []
+        return
+    }
+
     isLoadingAssets.value = true
     try {
-        const data = await $fetch('/api/assets')
+        const data = await $fetch('/api/assets', {
+            query: {
+                q: query,
+                limit: 90
+            }
+        })
         if (data && Array.isArray(data)) {
             assets.value = data
+        } else {
+            assets.value = []
         }
     } catch (error) {
         console.error('Falha ao buscar assets:', error)
+        assets.value = []
     } finally {
         isLoadingAssets.value = false
     }
 }
 
-const openAssetPicker = async (index: number) => {
+const openAssetPicker = (index: number) => {
     selectedProductIndex.value = index
+    assets.value = []
+    const product = products.value[index]
+    assetSearch.value = buildCacheSearchTerm(product)
     showAssetPicker.value = true
-    if (!assets.value.length) {
-        await fetchAssets()
-    }
 }
+
+watch(showAssetPicker, (open) => {
+    if (open) return
+    selectedProductIndex.value = null
+    assets.value = []
+    assetSearch.value = ''
+})
 
 const handleAssetSelect = async (asset: any) => {
     if (selectedProductIndex.value === null) return
@@ -195,9 +291,11 @@ const handleAssetSelect = async (asset: any) => {
 
     // Salvar no cache do banco para próximas buscas
     try {
-        const searchTerm = [product.name, product.brand, product.flavor, product.weight].filter(Boolean).join(' ').trim()
+        const searchTerm = buildCacheSearchTerm(product)
+        const headers = await getApiAuthHeaders()
         await $fetch('/api/cache-product-image', {
             method: 'POST',
+            headers,
             body: {
                 searchTerm,
                 productName: product.name,
@@ -205,7 +303,7 @@ const handleAssetSelect = async (asset: any) => {
                 flavor: product.flavor || null,
                 weight: product.weight || null,
                 imageUrl: asset.url,
-                s3Key: asset.key || null,
+                s3Key: asset.key || asset.id || null,
                 source: 'storage'
             }
         })
@@ -215,23 +313,20 @@ const handleAssetSelect = async (asset: any) => {
     }
 }
 
-const handleImageUpload = async (event: Event, index: number) => {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) return
-
-    const product = products.value[index]
+const uploadManualImageForProduct = async (productIndex: number, file: File) => {
+    const product = products.value[productIndex]
     if (!product) return
 
+    const prevImage = product.imageUrl
     // Mostrar preview local imediato enquanto faz upload
     const localPreview = URL.createObjectURL(file)
     product.imageUrl = localPreview
     product.status = 'processing'
     product.error = undefined
-    input.value = ''
 
     try {
         // Upload para Wasabi + salvar no cache do banco
+        const headers = await getApiAuthHeaders()
         const form = new FormData()
         form.append('file', file)
         form.append('productName', product.name || 'Produto')
@@ -241,22 +336,42 @@ const handleImageUpload = async (event: Event, index: number) => {
 
         const result = await $fetch('/api/upload-product-image', {
             method: 'POST',
+            headers,
             body: form
         }) as any
 
         if (result?.url) {
             product.imageUrl = result.url
             product.status = 'done'
+            product.error = undefined
             console.log('[Upload Manual] Imagem salva no Wasabi:', product.name)
         } else {
-            // Manter preview local como fallback
-            product.status = 'done'
+            product.status = 'error'
+            product.error = 'Upload não retornou URL'
+            product.imageUrl = prevImage || null
         }
     } catch (err: any) {
         console.error('[Upload Manual] Falha:', err)
-        // Manter preview local como fallback mas mostrar erro
+        product.imageUrl = prevImage || null
         product.status = 'error'
         product.error = err?.message || 'Falha no upload'
+    } finally {
+        URL.revokeObjectURL(localPreview)
+    }
+}
+
+const handleImageUpload = async (event: Event, index: number) => {
+    const input = event.target as HTMLInputElement
+    const files = Array.from(input.files || [])
+    if (!files.length) return
+    input.value = ''
+
+    // Se selecionar múltiplas imagens, aplica em sequência a partir do produto clicado:
+    // imagem[0] -> produto[index], imagem[1] -> produto[index+1], etc.
+    for (let i = 0; i < files.length; i++) {
+        const targetIndex = index + i
+        if (targetIndex >= products.value.length) break
+        await uploadManualImageForProduct(targetIndex, files[i]!)
     }
 }
 
@@ -445,6 +560,7 @@ const filteredProducts = computed(() => {
                                             type="file"
                                             class="hidden"
                                             accept="image/*"
+                                            multiple
                                             @change="handleImageUpload($event, resolveProductIndex(product))"
                                         />
 
@@ -647,15 +763,23 @@ const filteredProducts = computed(() => {
     <Dialog v-model="showAssetPicker" title="Selecionar imagem" width="720px">
         <div class="flex flex-col gap-3">
             <div class="flex items-center gap-2">
-                <Input v-model="assetSearch" placeholder="Buscar no storage" class="flex-1" />
+                <Input
+                    v-model="assetSearch"
+                    placeholder="Buscar no storage (ex: COCA COLA 2L)"
+                    class="flex-1"
+                    @keydown.enter.prevent="fetchAssets"
+                />
                 <Button variant="ghost" size="sm" @click="fetchAssets" :disabled="isLoadingAssets">
                     <Loader2 v-if="isLoadingAssets" class="w-3.5 h-3.5 animate-spin" />
-                    <span v-else>Atualizar</span>
+                    <span v-else>Buscar</span>
                 </Button>
             </div>
 
             <div class="max-h-90 overflow-y-auto custom-scrollbar border border-zinc-800 rounded-lg bg-zinc-900/50 p-3">
                 <div v-if="isLoadingAssets" class="text-xs text-zinc-500">Carregando imagens...</div>
+                <div v-else-if="assetSearch.trim().length < MIN_ASSET_SEARCH_CHARS" class="text-xs text-zinc-500">
+                    Digite ao menos {{ MIN_ASSET_SEARCH_CHARS }} caracteres e clique em buscar.
+                </div>
                 <div v-else-if="!filteredAssets.length" class="text-xs text-zinc-500">Nenhuma imagem encontrada.</div>
                 <div v-else class="grid grid-cols-3 gap-2">
                     <button

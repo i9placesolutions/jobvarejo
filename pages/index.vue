@@ -3,6 +3,7 @@ import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, F
 	import FolderTreeItem from '~/components/FolderTreeItem.vue'
 	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
 	import { toWasabiProxyUrl } from '~/utils/storageProxy'
+import type { Folder as FolderModel } from '~/types/folder'
 
 // Page config - middleware handles auth check
 definePageMeta({
@@ -286,11 +287,17 @@ watch(() => auth.user.value, (newUser) => {
 })
 
 // Computed: Folder tree with expansion state
-const folderTree = computed(() => {
+type FolderTreeNode = FolderModel & {
+  children: FolderTreeNode[]
+  depth: number
+  isExpanded: boolean
+}
+
+const folderTree = computed<FolderTreeNode[]>(() => {
   // During SSR, return empty array to avoid issues
   if (process.server || !folders.value) return []
 
-  const buildTree = (parentId: string | null = null, depth = 0) => {
+  const buildTree = (parentId: string | null = null, depth = 0): FolderTreeNode[] => {
     return folders.value
       .filter(f => f.parent_id === parentId)
       .sort((a, b) => a.order_index - b.order_index)

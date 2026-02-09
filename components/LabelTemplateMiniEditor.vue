@@ -117,6 +117,7 @@ const applyPresetColor = (color: string, property: 'fill' | 'stroke') => {
 const TEMPLATE_EXTRA_PROPS = [
   'name',
   'fontFamily',
+  '__preserveManualLayout',
   '__fontScale',
   '__yOffsetRatio',
   '__strokeWidth',
@@ -193,6 +194,8 @@ const instantiateGroupFromTemplate = async (tpl: LabelTemplate) => {
   const objectsJson = Array.isArray(groupJson?.objects) ? groupJson.objects : []
   const opts = { ...(groupJson || {}) }
   delete (opts as any).objects
+  // Fabric objects have fixed class-based type; restoring it from JSON causes warnings.
+  delete (opts as any).type
   // Avoid restoring Fabric's internal layout manager from plain JSON.
   // When persisted, it becomes a POJO and crashes group init in Fabric v7.
   delete (opts as any).layoutManager
@@ -206,6 +209,29 @@ const instantiateGroupFromTemplate = async (tpl: LabelTemplate) => {
     g.getObjects().forEach((c: any) => c.set({ selectable: true, evented: true, hasControls: true, hasBorders: true }))
   }
   return g
+}
+
+const normalizeEditorGroupTransform = (g: any) => {
+  if (!g) return
+  g.set({
+    name: 'priceGroup',
+    originX: 'center',
+    originY: 'center',
+    left: 0,
+    top: 0,
+    scaleX: 1,
+    scaleY: 1,
+    angle: 0,
+    subTargetCheck: true,
+    interactive: true
+  })
+  if (typeof g.getObjects === 'function') {
+    g.getObjects().forEach((c: any) => {
+      c.set?.({ selectable: true, evented: true, hasControls: true, hasBorders: true })
+      c.setCoords?.()
+    })
+  }
+  safeAddWithUpdate(g)
 }
 
 const serializeGroupForTemplate = (g: any) => {
@@ -232,6 +258,9 @@ const serializeGroupForTemplate = (g: any) => {
 
   // Match the template metadata used by the main editor so proportional scaling works.
   json.__isCustomTemplate = true
+  // This template was explicitly edited in the mini editor.
+  // Preserve manual element positions on canvas reload/apply.
+  json.__preserveManualLayout = true
   if (Array.isArray(json.objects)) {
     json.objects.forEach((obj: any) => {
       if (!obj) return
@@ -243,9 +272,12 @@ const serializeGroupForTemplate = (g: any) => {
       obj.__originalScaleX = obj.scaleX || 1
       obj.__originalScaleY = obj.scaleY || 1
 
-      if (obj.type === 'text') {
+      const t = String(obj.type || '').toLowerCase()
+      if (t === 'text' || t === 'i-text' || t === 'textbox') {
         if (typeof obj.fontSize === 'number') obj.__originalFontSize = obj.fontSize
         if (typeof obj.fontFamily === 'string') (obj as any).__originalFontFamily = obj.fontFamily
+        if (typeof obj.width === 'number') obj.__originalWidth = obj.width
+        if (typeof obj.height === 'number') obj.__originalHeight = obj.height
       }
 
       if (obj.type === 'circle' && typeof obj.radius === 'number') {
@@ -491,11 +523,11 @@ const loadTemplate = async () => {
 
   canvas.clear()
   group = await instantiateGroupFromTemplate(props.template)
+  normalizeEditorGroupTransform(group)
 
   console.log('[MiniEditor] Template loaded, listing objects:')
   listAllObjects(group)
 
-  normalizeAndLayoutForEditor(group)
   canvas.add(group)
   canvas.setActiveObject(group)
   resizeCanvasToViewport()
@@ -936,6 +968,29 @@ const setZoom = (pct: number) => {
   canvas.requestRenderAll()
 }
 
+const commitEditingTextObjects = (root: any) => {
+  if (!root) return
+  const queue: any[] = [root]
+  while (queue.length) {
+    const cur = queue.shift()
+    if (!cur) continue
+    const t = String(cur?.type || '').toLowerCase()
+    if ((t === 'i-text' || t === 'textbox' || t === 'text') && cur?.isEditing && typeof cur.exitEditing === 'function') {
+      try {
+        cur.exitEditing()
+      } catch {
+        // ignore individual object failures and continue committing the rest
+      }
+      cur.initDimensions?.()
+      cur.setCoords?.()
+    }
+    const children: any[] = Array.isArray(cur?._objects)
+      ? cur._objects
+      : (typeof cur?.getObjects === 'function' ? cur.getObjects() : [])
+    for (const child of children || []) queue.push(child)
+  }
+}
+
 const save = async () => {
   if (!props.template || !group) return
   if (isSaving.value) return
@@ -945,6 +1000,24 @@ const save = async () => {
   const name = editorName.value.trim() || props.template.name
 
   try {
+    // Commit any in-place text editing before serialization.
+    try {
+      const active = canvas?.getActiveObject?.()
+      const t = String(active?.type || '').toLowerCase()
+      if ((t === 'i-text' || t === 'textbox') && active?.isEditing && typeof active.exitEditing === 'function') {
+        active.exitEditing()
+        active.setCoords?.()
+        canvas?.requestRenderAll?.()
+      }
+      // In subTarget/group editing mode the active object can be the parent group.
+      // Ensure all nested text edits are committed before serializing.
+      commitEditingTextObjects(group)
+      if (active && active !== group) commitEditingTextObjects(active)
+      safeAddWithUpdate(group)
+    } catch {
+      // ignore
+    }
+
     const groupJson = serializeGroupForTemplate(group)
 
     // Preview = current editor canvas. This can fail if the canvas is tainted
@@ -1826,7 +1899,7 @@ watch(
 </template>
 
 <style scoped>
-@import "tailwindcss";
+@reference "tailwindcss";
 
 /* Container */
 .me-container {

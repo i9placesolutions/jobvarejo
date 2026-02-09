@@ -22,7 +22,7 @@
     "lucide-vue-next": "^0.562.0",
     "nuxt": "^4.2.2",
     "openai": "^6.16.0",
-    "pdf-parse": "^1.1.1",
+    "pdf2json": "^4.0.2",
     "pngjs": "^7.0.0",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",
@@ -32,9 +32,9 @@
     "xlsx": "^0.18.5"
   },
   "optionalDependencies": {
-    "sharp": "^0.34.5",
     "@imgly/background-removal": "^1.7.0",
-    "@imgly/background-removal-node": "^1.4.5"
+    "@imgly/background-removal-node": "^1.4.5",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/webfontloader": "^1.6.38",

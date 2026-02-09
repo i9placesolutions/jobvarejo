@@ -19,11 +19,22 @@ const isLoading = ref(false)
 const searchQuery = ref('')
 const showConfirmDialog = ref(false)
 const pendingDeleteId = ref<string | null>(null)
+const supabase = useSupabase()
+
+const getApiAuthHeaders = async () => {
+  const { data, error } = await supabase.auth.getSession()
+  const token = data?.session?.access_token
+  if (error || !token) {
+    throw new Error('Sessão expirada. Faça login novamente.')
+  }
+  return { Authorization: `Bearer ${token}` }
+}
 
 const fetchProjects = async () => {
   isLoading.value = true
   try {
-      const data = await $fetch('/api/projects');
+      const headers = await getApiAuthHeaders()
+      const data = await $fetch('/api/projects', { headers });
       if (data) {
         projects.value = Array.isArray(data) ? data : [];
       }

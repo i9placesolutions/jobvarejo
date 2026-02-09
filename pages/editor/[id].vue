@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from 'vue'
+import { onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue'
 import { useProject } from '~/composables/useProject'
-import EditorCanvas from '~/components/EditorCanvas.vue'
+
+const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanvas.vue'))
 
 // Get project ID from route
 const route = useRoute()

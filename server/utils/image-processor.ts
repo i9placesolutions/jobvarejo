@@ -53,7 +53,7 @@ const refineAlphaChannel = async (buffer: Buffer, sharp: any): Promise<Buffer> =
         // ──────────────────────────────────────────────
         const alphaOrig = new Uint8Array(totalPixels);
         for (let i = 0; i < totalPixels; i++) {
-            alphaOrig[i] = data[i * 4 + 3];
+            alphaOrig[i] = data[i * 4 + 3] ?? 0;
         }
 
         // ──────────────────────────────────────────────
@@ -71,7 +71,7 @@ const refineAlphaChannel = async (buffer: Buffer, sharp: any): Promise<Buffer> =
                     for (let dx = -1; dx <= 1; dx++) {
                         const nx = x + dx;
                         if (nx < 0 || nx >= w) continue;
-                        const a = alphaOrig[ny * w + nx];
+                        const a = alphaOrig[ny * w + nx] ?? 0;
                         if (a > maxA) maxA = a;
                     }
                 }
@@ -95,7 +95,7 @@ const refineAlphaChannel = async (buffer: Buffer, sharp: any): Promise<Buffer> =
                     for (let dx = -1; dx <= 1; dx++) {
                         const nx = x + dx;
                         if (nx < 0 || nx >= w) continue;
-                        const a = alphaDilated[ny * w + nx];
+                        const a = alphaDilated[ny * w + nx] ?? 0;
                         if (a < minA) minA = a;
                     }
                 }
@@ -114,12 +114,12 @@ const refineAlphaChannel = async (buffer: Buffer, sharp: any): Promise<Buffer> =
         // ──────────────────────────────────────────────
         for (let i = 0; i < totalPixels; i++) {
             const px = i * 4;
-            const r = data[px];
-            const g = data[px + 1];
-            const b = data[px + 2];
-            const origA = alphaOrig[i];
-            const dilA  = alphaDilated[i];
-            const closedA = alphaClosed[i];
+            const r = data[px] ?? 0;
+            const g = data[px + 1] ?? 0;
+            const b = data[px + 2] ?? 0;
+            const origA = alphaOrig[i] ?? 0;
+            const dilA  = alphaDilated[i] ?? 0;
+            const closedA = alphaClosed[i] ?? 0;
 
             // Mesclar: usar o maior entre original e 60 % do dilatado
             let alpha = Math.max(origA, Math.round(dilA * 0.6));
@@ -215,6 +215,8 @@ type ProcessImageOptions = {
     outputFormat?: 'webp' | 'png';
     /** Se true, lança erro em vez de retornar imagem original quando bg removal falha */
     strict?: boolean;
+    /** Se true, não pula a etapa de remoção mesmo quando já existe alpha parcial */
+    forceBgRemoval?: boolean;
     // Opções de refinamento do removedor de fundo
     bgRemoval?: {
         model?: 'small' | 'medium' | 'large';
@@ -324,6 +326,8 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
     const sharp = await getSharp();
     const outputFormat: 'webp' | 'png' = options.outputFormat || 'webp';
     const bgOptions = options.bgRemoval || {};
+    const strictMode = options.strict === true;
+    const forceBgRemoval = options.forceBgRemoval === true;
 
     console.log('🖼️ [Image Process] Iniciando processamento de imagem...');
     console.log(`📊 [Image Process] Buffer original: ${imageBuffer.length} bytes`);
@@ -342,17 +346,17 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
     console.log(`📊 [Image Process] Após resize: ${resizedBuffer.length} bytes, ${resizedMeta.width}x${resizedMeta.height}`);
 
     try {
-        // 1.5. If the input already has a transparent background, avoid running background removal.
-        // This prevents false positives that "remove" parts of the subject (e.g., text/logos).
-        if (await shouldSkipBackgroundRemoval(resizedBuffer, sharp)) {
-            if (options.strict) {
-                console.log('🧠 [Image Process][STRICT] Imagem já tem transparência — considerando OK');
-                // Em modo strict, retorna a imagem redimensionada (já tem alpha)
-            }
+        // 1.5. If input already has transparency, we may skip to avoid degrading cutouts.
+        // In "forceBgRemoval" mode (used by explicit "remove background" action), always process.
+        const shouldSkip = await shouldSkipBackgroundRemoval(resizedBuffer, sharp);
+        if (shouldSkip && !forceBgRemoval) {
             const passthrough = outputFormat === 'png'
                 ? await sharp(resizedBuffer).png().toBuffer()
                 : await sharp(resizedBuffer).webp({ quality: 85, alphaQuality: 100 }).toBuffer();
             return passthrough;
+        }
+        if (shouldSkip && forceBgRemoval) {
+            console.log('🧠 [Image Process] forceBgRemoval ativo: executando remoção mesmo com alpha pré-existente');
         }
 
         const lightRisk = await isMostlyLightLowContrast(resizedBuffer, sharp);
@@ -419,8 +423,20 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
                     const fallbackBuffer = outputFormat === 'png'
                         ? await fallbackPipeline.png().toBuffer()
                         : await fallbackPipeline.webp({ quality: 85 }).toBuffer();
+                    if (strictMode) {
+                        throw new Error('[Image Process][STRICT] Resultado muito transparente após remoção de fundo');
+                    }
                     return fallbackBuffer;
                 }
+            }
+        }
+
+        // Em modo estrito, exigir transparência real no resultado para evitar sucesso falso.
+        if (strictMode) {
+            const outStats = await getAlphaStats(refinedBuffer, sharp);
+            const transparentLike = outStats ? (outStats.transparentPercent + outStats.semiPercent) : 0;
+            if (!outStats || transparentLike < 2) {
+                throw new Error('[Image Process][STRICT] Remoção de fundo não gerou transparência detectável');
             }
         }
 
@@ -444,7 +460,7 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         console.error('❌ [Image Process] Erro na remoção de fundo:', error?.message || error);
         
         // Em modo strict, NÃO fazer fallback — propagar o erro
-        if (options.strict) {
+        if (strictMode) {
             throw new Error(`[Image Process][STRICT] Falha na remoção de fundo: ${error?.message || error}`);
         }
         

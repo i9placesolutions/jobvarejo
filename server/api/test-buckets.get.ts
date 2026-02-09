@@ -1,7 +1,13 @@
 import { ListBucketsCommand } from '@aws-sdk/client-s3'
 import { getS3Client } from '~/server/utils/s3'
+import { requireAuthenticatedUser } from '../utils/auth'
 
 export default defineEventHandler(async (event) => {
+  await requireAuthenticatedUser(event)
+  if (process.env.NODE_ENV !== 'development') {
+    throw createError({ statusCode: 404, statusMessage: 'Not found' })
+  }
+
   try {
     const s3Client = getS3Client()
     const config = useRuntimeConfig()

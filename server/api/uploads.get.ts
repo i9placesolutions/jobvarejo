@@ -24,14 +24,13 @@ export default defineEventHandler(async (event) => {
                 .filter(item => !String(item.Key).startsWith('uploads/bg-removed-')) // Hide derived assets from list
                 .map(async (item, index) => {
                     const keyParts = item.Key!.split('/');
-                    const fileName = keyParts[keyParts.length - 1];
+                    const fileName = keyParts[keyParts.length - 1] || '';
                     const cleanName = fileName.replace(/^\d+-/, '');
 
                     // Generate pre-signed URL (valid for 1 hour)
                     const getCommand = new GetObjectCommand({
                         Bucket: bucketName,
-                        Key: item.Key!,
-                        ChecksumMode: 'DISABLED'
+                        Key: item.Key!
                     });
                     const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
 

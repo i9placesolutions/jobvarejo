@@ -18,27 +18,25 @@ const updateAuthCookie = (authenticated: boolean) => {
 }
 
 export const useAuth = () => {
-  // Initialize state (lazy, only when composable is called)
-  if (!stateCache) {
-    stateCache = useState<AuthState>('auth', () => ({
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
-    }))
-  }
+  const state = stateCache ?? useState<AuthState>('auth', () => ({
+    user: null,
+    isAuthenticated: false,
+    isLoading: false,
+  }))
+  stateCache = state
 
   const supabase = useSupabase()
 
   // Get current session and profile
   const getSession = async () => {
-    stateCache.value.isLoading = true
+    state.value.isLoading = true
 
     try {
       const { data: { session }, error } = await supabase.auth.getSession()
 
       if (error || !session?.user) {
-        stateCache.value.user = null
-        stateCache.value.isAuthenticated = false
+        state.value.user = null
+        state.value.isAuthenticated = false
         updateAuthCookie(false)
         return null
       }
@@ -51,26 +49,26 @@ export const useAuth = () => {
         .single()
 
       if (profile) {
-        stateCache.value.user = {
+        state.value.user = {
           id: session.user.id,
           email: session.user.email!,
           name: profile.name,
           avatar_url: profile.avatar_url,
           role: profile.role,
         }
-        stateCache.value.isAuthenticated = true
+        state.value.isAuthenticated = true
         updateAuthCookie(true)
       }
 
       return session
     } catch (error) {
       console.error('Error getting session:', error)
-      stateCache.value.user = null
-      stateCache.value.isAuthenticated = false
+      state.value.user = null
+      state.value.isAuthenticated = false
       updateAuthCookie(false)
       return null
     } finally {
-      stateCache.value.isLoading = false
+      state.value.isLoading = false
     }
   }
 
@@ -94,14 +92,14 @@ export const useAuth = () => {
         .single()
 
       if (profile) {
-        stateCache.value.user = {
+        state.value.user = {
           id: data.user.id,
           email: data.user.email!,
           name: profile.name,
           avatar_url: profile.avatar_url,
           role: profile.role,
         }
-        stateCache.value.isAuthenticated = true
+        state.value.isAuthenticated = true
         updateAuthCookie(true)
       }
     }
@@ -131,31 +129,31 @@ export const useAuth = () => {
   // Sign out
   const signOut = async () => {
     await supabase.auth.signOut()
-    stateCache.value.user = null
-    stateCache.value.isAuthenticated = false
+    state.value.user = null
+    state.value.isAuthenticated = false
     updateAuthCookie(false)
     await navigateTo('/auth/login')
   }
 
   // Check if user has specific role
   const hasRole = (role: string) => {
-    return stateCache.value.user?.role === role
+    return state.value.user?.role === role
   }
 
   // Check if user is super admin
-  const isSuperAdmin = computed(() => stateCache.value.user?.role === 'super_admin')
+  const isSuperAdmin = computed(() => state.value.user?.role === 'super_admin')
 
   // Check if user is admin (admin or super admin)
   const isAdmin = computed(() =>
-    stateCache.value.user?.role === 'super_admin' ||
-    stateCache.value.user?.role === 'admin'
+    state.value.user?.role === 'super_admin' ||
+    state.value.user?.role === 'admin'
   )
 
   return {
     // State
-    user: computed(() => stateCache.value.user),
-    isAuthenticated: computed(() => stateCache.value.isAuthenticated),
-    isLoading: computed(() => stateCache.value.isLoading),
+    user: computed(() => state.value.user),
+    isAuthenticated: computed(() => state.value.isAuthenticated),
+    isLoading: computed(() => state.value.isLoading),
 
     // Methods
     getSession,

@@ -55,7 +55,7 @@ export const openAiGenerateImage = async (opts: {
   return { buffer, mime: 'image/png' }
 }
 
-const partDataToBlob = (buf: Buffer, mime: string) => new Blob([buf], { type: mime })
+const partDataToBlob = (buf: Buffer, mime: string) => new Blob([Uint8Array.from(buf)], { type: mime })
 
 export const openAiEditImage = async (opts: {
   prompt: string

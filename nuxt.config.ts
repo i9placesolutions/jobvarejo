@@ -104,7 +104,22 @@ export default defineNuxtConfig({
     build: {
       rollupOptions: {
         output: {
-          manualChunks: undefined,
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+
+            if (id.includes('/fabric/')) return 'vendor-fabric'
+            if (id.includes('/lucide-vue-next/')) return 'vendor-icons'
+            if (id.includes('/@supabase/')) return 'vendor-supabase'
+            if (id.includes('/@aws-sdk/')) return 'vendor-aws'
+            if (id.includes('/openai/')) return 'vendor-openai'
+            if (id.includes('/xlsx/')) return 'vendor-xlsx'
+            if (id.includes('/pdf-parse/')) return 'vendor-pdf'
+            if (
+              id.includes('/vue/') ||
+              id.includes('/vue-router/') ||
+              id.includes('/@vue/')
+            ) return 'vendor-vue'
+          },
         }
       }
     }

@@ -7,7 +7,7 @@
  * - Seleção e manipulação
  */
 
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import type { 
   Product, 
   ProductImage, 
@@ -20,7 +20,6 @@ import type {
 import { 
   DEFAULT_PRODUCT_ZONE, 
   DEFAULT_GLOBAL_STYLES, 
-  DEFAULT_SPLASH,
   LAYOUT_PRESETS 
 } from '~/types/product-zone';
 import {
@@ -30,9 +29,7 @@ import {
   migrateProductZone,
   calculateGridLayout,
   calculateProductPosition,
-  calculateOptimalImageSize,
-  parsePrice,
-  formatPriceBR
+  calculateOptimalImageSize
 } from '~/utils/product-zone-helpers';
 
 // Estado global singleton
@@ -231,17 +228,16 @@ export const useProductZone = () => {
     
     const newProducts: Product[] = [];
     const newSplashes: Splash[] = [];
+    const totalCount = products.value.length + productList.length;
+    const { cols, itemWidth, itemHeight } = calculateGridLayout(
+      productZone.value,
+      totalCount
+    );
     
     productList.forEach((prod, idx) => {
       const totalIndex = products.value.length + idx;
       const newProduct = createDefaultProduct(prod);
       const migrated = migrateProduct(newProduct);
-      
-      // Calcular posição
-      const { cols, itemWidth, itemHeight } = calculateGridLayout(
-        productZone.value,
-        products.value.length + productList.length
-      );
       
       const position = calculateProductPosition(
         productZone.value,
@@ -249,7 +245,7 @@ export const useProductZone = () => {
         cols,
         itemWidth,
         itemHeight,
-        products.value.length + productList.length
+        totalCount
       );
       
       migrated.x = position.x;
@@ -356,13 +352,14 @@ export const useProductZone = () => {
   const recalculateLayout = () => {
     if (products.value.length === 0) return;
     
-    const { cols, rows, itemWidth, itemHeight } = calculateGridLayout(
+    const { cols, itemWidth, itemHeight } = calculateGridLayout(
       productZone.value,
       products.value.length
     );
-    
-    products.value.forEach((product, index) => {
-      if (product.isFreeMode) return; // Skip produtos em free mode
+
+    const gridProducts = products.value.filter(product => !product.isFreeMode);
+
+    gridProducts.forEach((product, index) => {
       
       const position = calculateProductPosition(
         productZone.value,
@@ -370,7 +367,7 @@ export const useProductZone = () => {
         cols,
         itemWidth,
         itemHeight,
-        products.value.length
+        gridProducts.length
       );
       
       product.x = position.x;
@@ -388,15 +385,27 @@ export const useProductZone = () => {
   const applyPreset = (presetId: string) => {
     const preset = LAYOUT_PRESETS.find(p => p.id === presetId);
     if (!preset) return;
-    
-    saveToHistory();
-    
+
+    const defaultPadding = Number.isFinite(Number(preset.padding))
+      ? Number(preset.padding)
+      : Number(productZone.value.padding ?? DEFAULT_PRODUCT_ZONE.padding ?? 15);
+    const nextPadding = Math.max(0, defaultPadding);
+    const nextGapH = Math.max(0, Number.isFinite(Number(preset.gapHorizontal)) ? Number(preset.gapHorizontal) : nextPadding);
+    const nextGapV = Math.max(0, Number.isFinite(Number(preset.gapVertical)) ? Number(preset.gapVertical) : nextPadding);
+
     updateZone({
       columns: preset.columns,
       rows: preset.rows,
       layoutDirection: preset.layoutDirection,
       cardAspectRatio: preset.cardAspectRatio,
-      lastRowBehavior: preset.lastRowBehavior
+      lastRowBehavior: preset.lastRowBehavior,
+      verticalAlign: preset.verticalAlign ?? productZone.value.verticalAlign ?? DEFAULT_PRODUCT_ZONE.verticalAlign ?? 'top',
+      padding: nextPadding,
+      gapHorizontal: nextGapH,
+      gapVertical: nextGapV,
+      highlightCount: preset.highlightCount ?? 0,
+      highlightPos: preset.highlightPos ?? 'first',
+      highlightHeight: preset.highlightHeight ?? 1.5
     });
     
     recalculateLayout();
@@ -462,6 +471,12 @@ export const useProductZone = () => {
     if (historyIndex.value < historyStack.value.length - 1) {
       historyStack.value = historyStack.value.slice(0, historyIndex.value + 1);
     }
+
+    // Evita snapshots idênticos consecutivos.
+    if (historyStack.value.length > 0 && historyStack.value[historyStack.value.length - 1] === state) {
+      historyIndex.value = historyStack.value.length - 1;
+      return;
+    }
     
     historyStack.value.push(state);
     historyIndex.value = historyStack.value.length - 1;
@@ -473,40 +488,55 @@ export const useProductZone = () => {
     }
   };
 
-  const undo = () => {
-    if (historyIndex.value <= 0) return;
-    
-    isHistoryAction.value = true;
-    historyIndex.value--;
-    
-    const historyEntry = historyStack.value[historyIndex.value];
-    if (!historyEntry) return;
-    
-    const state = JSON.parse(historyEntry);
+  const applySerializedState = (serialized: string) => {
+    const state = JSON.parse(serialized);
     products.value = state.products;
     splashes.value = state.splashes;
     productZone.value = state.zone;
     globalStyles.value = state.globalStyles;
-    
-    isHistoryAction.value = false;
+  };
+
+  const serializeCurrentState = () => {
+    return JSON.stringify({
+      products: products.value,
+      splashes: splashes.value,
+      zone: productZone.value,
+      globalStyles: globalStyles.value
+    });
+  };
+
+  const undo = () => {
+    if (historyIndex.value < 0) return;
+
+    isHistoryAction.value = true;
+    try {
+      const historyEntry = historyStack.value[historyIndex.value];
+      if (!historyEntry) return;
+
+      // Swap current state with previous snapshot to support redo without a second stack.
+      historyStack.value[historyIndex.value] = serializeCurrentState();
+      historyIndex.value--;
+      applySerializedState(historyEntry);
+    } finally {
+      isHistoryAction.value = false;
+    }
   };
 
   const redo = () => {
     if (historyIndex.value >= historyStack.value.length - 1) return;
-    
+
     isHistoryAction.value = true;
-    historyIndex.value++;
-    
-    const historyEntry = historyStack.value[historyIndex.value];
-    if (!historyEntry) return;
-    
-    const state = JSON.parse(historyEntry);
-    products.value = state.products;
-    splashes.value = state.splashes;
-    productZone.value = state.zone;
-    globalStyles.value = state.globalStyles;
-    
-    isHistoryAction.value = false;
+    try {
+      const nextIndex = historyIndex.value + 1;
+      const historyEntry = historyStack.value[nextIndex];
+      if (!historyEntry) return;
+
+      historyStack.value[nextIndex] = serializeCurrentState();
+      historyIndex.value = nextIndex;
+      applySerializedState(historyEntry);
+    } finally {
+      isHistoryAction.value = false;
+    }
   };
 
   // ==========================================================================

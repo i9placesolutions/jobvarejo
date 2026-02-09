@@ -119,7 +119,21 @@ export const useFolder = () => {
       // Update local state
       const index = folders.value.findIndex(f => f.id === folderId)
       if (index !== -1) {
-        folders.value[index] = { ...folders.value[index], ...updates }
+        const current = folders.value[index]
+        if (!current) return
+        folders.value[index] = {
+          ...current,
+          ...updates,
+          id: current.id,
+          name: updates.name ?? current.name,
+          parent_id: updates.parent_id ?? current.parent_id,
+          user_id: current.user_id,
+          icon: updates.icon ?? current.icon,
+          color: updates.color ?? current.color,
+          order_index: updates.order_index ?? current.order_index,
+          created_at: current.created_at,
+          updated_at: updates.updated_at ?? current.updated_at,
+        }
       }
     } catch (error) {
       console.error('Error updating folder:', error)

@@ -89,11 +89,9 @@ export default defineEventHandler(async (event) => {
         ACL: 'public-read'
       })
     } else {
-      // Disable checksum mode para S3-compatible storage
       command = new GetObjectCommand({
         Bucket: bucket,
-        Key: key,
-        ChecksumMode: 'DISABLED'
+        Key: key
       })
     }
 

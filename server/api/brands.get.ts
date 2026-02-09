@@ -41,8 +41,7 @@ export default defineEventHandler(async (event) => {
                     // Generate pre-signed URL (valid for 1 hour)
                     const getCommand = new GetObjectCommand({
                         Bucket: bucketName,
-                        Key: item.Key!,
-                        ChecksumMode: 'DISABLED'
+                        Key: item.Key!
                     });
                     const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
 

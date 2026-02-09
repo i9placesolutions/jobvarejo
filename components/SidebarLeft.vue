@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, defineAsyncComponent } from 'vue'
 import { useProject } from '~/composables/useProject'
 import { Search, Plus, FileText, Copy, Trash2, Box, ChevronDown, Menu } from 'lucide-vue-next'
-import AssetsPanel from './AssetsPanel.vue'
-import ElementsPanel from './ElementsPanel.vue'
+
+const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
+const ElementsPanel = defineAsyncComponent(() => import('./ElementsPanel.vue'))
 
 const { project, activePage, switchPage, addPage, duplicatePage, deletePage } = useProject()
 

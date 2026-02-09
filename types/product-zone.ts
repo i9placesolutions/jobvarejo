@@ -207,6 +207,7 @@ export interface GlobalStyles {
   // Splash
   splashStyle?: Splash['style'];
   splashColor?: string;
+  splashSpecialColor?: string;
   splashTextColor?: string;
   // When set, uses a custom label template instead of the built-in splash style.
   splashTemplateId?: string;
@@ -229,7 +230,7 @@ export interface GlobalStyles {
 }
 
 // === LAYOUT PRESET ===
-export type LayoutPresetCategory = 'basic' | 'grid' | 'vertical' | 'horizontal' | 'special';
+export type LayoutPresetCategory = 'grid' | 'special';
 
 export interface LayoutPreset {
   id: string;
@@ -241,154 +242,234 @@ export interface LayoutPreset {
   layoutDirection?: 'horizontal' | 'vertical';
   cardAspectRatio?: ProductZone['cardAspectRatio'];
   lastRowBehavior?: ProductZone['lastRowBehavior'];
+  verticalAlign?: ProductZone['verticalAlign'];
+  padding?: number;
+  gapHorizontal?: number;
+  gapVertical?: number;
   description?: string;
-  // Optional extra settings for special presets
+  // Highlight settings for special presets
   highlightCount?: number;
   highlightPos?: 'first' | 'last' | 'random';
   highlightHeight?: number;
-  highlightStyle?: 'larger' | 'featured' | 'banner';
+  // UI preview metadata (mini thumbnail in ProductZoneSettings)
+  previewKind?: 'grid' | 'hero' | 'sidebar';
+  previewCols?: number;
+  previewRows?: number;
+  previewCount?: number;
 }
 
 // === PRESET DEFINITIONS ===
+// Simplified: grid presets (auto + column count) + special layouts (highlight)
 export const LAYOUT_PRESETS: LayoutPreset[] = [
-  // ==================== BÁSICOS ====================
+  // ==================== GRID ====================
   {
     id: 'auto',
     name: 'Automático',
     icon: 'wand',
-    category: 'basic',
+    category: 'grid',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
-    cardAspectRatio: 'auto',
+    cardAspectRatio: 'fill',
     lastRowBehavior: 'fill',
-    description: 'Calcula automaticamente baseado no espaço disponível'
+    padding: 15,
+    gapHorizontal: 15,
+    gapVertical: 15,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 3,
+    previewRows: 3,
+    description: 'Calcula automaticamente a melhor distribuição'
   },
   {
-    id: 'grid-2',
+    id: 'cols-1',
+    name: '1 Coluna',
+    icon: 'rows',
+    category: 'grid',
+    columns: 1,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 16,
+    gapHorizontal: 14,
+    gapVertical: 14,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 1,
+    previewRows: 4,
+    description: 'Lista vertical com 1 produto por linha'
+  },
+  {
+    id: 'cols-2',
     name: '2 Colunas',
     icon: 'grid-2x2',
-    category: 'basic',
+    category: 'grid',
     columns: 2,
     rows: 0,
     layoutDirection: 'horizontal',
-    cardAspectRatio: '3:4',
+    cardAspectRatio: 'fill',
     lastRowBehavior: 'fill',
-    description: 'Grid com 2 colunas fixas'
+    padding: 15,
+    gapHorizontal: 14,
+    gapVertical: 14,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 2,
+    previewRows: 3,
+    description: '2 produtos por linha'
   },
   {
-    id: 'grid-3',
+    id: 'cols-3',
     name: '3 Colunas',
     icon: 'grid-3x3',
-    category: 'basic',
+    category: 'grid',
     columns: 3,
     rows: 0,
     layoutDirection: 'horizontal',
-    cardAspectRatio: '3:4',
+    cardAspectRatio: 'fill',
     lastRowBehavior: 'fill',
-    description: 'Grid com 3 colunas fixas'
+    padding: 14,
+    gapHorizontal: 12,
+    gapVertical: 12,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 3,
+    previewRows: 3,
+    description: '3 produtos por linha'
   },
-
-  // ==================== GRIDS ====================
   {
-    id: 'grid-4',
+    id: 'cols-4',
     name: '4 Colunas',
     icon: 'layout-grid',
     category: 'grid',
     columns: 4,
     rows: 0,
     layoutDirection: 'horizontal',
-    cardAspectRatio: 'square',
+    cardAspectRatio: 'fill',
     lastRowBehavior: 'fill',
-    description: 'Grid denso com 4 colunas'
+    padding: 12,
+    gapHorizontal: 10,
+    gapVertical: 10,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 4,
+    previewRows: 3,
+    description: '4 produtos por linha'
   },
   {
-    id: 'grid-5',
+    id: 'cols-5',
     name: '5 Colunas',
     icon: 'layout-grid',
     category: 'grid',
     columns: 5,
     rows: 0,
     layoutDirection: 'horizontal',
-    cardAspectRatio: 'square',
+    cardAspectRatio: 'fill',
     lastRowBehavior: 'fill',
-    description: 'Grid muito denso com 5 colunas'
+    padding: 10,
+    gapHorizontal: 8,
+    gapVertical: 8,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 5,
+    previewRows: 2,
+    description: '5 produtos por linha'
   },
   {
-    id: 'grid-6',
+    id: 'cols-6',
     name: '6 Colunas',
     icon: 'layout-grid',
     category: 'grid',
     columns: 6,
     rows: 0,
     layoutDirection: 'horizontal',
-    cardAspectRatio: 'square',
+    cardAspectRatio: 'fill',
     lastRowBehavior: 'fill',
-    description: 'Máxima densidade com 6 colunas'
-  },
-
-  // ==================== VERTICAIS ====================
-  {
-    id: 'list',
-    name: 'Lista',
-    icon: 'list',
-    category: 'vertical',
-    columns: 1,
-    rows: 0,
-    layoutDirection: 'vertical',
-    cardAspectRatio: '16:9',
-    lastRowBehavior: 'stretch',
-    description: 'Lista vertical com cards largos'
+    padding: 8,
+    gapHorizontal: 6,
+    gapVertical: 6,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 6,
+    previewRows: 2,
+    description: '6 produtos por linha'
   },
   {
-    id: 'sidebar',
-    name: 'Barra Lateral',
-    icon: 'sidebar',
-    category: 'vertical',
-    columns: 1,
-    rows: 0,
-    layoutDirection: 'vertical',
-    cardAspectRatio: '9:16',
-    lastRowBehavior: 'fill',
-    description: 'Coluna vertical estreita'
-  },
-  {
-    id: 'cards',
-    name: 'Cartões',
-    icon: 'credit-card',
-    category: 'vertical',
+    id: 'grid-2x3',
+    name: 'Grid 2×3',
+    icon: 'grid-2x2',
+    category: 'grid',
     columns: 2,
-    rows: 0,
+    rows: 3,
     layoutDirection: 'horizontal',
-    cardAspectRatio: 'square',
+    cardAspectRatio: 'fill',
     lastRowBehavior: 'fill',
-    description: 'Cartões quadrados organizados'
-  },
-
-  // ==================== HORIZONTAIS ====================
-  {
-    id: 'horizontal',
-    name: 'Horizontal',
-    icon: 'arrow-right',
-    category: 'horizontal',
-    columns: 0,
-    rows: 1,
-    layoutDirection: 'horizontal',
-    cardAspectRatio: '16:9',
-    lastRowBehavior: 'stretch',
-    description: 'Linha única de produtos'
+    padding: 14,
+    gapHorizontal: 12,
+    gapVertical: 12,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 2,
+    previewRows: 3,
+    description: 'Tabloide 2×3 (ajuste automático quando necessário)'
   },
   {
-    id: 'magazine',
-    name: 'Revista',
-    icon: 'book-open',
-    category: 'horizontal',
-    columns: 2,
-    rows: 0,
+    id: 'grid-3x4',
+    name: 'Grid 3×4',
+    icon: 'grid-3x3',
+    category: 'grid',
+    columns: 3,
+    rows: 4,
     layoutDirection: 'horizontal',
-    cardAspectRatio: '4:3',
+    cardAspectRatio: 'fill',
     lastRowBehavior: 'fill',
-    description: 'Estilo revista/catálogo'
+    padding: 12,
+    gapHorizontal: 10,
+    gapVertical: 10,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 3,
+    previewRows: 4,
+    description: 'Encarte 3×4 para maior densidade'
+  },
+  {
+    id: 'grid-4x4',
+    name: 'Grid 4×4',
+    icon: 'layout-grid',
+    category: 'grid',
+    columns: 4,
+    rows: 4,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 10,
+    gapHorizontal: 8,
+    gapVertical: 8,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Volume alto com 16 slots-base'
+  },
+  {
+    id: 'grid-5x2',
+    name: 'Grid 5×2',
+    icon: 'layout-grid',
+    category: 'grid',
+    columns: 5,
+    rows: 2,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 9,
+    gapHorizontal: 7,
+    gapVertical: 7,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 5,
+    previewRows: 2,
+    description: 'Faixa horizontal com alta largura'
   },
 
   // ==================== ESPECIAIS ====================
@@ -397,30 +478,147 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Destaque',
     icon: 'star',
     category: 'special',
-    columns: 2,
+    columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
-    cardAspectRatio: '3:4',
-    lastRowBehavior: 'center',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 14,
+    gapHorizontal: 12,
+    gapVertical: 12,
     highlightCount: 1,
     highlightPos: 'first',
     highlightHeight: 1.5,
-    description: '1 produto em destaque + grid'
+    previewKind: 'hero',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Primeiro produto maior (1.5x)'
+  },
+  {
+    id: 'featured-2',
+    name: 'Destaque x2',
+    icon: 'star',
+    category: 'special',
+    columns: 0,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 14,
+    gapHorizontal: 12,
+    gapVertical: 12,
+    highlightCount: 2,
+    highlightPos: 'first',
+    highlightHeight: 1.5,
+    previewKind: 'sidebar',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Dois primeiros produtos maiores (1.5x)'
   },
   {
     id: 'showcase',
     name: 'Vitrine',
     icon: 'sparkles',
     category: 'special',
-    columns: 3,
+    columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
-    cardAspectRatio: '3:4',
+    cardAspectRatio: 'fill',
     lastRowBehavior: 'fill',
+    padding: 12,
+    gapHorizontal: 10,
+    gapVertical: 10,
     highlightCount: 1,
     highlightPos: 'first',
     highlightHeight: 2,
-    description: 'Produto grande em destaque'
+    previewKind: 'hero',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Primeiro produto bem grande (2x)'
+  },
+  {
+    id: 'hero-left',
+    name: 'Hero Esquerda',
+    icon: 'sparkles',
+    category: 'special',
+    columns: 3,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 12,
+    gapHorizontal: 10,
+    gapVertical: 10,
+    highlightCount: 1,
+    highlightPos: 'first',
+    highlightHeight: 2.4,
+    previewKind: 'hero',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Bloco principal grande à esquerda'
+  },
+  {
+    id: 'hero-right',
+    name: 'Hero Direita',
+    icon: 'sparkles',
+    category: 'special',
+    columns: 3,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 12,
+    gapHorizontal: 10,
+    gapVertical: 10,
+    highlightCount: 1,
+    highlightPos: 'last',
+    highlightHeight: 2.4,
+    previewKind: 'hero',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Bloco principal grande à direita'
+  },
+  {
+    id: 'sidebar-left',
+    name: 'Coluna Esq.',
+    icon: 'star',
+    category: 'special',
+    columns: 4,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 11,
+    gapHorizontal: 9,
+    gapVertical: 9,
+    highlightCount: 3,
+    highlightPos: 'first',
+    highlightHeight: 1.9,
+    previewKind: 'sidebar',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Coluna lateral de destaque à esquerda'
+  },
+  {
+    id: 'sidebar-right',
+    name: 'Coluna Dir.',
+    icon: 'star',
+    category: 'special',
+    columns: 4,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 11,
+    gapHorizontal: 9,
+    gapVertical: 9,
+    highlightCount: 3,
+    highlightPos: 'last',
+    highlightHeight: 1.9,
+    previewKind: 'sidebar',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Coluna lateral de destaque à direita'
   }
 ];
 
@@ -459,8 +657,8 @@ export const DEFAULT_PRODUCT_ZONE: ProductZone = {
   columns: 0,
   rows: 0,
   layoutDirection: 'horizontal',
-  cardAspectRatio: 'auto',
-  lastRowBehavior: 'center',
+  cardAspectRatio: 'fill',
+  lastRowBehavior: 'fill',
   verticalAlign: 'stretch',
   highlightCount: 0,
   isLocked: false,

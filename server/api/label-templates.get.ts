@@ -1,22 +1,19 @@
-import { createClient } from '@supabase/supabase-js'
+import { createSupabaseAdmin } from '../utils/supabase'
+import { requireAuthenticatedUser } from '../utils/auth'
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig()
-  const query = getQuery(event)
+  const user = await requireAuthenticatedUser(event)
+  const userId = user.id
 
-  const userId = (query.userId as string | undefined) || undefined
-
-  const supabase = createClient(config.public.supabaseUrl, config.public.supabaseKey)
+  const supabase = createSupabaseAdmin()
 
   let q = supabase
     .from('label_templates')
     .select('id, user_id, name, kind, "group", preview_data_url, created_at, updated_at')
     .order('updated_at', { ascending: false })
 
-  // If userId is provided, fetch user templates + global ones (user_id is null).
-  if (userId) {
-    q = q.or(`user_id.eq.${userId},user_id.is.null`)
-  }
+  // Always fetch user templates + global templates for the authenticated user.
+  q = q.or(`user_id.eq.${userId},user_id.is.null`)
 
   const { data, error } = await q
   if (error) {
