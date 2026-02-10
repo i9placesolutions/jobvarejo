@@ -729,17 +729,33 @@ const FRAME_SPAWN_GAP = 48;
 
 const getFrameBounds = (frame: any) => {
     if (!frame) return null;
-    try {
-        const bounds = frame.getBoundingRect?.(true);
-        if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.top) && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)) {
-            return bounds;
+    const angle = Math.abs(Number(frame.angle || 0)) % 360;
+    if (angle > 0.001) {
+        try {
+            const rotatedBounds = frame.getBoundingRect?.(true);
+            if (
+                rotatedBounds &&
+                Number.isFinite(rotatedBounds.left) &&
+                Number.isFinite(rotatedBounds.top) &&
+                Number.isFinite(rotatedBounds.width) &&
+                Number.isFinite(rotatedBounds.height) &&
+                rotatedBounds.width > 0 &&
+                rotatedBounds.height > 0
+            ) {
+                return rotatedBounds;
+            }
+        } catch {
+            // fallback below
         }
-    } catch {}
+    }
 
-    const width = (Number(frame.width) || 0) * (Number(frame.scaleX) || 1);
-    const height = (Number(frame.height) || 0) * (Number(frame.scaleY) || 1);
-    const left = (Number(frame.left) || 0) - width / 2;
-    const top = (Number(frame.top) || 0) - height / 2;
+    const width = Math.abs((Number(frame.width) || 0) * (Number(frame.scaleX) || 1));
+    const height = Math.abs((Number(frame.height) || 0) * (Number(frame.scaleY) || 1));
+    const center = typeof frame.getCenterPoint === 'function'
+        ? frame.getCenterPoint()
+        : { x: Number(frame.left) || 0, y: Number(frame.top) || 0 };
+    const left = Number(center.x || 0) - (width / 2);
+    const top = Number(center.y || 0) - (height / 2);
     if (!Number.isFinite(left) || !Number.isFinite(top) || width <= 0 || height <= 0) return null;
     return { left, top, width, height };
 };
@@ -872,14 +888,44 @@ const ensureFramesBelowContents = () => {
     applyArrangedOrder(canvas.value, [...frames, ...rest, ...pinnedTop]);
 };
 
+const isFrameLikeObject = (obj: any) => {
+    if (!obj) return false;
+    if (obj.isFrame) return true;
+
+    const layerName = String(obj.layerName || '').trim().toUpperCase();
+    const name = String(obj.name || '').trim();
+    if (layerName === 'FRAMER' || layerName === 'FRAME' || /^FRAMER?\s+\d+\s*$/i.test(layerName)) return true;
+    if (/^FRAMER(?:\s+\d+)?$/i.test(name) || /^FRAME(?:\s+\d+)?\s*$/i.test(name)) return true;
+
+    const isRect = isRectObject(obj) || String(obj.type || '').toLowerCase() === 'rect';
+    if (isRect && (obj.clipContent === true || obj.clipContent === 1)) return true;
+    if (isRect && (obj.isGridCell === true || String(obj.gridGroupId || '').trim().length > 0)) return true;
+
+    return false;
+};
+
+const normalizeFrameRuntimeProps = (obj: any) => {
+    if (!obj || !isFrameLikeObject(obj)) return null;
+    if (!obj._customId) obj._customId = Math.random().toString(36).substr(2, 9);
+    if (!obj.isFrame) obj.isFrame = true;
+    if (typeof obj.clipContent !== 'boolean') obj.clipContent = true;
+    if (!obj.layerName) obj.layerName = 'FRAMER';
+    return obj;
+};
+
 const getFrameById = (id: string) => {
     if (!canvas.value || !id) return null;
-    return canvas.value.getObjects().find((o: any) => o?.isFrame && o._customId === id) || null;
+    return getAllFrames().find((o: any) => String(o?._customId || o?.id || '') === String(id)) || null;
 };
 
 const getAllFrames = () => {
     if (!canvas.value) return [];
-    return canvas.value.getObjects().filter((o: any) => !!o?.isFrame);
+    const frames: any[] = [];
+    canvas.value.getObjects().forEach((obj: any) => {
+        const normalized = normalizeFrameRuntimeProps(obj);
+        if (normalized) frames.push(normalized);
+    });
+    return frames;
 };
 
 const getOrCreateFrameClipRect = (frame: any) => {
@@ -4555,11 +4601,37 @@ const exportSettings = ref({
 })
 
 const availableFramesForExport = computed(() => {
-    if (!canvas.value) return []
-    return getAllFrames().map((f: any) => ({
-        id: f._customId || f.id || '',
-        name: f.layerName || f.name || 'Sem nome'
-    }))
+    const _activePage = Number(project.activePageIndex || 0);
+    const _objectsSnapshot = canvasObjects.value;
+    void _activePage;
+
+    if (!canvas.value) return [];
+
+    // Depend explicitly on reactive object snapshots. Fabric internals are non-reactive.
+    const sourceObjects = Array.isArray(_objectsSnapshot) && _objectsSnapshot.length > 0
+        ? _objectsSnapshot
+        : (canvas.value.getObjects?.() || []);
+    void sourceObjects.length;
+
+    const normalized: any[] = [];
+    sourceObjects.forEach((obj: any) => {
+        const frame = normalizeFrameRuntimeProps(obj);
+        if (frame) normalized.push(frame);
+    });
+    // Fallback to runtime query if snapshot is temporarily stale.
+    if (normalized.length === 0) {
+        getAllFrames().forEach((f: any) => normalized.push(f));
+    }
+
+    const byId = new Map<string, { id: string; name: string }>();
+    normalized.forEach((f: any, idx: number) => {
+        const id = String(f?._customId || f?.id || '').trim() || `frame-${idx + 1}`;
+        if (!f?._customId) f._customId = id;
+        const name = String(f?.name || f?.layerName || '').trim() || `Frame ${idx + 1}`;
+        if (!byId.has(id)) byId.set(id, { id, name });
+    });
+
+    return Array.from(byId.values());
 })
 
 const selectedFrameForExport = computed(() => {
@@ -5538,6 +5610,7 @@ const resizeCanvas = () => {
 // 3. Works on load, move, and scale
 // MUST be declared at component scope to be accessible in all event handlers
 let containmentZoneByIdCache: Map<string, any> | null = null;
+const pendingZoneRelayoutOnDrop = new Set<string>();
 
 const invalidateContainmentZoneCache = () => {
     containmentZoneByIdCache = null;
@@ -5545,6 +5618,59 @@ const invalidateContainmentZoneCache = () => {
 
 const hasParentZoneBinding = (obj: any) => {
     return String((obj as any)?.parentZoneId || '').trim().length > 0;
+};
+
+const getObjectCenterInParentPlane = (obj: any): { x: number; y: number } => {
+    if (!obj) return { x: 0, y: 0 };
+
+    // Preferred for grouped objects: center in parent/group coordinate plane.
+    try {
+        if (typeof obj.getRelativeCenterPoint === 'function') {
+            const p = obj.getRelativeCenterPoint();
+            if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) {
+                return { x: Number(p.x), y: Number(p.y) };
+            }
+        }
+    } catch {
+        // fallback below
+    }
+
+    // Fallback: derive center from local left/top + origin.
+    const w = Math.abs((Number(obj.width) || 0) * (Number(obj.scaleX) || 1));
+    const h = Math.abs((Number(obj.height) || 0) * (Number(obj.scaleY) || 1));
+    const ox = String(obj.originX || 'left');
+    const oy = String(obj.originY || 'top');
+    let cx = Number(obj.left || 0);
+    let cy = Number(obj.top || 0);
+    if (ox === 'left') cx += w / 2;
+    else if (ox === 'right') cx -= w / 2;
+    if (oy === 'top') cy += h / 2;
+    else if (oy === 'bottom') cy -= h / 2;
+
+    if (Number.isFinite(cx) && Number.isFinite(cy)) return { x: cx, y: cy };
+
+    // Final fallback for top-level objects.
+    try {
+        if (typeof obj.getCenterPoint === 'function') {
+            const p = obj.getCenterPoint();
+            if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) {
+                return { x: Number(p.x), y: Number(p.y) };
+            }
+        }
+    } catch {
+        // ignore
+    }
+
+    return { x: 0, y: 0 };
+};
+
+const setObjectCenterInParentPlane = (obj: any, cx: number, cy: number) => {
+    if (!obj) return;
+    if (fabric?.Point && typeof obj.setPositionByOrigin === 'function') {
+        obj.setPositionByOrigin(new fabric.Point(cx, cy), 'center', 'center');
+    } else {
+        obj.set({ left: cx, top: cy, originX: 'center', originY: 'center' });
+    }
 };
 
 const shouldApplyContainmentConstraints = (obj: any) => {
@@ -5568,6 +5694,211 @@ const getContainmentZoneById = (zoneId: any) => {
         containmentZoneByIdCache = map;
     }
     return containmentZoneByIdCache.get(id) || null;
+};
+
+const findContainmentZoneById = (zoneId: any) => {
+    if (!canvas.value) return null;
+    const id = String(zoneId || '').trim();
+    if (!id) return null;
+    return getContainmentZoneById(id) || canvas.value.getObjects().find((o: any) => (
+        isLikelyProductZone(o) && String((o as any)?._customId || '').trim() === id
+    )) || null;
+};
+
+const isCardLikeForZoneBinding = (obj: any) => {
+    if (!obj || obj.excludeFromExport || obj.isFrame) return false;
+    if (obj.type !== 'group') return false;
+    const hasLegacyCardSize =
+        Number.isFinite(Number((obj as any)?._cardWidth)) &&
+        Number((obj as any)?._cardWidth) > 0 &&
+        Number.isFinite(Number((obj as any)?._cardHeight)) &&
+        Number((obj as any)?._cardHeight) > 0;
+    const hasLegacyGridSignals =
+        String((obj as any)?.smartGridId || '').trim().length > 0 ||
+        String((obj as any)?.priceMode || '').trim().length > 0;
+    return !!(
+        obj.isSmartObject ||
+        obj.isProductCard ||
+        String(obj.name || '').startsWith('product-card') ||
+        hasLegacyCardSize ||
+        hasLegacyGridSignals ||
+        String((obj as any)?.parentZoneId || '').trim().length > 0 ||
+        String((obj as any)?._zoneSlot?.zoneId || '').trim().length > 0
+    );
+};
+
+const repairLooseZoneCardBindings = () => {
+    if (!canvas.value) return;
+    const cards = canvas.value.getObjects().filter((o: any) => isCardLikeForZoneBinding(o));
+    cards.forEach((card: any) => {
+        const slotZoneId = String((card as any)?._zoneSlot?.zoneId || '').trim();
+        const parentZoneId = String((card as any)?.parentZoneId || '').trim();
+        const parentZone = parentZoneId ? findContainmentZoneById(parentZoneId) : null;
+        const slotZone = slotZoneId ? findContainmentZoneById(slotZoneId) : null;
+        const hasMissingParent = !parentZoneId;
+        const hasInvalidParent = !!parentZoneId && !parentZone;
+        const hasSlotMismatch = !!slotZoneId && !!parentZoneId && slotZoneId !== parentZoneId;
+        const needsRepair = hasMissingParent || hasInvalidParent || hasSlotMismatch;
+        if (!needsRepair) return;
+
+        // Recover missing parent id from the persisted slot metadata.
+        if (hasMissingParent && slotZone) {
+            (card as any).parentZoneId = slotZoneId;
+        }
+
+        // Keep legacy cards upgraded so downstream checks stay deterministic.
+        if (!card.isProductCard && !card.isSmartObject && isLikelyProductCard(card)) {
+            card.isProductCard = true;
+            card.isSmartObject = true;
+        }
+
+        ensureCardZoneBinding(card, { allowNearest: true });
+    });
+};
+
+const markZoneForDropRelayout = (zone: any) => {
+    const zoneId = String((zone as any)?._customId || '').trim();
+    if (zoneId) pendingZoneRelayoutOnDrop.add(zoneId);
+};
+
+const flushZoneRelayoutOnDrop = () => {
+    if (!canvas.value) return;
+    repairLooseZoneCardBindings();
+    if (pendingZoneRelayoutOnDrop.size === 0) return;
+    const zoneIds = Array.from(pendingZoneRelayoutOnDrop);
+    pendingZoneRelayoutOnDrop.clear();
+
+    zoneIds.forEach((zoneId: string) => {
+        const zone = findContainmentZoneById(zoneId);
+        if (!zone) return;
+        ensureZoneSanity(zone);
+        recalculateZoneLayout(zone, getZoneChildren(zone), { save: false });
+    });
+
+    canvas.value.requestRenderAll();
+};
+
+const resolveCardParentZone = (card: any, opts: { allowNearest?: boolean } = {}) => {
+    if (!canvas.value || !card) return null;
+    const allowNearest = opts.allowNearest !== false;
+
+    const currentZoneId = String((card as any)?.parentZoneId || '').trim();
+    if (currentZoneId) {
+        const currentZone = findContainmentZoneById(currentZoneId);
+        if (currentZone) return currentZone;
+    }
+
+    // Slot metadata is a stronger signal than nearest-zone guessing.
+    const slotZoneId = String((card as any)?._zoneSlot?.zoneId || '').trim();
+    if (slotZoneId) {
+        const slotZone = findContainmentZoneById(slotZoneId);
+        if (slotZone) return slotZone;
+    }
+
+    const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+    if (!zones.length) return null;
+    if (zones.length === 1) return zones[0];
+
+    const center = typeof card.getCenterPoint === 'function'
+        ? card.getCenterPoint()
+        : { x: Number(card.left || 0), y: Number(card.top || 0) };
+
+    let bestZone: any = null;
+    let bestDistanceSq = Number.POSITIVE_INFINITY;
+
+    for (const zone of zones) {
+        const zm = (typeof getZoneMetrics === 'function')
+            ? (getZoneMetrics(zone) ?? zone.getBoundingRect(true))
+            : zone.getBoundingRect(true);
+        const insideBounds =
+            center.x >= zm.left &&
+            center.x <= (zm.left + zm.width) &&
+            center.y >= zm.top &&
+            center.y <= (zm.top + zm.height);
+        if (insideBounds) {
+            bestZone = zone;
+            bestDistanceSq = 0;
+            break;
+        }
+
+        try {
+            if (typeof zone.intersectsWithObject === 'function' && zone.intersectsWithObject(card)) {
+                bestZone = zone;
+                bestDistanceSq = 0;
+                break;
+            }
+        } catch {
+            // ignore intersection errors during drag
+        }
+
+        if (!allowNearest) continue;
+        const zx = Number((zm.centerX ?? (zm.left + (zm.width / 2))) || 0);
+        const zy = Number((zm.centerY ?? (zm.top + (zm.height / 2))) || 0);
+        const dx = center.x - zx;
+        const dy = center.y - zy;
+        const d2 = (dx * dx) + (dy * dy);
+        if (d2 < bestDistanceSq) {
+            bestDistanceSq = d2;
+            bestZone = zone;
+        }
+    }
+
+    if (!bestZone) return null;
+    if (bestDistanceSq > 0) {
+        const zm = (typeof getZoneMetrics === 'function')
+            ? (getZoneMetrics(bestZone) ?? bestZone.getBoundingRect(true))
+            : bestZone.getBoundingRect(true);
+        const maxDim = Math.max(Number(zm.width || 0), Number(zm.height || 0), 1);
+        const maxDistance = Math.max(120, maxDim * 1.75);
+        if (bestDistanceSq > (maxDistance * maxDistance)) return null;
+    }
+
+    return bestZone;
+};
+
+const ensureCardZoneBinding = (card: any, opts: { allowNearest?: boolean } = {}) => {
+    if (!card || !canvas.value) return null;
+    const previousZoneId = String((card as any)?.parentZoneId || '').trim();
+    const zone = resolveCardParentZone(card, opts);
+    if (!zone) {
+        // If binding references a non-existing zone, clear stale metadata.
+        if (previousZoneId && !findContainmentZoneById(previousZoneId)) {
+            (card as any).parentZoneId = undefined;
+        }
+        const slotZoneId = String((card as any)?._zoneSlot?.zoneId || '').trim();
+        if (slotZoneId && !findContainmentZoneById(slotZoneId)) {
+            (card as any)._zoneSlot = undefined;
+        }
+        return null;
+    }
+
+    const zoneId = String((zone as any)?._customId || '').trim();
+    if (!zoneId) return null;
+
+    if (String((card as any)?.parentZoneId || '').trim() !== zoneId) {
+        (card as any).parentZoneId = zoneId;
+    }
+
+    // Slot metadata from another zone causes cross-zone relayout corruption.
+    const slotZoneId = String((card as any)?._zoneSlot?.zoneId || '').trim();
+    if (slotZoneId && slotZoneId !== zoneId) {
+        (card as any)._zoneSlot = undefined;
+    }
+
+    if (previousZoneId && previousZoneId !== zoneId) {
+        const previousZone = findContainmentZoneById(previousZoneId);
+        if (previousZone) markZoneForDropRelayout(previousZone);
+    }
+
+    try {
+        const zoneFrameId = getResolvedZoneFrameId(zone);
+        applyCardFrameBinding(card, zoneFrameId);
+    } catch {
+        // keep binding even if frame sync fails
+    }
+
+    markZoneForDropRelayout(zone);
+    return zone;
 };
 
 const getCardBaseSizeForContainment = (card: any): { w: number; h: number } | null => {
@@ -5603,13 +5934,8 @@ const applyContainmentConstraints = (obj: any) => {
     if (!shouldApplyContainmentConstraints(obj)) return;
     
     // CONSTRAINT 1: Product Card must stay inside Product Zone
-    if (obj.type === 'group' && hasParentZoneBinding(obj)) {
-        const parentZoneId = obj.parentZoneId;
-        if (!parentZoneId) return;
-        
-        // Find parent zone
-        const zone = getContainmentZoneById(parentZoneId);
-        
+    if (obj.type === 'group' && (hasParentZoneBinding(obj) || isLikelyProductCard(obj))) {
+        const zone = ensureCardZoneBinding(obj, { allowNearest: true });
         if (!zone) return;
         
         // Get zone boundaries (robust to origin/viewport)
@@ -5633,20 +5959,26 @@ const applyContainmentConstraints = (obj: any) => {
         const cardTop = center.y - cardHeight / 2;
         const cardRight = cardLeft + cardWidth;
         const cardBottom = cardTop + cardHeight;
+        const zoneWidth = zoneRight - zoneLeft;
+        const zoneHeight = zoneBottom - zoneTop;
         
         // Calculate constraints
         let constrainedCx = center.x;
         let constrainedCy = center.y;
         
         // Constrain horizontally
-        if (cardLeft < zoneLeft) {
+        if (cardWidth >= zoneWidth) {
+            constrainedCx = zoneLeft + (zoneWidth / 2);
+        } else if (cardLeft < zoneLeft) {
             constrainedCx = zoneLeft + cardWidth / 2;
         } else if (cardRight > zoneRight) {
             constrainedCx = zoneRight - cardWidth / 2;
         }
         
         // Constrain vertically
-        if (cardTop < zoneTop) {
+        if (cardHeight >= zoneHeight) {
+            constrainedCy = zoneTop + (zoneHeight / 2);
+        } else if (cardTop < zoneTop) {
             constrainedCy = zoneTop + cardHeight / 2;
         } else if (cardBottom > zoneBottom) {
             constrainedCy = zoneBottom - cardHeight / 2;
@@ -5702,39 +6034,28 @@ const applyContainmentConstraints = (obj: any) => {
         const cardRight = cardW / 2;
         const cardBottom = cardH / 2;
         
-        // Get image boundaries in GROUP-LOCAL coordinates
+        // Get image size in GROUP-LOCAL coordinates
         const imgWidth = Math.abs(Number(obj.width || 0) * Number(obj.scaleX || 1));
         const imgHeight = Math.abs(Number(obj.height || 0) * Number(obj.scaleY || 1));
         if (!Number.isFinite(imgWidth) || imgWidth <= 0 || !Number.isFinite(imgHeight) || imgHeight <= 0) return;
-        const imgLeft = obj.left - imgWidth / 2;
-        const imgTop = obj.top - imgHeight / 2;
-        const imgRight = imgLeft + imgWidth;
-        const imgBottom = imgTop + imgHeight;
-        
-        // Calculate constraints
-        let constrainedLeft = obj.left;
-        let constrainedTop = obj.top;
-        
-        // Constrain horizontally
-        if (imgLeft < cardLeft) {
-            constrainedLeft = cardLeft + imgWidth / 2;
-        } else if (imgRight > cardRight) {
-            constrainedLeft = cardRight - imgWidth / 2;
-        }
-        
-        // Constrain vertically
-        if (imgTop < cardTop) {
-            constrainedTop = cardTop + imgHeight / 2;
-        } else if (imgBottom > cardBottom) {
-            constrainedTop = cardBottom - imgHeight / 2;
-        }
-        
+
+        // Use CENTER-based clamping regardless of current origin.
+        // This avoids "teleport to corner" when Fabric temporarily changes origin during scale gestures.
+        const center = getObjectCenterInParentPlane(obj);
+        const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+        // If image is larger than card, range inverts naturally; keep min<=max by using Math.min/Math.max.
+        const minCx = Math.min(cardLeft + (imgWidth / 2), cardRight - (imgWidth / 2));
+        const maxCx = Math.max(cardLeft + (imgWidth / 2), cardRight - (imgWidth / 2));
+        const minCy = Math.min(cardTop + (imgHeight / 2), cardBottom - (imgHeight / 2));
+        const maxCy = Math.max(cardTop + (imgHeight / 2), cardBottom - (imgHeight / 2));
+
+        const constrainedCx = clamp(Number(center.x || 0), minCx, maxCx);
+        const constrainedCy = clamp(Number(center.y || 0), minCy, maxCy);
+
         // Apply constraints if needed
-        if (constrainedLeft !== obj.left || constrainedTop !== obj.top) {
-            obj.set({
-                left: constrainedLeft,
-                top: constrainedTop
-            });
+        if (constrainedCx !== center.x || constrainedCy !== center.y) {
+            setObjectCenterInParentPlane(obj, constrainedCx, constrainedCy);
             obj.setCoords();
             parentCard.dirty = true;
         }
@@ -7657,6 +7978,15 @@ const setupHistory = () => {
 const handleObjectModified = (e: any) => {
     const obj = e.target;
     if (!obj) return;
+    const transformTarget = e?.transform?.target;
+    const isChildImageTransformOnCard = !!(
+        obj &&
+        isLikelyProductCard(obj) &&
+        transformTarget &&
+        transformTarget !== obj &&
+        transformTarget.group === obj &&
+        String(transformTarget.type || '').toLowerCase() === 'image'
+    );
 
     // Multi-selection: keep each member attached/contained and then relayout affected zones.
     if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
@@ -7687,6 +8017,11 @@ const handleObjectModified = (e: any) => {
             ensureZoneSanity(zone);
             recalculateZoneLayout(zone, getZoneChildren(zone), { save: false });
         });
+        return;
+    }
+
+    // Scaling/cropping an image INSIDE the card should not trigger card reorder/zone relayout.
+    if (isChildImageTransformOnCard) {
         return;
     }
 
@@ -7807,41 +8142,41 @@ const handleObjectModified = (e: any) => {
                 };
 
                 // Fast path: same slot index and no scaling => snap only this card back to its slot.
-                if (!didScale && fromIndex !== -1 && toIndex === fromIndex) {
+	                if (!didScale && fromIndex !== -1 && toIndex === fromIndex) {
                     const slot = (obj as any)?._zoneSlot;
                     const slotZoneId = String(slot?.zoneId || '').trim();
                     if (slot && slotZoneId === zoneId) {
                         const targetCx = slot.left + (slot.width / 2);
                         const targetCy = slot.top + (slot.height / 2);
                         const currentCenter = center || { x: Number(obj.left || 0), y: Number(obj.top || 0) };
-                        if (Math.abs(currentCenter.x - targetCx) > 0.25 || Math.abs(currentCenter.y - targetCy) > 0.25) {
+	                        if (Math.abs(currentCenter.x - targetCx) > 0.25 || Math.abs(currentCenter.y - targetCy) > 0.25) {
                             if (fabric?.Point && typeof obj.setPositionByOrigin === 'function') {
                                 obj.setPositionByOrigin(new fabric.Point(targetCx, targetCy), 'center', 'center');
                             } else {
                                 obj.set({ left: targetCx, top: targetCy, originX: 'center', originY: 'center' });
                             }
-                            obj.setCoords?.();
-                        }
-                        canvas.value.requestRenderAll();
-                        return;
-                    }
-                }
+	                            obj.setCoords?.();
+	                        }
+	                        recalculateZoneLayout(zone, ordered, { save: false });
+	                        return;
+	                    }
+	                }
 
                 // Fast path: simple 2-card swap in standard grid (no featured layout) without full zone relayout.
-                if (!didScale && !hasFeaturedLayout && fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
+	                if (!didScale && !hasFeaturedLayout && fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
                     const fromCard = ordered[fromIndex];
                     const toCard = ordered[toIndex];
                     const fromSlot = (fromCard as any)?._zoneSlot;
                     const toSlot = (toCard as any)?._zoneSlot;
-                    if (
-                        applyCardToSlot(fromCard, toSlot, toIndex) &&
-                        applyCardToSlot(toCard, fromSlot, fromIndex)
-                    ) {
-                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
-                        canvas.value.requestRenderAll();
-                        return;
-                    }
-                }
+	                    if (
+	                        applyCardToSlot(fromCard, toSlot, toIndex) &&
+	                        applyCardToSlot(toCard, fromSlot, fromIndex)
+	                    ) {
+	                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
+	                        recalculateZoneLayout(zone, ordered, { save: false });
+	                        return;
+	                    }
+	                }
 
                 if (fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
                     // Swap apenas os dois cards - troca completa de posição
@@ -9615,7 +9950,7 @@ const setupZoomPan = () => {
         }
     });
     
-    canvas.value.on('mouse:up', (opt: any) => {
+	    canvas.value.on('mouse:up', (opt: any) => {
         if (isDragging) {
             isDragging = false;
             canvas.value.selection = true;
@@ -9627,16 +9962,16 @@ const setupZoomPan = () => {
         // Commit Node Changes for polygons/polylines
         if (isNodeEditing.value) {
              const controls = canvas.value.getObjects().filter((o: any) => o.name === 'control_point');
-             if(controls.length > 0) {
-                 const parent = controls[0].data.parentObj;
-                 // Trigger update
-                 parent.set({ points: parent.points }); 
-                 // Fabric often needs _calcDimensions or similar
-                 parent._calcDimensions();
-                 parent.setCoords();
-                 canvas.value.requestRenderAll();
-             }
-        }
+	             if(controls.length > 0) {
+	                 const parent = controls[0].data.parentObj;
+	                 // Trigger update
+	                 parent.set({ points: parent.points }); 
+	                 // Fabric often needs _calcDimensions or similar
+	                 parent._calcDimensions();
+	                 parent.setCoords();
+	                 canvas.value.requestRenderAll();
+	             }
+	        }
         
         // Commit Path Node Changes (final save)
         if (isNodeEditing.value) {
@@ -9650,11 +9985,12 @@ const setupZoomPan = () => {
             }
         }
         
-        // Remove direct guide access here as they are scoped to setupSnapping
-        // verticalGuide.set({ visible: false }); 
-        // horizontalGuide.set({ visible: false });
-        
-        canvas.value.requestRenderAll();
+	        // Remove direct guide access here as they are scoped to setupSnapping
+	        // verticalGuide.set({ visible: false }); 
+	        // horizontalGuide.set({ visible: false });
+	        
+	        flushZoneRelayoutOnDrop();
+	        canvas.value.requestRenderAll();
         
         // Also ensure reactivity properties update on drop
         if (selectedObjectRef.value) {
@@ -10458,10 +10794,21 @@ const setupSnapping = () => {
     const objectMovingHandler = (e: any) => {
         const obj = e.target;
         const evt = e.e as MouseEvent | undefined;
+        const currentTransform: any = (canvasInstance as any)?._currentTransform;
+        const transformAction = String(currentTransform?.action || '').toLowerCase();
+        const isScaleTransform = !!currentTransform && transformAction.includes('scale');
 
         // Skip for frames and controls
         if (!obj || obj.isFrame || isControl(obj)) {
             hideGuides();
+            return;
+        }
+
+        // Ignore move-snapping logic while the active interaction is scaling.
+        // Scaling has its own normalization path and mixing both creates cursor drift/jumps.
+        if (isScaleTransform && currentTransform?.target === obj) {
+            hideGuides();
+            syncMovingFrameClip(obj);
             return;
         }
 
@@ -10588,8 +10935,7 @@ const setupSnapping = () => {
             }
 
             if (zone) {
-                const zoneFrameId = getResolvedZoneFrameId(zone);
-                applyCardFrameBinding(obj, zoneFrameId);
+                const boundZone = ensureCardZoneBinding(obj, { allowNearest: true }) || zone;
                 const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
                 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
                 const objW = obj.getScaledWidth?.() ?? 0;
@@ -10597,8 +10943,8 @@ const setupSnapping = () => {
 
                 // Zone bounds constraint while dragging (reorder happens on drop).
                 if (center) {
-                    const zr = getCachedZoneMetrics(zone) ?? zone.getBoundingRect(true);
-                    const pad = typeof (zone as any)._zonePadding === 'number' ? (zone as any)._zonePadding : 20;
+                    const zr = getCachedZoneMetrics(boundZone) ?? boundZone.getBoundingRect(true);
+                    const pad = typeof (boundZone as any)._zonePadding === 'number' ? (boundZone as any)._zonePadding : 20;
                     let minCx = zr.left + pad + (objW / 2);
                     let maxCx = (zr.left + zr.width) - pad - (objW / 2);
                     let minCy = zr.top + pad + (objH / 2);
@@ -10765,6 +11111,7 @@ const setupSnapping = () => {
         hideGuides();
         constrainAxis = null;
         invalidateSnapCache();
+        flushZoneRelayoutOnDrop();
         safeRequestRenderAll(canvasInstance);
         // CRITICAL: Create fresh snapshot (not just triggerRef) so PropertiesPanel
         // sees updated position/dimension/zone values after drag/resize.
@@ -11027,62 +11374,78 @@ const setupReactivity = () => {
         if (shouldSave) saveCurrentState();
     };
 
+    const resolveSelectionRootObject = (obj: any) => {
+        if (!obj || isTransientCanvasObject(obj)) return null;
+        if (isLikelyProductCard(obj)) return obj;
+        const parentCard = findProductCardParentGroup(obj);
+        if (parentCard) return parentCard;
+        return obj;
+    };
+
+    const collectNormalizedSelectionMembers = (activeObj: any) => {
+        if (!activeObj) return [] as any[];
+        const rawMembers = isActiveSelectionObject(activeObj) && typeof activeObj.getObjects === 'function'
+            ? (activeObj.getObjects() || [])
+            : [activeObj];
+        const unique: any[] = [];
+        rawMembers.forEach((member: any) => {
+            const root = resolveSelectionRootObject(member);
+            if (!root) return;
+            if (!unique.includes(root)) unique.push(root);
+        });
+        return unique;
+    };
+
+    let isNormalizingShiftSelection = false;
+    const normalizeActiveSelectionForProductCards = () => {
+        if (!canvas.value || isNormalizingShiftSelection) return false;
+        const activeObj = canvas.value.getActiveObject();
+        if (!isActiveSelectionObject(activeObj) || typeof activeObj.getObjects !== 'function') return false;
+
+        const rawMembers = (activeObj.getObjects() || []).slice();
+        if (!rawMembers.length) return false;
+        const normalized = collectNormalizedSelectionMembers(activeObj);
+        const changed =
+            normalized.length !== rawMembers.length ||
+            normalized.some((member: any, idx: number) => member !== rawMembers[idx]);
+        if (!changed) return false;
+
+        isNormalizingShiftSelection = true;
+        try {
+            canvas.value.discardActiveObject();
+            if (normalized.length === 1) {
+                canvas.value.setActiveObject(normalized[0]);
+            } else if (normalized.length > 1 && fabric?.ActiveSelection) {
+                const nextSelection = new fabric.ActiveSelection(normalized, { canvas: canvas.value });
+                canvas.value.setActiveObject(nextSelection);
+            }
+            canvas.value.requestRenderAll();
+        } finally {
+            isNormalizingShiftSelection = false;
+        }
+        return true;
+    };
+
+    // Corner handles behavior (no crop):
+    // apply pure scale and keep current crop window untouched.
     const normalizeImageScaleAndCrop = (img: any, opts: { save?: boolean } = {}) => {
         if (!canvas.value || !img) return;
         const t = String(img.type || '').toLowerCase();
         if (t !== 'image') return;
 
         const shouldSave = opts.save !== false;
-        const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
-
-        const center = typeof img.getCenterPoint === 'function' ? img.getCenterPoint() : { x: img.left ?? 0, y: img.top ?? 0 };
-
+        const center = getObjectCenterInParentPlane(img);
         const scaleX = Math.abs(Number(img.scaleX ?? 1)) || 1;
         const scaleY = Math.abs(Number(img.scaleY ?? 1)) || 1;
-        const curW = Math.max(1, Number(img.width ?? 1) || 1);
-        const curH = Math.max(1, Number(img.height ?? 1) || 1);
-
-        // What the user "wants" in canvas units after the resize gesture
-        const desiredW = Math.max(1, curW * scaleX);
-        const desiredH = Math.max(1, curH * scaleY);
-
-        // Source (natural) dimensions in pixels
-        const el: any = (img as any)._originalElement || (img as any)._element || null;
-        const srcW = Math.max(1, Number((img as any).__sourceWidth ?? el?.naturalWidth ?? el?.width ?? curW) || 1);
-        const srcH = Math.max(1, Number((img as any).__sourceHeight ?? el?.naturalHeight ?? el?.height ?? curH) || 1);
-        (img as any).__sourceWidth = srcW;
-        (img as any).__sourceHeight = srcH;
-
-        // Preserve the current focal point (center of the current crop)
-        const prevCropX = Math.max(0, Number(img.cropX ?? 0) || 0);
-        const prevCropY = Math.max(0, Number(img.cropY ?? 0) || 0);
-        const prevCropW = clamp(curW, 1, srcW);
-        const prevCropH = clamp(curH, 1, srcH);
-        const cxRatio = clamp((prevCropX + (prevCropW / 2)) / srcW, 0, 1);
-        const cyRatio = clamp((prevCropY + (prevCropH / 2)) / srcH, 0, 1);
-
-        // Behavior:
-        // - If user shrinks the box: crop (cut the extra area).
-        // - If user enlarges beyond source: scale uniformly (no distortion) + crop if needed.
-        const scale = Math.max(desiredW / srcW, desiredH / srcH, 1);
-        const cropW = clamp(desiredW / scale, 1, srcW);
-        const cropH = clamp(desiredH / scale, 1, srcH);
-
-        const nextCropX = clamp((cxRatio * srcW) - (cropW / 2), 0, srcW - cropW);
-        const nextCropY = clamp((cyRatio * srcH) - (cropH / 2), 0, srcH - cropH);
 
         img.set({
             originX: 'center',
             originY: 'center',
             left: center.x,
             top: center.y,
-            // enforce uniform scaling for predictable crop behavior (avoid stretching)
-            scaleX: scale,
-            scaleY: scale,
-            width: cropW,
-            height: cropH,
-            cropX: nextCropX,
-            cropY: nextCropY,
+            // Keep image crop rectangle untouched on corner scale.
+            scaleX: scaleX,
+            scaleY: scaleY,
             flipX: false,
             flipY: false,
             lockScalingFlip: true,
@@ -11105,6 +11468,7 @@ const setupReactivity = () => {
         if (!canvas.value || !img) return;
         const t = String(img.type || '').toLowerCase();
         if (t !== 'image') return;
+        const prevCenter = getObjectCenterInParentPlane(img);
 
         const cornerRaw = String(transform?.corner || '').toLowerCase();
         if (!cornerRaw) return;
@@ -11203,6 +11567,19 @@ const setupReactivity = () => {
 
         if (anchorPoint && typeof img.setPositionByOrigin === 'function') {
             img.setPositionByOrigin(anchorPoint, anchorOriginX, anchorOriginY);
+        }
+
+        // Keep the orthogonal axis stable for side handles to avoid visual "jump":
+        // ml/mr should preserve Y center; mt/mb should preserve X center.
+        const nextCenter = getObjectCenterInParentPlane(img);
+        if (corner === 'ml' || corner === 'mr') {
+            if (Math.abs(Number(nextCenter.y || 0) - Number(prevCenter.y || 0)) > 0.001) {
+                setObjectCenterInParentPlane(img, Number(nextCenter.x || 0), Number(prevCenter.y || 0));
+            }
+        } else if (corner === 'mt' || corner === 'mb') {
+            if (Math.abs(Number(nextCenter.x || 0) - Number(prevCenter.x || 0)) > 0.001) {
+                setObjectCenterInParentPlane(img, Number(prevCenter.x || 0), Number(nextCenter.y || 0));
+            }
         }
 
         sanitizeProductCardImageTransform(img, { clampWithinCard: true });
@@ -11339,6 +11716,15 @@ const setupReactivity = () => {
         ensurePersistentContentFlags(obj);
         const action = e?.transform?.action || '';
         const didScale = typeof action === 'string' && action.includes('scale');
+        const transformTarget = e?.transform?.target;
+        const isChildImageTransformOnCard = !!(
+            obj &&
+            isLikelyProductCard(obj) &&
+            transformTarget &&
+            transformTarget !== obj &&
+            transformTarget.group === obj &&
+            String(transformTarget.type || '').toLowerCase() === 'image'
+        );
 
         if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
             const members = (obj.getObjects() || []).slice();
@@ -11357,7 +11743,13 @@ const setupReactivity = () => {
                 } catch {}
                 try { syncObjectFrameClip(member); } catch {}
                 if (didScale && String(member.type || '').toLowerCase() === 'image' && ((member.scaleX ?? 1) !== 1 || (member.scaleY ?? 1) !== 1)) {
-                    normalizeImageScaleAndCrop(member, { save: false });
+                    const corner = String(e?.transform?.corner || '').toLowerCase();
+                    const isSide = corner === 'ml' || corner === 'mr' || corner === 'mt' || corner === 'mb';
+                    if (isSide) {
+                        normalizeImageCropBySideHandle(member, e?.transform, { save: false });
+                    } else {
+                        normalizeImageScaleAndCrop(member, { save: false });
+                    }
                 }
                 sanitizeProductCardImageTransform(member, { clampWithinCard: true });
                 if (shouldApplyContainmentConstraints(member)) {
@@ -11369,7 +11761,7 @@ const setupReactivity = () => {
 
         // If a product card was resized (scaled), convert scale into width/height and reflow internals (image/title/limit/label).
         // This keeps layout crisp and responsive instead of just stretching the whole group.
-        if (didScale && isLikelyProductCard(obj) && ((obj.scaleX ?? 1) !== 1 || (obj.scaleY ?? 1) !== 1)) {
+        if (!isChildImageTransformOnCard && didScale && isLikelyProductCard(obj) && ((obj.scaleX ?? 1) !== 1 || (obj.scaleY ?? 1) !== 1)) {
             normalizeCardScaleAndRelayout(obj, { save: false });
         }
         // Images:
@@ -11496,6 +11888,29 @@ const setupReactivity = () => {
         if (canvasContextMenu.value.show) canvasContextMenu.value.show = false;
         const target = e.target;
 
+        // Stabilize Shift+click multi-selection for product cards:
+        // always select card groups (not deep children) to prevent disappearing items.
+        if (evt?.shiftKey && target && !isNormalizingShiftSelection) {
+            const normalizedTarget = resolveSelectionRootObject(target);
+            if (normalizedTarget && isLikelyProductCard(normalizedTarget)) {
+                const currentMembers = collectNormalizedSelectionMembers(canvas.value.getActiveObject());
+                const isAlreadySelected = currentMembers.includes(normalizedTarget);
+                if (!isAlreadySelected) {
+                    const nextMembers = [...currentMembers, normalizedTarget];
+                    canvas.value.discardActiveObject();
+                    if (nextMembers.length === 1) {
+                        canvas.value.setActiveObject(nextMembers[0]);
+                    } else if (fabric?.ActiveSelection) {
+                        const nextSelection = new fabric.ActiveSelection(nextMembers, { canvas: canvas.value });
+                        canvas.value.setActiveObject(nextSelection);
+                    }
+                    updateSelection();
+                    canvas.value.requestRenderAll();
+                    return;
+                }
+            }
+        }
+
         if (target && target.isFrame) {
             frameChildrenCache = getFrameDescendants(target);
             lastFrameState = { left: target.left, top: target.top };
@@ -11517,7 +11932,7 @@ const setupReactivity = () => {
             gridGroupSiblingCacheId = null;
         }
 
-         if (target && isLikelyProductZone(target)) {
+	        if (target && isLikelyProductZone(target)) {
              ensureZoneSanity(target);
              // Cache children once on start drag
              zoneChildrenCache = getZoneChildren(target);
@@ -11658,14 +12073,36 @@ const setupReactivity = () => {
              });
              
              // Update last state
-             lastZoneState.left = target.left;
-             lastZoneState.top = target.top;
-        }
-        
-        // 🔒 CONTAINMENT CONSTRAINTS: Keep objects inside their parents
-        if (shouldApplyContainmentConstraints(target)) {
-            applyContainmentConstraints(target);
-        }
+	             lastZoneState.left = target.left;
+	             lastZoneState.top = target.top;
+	        }
+	        
+	        // Product card zone-lock during drag:
+	        // keep binding stable so cards never disconnect from their zone/grid.
+	        if (target && !isLikelyProductZone(target) && !target.isFrame) {
+	            const isCardLike = !!(
+	                target.isSmartObject ||
+	                target.isProductCard ||
+	                String(target.name || '').startsWith('product-card') ||
+	                isLikelyProductCard(target) ||
+	                String((target as any).parentZoneId || '').trim().length
+	            );
+	            if (isCardLike) {
+	                ensureCardZoneBinding(target, { allowNearest: true });
+	            }
+	        }
+	        
+	        // 🔒 CONTAINMENT CONSTRAINTS: Keep objects inside their parents.
+	        // Product images inside cards are already constrained by the dedicated
+	        // smart-object drag handler (setupSnapping). Re-applying here causes jitter.
+	        const isCardImageTarget = !!(
+	            target &&
+	            String(target.type || '').toLowerCase() === 'image' &&
+	            isProductCardImage(target)
+	        );
+	        if (!isCardImageTarget && shouldApplyContainmentConstraints(target)) {
+	            applyContainmentConstraints(target);
+	        }
     });
 
     // Smart Scaling for Textbox Reflow & Product Zone AutoLayout
@@ -11748,9 +12185,16 @@ const setupReactivity = () => {
             recalculateZoneLayout(obj, cachedChildren, { save: false });
         }
 
-        // 🔒 Apply containment after scaling
-        sanitizeProductCardImageTransform(obj, { clampWithinCard: true });
-        if (shouldApplyContainmentConstraints(obj)) {
+        // 🔒 Apply containment after scaling.
+        // During active scale of product images, avoid hard clamping each frame because
+        // Fabric may use temporary side origins; clamping runs on `object:modified`.
+        const isCardImageScaling = !!(
+            obj &&
+            String(obj.type || '').toLowerCase() === 'image' &&
+            isProductCardImage(obj)
+        );
+        sanitizeProductCardImageTransform(obj, { clampWithinCard: !isCardImageScaling });
+        if (!isCardImageScaling && shouldApplyContainmentConstraints(obj)) {
             applyContainmentConstraints(obj);
         }
     });
@@ -11775,8 +12219,20 @@ const setupReactivity = () => {
     canvas.value.on('mouse:wheel', updateFloatingUI);
 
     // 'selection:created', 'selection:updated', 'selection:cleared'
-    canvas.value.on('selection:created', updateSelection);
-    canvas.value.on('selection:updated', updateSelection);
+    canvas.value.on('selection:created', () => {
+        if (normalizeActiveSelectionForProductCards()) {
+            updateSelection();
+            return;
+        }
+        updateSelection();
+    });
+    canvas.value.on('selection:updated', () => {
+        if (normalizeActiveSelectionForProductCards()) {
+            updateSelection();
+            return;
+        }
+        updateSelection();
+    });
     canvas.value.on('selection:cleared', (e: any) => {
         updateSelection();
         // Exit Deep Select Mode on clear
@@ -13731,7 +14187,7 @@ const exportCanvas = async (format: 'png' | 'svg' | 'jpg' = 'png') => {
     const fileName = `design-export-${Date.now()}`;
     
     if (format === 'svg') {
-        const svgContent = canvas.value.toSVG();
+        const svgContent = await withProductZonesHiddenForOutput(async () => canvas.value.toSVG());
         const blob = new Blob([svgContent], {type: "image/svg+xml;charset=utf-8"});
         const url = URL.createObjectURL(blob);
         downloadFile(url, `${fileName}.svg`);
@@ -13742,11 +14198,13 @@ const exportCanvas = async (format: 'png' | 'svg' | 'jpg' = 'png') => {
 
         let dataURL = '';
         try {
-            dataURL = canvas.value.toDataURL({
-                format: format,
-                quality: 1,
-                multiplier: 1
-            });
+            dataURL = await withProductZonesHiddenForOutput(async () => (
+                canvas.value.toDataURL({
+                    format: format,
+                    quality: 1,
+                    multiplier: 1
+                })
+            ));
         } catch (exportErr) {
             console.warn('[Export] Erro ao exportar, tentando sem clipPaths:', exportErr);
             // Nuclear option: clear all clipPaths
@@ -13754,11 +14212,13 @@ const exportCanvas = async (format: 'png' | 'svg' | 'jpg' = 'png') => {
             try {
                 canvas.value.requestRenderAll();
                 await new Promise(resolve => setTimeout(resolve, 10));
-                dataURL = canvas.value.toDataURL({
-                    format: format,
-                    quality: 1,
-                    multiplier: 1
-                });
+                dataURL = await withProductZonesHiddenForOutput(async () => (
+                    canvas.value.toDataURL({
+                        format: format,
+                        quality: 1,
+                        multiplier: 1
+                    })
+                ));
             } catch (fallbackErr) {
                 console.error('[Export] Falha definitiva ao exportar:', fallbackErr);
                 alert('Erro ao exportar imagem. Tente novamente.');
@@ -13827,6 +14287,60 @@ const downloadFile = (url: string, name: string) => {
     document.body.removeChild(link);
 }
 
+const runWithNeutralViewport = async <T>(action: () => Promise<T> | T): Promise<T> => {
+    if (!canvas.value) return await action();
+
+    const c: any = canvas.value;
+    const prevVpt = Array.isArray(c.viewportTransform) ? [...c.viewportTransform] : [1, 0, 0, 1, 0, 0];
+    const prevRenderOnAddRemove = c.renderOnAddRemove;
+
+    try {
+        c.renderOnAddRemove = false;
+        c.setViewportTransform([1, 0, 0, 1, 0, 0]);
+        c.calcOffset?.();
+        c.requestRenderAll?.();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        return await action();
+    } finally {
+        c.setViewportTransform(prevVpt);
+        c.renderOnAddRemove = prevRenderOnAddRemove;
+        c.calcOffset?.();
+        c.requestRenderAll?.();
+    }
+};
+
+const withProductZonesHiddenForOutput = async <T>(action: () => Promise<T> | T): Promise<T> => {
+    if (!canvas.value) return await action();
+
+    const zones = (canvas.value.getObjects() || []).filter((o: any) => isLikelyProductZone(o));
+    if (!zones.length) return await action();
+
+    const prevVisibility = zones.map((zone: any) => ({
+        obj: zone,
+        visible: zone?.visible !== false
+    }));
+
+    // IMPORTANT: call Fabric methods through the instance (`obj.set(...)`), never detached.
+    // Detached method refs lose `this` and crash on internal `_set`.
+    zones.forEach((zone: any) => {
+        zone?.set?.('visible', false);
+        zone?.setCoords?.();
+    });
+    canvas.value.requestRenderAll?.();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    try {
+        return await action();
+    } finally {
+        prevVisibility.forEach(({ obj, visible }: any) => {
+            obj?.set?.('visible', visible);
+            obj?.setCoords?.();
+        });
+        canvas.value.requestRenderAll?.();
+        await new Promise(resolve => setTimeout(resolve, 0));
+    }
+};
+
 // --- Frame Export Functions ---
 
 // Export a single frame as an image
@@ -13836,29 +14350,50 @@ const exportSingleFrame = async (frame: any, format: 'png' | 'jpg' = 'png', scal
     const frameName = (frame.layerName || frame.name || 'frame').replace(/[^a-z0-9]/gi, '-').toLowerCase();
     const fileName = `frame-${frameName}-${Date.now()}`;
 
-    // Get frame bounds
-    const bounds = {
-        left: frame.left || 0,
-        top: frame.top || 0,
-        width: (frame.getScaledWidth?.() || frame.width * (frame.scaleX || 1)),
-        height: (frame.getScaledHeight?.() || frame.height * (frame.scaleY || 1))
-    };
+    const bounds = getFrameBounds(frame);
+    if (!bounds) return null;
 
     // Create a data URL for the frame area
     let dataURL = '';
     try {
-        dataURL = canvas.value.toDataURL({
-            format: format,
-            quality: quality,
-            multiplier: scale,
-            left: bounds.left,
-            top: bounds.top,
-            width: bounds.width,
-            height: bounds.height
-        });
+        dataURL = await withProductZonesHiddenForOutput(async () => (
+            await runWithNeutralViewport(async () => {
+                sanitizeAllClipPaths();
+                const options: any = {
+                    format: format,
+                    quality: quality,
+                    multiplier: Math.max(1, Number(scale) || 1),
+                    left: bounds.left,
+                    top: bounds.top,
+                    width: Math.max(1, bounds.width),
+                    height: Math.max(1, bounds.height),
+                    enableRetinaScaling: false,
+                    ...(format === 'jpg' ? { backgroundColor: '#ffffff' } : {})
+                };
+                return canvas.value.toDataURL(options);
+            })
+        ));
     } catch (err) {
-        console.error('[Export Frame] Error:', err);
-        return null;
+        console.warn('[Export Frame] Primeira tentativa falhou, tentando fallback:', err);
+        try {
+            dataURL = await withProductZonesHiddenForOutput(async () => (
+                await runWithNeutralViewport(async () => {
+                    return canvas.value.toDataURL({
+                        format: format,
+                        quality: quality,
+                        multiplier: Math.max(1, Number(scale) || 1),
+                        left: bounds.left,
+                        top: bounds.top,
+                        width: Math.max(1, bounds.width),
+                        height: Math.max(1, bounds.height),
+                        ...(format === 'jpg' ? { backgroundColor: '#ffffff' } : {})
+                    });
+                })
+            ));
+        } catch (fallbackErr) {
+            console.error('[Export Frame] Error:', fallbackErr);
+            return null;
+        }
     }
 
     return { dataURL, fileName };
@@ -13934,14 +14469,15 @@ const performExport = async () => {
 
     const { format, scale, quality, exportScope, selectedFrameId } = exportSettings.value;
     const imgFormat = format === 'jpeg' ? 'jpg' : format;
+    const frameFormat: 'png' | 'jpg' = imgFormat === 'jpg' ? 'jpg' : 'png';
 
     // Export selected frame
     if (exportScope === 'selected-frame' && selectedFrameId) {
         const frame = getFrameById(selectedFrameId);
         if (frame) {
-            const result = await exportSingleFrame(frame, imgFormat as 'png' | 'jpg', scale, quality);
+            const result = await exportSingleFrame(frame, frameFormat, scale, quality);
             if (result) {
-                downloadFile(result.dataURL, `${result.fileName}.${imgFormat}`);
+                downloadFile(result.dataURL, `${result.fileName}.${frameFormat}`);
             }
         }
     }
@@ -13949,11 +14485,11 @@ const performExport = async () => {
     else if (exportScope === 'all-frames') {
         const frames = getAllFrames();
         if (frames.length > 0) {
-            const frameExports = await exportAllFrames(imgFormat as 'png' | 'jpg', scale, quality);
+            const frameExports = await exportAllFrames(frameFormat, scale, quality);
             const filesToDownload = frameExports.map(e => ({
                 dataURL: e.dataURL,
                 fileName: e.fileName,
-                format: imgFormat
+                format: frameFormat
             }));
             await downloadMultipleFiles(filesToDownload);
         } else {
@@ -13965,16 +14501,22 @@ const performExport = async () => {
         let dataURL = '';
 
         if (format === 'svg') {
-            const svgContent = canvas.value.toSVG();
+            const svgContent = await withProductZonesHiddenForOutput(async () => canvas.value.toSVG());
             const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
             const url = URL.createObjectURL(blob);
             downloadFile(url, `design-export-${Date.now()}.svg`);
         } else {
-            dataURL = canvas.value.toDataURL({
-                format: format,
-                quality: quality,
-                multiplier: scale
-            });
+            dataURL = await withProductZonesHiddenForOutput(async () => (
+                await runWithNeutralViewport(async () => {
+                    sanitizeAllClipPaths();
+                    return canvas.value.toDataURL({
+                        format: format,
+                        quality: quality,
+                        multiplier: Math.max(1, Number(scale) || 1),
+                        ...(imgFormat === 'jpg' ? { backgroundColor: '#ffffff' } : {})
+                    });
+                })
+            ));
             downloadFile(dataURL, `design-export-${Date.now()}.${imgFormat}`);
         }
     }
@@ -13997,6 +14539,36 @@ const shareSettings = ref({
     selectedFrameIds: [] as string[],
     shareAsFiles: true // Share as files or use link sharing
 })
+
+watch(availableFramesForExport, (frames) => {
+    const ids = new Set(frames.map((f: any) => String(f.id || '').trim()).filter(Boolean));
+    const firstId = frames[0]?.id || '';
+
+    // Export modal selection
+    if (exportSettings.value.selectedFrameId && !ids.has(String(exportSettings.value.selectedFrameId))) {
+        exportSettings.value.selectedFrameId = '';
+    }
+    if (exportSettings.value.exportScope === 'selected-frame' && !exportSettings.value.selectedFrameId) {
+        exportSettings.value.selectedFrameId = firstId;
+    }
+
+    // Share modal selections
+    const filteredShareIds = (shareSettings.value.selectedFrameIds || []).filter((id: string) => ids.has(String(id || '').trim()));
+    if (filteredShareIds.length !== shareSettings.value.selectedFrameIds.length) {
+        shareSettings.value.selectedFrameIds = filteredShareIds;
+    }
+    if (shareSettings.value.selectedFrameId && !ids.has(String(shareSettings.value.selectedFrameId))) {
+        shareSettings.value.selectedFrameId = '';
+    }
+    if (shareSettings.value.shareScope === 'selected-frame') {
+        if (shareSettings.value.selectedFrameIds.length === 0 && firstId) {
+            shareSettings.value.selectedFrameIds = [firstId];
+        }
+        if (!shareSettings.value.selectedFrameId) {
+            shareSettings.value.selectedFrameId = shareSettings.value.selectedFrameIds[0] || firstId || '';
+        }
+    }
+}, { immediate: true });
 
 const toggleFrameSelection = (frameId: string) => {
     const idx = shareSettings.value.selectedFrameIds.indexOf(frameId)
@@ -14029,6 +14601,7 @@ const performShare = async () => {
 
     const { format, scale, quality, shareScope, selectedFrameId } = shareSettings.value;
     const imgFormat = format === 'jpeg' ? 'jpg' : format;
+    const frameFormat: 'png' | 'jpg' = imgFormat === 'jpg' ? 'jpg' : 'png';
 
     // Share selected frame(s)
     if (shareScope === 'selected-frame' && shareSettings.value.selectedFrameIds.length > 0) {
@@ -14036,11 +14609,11 @@ const performShare = async () => {
         if (frameIds.length === 1) {
             const frame = getFrameById(frameIds[0] as string);
             if (frame) {
-                const result = await exportSingleFrame(frame, imgFormat as 'png' | 'jpg', scale, quality);
+                const result = await exportSingleFrame(frame, frameFormat, scale, quality);
                 if (result) {
-                    const shared = await shareFile(result.dataURL, `${result.fileName}.${imgFormat}`, (frame.layerName || frame.name || 'Frame'));
+                    const shared = await shareFile(result.dataURL, `${result.fileName}.${frameFormat}`, (frame.layerName || frame.name || 'Frame'));
                     if (!shared) {
-                        downloadFile(result.dataURL, `${result.fileName}.${imgFormat}`);
+                        downloadFile(result.dataURL, `${result.fileName}.${frameFormat}`);
                     }
                 }
             }
@@ -14050,8 +14623,8 @@ const performShare = async () => {
             for (const fid of frameIds) {
                 const frame = getFrameById(fid);
                 if (frame) {
-                    const result = await exportSingleFrame(frame, imgFormat as 'png' | 'jpg', scale, quality);
-                    if (result) results.push({ dataURL: result.dataURL, fileName: result.fileName, format: imgFormat });
+                    const result = await exportSingleFrame(frame, frameFormat, scale, quality);
+                    if (result) results.push({ dataURL: result.dataURL, fileName: result.fileName, format: frameFormat });
                 }
             }
             if (results.length > 0) {
@@ -14064,21 +14637,21 @@ const performShare = async () => {
         const frames = getAllFrames();
         if (frames.length > 0) {
             if (frames.length === 1) {
-                const result = await exportSingleFrame(frames[0], imgFormat as 'png' | 'jpg', scale, quality);
+                const result = await exportSingleFrame(frames[0], frameFormat, scale, quality);
                 if (result) {
-                    const shared = await shareFile(result.dataURL, `${result.fileName}.${imgFormat}`, 'All Frames');
+                    const shared = await shareFile(result.dataURL, `${result.fileName}.${frameFormat}`, 'All Frames');
                     if (!shared) {
-                        downloadFile(result.dataURL, `${result.fileName}.${imgFormat}`);
+                        downloadFile(result.dataURL, `${result.fileName}.${frameFormat}`);
                     }
                 }
             } else {
                 // For multiple files, we need to download them (Web Share API only supports single file)
                 alert('Compartilhamento nativo suporta apenas um arquivo por vez. Os arquivos serão baixados.');
-                const frameExports = await exportAllFrames(imgFormat as 'png' | 'jpg', scale, quality);
+                const frameExports = await exportAllFrames(frameFormat, scale, quality);
                 const filesToDownload = frameExports.map(e => ({
                     dataURL: e.dataURL,
                     fileName: e.fileName,
-                    format: imgFormat
+                    format: frameFormat
                 }));
                 await downloadMultipleFiles(filesToDownload);
             }
@@ -14088,11 +14661,17 @@ const performShare = async () => {
     }
     // Share entire canvas
     else {
-        let dataURL = canvas.value.toDataURL({
-            format: format,
-            quality: quality,
-            multiplier: scale
-        });
+        const dataURL = await withProductZonesHiddenForOutput(async () => (
+            await runWithNeutralViewport(async () => {
+                sanitizeAllClipPaths();
+                return canvas.value.toDataURL({
+                    format: format,
+                    quality: quality,
+                    multiplier: Math.max(1, Number(scale) || 1),
+                    ...(imgFormat === 'jpg' ? { backgroundColor: '#ffffff' } : {})
+                });
+            })
+        ));
         const fileName = `design-${project.name || 'export'}-${Date.now()}.${imgFormat}`;
         const shared = await shareFile(dataURL, fileName, project.name || 'Design');
         if (!shared) {
@@ -17741,13 +18320,13 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
         setText(bannerText, `\u2605 ${bannerLabel} \u2605`);
     }
 
-    // Manual templates keep typography/layout authored in Mini Editor, but
-    // must still widen horizontally when price digits grow (e.g. 19,99 -> 139,99).
-    expandManualTemplateWidthForDynamicPrice(pg);
-
     const preserveTemplateVisual =
         !!((pg as any)?.__preserveManualLayout) ||
         !!((pg as any)?.__isCustomTemplate);
+    // Keep Mini Editor templates visually identical (no auto width expansion).
+    if (!preserveTemplateVisual) {
+        expandManualTemplateWidthForDynamicPrice(pg);
+    }
     if (preserveTemplateVisual) {
         const parts = typeof pg.getObjects === 'function' ? (pg.getObjects() || []) : [];
         parts.forEach((o: any) => o?.setCoords?.());
@@ -19232,7 +19811,13 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
             unitTxt.set?.('text', u);
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
         }
-        expandManualTemplateWidthForDynamicPrice(pg);
+        const preserveTemplateVisual =
+            !!((pg as any)?.__preserveManualLayout) ||
+            !!((pg as any)?.__isCustomTemplate);
+        // Keep Mini Editor templates visually identical (no auto width expansion).
+        if (!preserveTemplateVisual) {
+            expandManualTemplateWidthForDynamicPrice(pg);
+        }
         return;
     }
 
@@ -19240,7 +19825,13 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
         legacy.set?.('text', `${integer}${decimalText}`);
         if (typeof legacy.initDimensions === 'function') legacy.initDimensions();
     }
-    expandManualTemplateWidthForDynamicPrice(pg);
+    const preserveTemplateVisual =
+        !!((pg as any)?.__preserveManualLayout) ||
+        !!((pg as any)?.__isCustomTemplate);
+    // Keep Mini Editor templates visually identical (no auto width expansion).
+    if (!preserveTemplateVisual) {
+        expandManualTemplateWidthForDynamicPrice(pg);
+    }
 }
 
 function inferUnitFromCard(card: any): string | undefined {
@@ -19266,8 +19857,14 @@ async function renderLabelTemplatePreview(tpl: LabelTemplate): Promise<string | 
         el.height = 110;
         const sc = new fabric.StaticCanvas(el, { backgroundColor: 'transparent' });
         const g = await instantiatePriceGroupFromTemplate(tpl);
-        normalizePriceGroupForPreview(g);
-        layoutPriceGroup(g, 320, 220);
+        const preserveTemplateVisual =
+            !!((g as any)?.__preserveManualLayout) ||
+            !!((g as any)?.__isCustomTemplate);
+        // Keep preview 1:1 with Mini Editor template; avoid auto-normalization/reflow.
+        if (!preserveTemplateVisual) {
+            normalizePriceGroupForPreview(g);
+            layoutPriceGroup(g, 320, 220);
+        }
         g.set({ left: sc.getWidth() / 2, top: sc.getHeight() / 2 });
         // Fit with a bit of padding
         const bw = g.getScaledWidth?.() ?? g.width ?? 1;
@@ -20162,7 +20759,12 @@ async function insertLabelTemplateToCanvas(templateId: string) {
     if (!tpl) return;
     try {
         const g = await instantiatePriceGroupFromTemplate(tpl);
-        layoutPriceGroup(g, 320, 220);
+        const preserveTemplateVisual =
+            !!((g as any)?.__preserveManualLayout) ||
+            !!((g as any)?.__isCustomTemplate);
+        if (!preserveTemplateVisual) {
+            layoutPriceGroup(g, 320, 220);
+        }
         const center = getCenterOfView();
         g.set({
             left: center.x,
@@ -20946,14 +21548,36 @@ const isLikelyProductZone = (obj: any) => {
     return !!(rect && Array.isArray(rect.strokeDashArray));
 }
 
+const isStandalonePriceGroup = (obj: any) => {
+    if (!obj) return false;
+    if (obj.type !== 'group' || typeof obj.getObjects !== 'function') return false;
+    if (String(obj.name || '') !== 'priceGroup') return false;
+
+    // If it's already tagged as card/smart object, it's not a standalone label.
+    if (obj.isSmartObject || obj.isProductCard) return false;
+    if (String((obj as any).parentZoneId || '').trim()) return false;
+    if (String((obj as any).smartGridId || '').trim()) return false;
+
+    const children = obj.getObjects() || [];
+    const hasOfferBg = children.some((c: any) => String(c?.name || '') === 'offerBackground');
+    const hasSmartImage = children.some((c: any) => {
+        const t = String(c?.type || '').toLowerCase();
+        const n = String(c?.name || '');
+        return t === 'image' || ['smart_image', 'product_image', 'productImage'].includes(n);
+    });
+
+    // A real standalone price label usually has only price texts/backgrounds, not card background/image.
+    return !hasOfferBg && !hasSmartImage;
+}
+
 const isLikelyProductCard = (obj: any) => {
     if (!obj) return false;
     if (obj.excludeFromExport) return false;
     if (obj.isFrame) return false;
     if (isLikelyProductZone(obj)) return false;
     if (obj.type !== 'group' || typeof obj.getObjects !== 'function') return false;
-    // A standalone label template inserted to canvas is usually the "priceGroup" itself.
-    if (String(obj.name || '') === 'priceGroup') return false;
+    // Ignore only true standalone price labels. Some legacy cards were incorrectly named "priceGroup".
+    if (isStandalonePriceGroup(obj)) return false;
 
     // If it already has a zone binding, treat as a product card (legacy-safe).
     const pz = String((obj as any).parentZoneId || '').trim();
@@ -21292,7 +21916,8 @@ const getZoneChildCandidates = (zone: any) => {
         if ((o as any).isFrame) return false;
         if (isLikelyProductZone(o)) return false;
         if (o.type !== 'group' || typeof o.getObjects !== 'function') return false;
-        if (String(o.name || '') === 'priceGroup') return false;
+        // Exclude only bare price labels, not misnamed legacy product cards.
+        if (isStandalonePriceGroup(o)) return false;
         return true;
     };
 
@@ -21359,6 +21984,50 @@ const getZoneChildren = (zone: any) => {
     const slotBound: any[] = [];
     const legacyCandidates: any[] = [];
 
+    const hasStrongCardSignature = (o: any) => {
+        if (!o || typeof o.getObjects !== 'function') return false;
+        const cw = Number((o as any)?._cardWidth);
+        const ch = Number((o as any)?._cardHeight);
+        if (Number.isFinite(cw) && cw > 0 && Number.isFinite(ch) && ch > 0) return true;
+
+        const children = o.getObjects() || [];
+        if (!Array.isArray(children) || children.length === 0) return false;
+
+        const hasOfferBg = children.some((c: any) => String(c?.name || '') === 'offerBackground');
+        if (hasOfferBg) return true;
+
+        const hasPriceGroup = children.some((c: any) => String(c?.type || '').toLowerCase() === 'group' && String(c?.name || '') === 'priceGroup');
+        const hasImage = children.some((c: any) => String(c?.type || '').toLowerCase() === 'image');
+        return hasPriceGroup && hasImage;
+    };
+
+    const canBelongToZone = (o: any) => {
+        const objBounds = o.getBoundingRect();
+        const isInside =
+            objBounds.left >= zoneBounds.left &&
+            objBounds.top >= zoneBounds.top &&
+            objBounds.left + objBounds.width <= zoneBounds.left + zoneBounds.width &&
+            objBounds.top + objBounds.height <= zoneBounds.top + zoneBounds.height;
+
+        const center = typeof o.getCenterPoint === 'function'
+            ? o.getCenterPoint()
+            : { x: (o.left ?? 0), y: (o.top ?? 0) };
+        const nearInside =
+            center.x >= (zoneBounds.left - margin) &&
+            center.x <= (zoneBounds.left + zoneBounds.width + margin) &&
+            center.y >= (zoneBounds.top - margin) &&
+            center.y <= (zoneBounds.top + zoneBounds.height + margin);
+
+        let intersects = false;
+        try {
+            intersects = !!zone.intersectsWithObject(o);
+        } catch {
+            intersects = false;
+        }
+
+        return isInside || intersects || nearInside;
+    };
+
     candidates.forEach((o: any) => {
         const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
         const likelyCard = explicitCard ? true : isLikelyProductCard(o);
@@ -21382,39 +22051,46 @@ const getZoneChildren = (zone: any) => {
             return;
         }
 
+        // Hard stop: a card already bound to ANOTHER zone must never be auto-captured here.
+        if ((boundId && boundId !== zoneId) || (slotZoneId && slotZoneId !== zoneId)) {
+            return;
+        }
+
         legacyCandidates.push(o);
     });
 
-    // If the zone already has explicit bindings, do NOT auto-capture nearby groups.
-    // This prevents false positives (mini-cards/soltos) when changing spacing/layout.
+    // Recover unbound but strongly-identifiable product cards that are still inside/near the zone.
+    // This keeps old/corrupted layouts responsive after resize without stealing objects from other zones.
+    const recoveredUnbound = legacyCandidates.filter((o: any) => {
+        const boundId = String((o as any)?.parentZoneId || '').trim();
+        const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
+        if (boundId || slotZoneId) return false;
+        if (!hasStrongCardSignature(o)) return false;
+        if (!canBelongToZone(o)) return false;
+
+        const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
+        normalizeLegacyCard(o, explicitCard);
+        o.parentZoneId = zoneId || zone._customId;
+        applyCardFrameBinding(o, zoneFrameId);
+        return true;
+    });
+
+    // If the zone already has explicit bindings, keep strict mode but include recovered unbound cards.
+    // This prevents false positives while fixing detached cards from legacy/buggy states.
     if (explicitBound.length > 0 || slotBound.length > 0) {
-        return [...explicitBound, ...slotBound];
+        return [...explicitBound, ...slotBound, ...recoveredUnbound];
     }
 
     // Legacy rescue mode: only when no explicit cards exist for the zone.
     return legacyCandidates.filter((o: any) => {
-        const objBounds = o.getBoundingRect();
-        const isInside =
-            objBounds.left >= zoneBounds.left &&
-            objBounds.top >= zoneBounds.top &&
-            objBounds.left + objBounds.width <= zoneBounds.left + zoneBounds.width &&
-            objBounds.top + objBounds.height <= zoneBounds.top + zoneBounds.height;
-
-        // Legacy tolerance: consider "near inside" so a slightly offset card still belongs to the zone.
-        const center = typeof o.getCenterPoint === 'function'
-            ? o.getCenterPoint()
-            : { x: (o.left ?? 0), y: (o.top ?? 0) };
-        const nearInside =
-            center.x >= (zoneBounds.left - margin) &&
-            center.x <= (zoneBounds.left + zoneBounds.width + margin) &&
-            center.y >= (zoneBounds.top - margin) &&
-            center.y <= (zoneBounds.top + zoneBounds.height + margin);
-
-        const intersects = zone.intersectsWithObject(o);
-        if (isInside || intersects || nearInside) {
+        // Legacy rescue should only capture truly unbound cards.
+        const boundId = String((o as any)?.parentZoneId || '').trim();
+        const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
+        if (boundId || slotZoneId) return false;
+        if (canBelongToZone(o)) {
             const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
             normalizeLegacyCard(o, explicitCard);
-            o.parentZoneId = zone._customId;
+            o.parentZoneId = zoneId || zone._customId;
             applyCardFrameBinding(o, zoneFrameId);
             return true;
         }
@@ -21807,7 +22483,8 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
                         // Last row fill
                         const isLastRow = row === normRowCount - 1;
                         const itemsInRow = isLastRow ? (normCards.length % normalCols || normalCols) : normalCols;
-                        const shouldFill = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < normalCols;
+                        const shouldFill = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < normalCols && itemsInRow > 1;
+                        const shouldCenterSingle = isLastRow && itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch');
                         const cellW = shouldFill
                             ? (normSectionW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow)
                             : baseNormCellW;
@@ -21815,7 +22492,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
                         let x = normSectionX + col * (cellW + gapX);
 
                         // Center last row if needed
-                        if (isLastRow && lastRowBehavior === 'center' && itemsInRow < normalCols) {
+                        if ((isLastRow && lastRowBehavior === 'center' && itemsInRow < normalCols) || shouldCenterSingle) {
                             const rowW = (itemsInRow * cellW) + ((itemsInRow - 1) * gapX);
                             x = normSectionX + (normSectionW - rowW) / 2 + col * (cellW + gapX);
                         }
@@ -21852,7 +22529,8 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
 
         const isLastRow = layoutDirection !== 'vertical' && row === effectiveRows - 1;
         const itemsInRow = isLastRow ? (count % cols || cols) : cols;
-        const shouldFillRow = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < cols;
+        const shouldFillRow = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < cols && itemsInRow > 1;
+        const shouldCenterSingleLastItem = isLastRow && itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch');
         const rowItemW = shouldFillRow
             ? (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow)
             : itemW;
@@ -21861,7 +22539,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
         let y = startY + (row * (itemH + gapY));
 
         // Center last row if needed
-        if (isLastRow && lastRowBehavior === 'center' && itemsInRow < cols) {
+        if ((isLastRow && lastRowBehavior === 'center' && itemsInRow < cols) || shouldCenterSingleLastItem) {
             const rowWidth = (itemsInRow * rowItemW) + ((itemsInRow - 1) * gapX);
             x = startX + (usableW - rowWidth) / 2 + (col * (rowItemW + gapX));
         }
