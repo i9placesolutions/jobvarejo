@@ -202,6 +202,27 @@ export const useProductProcessor = () => {
         })) as SmartProduct[];
     };
 
+    const isExpectedNoImageError = (err: any): boolean => {
+        const status = Number(
+            err?.statusCode ??
+            err?.status ??
+            err?.response?.status ??
+            err?.data?.statusCode
+        );
+        return status === 404;
+    };
+
+    const extractErrorMessage = (err: any, fallback: string): string => {
+        const msg = String(
+            err?.data?.message ||
+            err?.data?.statusMessage ||
+            err?.statusMessage ||
+            err?.message ||
+            fallback
+        ).trim();
+        return msg.length ? msg : fallback;
+    };
+
     const parseText = async (text: string) => {
         isParsing.value = true;
         parsingError.value = null;
@@ -261,7 +282,13 @@ export const useProductProcessor = () => {
             const searchTerm = buildSearchTerm(product, effectiveWeight);
             const headers = await getApiAuthHeaders();
             
-            const result = await $fetch('/api/process-product-image', {
+            const result = await $fetch<{
+                url?: string;
+                found?: boolean;
+                reason?: string;
+                statusMessage?: string;
+                message?: string;
+            }>('/api/process-product-image', {
                 method: 'POST',
                 headers,
                 body: {
@@ -278,13 +305,21 @@ export const useProductProcessor = () => {
                 console.log('[ProductProcessor] Image found:', product.name, result.url.substring(0, 80) + '...');
             } else {
                 product.status = 'error';
-                product.error = 'Imagem não encontrada';
-                console.log('[ProductProcessor] No image found for:', product.name);
+                product.error = String(result?.reason || result?.statusMessage || result?.message || 'Imagem não encontrada');
+                console.log('[ProductProcessor] No image found for:', product.name, '-', product.error);
             }
         } catch (err: any) {
-            console.error(err);
+            if (isExpectedNoImageError(err)) {
+                const noImageMessage = extractErrorMessage(err, 'Imagem não encontrada');
+                product.status = 'error';
+                product.error = noImageMessage;
+                console.warn('[ProductProcessor] Imagem não encontrada:', product.name, '-', noImageMessage);
+                return;
+            }
+
+            console.error('[ProductProcessor] Falha ao processar imagem:', product.name, err);
             product.status = 'error';
-            product.error = 'Falha no processamento';
+            product.error = extractErrorMessage(err, 'Falha no processamento');
         }
     }
 

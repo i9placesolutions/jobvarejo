@@ -7,6 +7,45 @@ import { Plus, Copy, Trash2, Smartphone, Monitor, FileText, Instagram, ChevronUp
 const { project, activePage, switchPage, addPage, duplicatePage, deletePage } = useProject()
 
 const isExpanded = ref(true)
+const pageThumbErrors = ref<Record<string, boolean>>({})
+
+const isUsableThumbnailUrl = (url: unknown): boolean => {
+    if (typeof url !== 'string') return false
+    const value = url.trim()
+    if (!value) return false
+    const lower = value.toLowerCase()
+    if (lower === 'data:,' || lower === 'about:blank') return false
+    if (lower.startsWith('blob:null')) return false
+    if (lower.startsWith('javascript:')) return false
+    return true
+}
+
+const getPageThumbSrc = (page: any): string => {
+    const inlineThumb = typeof page?.thumbnail === 'string' ? page.thumbnail.trim() : ''
+    const storedThumb = typeof page?.thumbnailUrl === 'string' ? page.thumbnailUrl.trim() : ''
+    return inlineThumb || storedThumb
+}
+
+const hasUsablePageThumbnail = (page: any): boolean => {
+    const id = String(page?.id || '')
+    if (pageThumbErrors.value[id]) return false
+    return isUsableThumbnailUrl(getPageThumbSrc(page))
+}
+
+const markPageThumbError = (page: any) => {
+    const id = String(page?.id || '')
+    if (!id) return
+    pageThumbErrors.value[id] = true
+}
+
+const getPageInitials = (page: any): string => {
+    const rawName = String(page?.name || '').trim()
+    if (!rawName) return 'PG'
+    const words = rawName.split(/\s+/).filter(Boolean).slice(0, 2)
+    const initials = words.map((w: string) => (w[0] || '').toUpperCase()).join('')
+    return initials || 'PG'
+}
+
 const createPage = (preset: string) => {
     switch(preset) {
         case 'story': addPage('RETAIL_OFFER', 1080, 1920, 'Story'); break;
@@ -66,9 +105,15 @@ const createPage = (preset: string) => {
                 }"
               >
                   <!-- Image Preview -->
-                  <img v-if="page.thumbnail || page.thumbnailUrl" :src="page.thumbnail || page.thumbnailUrl" class="w-full h-full object-contain" />
-                  <div v-else class="w-full h-full flex items-center justify-center bg-zinc-900">
+                  <img
+                    v-if="hasUsablePageThumbnail(page)"
+                    :src="getPageThumbSrc(page)"
+                    class="w-full h-full object-contain"
+                    @error="markPageThumbError(page)"
+                  />
+                  <div v-else class="w-full h-full flex flex-col items-center justify-center gap-1 bg-zinc-900">
                       <FileText class="w-4 h-4 text-zinc-700" />
+                      <span class="text-[8px] font-bold text-zinc-500 tracking-wide">{{ getPageInitials(page) }}</span>
                   </div>
                   
                   <!-- Selection Overlay -->

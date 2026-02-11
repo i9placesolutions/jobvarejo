@@ -11,6 +11,10 @@ export interface Page {
     canvasDataPath?: string; // Caminho no Storage (salvo no banco)
     thumbnail?: string; // DataURL da miniatura (em memória)
     thumbnailUrl?: string; // URL pública no Storage
+    lastLoadedFingerprint?: string;
+    lastSavedFingerprint?: string;
+    lastPersistedObjectCount?: number;
+    dirty?: boolean;
 }
 
 export interface Project {
@@ -50,6 +54,24 @@ const DRAFT_PROJECT_KEY_PREFIX = 'jobvarejo:draft:project:'
 const getProjectDraftKey = (projectId: string) => `${DRAFT_PROJECT_KEY_PREFIX}${projectId}`
 type ProjectDraftPayload = { updatedAt: number; project: { id: string; name: string; pages: Page[]; activePageIndex: number } }
 
+const hashString = (input: string): string => {
+    let hash = 5381
+    for (let i = 0; i < input.length; i++) {
+        hash = ((hash << 5) + hash) + input.charCodeAt(i)
+        hash |= 0
+    }
+    return `h${(hash >>> 0).toString(16)}`
+}
+
+const computeCanvasFingerprint = (canvasData: any): string => {
+    try {
+        if (!canvasData || typeof canvasData !== 'object') return 'empty'
+        return hashString(JSON.stringify(canvasData))
+    } catch {
+        return `fallback:${getCanvasObjectCount(canvasData)}:${getCanvasSavedAt(canvasData)}`
+    }
+}
+
 const getCanvasSavedAt = (canvasData: any): number => {
     if (!canvasData || typeof canvasData !== 'object') return 0
     const direct = [
@@ -77,6 +99,12 @@ const pickBestRemoteCanvasData = (storageCanvasData: any, dbCanvasData: any) => 
     if (storageCanvasData && !dbCanvasData) return { data: storageCanvasData, source: 'storage' as const }
     if (!storageCanvasData && dbCanvasData) return { data: dbCanvasData, source: 'db' as const }
 
+    const storageCount = getCanvasObjectCount(storageCanvasData)
+    const dbCount = getCanvasObjectCount(dbCanvasData)
+    // Safety first: avoid selecting a blank payload while a non-empty backup exists.
+    if (storageCount === 0 && dbCount > 0) return { data: dbCanvasData, source: 'db(non-empty-safer)' as const }
+    if (dbCount === 0 && storageCount > 0) return { data: storageCanvasData, source: 'storage(non-empty-safer)' as const }
+
     const storageTs = getCanvasSavedAt(storageCanvasData)
     const dbTs = getCanvasSavedAt(dbCanvasData)
     if (storageTs > 0 || dbTs > 0) {
@@ -86,8 +114,6 @@ const pickBestRemoteCanvasData = (storageCanvasData: any, dbCanvasData: any) => 
 
     // Legacy payloads sem timestamp: preserva comportamento atual (Storage), mas evita
     // regressão quando Storage vier vazio e o banco tiver conteúdo.
-    const storageCount = getCanvasObjectCount(storageCanvasData)
-    const dbCount = getCanvasObjectCount(dbCanvasData)
     if (storageCount === 0 && dbCount > 0) return { data: dbCanvasData, source: 'db(non-empty)' as const }
     return { data: storageCanvasData, source: 'storage(legacy-default)' as const }
 }
@@ -167,7 +193,9 @@ const clearProjectDraft = (projectId: string) => {
 
 export const useProject = () => {
     const supabase = useSupabase()
-    const { saveCanvasData, saveThumbnail, loadCanvasData, loadCanvasDataFromPath, deleteProjectFiles, saveStatus: storageSaveStatus } = useStorage()
+    const { saveCanvasData, saveThumbnail, loadCanvasData, loadCanvasDataFromPath, recoverLatestNonEmptyCanvasData, deleteProjectFiles, saveStatus: storageSaveStatus } = useStorage()
+    const projectServerUpdatedAt = ref<string | null>(null)
+    const projectLoadSession = ref(0)
 
     const activePage = computed(() => project.pages[project.activePageIndex])
 
@@ -211,7 +239,11 @@ export const useProject = () => {
             height,
             type,
             canvasData: null, // Começa vazio
-            canvasDataPath: undefined
+            canvasDataPath: undefined,
+            lastLoadedFingerprint: 'empty',
+            lastSavedFingerprint: 'empty',
+            lastPersistedObjectCount: 0,
+            dirty: false
         }
         project.pages.push(newPage)
         // Switch to new page
@@ -233,15 +265,32 @@ export const useProject = () => {
         }
     }
 
-    const updatePageData = (index: number, json: any) => {
+    type UpdatePageDataOptions = {
+        markUnsaved?: boolean
+        source?: 'user' | 'system'
+        skipIfSameFingerprint?: boolean
+    }
+
+    const updatePageData = (index: number, json: any, opts: UpdatePageDataOptions = {}) => {
         if (project.pages[index]) {
             const stampedJson = (json && typeof json === 'object')
                 ? { ...json, __savedAt: Date.now() }
                 : json
+            const fingerprint = computeCanvasFingerprint(stampedJson)
+            if (opts.skipIfSameFingerprint && project.pages[index].lastSavedFingerprint === fingerprint) {
+                return false
+            }
             const objectCount = stampedJson?.objects?.length || 0;
             console.log(`💾 updatePageData: salvando ${objectCount} objeto(s) na página ${index} (${project.pages[index].id})`);
             
             project.pages[index].canvasData = stampedJson
+            project.pages[index].lastSavedFingerprint = fingerprint
+            if (!project.pages[index].lastLoadedFingerprint) {
+                project.pages[index].lastLoadedFingerprint = fingerprint
+            }
+            project.pages[index].dirty = opts.source === 'system'
+                ? !!opts.markUnsaved
+                : true
             
             // Verificar se foi salvo corretamente
             const savedObjectCount = project.pages[index].canvasData?.objects?.length || 0;
@@ -251,7 +300,8 @@ export const useProject = () => {
                 console.log(`✅ updatePageData: ${savedObjectCount} objeto(s) salvos corretamente`);
             }
             
-            markAsUnsaved()
+            const shouldMarkUnsaved = opts.markUnsaved ?? (opts.source !== 'system')
+            if (shouldMarkUnsaved) markAsUnsaved()
             // Also persist a local draft to survive reloads/offline.
             const p = project.pages[index]
             if (p?.id && project.id) {
@@ -259,8 +309,10 @@ export const useProject = () => {
                 console.log(`📝 Draft local salvo para página ${p.id}`);
             }
             writeProjectDraft()
+            return true
         } else {
             console.error(`❌ updatePageData: página ${index} não existe!`);
+            return false
         }
     }
 
@@ -310,7 +362,11 @@ export const useProject = () => {
             height: sourcePage.height,
             type: sourcePage.type,
             canvasData: clonedJson,
-            thumbnail: sourcePage.thumbnail
+            thumbnail: sourcePage.thumbnail,
+            lastLoadedFingerprint: computeCanvasFingerprint(clonedJson),
+            lastSavedFingerprint: computeCanvasFingerprint(clonedJson),
+            lastPersistedObjectCount: getCanvasObjectCount(clonedJson),
+            dirty: true
         }
 
         // Inserir logo após a original
@@ -340,7 +396,7 @@ export const useProject = () => {
      * Salva o projeto usando Supabase Storage para os dados pesados
      * O banco armazena apenas metadados e caminhos para os arquivos
      */
-    const saveProjectDB = async () => {
+    const saveProjectDB = async (opts: { forceEmptyOverwrite?: boolean } = {}) => {
         // Não executar no servidor (SSR)
         if (import.meta.server) {
             return
@@ -351,6 +407,20 @@ export const useProject = () => {
 
         try {
             const supabase = useSupabase()
+            const unsafeEmptyPages = project.pages.filter((page) => {
+                const currentCount = getCanvasObjectCount(page?.canvasData)
+                const persistedCount = Number(page?.lastPersistedObjectCount || 0)
+                return currentCount === 0 && persistedCount > 0
+            })
+            if (unsafeEmptyPages.length > 0 && !opts.forceEmptyOverwrite) {
+                saveStatus.value = 'error'
+                console.error('🛑 Bloqueando save remoto para evitar overwrite vazio em páginas persistidas:', unsafeEmptyPages.map((p) => ({
+                    pageId: p.id,
+                    persistedCount: p.lastPersistedObjectCount || 0,
+                    currentCount: getCanvasObjectCount(p.canvasData)
+                })))
+                return
+            }
 
             // 1. Salvar cada página no Storage
             const storagePaths: string[] = []
@@ -361,11 +431,18 @@ export const useProject = () => {
                 // Salvar canvas JSON no Storage (com retry automático)
                 if (page?.canvasData) {
                     try {
+                        const currentCount = getCanvasObjectCount(page.canvasData)
+                        const persistedCount = Number(page?.lastPersistedObjectCount || 0)
+                        if (currentCount === 0 && persistedCount > 0 && !opts.forceEmptyOverwrite) {
+                            console.warn(`🛡️ Skip upload vazio para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
+                            continue
+                        }
                         // Tentar salvar na Contabo (com retry interno)
                         const path = await saveCanvasData(project.id, page.id, page.canvasData, 3)
                         if (path) {
                             storagePaths[i] = path
                             page.canvasDataPath = path
+                            page.lastPersistedObjectCount = currentCount
                             console.log('✅ Canvas salvo na Contabo:', path)
                         } else {
                             // Se falhou após todas as tentativas, o draft local já está salvo
@@ -406,8 +483,15 @@ export const useProject = () => {
                 // Mesmo quando temos storagePath, mantemos canvasData para garantir
                 // que os dados nunca sejam perdidos se o Storage falhar
                 if (page.canvasData) {
-                    metadata.canvasData = page.canvasData
-                    console.log(`💾 Incluindo canvasData no banco para página ${page.id} (${page.canvasData?.objects?.length || 0} objetos)`)
+                    const currentCount = getCanvasObjectCount(page.canvasData)
+                    const persistedCount = Number(page?.lastPersistedObjectCount || 0)
+                    const shouldBlockEmptyBackup = currentCount === 0 && persistedCount > 0 && !opts.forceEmptyOverwrite
+                    if (shouldBlockEmptyBackup) {
+                        console.warn(`🛡️ Bloqueando backup vazio no DB para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
+                    } else {
+                        metadata.canvasData = page.canvasData
+                        console.log(`💾 Incluindo canvasData no banco para página ${page.id} (${currentCount} objetos)`)
+                    }
                 }
 
                 return metadata
@@ -431,19 +515,38 @@ export const useProject = () => {
 
                 if (error) throw error
                 if (data?.id) project.id = data.id
+                if (data?.updated_at) projectServerUpdatedAt.value = data.updated_at
             } else {
                 // Update existing project
-                const { error } = await supabase
+                const expectedUpdatedAt = projectServerUpdatedAt.value
+                let updateQuery = supabase
                     .from('projects')
                     .update(payload)
                     .eq('id', project.id)
-
+                if (expectedUpdatedAt) {
+                    updateQuery = updateQuery.eq('updated_at', expectedUpdatedAt)
+                }
+                const { data: updatedRow, error } = await updateQuery
+                    .select('updated_at')
+                    .maybeSingle()
                 if (error) throw error
+                if (!updatedRow) {
+                    saveStatus.value = 'error'
+                    throw new Error('Conflito de gravação: o projeto foi alterado em outra sessão e este save foi bloqueado.')
+                }
+                projectServerUpdatedAt.value = String(updatedRow.updated_at || '')
             }
 
             lastSavedAt.value = new Date()
             hasUnsavedChanges.value = false
             saveStatus.value = 'saved'
+            project.pages.forEach((page) => {
+                page.dirty = false
+                page.lastPersistedObjectCount = getCanvasObjectCount(page.canvasData)
+                if (page.canvasData) {
+                    page.lastSavedFingerprint = computeCanvasFingerprint(page.canvasData)
+                }
+            })
 
             // Clear local drafts after a successful save.
             for (const p of project.pages) {
@@ -465,17 +568,19 @@ export const useProject = () => {
      * Salva automaticamente após período de inatividade
      */
     let saveTimeout: any = null
-    const AUTO_SAVE_DELAY = 3000 // 3 segundos
+    const AUTO_SAVE_DELAY = 6000 // 6 segundos (menos pressão de I/O durante edição intensa)
 
     const triggerAutoSave = () => {
         if (!project.id || project.id.startsWith('proj_')) {
             // Não auto-salvar projetos não criados ainda
             return
         }
+        if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) {
+            return
+        }
 
         clearTimeout(saveTimeout)
         hasUnsavedChanges.value = true
-        saveStatus.value = 'saving'
 
         saveTimeout = setTimeout(() => {
             saveProjectDB()
@@ -507,6 +612,13 @@ export const useProject = () => {
             return false
         }
 
+        const currentSession = ++projectLoadSession.value
+        isProjectLoaded.value = false
+        projectServerUpdatedAt.value = null
+        project.pages = []
+        project.activePageIndex = 0
+        hasUnsavedChanges.value = false
+
         console.log('🔄 loadProjectDB iniciado para ID:', id)
 
         try {
@@ -516,6 +628,11 @@ export const useProject = () => {
                 .select('*')
                 .eq('id', id)
                 .single()
+
+            if (currentSession !== projectLoadSession.value) {
+                console.warn('⏭️ loadProjectDB descartado por sessão mais nova')
+                return false
+            }
 
             if (error) throw error
             if (!data) {
@@ -528,6 +645,7 @@ export const useProject = () => {
 
             project.id = data.id
             project.name = data.name
+            projectServerUpdatedAt.value = data.updated_at || null
 
             // Verificar se os dados estão no novo formato (com caminhos do Storage)
             // Garantir que storedPages seja sempre um array válido
@@ -547,6 +665,10 @@ export const useProject = () => {
             project.pages = []
 
             for (const pageMeta of storedPages) {
+                if (currentSession !== projectLoadSession.value) {
+                    console.warn('⏭️ Carregamento de páginas interrompido por sessão mais nova')
+                    return false
+                }
                 // Pular se pageMeta não for um objeto válido ou não tiver id
                 if (!pageMeta || typeof pageMeta !== 'object' || !pageMeta.id) continue
 
@@ -565,6 +687,22 @@ export const useProject = () => {
                         console.warn('⚠️ CanvasData não encontrado no Storage')
                     }
                 }
+
+                const serverCountBeforeRecovery = getCanvasObjectCount(serverCanvasData)
+                const dbCountBeforeRecovery = getCanvasObjectCount(dbCanvasData)
+                if (pageMeta.canvasDataPath && serverCountBeforeRecovery === 0 && dbCountBeforeRecovery === 0) {
+                    const recovered = await recoverLatestNonEmptyCanvasData({
+                        projectId: data.id,
+                        pageId: pageMeta.id,
+                        preferredKey: pageMeta.canvasDataPath
+                    })
+                    if (recovered?.json) {
+                        serverCanvasData = recovered.json
+                        pageMeta.canvasDataPath = recovered.key
+                        console.warn(`🛟 Recovery automático aplicado para página ${pageMeta.id}: ${recovered.objectCount} objetos`)
+                    }
+                }
+
                 const bestRemote = pickBestRemoteCanvasData(serverCanvasData, dbCanvasData)
                 serverCanvasData = bestRemote.data
                 if (bestRemote.source !== 'none') {
@@ -582,30 +720,25 @@ export const useProject = () => {
                     // Verificar se o draft tem conteúdo válido (deve ter objetos > 0)
                     const draftIsValid = draftObjectCount > 0
                     const serverObjectCount = serverCanvasData?.objects?.length || 0
-                    const serverTs = getCanvasSavedAt(serverCanvasData)
-                    const draftTs = Number(draft.updatedAt || 0)
 
                     console.log(`📝 Draft encontrado para página ${pageMeta.id}: ${draftObjectCount} objetos (idade: ${draftAgeMin}min)`)
                     console.log(`📝 Servidor tem: ${serverObjectCount} objetos`)
 
-                    // CRITICAL: Só usar draft se ele tiver objetos válidos E se o servidor não tiver dados melhores
-                    // Se o servidor tem dados mas o draft está vazio, sempre usar o servidor
-                    // Se o servidor tem mais objetos que o draft, usar o servidor
-                    if (draftIsValid && serverTs > 0 && draftTs > 0 && (draftTs + 1000) < serverTs) {
-                        console.log(`⚠️ Draft mais antigo (${draftTs}) que servidor (${serverTs}) - usando servidor`)
+                    // REGRA DE SEGURANÇA (anti-tela em branco):
+                    // Se o servidor já tem conteúdo, SEMPRE priorizar servidor e ignorar draft local.
+                    // Draft local só entra quando servidor vier vazio/indisponível.
+                    if (serverObjectCount > 0) {
                         canvasData = serverCanvasData
-                    } else if (draftIsValid && serverObjectCount > 0 && draftObjectCount < serverObjectCount) {
-                        console.log(`⚠️ Draft tem ${draftObjectCount} objetos, servidor tem ${serverObjectCount} - usando servidor`)
-                        canvasData = serverCanvasData
-                    } else if (draftIsValid && (serverObjectCount === 0 || draftObjectCount >= serverObjectCount)) {
-                        canvasData = draft.canvasData
-                        console.log(`📝 Usando rascunho local (draft) para a página ${pageMeta.id} (${draftAgeMin}min atrás, ${draftObjectCount} objetos)`)
-                    } else {
-                        if (draftObjectCount === 0 && serverObjectCount > 0) {
-                            // Limpar o draft vazio para evitar usar ele novamente
+                        if (!draftIsValid || draftObjectCount === 0) {
                             clearDraft(data.id, pageMeta.id)
-                            console.log(`🗑️ Draft vazio removido, usando servidor com ${serverObjectCount} objetos`)
+                            console.log(`🗑️ Draft inválido/vazio removido; servidor tem ${serverObjectCount} objetos`)
+                        } else {
+                            console.log(`ℹ️ Ignorando draft local (${draftObjectCount}) porque servidor já tem ${serverObjectCount} objeto(s)`)
                         }
+                    } else if (draftIsValid) {
+                        canvasData = draft.canvasData
+                        console.log(`📝 Usando rascunho local (servidor vazio) para a página ${pageMeta.id} (${draftAgeMin}min atrás, ${draftObjectCount} objetos)`)
+                    } else {
                         canvasData = serverCanvasData
                     }
                 } else {
@@ -622,6 +755,9 @@ export const useProject = () => {
                 }
                 // Nota: Páginas novas podem não ter canvasData ainda, isso é normal
 
+                const finalObjectCount = getCanvasObjectCount(canvasData)
+                const finalFingerprint = computeCanvasFingerprint(canvasData)
+
                 const page: Page = {
                     id: pageMeta.id,
                     name: pageMeta.name,
@@ -630,7 +766,11 @@ export const useProject = () => {
                     type: pageMeta.type || 'RETAIL_OFFER',
                     canvasData,
                     canvasDataPath: pageMeta.canvasDataPath,
-                    thumbnailUrl: toWasabiProxyUrl(pageMeta.thumbnailUrl) || undefined
+                    thumbnailUrl: toWasabiProxyUrl(pageMeta.thumbnailUrl) || undefined,
+                    lastLoadedFingerprint: finalFingerprint,
+                    lastSavedFingerprint: finalFingerprint,
+                    lastPersistedObjectCount: finalObjectCount,
+                    dirty: false
                 }
 
                 project.pages.push(page)
@@ -648,6 +788,10 @@ export const useProject = () => {
             console.log('✅ Projeto carregado com sucesso:', { pagesCount: project.pages.length, activePageHasData: !!project.pages[0]?.canvasData })
             return true
         } catch (e) {
+            if (currentSession !== projectLoadSession.value) {
+                console.warn('⏭️ Ignorando erro de sessão antiga no loadProjectDB')
+                return false
+            }
             console.error('❌ Load Failed:', e)
             // Offline-safe fallback: restore from local project draft if present.
             const local = readProjectDraft(id)
@@ -655,7 +799,16 @@ export const useProject = () => {
                 console.log('📝 Restaurando projeto do rascunho local (offline fallback):', id)
                 project.id = local.project.id || id
                 project.name = local.project.name || project.name
-                project.pages = local.project.pages || []
+                project.pages = (local.project.pages || []).map((page) => {
+                    const fp = computeCanvasFingerprint(page?.canvasData)
+                    return {
+                        ...page,
+                        lastLoadedFingerprint: fp,
+                        lastSavedFingerprint: fp,
+                        lastPersistedObjectCount: getCanvasObjectCount(page?.canvasData),
+                        dirty: true
+                    } as Page
+                })
                 project.activePageIndex = local.project.activePageIndex || 0
                 hasUnsavedChanges.value = true
                 saveStatus.value = 'error'

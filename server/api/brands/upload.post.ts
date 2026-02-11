@@ -1,5 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 /**
  * API Route para upload de logos/marcas para Wasabi Storage
@@ -57,17 +56,10 @@ export default defineEventHandler(async (event) => {
 
         await s3Client.send(command);
 
-        // Generate pre-signed URL (valid for 1 hour) since Wasabi account doesn't allow public access
-        const getCommand = new GetObjectCommand({
-            Bucket: bucketName,
-            Key: key
-        });
-        const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
-
         console.log('✅ Brand logo uploaded to Wasabi:', key);
 
         return {
-            url: signedUrl,
+            url: `/api/storage/proxy?key=${encodeURIComponent(key)}`,
             key: key,
             success: true
         };

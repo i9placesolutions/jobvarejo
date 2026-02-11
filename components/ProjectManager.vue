@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import Button from './ui/Button.vue'
 import ConfirmDialog from './ui/ConfirmDialog.vue'
 import { Trash2, FolderOpen, Clock, X, Search, FileEdit } from 'lucide-vue-next'
+import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 const props = defineProps<{
   isOpen: boolean
@@ -36,12 +37,71 @@ const fetchProjects = async () => {
       const headers = await getApiAuthHeaders()
       const data = await $fetch('/api/projects', { headers });
       if (data) {
-        projects.value = Array.isArray(data) ? data : [];
+        projects.value = (Array.isArray(data) ? data : []).map((p: any) => {
+          if (p?.preview_url) p.preview_url = toWasabiProxyUrl(p.preview_url)
+          if (p && typeof p === 'object') p._thumbError = false
+          return p
+        })
       }
   } catch (e) {
       console.error("Failed to fetch projects", e);
   } finally {
       isLoading.value = false
+  }
+}
+
+const THUMB_FALLBACK_GRADIENTS = [
+  'linear-gradient(135deg, #1d4ed8 0%, #312e81 100%)',
+  'linear-gradient(135deg, #0f766e 0%, #14532d 100%)',
+  'linear-gradient(135deg, #b45309 0%, #7c2d12 100%)',
+  'linear-gradient(135deg, #6d28d9 0%, #7e22ce 100%)',
+  'linear-gradient(135deg, #0f172a 0%, #1f2937 100%)',
+  'linear-gradient(135deg, #9f1239 0%, #831843 100%)',
+]
+
+const hashText = (input: string): number => {
+  let hash = 0
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(i)
+    hash |= 0
+  }
+  return Math.abs(hash)
+}
+
+const getProjectInitials = (project: any): string => {
+  const name = String(project?.name || '').trim()
+  if (!name) return 'JV'
+  const words = name.split(/\s+/).filter(Boolean).slice(0, 2)
+  const initials = words.map(w => (w[0] || '').toUpperCase()).join('')
+  return initials || 'JV'
+}
+
+const getProjectThumbStyle = (project: any) => {
+  const seed = `${String(project?.id || '')}:${String(project?.name || '')}`
+  const idx = hashText(seed) % THUMB_FALLBACK_GRADIENTS.length
+  return { background: THUMB_FALLBACK_GRADIENTS[idx] || THUMB_FALLBACK_GRADIENTS[0] }
+}
+
+const isUsableThumbnailUrl = (url: unknown): boolean => {
+  if (typeof url !== 'string') return false
+  const value = url.trim()
+  if (!value) return false
+  const lower = value.toLowerCase()
+  if (lower === 'data:,' || lower === 'about:blank') return false
+  if (lower.startsWith('blob:null')) return false
+  if (lower.startsWith('javascript:')) return false
+  return true
+}
+
+const hasUsableProjectPreview = (project: any): boolean => {
+  return isUsableThumbnailUrl(project?.preview_url)
+}
+
+const handleProjectThumbLoad = (project: any, event: Event) => {
+  const img = event?.target as HTMLImageElement | null
+  if (!img) return
+  if ((img.naturalWidth || 0) < 2 || (img.naturalHeight || 0) < 2) {
+    project._thumbError = true
   }
 }
 
@@ -145,10 +205,26 @@ onMounted(() => {
 	              class="group flex items-center justify-between p-4 border border-border rounded-xl bg-card hover:bg-accent/5 hover:border-primary/30 transition-all cursor-pointer shadow-sm hover:shadow-md"
 	          >
 	              <div class="flex items-center gap-4">
-	                  <div class="w-12 h-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center group-hover:bg-primary/5 transition-colors">
-	                      <img v-if="project.preview_url" :src="project.preview_url" class="w-full h-full object-cover" :alt="project.name" />
-	                      <FileEdit v-else class="w-6 h-6 text-muted-foreground/40 group-hover:text-primary transition-colors" />
-	                  </div>
+                  <div class="w-12 h-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center group-hover:bg-primary/5 transition-colors">
+                      <img
+                        v-if="hasUsableProjectPreview(project) && !project._thumbError"
+                        :src="project.preview_url"
+                        class="w-full h-full object-cover"
+                        :alt="project.name"
+                        loading="lazy"
+                        decoding="async"
+                        @load="handleProjectThumbLoad(project, $event)"
+                        @error="project._thumbError = true"
+                      />
+                      <div
+                        v-else
+                        class="w-full h-full flex items-center justify-center text-white text-xs font-bold"
+                        :style="getProjectThumbStyle(project)"
+                        :title="project.name || 'Projeto sem nome'"
+                      >
+                        {{ getProjectInitials(project) }}
+                      </div>
+                  </div>
 	                  <div class="flex flex-col">
 	                      <span class="font-bold text-foreground group-hover:text-primary transition-colors">{{ project.name }}</span>
 	                      <span class="text-[11px] text-muted-foreground/60 flex items-center gap-1 mt-0.5">

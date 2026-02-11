@@ -97,7 +97,7 @@ const zoom = ref(1)
 
 const refreshAiStudioUploads = async () => {
     try {
-        const data: any = await $fetch('/api/assets').catch(() => [])
+        const data: any = await $fetch('/api/assets', { query: { limit: 80 } }).catch(() => [])
         if (Array.isArray(data)) {
             aiStudioUploads.value = data.map((a: any) => ({ id: a.id, name: a.name, url: a.url }))
         }
@@ -245,6 +245,7 @@ const patchCanvasRenderSafety = (c: any): void => {
     let contextsValid = true;
     let lastContextCheck = 0;
     const CONTEXT_CHECK_INTERVAL = 500; // ms
+    let renderRafId: number | null = null;
 
     const checkContextsIfNeeded = (): boolean => {
         const now = performance.now();
@@ -254,26 +255,41 @@ const patchCanvasRenderSafety = (c: any): void => {
         return contextsValid;
     };
 
+    const scheduleRenderWork = (work: () => void) => {
+        if (typeof window === 'undefined') {
+            work();
+            return;
+        }
+        if (renderRafId !== null) return;
+        renderRafId = requestAnimationFrame(() => {
+            renderRafId = null;
+            work();
+        });
+    };
+
     if (origRequest) {
         (c as any).__origRequestRenderAll = origRequest;
         c.requestRenderAll = () => {
             if (!checkContextsIfNeeded()) return;
-            try {
-                return origRequest();
-            } catch (e) {
-                // Render falhou — invalidar cache, purgar objetos inválidos e tentar novamente
-                contextsValid = false;
+            scheduleRenderWork(() => {
                 try {
-                    purgeInvalidRecursive(c);
-                } catch {
-                    // ignore
+                    origRequest();
+                } catch (e) {
+                    // Render falhou — invalidar cache, purgar objetos inválidos e tentar novamente
+                    contextsValid = false;
+                    try {
+                        purgeInvalidRecursive(c);
+                    } catch {
+                        // ignore
+                    }
+                    try {
+                        if (origRender) origRender();
+                    } catch {
+                        // ignore
+                    }
                 }
-                try {
-                    return origRender ? origRender() : undefined;
-                } catch {
-                    // ignore
-                }
-            }
+            });
+            return;
         };
     }
 
@@ -301,6 +317,53 @@ const patchCanvasRenderSafety = (c: any): void => {
     }
 
     (c as any).__patchedSafeRender = true;
+};
+
+const ensureCanvasContextsReady = (fc: any): boolean => {
+    if (!fc || isCanvasDestroyed.value) return false;
+    try {
+        if (fc.upperCanvasEl && (!fc.contextTop || typeof fc.contextTop.clearRect !== 'function')) {
+            const ctxTop = fc.upperCanvasEl.getContext?.('2d');
+            if (ctxTop) fc.contextTop = ctxTop;
+        }
+        const lowerEl = fc.lowerCanvasEl || fc.getElement?.();
+        if (lowerEl && (!fc.contextContainer || typeof fc.contextContainer.clearRect !== 'function')) {
+            const ctx = lowerEl.getContext?.('2d');
+            if (ctx) fc.contextContainer = ctx;
+        }
+        if (!fc.context && fc.contextContainer) fc.context = fc.contextContainer;
+        return !!(fc.contextContainer && typeof fc.contextContainer.clearRect === 'function');
+    } catch {
+        return false;
+    }
+};
+
+const isCanvasContextError = (err: any): boolean => {
+    const msg = String(err?.message || err || '').toLowerCase();
+    return msg.includes('clearrect') || msg.includes('contextcontainer') || msg.includes('getcontext');
+};
+
+const loadFromJsonSafe = async (json: any): Promise<void> => {
+    const c = canvas.value as any;
+    if (!c || isCanvasDestroyed.value) {
+        throw new Error('Canvas indisponível para loadFromJSON');
+    }
+    if (!ensureCanvasContextsReady(c)) {
+        throw new Error('Contexto do canvas indisponível para loadFromJSON');
+    }
+
+    const prevRenderOnAddRemove = c.renderOnAddRemove;
+    c.renderOnAddRemove = false;
+    try {
+        await c.loadFromJSON(json);
+    } catch (err: any) {
+        if (!isCanvasContextError(err) || isCanvasDestroyed.value) throw err;
+        if (!ensureCanvasContextsReady(c)) throw err;
+        await c.loadFromJSON(json);
+    } finally {
+        c.renderOnAddRemove = prevRenderOnAddRemove;
+        safeRequestRenderAll(c);
+    }
 };
 
 /**
@@ -498,7 +561,8 @@ const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
 const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
 const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
 const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
-const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__preserveManualLayout', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur']
+const BUILTIN_ATACAREJO_SEED_VERSION = 4
+const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur']
 
 const serializeLabelTemplatesForProject = () => {
     // Keep project JSON lean: previews can be regenerated client-side.
@@ -884,8 +948,21 @@ const ensureFramesBelowContents = () => {
     // Put frames behind everything else (Figma-like: frame is a container/background).
     const frames = list.filter((o: any) => !!o?.isFrame);
     const rest = list.filter((o: any) => !o?.isFrame);
-    console.log(`[ensureFramesBelowContents] frames=${frames.length}, rest=${rest.length}, pinnedTop=${pinnedTop.length}, total=${all.length}`);
-    applyArrangedOrder(canvas.value, [...frames, ...rest, ...pinnedTop]);
+    const desiredOrder = [...frames, ...rest, ...pinnedTop];
+
+    // Avoid expensive stack rewrites + re-render when order is already correct.
+    if (desiredOrder.length === all.length) {
+        let sameOrder = true;
+        for (let i = 0; i < all.length; i++) {
+            if (all[i] !== desiredOrder[i]) {
+                sameOrder = false;
+                break;
+            }
+        }
+        if (sameOrder) return;
+    }
+
+    applyArrangedOrder(canvas.value, desiredOrder);
 };
 
 const isFrameLikeObject = (obj: any) => {
@@ -898,7 +975,6 @@ const isFrameLikeObject = (obj: any) => {
     if (/^FRAMER(?:\s+\d+)?$/i.test(name) || /^FRAME(?:\s+\d+)?\s*$/i.test(name)) return true;
 
     const isRect = isRectObject(obj) || String(obj.type || '').toLowerCase() === 'rect';
-    if (isRect && (obj.clipContent === true || obj.clipContent === 1)) return true;
     if (isRect && (obj.isGridCell === true || String(obj.gridGroupId || '').trim().length > 0)) return true;
 
     return false;
@@ -1301,6 +1377,187 @@ const getFrameDescendants = (frame: any) => {
     };
 
     return objs.filter((o: any) => o !== frame && isDescendant(o));
+};
+
+const isObjectCenterInsideFrame = (obj: any, frame: any) => {
+    if (!obj || !frame || typeof obj.getBoundingRect !== 'function' || typeof frame.getBoundingRect !== 'function') {
+        return false;
+    }
+    const objBounds = obj.getBoundingRect(true);
+    const frameBounds = frame.getBoundingRect(true);
+    if (!objBounds || !frameBounds) return false;
+    const cx = objBounds.left + (objBounds.width / 2);
+    const cy = objBounds.top + (objBounds.height / 2);
+    const minX = frameBounds.left;
+    const maxX = frameBounds.left + frameBounds.width;
+    const minY = frameBounds.top;
+    const maxY = frameBounds.top + frameBounds.height;
+    return cx >= minX && cx <= maxX && cy >= minY && cy <= maxY;
+};
+
+const isObjectVisuallyInsideFrame = (obj: any, frame: any) => {
+    if (!obj || !frame || typeof obj.getBoundingRect !== 'function' || typeof frame.getBoundingRect !== 'function') {
+        return false;
+    }
+
+    if (isObjectCenterInsideFrame(obj, frame)) return true;
+
+    const objBounds = obj.getBoundingRect(true);
+    const frameBounds = frame.getBoundingRect(true);
+    if (!objBounds || !frameBounds) return false;
+
+    const left = Math.max(objBounds.left, frameBounds.left);
+    const top = Math.max(objBounds.top, frameBounds.top);
+    const right = Math.min(objBounds.left + objBounds.width, frameBounds.left + frameBounds.width);
+    const bottom = Math.min(objBounds.top + objBounds.height, frameBounds.top + frameBounds.height);
+    const overlapW = Math.max(0, right - left);
+    const overlapH = Math.max(0, bottom - top);
+    const overlapArea = overlapW * overlapH;
+    const objArea = Math.max(1, objBounds.width * objBounds.height);
+
+    return overlapArea / objArea >= 0.2;
+};
+
+const collectFrameVisibilityTargets = (rootFrame: any) => {
+    if (!canvas.value || !rootFrame) return [rootFrame].filter(Boolean);
+
+    const allObjects = canvas.value.getObjects();
+    const targetSet = new Set<any>([rootFrame]);
+    const visitedFrameIds = new Set<string>();
+    const queue: any[] = [rootFrame];
+
+    const enqueueFrame = (frameCandidate: any) => {
+        const normalized = normalizeFrameRuntimeProps(frameCandidate);
+        if (!normalized) return;
+        targetSet.add(normalized);
+        const id = String(normalized._customId || '').trim();
+        if (!id || visitedFrameIds.has(id)) return;
+        visitedFrameIds.add(id);
+        queue.push(normalized);
+    };
+
+    enqueueFrame(rootFrame);
+
+    while (queue.length > 0) {
+        const frame = queue.shift();
+        if (!frame) continue;
+
+        const descendants = getFrameDescendants(frame);
+        descendants.forEach((child: any) => {
+            if (!child) return;
+            targetSet.add(child);
+            if (child.isFrame || isFrameLikeObject(child)) {
+                enqueueFrame(child);
+            }
+        });
+
+        const spatialChildren = allObjects.filter((candidate: any) => {
+            if (!candidate || candidate === frame) return false;
+            if (candidate.excludeFromExport) return false;
+            if (isControlLikeObject(candidate) || isTransientCanvasObject(candidate)) return false;
+            if (String(candidate.id || '') === 'artboard-bg') return false;
+            if (targetSet.has(candidate)) return false;
+            return isObjectVisuallyInsideFrame(candidate, frame);
+        });
+
+        spatialChildren.forEach((candidate: any) => {
+            if (!candidate.parentFrameId && frame._customId) {
+                candidate.parentFrameId = frame._customId;
+            }
+            targetSet.add(candidate);
+            if (candidate.isFrame || isFrameLikeObject(candidate)) {
+                enqueueFrame(candidate);
+            }
+        });
+    }
+
+    // Extra pass: include objects bound by metadata even when runtime parenting got stale.
+    // This guarantees frame eye toggle affects product zones/cards that belong to the frame.
+    let expanded = true;
+    while (expanded) {
+        expanded = false;
+
+        const zoneIds = new Set<string>();
+        targetSet.forEach((entry: any) => {
+            if (!entry || !isLikelyProductZone(entry)) return;
+            const zoneId = String(entry._customId || '').trim();
+            if (zoneId) zoneIds.add(zoneId);
+        });
+
+        allObjects.forEach((candidate: any) => {
+            if (!candidate || targetSet.has(candidate)) return;
+            if (candidate.excludeFromExport) return;
+            if (isControlLikeObject(candidate) || isTransientCanvasObject(candidate)) return;
+            if (String(candidate.id || '') === 'artboard-bg') return;
+
+            const candidateParentFrameId = String((candidate as any).parentFrameId || '').trim();
+            const candidateZoneId = String((candidate as any).parentZoneId || (candidate as any)?._zoneSlot?.zoneId || '').trim();
+
+            let shouldInclude = false;
+
+            if (candidateParentFrameId && visitedFrameIds.has(candidateParentFrameId)) {
+                shouldInclude = true;
+            }
+
+            if (!shouldInclude && candidateZoneId && zoneIds.has(candidateZoneId)) {
+                shouldInclude = true;
+            }
+
+            if (!shouldInclude) return;
+
+            targetSet.add(candidate);
+            expanded = true;
+
+            if (candidate.isFrame || isFrameLikeObject(candidate)) {
+                enqueueFrame(candidate);
+            }
+        });
+    }
+
+    return Array.from(targetSet);
+};
+
+const applyObjectVisibility = (entry: any, visible: boolean) => {
+    if (!entry) return;
+
+    entry.set?.('visible', visible);
+    entry.visible = visible;
+
+    // Reduce interaction cost while hidden and restore previous state on show.
+    if (!visible) {
+        if ((entry as any).__prevEventedBeforeEyeToggle === undefined) {
+            (entry as any).__prevEventedBeforeEyeToggle = entry.evented;
+        }
+        if ((entry as any).__prevSelectableBeforeEyeToggle === undefined) {
+            (entry as any).__prevSelectableBeforeEyeToggle = entry.selectable;
+        }
+        entry.set?.('evented', false);
+        entry.set?.('selectable', false);
+        entry.evented = false;
+        entry.selectable = false;
+    } else {
+        const prevEvented = (entry as any).__prevEventedBeforeEyeToggle;
+        const prevSelectable = (entry as any).__prevSelectableBeforeEyeToggle;
+        if (prevEvented !== undefined) {
+            entry.set?.('evented', prevEvented);
+            entry.evented = prevEvented;
+            delete (entry as any).__prevEventedBeforeEyeToggle;
+        } else {
+            entry.set?.('evented', true);
+            entry.evented = true;
+        }
+        if (prevSelectable !== undefined) {
+            entry.set?.('selectable', prevSelectable);
+            entry.selectable = prevSelectable;
+            delete (entry as any).__prevSelectableBeforeEyeToggle;
+        } else {
+            entry.set?.('selectable', true);
+            entry.selectable = true;
+        }
+    }
+
+    entry.dirty = true;
+    entry.setCoords?.();
 };
 
 const moveFrameDescendants = (frame: any, dx: number, dy: number, descendants?: any[]) => {
@@ -1806,9 +2063,23 @@ const generateStickerOutlineCanvas = (
         (obj as any).__origDrawObjectSticker = obj.drawObject;
     }
 
-	    obj.drawObject = function (ctx: CanvasRenderingContext2D, forClipping: boolean, context: any) {
+    obj.drawObject = function (ctx: CanvasRenderingContext2D, forClipping: boolean, context: any) {
 	        const drawOutline = () => {
 	            if (forClipping || !this.__stickerOutlineEnabled || !this.__stickerOutlineCache) return;
+                // Never draw outline for hidden objects (or hidden parent groups/frames).
+                if (this.visible === false || Number(this.opacity ?? 1) <= 0) return;
+                let ancestor: any = this.group;
+                let guard = 0;
+                while (ancestor && guard++ < 20) {
+                    if (ancestor.visible === false || Number(ancestor.opacity ?? 1) <= 0) return;
+                    ancestor = ancestor.group;
+                }
+                // If parent frame is hidden, suppress sticker outline as well.
+                const parentFrameId = String((this as any).parentFrameId || '').trim();
+                if (parentFrameId && canvas.value) {
+                    const parentFrame = canvas.value.getObjects().find((o: any) => String(o?._customId || '') === parentFrameId);
+                    if (parentFrame && parentFrame.visible === false) return;
+                }
 	            try {
 	                const cache = this.__stickerOutlineCache;
 	                const pad = (cache as any).__outlinePad || (Math.ceil(Number(this.__stickerOutlineWidth) || 4) + 2);
@@ -1850,6 +2121,20 @@ const generateStickerOutlineCanvas = (
     }
 
     obj.render = function (ctx: CanvasRenderingContext2D) {
+        // Respect visibility before any custom outside-outline draw.
+        if (this.visible === false || Number(this.opacity ?? 1) <= 0) return;
+        let ancestor: any = this.group;
+        let guard = 0;
+        while (ancestor && guard++ < 20) {
+            if (ancestor.visible === false || Number(ancestor.opacity ?? 1) <= 0) return;
+            ancestor = ancestor.group;
+        }
+        const parentFrameId = String((this as any).parentFrameId || '').trim();
+        if (parentFrameId && canvas.value) {
+            const parentFrame = canvas.value.getObjects().find((o: any) => String(o?._customId || '') === parentFrameId);
+            if (parentFrame && parentFrame.visible === false) return;
+        }
+
         // Render normal (com clipPath/frame clipping aplicado)
         (this as any).__origRenderSticker.call(this, ctx);
 
@@ -3238,8 +3523,22 @@ const setupAltDragDuplicate = () => {
                 const origPerformLayout = lm?.performLayout;
                 if (lm) lm.performLayout = () => {};
 
-                if (Array.isArray(parentGroup._objects)) {
-                    parentGroup._objects.push(cloned);
+                const groupObjects = typeof parentGroup.getObjects === 'function'
+                    ? parentGroup.getObjects()
+                    : (Array.isArray((parentGroup as any)._objects) ? (parentGroup as any)._objects : []);
+                const originalIndexInGroup = Array.isArray(groupObjects) ? groupObjects.indexOf(original) : -1;
+                const insertIndex = originalIndexInGroup >= 0
+                    ? Math.min(originalIndexInGroup + 1, groupObjects.length)
+                    : -1;
+
+                if (insertIndex >= 0 && typeof (parentGroup as any).insertAt === 'function') {
+                    (parentGroup as any).insertAt(insertIndex, cloned);
+                } else if (Array.isArray((parentGroup as any)._objects)) {
+                    if (insertIndex >= 0) {
+                        (parentGroup as any)._objects.splice(insertIndex, 0, cloned);
+                    } else {
+                        (parentGroup as any)._objects.push(cloned);
+                    }
                     (cloned as any).group = parentGroup;
                     cloned.canvas = canvas.value;
                 } else if (typeof parentGroup.add === 'function') {
@@ -3367,7 +3666,6 @@ const setupAltDragDuplicate = () => {
         state.cloneInGroup = false;
 
         saveCurrentState();
-        triggerAutoSave();
     });
 };
 
@@ -3449,6 +3747,50 @@ const applyArrangedOrder = (container: any, newOrder: any[]) => {
         safeAddWithUpdate(container);
         canvas.value?.requestRenderAll?.();
     }
+};
+
+const isValidFabricCanvasObject = (o: any): boolean => {
+    if (!o || typeof o !== 'object') return false;
+    return (
+        typeof o.render === 'function' &&
+        typeof o.setCoords === 'function' &&
+        typeof o.set === 'function' &&
+        typeof o.toObject === 'function'
+    );
+};
+
+const sanitizeCanvasObjectStack = (canvasInstance: any, reason: string = 'unknown'): number => {
+    if (!canvasInstance) return 0;
+    const visited = new Set<any>();
+    const sanitizeContainer = (container: any, tag: string): number => {
+        if (!container || visited.has(container)) return 0;
+        visited.add(container);
+
+        const internal = (container as any)._objects;
+        if (!Array.isArray(internal)) return 0;
+
+        const before = internal.length;
+        const valid = internal.filter((o: any) => isValidFabricCanvasObject(o));
+        const removedHere = before - valid.length;
+        if (removedHere > 0) {
+            internal.length = 0;
+            valid.forEach((o: any) => internal.push(o));
+            if (typeof (container as any)._onStackOrderChanged === 'function') {
+                try { (container as any)._onStackOrderChanged(); } catch { /* ignore */ }
+            }
+            console.debug(`⚠️ [sanitizeCanvasObjectStack] Removidos ${removedHere} item(ns) inválido(s) em ${tag} (${reason})`);
+        }
+
+        let nestedRemoved = 0;
+        valid.forEach((child: any, idx: number) => {
+            if (Array.isArray((child as any)?._objects)) {
+                nestedRemoved += sanitizeContainer(child, `${tag}.group[${idx}]`);
+            }
+        });
+        return removedHere + nestedRemoved;
+    };
+
+    return sanitizeContainer(canvasInstance, 'canvas');
 };
 
 function arrangeActiveObjects(mode: ArrangeMode) {
@@ -3659,6 +4001,65 @@ const canvasEl = ref<HTMLCanvasElement | null>(null)
 const wrapperEl = ref<HTMLDivElement | null>(null)
 const isProcessing = ref(false)
 const currentZoom = ref(100) // Zoom state
+let isCanvasJsonLoadInProgress = false
+const isInitialCanvasHydrationDone = ref(false)
+let isBulkProductMutation = false
+let lastTransformMutationAt = 0
+let activePageLoadSessionId = 0
+const ENABLE_LEGACY_WATCH_EFFECT_LOADER = false
+
+const getActiveProjectPageId = (): string => {
+    const page = project.pages?.[project.activePageIndex]
+    return String(page?.id || '').trim()
+}
+
+const scheduleIdleStatePersistence = (opts: any, timeoutMs = 2200) => {
+    const scheduledForPageId = getActiveProjectPageId()
+    const run = () => {
+        if (isCanvasDestroyed.value) return
+
+        if (scheduledForPageId) {
+            const currentPageId = getActiveProjectPageId()
+            if (!currentPageId || currentPageId !== scheduledForPageId) {
+                return
+            }
+        }
+
+        const nextOpts = { ...(opts || {}) }
+        if (scheduledForPageId && !nextOpts.expectedPageId) {
+            nextOpts.expectedPageId = scheduledForPageId
+        }
+        saveCurrentState(nextOpts)
+    }
+
+    if (typeof window === 'undefined') {
+        run();
+        return;
+    }
+
+    const ric = (window as any).requestIdleCallback;
+    if (typeof ric === 'function') {
+        ric(() => run(), { timeout: timeoutMs });
+        return;
+    }
+
+    window.setTimeout(run, Math.min(1200, timeoutMs));
+}
+
+const scheduleIdleWork = (work: () => void, timeoutMs = 2200) => {
+    if (typeof window === 'undefined') {
+        work();
+        return;
+    }
+
+    const ric = (window as any).requestIdleCallback;
+    if (typeof ric === 'function') {
+        ric(() => work(), { timeout: timeoutMs });
+        return;
+    }
+
+    window.setTimeout(work, Math.min(1200, timeoutMs));
+}
 
 const pageSettings = ref({
     backgroundColor: '#1e1e1e' // Match default dark workspace
@@ -3668,13 +4069,42 @@ const pageSettings = ref({
 const frameLabels = ref<Array<{ id: string; name: string; x: number; y: number; dimX: number; dimY: number; dims: string; isSelected: boolean; frameRef: any }>>([]);
 
 let frameLabelUpdatePending = false;
+let frameLabelUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+let lastFrameLabelUpdateAt = 0;
+let lastKnownFrameLabelCount = 0;
+const getFrameLabelUpdateIntervalMs = () => {
+    const count = lastKnownFrameLabelCount;
+    if (count > 240) return 280;
+    if (count > 120) return 180;
+    if (count > 60) return 120;
+    return 80;
+};
 const throttledUpdateFrameLabels = () => {
     if (frameLabelUpdatePending) return;
-    frameLabelUpdatePending = true;
-    requestAnimationFrame(() => {
-        updateFrameLabels();
-        frameLabelUpdatePending = false;
-    });
+
+    const run = () => {
+        if (frameLabelUpdatePending) return;
+        frameLabelUpdatePending = true;
+        requestAnimationFrame(() => {
+            updateFrameLabels();
+            lastFrameLabelUpdateAt = performance.now();
+            frameLabelUpdatePending = false;
+        });
+    };
+
+    const intervalMs = getFrameLabelUpdateIntervalMs();
+    const now = performance.now();
+    const elapsed = now - lastFrameLabelUpdateAt;
+    if (elapsed >= intervalMs) {
+        run();
+        return;
+    }
+
+    if (frameLabelUpdateTimer) return;
+    frameLabelUpdateTimer = setTimeout(() => {
+        frameLabelUpdateTimer = null;
+        run();
+    }, Math.max(0, intervalMs - elapsed));
 };
 
 const updateFrameLabels = () => {
@@ -3683,7 +4113,14 @@ const updateFrameLabels = () => {
         return;
     }
     const frames = getAllFrames();
+    lastKnownFrameLabelCount = frames.length;
     if (!frames.length) {
+        frameLabels.value = [];
+        return;
+    }
+    const zoomVal = Number(canvas.value.getZoom?.() || 1);
+    // Performance guard: with many frames and zoomed far out, labels become unreadable and expensive.
+    if (frames.length > 180 && zoomVal < 0.35) {
         frameLabels.value = [];
         return;
     }
@@ -3698,6 +4135,7 @@ const updateFrameLabels = () => {
     };
     const labels: typeof frameLabels.value = [];
     for (const frame of frames) {
+        if (frame?.visible === false) continue;
         try {
             const bounds = typeof frame.getBoundingRect === 'function'
                 ? frame.getBoundingRect(true, true)
@@ -3820,13 +4258,15 @@ type ScrollbarContentBounds = {
 
 let scrollbarBoundsDirty = true
 let scrollbarBoundsCache: ScrollbarContentBounds | null = null
+let lastScrollbarSanitizeAt = 0
+const SCROLLBAR_SANITIZE_INTERVAL_MS = 1200
 
 const invalidateScrollbarBounds = () => {
     scrollbarBoundsDirty = true
 }
 
 const isScrollbarRelevantObject = (obj: any): boolean => {
-    if (!obj) return false
+    if (!isValidFabricCanvasObject(obj)) return false
     if (obj.excludeFromExport) return false
     if (SCROLLBAR_IGNORED_IDS.has(String(obj.id || ''))) return false
     return true
@@ -3845,7 +4285,20 @@ const getScrollbarContentBounds = (): ScrollbarContentBounds => {
         return scrollbarBoundsCache
     }
 
-    const objects = canvas.value?.getObjects?.() || []
+    const canvasInstance = canvas.value as any
+    if (scrollbarBoundsDirty && canvasInstance) {
+        const now = Date.now()
+        const objectCount = Number(canvasInstance?.getObjects?.()?.length || 0)
+        const adaptiveSanitizeInterval =
+            objectCount > 600 ? 5000 :
+            objectCount > 250 ? 2500 :
+            SCROLLBAR_SANITIZE_INTERVAL_MS
+        if (now - lastScrollbarSanitizeAt > adaptiveSanitizeInterval) {
+            sanitizeCanvasObjectStack(canvasInstance, 'scrollbar-bounds')
+            lastScrollbarSanitizeAt = now
+        }
+    }
+    const objects = canvasInstance?.getObjects?.() || []
     let minX = Infinity
     let minY = Infinity
     let maxX = -Infinity
@@ -3854,10 +4307,12 @@ const getScrollbarContentBounds = (): ScrollbarContentBounds => {
 
     for (const obj of objects) {
         if (!isScrollbarRelevantObject(obj)) continue
+        if (typeof obj.getBoundingRect !== 'function') continue
         hasRelevantObjects = true
-        const bounds = typeof obj.getBoundingRect === 'function'
-            ? obj.getBoundingRect(true, true)
-            : obj.getBoundingRect()
+        const bounds = obj.getBoundingRect(true, true)
+        if (!bounds || !Number.isFinite(bounds.left) || !Number.isFinite(bounds.top) || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) {
+            continue
+        }
         const oMinX = bounds.left
         const oMinY = bounds.top
         const oMaxX = bounds.left + bounds.width
@@ -4082,10 +4537,17 @@ const handleHorizontalScrollbarDrag = (e: MouseEvent) => {
 };
 
 // View Controls
-const updateZoomState = () => {
+const updateZoomState = (opts?: { immediate?: boolean }) => {
     if (!canvas.value) return;
-    currentZoom.value = Math.round(canvas.value.getZoom() * 100);
-    updateScrollbars();
+    const nextZoom = Math.round(canvas.value.getZoom() * 100);
+    if (currentZoom.value !== nextZoom) {
+        currentZoom.value = nextZoom;
+    }
+    if (opts?.immediate) {
+        updateScrollbars();
+    } else {
+        throttledUpdateScrollbars();
+    }
 }
 
 // Close zoom menu when clicking outside
@@ -4346,13 +4808,18 @@ const flushPersistenceNow = (reason: string) => {
 
         // Save to in-memory project + local draft immediately (sync path inside saveState/updatePageData).
         try {
-            saveCurrentState({ allowEmptyOverwrite: true, reason: `lifecycle:${reason}` });
+            saveCurrentState({
+                allowEmptyOverwrite: true,
+                reason: `lifecycle:${reason}`,
+                source: 'system',
+                skipIfUnchanged: true
+            });
         } catch (err) {
             console.warn('[persist] Falha ao salvar estado em flush de lifecycle:', err);
         }
 
         // Also force remote save path whenever possible.
-        triggerAutoSave();
+        if (hasUnsavedChanges.value) triggerAutoSave();
         void flushAutoSave().catch((err: any) => {
             console.warn('[persist] Falha no flushAutoSave:', err);
         });
@@ -4487,6 +4954,142 @@ const showProductReviewModal = ref(false)
 const reviewProducts = ref<any[]>([])
 const productImportExistingCount = ref(0)
 const targetGridZone = ref<any>(null) // Reference to the Grid Zone that was double-clicked
+
+const isPriceGroupOrPriceChild = (obj: any): boolean => {
+    if (!obj) return false;
+    if (String(obj?.name || '') === 'priceGroup') return true;
+    if (String((obj as any)?.group?.name || '') === 'priceGroup') return true;
+    return false;
+}
+
+const extractProductsFromZoneForReview = (zone: any): any[] => {
+    if (!zone || !isLikelyProductZone(zone)) return [];
+
+    let cards: any[] = [];
+    try {
+        cards = getZoneChildren(zone);
+    } catch {
+        cards = [];
+    }
+    if (!Array.isArray(cards) || !cards.length) return [];
+
+    const orderedCards = cards
+        .filter((card: any) => !!card)
+        .slice()
+        .sort((a: any, b: any) => {
+            const ao = Number((a as any)?._zoneOrder);
+            const bo = Number((b as any)?._zoneOrder);
+            if (Number.isFinite(ao) && Number.isFinite(bo)) return ao - bo;
+            if (Number.isFinite(ao)) return -1;
+            if (Number.isFinite(bo)) return 1;
+            return 0;
+        });
+
+    return orderedCards.map((card: any, index: number) => {
+        const base = (((card as any)?._productData && typeof (card as any)._productData === 'object')
+            ? { ...(card as any)._productData }
+            : {}) as any;
+
+        const name = String(base.name || (card as any)?.layerName || `Produto ${index + 1}`).trim() || `Produto ${index + 1}`;
+        const imageUrlRaw = base.imageUrl ?? base.image ?? (card as any)?.imageUrl ?? null;
+        const imageUrl = imageUrlRaw == null ? null : String(imageUrlRaw).trim() || null;
+
+        return {
+            id: String(base.id || (card as any)?._customId || `zone-product-${index + 1}`),
+            name,
+            brand: base.brand ?? '',
+            weight: base.weight ?? '',
+            price: base.price ?? (card as any)?.price ?? '',
+            pricePack: base.pricePack ?? (card as any)?.pricePack ?? '',
+            priceUnit: base.priceUnit ?? (card as any)?.priceUnit ?? '',
+            priceSpecial: base.priceSpecial ?? (card as any)?.priceSpecial ?? '',
+            priceSpecialUnit: base.priceSpecialUnit ?? (card as any)?.priceSpecialUnit ?? '',
+            specialCondition: base.specialCondition ?? (card as any)?.specialCondition ?? '',
+            priceWholesale: base.priceWholesale ?? (card as any)?.priceWholesale ?? '',
+            wholesaleTrigger: base.wholesaleTrigger ?? (card as any)?.wholesaleTrigger ?? null,
+            wholesaleTriggerUnit: base.wholesaleTriggerUnit ?? (card as any)?.wholesaleTriggerUnit ?? '',
+            packQuantity: base.packQuantity ?? (card as any)?.packQuantity ?? null,
+            packUnit: base.packUnit ?? (card as any)?.packUnit ?? '',
+            packageLabel: base.packageLabel ?? (card as any)?.packageLabel ?? '',
+            price_mode: base.price_mode ?? 'retail',
+            limit: base.limit ?? (card as any)?.limit ?? '',
+            flavor: base.flavor ?? '',
+            imageUrl,
+            status: imageUrl ? 'done' : 'pending',
+            error: undefined,
+            raw: base.raw ?? base
+        };
+    });
+}
+
+const resolveZoneForProductImport = (target: any): any | null => {
+    if (!target || !canvas.value) return null;
+
+    if (isLikelyProductZone(target)) return target;
+
+    const resolveByZoneId = (zoneIdRaw: any): any | null => {
+        const zoneId = String(zoneIdRaw || '').trim();
+        if (!zoneId) return null;
+        return findContainmentZoneById(zoneId);
+    };
+
+    const directZoneByParent = resolveByZoneId((target as any)?.parentZoneId);
+    if (directZoneByParent) return directZoneByParent;
+    const directZoneBySlot = resolveByZoneId((target as any)?._zoneSlot?.zoneId);
+    if (directZoneBySlot) return directZoneBySlot;
+
+    if (isProductCardContainer(target)) {
+        const zoneFromCard = resolveCardParentZone(target, { allowNearest: true });
+        if (zoneFromCard) return zoneFromCard;
+    }
+
+    let cursor: any = target;
+    const visited = new Set<any>();
+    while (cursor && !visited.has(cursor)) {
+        visited.add(cursor);
+        if (isLikelyProductZone(cursor)) return cursor;
+
+        const byParent = resolveByZoneId((cursor as any)?.parentZoneId);
+        if (byParent) return byParent;
+        const bySlot = resolveByZoneId((cursor as any)?._zoneSlot?.zoneId);
+        if (bySlot) return bySlot;
+
+        if (isProductCardContainer(cursor)) {
+            const zoneFromCard = resolveCardParentZone(cursor, { allowNearest: true });
+            if (zoneFromCard) return zoneFromCard;
+        }
+
+        cursor = (cursor as any)?.group;
+    }
+
+    const parentCard = findProductCardParentGroup(target);
+    if (parentCard) {
+        const zoneFromParentCard = resolveCardParentZone(parentCard, { allowNearest: true });
+        if (zoneFromParentCard) return zoneFromParentCard;
+    }
+
+    return null;
+}
+
+const openProductReviewForZone = (zone: any): boolean => {
+    if (!zone || !isLikelyProductZone(zone)) return false;
+
+    targetGridZone.value = zone;
+    const zoneProducts = extractProductsFromZoneForReview(zone);
+    reviewProducts.value = zoneProducts;
+    productImportExistingCount.value = zoneProducts.length;
+    showProductReviewModal.value = true;
+    return true;
+}
+
+const tryOpenProductReviewFromDblClickTarget = (target: any): boolean => {
+    if (!target || showProductReviewModal.value) return false;
+    if (isPriceGroupOrPriceChild(target)) return false;
+
+    const zone = resolveZoneForProductImport(target);
+    if (!zone) return false;
+    return openProductReviewForZone(zone);
+}
 
 const importZoneLabelTemplateId = computed(() => {
     const z = targetGridZone.value;
@@ -5052,6 +5655,11 @@ const renderProducts = (products: any[]) => {
 watch(activePage, async (newPage, oldPage) => {
     if (!canvas.value || !fabric) return;
     if (!newPage) return;
+    if (oldPage && newPage.id === oldPage.id) return;
+    if (!isProjectLoaded.value && project.id && !project.id.startsWith('proj_')) return;
+
+    const loadSessionId = ++activePageLoadSessionId;
+    const isStaleLoad = () => loadSessionId !== activePageLoadSessionId || isCanvasDestroyed.value;
 
     const savedVpt = newPage.canvasData ? getSavedViewportTransform(newPage.canvasData) : null;
 
@@ -5059,21 +5667,7 @@ watch(activePage, async (newPage, oldPage) => {
     
     // 2. Clear & Resize Canvas
     isHistoryProcessing.value = true;
-    
-    // CRITICAL: Only clear if canvas is fully initialized (has context)
-    if (canvas.value) {
-        try {
-            const ctx = canvas.value.getContext();
-            if (ctx && typeof ctx.clearRect === 'function') {
-                canvas.value.clear();
-            } else {
-                console.warn('⚠️ Contexto do canvas não está disponível para clear(), pulando...');
-            }
-        } catch (err) {
-            console.warn('⚠️ Erro ao limpar canvas (pode não estar inicializado):', err);
-            // Continue anyway - loadFromJSON will handle it
-        }
-    }
+    clearCanvasForPageSwitch(canvas.value)
     // THE WORKSPACE BACKGROUND IS DYNAMIC
     if (canvas.value) {
         canvas.value.backgroundColor = pageSettings.value.backgroundColor;
@@ -5242,13 +5836,17 @@ watch(activePage, async (newPage, oldPage) => {
                     throw loadErr;
                 }
             }
-            // If we couldn't load, do NOT continue (prevents wiping saved data with empty state).
-            if (!didLoadNewPage) {
-	                isHistoryProcessing.value = false;
-	                return;
-	            }
-	            
-	            // Remove old frame label text objects (if any were saved)
+	            // If we couldn't load, do NOT continue (prevents wiping saved data with empty state).
+	            if (!didLoadNewPage) {
+		                isHistoryProcessing.value = false;
+		                return;
+		            }
+                    if (isStaleLoad()) {
+                        isHistoryProcessing.value = false;
+                        return;
+                    }
+		            
+		            // Remove old frame label text objects (if any were saved)
 	            const objects = canvas.value.getObjects();
 	            objects.forEach((obj: any) => {
 	                if (obj.isFrameLabel || (obj.type === 'text' && obj.text && obj.text.includes('@') && obj.text.includes('dpi'))) {
@@ -5416,11 +6014,26 @@ watch(activePage, async (newPage, oldPage) => {
     if (savedVpt) {
         applyViewportTransform(savedVpt);
         // Persist immediately so a reload doesn't overwrite viewport with defaults.
-        saveCurrentState();
+        if (oldPage) {
+            saveCurrentState({
+                reason: 'page-switch-viewport',
+                source: 'system',
+                skipIfUnchanged: true,
+                expectedPageId: String(newPage.id || '')
+            });
+        }
     } else {
         setTimeout(() => {
+            if (isStaleLoad()) return;
             zoomToFit();
-            saveCurrentState();
+            if (oldPage) {
+                saveCurrentState({
+                    reason: 'page-switch-viewport',
+                    source: 'system',
+                    skipIfUnchanged: true,
+                    expectedPageId: String(newPage.id || '')
+                });
+            }
         }, 50);
     }
 
@@ -5479,7 +6092,7 @@ watch(activePage, async (newPage, oldPage) => {
     // CRITICAL: Update canvasObjects with deduplicated list (order preserved from original)
     // Don't reorder - maintain exact order from canvas.getObjects()
     canvasObjects.value = [...finalObjs];
-}, { deep: false }); // Watch the object reference change
+}, { deep: false, immediate: true }); // Watch the object reference change
 
 const zoomToFit = () => {
     if (!canvas.value || !wrapperEl.value) return;
@@ -6063,6 +6676,8 @@ const applyContainmentConstraints = (obj: any) => {
 };
 
 onMounted(async () => {
+  isCanvasDestroyed.value = false;
+  isCanvasJsonLoadInProgress = false;
   // Run non-critical network warmups in background.
   // Do not block canvas/Fabric boot on auth/templates/uploads.
   void (async () => {
@@ -6376,7 +6991,6 @@ onMounted(async () => {
               ) {
                   keyboardNudgeDirty = false;
                   saveCurrentState({ reason: 'keyboard-nudge' });
-                  triggerAutoSave();
               }
           };
           window.addEventListener('keyup', globalKeyUpHandler);
@@ -6410,8 +7024,9 @@ onMounted(async () => {
           window.addEventListener('mouseup', globalMouseUpHandler);
       }
 
-      // Watch for project loaded state before loading canvas data
-      // Use watchEffect to automatically re-evaluate when dependencies change
+      // LEGACY loader desativado: mantemos um único pipeline no watch(activePage)
+      // para evitar corrida de load e sobrescrita acidental.
+      if (ENABLE_LEGACY_WATCH_EFFECT_LOADER) {
       let stopWatchFn: (() => void) | null = null;
       stopWatchFn = watchEffect(async () => {
           if (!canvas.value) return;
@@ -6425,6 +7040,11 @@ onMounted(async () => {
 
           // Only load when project is loaded AND we have a page
           if (loaded && page && pagesLen > 0) {
+              if (isCanvasJsonLoadInProgress) {
+                  console.log('⏳ Carregamento de canvas já em andamento, aguardando conclusão...');
+                  return;
+              }
+
               // Check if canvas is already loaded to avoid reloading
               const objects = canvas.value.getObjects();
               const alreadyLoaded = objects.some((o: any) => {
@@ -6439,6 +7059,7 @@ onMounted(async () => {
                   return;
               }
 
+              isCanvasJsonLoadInProgress = true;
               isHistoryProcessing.value = true;
 
               try {
@@ -6484,21 +7105,20 @@ onMounted(async () => {
                       
                       // Log antes de carregar
                       const expectedObjects = page.canvasData?.objects?.length || 0;
+                      const deferHeavyPostLoad = !isInitialCanvasHydrationDone.value && expectedObjects >= 80;
                       console.log(`📥 Preparando para carregar ${expectedObjects} objeto(s) do canvasData`);
                       
                       // Normalize image URLs to same-origin proxy (Wasabi/Contabo) before load.
                       let canvasDataToLoad = prepareCanvasDataForLoad(page.canvasData);
                       
-                      // DEBUG: Log all objects being loaded with order
-                      console.log(`📦 CanvasData carregado - ${canvasDataToLoad?.objects?.length || 0} objeto(s):`);
-                      console.log(`📋 Ordem dos objetos NO JSON ao carregar:`, canvasDataToLoad.objects?.map((o: any, i: number) => `[${i}] ${o.type} - ${o.name || o.layerName || o._customId} (isFrame=${o.isFrame})`));
+                      console.log(`📦 CanvasData carregado - ${canvasDataToLoad?.objects?.length || 0} objeto(s)`);
                       
                       let didLoadPage = false;
                       try {
                           // CRITICAL: Wrap loadFromJSON in a try-catch that handles image errors gracefully
                           // If an image fails to load, we'll catch the error and continue with other objects
                           try {
-                              await canvas.value.loadFromJSON(canvasDataToLoad);
+                              await loadFromJsonSafe(canvasDataToLoad);
                               didLoadPage = true;
                           } catch (imageLoadErr: any) {
                               // Image load error - since we're using proxy, this shouldn't happen often
@@ -6507,7 +7127,7 @@ onMounted(async () => {
                               
                               // Try again with failed images replaced by placeholders
                               const safeCanvasData = replaceContaboImagesWithPlaceholder(prepareCanvasDataForLoad(canvasDataToLoad));
-                              await canvas.value.loadFromJSON(safeCanvasData);
+                              await loadFromJsonSafe(safeCanvasData);
                               didLoadPage = true;
                               degradedPage = true;
                           }
@@ -6568,7 +7188,7 @@ onMounted(async () => {
                           if (canvas.value) {
                               try {
                                   const dataWithPlaceholders = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
-                                  await canvas.value.loadFromJSON(dataWithPlaceholders);
+                                  await loadFromJsonSafe(dataWithPlaceholders);
                                   didLoadPage = true;
                                   degradedPage = true;
                                   console.log('✅ loadFromJSON concluído com placeholders');
@@ -6694,16 +7314,13 @@ onMounted(async () => {
                                               );
                                               if (isLargest) {
                                                   child.set('name', 'price_bg');
-                                                  console.log('[restoreProductCardNames] Assigned name: price_bg');
                                               }
                                           } else if (child.type === 'circle') {
                                               child.set('name', 'price_currency_bg');
-                                              console.log('[restoreProductCardNames] Assigned name: price_currency_bg');
                                           } else if (child.type && child.type.includes('text')) {
                                               const text = String(child.text || '').trim();
                                               if (text === 'R$' || text.includes('R$')) {
                                                   child.set('name', 'price_currency_text');
-                                                  console.log('[restoreProductCardNames] Assigned name: price_currency_text');
                                               } else if (/^\d+$/.test(text.replace(',', ''))) {
                                                   // Integer part of price
                                                   const hasInteger = priceChildren.some((other: any) => 
@@ -6711,14 +7328,11 @@ onMounted(async () => {
                                                   );
                                                   if (!hasInteger) {
                                                       child.set('name', 'price_integer_text');
-                                                      console.log('[restoreProductCardNames] Assigned name: price_integer_text');
                                                   } else {
                                                       child.set('name', 'price_decimal_text');
-                                                      console.log('[restoreProductCardNames] Assigned name: price_decimal_text');
                                                   }
                                               } else {
                                                   child.set('name', 'price_unit_text');
-                                                  console.log('[restoreProductCardNames] Assigned name: price_unit_text');
                                               }
                                           }
                                       });
@@ -6730,32 +7344,22 @@ onMounted(async () => {
                                           if (child.type === 'rect' && child.width > child.height * 0.8) {
                                               // Likely offer background
                                               child.set('name', 'offerBackground');
-                                              console.log('[restoreProductCardNames] Assigned name: offerBackground');
                                           } else if (child.type && child.type.includes('text')) {
                                               const text = String(child.text || '').trim().toLowerCase();
                                               if (text.includes('kg') || text.includes('ml') || text.includes('un')) {
                                                   child.set('name', 'smart_limit');
-                                                  console.log('[restoreProductCardNames] Assigned name: smart_limit');
                                               } else {
                                                   child.set('name', 'smart_title');
-                                                  console.log('[restoreProductCardNames] Assigned name: smart_title');
                                               }
                                           } else if (child.type === 'image') {
                                               child.set('name', 'smart_image');
-                                              console.log('[restoreProductCardNames] Assigned name: smart_image');
                                           }
                                       });
                                   }
                               }
                           });
                       };
-                      
-                      restoreProductCardNames();
-                      
-                      // DEBUG: Log objects after rehydrate
-                      const objsAfterRehydrate = canvas.value.getObjects();
-                      console.log('📦 Objetos APÓS rehydrateCanvasZones:', objsAfterRehydrate.map((o: any, i: number) => `[${i}] ${o.type} - ${o.name || o.layerName || o._customId} (isFrame=${o.isFrame})`));
-                      
+
                       // CRITICAL: After rehydrate, ensure all frames have layerName and isFrame
                       const allObjs = canvas.value.getObjects();
                       let framesFixed = 0;
@@ -6771,17 +7375,6 @@ onMounted(async () => {
                               if (!obj.layerName) {
                                   obj.layerName = 'FRAMER';
                                   framesFixed++;
-                                  console.log(`🔄 Frame restaurado após loadFromJSON:`, {
-                                      name: obj.name,
-                                      hadIsFrame: !!obj.isFrame,
-                                      hadLayerName: false,
-                                      fixed: true
-                                  });
-                              } else {
-                                  console.log(`✅ Frame já tinha layerName:`, {
-                                      name: obj.name,
-                                      layerName: obj.layerName
-                                  });
                               }
                               // Ensure stroke is correct
                               if (!obj.stroke || String(obj.stroke).toLowerCase() !== '#0d99ff') {
@@ -6791,9 +7384,12 @@ onMounted(async () => {
                       });
                       
                       if (framesFixed > 0 && !degradedPage) {
-                          console.log(`✅ ${framesFixed} frame(s) corrigido(s) após carregar`);
                           // Re-save immediately to persist the fixes
-                          saveCurrentState();
+                          if (!deferHeavyPostLoad) {
+	                              saveCurrentState({ reason: 'frame-fix-post-load', source: 'system', skipIfUnchanged: true });
+	                          } else {
+	                              scheduleIdleStatePersistence({ reason: 'frame-fix-post-load', source: 'system', skipIfUnchanged: true }, 3000);
+	                          }
                       }
                       
                       // CRITICAL: Remove any artboard-bg that might have been incorrectly created from a Frame
@@ -6809,37 +7405,45 @@ onMounted(async () => {
                           }
                       }
                       
-                      // CRITICAL: Clean up any orphaned control objects that might have been saved
-                      // Cleanup is done inline here since cleanupOrphanedObjects may not be defined yet
-                      // IMPORTANT: Remove from end to preserve order of valid objects
-                      const allObjsForCleanup = canvas.value.getObjects();
-                      const orphanedToRemove: any[] = [];
-                      // Iterate in reverse to remove from end, preserving order
-                      for (let i = allObjsForCleanup.length - 1; i >= 0; i--) {
-                          const o = allObjsForCleanup[i];
-                          ensurePersistentContentFlags(o);
-                          ensureObjectPersistentId(o);
-                          if (isTransientCanvasObject(o)) {
-                              orphanedToRemove.push(o);
+                      const runHeavyPostLoadPasses = () => {
+                          if (!canvas.value || isCanvasDestroyed.value) return;
+
+                          restoreProductCardNames();
+
+                          // Clean up transient/orphaned control objects that might have been saved
+                          const allObjsForCleanup = canvas.value.getObjects();
+                          const orphanedToRemove: any[] = [];
+                          for (let i = allObjsForCleanup.length - 1; i >= 0; i--) {
+                              const o = allObjsForCleanup[i];
+                              ensurePersistentContentFlags(o);
+                              ensureObjectPersistentId(o);
+                              if (isTransientCanvasObject(o)) {
+                                  orphanedToRemove.push(o);
+                              }
                           }
-                      }
-                      if (orphanedToRemove.length > 0) {
-                          console.log(`🧹 Limpando ${orphanedToRemove.length} objeto(s) órfão(ões) após carregar`);
-                          // Remove from end to preserve order
-                          orphanedToRemove.forEach((obj: any) => {
-                              try { canvas.value.remove(obj); } catch (e) {}
+                          if (orphanedToRemove.length > 0) {
+                              orphanedToRemove.forEach((obj: any) => {
+                                  try { canvas.value.remove(obj); } catch (e) {}
+                              });
+                          }
+
+                          // Ensure product cards stay in zones and images stay in cards
+                          const allLoadedObjects = canvas.value.getObjects();
+                          allLoadedObjects.forEach((obj: any) => {
+                              if (shouldApplyContainmentConstraints(obj)) {
+                                  applyContainmentConstraints(obj);
+                              }
                           });
+
+                          canvasObjects.value = [...canvas.value.getObjects()];
+                          safeRequestRenderAll();
+                      };
+
+                      if (deferHeavyPostLoad) {
+                          scheduleIdleWork(runHeavyPostLoadPasses, 2800);
+                      } else {
+                          runHeavyPostLoadPasses();
                       }
-                      
-                      // 🔒 APPLY CONTAINMENT CONSTRAINTS ON LOAD
-                      // Ensure product cards stay in zones and images stay in cards
-                      console.log('🔒 Aplicando constraints de contenção...');
-                      const allLoadedObjects = canvas.value.getObjects();
-                      allLoadedObjects.forEach((obj: any) => {
-                          if (shouldApplyContainmentConstraints(obj)) {
-                              applyContainmentConstraints(obj);
-                          }
-                      });
                       
                       // CRITICAL: Preserve exact order from JSON - don't reorder objects
                       // Force update canvasObjects to reflect restored state (order preserved from loadFromJSON)
@@ -6849,7 +7453,6 @@ onMounted(async () => {
                       
                       // Ensure objects have IDs restored if missing - BUT exclude frames
                       const objs = canvas.value.getObjects();
-                      console.log('📦 Objetos APÓS loadFromJSON:', objs.map((o: any, i: number) => `[${i}] ${o.type} - ${o.name || o.layerName || o._customId} (isFrame=${o.isFrame})`));
                       objs.forEach((o: any) => {
                           // CRITICAL: Don't mark frames as artboard! Only mark non-selectable, non-frame rects
                           if (o.type === 'rect' && !o.selectable && !o.id && !o.isFrame && !o.clipContent) {
@@ -6879,24 +7482,42 @@ onMounted(async () => {
                   // Important: DO NOT auto-save after a degraded load (missing images),
                   // otherwise we overwrite the stored JSON with placeholders/empty state.
                   if (!degradedPage) {
-                      // Allow overwriting to persist migrations/cleanups (e.g. removing legacy artboard-bg),
-                      // even if the resulting canvas ends up empty.
-                      saveCurrentState({ allowEmptyOverwrite: true, reason: 'post-load-cleanup' });
+                      const expectedObjects = Number(page?.canvasData?.objects?.length || 0);
+                      const nonTransientObjects = canvas.value
+                          .getObjects()
+                          .filter((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg').length;
+
+                      if (expectedObjects > 0 && nonTransientObjects === 0) {
+                          console.warn('⚠️ Pós-load gerou canvas vazio para página que tinha objetos. Pulando auto-save para evitar sobrescrita.');
+                      } else {
+                          // Persistência pós-load em modo ocioso:
+                          // evita travar o primeiro paint do editor.
+	                          scheduleIdleStatePersistence({
+	                              allowEmptyOverwrite: expectedObjects === 0,
+	                              reason: 'post-load-cleanup',
+                                  source: 'system',
+                                  skipIfUnchanged: true
+	                          });
+                      }
                   } else {
                       console.warn('⚠️ Carregamento degradado (imagens com erro). Pulando auto-save para não sobrescrever o projeto.');
                   }
 
                       // Stop watching after successful load
                       console.log('✅ Carregamento concluído, parando watch');
+                  isInitialCanvasHydrationDone.value = true;
                   if (stopWatchFn) stopWatchFn();
               } catch (err) {
                   console.error('❌ Error loading canvas data:', err);
                   isHistoryProcessing.value = false;
+              } finally {
+                  isCanvasJsonLoadInProgress = false;
               }
           } else {
               console.log('⏳ Aguardando projeto carregar...', { loaded, pagesLen, hasPage: !!page });
           }
       });
+      }
 
     }
   } catch (e) {
@@ -6904,6 +7525,12 @@ onMounted(async () => {
   }
 })
 onUnmounted(() => {
+  isCanvasDestroyed.value = true;
+  isCanvasJsonLoadInProgress = false;
+  if (frameLabelUpdateTimer) {
+    clearTimeout(frameLabelUpdateTimer);
+    frameLabelUpdateTimer = null;
+  }
   if (globalStylesSaveTimer) {
     clearTimeout(globalStylesSaveTimer);
     globalStylesSaveTimer = null;
@@ -6949,7 +7576,9 @@ onUnmounted(() => {
     teardownSnapping = null;
   }
   if (canvas.value) {
-    canvas.value.dispose();
+    const canvasToDispose = canvas.value;
+    canvas.value = null;
+    canvasToDispose.dispose();
   }
 })
 
@@ -6957,10 +7586,24 @@ onUnmounted(() => {
 // Ensure function is hoisted or accessible for updateObjectProperty
 type SaveStateOptions = {
     allowEmptyOverwrite?: boolean;
+    forceEmptyOverwrite?: boolean;
     reason?: string;
+    source?: 'user' | 'system';
+    skipIfUnchanged?: boolean;
+    expectedPageId?: string;
+    skipCoalesce?: boolean;
 };
 
 let saveCurrentState: (opts?: SaveStateOptions) => void | Promise<void> = () => {}; 
+
+const fastHashString = (input: string): string => {
+    let hash = 5381;
+    for (let i = 0; i < input.length; i++) {
+        hash = ((hash << 5) + hash) + input.charCodeAt(i);
+        hash |= 0;
+    }
+    return `h${(hash >>> 0).toString(16)}`;
+};
 
 // Persist/restore Fabric viewport (pan/zoom) inside the stored canvas JSON.
 // Fabric's `toJSON()` does NOT include viewportTransform by default.
@@ -6984,6 +7627,31 @@ const applyViewportTransform = (vpt: number[]) => {
     updateScrollbars();
     canvas.value.requestRenderAll();
 };
+
+const clearCanvasForPageSwitch = (canvasInstance: any) => {
+    if (!canvasInstance) return
+    try {
+        canvasInstance.discardActiveObject?.()
+        canvasInstance.clear()
+        return
+    } catch (err) {
+        console.warn('⚠️ clear() falhou no page switch, tentando remoção manual:', err)
+    }
+
+    try {
+        const allObjects = Array.isArray(canvasInstance.getObjects?.()) ? [...canvasInstance.getObjects()] : []
+        for (let i = allObjects.length - 1; i >= 0; i--) {
+            try {
+                canvasInstance.remove(allObjects[i])
+            } catch {
+                // ignore object-specific remove failures
+            }
+        }
+        canvasInstance.requestRenderAll?.()
+    } catch (manualErr) {
+        console.error('❌ Falha ao limpar canvas no page switch:', manualErr)
+    }
+}
 
 const CANVAS_CUSTOM_PROPS = [
     // Identity / selection
@@ -7019,6 +7687,10 @@ const CANVAS_CUSTOM_PROPS = [
     '__manualTransform',
     '__manualTransformCardW',
     '__manualTransformCardH',
+    '__priceLayoutSnapshot',
+    '__priceLayoutSnapshotAt',
+    '__atacValueVariants',
+    '__atacVariantGroups',
 
     // Product zone metadata
     'isGridZone',
@@ -7489,6 +8161,19 @@ const setupHistory = () => {
     if (!canvas.value) return;
     let lastThumbnailAt = 0;
     let thumbnailTicket = 0;
+    let lastHotSaveSanitizeAt = 0;
+    let pendingCoalescedSaveTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingCoalescedSaveOpts: SaveStateOptions | null = null;
+    let pendingCoalescedSavePageId = '';
+    let invokeSaveStateSafely: (opts?: SaveStateOptions) => void = () => {};
+
+    const getAdaptiveCoalesceDelayMs = (reason: string, objectCount: number): number => {
+        if (!reason.startsWith('object:')) return 0;
+        if (objectCount >= 1200) return 420;
+        if (objectCount >= 700) return 300;
+        if (objectCount >= 300) return 180;
+        return 0;
+    };
 
     const stripClipPathsFromJson = (node: any): void => {
         if (!node || typeof node !== 'object') return;
@@ -7505,10 +8190,19 @@ const setupHistory = () => {
         });
     };
 
-    const generateThumbnailFromJson = async (sourceJson: any): Promise<string> => {
+    const resolvePageIndexById = (pageId: string): number => {
+        const targetId = String(pageId || '').trim()
+        if (!targetId) return -1
+        return project.pages.findIndex((p: any) => String(p?.id || '').trim() === targetId)
+    }
+
+    const generateThumbnailFromJson = async (
+        sourceJson: any,
+        opts: { pageWidth?: number; pageHeight?: number } = {}
+    ): Promise<string> => {
         if (!fabric || typeof document === 'undefined') return '';
-        const width = Math.max(1, Math.round(Number(activePage.value?.width || canvas.value?.getWidth?.() || 1080)));
-        const height = Math.max(1, Math.round(Number(activePage.value?.height || canvas.value?.getHeight?.() || 1920)));
+        const width = Math.max(1, Math.round(Number(opts.pageWidth || activePage.value?.width || canvas.value?.getWidth?.() || 1080)));
+        const height = Math.max(1, Math.round(Number(opts.pageHeight || activePage.value?.height || canvas.value?.getHeight?.() || 1920)));
         const el = document.createElement('canvas');
         el.width = width;
         el.height = height;
@@ -7539,21 +8233,92 @@ const setupHistory = () => {
 
     const saveState = async (opts: SaveStateOptions = {}) => {
         if (isHistoryProcessing.value) return; // Prevent loop
+        const canvasInstance = canvas.value as any;
+        if (!canvasInstance || isCanvasDestroyed.value) return;
+        const saveReason = String(opts.reason || 'unknown');
+        const expectedPageId = String(opts.expectedPageId || '').trim();
+        const targetPageId = expectedPageId || getActiveProjectPageId();
+        if (!targetPageId) return;
+        const isTargetPageActive = () => getActiveProjectPageId() === targetPageId;
+        if (expectedPageId && !isTargetPageActive()) {
+            return;
+        }
+        const targetPageIndexStart = resolvePageIndexById(targetPageId);
+        if (targetPageIndexStart < 0) {
+            return;
+        }
+        if (expectedPageId) {
+            const activeNowId = getActiveProjectPageId();
+            if (!activeNowId || activeNowId !== expectedPageId) {
+                return
+            }
+        }
+        const liveObjectCount = Number(canvasInstance?.getObjects?.()?.length || 0)
+        const coalesceDelayMs = opts.skipCoalesce
+            ? 0
+            : getAdaptiveCoalesceDelayMs(saveReason, liveObjectCount)
+        if (coalesceDelayMs > 0) {
+            pendingCoalescedSaveOpts = { ...opts }
+            pendingCoalescedSavePageId = getActiveProjectPageId()
+            if (!pendingCoalescedSaveTimer) {
+                pendingCoalescedSaveTimer = setTimeout(() => {
+                    pendingCoalescedSaveTimer = null
+                    const nextOpts = pendingCoalescedSaveOpts
+                        ? { ...pendingCoalescedSaveOpts, skipCoalesce: true }
+                        : { reason: saveReason, source: opts.source, skipCoalesce: true }
+                    pendingCoalescedSaveOpts = null
+                    if (pendingCoalescedSavePageId && !nextOpts.expectedPageId) {
+                        nextOpts.expectedPageId = pendingCoalescedSavePageId
+                    }
+                    pendingCoalescedSavePageId = ''
+                    invokeSaveStateSafely(nextOpts)
+                }, coalesceDelayMs)
+            }
+            return
+        }
+
+        // Don't persist transient geometry while the user is still in a brusque transform.
+        // Keeping the previous stable snapshot is safer than saving an in-flight state.
+        if (saveReason.startsWith('lifecycle:') && (Date.now() - lastTransformMutationAt) < 350) {
+            console.warn(`[saveState] Pulando flush de lifecycle durante transformação ativa (${saveReason})`);
+            return;
+        }
+
+        const shouldRunHeavySanitize =
+            saveReason.includes('post-load') ||
+            saveReason.startsWith('lifecycle:') ||
+            saveReason.includes('frame-fix') ||
+            saveReason.includes('history') ||
+            saveReason.includes('load');
+        if (shouldRunHeavySanitize) {
+            sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}`);
+            stabilizePriceGroupsForPersistence(canvasInstance, `saveState:${saveReason}`);
+            lastHotSaveSanitizeAt = Date.now();
+        } else if ((Date.now() - lastHotSaveSanitizeAt) > 1200) {
+            sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}:throttled`);
+            lastHotSaveSanitizeAt = Date.now();
+        }
 
         // CRITICAL: Don't push/save empty canvas if the page already has data.
         // This can happen during transient clears (page switch/load) and it pollutes undo history
         // (Ctrl/Cmd+Z appears to "black screen" by undoing to an empty state).
-        if (project.activePageIndex >= 0 && project.pages.length > 0 && project.pages[project.activePageIndex]) {
-            const currentPage = project.pages[project.activePageIndex];
+        if (targetPageIndexStart >= 0 && project.pages.length > targetPageIndexStart && project.pages[targetPageIndexStart]) {
+            const currentPage = project.pages[targetPageIndexStart];
             const existingObjectCount = currentPage?.canvasData?.objects?.length || 0;
-            const liveObjectCount = canvas.value?.getObjects?.()?.length || 0;
-            if (!opts.allowEmptyOverwrite && liveObjectCount === 0 && existingObjectCount > 0) {
+            const liveObjectCount = canvasInstance?.getObjects?.()?.length || 0;
+            // Data-loss guard:
+            // never overwrite a non-empty saved page with an empty runtime snapshot
+            // unless this was an explicit forced empty-save operation.
+            if (liveObjectCount === 0 && existingObjectCount > 0 && !opts.forceEmptyOverwrite) {
                 console.warn(
-                    `⚠️ Pulando salvamento: canvas está vazio (${liveObjectCount} objetos) mas página já tem ${existingObjectCount} objetos salvos`,
-                    { pageIndex: project.activePageIndex, reason: opts.reason || 'unspecified' }
+                    `⚠️ Pulando salvamento vazio para evitar perda de dados: canvas está vazio (${liveObjectCount}) mas página já tinha ${existingObjectCount} objetos`,
+                    { pageIndex: targetPageIndexStart, reason: opts.reason || 'unspecified', pageId: targetPageId }
                 );
                 return;
             }
+        }
+        if (!isTargetPageActive()) {
+            return;
         }
         
         // Remove redo stack if new action happens (standard history behavior)
@@ -7562,7 +8327,7 @@ const setupHistory = () => {
         }
 
         // CRITICAL: Before saving, ensure all frames have layerName and isFrame set
-        const allObjs = canvas.value.getObjects();
+        const allObjs = canvasInstance.getObjects().filter((o: any) => isValidFabricCanvasObject(o));
         allObjs.forEach((obj: any) => {
             ensurePersistentContentFlags(obj);
             ensureObjectPersistentId(obj);
@@ -7582,7 +8347,7 @@ const setupHistory = () => {
         });
 
         // CRITICAL: Get all objects from canvas BEFORE serialization to cross-reference
-        const allCanvasObjects = canvas.value.getObjects();
+        const allCanvasObjects = canvasInstance.getObjects().filter((o: any) => isValidFabricCanvasObject(o));
         const canvasFrames = allCanvasObjects.filter((o: any) => o?.isFrame);
         
         // CRITICAL: Force all frames to be included in toJSON by ensuring they're "selectable" and have proper state
@@ -7592,8 +8357,6 @@ const setupHistory = () => {
             if (frame.selectable === false) frame.selectable = true;
             // Ensure frame is evented (can receive events)
             if (frame.evented === false) frame.evented = true;
-            // Ensure frame has visible property set
-            if (frame.visible === false) frame.visible = true;
             // Force update object state to ensure it's included
             frame.set('isFrame', true);
             frame.set('layerName', frame.layerName || 'FRAMER');
@@ -7618,31 +8381,8 @@ const setupHistory = () => {
         });
         safeRequestRenderAll();
         
-        // CRITICAL: Pre-serialize all frames to ensure they're included
-        // Sometimes toJSON() misses objects, so we'll manually add them if needed
-        const preSerializedFrames = new Map<string, any>();
-        canvasFrames.forEach((frame: any) => {
-            try {
-                if (!frame._customId) {
-                    frame._customId = Math.random().toString(36).substr(2, 9);
-                }
-                // Pre-serialize the frame
-                const frameObj = frame.toObject([...CANVAS_CUSTOM_PROPS]);
-                frameObj.isFrame = true;
-                frameObj.layerName = frameObj.layerName || 'FRAMER';
-                frameObj.stroke = frameObj.stroke || '#0d99ff';
-                frameObj.clipContent = frameObj.clipContent !== false;
-                frameObj.selectable = frameObj.selectable !== false;
-                frameObj.evented = frameObj.evented !== false;
-                frameObj.visible = frameObj.visible !== false;
-                preSerializedFrames.set(String(frame._customId), frameObj);
-            } catch (err) {
-                console.error('❌ Erro ao pré-serializar frame:', err, frame);
-            }
-        });
-        
         // Serialize with custom props
-        const json = canvas.value.toJSON([...CANVAS_CUSTOM_PROPS]);
+        const json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
 
         // ═══════════════════════════════════════════════════════════════════════════════════
         // CRITICAL FIX: Sync custom properties recursively for nested objects inside groups.
@@ -7675,7 +8415,7 @@ const setupHistory = () => {
         
         // Apply recursive sync to all top-level objects
         if (json.objects && Array.isArray(json.objects)) {
-            const canvasObjs = canvas.value.getObjects();
+            const canvasObjs = canvasInstance.getObjects().filter((o: any) => isValidFabricCanvasObject(o));
             const minLen = Math.min(canvasObjs.length, json.objects.length);
             for (let i = 0; i < minLen; i++) {
                 syncNestedProps(canvasObjs[i], json.objects[i]);
@@ -7691,15 +8431,12 @@ const setupHistory = () => {
             });
         }
 
-        // DEBUG: Log object order being saved
-        console.log(`📋 Ordem dos objetos ao salvar (ANTES de verificar missingFrames):`, json.objects?.map((o: any, i: number) => `[${i}] ${o.type} - ${o.name || o.layerName || o._customId} (isFrame=${o.isFrame})`));
-        
         // CRITICAL FIX: Restore frame properties in JSON objects
         // The problem is that Fabric's toJSON() serializes frames but loses custom properties
         // We need to match canvas frames with JSON objects and restore the properties
         if (json.objects && Array.isArray(json.objects)) {
             // Build a mapping of canvas objects by index (order is preserved by Fabric)
-            const canvasObjs = canvas.value.getObjects();
+            const canvasObjs = canvasInstance.getObjects().filter((o: any) => isValidFabricCanvasObject(o));
             
             // Match JSON objects with canvas objects by position (same index = same object)
             // This is the most reliable way since Fabric preserves order
@@ -7758,9 +8495,6 @@ const setupHistory = () => {
                 json.objects = validObjects;
             }
             
-            // DEBUG: Log final order after all processing
-            console.log(`📋 Ordem FINAL dos objetos ao salvar:`, json.objects?.map((o: any, i: number) => `[${i}] ${o.type} - ${o.name || o.layerName || o._customId} (isFrame=${o.isFrame})`));
-            
             // Debug: verify frames are being saved correctly
             const framesInJson = json.objects.filter((o: any) => o?.isFrame);
             if (framesInJson.length > 0) {
@@ -7782,51 +8516,32 @@ const setupHistory = () => {
         // CRITICAL: Convert presigned URLs to permanent URLs before saving
         // This ensures images persist after reload
         if (json.objects && Array.isArray(json.objects)) {
-            // DEBUG: Log images being saved
-            // IMPORTANT: Fabric.js may serialize type as 'Image' (uppercase) or 'image' (lowercase)
-            const imagesToSave = json.objects.filter((o: any) => (o.type || '').toLowerCase() === 'image');
-            if (imagesToSave.length > 0) {
-                console.log(`💾 Salvando ${imagesToSave.length} imagem(ns):`);
-                imagesToSave.forEach((img: any, idx: number) => {
-                    console.log(`   [${idx}] src ANTES: ${img.src?.substring(0, 100) || 'N/A'}`);
-                });
-            }
-            
             json.objects.forEach((obj: any) => {
                 const objType = (obj.type || '').toLowerCase();
                 if (objType === 'image' && obj.src) {
                     const permanentUrl = convertPresignedToPermanentUrl(obj.src);
-                    if (permanentUrl !== obj.src) {
-                        console.log(`🔄 Convertendo URL presignada para permanente:`);
-                        console.log(`   De: ${obj.src.substring(0, 100)}...`);
-                        console.log(`   Para: ${permanentUrl.substring(0, 100)}...`);
-                        obj.src = permanentUrl;
-                    } else {
-                        console.log(`🔗 URL já é permanente (mantendo): ${obj.src.substring(0, 100)}...`);
-                    }
+                    if (permanentUrl !== obj.src) obj.src = permanentUrl;
                 }
             });
-            
-            // DEBUG: Log images after conversion
-            if (imagesToSave.length > 0) {
-                console.log(`💾 Imagens APÓS conversão:`);
-                json.objects.filter((o: any) => (o.type || '').toLowerCase() === 'image').forEach((img: any, idx: number) => {
-                    console.log(`   [${idx}] src DEPOIS: ${img.src?.substring(0, 100) || 'N/A'}`);
-                });
-            }
         }
         
         // Persist app-level metadata alongside Fabric JSON.
         (json as any)[LABEL_TEMPLATES_JSON_KEY] = serializeLabelTemplatesForProject();
         // Persist viewport (pan/zoom) so reload restores the exact view.
-        const vpt = canvas.value?.viewportTransform;
+        const vpt = canvasInstance?.viewportTransform;
         if (Array.isArray(vpt) && vpt.length >= 6) {
             (json as any)[CANVAS_VIEWPORT_JSON_KEY] = {
                 vpt: vpt.slice(0, 6).map((n: any) => Number(n)),
-                zoom: Number(canvas.value?.getZoom?.() || vpt[0] || 1),
+                zoom: Number(canvasInstance?.getZoom?.() || vpt[0] || 1),
             };
         }
         const jsonStr = JSON.stringify(json);
+        const currentFingerprint = fastHashString(jsonStr);
+        const source = opts.source || 'user';
+        const currentPage = targetPageIndexStart >= 0 ? project.pages?.[targetPageIndexStart] : null;
+        if ((opts.skipIfUnchanged ?? true) && currentPage?.lastSavedFingerprint === currentFingerprint) {
+            return;
+        }
         // CRITICAL: Avoid pushing duplicate states (prevents "weird" undo that feels like it skips or needs many presses)
         const last = historyStack.value[historyStack.value.length - 1];
         if (last === jsonStr) {
@@ -7844,49 +8559,82 @@ const setupHistory = () => {
 
         // --- SYNC WITH STORE ---
         // CRITICAL: Não salvar se as páginas ainda não foram carregadas
-        if (project.activePageIndex >= 0 && project.pages.length > 0 && project.pages[project.activePageIndex]) {
+        const targetPageIndex = resolvePageIndexById(targetPageId);
+        if (targetPageIndex >= 0 && project.pages.length > targetPageIndex && project.pages[targetPageIndex]) {
              const objectCount = json.objects?.length || 0;
-             const currentPage = project.pages[project.activePageIndex];
+             const didUpdate = updatePageData(targetPageIndex, json, {
+                 source,
+                 markUnsaved: source === 'user',
+                 skipIfSameFingerprint: true
+             });
+             if (!didUpdate) return;
 
-             console.log(`💾 Salvando estado: ${objectCount} objeto(s) para página ${project.activePageIndex}`);
-
-             updatePageData(project.activePageIndex, json);
-             if (String(opts.reason || '') !== 'initial-history-capture') {
+             const activePageRef = project.pages[targetPageIndex]
+             if (activePageRef) activePageRef.lastSavedFingerprint = currentFingerprint
+             const reason = String(opts.reason || '');
+             const shouldSkipAutoSave =
+                 source === 'system' ||
+                 reason === 'initial-history-capture' ||
+                 reason === 'post-load-cleanup' ||
+                 reason.startsWith('lifecycle:');
+             if (!shouldSkipAutoSave) {
                  triggerAutoSave();
              }
 
              // Verificar se os dados foram salvos corretamente
-             const savedPage = project.pages[project.activePageIndex];
+             const savedPage = project.pages[targetPageIndex];
              if (savedPage?.canvasData) {
                  const savedObjectCount = savedPage.canvasData?.objects?.length || 0;
-                 console.log(`✅ Estado salvo: página tem ${savedObjectCount} objeto(s) no canvasData`);
                  if (savedObjectCount !== objectCount) {
                      console.warn(`⚠️ Discrepância: salvamos ${objectCount} objetos mas página tem ${savedObjectCount}`);
                  }
              } else {
-                 console.error(`❌ PROBLEMA: Estado não foi salvo! Página ${project.activePageIndex} não tem canvasData`);
+                 console.error(`❌ PROBLEMA: Estado não foi salvo! Página ${targetPageIndex} (${targetPageId}) não tem canvasData`);
              }
              
               // Generate thumbnail from an offscreen canvas (never mutate the live editor canvas).
-              const reason = String(opts.reason || '');
               const isModifiedReason = reason === 'object:modified' || reason === 'object:modified(zone)';
+              const skipThumbnail =
+                  source === 'system' ||
+                  reason === 'initial-history-capture' ||
+                  reason === 'post-load-cleanup' ||
+                  reason.startsWith('lifecycle:');
               const now = Date.now();
               const minInterval = isModifiedReason ? 3000 : 600;
               const canGenerate = (now - lastThumbnailAt) >= minInterval;
 
-              if (canGenerate) {
+              if (!skipThumbnail && canGenerate) {
+                  const targetPageForThumb = project.pages[targetPageIndex];
                   const myTicket = ++thumbnailTicket;
-                  const dataURL = await generateThumbnailFromJson(json);
+                  const dataURL = await generateThumbnailFromJson(json, {
+                      pageWidth: Number(targetPageForThumb?.width || 0),
+                      pageHeight: Number(targetPageForThumb?.height || 0)
+                  });
                   if (dataURL && myTicket === thumbnailTicket) {
-                      updatePageThumbnail(project.activePageIndex, dataURL);
+                      const latestPageIndex = resolvePageIndexById(targetPageId);
+                      if (latestPageIndex >= 0) {
+                          updatePageThumbnail(latestPageIndex, dataURL);
+                      }
                       lastThumbnailAt = Date.now();
                   }
               }
         }
     }
     
+    invokeSaveStateSafely = (opts: SaveStateOptions = {}) => {
+        const nextOpts: SaveStateOptions = { ...(opts || {}) };
+        if (!nextOpts.expectedPageId) {
+            const pageId = getActiveProjectPageId();
+            if (pageId) nextOpts.expectedPageId = pageId;
+        }
+        void saveState(nextOpts).catch((err: any) => {
+            console.error('❌ [saveState] Falha ao salvar estado:', err);
+            if (canvas.value) sanitizeCanvasObjectStack(canvas.value as any, 'saveState-catch');
+        });
+    };
+
     // Export for external use
-    saveCurrentState = saveState;
+    saveCurrentState = invokeSaveStateSafely;
 
     // Capture initial state - only if canvas has objects OR page is new/empty
     const currentObjectCount = canvas.value.getObjects().length;
@@ -7895,7 +8643,7 @@ const setupHistory = () => {
 
     // Only save initial state if canvas has objects, or if page is completely new (no existing data)
     if (currentObjectCount > 0 || !pageHasData) {
-        saveState({ reason: 'initial-history-capture' });
+        invokeSaveStateSafely({ reason: 'initial-history-capture', source: 'system', skipIfUnchanged: true });
     } else {
         console.log('ℹ️ Pullando saveState inicial: canvas vazio mas página já tem dados');
     }
@@ -7904,15 +8652,19 @@ const setupHistory = () => {
     canvas.value.on('object:added', (e: any) => {
         invalidateScrollbarBounds();
         invalidateContainmentZoneCache();
+        if (isBulkProductMutation) {
+            updateScrollbars();
+            return;
+        }
         if (!isHistoryProcessing.value) {
-            saveState({ allowEmptyOverwrite: true, reason: 'object:added' });
-            triggerAutoSave(); // Auto-save to Contabo
+            invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:added' });
         }
         updateScrollbars();
     });
     canvas.value.on('object:modified', (e: any) => {
         invalidateScrollbarBounds();
         invalidateContainmentZoneCache();
+        if (isBulkProductMutation) return;
         if (isHistoryProcessing.value) return;
         // Prevent double state save when applyZoneUpdates already saved (prevents duplicate history entries)
         if (isApplyingZoneUpdate) return;
@@ -7921,19 +8673,21 @@ const setupHistory = () => {
         // For zones, run our normalization/layout first and save only once (prevents unstable undo states).
         if (obj && isLikelyProductZone(obj)) {
             handleObjectModified(e);
-            saveState({ allowEmptyOverwrite: true, reason: 'object:modified(zone)' });
-            triggerAutoSave(); // Auto-save to Contabo
+            invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:modified(zone)' });
             return;
         }
 
         handleObjectModified(e);
         // Save AFTER any normalization so each Ctrl+Z reverts one user action.
-        saveState({ allowEmptyOverwrite: true, reason: 'object:modified' });
-        triggerAutoSave(); // Auto-save to Contabo
+        invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:modified' });
     });
     canvas.value.on('object:removed', (e: any) => {
         invalidateScrollbarBounds();
         invalidateContainmentZoneCache();
+        if (isBulkProductMutation) {
+            updateScrollbars();
+            return;
+        }
         if (isHistoryProcessing.value) {
             updateScrollbars();
             return;
@@ -7959,16 +8713,14 @@ const setupHistory = () => {
                 }
             }
 
-            saveState({ allowEmptyOverwrite: true, reason: 'object:removed(zone+cascade)' });
-            triggerAutoSave(); // Auto-save to Contabo
+            invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:removed(zone+cascade)' });
             updateScrollbars();
             return;
         }
 
         // When cascading, skip intermediate saves for each child removal.
         if (!isZoneCascadeDelete) {
-            saveState({ allowEmptyOverwrite: true, reason: 'object:removed' });
-            triggerAutoSave(); // Auto-save to Contabo
+            invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:removed' });
         }
         updateScrollbars();
     });
@@ -8261,7 +9013,10 @@ const repairZoneCardsAfterHistoryRestore = () => {
         if (!cards.length) return;
 
         cards.forEach((card: any) => {
-            if (card.visible === false) card.visible = true;
+            const cardFrameId = String((card as any).parentFrameId || '').trim();
+            const hiddenByFrame = !!(cardFrameId && getFrameById(cardFrameId)?.visible === false);
+            if (hiddenByFrame) card.visible = false;
+            else if (card.visible === false) card.visible = true;
             if (!Number.isFinite(Number(card.opacity)) || Number(card.opacity) <= 0) card.opacity = 1;
             card.set?.({ objectCaching: false, statefullCache: false, dirty: true });
             card.setCoords?.();
@@ -8560,23 +9315,85 @@ const redo = async () => {
 
 const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } = {}) => {
     if (!canvas.value || !frame) return null;
-    if (!frame.isFrame) return null;
-    const rootId = String(frame._customId || '');
+    const frameLayerName = String((frame as any)?.layerName || '').trim().toUpperCase();
+    const frameName = String((frame as any)?.name || '').trim();
+    const isRootFrameLike = !!(frame as any)?.isFrame ||
+        frameLayerName === 'FRAMER' ||
+        frameLayerName === 'FRAME' ||
+        /^FRAME(?:\s+\d+)?$/i.test(frameName) ||
+        /^FRAMER(?:\s+\d+)?$/i.test(frameName);
+    if (!isRootFrameLike) return null;
+    if (!(frame as any)._customId) (frame as any)._customId = makeCanvasObjectId();
+    const rootId = String((frame as any)._customId || '');
     if (!rootId) return null;
 
     const rootBounds = getFrameBounds(frame);
-    const fallbackRootWidth = (Number(frame.width) || 0) * (Number(frame.scaleX) || 1);
+    const fallbackRootWidth = (Number((frame as any).width) || 0) * (Number((frame as any).scaleX) || 1);
     const rootWidth = Number(rootBounds?.width) || fallbackRootWidth || 1080;
     const gap = Number(opts.offset ?? FRAME_SPAWN_GAP) || FRAME_SPAWN_GAP;
-    const offsetX = rootWidth + gap;
-    const offsetY = 0;
+    const rootCenter = typeof (frame as any).getCenterPoint === 'function'
+        ? (frame as any).getCenterPoint()
+        : { x: Number((frame as any).left) || 0, y: Number((frame as any).top) || 0 };
+    const spawn = rootBounds
+        ? {
+            left: rootBounds.left + rootBounds.width + gap + rootWidth / 2,
+            top: rootBounds.top + rootBounds.height / 2
+        }
+        : {
+            left: (Number(rootCenter.x) || 0) + rootWidth + gap,
+            top: Number(rootCenter.y) || 0
+        };
+    const offsetX = (Number(spawn.left) || 0) - (Number(rootCenter.x) || 0);
+    const offsetY = (Number(spawn.top) || 0) - (Number(rootCenter.y) || 0);
 
     const all = canvas.value.getObjects();
+    // Hard guard: guarantee stable IDs for legacy objects so duplication mapping never drops content.
+    all.forEach((o: any) => {
+        if (!o || o.excludeFromExport) return;
+        if (!o._customId) o._customId = makeCanvasObjectId();
+    });
     const indexById = new Map<string, number>();
     all.forEach((o: any, i: number) => {
         if (o?._customId) indexById.set(String(o._customId), i);
     });
 
+    const isFrameContainerCandidate = (obj: any) => {
+        if (!obj) return false;
+        const layer = String(obj.layerName || '').trim().toUpperCase();
+        const name = String(obj.name || '').trim();
+        return !!obj.isFrame ||
+            layer === 'FRAMER' ||
+            layer === 'FRAME' ||
+            /^FRAME(?:\s+\d+)?$/i.test(name) ||
+            /^FRAMER(?:\s+\d+)?$/i.test(name);
+    };
+
+    const getFrameArea = (obj: any) => {
+        const b = getFrameBounds(obj);
+        if (!b) return Number.POSITIVE_INFINITY;
+        return Math.max(1, Number(b.width || 0) * Number(b.height || 0));
+    };
+
+    const isObjectInsideOrOverlappingFrame = (candidate: any, container: any) => {
+        if (!candidate || !container) return false;
+        try {
+            if (isObjectCenterInsideFrame(candidate, container)) return true;
+            if (typeof candidate.getBoundingRect !== 'function' || typeof container.getBoundingRect !== 'function') return false;
+            const objBounds = candidate.getBoundingRect(true);
+            const frameBounds = container.getBoundingRect(true);
+            if (!objBounds || !frameBounds) return false;
+            const objArea = Math.max(1, Number(objBounds.width || 0) * Number(objBounds.height || 0));
+            const ix = Math.max(0, Math.min(objBounds.left + objBounds.width, frameBounds.left + frameBounds.width) - Math.max(objBounds.left, frameBounds.left));
+            const iy = Math.max(0, Math.min(objBounds.top + objBounds.height, frameBounds.top + frameBounds.height) - Math.max(objBounds.top, frameBounds.top));
+            const overlapRatio = (ix * iy) / objArea;
+            return overlapRatio >= 0.6;
+        } catch {
+            return false;
+        }
+    };
+
+    const resolvedParentByOriginalId = new Map<string, string | undefined>();
+    resolvedParentByOriginalId.set(rootId, undefined);
     const toDuplicateIds = new Set<string>([rootId]);
     const queue: string[] = [rootId];
     while (queue.length) {
@@ -8588,12 +9405,55 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             const id = String(o._customId);
             if (toDuplicateIds.has(id)) return;
             toDuplicateIds.add(id);
-            if ((o as any).isFrame) queue.push(id);
+            resolvedParentByOriginalId.set(id, parentId);
+            if (isFrameContainerCandidate(o)) queue.push(id);
+        });
+    }
+
+    // Fallback espacial: inclui objetos visualmente dentro do frame mesmo sem parentFrameId.
+    // Isso cobre arquivos legacy onde vínculos não foram persistidos corretamente.
+    let safety = 0;
+    let changed = true;
+    while (changed && safety++ < 20) {
+        changed = false;
+        const duplicatedFrames = all
+            .filter((o: any) => {
+                if (!o || !o._customId) return false;
+                if (!toDuplicateIds.has(String(o._customId))) return false;
+                return isFrameContainerCandidate(o);
+            })
+            .sort((a: any, b: any) => getFrameArea(a) - getFrameArea(b));
+
+        if (!duplicatedFrames.length) break;
+
+        all.forEach((candidate: any) => {
+            if (!candidate || candidate.excludeFromExport || !candidate._customId) return;
+            const candidateId = String(candidate._customId);
+            if (toDuplicateIds.has(candidateId)) return;
+
+            let container: any = null;
+            for (const f of duplicatedFrames) {
+                if (f === candidate) continue;
+                if (!isObjectInsideOrOverlappingFrame(candidate, f)) continue;
+                container = f;
+                break; // duplicatedFrames já está ordenado do menor para o maior
+            }
+            if (!container?._customId) return;
+
+            toDuplicateIds.add(candidateId);
+            changed = true;
+
+            const existingParent = String((candidate as any).parentFrameId || '').trim();
+            const resolvedParent = existingParent && toDuplicateIds.has(existingParent)
+                ? existingParent
+                : String(container._customId);
+            resolvedParentByOriginalId.set(candidateId, resolvedParent || undefined);
         });
     }
 
     const originals = all.filter((o: any) => o?._customId && toDuplicateIds.has(String(o._customId)));
     originals.sort((a: any, b: any) => (indexById.get(String(a._customId)) ?? 0) - (indexById.get(String(b._customId)) ?? 0));
+    console.log(`[duplicateFrameWithContents] root=${rootId} totalDuplicated=${originals.length} framesInSet=${originals.filter((o: any) => isFrameContainerCandidate(o)).length}`);
 
     if (!originals.length) return null;
 
@@ -8634,7 +9494,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         try { delete (cloned as any).__clipRect; } catch {}
 
         // Keep the frame flag even if Fabric drops it in clone.
-        if (original.isFrame) {
+        if (isFrameContainerCandidate(original)) {
             cloned.isFrame = true;
             cloned.clipContent = (original as any).clipContent !== false;
             cloned.stroke = (original as any).stroke || '#0d99ff';
@@ -8654,7 +9514,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         // Insert right above the duplicated block to keep stacking predictable.
         try {
             if (typeof (canvas.value as any).insertAt === 'function') {
-                (canvas.value as any).insertAt(cloned, insertBaseIndex + clones.length, false);
+                (canvas.value as any).insertAt(insertBaseIndex + clones.length, cloned);
             } else {
                 canvas.value.add(cloned);
             }
@@ -8684,7 +9544,9 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         const entry = oldByNew.get(String(clone._customId));
         const original = entry?.original;
         if (!original) return;
-        const oldParent = String((original as any).parentFrameId || '');
+        const originalId = String((original as any)._customId || '');
+        const resolvedParent = resolvedParentByOriginalId.get(originalId);
+        const oldParent = String(resolvedParent || (original as any).parentFrameId || '');
         if (!oldParent) {
             clone.parentFrameId = undefined;
             return;
@@ -8713,7 +9575,6 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     canvasObjects.value = [...canvas.value.getObjects()];
     updateSelection();
     saveCurrentState({ reason: 'duplicate-frame' });
-    triggerAutoSave();
     return rootClone;
 };
 
@@ -9492,9 +10353,17 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         if (!active) return;
 
         // Frames: duplicate frame + everything inside it.
-        if ((active as any).isFrame) {
-            await duplicateFrameWithContents(active);
-            return;
+        // Fallback robusto: alguns frames legacy podem perder `isFrame` em runtime.
+        const activeLayerName = String((active as any)?.layerName || '').trim().toUpperCase();
+        const activeName = String((active as any)?.name || '').trim();
+        const looksLikeFrame = !!(active as any)?.isFrame ||
+            activeLayerName === 'FRAMER' ||
+            activeLayerName === 'FRAME' ||
+            /^FRAME(?:\s+\d+)?$/i.test(activeName) ||
+            /^FRAMER(?:\s+\d+)?$/i.test(activeName);
+        if (looksLikeFrame) {
+            const duplicatedFrame = await duplicateFrameWithContents(active);
+            if (duplicatedFrame) return;
         }
 
         try {
@@ -9503,7 +10372,6 @@ const handleKeyDown = async (e: KeyboardEvent) => {
             finalizeDuplicatedObjects(clones);
             const reason = isActiveSelectionObject(active) ? 'duplicate-selection-multi' : 'duplicate-selection';
             saveCurrentState({ reason });
-            triggerAutoSave();
         } catch (err) {
             console.warn('[duplicate] Falha ao duplicar seleção', err);
         }
@@ -9555,37 +10423,73 @@ const setupZoomPan = () => {
         return { x: canvasX, y: canvasY };
     };
 
-    // Wheel Zoom & Pan
-    canvas.value.on('mouse:wheel', (opt: any) => {
-        const delta = opt.e.deltaY;
-        const evt = opt.e;
-        
-        // Ctrl/Cmd + Wheel to ZOOM
-        if (evt.ctrlKey || evt.metaKey) {
+    // Wheel Zoom & Pan (coalesced in RAF to avoid stutter on trackpads/high-frequency wheels)
+    let wheelRafPending = false;
+    let wheelAccumZoomDelta = 0;
+    let wheelAccumPanX = 0;
+    let wheelAccumPanY = 0;
+    let wheelZoomPoint = { x: 0, y: 0 };
+    let wheelMode: 'none' | 'zoom' | 'pan' = 'none';
+
+    const flushWheel = () => {
+        wheelRafPending = false;
+        if (!canvas.value) return;
+
+        if (wheelMode === 'zoom') {
             let zoom = canvas.value.getZoom();
-            zoom *= 0.999 ** delta;
+            // Apply the accumulated delta only once per frame for smoother zoom.
+            zoom *= 0.999 ** wheelAccumZoomDelta;
             if (zoom > 20) zoom = 20;
             if (zoom < 0.01) zoom = 0.01;
-            canvas.value.zoomToPoint({ x: evt.offsetX, y: evt.offsetY }, zoom);
-            canvas.value.requestRenderAll();
+            canvas.value.zoomToPoint(wheelZoomPoint, zoom);
             updateZoomState();
-        } else {
-            // Standard Wheel = PAN by changing ViewportTransform
+            safeRequestRenderAll();
+            updateFloatingUI();
+        } else if (wheelMode === 'pan') {
             const vpt = canvas.value.viewportTransform;
             if (vpt) {
-                 // Pan vertical by default
-                 vpt[5] -= delta; 
-                 
-                 // Pan horizontal when shift key is pressed OR for horizontal scrolling
-                 if (evt.shiftKey || evt.deltaX !== 0) {
-                     vpt[4] -= (evt.deltaX || delta); // Use deltaX if available, otherwise use delta
-                 }
-                 
-                 safeRequestRenderAll();
-                 throttledUpdateScrollbars();
+                vpt[4] += wheelAccumPanX;
+                vpt[5] += wheelAccumPanY;
+                safeRequestRenderAll();
+                updateFloatingUI();
+                throttledUpdateScrollbars();
             }
         }
-        
+
+        wheelAccumZoomDelta = 0;
+        wheelAccumPanX = 0;
+        wheelAccumPanY = 0;
+        wheelMode = 'none';
+    };
+
+    const scheduleWheelFlush = () => {
+        if (wheelRafPending) return;
+        wheelRafPending = true;
+        requestAnimationFrame(flushWheel);
+    };
+
+    canvas.value.on('mouse:wheel', (opt: any) => {
+        const evt = opt.e;
+        if (!evt) return;
+        const deltaY = Number(evt.deltaY || 0);
+        const deltaX = Number(evt.deltaX || 0);
+
+        // Ctrl/Cmd + Wheel to ZOOM
+        if (evt.ctrlKey || evt.metaKey) {
+            wheelMode = 'zoom';
+            wheelAccumZoomDelta += deltaY;
+            wheelZoomPoint = { x: Number(evt.offsetX || 0), y: Number(evt.offsetY || 0) };
+        } else {
+            wheelMode = 'pan';
+            // Vertical pan by default
+            wheelAccumPanY -= deltaY;
+            // Horizontal pan with shift or native deltaX
+            if (evt.shiftKey || deltaX !== 0) {
+                wheelAccumPanX -= (deltaX || deltaY);
+            }
+        }
+
+        scheduleWheelFlush();
         evt.preventDefault();
         evt.stopPropagation();
     });
@@ -9824,17 +10728,11 @@ const setupZoomPan = () => {
 
     canvas.value.on('mouse:dblclick', (opt: any) => {
         if (opt.target) {
-            // Check for product zone using isLikelyProductZone to handle both isGridZone and isProductZone
-            if (isLikelyProductZone(opt.target)) {
-                // Save reference to the zone for later use during import
-                targetGridZone.value = opt.target;
-                try {
-                    productImportExistingCount.value = getZoneChildren(opt.target).length;
-                } catch {
-                    productImportExistingCount.value = 0;
-                }
-                // Open the Product Review Modal directly (same as Assets panel)
-                showProductReviewModal.value = true;
+            // Product zone import/edit on double-click:
+            // works on zone itself and also on cards/children inside the zone.
+            // Keep price label nested-edit (priceGroup) untouched.
+            if (tryOpenProductReviewFromDblClickTarget(opt.target)) {
+                return;
             } else if (opt.target.type === 'polygon' || opt.target.type === 'polyline') {
                 enterNodeEditing(opt.target);
             } else if (opt.target.isVectorPath) {
@@ -11589,27 +12487,24 @@ const setupReactivity = () => {
         if (shouldSave) saveCurrentState();
     };
 
+    let lastUpdateObjectsSanitizeAt = 0;
     const updateObjects = () => {
+        const canvasInstance = canvas.value;
+        if (!canvasInstance || isCanvasDestroyed.value) return;
+        const now = Date.now();
+        if ((now - lastUpdateObjectsSanitizeAt) > 1200) {
+            sanitizeCanvasObjectStack(canvasInstance as any, 'updateObjects:throttled');
+            lastUpdateObjectsSanitizeAt = now;
+        }
+
         // CRITICAL: Preserve exact order from canvas.getObjects()
         // Don't reorder or sort - maintain order as saved
-        const isValidFabricObject = (o: any) => {
-            // Fabric.js v7 compatible validation
-            if (!o || typeof o !== 'object') return false;
-            const hasRender = typeof o.render === 'function';
-            const hasSetCoords = typeof o.setCoords === 'function';
-            const hasSet = typeof o.set === 'function';
-            const hasToObject = typeof o.toObject === 'function';
-            // Additional check: must not be a primitive or plain number
-            const isNotPrimitive = typeof o !== 'number' && typeof o !== 'string' && typeof o !== 'boolean';
-            return isNotPrimitive && hasRender && hasSetCoords && hasSet && hasToObject;
-        };
-
-        const objs = canvas.value.getObjects();
+        const objs = canvasInstance.getObjects();
         const toRemove: any[] = [];
         let hasInvalid = false;
         
         objs.forEach((o: any) => {
-            if (!isValidFabricObject(o)) {
+            if (!isValidFabricCanvasObject(o)) {
                 hasInvalid = true;
                 console.error('❌ [updateObjects] Objeto inválido detectado no canvas (será ignorado/purgado):', o);
                 return;
@@ -11653,13 +12548,13 @@ const setupReactivity = () => {
 
         // If something corrupted the internal stack (e.g., number inserted into _objects), purge it to prevent render crashes.
         if (hasInvalid) {
-            const internal = (canvas.value as any)._objects;
+            const internal = (canvasInstance as any)._objects;
             if (Array.isArray(internal)) {
-                const next = internal.filter((o: any) => isValidFabricObject(o));
+                const next = internal.filter((o: any) => isValidFabricCanvasObject(o));
                 if (next.length !== internal.length) {
                     internal.length = 0;
                     next.forEach((o: any) => internal.push(o));
-                    if (typeof (canvas.value as any)._onStackOrderChanged === 'function') (canvas.value as any)._onStackOrderChanged();
+                    if (typeof (canvasInstance as any)._onStackOrderChanged === 'function') (canvasInstance as any)._onStackOrderChanged();
                 }
             }
         }
@@ -11668,7 +12563,7 @@ const setupReactivity = () => {
         if (toRemove.length > 0) {
             toRemove.forEach((obj: any) => {
                 try {
-                    canvas.value.remove(obj);
+                    canvasInstance.remove(obj);
                 } catch (e) {
                     // Ignore errors
                 }
@@ -11676,12 +12571,22 @@ const setupReactivity = () => {
         }
         
         // CRITICAL: Preserve exact order - don't reorder or sort
-        canvasObjects.value = [...canvas.value.getObjects()];
+        canvasObjects.value = [...canvasInstance.getObjects()];
     };
 
-    canvas.value.on('object:added', updateObjects);
-    canvas.value.on('object:removed', updateObjects);
-    canvas.value.on('object:modified', updateObjects); 
+    let updateObjectsRafId: number | null = null;
+    const scheduleUpdateObjects = () => {
+        if (updateObjectsRafId !== null) return;
+        updateObjectsRafId = requestAnimationFrame(() => {
+            updateObjectsRafId = null;
+            if (!canvas.value || isCanvasDestroyed.value) return;
+            updateObjects();
+        });
+    };
+
+    canvas.value.on('object:added', scheduleUpdateObjects);
+    canvas.value.on('object:removed', scheduleUpdateObjects);
+    canvas.value.on('object:modified', scheduleUpdateObjects); 
 
     // Frames: auto-parent new objects when created inside a frame + keep clipPaths in sync
     canvas.value.on('object:added', (e: any) => {
@@ -11821,6 +12726,7 @@ const setupReactivity = () => {
     let pendingZones: Set<any> = new Set();
     
     canvas.value.on('object:added', (e: any) => {
+        if (isBulkProductMutation) return;
         const obj = e.target;
         if (!obj) return;
         const isCard = !!(obj.isProductCard || obj.isSmartObject || isLikelyProductCard(obj));
@@ -11843,7 +12749,7 @@ const setupReactivity = () => {
         clearTimeout(layoutDebounceTimer);
         layoutDebounceTimer = setTimeout(() => {
             pendingZones.forEach(zone => {
-                recalculateZoneLayout(zone);
+                recalculateZoneLayout(zone, undefined, { save: false });
             });
             pendingZones.clear();
         }, 100); // 100ms debounce
@@ -11948,6 +12854,7 @@ const setupReactivity = () => {
     // Throttled floating UI update (avoid expensive getBoundingRect on every move frame)
     let floatingUIRafPending = false;
     canvas.value.on('object:moving', (e: any) => {
+        lastTransformMutationAt = Date.now();
         const target = e.target;
         const activeObj = canvas.value.getActiveObject?.();
         const shouldUpdateFloatingUI = !!(
@@ -12107,6 +13014,7 @@ const setupReactivity = () => {
 
     // Smart Scaling for Textbox Reflow & Product Zone AutoLayout
     canvas.value.on('object:scaling', (e: any) => {
+        lastTransformMutationAt = Date.now();
         updateFloatingUI();
         const obj = e.target;
 
@@ -12198,6 +13106,10 @@ const setupReactivity = () => {
             applyContainmentConstraints(obj);
         }
     });
+
+    canvas.value.on('object:rotating', () => {
+        lastTransformMutationAt = Date.now();
+    });
     
     // 🔒 Apply containment after modification (drag end)
     canvas.value.on('object:modified', (e: any) => {
@@ -12216,8 +13128,6 @@ const setupReactivity = () => {
         }
     });
     
-    canvas.value.on('mouse:wheel', updateFloatingUI);
-
     // 'selection:created', 'selection:updated', 'selection:cleared'
     canvas.value.on('selection:created', () => {
         if (normalizeActiveSelectionForProductCards()) {
@@ -12249,6 +13159,8 @@ const setupReactivity = () => {
 
     // 2. Enable deep select on Double Click
     canvas.value.on('mouse:dblclick', (opt: any) => {
+        if (showProductReviewModal.value) return;
+
         const c: any = canvas.value as any;
         const evt = opt.e || opt.originalEvent;
         let rawTarget = opt.target;
@@ -12358,9 +13270,13 @@ const setupReactivity = () => {
                 parentZoneId: (target as any)?.parentZoneId
             });
         }
+
+        if (tryOpenProductReviewFromDblClickTarget(target)) {
+            return;
+        }
         
-	        // Nested label editing: double click the priceGroup to edit its inner parts.
-	        if (target.type === 'group' && target.name === 'priceGroup') {
+		        // Nested label editing: double click the priceGroup to edit its inner parts.
+		        if (target.type === 'group' && target.name === 'priceGroup') {
 	             target.set({ subTargetCheck: true, interactive: true });
 	             if (typeof target.getObjects === 'function') {
 	                 target.getObjects().forEach((child: any) => {
@@ -12384,8 +13300,8 @@ const setupReactivity = () => {
 	             return;
 	        }
 
-            // Product cards already have subTargetCheck=true, so single click selects inner elements.
-            // Double-click on a product card is now a no-op (no extra mode needed).
+            // Product cards already have subTargetCheck=true for single-click deep select.
+            // Double-click on card/zone now prioritizes opening Product Review import/edit modal.
     });
 
     // 3. Product cards always stay interactive (single-click deep select).
@@ -13386,16 +14302,22 @@ const handleAction = async (action: string) => {
     // Duplicate (button/menu)
     if (action === 'duplicate') {
         if (!active) return;
-        if ((active as any).isFrame) {
-            await duplicateFrameWithContents(active);
-            return;
+        const activeLayerName = String((active as any)?.layerName || '').trim().toUpperCase();
+        const activeName = String((active as any)?.name || '').trim();
+        const looksLikeFrame = !!(active as any)?.isFrame ||
+            activeLayerName === 'FRAMER' ||
+            activeLayerName === 'FRAME' ||
+            /^FRAME(?:\s+\d+)?$/i.test(activeName) ||
+            /^FRAMER(?:\s+\d+)?$/i.test(activeName);
+        if (looksLikeFrame) {
+            const duplicatedFrame = await duplicateFrameWithContents(active);
+            if (duplicatedFrame) return;
         }
         try {
             const clones = await duplicateActiveObjectWithContext(active, { offsetX: DUPLICATE_OFFSET, offsetY: DUPLICATE_OFFSET });
             if (!clones.length) return;
             finalizeDuplicatedObjects(clones);
             saveCurrentState({ reason: 'duplicate-action' });
-            triggerAutoSave();
         } catch (err) {
             console.warn('[duplicate] Falha ao duplicar (action)', err);
         }
@@ -13518,7 +14440,7 @@ const handleAction = async (action: string) => {
                                 filters: (oldImg as any).filters
                             });
                             if (typeof (active as any).insertAt === 'function') {
-                                (active as any).insertAt(newImg, imgIndex);
+                                (active as any).insertAt(imgIndex, newImg);
                             } else {
                                 active.add(newImg);
                             }
@@ -13556,7 +14478,7 @@ const handleAction = async (action: string) => {
                         const oldIndex = canvas.value.getObjects().indexOf(active);
                         canvas.value.remove(active);
                         if (oldIndex >= 0 && typeof (canvas.value as any).insertAt === 'function') {
-                            (canvas.value as any).insertAt(newImg, oldIndex);
+                            (canvas.value as any).insertAt(oldIndex, newImg);
                         } else {
                             canvas.value.add(newImg);
                         }
@@ -14067,10 +14989,31 @@ const toggleVisible = (id: string) => {
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
         const next = !(obj.visible !== false);
-        obj.set?.('visible', next);
-        obj.visible = next;
-        // Deselect if hidden
-        if (!next) canvas.value.discardActiveObject();
+        const isFrameTarget = !!obj.isFrame || !!isFrameLikeObject(obj);
+        let targets: any[] = [obj];
+
+        if (isFrameTarget) {
+            if (!obj.isFrame) obj.isFrame = true;
+            // Ensure frame membership is up to date before toggling visibility.
+            try { syncFrameClips(obj); } catch (_) {}
+            targets = collectFrameVisibilityTargets(obj);
+        }
+
+        targets.forEach((entry: any) => {
+            applyObjectVisibility(entry, next);
+        });
+
+        // If hiding, clear selection when active object (or selection member) is hidden.
+        if (!next) {
+            const active = canvas.value.getActiveObject?.();
+            const hiddenSet = new Set(targets);
+            let shouldClear = !!active && hiddenSet.has(active);
+            if (!shouldClear && active && typeof active.getObjects === 'function') {
+                const members = active.getObjects() || [];
+                shouldClear = members.some((m: any) => hiddenSet.has(m));
+            }
+            if (shouldClear) canvas.value.discardActiveObject();
+        }
         canvas.value.requestRenderAll();
         // Trigger update to refresh UI icons
         // (Fabric doesn't emit 'modified' on property set via code usually, need to force or rely on array ref update might not catch deep prop)
@@ -14079,7 +15022,6 @@ const toggleVisible = (id: string) => {
         canvasObjects.value = [...canvas.value.getObjects()];
         updateSelection();
         saveCurrentState({ reason: 'layers-toggle-visible' });
-        triggerAutoSave();
     }
 }
 
@@ -14100,7 +15042,6 @@ const toggleLock = (id: string) => {
         canvasObjects.value = [...canvas.value.getObjects()];
         // Persist lock so reload keeps it
         saveCurrentState();
-        triggerAutoSave();
         if (selectedObjectId.value === id) refreshSelectedRef();
     }
 }
@@ -14134,7 +15075,7 @@ const moveLayer = (id: string, dir: 'up' | 'down') => {
                 const index = objects.indexOf(obj);
                 if (index >= 0 && index < objects.length - 1) {
                     canvas.value.remove(obj);
-                    canvas.value.insertAt(obj, index + 2);
+                    canvas.value.insertAt(index + 2, obj);
                 }
             }
         } else {
@@ -14148,7 +15089,7 @@ const moveLayer = (id: string, dir: 'up' | 'down') => {
                 const index = objects.indexOf(obj);
                 if (index > 1) {
                     canvas.value.remove(obj);
-                    canvas.value.insertAt(obj, index - 1);
+                    canvas.value.insertAt(index - 1, obj);
                 }
             }
         }
@@ -14698,24 +15639,19 @@ const saveProject = async () => {
 
 const loadCanvasData = async (data: any) => {
     if (!canvas.value) return;
+
+    // Novo fluxo: carregamento de projeto completo deve acontecer pelo pipeline
+    // principal (route + useProject.loadProjectDB). Isso evita corrida com o watch(activePage).
+    if (data?.id && data?.canvas_data) {
+        const incomingId = String(data.id || '').trim()
+        if (incomingId && incomingId !== String(project.id || '').trim()) {
+            await navigateTo(`/editor/${incomingId}`)
+        }
+        return
+    }
     
     // Handle full project object (from DB) or just JSON (dnd/legacy)
     let json = data;
-    if (data.id && data.canvas_data) {
-        // It's a Project Object from DB
-        project.id = data.id;
-        project.name = data.name;
-        // project.pages = data.canvas_data; // If we support multi-page later
-        json = Array.isArray(data.canvas_data) ? data.canvas_data[0].canvasData : data.canvas_data; 
-        
-        // Handle Legacy/Single Page JSON vs new MultiPage structure
-        if (Array.isArray(data.canvas_data)) {
-             project.pages = data.canvas_data;
-             // Load active page?
-             // For now assume we load the first page info
-             json = project.pages[0]?.canvasData;
-        }
-    }
 
     if (!json) return;
     
@@ -14831,7 +15767,7 @@ const loadCanvasData = async (data: any) => {
     isHistoryProcessing.value = false;
     historyStack.value = [];
     historyIndex.value = -1;
-    saveCurrentState();
+    saveCurrentState({ reason: 'legacy-import-load', source: 'system', skipIfUnchanged: true });
 }
 
 const generateFlyerWithAI = async () => {
@@ -15034,7 +15970,7 @@ const replaceImageByCustomId = async (targetId: string, newUrl: string) => {
             const list = typeof parent.getObjects === 'function' ? parent.getObjects() : [];
             const idx = list.indexOf(target);
             parent.remove(target);
-            if (typeof (parent as any).insertAt === 'function' && idx >= 0) (parent as any).insertAt(newImg, idx);
+            if (typeof (parent as any).insertAt === 'function' && idx >= 0) (parent as any).insertAt(idx, newImg);
             else parent.add(newImg);
             safeAddWithUpdate(parent);
             parent.setCoords?.();
@@ -15043,7 +15979,7 @@ const replaceImageByCustomId = async (targetId: string, newUrl: string) => {
             const oldIndex = canvas.value.getObjects().indexOf(target);
             canvas.value.remove(target);
             if (oldIndex >= 0 && typeof (canvas.value as any).insertAt === 'function') {
-                (canvas.value as any).insertAt(newImg, oldIndex);
+                (canvas.value as any).insertAt(oldIndex, newImg);
             } else {
                 canvas.value.add(newImg);
             }
@@ -16248,6 +17184,7 @@ const simulateSmartGrid = async (
     }
 
     isProcessing.value = true;
+    isBulkProductMutation = true;
 
     try {
         // Allow import-time override of the label template.
@@ -16526,12 +17463,10 @@ const simulateSmartGrid = async (
                 // Avoid rare black-flash rendering glitches on some browsers by disabling caching on cards.
                 obj.set?.({ objectCaching: false, statefullCache: false, dirty: true });
                 canvas.value.add(obj);
-                // Fabric v7 uses bringObjectToFront; older builds sometimes expose bringToFront on canvas.
-                const c: any = canvas.value as any;
-                if (typeof c.bringObjectToFront === 'function') c.bringObjectToFront(obj);
-                else if (typeof c.bringToFront === 'function') c.bringToFront(obj);
-                else if (typeof (obj as any).bringToFront === 'function') (obj as any).bringToFront();
             });
+
+            // Keep frames behind all content in one pass (faster than bringToFront per card).
+            ensureFramesBelowContents();
 
             targetZone.set({
                 isProductZone: true,
@@ -16556,7 +17491,7 @@ const simulateSmartGrid = async (
             try {
                 const cache = (mode === 'append') ? [...existingCards, ...smartObjects] : smartObjects;
                 syncZoneCardFrameBindings(targetZone, cache);
-                recalculateZoneLayout(targetZone, cache);
+                recalculateZoneLayout(targetZone, cache, { save: false });
             } catch (calcErr) {
                 console.warn('Grid layout recalc error:', calcErr);
             }
@@ -16575,10 +17510,6 @@ const simulateSmartGrid = async (
                 obj.visible = true;
                 obj.opacity = 1;
                 canvas.value.add(obj);
-                // Bring each card to front so they sit ABOVE the white Frame
-                const c: any = canvas.value as any;
-                if (typeof c.bringObjectToFront === 'function') c.bringObjectToFront(obj);
-                else if (typeof c.bringToFront === 'function') c.bringToFront(obj);
             });
             // Ensure frames stay behind all content (products on top, frame at back)
             ensureFramesBelowContents();
@@ -16593,7 +17524,11 @@ const simulateSmartGrid = async (
     } catch (err) {
         console.error("Grid Generation Failed:", err);
     } finally {
+        isBulkProductMutation = false;
         isProcessing.value = false;
+        canvasObjects.value = [...canvas.value.getObjects()];
+        invalidateScrollbarBounds();
+        updateScrollbars();
         canvas.value.requestRenderAll();
         saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid' });
         flushPersistenceNow('simulate-smart-grid');
@@ -17279,52 +18214,163 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
         });
         return Array.from(map.values());
     };
+    const hasStrongCardSignature = (o: any) => {
+        if (!o || o.type !== 'group' || typeof o.getObjects !== 'function') return false;
+        const cw = Number((o as any)?._cardWidth);
+        const ch = Number((o as any)?._cardHeight);
+        if (Number.isFinite(cw) && cw > 0 && Number.isFinite(ch) && ch > 0) return true;
+
+        const children = o.getObjects() || [];
+        if (!Array.isArray(children) || children.length === 0) return false;
+
+        const hasOfferBg = children.some((c: any) => String(c?.name || '') === 'offerBackground');
+        if (hasOfferBg) return true;
+
+        const hasPriceGroup = children.some((c: any) => String(c?.type || '').toLowerCase() === 'group' && String(c?.name || '') === 'priceGroup');
+        const hasImage = children.some((c: any) => String(c?.type || '').toLowerCase() === 'image');
+        return hasPriceGroup && hasImage;
+    };
 
     let list: any[] = allCards;
-    if (zone && isLikelyProductZone(zone)) {
-        const zoneId = String((zone as any)?._customId || '').trim();
-        const zoneBounds = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
-        const margin = (() => {
-            const pad = typeof (zone as any)._zonePadding === 'number' ? (zone as any)._zonePadding : 20;
-            const base = Math.min(zoneBounds.width || 0, zoneBounds.height || 0);
+    const zoneWarnKey = String((zone as any)?._customId || '').trim() || 'unknown-zone';
+    const resolveCardsForZone = (zoneObj: any, pool: any[]) => {
+        const zid = String((zoneObj as any)?._customId || '').trim();
+        const zBounds = getZoneMetrics(zoneObj) ?? zoneObj.getBoundingRect(true);
+        const zMargin = (() => {
+            const pad = typeof (zoneObj as any)._zonePadding === 'number' ? (zoneObj as any)._zonePadding : 20;
+            const base = Math.min(zBounds.width || 0, zBounds.height || 0);
             return Math.max(80, Math.min(260, pad + base * 0.14));
         })();
 
-        const fromBinding = zoneId
-            ? allCards.filter((c: any) => String((c as any)?.parentZoneId || '').trim() === zoneId)
+        const fromBinding = zid
+            ? pool.filter((c: any) => String((c as any)?.parentZoneId || '').trim() === zid)
             : [];
-        const fromSlot = zoneId
-            ? allCards.filter((c: any) => String((c as any)?._zoneSlot?.zoneId || '').trim() === zoneId)
+        const fromSlot = zid
+            ? pool.filter((c: any) => String((c as any)?._zoneSlot?.zoneId || '').trim() === zid)
             : [];
-        const fromHeuristic = getZoneChildren(zone);
-        const fromIntersection = allCards.filter((c: any) => {
+        const fromHeuristic = getZoneChildren(zoneObj);
+        const fromIntersection = pool.filter((c: any) => {
             const center = typeof c.getCenterPoint === 'function'
                 ? c.getCenterPoint()
                 : { x: Number(c.left || 0), y: Number(c.top || 0) };
             const nearInside =
-                center.x >= (zoneBounds.left - margin) &&
-                center.x <= (zoneBounds.left + zoneBounds.width + margin) &&
-                center.y >= (zoneBounds.top - margin) &&
-                center.y <= (zoneBounds.top + zoneBounds.height + margin);
+                center.x >= (zBounds.left - zMargin) &&
+                center.x <= (zBounds.left + zBounds.width + zMargin) &&
+                center.y >= (zBounds.top - zMargin) &&
+                center.y <= (zBounds.top + zBounds.height + zMargin);
             if (nearInside) return true;
             try {
-                return typeof zone.intersectsWithObject === 'function' && zone.intersectsWithObject(c);
+                return typeof zoneObj.intersectsWithObject === 'function' && zoneObj.intersectsWithObject(c);
             } catch {
                 return false;
             }
         });
 
-        list = dedupeCards([...fromBinding, ...fromSlot, ...fromHeuristic, ...fromIntersection]);
+        return dedupeCards([...fromBinding, ...fromSlot, ...fromHeuristic, ...fromIntersection]);
+    };
+    if (zone && isLikelyProductZone(zone)) {
+        list = resolveCardsForZone(zone, allCards);
 
         // Multi-zone safety: never bleed a zone style into every card.
         if (!list.length) {
             const zones = objs.filter((o: any) => isLikelyProductZone(o));
-            if (zones.length <= 1) {
-                console.warn('⚠️ [applyGlobalStylesToCards] No cards resolved for zone; fallback to all cards (single-zone canvas)');
-                list = allCards;
-            } else {
-                console.warn('⚠️ [applyGlobalStylesToCards] No cards resolved for zone; aborting global-style apply to avoid cross-zone pollution');
+            if (!allCards.length) {
+                // Normal state: zone exists but still has no cards.
+                if (import.meta.dev) {
+                    console.debug('[applyGlobalStylesToCards] Zone has no cards yet; skipping style apply');
+                }
                 return summary;
+            }
+
+            // Binding metadata can be stale after undo/reload; try one repair pass first.
+            try {
+                repairLooseZoneCardBindings();
+            } catch {
+                // keep safe fallback below
+            }
+            const refreshedObjects = canvas.value.getObjects();
+            const refreshedCards = refreshedObjects.filter((o: any) => isCardCandidate(o));
+            list = resolveCardsForZone(zone, refreshedCards.length ? refreshedCards : allCards);
+
+            if (!list.length) {
+                const zid = String((zone as any)?._customId || '').trim();
+                const zBounds = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
+                const emergencyUnbound = refreshedObjects.filter((o: any) => {
+                    if (!o || o.type !== 'group' || typeof o.getObjects !== 'function') return false;
+                    if ((o as any).excludeFromExport || (o as any).isFrame || isLikelyProductZone(o)) return false;
+                    if (isStandalonePriceGroup(o)) return false;
+                    if (!hasStrongCardSignature(o)) return false;
+
+                    const boundId = String((o as any)?.parentZoneId || '').trim();
+                    const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
+                    if ((boundId && boundId !== zid) || (slotZoneId && slotZoneId !== zid)) return false;
+                    if (boundId || slotZoneId) return false;
+
+                    const center = typeof o.getCenterPoint === 'function'
+                        ? o.getCenterPoint()
+                        : { x: Number(o.left || 0), y: Number(o.top || 0) };
+
+                    return (
+                        center.x >= zBounds.left &&
+                        center.x <= (zBounds.left + zBounds.width) &&
+                        center.y >= zBounds.top &&
+                        center.y <= (zBounds.top + zBounds.height)
+                    );
+                });
+
+                if (emergencyUnbound.length > 0) {
+                    const zoneFrameId = getResolvedZoneFrameId(zone);
+                    emergencyUnbound.forEach((card: any) => {
+                        if (zid && !String((card as any)?.parentZoneId || '').trim()) {
+                            (card as any).parentZoneId = zid;
+                        }
+                        applyCardFrameBinding(card, zoneFrameId);
+                    });
+                    list = dedupeCards(emergencyUnbound);
+                }
+            }
+
+            if (!list.length) {
+                // If the target zone is truly empty, skipping style-apply is expected behavior.
+                // Persisted zone styles still remain for future cards.
+                const hasZoneBoundCards = (() => {
+                    const zid = String((zone as any)?._customId || '').trim();
+                    if (!zid) return false;
+                    const inZone = refreshedObjects.some((o: any) => {
+                        if (!o || o.type !== 'group' || typeof o.getObjects !== 'function') return false;
+                        if ((o as any).excludeFromExport || (o as any).isFrame || isLikelyProductZone(o)) return false;
+                        if (isStandalonePriceGroup(o)) return false;
+
+                        const boundId = String((o as any)?.parentZoneId || '').trim();
+                        const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
+                        return boundId === zid || slotZoneId === zid;
+                    });
+                    return inZone;
+                })();
+
+                if (!hasZoneBoundCards) {
+                    const warnedMap = ((applyGlobalStylesToCards as any).__warnedZones ||= new Set<string>());
+                    warnedMap.delete(zoneWarnKey);
+                    if (import.meta.dev) {
+                        console.debug('[applyGlobalStylesToCards] Zone has no bound cards; skipping style apply');
+                    }
+                    return summary;
+                }
+
+                if (zones.length <= 1) {
+                    console.warn('⚠️ [applyGlobalStylesToCards] No cards resolved for zone; fallback to all cards (single-zone canvas)');
+                    list = allCards;
+                } else {
+                    const warnedMap = ((applyGlobalStylesToCards as any).__warnedZones ||= new Set<string>());
+                    if (!warnedMap.has(zoneWarnKey)) {
+                        warnedMap.add(zoneWarnKey);
+                        console.warn('⚠️ [applyGlobalStylesToCards] No cards resolved for zone; aborting global-style apply to avoid cross-zone pollution');
+                    }
+                    return summary;
+                }
+            } else {
+                const warnedMap = ((applyGlobalStylesToCards as any).__warnedZones ||= new Set<string>());
+                warnedMap.delete(zoneWarnKey);
             }
         }
     }
@@ -17640,6 +18686,16 @@ const formatCentsToPrice = (cents: number | null): string | null => {
 const splitPriceParts = (raw: any): { integer: string; dec: string } => {
     const parsed = parsePriceBR(String(raw ?? ''));
     return { integer: parsed.inteiro, dec: parsed.centavos };
+};
+
+type AtacVariantKey = 'tiny' | 'normal' | 'large';
+const resolveAtacVariantKeyFromPrice = (raw: any): AtacVariantKey => {
+    const parsed = parsePriceBR(String(raw ?? ''));
+    const integerDigits = String(parsed.inteiro || '0').replace(/^0+(?=\d)/, '');
+    const digitsCount = Math.max(1, integerDigits.length || 1);
+    if (digitsCount <= 1) return 'tiny';
+    if (digitsCount >= 4) return 'large';
+    return 'normal';
 };
 
 // Parse de preço brasileiro (ex: "129,99" => { inteiro: "129", centavos: "99" })
@@ -18019,6 +19075,237 @@ const expandManualTemplateWidthForDynamicPrice = (priceGroup: any) => {
     }
 };
 
+const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return;
+    // IMPORTANT:
+    // Even when templates have independent `__atacVariantGroups`, we still must fit dynamic product
+    // values into the CURRENT instance geometry. This does not mutate the stored snapshots; it only
+    // adjusts the objects inside this card's `priceGroup` to avoid overlaps.
+
+    const preserveTemplateVisual =
+        !!((priceGroup as any).__preserveManualLayout) ||
+        !!((priceGroup as any).__isCustomTemplate);
+    if (!preserveTemplateVisual) return;
+
+    const all = collectObjectsDeep(priceGroup);
+    const retailBg = findByName(all, 'atac_retail_bg');
+    const wholesaleBg = findByName(all, 'atac_wholesale_bg');
+    const bannerBg = findByName(all, 'atac_banner_bg');
+    if (!retailBg) return;
+
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+    const getW = (obj: any) => (obj && typeof obj.getScaledWidth === 'function') ? Number(obj.getScaledWidth()) : 0;
+    type AtacValueVariantKey = 'tiny' | 'normal' | 'large';
+    type AtacValueVariantConfig = {
+        chainWidthRatio: number;
+        minScale: number;
+        intDecimalGap: number;
+        currencyGapRatio: number;
+        packWidthRatio: number;
+    };
+    const DEFAULT_ATAC_VALUE_VARIANTS: Record<AtacValueVariantKey, AtacValueVariantConfig> = {
+        // 1,99 / 0,33
+        tiny: {
+            chainWidthRatio: 0.62,
+            minScale: 0.58,
+            intDecimalGap: -8,
+            currencyGapRatio: 0.018,
+            packWidthRatio: 0.90
+        },
+        // 12,99
+        normal: {
+            chainWidthRatio: 0.74,
+            minScale: 0.52,
+            intDecimalGap: -3,
+            currencyGapRatio: 0.020,
+            packWidthRatio: 0.92
+        },
+        // 119,99 / 1.299,99+
+        large: {
+            chainWidthRatio: 0.90,
+            minScale: 0.40,
+            intDecimalGap: -2,
+            currencyGapRatio: 0.015,
+            packWidthRatio: 0.94
+        }
+    };
+    const asFinite = (value: any, fallback: number) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : fallback;
+    };
+    const getIntegerDigitsCount = (obj: any) => {
+        const raw = String(obj?.text ?? '').replace(/[^\d]/g, '');
+        const normalized = raw.replace(/^0+(?=\d)/, '');
+        return Math.max(1, normalized.length || raw.length || 1);
+    };
+    const resolveVariantKey = (digitsCount: number): AtacValueVariantKey => {
+        if (digitsCount <= 1) return 'tiny';
+        if (digitsCount === 2) return 'normal';
+        // 3+ digits need the "large" fitting behavior (e.g. 119,99 / 129,99).
+        return 'large';
+    };
+    const getMergedVariant = (key: AtacValueVariantKey): AtacValueVariantConfig => {
+        const fromTemplate = ((priceGroup as any).__atacValueVariants || {})?.[key] || {};
+        const base = DEFAULT_ATAC_VALUE_VARIANTS[key];
+        return {
+            chainWidthRatio: clamp(asFinite(fromTemplate.chainWidthRatio, base.chainWidthRatio), 0.35, 0.95),
+            minScale: clamp(asFinite(fromTemplate.minScale, base.minScale), 0.30, 1),
+            intDecimalGap: clamp(asFinite(fromTemplate.intDecimalGap, base.intDecimalGap), -18, 12),
+            currencyGapRatio: clamp(asFinite(fromTemplate.currencyGapRatio, base.currencyGapRatio), 0.005, 0.08),
+            packWidthRatio: clamp(asFinite(fromTemplate.packWidthRatio, base.packWidthRatio), 0.55, 0.99),
+        };
+    };
+    const getInnerWidth = (bg: any, padRatio: number, minPad: number, maxPad: number) => {
+        if (!bg) return 0;
+        const bw = Math.max(1, Number(bg.width || 0) * Math.abs(Number(bg.scaleX ?? 1) || 1));
+        const pad = clamp(bw * padRatio, minPad, maxPad);
+        return Math.max(8, bw - (pad * 2));
+    };
+
+    const restoreBaseScale = (obj: any) => {
+        if (!obj || typeof obj.set !== 'function') return;
+        const sx = Number((obj as any).__originalScaleX);
+        const sy = Number((obj as any).__originalScaleY);
+        obj.set({
+            scaleX: Number.isFinite(sx) && sx > 0 ? sx : 1,
+            scaleY: Number.isFinite(sy) && sy > 0 ? sy : 1
+        });
+        obj.initDimensions?.();
+    };
+
+    const fitText = (obj: any, maxW: number, minScale: number) => {
+        if (!obj || !Number.isFinite(maxW) || maxW <= 0) return;
+        restoreBaseScale(obj);
+        const w = getW(obj);
+        if (!w || w <= maxW) return;
+        const s = clamp(maxW / w, minScale, 1);
+        obj.set?.({
+            scaleX: Number(obj.scaleX || 1) * s,
+            scaleY: Number(obj.scaleY || 1) * s
+        });
+    };
+
+    const fitChain = (objs: any[], maxW: number, minScale: number) => {
+        const shown = (objs || []).filter((o: any) => isObjectShownForBounds(o));
+        if (!shown.length || !Number.isFinite(maxW) || maxW <= 0) return;
+        shown.forEach((o: any) => restoreBaseScale(o));
+        const bounds = measureHorizontalBoundsLocal(shown);
+        if (!bounds || bounds.width <= maxW) return;
+        const s = clamp(maxW / bounds.width, minScale, 1);
+        shown.forEach((o: any) => o?.set?.({
+            scaleX: Number(o.scaleX || 1) * s,
+            scaleY: Number(o.scaleY || 1) * s
+        }));
+    };
+    const centerObjectsX = (objs: any[], centerX = 0) => {
+        if (!Array.isArray(objs) || !objs.length) return;
+        const bounds = measureHorizontalBoundsLocal(objs);
+        if (!bounds) return;
+        const currentCenter = (bounds.left + bounds.right) / 2;
+        const dx = centerX - currentCenter;
+        if (Math.abs(dx) < 0.001) return;
+        objs.forEach((obj: any) => obj?.set?.({ left: Number(obj.left || 0) + dx }));
+    };
+    const applyTierVariant = (opts: {
+        bg: any;
+        currency: any;
+        integer: any;
+        decimal: any;
+        unit: any;
+        pack: any;
+    }) => {
+        const { bg, currency, integer, decimal, unit, pack } = opts;
+        if (!bg || !integer || !decimal) return;
+
+        const digits = getIntegerDigitsCount(integer);
+        const variant = getMergedVariant(resolveVariantKey(digits));
+        const maxW = getInnerWidth(bg, 0.075, 12, 34);
+        const chainMaxW = Math.max(20, maxW * variant.chainWidthRatio);
+
+        restoreBaseScale(integer);
+        restoreBaseScale(decimal);
+        restoreBaseScale(unit);
+        restoreBaseScale(currency);
+
+        const intY = Number(integer.top || 0);
+        const decY = Number(decimal.top || intY);
+        const unitY = Number(unit?.top || decY);
+        const unitVisible = isObjectShownForBounds(unit);
+
+        layoutPrice({
+            priceInteger: integer,
+            priceDecimal: decimal,
+            priceUnit: unitVisible ? unit : undefined,
+            intX: 0,
+            intY,
+            decY,
+            unitY,
+            maxWidth: chainMaxW,
+            gapPx: variant.intDecimalGap,
+            minGapPx: -24,
+            maxGapPx: 14
+        });
+
+        const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[];
+        const chainBounds = measureHorizontalBoundsLocal(chain);
+        if (currency && chainBounds) {
+            const curGap = Math.max(2, maxW * variant.currencyGapRatio);
+            currency.set?.({
+                originX: 'left',
+                originY: 'center',
+                left: chainBounds.left - curGap - getW(currency)
+            });
+        }
+
+        const full = [currency, ...chain].filter((o: any) => isObjectShownForBounds(o));
+        centerObjectsX(full, 0);
+        fitChain(full, maxW, variant.minScale);
+        centerObjectsX(full, 0);
+
+        if (pack && isObjectShownForBounds(pack)) {
+            fitText(pack, maxW * variant.packWidthRatio, 0.50);
+        }
+    };
+
+    const retailCurrency = findByName(all, 'retail_currency_text');
+    const retailInteger = findByName(all, 'retail_integer_text');
+    const retailDecimal = findByName(all, 'retail_decimal_text');
+    const retailUnit = findByName(all, 'retail_unit_text');
+    const retailPack = findByName(all, 'retail_pack_line_text');
+
+    const wholesaleCurrency = findByName(all, 'wholesale_currency_text');
+    const wholesaleInteger = findByName(all, 'wholesale_integer_text');
+    const wholesaleDecimal = findByName(all, 'wholesale_decimal_text');
+    const wholesaleUnit = findByName(all, 'wholesale_unit_text');
+    const wholesalePack = findByName(all, 'wholesale_pack_line_text');
+    const bannerText = findByName(all, 'wholesale_banner_text');
+
+    const retailInnerW = getInnerWidth(retailBg, 0.075, 12, 34);
+    const wholesaleInnerW = getInnerWidth(wholesaleBg, 0.075, 12, 34);
+    const bannerInnerW = getInnerWidth(bannerBg, 0.060, 8, 28);
+
+    applyTierVariant({
+        bg: retailBg,
+        currency: retailCurrency,
+        integer: retailInteger,
+        decimal: retailDecimal,
+        unit: retailUnit,
+        pack: retailPack
+    });
+    applyTierVariant({
+        bg: wholesaleBg,
+        currency: wholesaleCurrency,
+        integer: wholesaleInteger,
+        decimal: wholesaleDecimal,
+        unit: wholesaleUnit,
+        pack: wholesalePack
+    });
+
+    fitText(retailPack, retailInnerW, 0.50);
+    fitText(wholesalePack, wholesaleInnerW, 0.50);
+    fitText(bannerText, bannerInnerW, 0.50);
+};
+
 const inferUnitLabelFromProduct = (product: any): 'KG' | 'UN' => {
     // Priority:
     // 1) explicit product.unit
@@ -18059,7 +19346,6 @@ const computePackLine = (opts: { packageLabel?: any; packQuantity?: any; packUni
     const price = String(opts.packPrice ?? '').trim();
     if (!label || !Number.isFinite(q) || q <= 0 || !unit || !price) return null;
     if (q === 1) return `1 ${unit}: R$ ${price}`;
-    if (label === unit) return `${q} ${unit}: R$ ${price}`;
     return `${label} C/${q}${unit}: R$ ${price}`;
 };
 
@@ -18323,11 +19609,11 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     const preserveTemplateVisual =
         !!((pg as any)?.__preserveManualLayout) ||
         !!((pg as any)?.__isCustomTemplate);
-    // Keep Mini Editor templates visually identical (no auto width expansion).
-    if (!preserveTemplateVisual) {
-        expandManualTemplateWidthForDynamicPrice(pg);
-    }
-    if (preserveTemplateVisual) {
+    const forceCanonicalAtac = (pg as any)?.__forceAtacarejoCanonical === true;
+    // Canonical layout: runtime layout function will place/fit values. Do not pre-fit here.
+    if (preserveTemplateVisual && !forceCanonicalAtac) {
+        // Use Etiquetas template geometry as source-of-truth and only fit dynamic values.
+        fitManualAtacarejoValuesIntoTemplate(pg);
         const parts = typeof pg.getObjects === 'function' ? (pg.getObjects() || []) : [];
         parts.forEach((o: any) => o?.setCoords?.());
         pg.dirty = true;
@@ -18362,9 +19648,24 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
     const wholesalePack = findByName(all, 'wholesale_pack_line_text');
 
     const isShown = (o: any) => !!(o && o.visible !== false && (o.scaleX ?? 1) !== 0 && (o.scaleY ?? 1) !== 0);
-    const showRetail = isShown(retailBg);
-    const showWholesale = isShown(wholesaleBg);
-    const showBanner = isShown(bannerBg) && isShown(bannerText);
+    let showRetail = isShown(retailBg);
+    let showWholesale = isShown(wholesaleBg);
+    const bannerHasText = String((bannerText as any)?.text || '').trim().length > 0;
+    const showBanner = bannerHasText || isShown(bannerBg) || isShown(bannerText);
+    if (showBanner) {
+        setVisible(bannerBg, true);
+        setVisible(bannerText, true);
+    }
+
+    // Never leave an empty tag block: if both tiers are hidden, show retail as fallback.
+    if (!showRetail && !showWholesale) {
+        showRetail = true;
+        setVisible(retailBg, true);
+        setVisible(retailCurrency, true);
+        setVisible(retailInteger, true);
+        setVisible(retailDecimal, true);
+        setVisible(retailUnit, true);
+    }
 
     // Guarantee collapsed tiers stay fully hidden (including duplicated text nodes).
     if (!showWholesale) {
@@ -18388,61 +19689,70 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
 
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
-    const isCustom = !!((priceGroup as any).__preserveManualLayout || (priceGroup as any).__isCustomTemplate);
+    // Canonical Atacarejo style (fixed visual language, dynamic values).
+    // Values can vary, but geometry/font hierarchy stays consistent.
+    // Requested: slightly narrower blocks, and taller red/yellow tiers so prices like 7,24 / 7,18
+    // stay inside their rectangles without invading the banner area.
+    const totalW = clamp(cardW * 0.88, 170, cardW * 0.94);
+    const totalH = clamp(cardH * 0.52, 160, cardH * 0.74);
+    const padX = clamp(totalW * 0.045, 10, 22);
+    const sectionGap = clamp(totalH * 0.016, 4, 8);
 
-    // Keep width content-driven (prevents "stretch wide" tags when cards are wide).
-    // We'll compute it after we size texts.
-    let totalW = clamp(cardW * 0.9, 160, cardW);
-    const padX = clamp(cardW * 0.04, 10, 28);
+    const sections: Array<'retail' | 'banner' | 'wholesale'> = [];
+    if (showRetail) sections.push('retail');
+    if (showBanner) sections.push('banner');
+    if (showWholesale) sections.push('wholesale');
+    const gapCount = Math.max(0, sections.length - 1);
+    const usableH = Math.max(24, totalH - (sectionGap * gapCount));
 
-    // Section heights
     let retailH = 0;
     let bannerH = 0;
     let wholesaleH = 0;
-    let totalH: number;
-
-    if (isCustom) {
-        // For custom templates: compute section heights using FULL-template proportions
-        // so that font sizes (baseH * scale) remain identical regardless of collapsed tiers.
-        // totalH is then the sum of ONLY visible sections — collapses empty space.
-        const fullTotalH = clamp(cardH * 0.30, 70, Math.max(70, cardH * 0.45));
-        const fullRetailH = fullTotalH * 0.43;
-        const fullBannerH = fullTotalH * 0.14;
-        const fullWholesaleH = fullTotalH - fullRetailH - fullBannerH;
-        retailH = showRetail ? fullRetailH : 0;
-        bannerH = showBanner ? fullBannerH : 0;
-        wholesaleH = showWholesale ? fullWholesaleH : 0;
-        totalH = retailH + bannerH + wholesaleH;
-    } else {
-        const ratio = (showRetail && showWholesale) ? 0.30 : (showBanner ? 0.26 : 0.22);
-        totalH = clamp(cardH * ratio, 70, Math.max(70, cardH * 0.45));
-        if (showRetail && showWholesale) {
-            bannerH = totalH * 0.14;
-            retailH = totalH * 0.43;
-            wholesaleH = totalH - retailH - bannerH;
-        } else if (showRetail && showBanner) {
-            bannerH = totalH * 0.18;
-            retailH = totalH - bannerH;
-        } else if (showWholesale && showBanner) {
-            bannerH = totalH * 0.18;
-            wholesaleH = totalH - bannerH;
-        } else if (showWholesale && !showRetail) {
-            wholesaleH = totalH;
+    if (showRetail && showWholesale) {
+        if (showBanner) {
+            // Keep each tier clearly separated:
+            // red = top price, white = condition, yellow = highlighted cheapest price.
+            retailH = clamp(usableH * 0.32, 44, 86);
+            bannerH = clamp(usableH * 0.16, 22, 40);
+            wholesaleH = usableH - retailH - bannerH;
+            if (wholesaleH < 68) {
+                const need = 68 - wholesaleH;
+                const giveFromBanner = Math.min(need, Math.max(0, bannerH - 20));
+                bannerH -= giveFromBanner;
+                const rest1 = need - giveFromBanner;
+                const giveFromRetail = Math.min(rest1, Math.max(0, retailH - 40));
+                retailH -= giveFromRetail;
+                wholesaleH = usableH - retailH - bannerH;
+            }
         } else {
-            retailH = totalH;
+            retailH = usableH * 0.36;
+            wholesaleH = usableH - retailH;
+        }
+    } else if (showRetail || showWholesale) {
+        if (showBanner) {
+            bannerH = clamp(usableH * 0.22, 22, 40);
+            if (showRetail) retailH = usableH - bannerH;
+            if (showWholesale) wholesaleH = usableH - bannerH;
+        } else {
+            if (showRetail) retailH = usableH;
+            if (showWholesale) wholesaleH = usableH;
         }
     }
 
-    const y0 = -totalH / 2;
-    const retailCY = showRetail ? (y0 + retailH / 2) : 0;
-    const bannerCY = showBanner
-        ? (showRetail ? (y0 + retailH + (bannerH / 2)) : (y0 + wholesaleH + (bannerH / 2)))
-        : 0;
-    const wholesaleCY = showWholesale
-        ? (showRetail ? (y0 + retailH + bannerH + (wholesaleH / 2)) : (y0 + (wholesaleH / 2)))
-        : 0;
+    const centers: { retail: number; banner: number; wholesale: number } = {
+        retail: 0,
+        banner: 0,
+        wholesale: 0
+    };
+    let y = -totalH / 2;
+    sections.forEach((section, idx) => {
+        const h = section === 'retail' ? retailH : section === 'banner' ? bannerH : wholesaleH;
+        centers[section] = y + (h / 2);
+        y += h;
+        if (idx < sections.length - 1) y += sectionGap;
+    });
 
-    const setBg = (bg: any, h: number, cy: number, rx: number) => {
+    const setBg = (bg: any, h: number, cy: number, rx: number, color?: string) => {
         if (!bg || typeof bg.set !== 'function') return;
         bg.set({
             width: totalW,
@@ -18452,63 +19762,47 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
             originX: 'center',
             originY: 'center',
             left: 0,
-            top: cy
+            top: cy,
+            ...(color ? { fill: color } : {})
         });
     };
 
-    const setTextSizing = (txt: any, defaultScale: number, baseH: number) => {
+    const setTextSizing = (txt: any, defaultScale: number, baseH: number, color?: string) => {
         if (!txt || !String(txt.type || '').includes('text')) return;
-        const scale = typeof txt.__fontScale === 'number' ? txt.__fontScale : defaultScale;
-        txt.set({ fontSize: baseH * scale, scaleX: 1, scaleY: 1 });
+        txt.set({
+            fontFamily: 'Inter',
+            fontWeight: '900',
+            fill: color ?? txt.fill,
+            fontSize: Math.max(8, baseH * defaultScale),
+            scaleX: 1,
+            scaleY: 1
+        });
         if (typeof txt.initDimensions === 'function') txt.initDimensions();
     };
     const getW = (t: any) => (t && typeof t.getScaledWidth === 'function' ? t.getScaledWidth() : 0);
-
-    const measureTierWidth = (tier: {
-        blockH: number;
-        currency: any;
-        integer: any;
-        decimal: any;
-        unit: any;
-        pack: any;
-    }) => {
-        const { blockH, currency, integer, decimal, unit, pack } = tier;
-        if (!blockH || !Number.isFinite(blockH)) return 0;
-
-        const gapX = clamp(blockH * 0.03, 2, 8);
-        setTextSizing(integer, 0.60, blockH);
-        setTextSizing(decimal, 0.36, blockH);
-        setTextSizing(currency, 0.22, blockH);
-        setTextSizing(unit, 0.22, blockH);
-        setTextSizing(pack, 0.18, blockH);
-
-        const packVisible = isShown(pack) && String(pack?.text || '').trim().length > 0;
-        const unitVisible = isShown(unit) && String(unit?.text || '').trim().length > 0;
-
-        const digitsCount = String(integer?.text || '').replace(/[^\d]/g, '').length || 1;
-        const gapPrice = digitsCount <= 1 ? -6
-                       : digitsCount === 2 ? -4
-                       : digitsCount === 3 ? -3 : -2;
-        const centsBlockW = unitVisible ? Math.max(getW(decimal), getW(unit)) : getW(decimal);
-        let w = getW(currency) + gapX + getW(integer) + gapPrice + centsBlockW;
-        if (packVisible) w = Math.max(w, getW(pack));
-        return w;
+    const getH = (t: any) => (t && typeof t.getScaledHeight === 'function' ? t.getScaledHeight() : 0);
+    const getVerticalBounds = (obj: any) => {
+        if (!obj) return null;
+        const h = getH(obj);
+        if (!h || !Number.isFinite(h)) return null;
+        const y0 = Number(obj.top || 0);
+        const oy = String(obj.originY || 'top');
+        if (oy === 'center') return { min: y0 - (h / 2), max: y0 + (h / 2) };
+        if (oy === 'bottom') return { min: y0 - h, max: y0 };
+        return { min: y0, max: y0 + h };
     };
 
-    // Pass 1: compute minimal required width based on text content.
-    let contentW = 0;
-    if (showRetail) contentW = Math.max(contentW, measureTierWidth({ blockH: retailH, currency: retailCurrency, integer: retailInteger, decimal: retailDecimal, unit: retailUnit, pack: retailPack }));
-    if (showWholesale) contentW = Math.max(contentW, measureTierWidth({ blockH: wholesaleH, currency: wholesaleCurrency, integer: wholesaleInteger, decimal: wholesaleDecimal, unit: wholesaleUnit, pack: wholesalePack }));
-    if (showBanner && bannerText) {
-        setTextSizing(bannerText, 0.32, bannerH);
-        contentW = Math.max(contentW, getW(bannerText));
-    }
-    totalW = clamp(contentW + (padX * 2), 160, cardW);
+    const fitTextWidth = (txt: any, maxW: number, minScale: number = 0.6) => {
+        if (!txt || !Number.isFinite(maxW) || maxW <= 0) return;
+        const w = getW(txt);
+        if (!w || w <= maxW) return;
+        const s = clamp(maxW / w, minScale, 1);
+        txt.set?.({ scaleX: s, scaleY: s });
+    };
 
-    // Apply final width to backgrounds.
-    if (showRetail) setBg(retailBg, retailH, retailCY, Math.max(6, Math.min(18, totalH * 0.08)));
-    if (showBanner && bannerBg) setBg(bannerBg, bannerH, bannerCY, Math.max(4, Math.min(12, totalH * 0.05)));
-    if (showWholesale) setBg(wholesaleBg, wholesaleH, wholesaleCY, Math.max(6, Math.min(18, totalH * 0.08)));
+    if (showRetail) setBg(retailBg, retailH, centers.retail, clamp(retailH * 0.22, 10, 28), '#EF4444');
+    if (showBanner && bannerBg) setBg(bannerBg, bannerH, centers.banner, clamp(bannerH * 0.48, 8, 20), '#FFFFFF');
+    if (showWholesale) setBg(wholesaleBg, wholesaleH, centers.wholesale, clamp(wholesaleH * 0.22, 10, 28), '#FDE047');
 
     const layoutTier = (tier: {
         blockH: number;
@@ -18518,47 +19812,73 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         decimal: any;
         unit: any;
         pack: any;
+        color: string;
+        emphasis?: 'normal' | 'high';
     }) => {
-        const { blockH, blockCY, currency, integer, decimal, unit, pack } = tier;
+        const { blockH, blockCY, currency, integer, decimal, unit, pack, color, emphasis } = tier;
         if (!blockH || !Number.isFinite(blockH)) return;
 
         const maxPriceW = totalW - (padX * 2);
-        const gapX = clamp(blockH * 0.03, 2, 8);
+        const currencyGap = clamp(blockH * 0.045, 2, 9);
+        const integerDecimalGap = clamp(blockH * 0.02, 1, 4);
 
-        setTextSizing(integer, 0.60, blockH);
-        setTextSizing(decimal, 0.36, blockH);
-        setTextSizing(currency, 0.22, blockH);
-        setTextSizing(unit, 0.22, blockH);
-        setTextSizing(pack, 0.18, blockH);
+        const isHigh = emphasis === 'high';
+        const integerScale = isHigh ? 0.72 : 0.60;
+        const decimalScale = isHigh ? 0.38 : 0.31;
+        const currencyScale = isHigh ? 0.26 : 0.21;
+        const unitScale = isHigh ? 0.27 : 0.22;
+        const packScale = isHigh ? 0.17 : 0.155;
+
+        setTextSizing(integer, integerScale, blockH, color);
+        setTextSizing(decimal, decimalScale, blockH, color);
+        setTextSizing(currency, currencyScale, blockH, color);
+        setTextSizing(unit, unitScale, blockH, color);
+        setTextSizing(pack, packScale, blockH, color);
 
         const packVisible = isShown(pack) && String(pack?.text || '').trim().length > 0;
         const unitVisible = isShown(unit) && String(unit?.text || '').trim().length > 0;
-
-        // Compute dynamic gap between integer and decimal based on digit count.
-        // Use tight negative gaps for fewer digits (matches layoutPrice's autoGap defaults).
-        const digitsCount = String(integer?.text || '').replace(/[^\d]/g, '').length || 1;
-        const autoGapPx = digitsCount <= 1 ? -6
-                        : digitsCount === 2 ? -4
-                        : digitsCount === 3 ? -3 : -2;
-
-        // Center the full "R$ + price" horizontally (include the dynamic gap in width calc).
-        let priceW = getW(currency) + gapX + getW(integer) + autoGapPx + getW(decimal);
+        let centsBlockW = unitVisible ? Math.max(getW(decimal), getW(unit)) : getW(decimal);
+        let priceW = getW(currency) + currencyGap + getW(integer) + integerDecimalGap + centsBlockW;
         if (priceW > maxPriceW && priceW > 0) {
-            const s = maxPriceW / priceW;
-            [currency, integer, decimal].forEach((t: any) => t?.set?.({ scaleX: s, scaleY: s }));
-            priceW = getW(currency) + gapX + getW(integer) + autoGapPx + getW(decimal);
+            const s = Math.max(isHigh ? 0.65 : 0.58, maxPriceW / priceW);
+            [currency, integer, decimal, unit].forEach((t: any) => t?.set?.({ scaleX: s, scaleY: s }));
+            centsBlockW = unitVisible ? Math.max(getW(decimal), getW(unit)) : getW(decimal);
+            priceW = getW(currency) + currencyGap + getW(integer) + integerDecimalGap + centsBlockW;
         }
 
+        const blockTop = blockCY - (blockH / 2);
+        const blockBottom = blockCY + (blockH / 2);
+        const innerTop = blockTop + (blockH * 0.10);
+        const innerBottom = blockBottom - (blockH * 0.10);
+
+        const maxPackW = totalW - (padX * 2);
+        let chainBottomLimit = innerBottom;
+        if (pack && packVisible) {
+            // Keep pack/observacao near the footer of each tier.
+            const pw = getW(pack);
+            if (pw > maxPackW && pw > 0) {
+                const s = maxPackW / pw;
+                pack.set({ scaleX: s, scaleY: s });
+            } else {
+                pack.set({ scaleX: 1, scaleY: 1 });
+            }
+            fitTextWidth(pack, maxPackW, isHigh ? 0.6 : 0.55);
+            const packH = Math.max(8, getH(pack));
+            const packCenterY = Math.min(innerBottom - (packH / 2), blockBottom - (packH / 2) - 2);
+            pack.set({ originX: 'center', originY: 'center', left: 0, top: packCenterY });
+            chainBottomLimit = Math.max(innerTop + 6, packCenterY - (packH / 2) - (blockH * 0.08));
+        }
+
+        const chainCenterY = (innerTop + chainBottomLimit) / 2;
         const startX = -priceW / 2;
-        const priceShiftY = packVisible ? (blockH * 0.10) : 0;
-        const intY = blockCY - priceShiftY;
-        const decY = intY - (blockH * 0.22);
-        const curY = intY - (blockH * 0.18);
+        const intY = chainCenterY + (isHigh ? (blockH * 0.02) : (blockH * 0.01));
+        const decY = intY - (blockH * (isHigh ? 0.18 : 0.16));
+        const curY = intY + (blockH * (isHigh ? 0.02 : 0.01));
 
         const curW = getW(currency);
         currency?.set?.({ originX: 'left', originY: 'center', left: startX, top: curY });
 
-        const intX = startX + curW + gapX;
+        const intX = startX + curW + currencyGap;
         layoutPrice({
             priceInteger: integer,
             priceDecimal: decimal,
@@ -18566,36 +19886,70 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
             intX,
             intY,
             decY,
-            unitY: intY + (blockH * 0.22),
-            maxWidth: Math.max(20, maxPriceW - (curW + gapX)),
-            gapPx: autoGapPx,
-            minGapPx: -6,
-            maxGapPx: 10
+            unitY: intY + (blockH * (isHigh ? 0.26 : 0.22)),
+            maxWidth: Math.max(20, maxPriceW - (curW + currencyGap)),
+            gapPx: integerDecimalGap,
+            minGapPx: integerDecimalGap,
+            maxGapPx: integerDecimalGap
         });
 
-        if (pack && packVisible) {
-            // Fit pack line within block width if needed.
-            const pw = getW(pack);
-            const maxPackW = totalW - (padX * 2);
-            if (pw > maxPackW && pw > 0) {
-                const s = maxPackW / pw;
-                pack.set({ scaleX: s, scaleY: s });
-            } else {
-                pack.set({ scaleX: 1, scaleY: 1 });
+        // Keep the whole chain (currency + integer + decimal + unit) centered as a block.
+        const chainBounds = measureHorizontalBoundsLocal(
+            [currency, integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[]
+        );
+        if (chainBounds) {
+            const chainCenterX = (chainBounds.left + chainBounds.right) / 2;
+            const dx = -chainCenterX;
+            if (Math.abs(dx) > 0.001) {
+                [currency, integer, decimal, unitVisible ? unit : null].forEach((obj: any) => {
+                    if (!obj || typeof obj.set !== 'function') return;
+                    obj.set({ left: Number(obj.left || 0) + dx });
+                });
             }
-            pack.set({ originX: 'center', originY: 'center', left: 0, top: blockCY + (blockH * 0.33) });
+        }
+
+        // Hard clamp: price chain must stay inside its own block (never invade banner/other tiers).
+        const chainObjects = [currency, integer, decimal, unitVisible ? unit : null].filter(Boolean);
+        const yBounds = chainObjects
+            .map((obj: any) => getVerticalBounds(obj))
+            .filter(Boolean) as Array<{ min: number; max: number }>;
+        if (yBounds.length > 0) {
+            const minY = Math.min(...yBounds.map((b) => b.min));
+            const maxY = Math.max(...yBounds.map((b) => b.max));
+            const topLimit = innerTop;
+            const bottomLimit = chainBottomLimit;
+            let dy = 0;
+            if (minY < topLimit) dy += (topLimit - minY);
+            if ((maxY + dy) > bottomLimit) dy += (bottomLimit - (maxY + dy));
+            if (Math.abs(dy) > 0.001) {
+                chainObjects.forEach((obj: any) => {
+                    obj?.set?.({ top: Number(obj.top || 0) + dy });
+                });
+            }
         }
     };
 
-    if (showRetail) layoutTier({ blockH: retailH, blockCY: retailCY, currency: retailCurrency, integer: retailInteger, decimal: retailDecimal, unit: retailUnit, pack: retailPack });
-    if (showWholesale) layoutTier({ blockH: wholesaleH, blockCY: wholesaleCY, currency: wholesaleCurrency, integer: wholesaleInteger, decimal: wholesaleDecimal, unit: wholesaleUnit, pack: wholesalePack });
+    if (showRetail) layoutTier({ blockH: retailH, blockCY: centers.retail, currency: retailCurrency, integer: retailInteger, decimal: retailDecimal, unit: retailUnit, pack: retailPack, color: '#FFFFFF', emphasis: 'normal' });
+    if (showWholesale) layoutTier({ blockH: wholesaleH, blockCY: centers.wholesale, currency: wholesaleCurrency, integer: wholesaleInteger, decimal: wholesaleDecimal, unit: wholesaleUnit, pack: wholesalePack, color: '#000000', emphasis: 'high' });
 
     if (showBanner && bannerText) {
-        setTextSizing(bannerText, 0.32, bannerH);
-        bannerText.set({ originX: 'center', originY: 'center', left: 0, top: bannerCY });
+        setTextSizing(bannerText, 0.58, bannerH, '#000000');
+        fitTextWidth(bannerText, totalW - (padX * 0.9), 0.56);
+        const bannerTop = centers.banner - (bannerH / 2);
+        const bannerBottom = centers.banner + (bannerH / 2);
+        bannerText.set({ originX: 'center', originY: 'center', left: 0, top: centers.banner });
+        const bannerBounds = getVerticalBounds(bannerText);
+        if (bannerBounds) {
+            let dy = 0;
+            if (bannerBounds.min < (bannerTop + 2)) dy += ((bannerTop + 2) - bannerBounds.min);
+            if ((bannerBounds.max + dy) > (bannerBottom - 2)) dy += ((bannerBottom - 2) - (bannerBounds.max + dy));
+            if (Math.abs(dy) > 0.001) {
+                bannerText.set({ top: Number(bannerText.top || 0) + dy });
+            }
+        }
     }
 
-    // CRITICAL: Freeze priceGroup to intended dimensions (no auto-expand).
+    // Freeze to canonical size (style stays identical even with value variations).
     priceGroup.set({ width: totalW, height: totalH });
     const _apgParts = priceGroup.getObjects?.() || [];
     _apgParts.forEach((o: any) => { if (o && typeof o.setCoords === 'function') o.setCoords(); });
@@ -19042,6 +20396,263 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
 const priceGroupAtacarejoProbeCache = new WeakMap<any, { childCount: number; hasAtacarejo: boolean }>();
 
+const PRICE_LAYOUT_NODE_PREFIXES = ['price_', 'retail_', 'wholesale_', 'atac_'];
+const PRICE_LAYOUT_NODE_EXACT = new Set([
+    'priceGroup',
+    'priceSymbol',
+    'price_currency',
+    'priceInteger',
+    'priceDecimal',
+    'priceUnit',
+    'smart_price',
+    'price_value_text'
+]);
+
+const isPriceLayoutNode = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return false;
+    const name = String(obj?.name || '').trim();
+    if (!name) return false;
+    if (PRICE_LAYOUT_NODE_EXACT.has(name)) return true;
+    return PRICE_LAYOUT_NODE_PREFIXES.some((prefix) => name.startsWith(prefix));
+};
+
+const isLikelyPriceGroupObject = (group: any) => {
+    if (!group || String(group?.type || '').toLowerCase() !== 'group') return false;
+    if (String(group?.name || '') === 'priceGroup') return true;
+    if ((group as any).__isCustomTemplate === true || (group as any).__preserveManualLayout === true) return true;
+    if (typeof group.getObjects !== 'function') return false;
+    return (group.getObjects() || []).some((child: any) => isPriceLayoutNode(child));
+};
+
+const makePriceLayoutKeyBuilder = () => {
+    const counters = new Map<string, number>();
+    return (obj: any) => {
+        const base = String(obj?.name || obj?.type || 'node');
+        const idx = counters.get(base) ?? 0;
+        counters.set(base, idx + 1);
+        return `${base}#${idx}`;
+    };
+};
+
+const isFiniteLayoutNumber = (value: any) => {
+    const n = Number(value);
+    return Number.isFinite(n);
+};
+
+const getCardHostForPriceGroup = (group: any): any | null => {
+    let cur: any = group?.group || null;
+    while (cur) {
+        const name = String(cur?.name || '');
+        const isCardLike =
+            (String(cur?.type || '').toLowerCase() === 'group') &&
+            (
+                !!cur?.isSmartObject ||
+                !!cur?.isProductCard ||
+                name.startsWith('product-card') ||
+                (typeof cur.getObjects === 'function' && (cur.getObjects() || []).some((o: any) => String(o?.name || '') === 'offerBackground'))
+            );
+        if (isCardLike) return cur;
+        cur = cur.group || null;
+    }
+    return null;
+};
+
+const getCardSizeForPriceGroup = (group: any) => {
+    const host = getCardHostForPriceGroup(group);
+    if (!host) return null;
+    const width = Math.abs(Number(host?._cardWidth ?? host?.width ?? host?.getScaledWidth?.() ?? 0) || 0);
+    const height = Math.abs(Number(host?._cardHeight ?? host?.height ?? host?.getScaledHeight?.() ?? 0) || 0);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 20 || height < 20) return null;
+    return { width, height };
+};
+
+const hasCorruptedPriceLayout = (group: any) => {
+    if (!group || typeof group.getObjects !== 'function') return false;
+    if (!isFiniteLayoutNumber(group?.scaleX) || !isFiniteLayoutNumber(group?.scaleY)) return true;
+    if (Math.abs(Number(group?.scaleX || 0)) < 0.0001 || Math.abs(Number(group?.scaleY || 0)) < 0.0001) return true;
+
+    const nodes = collectObjectsDeep(group).filter((o: any) => isPriceLayoutNode(o));
+    if (!nodes.length) return false;
+
+    for (const node of nodes) {
+        if (!isFiniteLayoutNumber(node?.left) || !isFiniteLayoutNumber(node?.top)) return true;
+        if (!isFiniteLayoutNumber(node?.scaleX) || !isFiniteLayoutNumber(node?.scaleY)) return true;
+        if (Math.abs(Number(node?.left || 0)) > 100000 || Math.abs(Number(node?.top || 0)) > 100000) return true;
+
+        const hidden = node?.visible === false;
+        if (!hidden) {
+            if (Math.abs(Number(node?.scaleX || 0)) < 0.0001 || Math.abs(Number(node?.scaleY || 0)) < 0.0001) return true;
+        }
+
+        const tt = String(node?.type || '').toLowerCase();
+        const isText = tt === 'text' || tt === 'i-text' || tt === 'itext' || tt === 'textbox';
+        if (isText && !hidden) {
+            if (!isFiniteLayoutNumber(node?.fontSize) || Number(node?.fontSize || 0) <= 0) return true;
+        }
+    }
+
+    return false;
+};
+
+const rememberPriceLayoutSnapshot = (group: any) => {
+    if (!group || typeof group.getObjects !== 'function') return false;
+    if (!isLikelyPriceGroupObject(group)) return false;
+    if (hasCorruptedPriceLayout(group)) return false;
+
+    const nodes = collectObjectsDeep(group).filter((o: any) => isPriceLayoutNode(o));
+    if (!nodes.length) return false;
+
+    const makeKey = makePriceLayoutKeyBuilder();
+    const snapshot = {
+        version: 1,
+        group: {
+            width: Number(group?.width || 0),
+            height: Number(group?.height || 0),
+            scaleX: Number(group?.scaleX || 1),
+            scaleY: Number(group?.scaleY || 1)
+        },
+        nodes: nodes.map((node: any) => ({
+            key: makeKey(node),
+            name: String(node?.name || ''),
+            left: Number(node?.left || 0),
+            top: Number(node?.top || 0),
+            scaleX: Number(node?.scaleX || 1),
+            scaleY: Number(node?.scaleY || 1),
+            originX: String(node?.originX || 'left'),
+            originY: String(node?.originY || 'top'),
+            visible: node?.visible !== false,
+            fontSize: Number(node?.fontSize || 0),
+            width: Number(node?.width || 0),
+            height: Number(node?.height || 0),
+            text: typeof node?.text === 'string' ? node.text : undefined
+        }))
+    };
+
+    (group as any).__priceLayoutSnapshot = snapshot;
+    (group as any).__priceLayoutSnapshotAt = Date.now();
+    return true;
+};
+
+const restorePriceLayoutSnapshot = (group: any) => {
+    if (!group || typeof group.getObjects !== 'function') return false;
+    const snapshot = (group as any).__priceLayoutSnapshot;
+    if (!snapshot || !Array.isArray(snapshot?.nodes)) return false;
+
+    const nodes = collectObjectsDeep(group).filter((o: any) => isPriceLayoutNode(o));
+    if (!nodes.length) return false;
+
+    const makeKey = makePriceLayoutKeyBuilder();
+    const nodeByKey = new Map<string, any>();
+    nodes.forEach((node: any) => nodeByKey.set(makeKey(node), node));
+
+    let restoredAny = false;
+    snapshot.nodes.forEach((snap: any) => {
+        const node = nodeByKey.get(String(snap?.key || ''));
+        if (!node) return;
+        if (!isFiniteLayoutNumber(snap?.left) || !isFiniteLayoutNumber(snap?.top)) return;
+
+        node.set?.({
+            left: Number(snap.left),
+            top: Number(snap.top),
+            scaleX: isFiniteLayoutNumber(snap?.scaleX) ? Number(snap.scaleX) : 1,
+            scaleY: isFiniteLayoutNumber(snap?.scaleY) ? Number(snap.scaleY) : 1,
+            originX: String(snap?.originX || node.originX || 'left'),
+            originY: String(snap?.originY || node.originY || 'top'),
+            visible: snap?.visible !== false
+        });
+
+        const tt = String(node?.type || '').toLowerCase();
+        const isText = tt === 'text' || tt === 'i-text' || tt === 'itext' || tt === 'textbox';
+        if (isText) {
+            if (isFiniteLayoutNumber(snap?.fontSize) && Number(snap.fontSize) > 0) node.set?.('fontSize', Number(snap.fontSize));
+            if (typeof snap?.text === 'string' && typeof node?.text === 'string') node.set?.('text', snap.text);
+            node.initDimensions?.();
+        }
+        node.setCoords?.();
+        restoredAny = true;
+    });
+
+    if (snapshot?.group && typeof snapshot.group === 'object') {
+        const nextW = Number(snapshot.group.width || 0);
+        const nextH = Number(snapshot.group.height || 0);
+        const nextScaleX = Number(snapshot.group.scaleX || 1);
+        const nextScaleY = Number(snapshot.group.scaleY || 1);
+        if (nextW > 0 && nextH > 0) {
+            group.set?.({ width: nextW, height: nextH });
+        }
+        if (Number.isFinite(nextScaleX) && Number.isFinite(nextScaleY)) {
+            group.set?.({ scaleX: nextScaleX, scaleY: nextScaleY });
+        }
+    }
+
+    if (restoredAny) {
+        group.dirty = true;
+        group.setCoords?.();
+    }
+
+    return restoredAny;
+};
+
+const stabilizeSinglePriceGroupForPersistence = (group: any) => {
+    if (!group || typeof group.getObjects !== 'function') return { fixed: false, captured: false };
+    if (!isLikelyPriceGroupObject(group)) return { fixed: false, captured: false };
+
+    const wasCorrupted = hasCorruptedPriceLayout(group);
+    let fixed = false;
+
+    if (wasCorrupted) {
+        const restored = restorePriceLayoutSnapshot(group);
+        if (restored) {
+            fixed = !hasCorruptedPriceLayout(group);
+        }
+
+        if (!fixed) {
+            const size = getCardSizeForPriceGroup(group);
+            if (size) {
+                try {
+                    const result = layoutPriceGroup(group, size.width, size.height);
+                    fixed = !!result && !hasCorruptedPriceLayout(group);
+                } catch {
+                    fixed = false;
+                }
+            }
+        }
+    }
+
+    const captured = rememberPriceLayoutSnapshot(group);
+    return { fixed, captured };
+};
+
+const stabilizePriceGroupsForPersistence = (canvasInstance: any, reason: string = 'unknown') => {
+    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return { fixed: 0, captured: 0 };
+    const roots = canvasInstance.getObjects() || [];
+    const candidates: any[] = [];
+    const seen = new Set<any>();
+
+    const visit = (node: any) => {
+        if (!node || seen.has(node)) return;
+        seen.add(node);
+        if (isLikelyPriceGroupObject(node)) candidates.push(node);
+        if (typeof node.getObjects === 'function') {
+            (node.getObjects() || []).forEach((child: any) => visit(child));
+        }
+    };
+    roots.forEach((root: any) => visit(root));
+
+    let fixed = 0;
+    let captured = 0;
+    candidates.forEach((group: any) => {
+        const result = stabilizeSinglePriceGroupForPersistence(group);
+        if (result.fixed) fixed += 1;
+        if (result.captured) captured += 1;
+    });
+
+    if (fixed > 0) {
+        console.warn(`[price-layout] ${fixed} etiqueta(s) recuperada(s) antes de persistir (${reason})`);
+    }
+    return { fixed, captured };
+};
+
 
 function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     if (!priceGroup || !priceGroup.getObjects) {
@@ -19050,6 +20661,7 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     const preserveManualLayout = (priceGroup as any).__preserveManualLayout === true;
     const hasCustomTemplateFlag = (priceGroup as any).__isCustomTemplate === true;
     const preferManualTemplateLayout = preserveManualLayout || hasCustomTemplateFlag;
+    const forceCanonicalAtacarejoLayout = (priceGroup as any).__forceAtacarejoCanonical === true;
 
     // Atacarejo template (2-tier label)
     try {
@@ -19069,13 +20681,18 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
         if (hasAtacarejo) {
             if (!deep) deep = collectObjectsDeep(priceGroup);
-            if (preferManualTemplateLayout) {
+            if (!forceCanonicalAtacarejoLayout && preferManualTemplateLayout) {
                 // Manual templates from Mini Editor must keep authored geometry
                 // (font weight, sizes and object positions). Do not collapse/reflow.
                 const manual = layoutManualTemplateGroup(priceGroup, cardW, cardH);
-                if (manual) return manual;
+                if (manual) {
+                    rememberPriceLayoutSnapshot(priceGroup);
+                    return manual;
+                }
             }
-            return layoutAtacarejoPriceGroup(priceGroup, cardW, cardH);
+            const atac = layoutAtacarejoPriceGroup(priceGroup, cardW, cardH);
+            if (atac) rememberPriceLayoutSnapshot(priceGroup);
+            return atac;
         }
     } catch {
         // fall through to legacy layout
@@ -19108,9 +20725,14 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     if (isCustomTemplate && priceBg) {
         if (preferManualTemplateLayout) {
             const manual = layoutManualTemplateGroup(priceGroup, cardW, cardH);
-            if (manual) return manual;
+            if (manual) {
+                rememberPriceLayoutSnapshot(priceGroup);
+                return manual;
+            }
         }
-        return layoutCustomPriceGroup(priceGroup, cardW, cardH);
+        const custom = layoutCustomPriceGroup(priceGroup, cardW, cardH);
+        if (custom) rememberPriceLayoutSnapshot(priceGroup);
+        return custom;
     }
     
     if (!priceBg || !currencyCircle || !currencyText) {
@@ -19351,6 +20973,7 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     _pgParts.forEach((o: any) => { if (o && typeof o.setCoords === 'function') o.setCoords(); });
     priceGroup.dirty = true;
     if (typeof priceGroup.setCoords === 'function') priceGroup.setCoords();
+    rememberPriceLayoutSnapshot(priceGroup);
     return { pillW, pillH };
 }
 
@@ -19503,29 +21126,186 @@ const seedManualTemplateOriginalMetrics = (group: any) => {
     });
 };
 
-async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate): Promise<any> {
-    const groupJson: any = tpl?.group;
+const collectTemplateJsonNodes = (root: any): any[] => {
+    const out: any[] = [];
+    const stack: any[] = Array.isArray(root?.objects) ? [...root.objects] : [];
+    while (stack.length) {
+        const cur = stack.pop();
+        if (!cur || typeof cur !== 'object') continue;
+        out.push(cur);
+        if (Array.isArray(cur.objects)) {
+            for (const child of cur.objects) stack.push(child);
+        }
+    }
+    return out;
+};
+
+const isTemplateGroupJsonRenderable = (groupJson: any): boolean => {
+    if (!groupJson || typeof groupJson !== 'object') return false;
+    const objects = collectTemplateJsonNodes(groupJson);
+    if (!objects.length) return false;
+
+    const hasName = (name: string) => objects.some((o: any) => String(o?.name || '') === name);
+    const hasAtac =
+        hasName('atac_retail_bg') &&
+        hasName('atac_banner_bg') &&
+        hasName('atac_wholesale_bg');
+    if (hasAtac) return true;
+
+    const hasSinglePriceCore =
+        hasName('price_bg') &&
+        (
+            hasName('price_integer_text') ||
+            hasName('price_value_text') ||
+            hasName('smart_price')
+        );
+    if (hasSinglePriceCore) return true;
+
+    // Generic fallback: at least one rect and one text-like node.
+    let hasRect = false;
+    let hasText = false;
+    for (const node of objects) {
+        const t = String(node?.type || '').toLowerCase();
+        if (t === 'rect') hasRect = true;
+        if (t === 'text' || t === 'i-text' || t === 'itext' || t === 'textbox') hasText = true;
+        if (hasRect && hasText) return true;
+    }
+    return false;
+};
+
+const isAtacarejoTemplateGroupJson = (groupJson: any): boolean => {
+    if (!groupJson || typeof groupJson !== 'object') return false;
+    const nodes = collectTemplateJsonNodes(groupJson);
+    return nodes.some((o: any) => String(o?.name || '') === 'atac_retail_bg');
+};
+
+const pickRenderableTemplateGroupJson = (tpl: LabelTemplate, preferredVariantKey?: AtacVariantKey) => {
+    const baseGroupJson: any = (tpl as any)?.group;
+    const variantMap = ((baseGroupJson as any)?.__atacVariantGroups || {}) as Record<string, any>;
+    const useVariantSnapshots = shouldUseAtacVariantSnapshotsForTemplate(baseGroupJson);
+
+    const hasAnyObjects = (groupJson: any): boolean => {
+        const objs = Array.isArray(groupJson?.objects) ? groupJson.objects : [];
+        return objs.length > 0;
+    };
+
+    if (!useVariantSnapshots) {
+        if (isTemplateGroupJsonRenderable(baseGroupJson) || hasAnyObjects(baseGroupJson)) return baseGroupJson;
+        const orderedRecoveryKeys = ['normal', 'tiny', 'large'];
+        for (const k of orderedRecoveryKeys) {
+            const snap = (variantMap as any)?.[k];
+            if (isTemplateGroupJsonRenderable(snap) || hasAnyObjects(snap)) return snap;
+        }
+        for (const snap of Object.values(variantMap || {})) {
+            if (isTemplateGroupJsonRenderable(snap) || hasAnyObjects(snap)) return snap;
+        }
+        return null;
+    }
+
+    const preferredVariant =
+        preferredVariantKey && variantMap && typeof variantMap === 'object'
+            ? variantMap[String(preferredVariantKey)]
+            : null;
+
+    if (isTemplateGroupJsonRenderable(preferredVariant) || hasAnyObjects(preferredVariant)) {
+        return preferredVariant;
+    }
+    if (isTemplateGroupJsonRenderable(baseGroupJson) || hasAnyObjects(baseGroupJson)) {
+        return baseGroupJson;
+    }
+
+    // Recovery path: pick first valid variation snapshot.
+    if (variantMap && typeof variantMap === 'object') {
+        const orderedKeys = preferredVariantKey
+            ? [String(preferredVariantKey), 'normal', 'tiny', 'large']
+            : ['normal', 'tiny', 'large'];
+        for (const k of orderedKeys) {
+            const snap = (variantMap as any)?.[k];
+            if (isTemplateGroupJsonRenderable(snap) || hasAnyObjects(snap)) return snap;
+        }
+        for (const snap of Object.values(variantMap || {})) {
+            if (isTemplateGroupJsonRenderable(snap) || hasAnyObjects(snap)) return snap;
+        }
+    }
+
+    return null;
+};
+
+const templateSnapshotHasAtacStructure = (snapshot: any) => {
+    if (!snapshot || typeof snapshot !== 'object') return false;
+    if (String((snapshot as any).name || '') === 'atac_retail_bg') return true;
+    const stack: any[] = [];
+    const rootJsonChildren = Array.isArray((snapshot as any).objects) ? (snapshot as any).objects : [];
+    const rootFabricChildren = Array.isArray((snapshot as any)._objects)
+        ? (snapshot as any)._objects
+        : (typeof (snapshot as any).getObjects === 'function' ? (snapshot as any).getObjects() : []);
+    if (rootJsonChildren.length) stack.push(...rootJsonChildren);
+    if (rootFabricChildren.length) stack.push(...rootFabricChildren);
+    while (stack.length) {
+        const obj = stack.pop();
+        if (!obj || typeof obj !== 'object') continue;
+        if (String((obj as any).name || '') === 'atac_retail_bg') return true;
+        const nestedJson = Array.isArray((obj as any).objects) ? (obj as any).objects : [];
+        const nestedFabric = Array.isArray((obj as any)._objects)
+            ? (obj as any)._objects
+            : (typeof (obj as any).getObjects === 'function' ? (obj as any).getObjects() : []);
+        if (nestedJson.length) stack.push(...nestedJson);
+        if (nestedFabric.length) stack.push(...nestedFabric);
+    }
+    return false;
+};
+
+const shouldForceCanonicalAtacForTemplateJson = (snapshot: any) => {
+    // Only honor the explicit flag. Atacarejo structure alone should NOT force code-driven reflow,
+    // otherwise Mini Editor templates won't persist exactly as authored.
+    return !!(snapshot && typeof snapshot === 'object' && (snapshot as any).__forceAtacarejoCanonical === true);
+};
+
+const shouldUseAtacVariantSnapshotsForTemplate = (_snapshot: any) => {
+    // Fixed Atacarejo layout: do not select per-variant snapshots in runtime.
+    return false;
+};
+
+async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { atacVariantKey?: AtacVariantKey }): Promise<any> {
+    const preferredVariantKey = opts?.atacVariantKey;
+    const baseGroupJson: any = tpl?.group;
+    const groupJson: any = pickRenderableTemplateGroupJson(tpl, preferredVariantKey);
     if (!fabric || !groupJson) throw new Error('Template missing group JSON');
     const objectsJson = Array.isArray(groupJson.objects) ? groupJson.objects : [];
-    const opts = { ...groupJson };
-    delete (opts as any).objects;
+    if (objectsJson.length === 0) throw new Error('Template group JSON has no objects');
+    const groupOpts = { ...groupJson };
+    delete (groupOpts as any).objects;
     // Fabric objects have a fixed `type` based on the class; restoring `type` from JSON is ignored and warns.
-    delete (opts as any).type;
+    delete (groupOpts as any).type;
     // Never restore layoutManager from plain JSON (Fabric v7 expects class instance).
-    delete (opts as any).layoutManager;
-    delete (opts as any).layout;
+    delete (groupOpts as any).layoutManager;
+    delete (groupOpts as any).layout;
     const enlivened = await enlivenObjectsAsync(objectsJson);
-    const g = new fabric.Group(enlivened, opts);
+    if (!Array.isArray(enlivened) || enlivened.length === 0) throw new Error('Template group failed to enliven objects');
+    const g = new fabric.Group(enlivened, groupOpts);
     // IMPORTANT: Any label template coming from the template system must preserve
     // the geometry authored in Mini Editor. Automatic reflow is only for legacy/default
     // programmatic groups, not for user template instances.
-    const preserveManualLayout = typeof (opts as any).__preserveManualLayout === 'boolean'
-        ? !!(opts as any).__preserveManualLayout
+    const preserveManualLayout = typeof (groupOpts as any).__preserveManualLayout === 'boolean'
+        ? !!(groupOpts as any).__preserveManualLayout
         : true;
     // Ensure templates always start from a normalized transform.
     g.set({ name: 'priceGroup', originX: 'center', originY: 'center', left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0 });
     (g as any).__preserveManualLayout = preserveManualLayout;
     (g as any).__isCustomTemplate = true;
+    // Keep Atacarejo templates on canonical layout across all value variants.
+    (g as any).__forceAtacarejoCanonical = shouldForceCanonicalAtacForTemplateJson(baseGroupJson);
+    const useVariantSnapshots = shouldUseAtacVariantSnapshotsForTemplate(baseGroupJson);
+    if (baseGroupJson && typeof baseGroupJson === 'object') {
+        if (typeof (baseGroupJson as any).__atacValueVariants === 'object') {
+            (g as any).__atacValueVariants = (baseGroupJson as any).__atacValueVariants;
+        }
+        if (useVariantSnapshots && typeof (baseGroupJson as any).__atacVariantGroups === 'object') {
+            (g as any).__atacVariantGroups = (baseGroupJson as any).__atacVariantGroups;
+        } else {
+            (g as any).__atacVariantGroups = {};
+        }
+    }
     if (preserveManualLayout) seedManualTemplateOriginalMetrics(g);
     return g;
 }
@@ -19542,84 +21322,8 @@ function normalizePriceGroupForPreview(pg: any) {
     const isAtacarejo = !!retailBg;
 
     if (isAtacarejo) {
-        // This is an atacarejo template - normalize all atacarejo elements for preview
-        const bannerBg = all.find(o => o?.name === 'atac_banner_bg');
-        const wholesaleBg = all.find(o => o?.name === 'atac_wholesale_bg');
-
-        const retailCurrency = all.find(o => o?.name === 'retail_currency_text');
-        const retailInteger = all.find(o => o?.name === 'retail_integer_text');
-        const retailDecimal = all.find(o => o?.name === 'retail_decimal_text');
-        const retailUnit = all.find(o => o?.name === 'retail_unit_text');
-        const retailPack = all.find(o => o?.name === 'retail_pack_line_text');
-
-        const bannerText = all.find(o => o?.name === 'wholesale_banner_text');
-
-        const wholesaleCurrency = all.find(o => o?.name === 'wholesale_currency_text');
-        const wholesaleInteger = all.find(o => o?.name === 'wholesale_integer_text');
-        const wholesaleDecimal = all.find(o => o?.name === 'wholesale_decimal_text');
-        const wholesaleUnit = all.find(o => o?.name === 'wholesale_unit_text');
-        const wholesalePack = all.find(o => o?.name === 'wholesale_pack_line_text');
-
-        // Use a standard preview size that matches the preview thumbnail
-        const previewW = 320;
-        const previewH = 220;
-        const totalH = previewH * 0.8;  // Total height for the price tag
-
-        // Section heights (same proportions as layoutAtacarejoPriceGroup)
-        const bannerH = totalH * 0.14;
-        const retailH = totalH * 0.43;
-        const wholesaleH = totalH - retailH - bannerH;
-
-        // Vertical positions (centered around 0)
-        const y0 = -totalH / 2;
-        const retailCY = y0 + retailH / 2;
-        const bannerCY = y0 + retailH + bannerH / 2;
-        const wholesaleCY = y0 + retailH + bannerH + wholesaleH / 2;
-
-        // Backgrounds - center horizontally, position vertically
-        if (retailBg) retailBg.set({ originX: 'center', originY: 'center', width: previewW, height: retailH, left: 0, top: retailCY });
-        if (bannerBg) bannerBg.set({ originX: 'center', originY: 'center', width: previewW, height: bannerH, left: 0, top: bannerCY });
-        if (wholesaleBg) wholesaleBg.set({ originX: 'center', originY: 'center', width: previewW, height: wholesaleH, left: 0, top: wholesaleCY });
-
-        // Helper to set font size based on block height
-        const setFontSize = (obj: any, scale: number, baseH: number) => {
-            if (obj) {
-                const fontSize = typeof obj.__fontScale === 'number' ? baseH * obj.__fontScale : baseH * scale;
-                obj.set({ fontSize, scaleX: 1, scaleY: 1 });
-                if (typeof obj.initDimensions === 'function') obj.initDimensions();
-            }
-        };
-
-        // Layout retail tier (top section - red background)
-        setFontSize(retailInteger, 0.60, retailH);
-        setFontSize(retailDecimal, 0.36, retailH);
-        setFontSize(retailCurrency, 0.22, retailH);
-        setFontSize(retailUnit, 0.22, retailH);
-        setFontSize(retailPack, 0.18, retailH);
-
-        if (retailCurrency) retailCurrency.set({ originX: 'left', originY: 'center', left: -60, top: retailCY - (retailH * 0.05) });
-        if (retailInteger) retailInteger.set({ originX: 'left', originY: 'center', left: -40, top: retailCY });
-        if (retailDecimal) retailDecimal.set({ originX: 'left', originY: 'center', left: 10, top: retailCY - (retailH * 0.18) });
-        if (retailUnit) retailUnit.set({ originX: 'left', originY: 'center', left: 45, top: retailCY + (retailH * 0.18) });
-        if (retailPack) retailPack.set({ originX: 'center', originY: 'center', left: 0, top: retailCY + (retailH * 0.30) });
-
-        // Layout banner (middle section - white background)
-        setFontSize(bannerText, 0.32, bannerH);
-        if (bannerText) bannerText.set({ originX: 'center', originY: 'center', left: 0, top: bannerCY });
-
-        // Layout wholesale tier (bottom section - yellow background)
-        setFontSize(wholesaleInteger, 0.60, wholesaleH);
-        setFontSize(wholesaleDecimal, 0.36, wholesaleH);
-        setFontSize(wholesaleCurrency, 0.22, wholesaleH);
-        setFontSize(wholesaleUnit, 0.22, wholesaleH);
-        setFontSize(wholesalePack, 0.18, wholesaleH);
-
-        if (wholesaleCurrency) wholesaleCurrency.set({ originX: 'left', originY: 'center', left: -60, top: wholesaleCY - (wholesaleH * 0.05) });
-        if (wholesaleInteger) wholesaleInteger.set({ originX: 'left', originY: 'center', left: -40, top: wholesaleCY });
-        if (wholesaleDecimal) wholesaleDecimal.set({ originX: 'left', originY: 'center', left: 10, top: wholesaleCY - (wholesaleH * 0.18) });
-        if (wholesaleUnit) wholesaleUnit.set({ originX: 'left', originY: 'center', left: 45, top: wholesaleCY + (wholesaleH * 0.18) });
-        if (wholesalePack) wholesalePack.set({ originX: 'center', originY: 'center', left: 0, top: wholesaleCY + (wholesaleH * 0.30) });
-
+        // Keep preview exactly aligned with runtime layout.
+        layoutAtacarejoPriceGroup(pg, 320, 450);
         safeAddWithUpdate(pg);
         return;
     }
@@ -19708,6 +21412,15 @@ function serializePriceGroupForTemplate(pg: any) {
     pg.set({ left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0, originX: 'center', originY: 'center' });
     safeAddWithUpdate(pg);
     const j: any = pg.toObject(LABEL_TEMPLATE_EXTRA_PROPS);
+    const useVariantSnapshots = shouldUseAtacVariantSnapshotsForTemplate(pg);
+    if (typeof (pg as any).__atacValueVariants === 'object') {
+        j.__atacValueVariants = (pg as any).__atacValueVariants;
+    }
+    if (useVariantSnapshots && typeof (pg as any).__atacVariantGroups === 'object') {
+        j.__atacVariantGroups = (pg as any).__atacVariantGroups;
+    } else {
+        delete j.__atacVariantGroups;
+    }
     pg.set(prev);
     safeAddWithUpdate(pg);
     delete j.layoutManager;
@@ -19975,35 +21688,63 @@ async function ensureBuiltInDefaultLabelTemplate() {
 async function ensureBuiltInAtacarejoLabelTemplate() {
     // Seed an "Atacarejo" 2-tier template (regular + wholesale) for CSV/Excel-like price tables.
     if (!fabric) return;
-    const exists = (labelTemplates.value || []).some(t => t.id === BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID);
-    if (exists) return;
+    const existingIdx = (labelTemplates.value || []).findIndex(t => t.id === BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID);
+    const existingTpl = existingIdx >= 0 ? (labelTemplates.value || [])[existingIdx] : null;
+    const existingGroup: any = existingTpl ? (existingTpl as any).group : null;
+    const existingHasAtac = isAtacarejoTemplateGroupJson(existingGroup);
+    const existingVariantGroups = existingGroup && typeof existingGroup === 'object' ? (existingGroup as any).__atacVariantGroups : null;
+    // Upgrade only when missing Atacarejo structure (we no longer use per-variant snapshots).
+    const existingSeed = Number((existingTpl as any)?.__seedVersionAtacarejo ?? 0);
+    if (existingTpl && existingHasAtac && existingSeed >= BUILTIN_ATACAREJO_SEED_VERSION) return;
 
     const now = new Date().toISOString();
-    const pg = buildAtacarejoPriceGroupForCard({
-        price: '1,95',
-        priceWholesale: '1,92',
+    const common = {
         wholesaleTrigger: 10,
         wholesaleTriggerUnit: 'FD',
         packQuantity: 12,
         packUnit: 'UN',
         packageLabel: 'FD'
-    }, 320, 450, 0);
+    };
+    const buildVariant = (prices: { price: string; priceWholesale?: string }) => {
+        const pg = buildAtacarejoPriceGroupForCard({ ...common, ...prices }, 320, 450, 0);
+        // Templates should preserve this authored geometry.
+        (pg as any).__preserveManualLayout = true;
+        (pg as any).__forceAtacarejoCanonical = false;
+        return pg;
+    };
+
+    // Base template uses the "tiny" look (matches the reference screenshot).
+    const pg = buildVariant({ price: '1,95', priceWholesale: '1,92' });
     pg.set({ name: 'priceGroup', subTargetCheck: true, interactive: true });
     if (typeof pg.getObjects === 'function') {
         pg.getObjects().forEach((child: any) => child.set({ selectable: true, evented: true, hasControls: true, hasBorders: true }));
     }
 
+    const baseJson: any = serializePriceGroupForTemplate(pg);
+    // Built-in: fixed style, fully runtime-driven fitting.
+    baseJson.__preserveManualLayout = false;
+    baseJson.__forceAtacarejoCanonical = true;
+    // No variations: keep a single fixed layout, values are fit dynamically at runtime.
+    delete baseJson.__atacVariantGroups;
+
     const tpl: LabelTemplate = {
         id: BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
         name: 'Atacarejo (2 precos)',
         kind: 'priceGroup-v1',
-        group: serializePriceGroupForTemplate(pg),
+        group: baseJson,
         isBuiltIn: true,
         createdAt: now,
         updatedAt: now
     };
+    (tpl as any).__seedVersionAtacarejo = BUILTIN_ATACAREJO_SEED_VERSION;
     tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
-    labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
+    if (existingIdx >= 0) {
+        const list = [...(labelTemplates.value || [])];
+        list[existingIdx] = tpl;
+        labelTemplates.value = list;
+    } else {
+        labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
+    }
     saveCurrentState();
 }
 
@@ -20126,7 +21867,16 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
         ? normalizeUnitForLabel(oldUnitText)
         : inferUnitFromCard(card);
 
-    const newPg = await instantiatePriceGroupFromTemplate(tpl);
+    let newPg: any = null;
+    try {
+        newPg = await instantiatePriceGroupFromTemplate(tpl, {
+            atacVariantKey: resolveAtacVariantKeyFromPrice(oldPriceText)
+        });
+    } catch (err) {
+        console.warn('[labelTemplates] Template inválido ao aplicar no card, fallback para padrão', err);
+        await resetCardPriceGroupToDefault(card);
+        return;
+    }
     const preserveManualTemplateLayout =
         (newPg as any).__preserveManualLayout === true ||
         (newPg as any).__isCustomTemplate === true;
@@ -20606,7 +22356,8 @@ function buildAtacarejoPriceGroupForCard(sample: any, cardW: number, cardH: numb
         originY: 'center',
         left: 0,
         top,
-        name: 'priceGroup'
+        name: 'priceGroup',
+        __forceAtacarejoCanonical: true
     });
 
     applyAtacarejoPricingToPriceGroup(pg, sample);
@@ -20785,6 +22536,29 @@ async function insertLabelTemplateToCanvas(templateId: string) {
         }
         (g as any)._customId = Math.random().toString(36).substr(2, 9);
         canvas.value.add(g);
+
+        // Center using the actual rendered bounds. Some custom templates can have
+        // an offset local origin, which makes `left/top = viewport center` appear off-screen.
+        try {
+            g.setCoords?.();
+            const bounds = g.getBoundingRect?.(true);
+            if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.top) && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)) {
+                const boundsCenterX = bounds.left + (bounds.width / 2);
+                const boundsCenterY = bounds.top + (bounds.height / 2);
+                const dx = center.x - boundsCenterX;
+                const dy = center.y - boundsCenterY;
+                if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+                    g.set({
+                        left: Number(g.left || 0) + dx,
+                        top: Number(g.top || 0) + dy
+                    });
+                    g.setCoords?.();
+                }
+            }
+        } catch (centerErr) {
+            console.warn('[labelTemplates] Failed to recenter inserted template bounds', centerErr);
+        }
+
         canvas.value.setActiveObject(g);
         canvas.value.requestRenderAll();
         saveCurrentState();
@@ -20872,6 +22646,45 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
         delete nextGroup.layout;
         // Mini editor is explicit manual mode: preserve exact element layout on cards/reload.
         nextGroup.__preserveManualLayout = true;
+        // Preserve explicit canonical flag (only if the template opted into it).
+        if (nextGroup.__forceAtacarejoCanonical == null && prev?.group && (prev.group as any).__forceAtacarejoCanonical != null) {
+            nextGroup.__forceAtacarejoCanonical = (prev.group as any).__forceAtacarejoCanonical;
+        }
+        const useVariantSnapshots = shouldUseAtacVariantSnapshotsForTemplate(nextGroup);
+        if (!useVariantSnapshots) {
+            (nextGroup as any).__atacVariantGroups = {};
+        }
+        // Guard against serializer/runtime paths that may omit this metadata.
+        // Never drop previously saved per-variant settings on update.
+        if (
+            (nextGroup as any).__atacValueVariants == null &&
+            prev?.group &&
+            typeof (prev.group as any).__atacValueVariants === 'object'
+        ) {
+            try {
+                (nextGroup as any).__atacValueVariants =
+                    typeof structuredClone === 'function'
+                        ? structuredClone((prev.group as any).__atacValueVariants)
+                        : JSON.parse(JSON.stringify((prev.group as any).__atacValueVariants));
+            } catch {
+                (nextGroup as any).__atacValueVariants = (prev.group as any).__atacValueVariants;
+            }
+        }
+        if (
+            useVariantSnapshots &&
+            (nextGroup as any).__atacVariantGroups == null &&
+            prev?.group &&
+            typeof (prev.group as any).__atacVariantGroups === 'object'
+        ) {
+            try {
+                (nextGroup as any).__atacVariantGroups =
+                    typeof structuredClone === 'function'
+                        ? structuredClone((prev.group as any).__atacVariantGroups)
+                        : JSON.parse(JSON.stringify((prev.group as any).__atacVariantGroups));
+            } catch {
+                (nextGroup as any).__atacVariantGroups = (prev.group as any).__atacVariantGroups;
+            }
+        }
     }
     const next: LabelTemplate = {
         ...prev,
@@ -22834,9 +24647,13 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
                 });
             }
 
-            // CRITICAL: Ensure zone is visible
-            if (z.visible === false) z.visible = true;
-            if (z.opacity === 0) z.opacity = 1;
+            // Keep persisted visibility, but never show a zone whose parent frame is hidden.
+            const zoneFrameId = String((z as any).parentFrameId || '').trim();
+            const hiddenByFrame = !!(zoneFrameId && getFrameById(zoneFrameId)?.visible === false);
+            if (typeof z.visible !== 'boolean') z.visible = true;
+            if (hiddenByFrame) z.visible = false;
+            if (typeof z.opacity !== 'number') z.opacity = 1;
+            if (!hiddenByFrame && z.opacity === 0) z.opacity = 1;
 
             ensureZoneSanity(z);
 
@@ -22863,7 +24680,12 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
             console.log('[rehydrateCanvasZones] Zone has normalized _zoneGlobalStyles:', Object.keys(zoneStyles));
             if (applyZoneStyles) {
                 console.log('[rehydrateCanvasZones] Applying global styles to cards for zone:', z._customId);
-                applyGlobalStylesToCards(zoneStyles, z);
+                const zoneCards = getZoneChildren(z);
+                if (zoneCards.length > 0) {
+                    applyGlobalStylesToCards(zoneStyles, z);
+                } else if (import.meta.dev) {
+                    console.debug('[rehydrateCanvasZones] Zone has no cards; skipping style reapply:', z._customId);
+                }
             }
         });
 
@@ -22926,9 +24748,22 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
                 card.isProductCard = true;
                 card.isSmartObject = true;
             }
-            // Ensure visibility
-            if (card.visible === false) card.visible = true;
-            if (card.opacity === 0 || card.opacity === undefined) card.opacity = 1;
+            // Keep persisted visibility, but never show cards whose frame is hidden.
+            let cardFrameId = String((card as any).parentFrameId || '').trim();
+            if (!cardFrameId) {
+                const zoneId = String((card as any).parentZoneId || (card as any)?._zoneSlot?.zoneId || '').trim();
+                const boundZone = zoneId ? zonesById.get(zoneId) : null;
+                const fallbackFrameId = String((boundZone as any)?.parentFrameId || '').trim();
+                if (fallbackFrameId) {
+                    cardFrameId = fallbackFrameId;
+                    (card as any).parentFrameId = fallbackFrameId;
+                }
+            }
+            const cardHiddenByFrame = !!(cardFrameId && getFrameById(cardFrameId)?.visible === false);
+            if (typeof card.visible !== 'boolean') card.visible = true;
+            if (cardHiddenByFrame) card.visible = false;
+            if (typeof card.opacity !== 'number') card.opacity = 1;
+            if (!cardHiddenByFrame && card.opacity === 0) card.opacity = 1;
 
             // CRITICAL: Disable objectCaching on cards after reload.
             // During creation, cards get objectCaching:false, but this prop is NOT
@@ -23105,6 +24940,7 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
 
         // Frames sempre atrás do conteúdo (evita bloquear drag do mouse em imagens)
         ensureFramesBelowContents();
+        stabilizePriceGroupsForPersistence(canvas.value, 'rehydrate');
 
         canvasObjects.value = [...canvas.value.getObjects()];
         canvas.value.requestRenderAll();

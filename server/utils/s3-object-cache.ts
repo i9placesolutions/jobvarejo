@@ -66,6 +66,7 @@ export const getCachedS3Objects = async (opts: {
     ttlMs?: number;
     maxKeysPerPrefix?: number;
     excludeKeyPrefixes?: string[];
+    forceRefresh?: boolean;
 }): Promise<CachedS3Object[]> => {
     const {
         s3,
@@ -73,7 +74,8 @@ export const getCachedS3Objects = async (opts: {
         prefixes,
         ttlMs = 120_000,
         maxKeysPerPrefix = 1000,
-        excludeKeyPrefixes = []
+        excludeKeyPrefixes = [],
+        forceRefresh = false
     } = opts;
 
     const normalizedPrefixes = [...new Set(prefixes.map((p) => String(p || '').trim()).filter(Boolean))].sort();
@@ -82,10 +84,10 @@ export const getCachedS3Objects = async (opts: {
     const now = Date.now();
     const existing = s3ObjectCache.get(cacheKey);
 
-    if (existing && existing.expiresAt > now && existing.data.length > 0) {
+    if (!forceRefresh && existing && existing.expiresAt > now && existing.data.length > 0) {
         return existing.data;
     }
-    if (existing?.inFlight) {
+    if (!forceRefresh && existing?.inFlight) {
         return existing.inFlight;
     }
 
@@ -144,4 +146,3 @@ export const getCachedS3Objects = async (opts: {
         throw err;
     }
 };
-

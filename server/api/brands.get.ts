@@ -1,17 +1,17 @@
-import { ListObjectsV2Command, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getS3Client } from "../utils/s3";
 
 /**
  * API Route para listar marcas/logos da Wasabi Storage
  *
  * Lista arquivos na pasta 'logo/' do bucket jobvarejo
- * Usa presigned URLs pois a conta Wasabi não permite acesso público direto
+ * Retorna URLs via proxy interno para evitar expor links assinados no frontend.
  */
 
 export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig();
     const bucketName = config.wasabiBucket;
+    const toProxyUrl = (key: string) => `/api/storage/proxy?key=${encodeURIComponent(key)}`;
 
     if (!bucketName) {
         throw createError({
@@ -31,28 +31,19 @@ export default defineEventHandler(async (event) => {
 
         const contents = response.Contents || [];
 
-        // Map S3 objects to our asset format with presigned URLs
-        const brands = await Promise.all(
-            contents
-                .filter(item => item.Key && !item.Key.endsWith('/')) // Filter out folders
-                .map(async (item, index) => {
-                    const fileName = item.Key!.replace(/^logo\//, '');
+        // Map S3 objects to our asset format with proxy URLs
+        const brands = contents
+            .filter(item => item.Key && !item.Key.endsWith('/')) // Filter out folders
+            .map((item, index) => {
+                const fileName = item.Key!.replace(/^logo\//, '');
 
-                    // Generate pre-signed URL (valid for 1 hour)
-                    const getCommand = new GetObjectCommand({
-                        Bucket: bucketName,
-                        Key: item.Key!
-                    });
-                    const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
-
-                    return {
-                        id: item.ETag || `brand-${index}`,
-                        url: signedUrl,
-                        name: fileName,
-                        lastModified: item.LastModified
-                    };
-                })
-        );
+                return {
+                    id: item.ETag || `brand-${index}`,
+                    url: toProxyUrl(item.Key!),
+                    name: fileName,
+                    lastModified: item.LastModified
+                };
+            });
 
         // Sort by name alphabetically
         brands.sort((a, b) => a.name.localeCompare(b.name));

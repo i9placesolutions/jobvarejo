@@ -239,6 +239,12 @@ type AlphaStats = {
     opaquePercent: number;
 };
 
+type AlphaShapeStats = {
+    visiblePercent: number;
+    opaquePercent: number;
+    fillWithinBoundsPercent: number;
+};
+
 const getAlphaStats = async (buffer: Buffer, sharp: any): Promise<AlphaStats | null> => {
     try {
         const meta = await sharp(buffer).metadata();
@@ -280,6 +286,78 @@ const getAlphaStats = async (buffer: Buffer, sharp: any): Promise<AlphaStats | n
     } catch {
         return null;
     }
+};
+
+const getAlphaShapeStats = async (buffer: Buffer, sharp: any): Promise<AlphaShapeStats | null> => {
+    try {
+        const { data, info } = await sharp(buffer)
+            .ensureAlpha()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+        const width = info.width;
+        const height = info.height;
+        const totalPixels = Math.max(1, width * height);
+        let visiblePixels = 0;
+        let opaquePixels = 0;
+        let minX = width;
+        let minY = height;
+        let maxX = -1;
+        let maxY = -1;
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const a = data[(y * width + x) * 4 + 3] ?? 0;
+                if (a < 16) continue;
+                visiblePixels++;
+                if (a >= 200) opaquePixels++;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+        }
+
+        if (visiblePixels === 0 || maxX < minX || maxY < minY) {
+            return {
+                visiblePercent: 0,
+                opaquePercent: 0,
+                fillWithinBoundsPercent: 0
+            };
+        }
+
+        const boundsArea = Math.max(1, (maxX - minX + 1) * (maxY - minY + 1));
+        return {
+            visiblePercent: (visiblePixels / totalPixels) * 100,
+            opaquePercent: (opaquePixels / totalPixels) * 100,
+            fillWithinBoundsPercent: (visiblePixels / boundsArea) * 100
+        };
+    } catch {
+        return null;
+    }
+};
+
+const isOverAggressiveRemoval = (alphaStats: AlphaStats | null, shapeStats: AlphaShapeStats | null) => {
+    if (!alphaStats || !shapeStats) return { aggressive: false, reason: '' };
+
+    const visiblePercent = shapeStats.visiblePercent;
+    const opaquePercent = shapeStats.opaquePercent;
+    const fillWithinBoundsPercent = shapeStats.fillWithinBoundsPercent;
+
+    const almostEmpty = visiblePercent < 4 || opaquePercent < 0.8;
+    const hollowCutout =
+        visiblePercent < 18 &&
+        fillWithinBoundsPercent < 24 &&
+        alphaStats.transparentPercent > 82;
+
+    if (almostEmpty || hollowCutout) {
+        return {
+            aggressive: true,
+            reason: `visível=${visiblePercent.toFixed(1)}%, opaco=${opaquePercent.toFixed(1)}%, preenchimento=${fillWithinBoundsPercent.toFixed(1)}%, transparente=${alphaStats.transparentPercent.toFixed(1)}%`
+        };
+    }
+
+    return { aggressive: false, reason: '' };
 };
 
 const shouldSkipBackgroundRemoval = async (buffer: Buffer, sharp: any): Promise<boolean> => {
@@ -409,10 +487,11 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
             return fallbackBuffer;
         }
 
+        const outStats = await getAlphaStats(refinedBuffer, sharp);
+
         // Additional guard for very light/low contrast images: if the result is mostly transparent,
         // prefer returning the original (better than deleting the subject).
         if (lightRisk) {
-            const outStats = await getAlphaStats(refinedBuffer, sharp);
             if (outStats) {
                 const visiblePercent = 100 - outStats.transparentPercent;
                 if (visiblePercent < 10 || outStats.opaquePercent < 2) {
@@ -431,9 +510,23 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
             }
         }
 
+        // Guard geral para evitar "furos" agressivos no produto.
+        const shapeStats = await getAlphaShapeStats(refinedBuffer, sharp);
+        const aggressive = isOverAggressiveRemoval(outStats, shapeStats);
+        if (aggressive.aggressive) {
+            console.warn(`⚠️ [Image Process] Resultado agressivo de remoção detectado (${aggressive.reason})`);
+            if (strictMode) {
+                throw new Error(`[Image Process][STRICT] Remoção agressiva detectada: ${aggressive.reason}`);
+            }
+            const fallbackPipeline = sharp(imageBuffer).resize(800, 800, { fit: 'inside', withoutEnlargement: true });
+            const fallbackBuffer = outputFormat === 'png'
+                ? await fallbackPipeline.png().toBuffer()
+                : await fallbackPipeline.webp({ quality: 85 }).toBuffer();
+            return fallbackBuffer;
+        }
+
         // Em modo estrito, exigir transparência real no resultado para evitar sucesso falso.
         if (strictMode) {
-            const outStats = await getAlphaStats(refinedBuffer, sharp);
             const transparentLike = outStats ? (outStats.transparentPercent + outStats.semiPercent) : 0;
             if (!outStats || transparentLike < 2) {
                 throw new Error('[Image Process][STRICT] Remoção de fundo não gerou transparência detectável');

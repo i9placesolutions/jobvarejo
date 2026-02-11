@@ -106,23 +106,91 @@ watch(dbFolders, (newFolders) => {
     }))
 }, { immediate: true, deep: true })
 
-// Fetch assets from Contabo S3 on mount
-const fetchAssets = async () => {
-    isLoadingAssets.value = true
+const UPLOADS_PAGE_SIZE = 60
+const uploadsCursor = ref<string | null>(null)
+const uploadsHasMore = ref(true)
+const uploadsLoadingMore = ref(false)
+const assetsScrollRef = ref<HTMLElement | null>(null)
+
+const normalizeUploadAsset = (item: any) => {
+    const map = assetFolderMap.value
+    return {
+        ...item,
+        folderId: map.get(item.id) ?? null
+    }
+}
+
+const mergeUploadsUnique = (current: any[], incoming: any[]) => {
+    const byId = new Map<string, any>()
+    current.forEach(item => byId.set(String(item?.id || ''), item))
+    incoming.forEach(item => {
+        const id = String(item?.id || '')
+        if (!id) return
+        byId.set(id, { ...byId.get(id), ...item })
+    })
+    return Array.from(byId.values())
+}
+
+const fetchUploadsPage = async (opts?: { reset?: boolean; fresh?: boolean }) => {
+    const reset = !!opts?.reset
+    const fresh = !!opts?.fresh
+
+    if (uploadsLoadingMore.value) return
+    if (!reset && !uploadsHasMore.value) return
+
+    uploadsLoadingMore.value = true
+    if (reset) isLoadingAssets.value = true
+
     try {
-        const data = await $fetch('/api/assets')
-        if (data && Array.isArray(data)) {
-            const map = assetFolderMap.value
-            assets.value.uploads = data.map((item: any) => ({
-                ...item,
-                folderId: map.get(item.id) ?? null
-            }))
+        const query: Record<string, string | number> = {
+            paginated: 1,
+            limit: UPLOADS_PAGE_SIZE
+        }
+        if (!reset && uploadsCursor.value) query.cursor = uploadsCursor.value
+        if (fresh) query.fresh = 1
+
+        const response = await $fetch('/api/assets', { query }) as {
+            items?: any[]
+            nextCursor?: string | null
+            hasMore?: boolean
+        } | any[]
+
+        const responseItems = Array.isArray(response)
+            ? response
+            : (Array.isArray(response?.items) ? response.items : [])
+
+        const normalizedItems = responseItems.map(normalizeUploadAsset)
+        assets.value.uploads = reset
+            ? normalizedItems
+            : mergeUploadsUnique(assets.value.uploads, normalizedItems)
+
+        if (Array.isArray(response)) {
+            uploadsCursor.value = normalizedItems.length >= UPLOADS_PAGE_SIZE
+                ? String((Number(uploadsCursor.value || 0) || 0) + normalizedItems.length)
+                : null
+            uploadsHasMore.value = normalizedItems.length >= UPLOADS_PAGE_SIZE
+        } else {
+            uploadsCursor.value = response?.nextCursor ?? null
+            uploadsHasMore.value = Boolean(response?.hasMore && response?.nextCursor)
         }
     } catch (e) {
         console.error('Failed to fetch assets:', e)
     } finally {
-        isLoadingAssets.value = false
+        uploadsLoadingMore.value = false
+        if (reset) isLoadingAssets.value = false
     }
+}
+
+const fetchAssets = async (opts?: { fresh?: boolean }) => {
+    uploadsCursor.value = null
+    uploadsHasMore.value = true
+    await fetchUploadsPage({ reset: true, fresh: !!opts?.fresh })
+    await nextTick()
+    await maybeLoadMoreUploads()
+}
+
+const fetchMoreAssets = async () => {
+    await fetchUploadsPage({ reset: false, fresh: false })
 }
 
 // Fetch brands/logos from Contabo
@@ -146,7 +214,7 @@ const fetchRecents = async () => {
     try {
         // Fetch both uploads and brands
         const [uploadsData, brandsData] = await Promise.all([
-            $fetch('/api/assets').catch(() => []),
+            $fetch('/api/assets', { query: { limit: 50 } }).catch(() => []),
             $fetch('/api/brands').catch(() => [])
         ])
         
@@ -182,22 +250,23 @@ const fetchRecents = async () => {
 // Watch category changes to fetch data
 watch(activeCategory, (newCat) => {
     if (newCat === 'uploads') fetchAssets()
+    if (newCat === 'folders' && assets.value.uploads.length === 0) fetchAssets()
     if (newCat === 'brand') fetchBrands()
     if (newCat === 'recents') fetchRecents()
 })
 
 // When AI Studio creates a new image, refresh libraries
 watch(() => aiStudio.refreshTick.value, async () => {
-    await fetchAssets()
+    await fetchAssets({ fresh: true })
     await fetchRecents()
 })
 
 onMounted(async () => {
     await loadFolders()
     await loadAssetFolders()
-    fetchAssets()
+    await fetchAssets()
     if (activeCategory.value === 'recents') {
-        fetchRecents()
+        await fetchRecents()
     }
 })
 
@@ -231,6 +300,25 @@ const currentItems = computed(() => {
     
     return items
 })
+
+const maybeLoadMoreUploads = async (scrollEl?: HTMLElement | null) => {
+    if (!(activeCategory.value === 'uploads' || activeCategory.value === 'folders')) return
+    if (isLoadingAssets.value || uploadsLoadingMore.value || !uploadsHasMore.value) return
+    if (props.searchQuery?.trim()) return
+
+    const el = scrollEl || assetsScrollRef.value
+    if (!el) return
+
+    const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (remaining > 220) return
+    await fetchMoreAssets()
+}
+
+const handleAssetsScroll = (event: Event) => {
+    const target = event.target as HTMLElement | null
+    if (!target) return
+    void maybeLoadMoreUploads(target)
+}
 
 // Navigation
 const enterFolder = (folderId: string) => {
@@ -595,7 +683,7 @@ const handleDragStart = (e: DragEvent, asset: any) => {
 
 // Upload Logic
 import { useUpload } from '../composables/useUpload'
-const { uploadFile, isUploading, error: uploadError } = useUpload()
+const { isUploading, error: uploadError } = useUpload()
 const fileInput = ref<HTMLInputElement | null>(null)
 
 const triggerUpload = () => {
@@ -635,16 +723,37 @@ const handleFileUpload = async (event: Event) => {
                     assets.value.uploads = [newItem, ...assets.value.uploads]
                 }
 
+                // If uploaded inside a folder view, persist folder mapping immediately.
+                if (activeCategory.value === 'folders' && currentFolderId.value && result.key) {
+                    const user = auth.user.value
+                    if (user) {
+                        try {
+                            await supabase.from('asset_folders').upsert(
+                                { user_id: user.id, asset_key: result.key, folder_id: String(currentFolderId.value) },
+                                { onConflict: 'user_id,asset_key' }
+                            )
+                            assetFolderMap.value.set(result.key, String(currentFolderId.value))
+                            assetFolderMap.value = new Map(assetFolderMap.value)
+                        } catch (e) {
+                            console.error('Erro ao persistir pasta do upload:', e)
+                            if (isAssetFoldersTableMissing(e)) {
+                                alert(ASSET_FOLDERS_MIGRATION_MSG)
+                            }
+                        }
+                    }
+                }
+
                 // Also refresh recents
                 assets.value.recents = [{ ...newItem, type: activeCategory.value === 'brand' ? 'brand' : 'upload' }, ...assets.value.recents].slice(0, 50)
 
-                // Background refresh from server for consistent data (presigned URLs, etc.)
+                // Refresh only the first page (fresh) to avoid stale cache and heavy full reload.
                 if (activeCategory.value === 'brand') {
-                    fetchBrands()
+                    await fetchBrands()
                 } else {
-                    fetchAssets()
+                    await fetchAssets({ fresh: true })
+                    await nextTick()
+                    await maybeLoadMoreUploads()
                 }
-                fetchRecents()
             }
         } catch (e) {
             console.error(e)
@@ -731,7 +840,9 @@ const handleFileUpload = async (event: Event) => {
 
         <!-- Grid Content -->
         <div 
+            ref="assetsScrollRef"
             class="flex-1 overflow-y-auto custom-scrollbar p-2"
+            @scroll.passive="handleAssetsScroll"
             @contextmenu="handleBackgroundContextMenu"
         >
             <div class="grid grid-cols-2 gap-1.5">
@@ -817,6 +928,20 @@ const handleFileUpload = async (event: Event) => {
                         </template>
                     </div>
                 </template>
+            </div>
+
+            <div
+                v-if="(activeCategory === 'uploads' || activeCategory === 'folders') && !props.searchQuery?.trim() && (uploadsLoadingMore || uploadsHasMore)"
+                class="col-span-2 flex items-center justify-center py-3"
+            >
+                <button
+                    v-if="uploadsHasMore && !uploadsLoadingMore"
+                    @click="fetchMoreAssets"
+                    class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 bg-white/5 hover:bg-white/10 rounded-md border border-white/10 transition-colors"
+                >
+                    Carregar mais
+                </button>
+                <div v-else class="text-[10px] text-zinc-500 animate-pulse">Carregando mais uploads...</div>
             </div>
             
             <!-- Empty state (only show if not already showing empty state for recents) -->

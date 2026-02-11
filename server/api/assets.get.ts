@@ -1,5 +1,4 @@
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { S3Client } from "@aws-sdk/client-s3";
 import { getCachedS3Objects } from "../utils/s3-object-cache";
 
 /**
@@ -51,10 +50,23 @@ export default defineEventHandler(async (event) => {
     const rawSearch = typeof query.q === 'string' ? query.q.trim() : '';
     const normalizedSearch = normalizeText(rawSearch);
     const searchMode = normalizedSearch.length >= 2;
+    const wantsPaginated =
+        String(query.paginated ?? '').toLowerCase() === '1' ||
+        String(query.paginated ?? '').toLowerCase() === 'true' ||
+        typeof query.cursor === 'string';
+    const forceFresh =
+        String(query.fresh ?? '').toLowerCase() === '1' ||
+        String(query.fresh ?? '').toLowerCase() === 'true';
+    const hasExplicitLimit = query.limit !== undefined;
     const requestedLimit = Number(query.limit ?? 200);
     const resultLimit = Number.isFinite(requestedLimit)
         ? Math.min(200, Math.max(1, Math.floor(requestedLimit)))
         : 200;
+    const requestedCursor = Number(query.cursor ?? 0);
+    const startIndex = Number.isFinite(requestedCursor)
+        ? Math.max(0, Math.floor(requestedCursor))
+        : 0;
+    const toProxyUrl = (key: string) => `/api/storage/proxy?key=${encodeURIComponent(key)}`;
 
     try {
         const listedObjects = await getCachedS3Objects({
@@ -63,7 +75,8 @@ export default defineEventHandler(async (event) => {
             prefixes: ['imagens/'],
             ttlMs: 120_000,
             maxKeysPerPrefix: searchMode ? 8000 : 1000,
-            excludeKeyPrefixes: ['imagens/bg-removed-']
+            excludeKeyPrefixes: ['imagens/bg-removed-'],
+            forceRefresh: forceFresh
         });
 
         const listEntries: Array<{ key: string; name: string; normalizedName: string; size?: number; lastModified?: Date }> = [];
@@ -95,26 +108,29 @@ export default defineEventHandler(async (event) => {
             return dateB - dateA;
         });
 
-        const finalEntries = searchMode ? listEntries.slice(0, resultLimit) : listEntries;
-        const assets = await Promise.all(
-            finalEntries.map(async (item) => {
-                const getCommand = new GetObjectCommand({
-                    Bucket: bucketName,
-                    Key: item.key
-                });
-                const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
+        const mapToAsset = (item: { key: string; name: string; size?: number; lastModified?: Date }) => ({
+            id: item.key,
+            name: item.name,
+            url: toProxyUrl(item.key),
+            size: item.size,
+            lastModified: item.lastModified
+        });
 
-                return {
-                    id: item.key,
-                    name: item.name,
-                    url: signedUrl,
-                    size: item.size,
-                    lastModified: item.lastModified
-                };
-            })
-        );
+        if (wantsPaginated) {
+            const endIndex = Math.min(listEntries.length, startIndex + resultLimit);
+            const pageEntries = listEntries.slice(startIndex, endIndex);
+            const nextCursor = endIndex < listEntries.length ? String(endIndex) : null;
+            return {
+                items: pageEntries.map(mapToAsset),
+                nextCursor,
+                hasMore: nextCursor !== null,
+                total: listEntries.length
+            };
+        }
 
-        return assets;
+        const shouldApplyLimit = searchMode || hasExplicitLimit;
+        const finalEntries = shouldApplyLimit ? listEntries.slice(0, resultLimit) : listEntries;
+        return finalEntries.map(mapToAsset);
     } catch (error: any) {
         console.error("Wasabi S3 List Error:", error);
         throw createError({ statusCode: 500, statusMessage: "Failed to list assets: " + error.message });

@@ -134,7 +134,7 @@ const removeBgWithOpenAI = async (rawBuffer: Buffer, outputFormat: 'webp' | 'png
     const size = await guessOpenAiSize(pngInput);
 
     const edited = await openAiEditImage({
-        prompt: 'Remova completamente o fundo da imagem, mantendo apenas o produto principal intacto, com contornos limpos e fundo transparente.',
+        prompt: 'Remova apenas o fundo externo da imagem. Preserve totalmente o produto, rótulos, textos e detalhes finos. Não crie furos internos nem apague partes semitransparentes do produto. Retorne fundo transparente.',
         size,
         background: 'transparent',
         images: [{ data: pngInput, filename: 'source.png', mime: 'image/png' }]

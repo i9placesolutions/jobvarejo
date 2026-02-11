@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue'
+import { onUnmounted, computed, defineAsyncComponent, watch } from 'vue'
 import { useProject } from '~/composables/useProject'
 
 const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanvas.vue'))
@@ -18,14 +18,22 @@ definePageMeta({
 // Use project composable
 const { project, activePage, loadProjectDB, saveStatus, lastSavedAt, hasUnsavedChanges, triggerAutoSave, cancelAutoSave } = useProject()
 
-// Load project on mount
-onMounted(async () => {
-  const loaded = await loadProjectDB(projectId)
-  if (!loaded) {
-    console.error('Failed to load project')
-    await navigateTo('/')
-  }
-})
+let pageLoadToken = 0
+watch(
+  () => route.params.id,
+  async (nextId) => {
+    const id = String(nextId || '').trim()
+    if (!id) return
+    const token = ++pageLoadToken
+    const loaded = await loadProjectDB(id)
+    if (token !== pageLoadToken) return
+    if (!loaded) {
+      console.error('Failed to load project')
+      await navigateTo('/')
+    }
+  },
+  { immediate: true }
+)
 
 // Cancel auto-save on unmount
 onUnmounted(() => {

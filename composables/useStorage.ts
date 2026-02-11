@@ -18,21 +18,33 @@ import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+export type RecoverLatestNonEmptyOptions = {
+  projectId: string
+  pageId: string
+  preferredKey?: string | null
+}
+
+export type RecoverLatestNonEmptyResult = {
+  key: string
+  versionId: string
+  objectCount: number
+  recoveredAt: string
+  json: any
+}
+
+type HistorySnapshotResponse = {
+  ok: boolean
+  sourceKey: string
+  historyKey: string
+  copiedAt: string
+}
+
 const saveStatus = ref<SaveStatus>('idle')
 const lastSavedAt = ref<Date | null>(null)
 const saveError = ref<string | null>(null)
-
-/**
- * Configuração da Wasabi Storage
- * Estas credenciais devem estar nas variáveis de ambiente
- */
-interface WasabiConfig {
-  endpoint: string      // e.g., 's3.wasabisys.com'
-  bucket: string        // Nome do bucket (jobvarejo)
-  accessKey: string     // S3 Access Key
-  secretKey: string     // S3 Secret Key
-  region: string        // e.g., 'us-east-1'
-}
+const HISTORY_SNAPSHOT_INTERVAL_MS = 30_000
+const lastHistorySnapshotAtByPage = new Map<string, number>()
+const historySnapshotInFlightByPage = new Map<string, Promise<void>>()
 
 /**
  * Obtém presigned URL do backend para upload/download
@@ -150,6 +162,67 @@ const resolveProxyGetUrl = (keyOrUrl: string): string | null => {
 
 export const useStorage = () => {
   const auth = useAuth()
+  const supabase = useSupabase()
+
+  const getAuthHeaders = async (): Promise<Record<string, string> | null> => {
+    try {
+      const { data } = await supabase.auth.getSession()
+      const token = data?.session?.access_token
+      return token ? { Authorization: `Bearer ${token}` } : null
+    } catch {
+      return null
+    }
+  }
+
+  const triggerHistorySnapshot = async (opts: {
+    userId: string
+    projectId: string
+    pageId: string
+    key: string
+  }): Promise<void> => {
+    if (import.meta.server) return
+
+    const pageScope = `${opts.userId}:${opts.projectId}:${opts.pageId}`
+    const now = Date.now()
+    const lastRun = Number(lastHistorySnapshotAtByPage.get(pageScope) || 0)
+    if (now - lastRun < HISTORY_SNAPSHOT_INTERVAL_MS) {
+      return
+    }
+    if (historySnapshotInFlightByPage.has(pageScope)) {
+      return
+    }
+    // Evita flood de tentativas mesmo se a chamada de snapshot falhar.
+    lastHistorySnapshotAtByPage.set(pageScope, now)
+
+    const run = (async () => {
+      try {
+        const headers = await getAuthHeaders()
+        if (!headers) return
+        const result = await $fetch<HistorySnapshotResponse>('/api/storage/history-snapshot', {
+          method: 'POST',
+          headers,
+          body: {
+            projectId: opts.projectId,
+            pageId: opts.pageId,
+            key: opts.key
+          }
+        })
+        if (result?.ok) {
+          lastHistorySnapshotAtByPage.set(pageScope, Date.now())
+        }
+      } catch (error: any) {
+        console.warn(
+          `⚠️ Snapshot histórico não salvo (${opts.projectId}/${opts.pageId}):`,
+          error?.message || error
+        )
+      } finally {
+        historySnapshotInFlightByPage.delete(pageScope)
+      }
+    })()
+
+    historySnapshotInFlightByPage.set(pageScope, run)
+    await run
+  }
 
   /**
    * Salva dados JSON na Wasabi Storage com retry automático (3 tentativas)
@@ -230,6 +303,13 @@ export const useStorage = () => {
           lastSavedAt.value = new Date()
           saveStatus.value = 'saved'
           console.log(`✅ Canvas salvo na Wasabi (tentativa ${attempt}/${retries}):`, key)
+          // Snapshot histórico assíncrono e com throttle para não impactar a UX.
+          void triggerHistorySnapshot({
+            userId,
+            projectId,
+            pageId,
+            key
+          })
           return key
 
         } catch (fetchError: any) {
@@ -298,6 +378,33 @@ export const useStorage = () => {
       return canvasJson
     } catch (error: any) {
       console.error('❌ Erro ao carregar da Wasabi:', error)
+      return null
+    }
+  }
+
+  /**
+   * Recupera automaticamente a versão mais recente não-vazia para uma página.
+   * Utilizado como fallback anti-tela-em-branco quando o payload atual foi sobrescrito vazio.
+   */
+  const recoverLatestNonEmptyCanvasData = async (
+    opts: RecoverLatestNonEmptyOptions
+  ): Promise<RecoverLatestNonEmptyResult | null> => {
+    if (import.meta.server) return null
+    if (!opts?.projectId || !opts?.pageId) return null
+
+    try {
+      const result = await $fetch<RecoverLatestNonEmptyResult>('/api/storage/recover-latest-non-empty', {
+        method: 'POST',
+        body: {
+          projectId: opts.projectId,
+          pageId: opts.pageId,
+          preferredKey: opts.preferredKey || undefined
+        }
+      })
+      if (!result?.json || !result?.key) return null
+      return result
+    } catch (error: any) {
+      console.warn('⚠️ Falha no recovery automático de versão não-vazia:', error?.message || error)
       return null
     }
   }
@@ -506,6 +613,7 @@ export const useStorage = () => {
     saveCanvasData,
     loadCanvasData,
     loadCanvasDataFromPath,
+    recoverLatestNonEmptyCanvasData,
     saveThumbnail,
     deleteProjectFiles,
     saveProjectPages,

@@ -754,6 +754,66 @@ const formatUserName = (fullName: string | null | undefined): string => {
   return `${names[0]} ${names[1]}`
 }
 
+const THUMB_FALLBACK_GRADIENTS = [
+  'linear-gradient(135deg, #1d4ed8 0%, #312e81 100%)',
+  'linear-gradient(135deg, #0f766e 0%, #14532d 100%)',
+  'linear-gradient(135deg, #b45309 0%, #7c2d12 100%)',
+  'linear-gradient(135deg, #6d28d9 0%, #7e22ce 100%)',
+  'linear-gradient(135deg, #0f172a 0%, #1f2937 100%)',
+  'linear-gradient(135deg, #9f1239 0%, #831843 100%)',
+]
+
+const hashText = (input: string): number => {
+  let hash = 0
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(i)
+    hash |= 0
+  }
+  return Math.abs(hash)
+}
+
+const getProjectInitials = (project: any): string => {
+  const name = String(project?.name || '').trim()
+  if (!name) return 'JV'
+  const words = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+  const initials = words.map(w => (w[0] || '').toUpperCase()).join('')
+  return initials || 'JV'
+}
+
+const getProjectThumbStyle = (project: any) => {
+  const seed = `${String(project?.id || '')}:${String(project?.name || '')}`
+  const idx = hashText(seed) % THUMB_FALLBACK_GRADIENTS.length
+  return {
+    background: THUMB_FALLBACK_GRADIENTS[idx] || THUMB_FALLBACK_GRADIENTS[0]
+  }
+}
+
+const isUsableThumbnailUrl = (url: unknown): boolean => {
+  if (typeof url !== 'string') return false
+  const value = url.trim()
+  if (!value) return false
+  const lower = value.toLowerCase()
+  if (lower === 'data:,' || lower === 'about:blank') return false
+  if (lower.startsWith('blob:null')) return false
+  if (lower.startsWith('javascript:')) return false
+  return true
+}
+
+const hasUsableProjectPreview = (project: any): boolean => {
+  return isUsableThumbnailUrl(project?.preview_url)
+}
+
+const handleProjectThumbLoad = (project: any, event: Event) => {
+  const img = event?.target as HTMLImageElement | null
+  if (!img) return
+  if ((img.naturalWidth || 0) < 2 || (img.naturalHeight || 0) < 2) {
+    project._thumbError = true
+  }
+}
+
 // Handle sign out
 const handleSignOut = async () => {
   await auth.signOut()
@@ -1137,21 +1197,35 @@ const handleDropOnRoot = async (event: DragEvent) => {
               @click="openProject(project.id)"
             >
               <!-- Thumbnail (Rounded Top) -->
-              <div
-                class="aspect-video bg-linear-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
-              >
-                <div v-if="project.preview_url && !project._thumbError" class="absolute inset-0 p-2 flex items-center justify-center">
+                <div
+                  class="aspect-video bg-linear-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
+                >
+                <div v-if="hasUsableProjectPreview(project) && !project._thumbError" class="absolute inset-0 p-2 flex items-center justify-center">
                   <img
                     :src="project.preview_url"
                     class="max-w-full max-h-full object-contain rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-[1.01]"
                     :alt="project.name"
                     loading="lazy"
                     decoding="async"
+                    @load="handleProjectThumbLoad(project, $event)"
                     @error="project._thumbError = true"
                   />
                 </div>
-                <div v-if="!project.preview_url || project._thumbError" class="w-full h-full flex items-center justify-center">
-                  <Sparkles class="w-8 h-8 text-zinc-600" />
+                <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="w-full h-full p-2">
+                  <div
+                    class="w-full h-full rounded-lg border border-white/20 relative overflow-hidden flex flex-col justify-between p-3"
+                    :style="getProjectThumbStyle(project)"
+                  >
+                    <div class="absolute inset-0 opacity-20 pointer-events-none" style="background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35) 0%, transparent 38%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.22) 0%, transparent 42%);"></div>
+                    <div class="relative z-[1] text-[10px] font-medium uppercase tracking-[0.14em] text-white/75">Sem preview</div>
+                    <div class="relative z-[1] text-white font-bold text-2xl leading-none">{{ getProjectInitials(project) }}</div>
+                    <div class="relative z-[1] text-[10px] text-white/85 truncate">{{ project.name || 'Projeto sem nome' }}</div>
+                  </div>
+                </div>
+                <div
+                  class="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/65 text-white text-[10px] font-semibold tracking-wide pointer-events-none"
+                >
+                  {{ getProjectInitials(project) }}
                 </div>
 
                 <!-- Actions Button (top right - Rounded) -->

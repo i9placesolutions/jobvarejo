@@ -10,6 +10,16 @@ import { getCachedS3Objects } from "../utils/s3-object-cache";
 /** Build a same-origin proxy URL for a given S3 key (avoids CORS + no expiration) */
 const proxyUrl = (key: string) => `/api/storage/proxy?key=${encodeURIComponent(key)}`;
 
+type ProcessProductImageResponse = {
+    source: string;
+    url?: string;
+    processing?: string;
+    found?: boolean;
+    reason?: string;
+    aiConfidence?: number;
+    aiBestIndex?: number;
+};
+
 // ========================================
 // Normalização avançada de search term
 // ========================================
@@ -95,6 +105,12 @@ const normalizeSearchTerm = (term: string): string => {
 };
 
 const WEIGHT_TOKENS = new Set(['kg', 'kgs', 'g', 'gr', 'grs', 'mg', 'ml', 'mls', 'l', 'lt', 'lts', 'un', 'pct', 'cx', 'fd']);
+const BUCKET_SEARCH_NOISE_TOKENS = new Set([
+    'sabor', 'sabores', 'sortido', 'sortidos', 'variado', 'variados', 'diverso', 'diversos',
+    'produto', 'produtos', 'embalagem', 'embalagens',
+    'energetico', 'refrigerante', 'bebida', 'suco',
+    'lata', 'latinha', 'garrafa', 'pet', 'pack'
+]);
 const stripWeightLikeTokens = (normalizedTerm: string): string => {
     const tokens = normalizedTerm.split(' ').filter(Boolean);
     const filtered = tokens.filter((t) => {
@@ -215,6 +231,65 @@ const hasWeightInNormalized = (normalized: string): boolean => {
     return extractWeightTokens(words).length > 0;
 };
 
+const buildExpandedNormalizedCandidates = (opts: {
+    rawInputs: string[];
+    enforceWeight: boolean;
+    maxCandidates?: number;
+}): string[] => {
+    const normalizedSet = new Set<string>();
+    const addNormalized = (raw: any) => {
+        const text = String(raw || '').trim();
+        if (!text) return;
+        const normalized = normalizeSearchTerm(text);
+        if (!normalized) return;
+        normalizedSet.add(normalized);
+    };
+
+    for (const rawInput of opts.rawInputs) {
+        const raw = String(rawInput || '').trim();
+        if (!raw) continue;
+        addNormalized(raw);
+
+        // Split on punctuation/separators to capture partial names inside long labels.
+        const parts = raw
+            .split(/[.;|,/]+/g)
+            .map((p) => p.trim())
+            .filter(Boolean);
+        for (const part of parts) addNormalized(part);
+    }
+
+    const base = Array.from(normalizedSet);
+    for (const normalized of base) {
+        const tokens = normalized.split(' ').filter(Boolean);
+        if (!tokens.length) continue;
+
+        const withoutNoise = tokens.filter((t) => !BUCKET_SEARCH_NOISE_TOKENS.has(t));
+        if (withoutNoise.length >= 2) {
+            normalizedSet.add(withoutNoise.join(' '));
+        }
+
+        if (!opts.enforceWeight) {
+            const noWeight = stripWeightLikeTokens(normalized);
+            if (noWeight) normalizedSet.add(noWeight);
+            if (withoutNoise.length >= 2) {
+                const withoutNoiseNoWeight = stripWeightLikeTokens(withoutNoise.join(' '));
+                if (withoutNoiseNoWeight) normalizedSet.add(withoutNoiseNoWeight);
+            }
+        }
+    }
+
+    const ranked = Array.from(normalizedSet)
+        .filter(Boolean)
+        .sort((a, b) => {
+            const aTokens = a.split(' ').filter(Boolean).length;
+            const bTokens = b.split(' ').filter(Boolean).length;
+            if (bTokens !== aTokens) return bTokens - aTokens;
+            return b.length - a.length;
+        });
+
+    return ranked.slice(0, Math.max(3, Number(opts.maxCandidates || 12)));
+};
+
 // Hash determinístico para S3 key (evita duplicatas com timestamp)
 const termHash = (normalizedTerm: string): string => {
     return createHash('sha256').update(normalizedTerm).digest('hex').substring(0, 12);
@@ -229,6 +304,13 @@ const buildDeterministicS3Key = (normalizedTerm: string): string => {
     const safeName = normalizedTerm.replace(/[^a-z0-9]/g, '-').substring(0, 50);
     const hash = termHash(normalizedTerm);
     return `imagens/smart-${safeName}-${hash}-${PROCESS_VERSION}.webp`;
+};
+
+const isProcessedSmartKey = (key: string): boolean => {
+    const k = String(key || '').trim().toLowerCase();
+    if (!k.startsWith('imagens/')) return false;
+    if (!k.includes('/smart-') && !k.startsWith('imagens/smart-')) return false;
+    return k.includes(`-${PROCESS_VERSION}.webp`) || k.includes(`-${PROCESS_VERSION}.png`);
 };
 
 const normalizeS3KeyForMatch = (s3Key: string): string => {
@@ -312,7 +394,8 @@ const findBestS3Match = async (opts: {
         return null;
     }
 
-    let best: { key: string; ratio: number; overlap: number } | null = null;
+    let bestStrict: { key: string; ratio: number; overlap: number } | null = null;
+    let bestRelaxed: { key: string; ratio: number; overlap: number } | null = null;
     const fuzzyRejectStats = {
         total: 0,
         variant: 0,
@@ -361,13 +444,28 @@ const findBestS3Match = async (opts: {
                 : (queryTokens.length <= 3 ? 0.95 : 0.75);
             const minOverlap = Math.min(3, queryTokens.length);
             if (ratio >= minRatio && overlap >= minOverlap) {
-                if (!best || ratio > best.ratio || (ratio === best.ratio && overlap > best.overlap)) {
-                    best = { key, ratio, overlap };
+                if (!bestStrict || ratio > bestStrict.ratio || (ratio === bestStrict.ratio && overlap > bestStrict.overlap)) {
+                    bestStrict = { key, ratio, overlap };
+                }
+                continue;
+            }
+
+            // Fallback mais tolerante para reaproveitar assets já existentes no bucket quando
+            // a key foi truncada/higienizada e perdeu parte dos tokens do nome.
+            // Mantemos validação de variante/peso acima para evitar poluição cruzada.
+            if (queryTokens.length >= 4) {
+                const relaxedMinRatio = requiresWeightStrict ? 0.62 : 0.58;
+                const relaxedMinOverlap = Math.min(3, queryTokens.length);
+                if (ratio >= relaxedMinRatio && overlap >= relaxedMinOverlap) {
+                    if (!bestRelaxed || ratio > bestRelaxed.ratio || (ratio === bestRelaxed.ratio && overlap > bestRelaxed.overlap)) {
+                        bestRelaxed = { key, ratio, overlap };
+                    }
                 }
             }
         }
     }
 
+    const best = bestStrict || bestRelaxed;
     if (best) {
         if (verboseFuzzy && fuzzyRejectStats.total > 0) {
             console.log(`ℹ️ [Fuzzy] Resumo: total=${fuzzyRejectStats.total}, variante=${fuzzyRejectStats.variant}, peso_diferente=${fuzzyRejectStats.weight_mismatch}, peso_ausente=${fuzzyRejectStats.weight_missing}`);
@@ -375,7 +473,8 @@ const findBestS3Match = async (opts: {
                 fuzzyRejectSamples.forEach((sample) => console.log(`   • ${sample}`));
             }
         }
-        console.log(`✅ [S3 Match] Reuso: "${best.key}" (ratio=${best.ratio.toFixed(2)} overlap=${best.overlap})`);
+        const mode = bestStrict ? 'strict' : 'relaxed';
+        console.log(`✅ [S3 Match:${mode}] Reuso: "${best.key}" (ratio=${best.ratio.toFixed(2)} overlap=${best.overlap})`);
         bestS3MatchMemo.set(bestMatchCacheKey, { expiresAt: Date.now() + 45_000, result: best.key });
         if (bestS3MatchMemo.size > 5000) {
             bestS3MatchMemo.clear();
@@ -576,6 +675,21 @@ async function ensureBgRemoved(opts: {
         return { key: sourceKey, processed: false };
     }
 
+    // Reuso agressivo: se o match já aponta para uma key "smart-...-vX", não reprocessar
+    // para outra key. Evita baixar/processar imagens repetidas que já estão no bucket.
+    if (isProcessedSmartKey(sourceKey)) {
+        console.log(`♻️ [ensureBgRemoved] Reusando key processada existente: "${sourceKey}"`);
+        await saveToCacheDB({
+            searchTerm: normalizedTerm,
+            productName: term,
+            brand, flavor, weight,
+            imageUrl: getPublicUrl(sourceKey),
+            s3Key: sourceKey,
+            source: 'internal-processed'
+        });
+        return { key: sourceKey, processed: false };
+    }
+
     // Verificar se o key determinístico versionado (processado) já existe
     const exists = await s3KeyExists(s3, bucketName, deterministicKey);
     if (exists) {
@@ -583,54 +697,171 @@ async function ensureBgRemoved(opts: {
         return { key: deterministicKey, processed: false };
     }
 
+    const inFlight = ((ensureBgRemoved as any).__inFlight ||= new Map<string, Promise<{ key: string; processed: boolean } | null>>()) as Map<string, Promise<{ key: string; processed: boolean } | null>>;
+    const lockKey = `${bucketName}:${deterministicKey}`;
+    const ongoing = inFlight.get(lockKey);
+    if (ongoing) {
+        console.log(`⏳ [ensureBgRemoved] Aguardando processamento em andamento para "${deterministicKey}"`);
+        return await ongoing;
+    }
+
     // Baixar via S3 SDK diretamente (mais confiável que HTTP público), processar, e fazer upload
-    try {
-        let rawBuffer: Buffer;
+    const job = (async (): Promise<{ key: string; processed: boolean } | null> => {
         try {
-            // Tentar via S3 SDK primeiro (evita problemas de rede/CORS)
-            const { GetObjectCommand } = await import('@aws-sdk/client-s3');
-            const getResponse = await s3.send(new GetObjectCommand({ Bucket: bucketName, Key: sourceKey }));
-            const stream = getResponse.Body as any;
-            const chunks: Buffer[] = [];
-            for await (const chunk of stream) {
-                chunks.push(Buffer.from(chunk));
+            // Check again after lock acquisition to avoid race duplicating downloads/work.
+            const existsAfterLock = await s3KeyExists(s3, bucketName, deterministicKey);
+            if (existsAfterLock) {
+                console.log(`✅ [ensureBgRemoved] Key criada por outro request: "${deterministicKey}"`);
+                await saveToCacheDB({
+                    searchTerm: normalizedTerm,
+                    productName: term,
+                    brand, flavor, weight,
+                    imageUrl: getPublicUrl(deterministicKey),
+                    s3Key: deterministicKey,
+                    source: 'internal-processed'
+                });
+                return { key: deterministicKey, processed: false };
             }
-            rawBuffer = Buffer.concat(chunks);
-            console.log(`📥 [ensureBgRemoved] Baixado via S3 SDK: "${sourceKey}" (${rawBuffer.length} bytes)`);
-        } catch (s3Err) {
-            // Fallback: tentar via URL pública
-            console.warn(`⚠️ [ensureBgRemoved] S3 SDK falhou, tentando URL pública:`, (s3Err as any)?.message);
-            const publicUrl = getPublicUrl(sourceKey);
-            rawBuffer = await downloadImage(publicUrl);
+
+            let rawBuffer: Buffer;
+            try {
+                // Tentar via S3 SDK primeiro (evita problemas de rede/CORS)
+                const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+                const getResponse = await s3.send(new GetObjectCommand({ Bucket: bucketName, Key: sourceKey }));
+                const stream = getResponse.Body as any;
+                const chunks: Buffer[] = [];
+                for await (const chunk of stream) {
+                    chunks.push(Buffer.from(chunk));
+                }
+                rawBuffer = Buffer.concat(chunks);
+                console.log(`📥 [ensureBgRemoved] Baixado via S3 SDK: "${sourceKey}" (${rawBuffer.length} bytes)`);
+            } catch (s3Err) {
+                // Fallback: tentar via URL pública
+                console.warn(`⚠️ [ensureBgRemoved] S3 SDK falhou, tentando URL pública:`, (s3Err as any)?.message);
+                const publicUrl = getPublicUrl(sourceKey);
+                rawBuffer = await downloadImage(publicUrl);
+            }
+
+            const processedBuffer = await processImageStrict(rawBuffer);
+
+            await s3.send(new PutObjectCommand({
+                Bucket: bucketName,
+                Key: deterministicKey,
+                Body: processedBuffer,
+                ContentType: 'image/webp',
+                ACL: 'public-read'
+            }));
+
+            console.log(`📤 [ensureBgRemoved] Imagem processada e salva: "${deterministicKey}" (${processedBuffer.length} bytes)`);
+
+            await saveToCacheDB({
+                searchTerm: normalizedTerm,
+                productName: term,
+                brand, flavor, weight,
+                imageUrl: getPublicUrl(deterministicKey),
+                s3Key: deterministicKey,
+                source: 'internal-processed'
+            });
+
+            return { key: deterministicKey, processed: true };
+        } catch (err) {
+            console.error('⚠️ [ensureBgRemoved] Falha ao processar imagem:', (err as any)?.message, (err as any)?.stack?.split('\n').slice(0, 3).join(' | '));
+            return null;
+        }
+    })();
+
+    inFlight.set(lockKey, job);
+    try {
+        return await job;
+    } finally {
+        if (inFlight.get(lockKey) === job) inFlight.delete(lockKey);
+    }
+}
+
+const inFlightExternalPipeline = new Map<string, Promise<ProcessProductImageResponse>>();
+
+const runExternalPipelineOnce = async (opts: {
+    s3: any;
+    bucketName: string;
+    deterministicKey: string;
+    normalizedTerm: string;
+    term: string;
+    brand?: string;
+    flavor?: string;
+    weight?: string;
+    selectedImageUrl: string;
+}): Promise<ProcessProductImageResponse> => {
+    const lockKey = `${opts.bucketName}:${opts.deterministicKey}`;
+    const ongoing = inFlightExternalPipeline.get(lockKey);
+    if (ongoing) {
+        console.log(`⏳ [External Pipeline] Aguardando processamento em andamento para "${opts.deterministicKey}"`);
+        return ongoing;
+    }
+
+    const job = (async (): Promise<ProcessProductImageResponse> => {
+        const existsNow = await s3KeyExists(opts.s3, opts.bucketName, opts.deterministicKey);
+        if (existsNow) {
+            console.log(`✅ [S3 Guard] Key criada por outro request: "${opts.deterministicKey}"`);
+            await saveToCacheDB({
+                searchTerm: opts.normalizedTerm,
+                productName: opts.term,
+                brand: opts.brand,
+                flavor: opts.flavor,
+                weight: opts.weight,
+                imageUrl: getPublicUrl(opts.deterministicKey),
+                s3Key: opts.deterministicKey,
+                source: 'serper'
+            });
+            return { source: 'cache-s3', url: proxyUrl(opts.deterministicKey) };
         }
 
-        const processedBuffer = await processImageStrict(rawBuffer);
+        const rawBuffer = await downloadImage(opts.selectedImageUrl);
+        let processedBuffer: Buffer;
+        try {
+            processedBuffer = await processImageStrict(rawBuffer);
+            console.log('✅ [Serper] Background removido com sucesso');
+        } catch (bgErr) {
+            console.warn('⚠️ [Serper] processImageStrict falhou, usando processImage normal:', (bgErr as any)?.message);
+            processedBuffer = await processImage(rawBuffer);
+        }
 
-        await s3.send(new PutObjectCommand({
-            Bucket: bucketName,
-            Key: deterministicKey,
+        await opts.s3.send(new PutObjectCommand({
+            Bucket: opts.bucketName,
+            Key: opts.deterministicKey,
             Body: processedBuffer,
             ContentType: 'image/webp',
             ACL: 'public-read'
         }));
 
-        console.log(`📤 [ensureBgRemoved] Imagem processada e salva: "${deterministicKey}" (${processedBuffer.length} bytes)`);
+        console.log(`📤 [S3] Upload: "${opts.deterministicKey}" (${processedBuffer.length} bytes)`);
 
         await saveToCacheDB({
-            searchTerm: normalizedTerm,
-            productName: term,
-            brand, flavor, weight,
-            imageUrl: getPublicUrl(deterministicKey),
-            s3Key: deterministicKey,
-            source: 'internal-processed'
+            searchTerm: opts.normalizedTerm,
+            productName: opts.term,
+            brand: opts.brand,
+            flavor: opts.flavor,
+            weight: opts.weight,
+            imageUrl: getPublicUrl(opts.deterministicKey),
+            s3Key: opts.deterministicKey,
+            source: 'serper'
         });
 
-        return { key: deterministicKey, processed: true };
-    } catch (err) {
-        console.error('⚠️ [ensureBgRemoved] Falha ao processar imagem:', (err as any)?.message, (err as any)?.stack?.split('\n').slice(0, 3).join(' | '));
-        return null;
+        return {
+            source: 'external',
+            processing: 'processed',
+            url: proxyUrl(opts.deterministicKey)
+        };
+    })();
+
+    inFlightExternalPipeline.set(lockKey, job);
+    try {
+        return await job;
+    } finally {
+        if (inFlightExternalPipeline.get(lockKey) === job) {
+            inFlightExternalPipeline.delete(lockKey);
+        }
     }
-}
+};
 
 // ========================================
 // HANDLER PRINCIPAL
@@ -664,16 +895,33 @@ export default defineEventHandler(async (event) => {
 
     const normalizedTerm = normalizeSearchTerm(combined);
     const deterministicKey = buildDeterministicS3Key(normalizedTerm);
-    const normalizedNoWeight = stripWeightLikeTokens(normalizedTerm);
-    // Se a consulta tem gramatura/peso explícito, NUNCA relaxar para versão "sem peso".
-    const candidateNormalizedTerms = hasWeightInNormalized(normalizedTerm)
-        ? [normalizedTerm]
-        : (normalizedNoWeight && normalizedNoWeight !== normalizedTerm
-            ? [normalizedTerm, normalizedNoWeight]
-            : [normalizedTerm]);
+    const enforceWeight = hasWeightInNormalized(normalizedTerm);
+    const candidateNormalizedTerms = buildExpandedNormalizedCandidates({
+        rawInputs: [
+            combined,
+            term,
+            [brand, term].filter(Boolean).join(' '),
+            [term, flavor].filter(Boolean).join(' '),
+            [brand, term, flavor, weight].filter(Boolean).join(' ')
+        ],
+        enforceWeight,
+        maxCandidates: 12
+    });
+    if (!candidateNormalizedTerms.includes(normalizedTerm)) {
+        candidateNormalizedTerms.unshift(normalizedTerm);
+    }
     const candidateKeys = [...new Set(candidateNormalizedTerms.map(buildDeterministicS3Key))];
+    const noImageResponse = (reason: string, details?: Record<string, any>) => ({
+        found: false,
+        source: 'external',
+        reason,
+        ...(details || {})
+    });
 
     console.log(`🔍 [Search] Termo: "${term}" → Normalizado: "${normalizedTerm}" → Key: "${deterministicKey}"`);
+    if (candidateNormalizedTerms.length > 1) {
+        console.log(`🧭 [Search Variants] ${candidateNormalizedTerms.length} variantes:`, candidateNormalizedTerms.slice(0, 8));
+    }
 
     // ========================================
     // 0. GUARD: S3 key determinístico já existe?
@@ -841,7 +1089,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (candidates.length === 0) {
-        throw createError({ statusCode: 404, statusMessage: "No image found" });
+        return noImageResponse(`No image found for "${term}"`);
     }
 
     // ========================================
@@ -864,19 +1112,18 @@ export default defineEventHandler(async (event) => {
                     selectedImageUrl = candidates[validation.bestIndex]!.url;
                     console.log(`🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidates.length} com ${(validation.confidence * 100).toFixed(0)}% confiança`);
                 } else {
-                    throw createError({
-                        statusCode: 404,
-                        statusMessage: `No reliable image found for "${term}" (AI confidence ${(validation.confidence * 100).toFixed(0)}%)`
+                    return noImageResponse(`No reliable image found for "${term}" (AI confidence ${(validation.confidence * 100).toFixed(0)}%)`, {
+                        aiConfidence: validation.confidence,
+                        aiBestIndex: validation.bestIndex
                     });
                 }
             } else if (validation.bestIndex === -1) {
-                throw createError({
-                    statusCode: 404,
-                    statusMessage: `No matching image found for "${term}" (AI rejected candidates)`
+                return noImageResponse(`No matching image found for "${term}" (AI rejected candidates)`, {
+                    aiConfidence: validation.confidence,
+                    aiBestIndex: validation.bestIndex
                 });
             }
         } catch (err) {
-            if ((err as any)?.statusCode === 404) throw err;
             console.warn('⚠️ [AI] Validação falhou, usando primeira imagem:', (err as any)?.message);
         }
     } else if (candidates.length === 1) {
@@ -887,58 +1134,17 @@ export default defineEventHandler(async (event) => {
     // 3. PROCESS + UPLOAD PIPELINE (S3 key determinístico)
     // ========================================
     try {
-        // Guard final: verificar novamente se key já existe (race condition)
-        const existsNow = await s3KeyExists(s3, bucketName, deterministicKey);
-        if (existsNow) {
-            console.log(`✅ [S3 Guard] Key criada por outro request: "${deterministicKey}"`);
-            await saveToCacheDB({
-                searchTerm: normalizedTerm,
-                productName: term,
-                brand, flavor, weight,
-                imageUrl: getPublicUrl(deterministicKey),
-                s3Key: deterministicKey,
-                source: 'serper'
-            });
-            return { source: 'cache-s3', url: proxyUrl(deterministicKey) };
-        }
-
-        const rawBuffer = await downloadImage(selectedImageUrl);
-        let processedBuffer: Buffer;
-        try {
-            processedBuffer = await processImageStrict(rawBuffer);
-            console.log('✅ [Serper] Background removido com sucesso');
-        } catch (bgErr) {
-            console.warn('⚠️ [Serper] processImageStrict falhou, usando processImage normal:', (bgErr as any)?.message);
-            processedBuffer = await processImage(rawBuffer);
-        }
-        
-        const putCommand = new PutObjectCommand({
-            Bucket: bucketName,
-            Key: deterministicKey,
-            Body: processedBuffer,
-            ContentType: 'image/webp',
-            ACL: 'public-read'
+        return await runExternalPipelineOnce({
+            s3,
+            bucketName,
+            deterministicKey,
+            normalizedTerm,
+            term,
+            brand,
+            flavor,
+            weight,
+            selectedImageUrl
         });
-        
-        await s3.send(putCommand);
-        console.log(`📤 [S3] Upload: "${deterministicKey}" (${processedBuffer.length} bytes)`);
-        
-        // Salvar no cache com await + retry
-        await saveToCacheDB({
-            searchTerm: normalizedTerm,
-            productName: term,
-            brand, flavor, weight,
-            imageUrl: getPublicUrl(deterministicKey),
-            s3Key: deterministicKey,
-            source: 'serper'
-        });
-        
-        return {
-            source: 'external',
-            processing: 'processed',
-            url: proxyUrl(deterministicKey)
-        };
-
     } catch (err: any) {
         console.error("Processing pipeline failed:", err);
         throw createError({ statusCode: 500, statusMessage: "Failed to process image", message: err.message });
