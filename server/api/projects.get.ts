@@ -6,6 +6,12 @@ export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event)
     const query = getQuery(event)
     const id = query.id as string
+    const limitParam = query.limit
+    const requestedLimitRaw = Array.isArray(limitParam) ? limitParam[0] : limitParam
+    const requestedLimit = Number.parseInt(String(requestedLimitRaw || ''), 10)
+    const safeLimit = Number.isFinite(requestedLimit)
+        ? Math.min(Math.max(requestedLimit, 1), 1000)
+        : null
 
     const supabase = createSupabaseAdmin()
 
@@ -23,13 +29,18 @@ export default defineEventHandler(async (event) => {
         }
         return data
     } else {
-        // List only projects from current user (Limit 10 for now)
-        const { data, error } = await supabase
+        // List only projects from current user, prioritizing recently updated projects.
+        let projectsQuery = supabase
             .from('projects')
-            .select('id, name, created_at, preview_url') // Don't fetch heavy canvas_data for list
+            .select('id, name, created_at, updated_at, preview_url') // Don't fetch heavy canvas_data for list
             .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(10)
+            .order('updated_at', { ascending: false })
+
+        if (safeLimit !== null) {
+            projectsQuery = projectsQuery.limit(safeLimit)
+        }
+
+        const { data, error } = await projectsQuery
 
         if (error) {
             throw createError({ statusCode: 500, statusMessage: error.message })

@@ -107,6 +107,31 @@ const hasMeaningfulTransparency = async (buffer: Buffer): Promise<boolean> => {
     }
 };
 
+const hasLikelySubjectPreserved = async (buffer: Buffer): Promise<boolean> => {
+    try {
+        const sharp = (await import("sharp")).default;
+        const { data, info } = await sharp(buffer)
+            .ensureAlpha()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+        const total = Math.max(1, info.width * info.height);
+        let visible = 0;
+        let opaque = 0;
+        for (let i = 3; i < data.length; i += 4) {
+            const alpha = data[i] ?? 0;
+            if (alpha >= 16) visible++;
+            if (alpha >= 200) opaque++;
+        }
+        const visiblePct = (visible / total) * 100;
+        const opaquePct = (opaque / total) * 100;
+        // Bloqueia recortes "fantasma" que apagam quase todo o produto.
+        return visiblePct >= 7 && opaquePct >= 2;
+    } catch {
+        return true;
+    }
+};
+
 const guessOpenAiSize = async (buffer: Buffer): Promise<'1024x1024' | '1024x1536' | '1536x1024'> => {
     try {
         const sharp = (await import("sharp")).default;
@@ -239,9 +264,7 @@ export default defineEventHandler(async (event) => {
         const localAttempts: Array<{ model?: 'small' | 'medium' | 'large'; strict: boolean }> = [
             { model: 'large', strict: true },
             { model: 'medium', strict: true },
-            { model: 'small', strict: true },
-            { model: 'large', strict: false },
-            { model: 'medium', strict: false }
+            { model: 'small', strict: true }
         ];
 
         for (const attempt of localAttempts) {
@@ -254,11 +277,12 @@ export default defineEventHandler(async (event) => {
                 });
                 if (!processedBuffer) continue;
                 const hasAlphaCut = await hasMeaningfulTransparency(processedBuffer);
-                if (hasAlphaCut) {
+                const hasSubject = await hasLikelySubjectPreserved(processedBuffer);
+                if (hasAlphaCut && hasSubject) {
                     console.log(`✅ [Remove BG] Sucesso local (model=${attempt.model || 'default'}, strict=${attempt.strict})`);
                     break;
                 }
-                console.warn(`⚠️ [Remove BG] Saída local sem transparência útil (model=${attempt.model || 'default'}, strict=${attempt.strict})`);
+                console.warn(`⚠️ [Remove BG] Saída local inválida (alpha=${hasAlphaCut}, subject=${hasSubject}) (model=${attempt.model || 'default'}, strict=${attempt.strict})`);
                 processedBuffer = null;
             } catch (err: any) {
                 lastLocalError = err;
@@ -271,11 +295,12 @@ export default defineEventHandler(async (event) => {
                 console.log("🤖 [Remove BG] Tentando fallback OpenAI...");
                 const openAiBuffer = await removeBgWithOpenAI(rawBuffer, outputFormat);
                 const hasAlphaCut = await hasMeaningfulTransparency(openAiBuffer);
-                if (hasAlphaCut) {
+                const hasSubject = await hasLikelySubjectPreserved(openAiBuffer);
+                if (hasAlphaCut && hasSubject) {
                     processedBuffer = openAiBuffer;
                     console.log("✅ [Remove BG] Fallback OpenAI aplicado com transparência");
                 } else {
-                    console.warn("⚠️ [Remove BG] OpenAI retornou imagem sem transparência útil");
+                    console.warn(`⚠️ [Remove BG] OpenAI retornou saída inválida (alpha=${hasAlphaCut}, subject=${hasSubject})`);
                 }
             } catch (openAiErr: any) {
                 console.warn("⚠️ [Remove BG] Fallback OpenAI falhou:", openAiErr?.message || openAiErr);

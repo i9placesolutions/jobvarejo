@@ -63,6 +63,34 @@ const hashString = (input: string): string => {
     return `h${(hash >>> 0).toString(16)}`
 }
 
+const makePageId = (): string => Math.random().toString(36).substr(2, 9)
+
+const ensureUniquePageId = (wanted: unknown, used: Set<string>): string => {
+    const raw = String(wanted || '').trim()
+    if (raw && !used.has(raw)) {
+        used.add(raw)
+        return raw
+    }
+    let next = makePageId()
+    while (used.has(next)) next = makePageId()
+    used.add(next)
+    return next
+}
+
+const normalizeProjectPageIds = (pages: any[], context: string): void => {
+    if (!Array.isArray(pages)) return
+    const used = new Set<string>()
+    pages.forEach((page: any, idx: number) => {
+        if (!page || typeof page !== 'object') return
+        const prev = String(page.id || '').trim()
+        const normalized = ensureUniquePageId(prev, used)
+        if (normalized !== prev) {
+            page.id = normalized
+            console.warn(`[pages] ID de página ausente/duplicado normalizado (${context}) #${idx}: "${prev || '(vazio)'}" -> "${normalized}"`)
+        }
+    })
+}
+
 const computeCanvasFingerprint = (canvasData: any): string => {
     try {
         if (!canvasData || typeof canvasData !== 'object') return 'empty'
@@ -214,6 +242,7 @@ export const useProject = () => {
                     project.id = local.project.id || project.id
                     project.name = local.project.name || project.name
                     project.pages = local.project.pages || []
+                    normalizeProjectPageIds(project.pages as any[], 'initProject:draft')
                     project.activePageIndex = Math.min(
                         Math.max(0, Number(local.project.activePageIndex || 0)),
                         Math.max(0, (project.pages.length || 1) - 1)
@@ -231,7 +260,8 @@ export const useProject = () => {
     }
 
     const addPage = (type: 'RETAIL_OFFER' | 'FREE_DESIGN', width: number, height: number, name?: string) => {
-        const id = Math.random().toString(36).substr(2, 9)
+        const existingIds = new Set((project.pages || []).map((p: any) => String(p?.id || '').trim()).filter(Boolean))
+        const id = ensureUniquePageId(makePageId(), existingIds)
         const newPage: Page = {
             id,
             name: name || `Página ${project.pages.length + 1}`,
@@ -355,8 +385,9 @@ export const useProject = () => {
         }
 
         // 3. Criar a nova página
+        const existingIds = new Set((project.pages || []).map((p: any) => String(p?.id || '').trim()).filter(Boolean))
         const newPage: Page = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: ensureUniquePageId(makePageId(), existingIds),
             name: `${sourcePage.name} (Cópia)`,
             width: sourcePage.width,
             height: sourcePage.height,
@@ -384,6 +415,17 @@ export const useProject = () => {
         markAsUnsaved()
     }
 
+    const renamePage = (index: number, name: string) => {
+        const page = project.pages[index]
+        if (!page) return
+        const fallbackName = `Página ${index + 1}`
+        const nextName = String(name || '').trim() || fallbackName
+        if (nextName === page.name) return
+        page.name = nextName
+        markAsUnsaved()
+        writeProjectDraft()
+    }
+
     const resizePage = (index: number, width: number, height: number) => {
         if (project.pages[index]) {
             project.pages[index].width = width
@@ -407,6 +449,7 @@ export const useProject = () => {
 
         try {
             const supabase = useSupabase()
+            normalizeProjectPageIds(project.pages as any[], 'saveProjectDB:preflight')
             const unsafeEmptyPages = project.pages.filter((page) => {
                 const currentCount = getCanvasObjectCount(page?.canvasData)
                 const persistedCount = Number(page?.lastPersistedObjectCount || 0)
@@ -664,13 +707,19 @@ export const useProject = () => {
             // Carregar cada página
             project.pages = []
 
+            const loadedPageIds = new Set<string>()
             for (const pageMeta of storedPages) {
                 if (currentSession !== projectLoadSession.value) {
                     console.warn('⏭️ Carregamento de páginas interrompido por sessão mais nova')
                     return false
                 }
-                // Pular se pageMeta não for um objeto válido ou não tiver id
-                if (!pageMeta || typeof pageMeta !== 'object' || !pageMeta.id) continue
+                // Pular se pageMeta não for um objeto válido
+                if (!pageMeta || typeof pageMeta !== 'object') continue
+                const rawPageId = String((pageMeta as any).id || '').trim()
+                const pageId = ensureUniquePageId(rawPageId, loadedPageIds)
+                if (rawPageId !== pageId) {
+                    console.warn(`[pages] ID de página normalizado durante loadProjectDB: "${rawPageId || '(vazio)'}" -> "${pageId}"`)
+                }
 
                 let canvasData = null
                 let serverCanvasData = null
@@ -693,13 +742,13 @@ export const useProject = () => {
                 if (pageMeta.canvasDataPath && serverCountBeforeRecovery === 0 && dbCountBeforeRecovery === 0) {
                     const recovered = await recoverLatestNonEmptyCanvasData({
                         projectId: data.id,
-                        pageId: pageMeta.id,
+                        pageId,
                         preferredKey: pageMeta.canvasDataPath
                     })
                     if (recovered?.json) {
                         serverCanvasData = recovered.json
                         pageMeta.canvasDataPath = recovered.key
-                        console.warn(`🛟 Recovery automático aplicado para página ${pageMeta.id}: ${recovered.objectCount} objetos`)
+                        console.warn(`🛟 Recovery automático aplicado para página ${pageId}: ${recovered.objectCount} objetos`)
                     }
                 }
 
@@ -711,7 +760,7 @@ export const useProject = () => {
                 }
 
                 // Offline-safe: Verificar draft local, mas só usar se for válido e mais recente
-                const draft = readDraft(data.id, pageMeta.id)
+                const draft = readDraft(data.id, pageId)
                 if (draft?.canvasData) {
                     const draftObjectCount = draft.canvasData?.objects?.length || 0
                     const draftAge = Date.now() - draft.updatedAt
@@ -721,7 +770,7 @@ export const useProject = () => {
                     const draftIsValid = draftObjectCount > 0
                     const serverObjectCount = serverCanvasData?.objects?.length || 0
 
-                    console.log(`📝 Draft encontrado para página ${pageMeta.id}: ${draftObjectCount} objetos (idade: ${draftAgeMin}min)`)
+                    console.log(`📝 Draft encontrado para página ${pageId}: ${draftObjectCount} objetos (idade: ${draftAgeMin}min)`)
                     console.log(`📝 Servidor tem: ${serverObjectCount} objetos`)
 
                     // REGRA DE SEGURANÇA (anti-tela em branco):
@@ -730,14 +779,14 @@ export const useProject = () => {
                     if (serverObjectCount > 0) {
                         canvasData = serverCanvasData
                         if (!draftIsValid || draftObjectCount === 0) {
-                            clearDraft(data.id, pageMeta.id)
+                            clearDraft(data.id, pageId)
                             console.log(`🗑️ Draft inválido/vazio removido; servidor tem ${serverObjectCount} objetos`)
                         } else {
                             console.log(`ℹ️ Ignorando draft local (${draftObjectCount}) porque servidor já tem ${serverObjectCount} objeto(s)`)
                         }
                     } else if (draftIsValid) {
                         canvasData = draft.canvasData
-                        console.log(`📝 Usando rascunho local (servidor vazio) para a página ${pageMeta.id} (${draftAgeMin}min atrás, ${draftObjectCount} objetos)`)
+                        console.log(`📝 Usando rascunho local (servidor vazio) para a página ${pageId} (${draftAgeMin}min atrás, ${draftObjectCount} objetos)`)
                     } else {
                         canvasData = serverCanvasData
                     }
@@ -750,7 +799,7 @@ export const useProject = () => {
                 if (canvasData) {
                     const finalObjectCount = canvasData?.objects?.length || 0
                     if (finalObjectCount > 0) {
-                        console.log(`✅ CanvasData final para página ${pageMeta.id}: ${finalObjectCount} objeto(s)`)
+                        console.log(`✅ CanvasData final para página ${pageId}: ${finalObjectCount} objeto(s)`)
                     }
                 }
                 // Nota: Páginas novas podem não ter canvasData ainda, isso é normal
@@ -759,7 +808,7 @@ export const useProject = () => {
                 const finalFingerprint = computeCanvasFingerprint(canvasData)
 
                 const page: Page = {
-                    id: pageMeta.id,
+                        id: pageId,
                     name: pageMeta.name,
                     width: pageMeta.width || 1080,
                     height: pageMeta.height || 1920,
@@ -779,6 +828,7 @@ export const useProject = () => {
 
             // Se não tem páginas, inicializar
             if (project.pages.length === 0) initProject()
+            normalizeProjectPageIds(project.pages as any[], 'loadProjectDB:final')
 
             project.activePageIndex = 0
             hasUnsavedChanges.value = false
@@ -809,6 +859,7 @@ export const useProject = () => {
                         dirty: true
                     } as Page
                 })
+                normalizeProjectPageIds(project.pages as any[], 'loadProjectDB:offline-fallback')
                 project.activePageIndex = local.project.activePageIndex || 0
                 hasUnsavedChanges.value = true
                 saveStatus.value = 'error'
@@ -854,6 +905,7 @@ export const useProject = () => {
         updatePageThumbnail,
         duplicatePage,
         deletePage,
+        renamePage,
         resizePage,
         saveProjectDB,
         triggerAutoSave,

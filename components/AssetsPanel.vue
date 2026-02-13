@@ -149,7 +149,7 @@ const fetchUploadsPage = async (opts?: { reset?: boolean; fresh?: boolean }) => 
         if (!reset && uploadsCursor.value) query.cursor = uploadsCursor.value
         if (fresh) query.fresh = 1
 
-        const response = await $fetch('/api/assets', { query }) as {
+        const response = await $fetch<any>('/api/assets', { query: query as any }) as {
             items?: any[]
             nextCursor?: string | null
             hasMore?: boolean

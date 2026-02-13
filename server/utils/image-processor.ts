@@ -344,13 +344,18 @@ const isOverAggressiveRemoval = (alphaStats: AlphaStats | null, shapeStats: Alph
     const opaquePercent = shapeStats.opaquePercent;
     const fillWithinBoundsPercent = shapeStats.fillWithinBoundsPercent;
 
-    const almostEmpty = visiblePercent < 4 || opaquePercent < 0.8;
+    const almostEmpty = visiblePercent < 6 || opaquePercent < 1.4;
+    const sparseSubject = visiblePercent < 12 && opaquePercent < 3.2;
+    const ghostCutout =
+        visiblePercent < 20 &&
+        opaquePercent < 2.2 &&
+        fillWithinBoundsPercent < 42;
     const hollowCutout =
-        visiblePercent < 18 &&
+        visiblePercent < 24 &&
         fillWithinBoundsPercent < 24 &&
-        alphaStats.transparentPercent > 82;
+        alphaStats.transparentPercent > 78;
 
-    if (almostEmpty || hollowCutout) {
+    if (almostEmpty || sparseSubject || ghostCutout || hollowCutout) {
         return {
             aggressive: true,
             reason: `visível=${visiblePercent.toFixed(1)}%, opaco=${opaquePercent.toFixed(1)}%, preenchimento=${fillWithinBoundsPercent.toFixed(1)}%, transparente=${alphaStats.transparentPercent.toFixed(1)}%`
@@ -530,6 +535,18 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
             const transparentLike = outStats ? (outStats.transparentPercent + outStats.semiPercent) : 0;
             if (!outStats || transparentLike < 2) {
                 throw new Error('[Image Process][STRICT] Remoção de fundo não gerou transparência detectável');
+            }
+            if (shapeStats) {
+                if (shapeStats.visiblePercent < 7 || shapeStats.opaquePercent < 2) {
+                    throw new Error(
+                        `[Image Process][STRICT] Produto ficou pequeno/diluído demais após recorte (visível=${shapeStats.visiblePercent.toFixed(1)}%, opaco=${shapeStats.opaquePercent.toFixed(1)}%)`
+                    );
+                }
+                if (shapeStats.visiblePercent < 22 && shapeStats.fillWithinBoundsPercent < 18) {
+                    throw new Error(
+                        `[Image Process][STRICT] Recorte com furos excessivos detectado (preenchimento=${shapeStats.fillWithinBoundsPercent.toFixed(1)}%)`
+                    );
+                }
             }
         }
 

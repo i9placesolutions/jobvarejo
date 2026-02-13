@@ -7,6 +7,19 @@ import { Sparkles, X, Check, AlertCircle, Loader2, Search, Upload, FolderOpen } 
 import { useProductProcessor, type SmartProduct } from '../composables/useProductProcessor'
 import type { LabelTemplate } from '~/types/label-template'
 
+type ImportTargetMode = 'zone' | 'multi-frame'
+type FrameCandidate = { id: string; name: string; left?: number; top?: number }
+type FrameAssignment = { productId: string; frameId: string | null }
+type ProductImportOptions = {
+    mode?: 'replace' | 'append'
+    labelTemplateId?: string
+    targetMode?: ImportTargetMode
+    selectedFrameIds?: string[]
+    frameAssignments?: FrameAssignment[]
+    countRule?: 'min'
+    cardsPerFrame?: 1
+}
+
 const props = defineProps<{
     modelValue: boolean
     initialProducts?: SmartProduct[]
@@ -14,11 +27,12 @@ const props = defineProps<{
     existingCount?: number
     labelTemplates?: LabelTemplate[]
     initialLabelTemplateId?: string
+    availableFramesForImport?: FrameCandidate[]
 }>()
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void
-    (e: 'import', products: SmartProduct[], opts?: { mode?: 'replace' | 'append'; labelTemplateId?: string }): void
+    (e: 'import', products: SmartProduct[], opts?: ProductImportOptions): void
 }>()
 
 const supabase = useSupabase()
@@ -35,6 +49,9 @@ const textInput = ref('')
 const step = ref<'input' | 'review'>('input')
 const listFileInput = ref<HTMLInputElement | null>(null)
 const importMode = ref<'replace' | 'append'>('replace')
+const targetMode = ref<ImportTargetMode>('zone')
+const selectedFrameIds = ref<string[]>([])
+const frameAssignmentsMap = ref<Record<string, string | null>>({})
 
 const LIST_FILE_ACCEPT = 'image/*,.csv,.tsv,.xlsx,.xls,.pdf,text/plain'
 
@@ -60,6 +77,9 @@ const resolveProductIndex = (p: any) => {
 watch(() => props.modelValue, (newVal) => {
     if (newVal) {
         importMode.value = 'replace'
+        targetMode.value = 'zone'
+        selectedFrameIds.value = []
+        frameAssignmentsMap.value = {}
         if (props.initialProducts && props.initialProducts.length > 0) {
             // Load external products directly into review mode
             products.value = [...props.initialProducts]
@@ -112,17 +132,24 @@ const handleDropFile = async (event: DragEvent) => {
 }
 
 const handleImport = () => {
-    // Filter only valid products? Or import all?
-    // Provide a clean list to parent
-    emit('import', JSON.parse(JSON.stringify(products.value)), {
+    const opts: ProductImportOptions = {
         mode: importMode.value,
-        labelTemplateId: selectedLabelTemplateId.value || undefined
-    });
-    emit('update:modelValue', false);
-    
-    // Reset for next time?
-    // products.value = []; 
-    // step.value = 'input';
+        labelTemplateId: selectedLabelTemplateId.value || undefined,
+        targetMode: targetMode.value
+    }
+
+    if (targetMode.value === 'multi-frame') {
+        opts.selectedFrameIds = [...selectedFrameIds.value]
+        opts.frameAssignments = productRows.value.map((row) => ({
+            productId: row.productId,
+            frameId: getAssignedFrameId(row.productId)
+        }))
+        opts.countRule = 'min'
+        opts.cardsPerFrame = 1
+    }
+
+    emit('import', JSON.parse(JSON.stringify(products.value)), opts)
+    emit('update:modelValue', false)
 }
 
 const showAssetPicker = ref(false)
@@ -162,6 +189,228 @@ const selectedLabelTemplate = computed(() => {
     const id = String(selectedLabelTemplateId.value || '')
     if (!id) return null
     return labelTemplateList.value.find(t => String(t.id) === id) || null
+})
+
+const productTempIdMap = new WeakMap<object, string>()
+let productTempIdSeq = 0
+
+const getStableProductId = (product: any, index: number): string => {
+    const persisted = String(product?.id ?? '').trim()
+    if (persisted) return persisted
+
+    if (product && typeof product === 'object') {
+        const existing = productTempIdMap.get(product)
+        if (existing) return existing
+        productTempIdSeq += 1
+        const next = `tmp-product-${productTempIdSeq}-${index + 1}`
+        productTempIdMap.set(product, next)
+        return next
+    }
+    return `tmp-product-fallback-${index + 1}`
+}
+
+const productRows = computed(() => {
+    const list = Array.isArray(products.value) ? products.value : []
+    return list.map((product: any, index: number) => ({
+        product,
+        index,
+        productId: getStableProductId(product, index)
+    }))
+})
+
+const availableFrames = computed<FrameCandidate[]>(() => {
+    const source = Array.isArray(props.availableFramesForImport) ? props.availableFramesForImport : []
+    const byId = new Map<string, FrameCandidate>()
+
+    source.forEach((item: any, index: number) => {
+        const id = String(item?.id || '').trim() || `frame-${index + 1}`
+        if (byId.has(id)) return
+        const name = String(item?.name || '').trim() || `Frame ${index + 1}`
+        const left = Number(item?.left)
+        const top = Number(item?.top)
+        byId.set(id, {
+            id,
+            name,
+            left: Number.isFinite(left) ? left : undefined,
+            top: Number.isFinite(top) ? top : undefined
+        })
+    })
+
+    const sorted = Array.from(byId.values())
+    sorted.sort((a, b) => {
+        const aTop = Number.isFinite(Number(a.top)) ? Number(a.top) : Number.POSITIVE_INFINITY
+        const bTop = Number.isFinite(Number(b.top)) ? Number(b.top) : Number.POSITIVE_INFINITY
+        if (aTop !== bTop) return aTop - bTop
+
+        const aLeft = Number.isFinite(Number(a.left)) ? Number(a.left) : Number.POSITIVE_INFINITY
+        const bLeft = Number.isFinite(Number(b.left)) ? Number(b.left) : Number.POSITIVE_INFINITY
+        if (aLeft !== bLeft) return aLeft - bLeft
+
+        return a.name.localeCompare(b.name)
+    })
+    return sorted
+})
+
+const orderedFrameIds = computed(() => availableFrames.value.map(frame => frame.id))
+const selectedFrameSet = computed(() => new Set(selectedFrameIds.value))
+const selectedFrames = computed(() => availableFrames.value.filter(frame => selectedFrameSet.value.has(frame.id)))
+const multiFrameImportCount = computed(() => Math.min(productRows.value.length, selectedFrameIds.value.length))
+const isProcessingProducts = computed(() => products.value.some((p: any) => p.status === 'processing'))
+const canUseMultiFrame = computed(() => availableFrames.value.length > 0)
+
+const setSelectedFrameIdsOrdered = (ids: string[]) => {
+    const wanted = new Set(
+        (Array.isArray(ids) ? ids : [])
+            .map(id => String(id || '').trim())
+            .filter(Boolean)
+    )
+    selectedFrameIds.value = orderedFrameIds.value.filter(id => wanted.has(id))
+}
+
+const getAssignedFrameId = (productId: string): string | null => {
+    const value = String(frameAssignmentsMap.value[String(productId) || ''] || '').trim()
+    return value || null
+}
+
+const reconcileFrameAssignments = (opts: { autofill?: boolean } = {}) => {
+    const productIds = productRows.value.map(row => row.productId)
+    const selectedSet = new Set(selectedFrameIds.value)
+    const next: Record<string, string | null> = {}
+    const used = new Set<string>()
+
+    productIds.forEach((productId) => {
+        const assigned = getAssignedFrameId(productId)
+        if (assigned && selectedSet.has(assigned) && !used.has(assigned)) {
+            next[productId] = assigned
+            used.add(assigned)
+            return
+        }
+        next[productId] = null
+    })
+
+    if (opts.autofill !== false) {
+        const queue = selectedFrameIds.value.filter(id => !used.has(id))
+        let cursor = 0
+        productIds.forEach((productId) => {
+            if (next[productId]) return
+            const candidate = queue[cursor]
+            if (!candidate) return
+            next[productId] = candidate
+            used.add(candidate)
+            cursor += 1
+        })
+    }
+
+    frameAssignmentsMap.value = next
+}
+
+const initializeMultiFrameState = () => {
+    setSelectedFrameIdsOrdered(orderedFrameIds.value)
+    frameAssignmentsMap.value = {}
+    reconcileFrameAssignments({ autofill: true })
+}
+
+const toggleFrameSelection = (frameId: string) => {
+    const id = String(frameId || '').trim()
+    if (!id) return
+    const next = new Set(selectedFrameIds.value)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedFrameIdsOrdered(Array.from(next))
+    reconcileFrameAssignments({ autofill: true })
+}
+
+const toggleSelectAllFrames = () => {
+    const all = orderedFrameIds.value
+    if (!all.length) {
+        selectedFrameIds.value = []
+        frameAssignmentsMap.value = {}
+        return
+    }
+    if (selectedFrameIds.value.length === all.length) {
+        selectedFrameIds.value = []
+    } else {
+        selectedFrameIds.value = [...all]
+    }
+    reconcileFrameAssignments({ autofill: true })
+}
+
+const isFrameAssignedElsewhere = (frameId: string, productId: string): boolean => {
+    const id = String(frameId || '').trim()
+    if (!id) return false
+    return productRows.value.some((row) => {
+        if (row.productId === productId) return false
+        return getAssignedFrameId(row.productId) === id
+    })
+}
+
+const setAssignmentForProduct = (productId: string, frameIdRaw: string) => {
+    const pid = String(productId || '').trim()
+    if (!pid) return
+
+    const frameId = String(frameIdRaw || '').trim() || null
+    const selectedSet = selectedFrameSet.value
+
+    if (!frameId || !selectedSet.has(frameId)) {
+        frameAssignmentsMap.value = { ...frameAssignmentsMap.value, [pid]: null }
+        reconcileFrameAssignments({ autofill: false })
+        return
+    }
+
+    const next = { ...frameAssignmentsMap.value }
+    Object.keys(next).forEach((otherProductId) => {
+        if (otherProductId !== pid && next[otherProductId] === frameId) {
+            next[otherProductId] = null
+        }
+    })
+    next[pid] = frameId
+    frameAssignmentsMap.value = next
+    reconcileFrameAssignments({ autofill: false })
+}
+
+const hasInvalidMultiFrameAssignments = computed(() => {
+    if (targetMode.value !== 'multi-frame') return false
+    if (multiFrameImportCount.value <= 0) return true
+    const selectedSet = selectedFrameSet.value
+    const used = new Set<string>()
+    let validAssignments = 0
+    for (const row of productRows.value) {
+        const frameId = getAssignedFrameId(row.productId)
+        if (!frameId || !selectedSet.has(frameId) || used.has(frameId)) continue
+        used.add(frameId)
+        validAssignments += 1
+    }
+    return validAssignments < multiFrameImportCount.value
+})
+
+const importButtonDisabled = computed(() => {
+    if (isProcessingProducts.value) return true
+    if (targetMode.value !== 'multi-frame') return false
+    if (!canUseMultiFrame.value) return true
+    if (selectedFrameIds.value.length === 0) return true
+    return hasInvalidMultiFrameAssignments.value
+})
+
+watch(targetMode, (mode, previous) => {
+    if (mode !== 'multi-frame') return
+    if (previous === 'multi-frame') return
+    initializeMultiFrameState()
+})
+
+watch(() => orderedFrameIds.value.join('|'), () => {
+    setSelectedFrameIdsOrdered(selectedFrameIds.value)
+    if (targetMode.value === 'multi-frame') {
+        if (selectedFrameIds.value.length === 0 && orderedFrameIds.value.length > 0) {
+            setSelectedFrameIdsOrdered(orderedFrameIds.value)
+        }
+        reconcileFrameAssignments({ autofill: true })
+    }
+})
+
+watch(() => productRows.value.map(row => row.productId).join('|'), () => {
+    if (targetMode.value === 'multi-frame') {
+        reconcileFrameAssignments({ autofill: true })
+    }
 })
 
 const normalizeText = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -393,6 +642,25 @@ const filteredProducts = computed(() => {
         return hay.includes(q)
     })
 })
+
+const selectedProductForAssetPicker = computed(() => {
+    const idx = Number(selectedProductIndex.value)
+    if (!Number.isInteger(idx) || idx < 0) return null
+    return products.value[idx] || null
+})
+
+const getAssetDisplayName = (asset: any): string => {
+    const explicit = String(asset?.name || '').trim()
+    if (explicit) return explicit
+    const keyLike = String(asset?.key || asset?.id || '').trim()
+    if (!keyLike) return 'Imagem sem nome'
+    const lastSegment = keyLike.split('/').pop() || keyLike
+    try {
+        return decodeURIComponent(lastSegment)
+    } catch {
+        return lastSegment
+    }
+}
 </script>
 
 <template>
@@ -475,7 +743,7 @@ const filteredProducts = computed(() => {
                         </div>
                     </div>
 
-                    <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-3">
                         <div v-if="props.showImportMode" class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10 bg-black/20">
                             <div class="min-w-0">
                                 <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Modo</div>
@@ -531,6 +799,113 @@ const filteredProducts = computed(() => {
                                     </option>
                                 </select>
                             </div>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10 bg-black/20">
+                            <div class="min-w-0">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Destino</div>
+                                <div class="text-[10px] text-zinc-500 truncate">
+                                    Escolha entre zona atual e multi-frame
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    class="h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all"
+                                    :class="targetMode === 'zone' ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
+                                    @click="targetMode = 'zone'"
+                                >
+                                    Zona atual
+                                </button>
+                                <button
+                                    type="button"
+                                    class="h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    :class="targetMode === 'multi-frame' ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
+                                    :disabled="!canUseMultiFrame"
+                                    @click="targetMode = 'multi-frame'"
+                                >
+                                    Multi-frame
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="targetMode === 'multi-frame'"
+                        class="mt-3 p-3 rounded-lg border border-white/10 bg-black/20 flex flex-col gap-3"
+                    >
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Frames selecionados</div>
+                                <div class="text-[10px] text-zinc-500">
+                                    Ordem automática: visual (topo para baixo, esquerda para direita)
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                class="text-[10px] text-zinc-300 border border-zinc-700 rounded px-2 py-1 hover:bg-white/5 transition-colors"
+                                @click="toggleSelectAllFrames"
+                            >
+                                {{ selectedFrameIds.length === orderedFrameIds.length && orderedFrameIds.length > 0 ? 'Desmarcar todos' : 'Selecionar todos' }}
+                            </button>
+                        </div>
+
+                        <div v-if="availableFrames.length > 0" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-28 overflow-y-auto custom-scrollbar pr-1">
+                            <label
+                                v-for="frame in availableFrames"
+                                :key="frame.id"
+                                class="flex items-center gap-2 text-xs text-zinc-300 border border-zinc-800 rounded px-2 py-1.5 hover:bg-white/5 cursor-pointer"
+                            >
+                                <input
+                                    type="checkbox"
+                                    class="accent-emerald-500"
+                                    :checked="selectedFrameSet.has(frame.id)"
+                                    @change="toggleFrameSelection(frame.id)"
+                                />
+                                <span class="truncate">{{ frame.name }}</span>
+                            </label>
+                        </div>
+                        <div v-else class="text-[11px] text-amber-300">
+                            Nenhum frame disponível na página ativa.
+                        </div>
+
+                        <div class="border border-zinc-800 rounded-md overflow-hidden">
+                            <div class="grid grid-cols-12 bg-zinc-900/70 text-[10px] uppercase tracking-widest text-zinc-500 px-2 py-1">
+                                <div class="col-span-6">Oferta</div>
+                                <div class="col-span-6">Frame destino</div>
+                            </div>
+                            <div class="max-h-36 overflow-y-auto custom-scrollbar divide-y divide-zinc-800">
+                                <div
+                                    v-for="row in productRows"
+                                    :key="row.productId"
+                                    class="grid grid-cols-12 px-2 py-1.5 items-center gap-2"
+                                >
+                                    <div class="col-span-6 min-w-0">
+                                        <div class="text-xs text-zinc-200 truncate">{{ row.product?.name || `Produto ${row.index + 1}` }}</div>
+                                    </div>
+                                    <div class="col-span-6">
+                                        <select
+                                            class="w-full h-7 bg-transparent border border-zinc-700 rounded px-2 text-[11px] text-zinc-200 focus:outline-none"
+                                            :value="getAssignedFrameId(row.productId) || ''"
+                                            @change="setAssignmentForProduct(row.productId, String(($event.target as HTMLSelectElement).value || ''))"
+                                        >
+                                            <option value="">(sem frame)</option>
+                                            <option
+                                                v-for="frame in selectedFrames"
+                                                :key="frame.id"
+                                                :value="frame.id"
+                                                :disabled="isFrameAssignedElsewhere(frame.id, row.productId)"
+                                            >
+                                                {{ frame.name }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-[11px] text-zinc-400">
+                            Serão importadas <span class="text-zinc-200 font-semibold">{{ multiFrameImportCount }}</span> ofertas (regra: mínimo entre ofertas e frames selecionados).
                         </div>
                     </div>
                 </div>
@@ -747,11 +1122,11 @@ const filteredProducts = computed(() => {
                             size="sm" 
                             @click="handleImport" 
                             class="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                            :disabled="products.some(p => p.status === 'processing')"
+                            :disabled="importButtonDisabled"
                         >
-                            <Loader2 v-if="products.some(p => p.status === 'processing')" class="w-3.5 h-3.5 mr-2 animate-spin" />
+                            <Loader2 v-if="isProcessingProducts" class="w-3.5 h-3.5 mr-2 animate-spin" />
                             <Check v-else class="w-3.5 h-3.5 mr-2" />
-                            Importar {{ products.length }} Produtos
+                            Importar {{ targetMode === 'multi-frame' ? multiFrameImportCount : products.length }} Produtos
                         </Button>
                     </div>
                 </div>
@@ -762,6 +1137,9 @@ const filteredProducts = computed(() => {
 
     <Dialog v-model="showAssetPicker" title="Selecionar imagem" width="720px">
         <div class="flex flex-col gap-3">
+            <div v-if="selectedProductForAssetPicker" class="text-xs text-zinc-400">
+                Produto: <span class="text-zinc-200 font-medium">{{ selectedProductForAssetPicker.name }}</span>
+            </div>
             <div class="flex items-center gap-2">
                 <Input
                     v-model="assetSearch"
@@ -785,10 +1163,17 @@ const filteredProducts = computed(() => {
                     <button
                         v-for="asset in filteredAssets"
                         :key="asset.id"
-                        class="aspect-square bg-zinc-800 rounded-lg overflow-hidden border border-zinc-700 hover:border-zinc-500 transition-all text-left"
+                        class="bg-zinc-800 rounded-lg overflow-hidden border border-zinc-700 hover:border-zinc-500 transition-all text-left"
                         @click="handleAssetSelect(asset)"
                     >
-                        <img :src="asset.url" crossorigin="anonymous" class="w-full h-full object-cover" />
+                        <div class="aspect-square">
+                            <img :src="asset.url" crossorigin="anonymous" class="w-full h-full object-cover" />
+                        </div>
+                        <div class="px-2 py-1.5 border-t border-zinc-700/80 bg-zinc-900/60">
+                            <p class="text-[10px] text-zinc-200 leading-tight line-clamp-2">
+                                {{ getAssetDisplayName(asset) }}
+                            </p>
+                        </div>
                     </button>
                 </div>
             </div>

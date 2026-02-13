@@ -2432,6 +2432,31 @@ const current = (prop: string, fallback: any = '') => {
   const val = typeof target.get === 'function' ? target.get(prop) : target[prop]
   const result = val ?? fallback
 
+  // ColorPicker expects string values. Fabric objects (gradients/patterns) can leak here
+  // and break prop validation/update cycle. Normalize them to a usable color string.
+  if (prop === 'fill' || prop === 'stroke') {
+    if (typeof result === 'string') {
+      const trimmed = result.trim()
+      if (!trimmed) return fallback
+      if (prop === 'stroke' && (trimmed === 'transparent' || trimmed === 'none')) {
+        return fallback || '#000000'
+      }
+      return trimmed
+    }
+
+    if (result && typeof result === 'object') {
+      const directColor = (result as any).color
+      if (typeof directColor === 'string' && directColor.trim()) {
+        return directColor.trim()
+      }
+      const stops = Array.isArray((result as any).colorStops) ? (result as any).colorStops : []
+      const firstStop = stops.find((s: any) => typeof s?.color === 'string' && s.color.trim())
+      if (firstStop?.color) return String(firstStop.color).trim()
+    }
+
+    return fallback
+  }
+
   // For stroke, if it's transparent/null/undefined, return a default visible color
   // This prevents the ColorPicker from starting with alpha=0 (invisible)
   if (prop === 'stroke' && (!result || result === 'transparent' || result === null)) {

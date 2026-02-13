@@ -1,6 +1,6 @@
 import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, getPublicUrl } from "../utils/s3";
-import { processImage, processImageStrict, downloadImage } from "../utils/image-processor";
+import { processImageStrict, downloadImage } from "../utils/image-processor";
 import { createSupabaseAdmin } from "../utils/supabase";
 import { createHash } from 'crypto';
 import { requireAuthenticatedUser } from "../utils/auth";
@@ -304,6 +304,17 @@ const buildDeterministicS3Key = (normalizedTerm: string): string => {
     const safeName = normalizedTerm.replace(/[^a-z0-9]/g, '-').substring(0, 50);
     const hash = termHash(normalizedTerm);
     return `imagens/smart-${safeName}-${hash}-${PROCESS_VERSION}.webp`;
+};
+
+// Chave canônica por arquivo de origem no bucket.
+// Evita duplicar a MESMA imagem com nomes diferentes quando ela já existe no banco/bucket.
+const buildSourceDerivedS3Key = (sourceKey: string): string => {
+    const normalizedSource = String(sourceKey || '')
+        .trim()
+        .replace(/^\/+/, '')
+        .toLowerCase();
+    const sourceHash = createHash('sha256').update(normalizedSource).digest('hex').substring(0, 16);
+    return `imagens/smart-src-${sourceHash}-${PROCESS_VERSION}.webp`;
 };
 
 const isProcessedSmartKey = (key: string): boolean => {
@@ -690,18 +701,23 @@ async function ensureBgRemoved(opts: {
         return { key: sourceKey, processed: false };
     }
 
+    // Canonical target based on source key (not search term) to avoid duplicated uploads
+    // with different names for the same underlying image.
+    const canonicalProcessedKey = buildSourceDerivedS3Key(sourceKey);
+    const targetProcessedKey = canonicalProcessedKey || deterministicKey;
+
     // Verificar se o key determinístico versionado (processado) já existe
-    const exists = await s3KeyExists(s3, bucketName, deterministicKey);
+    const exists = await s3KeyExists(s3, bucketName, targetProcessedKey);
     if (exists) {
-        console.log(`✅ [ensureBgRemoved] Key processado ${PROCESS_VERSION} já existe: "${deterministicKey}"`);
-        return { key: deterministicKey, processed: false };
+        console.log(`✅ [ensureBgRemoved] Key processado ${PROCESS_VERSION} já existe: "${targetProcessedKey}"`);
+        return { key: targetProcessedKey, processed: false };
     }
 
     const inFlight = ((ensureBgRemoved as any).__inFlight ||= new Map<string, Promise<{ key: string; processed: boolean } | null>>()) as Map<string, Promise<{ key: string; processed: boolean } | null>>;
-    const lockKey = `${bucketName}:${deterministicKey}`;
+    const lockKey = `${bucketName}:${targetProcessedKey}`;
     const ongoing = inFlight.get(lockKey);
     if (ongoing) {
-        console.log(`⏳ [ensureBgRemoved] Aguardando processamento em andamento para "${deterministicKey}"`);
+        console.log(`⏳ [ensureBgRemoved] Aguardando processamento em andamento para "${targetProcessedKey}"`);
         return await ongoing;
     }
 
@@ -709,18 +725,18 @@ async function ensureBgRemoved(opts: {
     const job = (async (): Promise<{ key: string; processed: boolean } | null> => {
         try {
             // Check again after lock acquisition to avoid race duplicating downloads/work.
-            const existsAfterLock = await s3KeyExists(s3, bucketName, deterministicKey);
+            const existsAfterLock = await s3KeyExists(s3, bucketName, targetProcessedKey);
             if (existsAfterLock) {
-                console.log(`✅ [ensureBgRemoved] Key criada por outro request: "${deterministicKey}"`);
+                console.log(`✅ [ensureBgRemoved] Key criada por outro request: "${targetProcessedKey}"`);
                 await saveToCacheDB({
                     searchTerm: normalizedTerm,
                     productName: term,
                     brand, flavor, weight,
-                    imageUrl: getPublicUrl(deterministicKey),
-                    s3Key: deterministicKey,
+                    imageUrl: getPublicUrl(targetProcessedKey),
+                    s3Key: targetProcessedKey,
                     source: 'internal-processed'
                 });
-                return { key: deterministicKey, processed: false };
+                return { key: targetProcessedKey, processed: false };
             }
 
             let rawBuffer: Buffer;
@@ -746,24 +762,24 @@ async function ensureBgRemoved(opts: {
 
             await s3.send(new PutObjectCommand({
                 Bucket: bucketName,
-                Key: deterministicKey,
+                Key: targetProcessedKey,
                 Body: processedBuffer,
                 ContentType: 'image/webp',
                 ACL: 'public-read'
             }));
 
-            console.log(`📤 [ensureBgRemoved] Imagem processada e salva: "${deterministicKey}" (${processedBuffer.length} bytes)`);
+            console.log(`📤 [ensureBgRemoved] Imagem processada e salva: "${targetProcessedKey}" (${processedBuffer.length} bytes)`);
 
             await saveToCacheDB({
                 searchTerm: normalizedTerm,
                 productName: term,
                 brand, flavor, weight,
-                imageUrl: getPublicUrl(deterministicKey),
-                s3Key: deterministicKey,
+                imageUrl: getPublicUrl(targetProcessedKey),
+                s3Key: targetProcessedKey,
                 source: 'internal-processed'
             });
 
-            return { key: deterministicKey, processed: true };
+            return { key: targetProcessedKey, processed: true };
         } catch (err) {
             console.error('⚠️ [ensureBgRemoved] Falha ao processar imagem:', (err as any)?.message, (err as any)?.stack?.split('\n').slice(0, 3).join(' | '));
             return null;
@@ -779,6 +795,34 @@ async function ensureBgRemoved(opts: {
 }
 
 const inFlightExternalPipeline = new Map<string, Promise<ProcessProductImageResponse>>();
+
+const findReusableCachedKeyByImageUrl = async (opts: {
+    imageUrl: string;
+    s3: any;
+    bucketName: string;
+}): Promise<string | null> => {
+    const imageUrl = String(opts.imageUrl || '').trim();
+    if (!imageUrl) return null;
+    try {
+        const supabase = createSupabaseAdmin();
+        const { data, error } = await (supabase.from as any)('product_image_cache')
+            .select('s3_key')
+            .eq('image_url', imageUrl)
+            .not('s3_key', 'is', null)
+            .limit(12);
+        if (error || !Array.isArray(data) || data.length === 0) return null;
+
+        for (const row of data) {
+            const candidate = String((row as any)?.s3_key || '').trim();
+            if (!candidate) continue;
+            const exists = await s3KeyExists(opts.s3, opts.bucketName, candidate);
+            if (exists) return candidate;
+        }
+    } catch (err) {
+        console.warn('⚠️ [Cache DB] Falha ao buscar reuso por image_url:', (err as any)?.message);
+    }
+    return null;
+};
 
 const runExternalPipelineOnce = async (opts: {
     s3: any;
@@ -799,6 +843,28 @@ const runExternalPipelineOnce = async (opts: {
     }
 
     const job = (async (): Promise<ProcessProductImageResponse> => {
+        // Reuso por URL da imagem já cacheada (evita novo upload do mesmo arquivo externo
+        // com outro nome/chave quando já existe no bucket).
+        const reusableByImageUrl = await findReusableCachedKeyByImageUrl({
+            imageUrl: opts.selectedImageUrl,
+            s3: opts.s3,
+            bucketName: opts.bucketName
+        });
+        if (reusableByImageUrl) {
+            console.log(`♻️ [External Pipeline] Reuso por image_url: "${reusableByImageUrl}"`);
+            await saveToCacheDB({
+                searchTerm: opts.normalizedTerm,
+                productName: opts.term,
+                brand: opts.brand,
+                flavor: opts.flavor,
+                weight: opts.weight,
+                imageUrl: getPublicUrl(reusableByImageUrl),
+                s3Key: reusableByImageUrl,
+                source: 'cache-image-url'
+            });
+            return { source: 'cache-image-url', url: proxyUrl(reusableByImageUrl) };
+        }
+
         const existsNow = await s3KeyExists(opts.s3, opts.bucketName, opts.deterministicKey);
         if (existsNow) {
             console.log(`✅ [S3 Guard] Key criada por outro request: "${opts.deterministicKey}"`);
@@ -821,8 +887,12 @@ const runExternalPipelineOnce = async (opts: {
             processedBuffer = await processImageStrict(rawBuffer);
             console.log('✅ [Serper] Background removido com sucesso');
         } catch (bgErr) {
-            console.warn('⚠️ [Serper] processImageStrict falhou, usando processImage normal:', (bgErr as any)?.message);
-            processedBuffer = await processImage(rawBuffer);
+            console.warn('⚠️ [Serper] processImageStrict falhou, mantendo imagem original otimizada:', (bgErr as any)?.message);
+            const sharp = (await import('sharp')).default;
+            processedBuffer = await sharp(rawBuffer)
+                .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+                .webp({ quality: 85 })
+                .toBuffer();
         }
 
         await opts.s3.send(new PutObjectCommand({

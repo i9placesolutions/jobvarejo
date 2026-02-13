@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, defineAsyncComponent } from 'vue'
+import { ref, nextTick, defineAsyncComponent } from 'vue'
 import { useProject } from '~/composables/useProject'
 import { Search, Plus, FileText, Copy, Trash2, Box, ChevronDown, Menu } from 'lucide-vue-next'
 
 const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
 const ElementsPanel = defineAsyncComponent(() => import('./ElementsPanel.vue'))
 
-const { project, activePage, switchPage, addPage, duplicatePage, deletePage } = useProject()
+const { project, activePage, switchPage, addPage, duplicatePage, deletePage, renamePage } = useProject()
 
 const emit = defineEmits<{
     (e: 'insert-asset', asset: any): void
@@ -24,6 +24,35 @@ const assetsSubTab = ref<AssetsSubTab>('elements')
 
 const createPage = (preset: string) => {
     addPage('RETAIL_OFFER', 1080, 1920, `Page ${project.pages.length + 1}`);
+}
+
+const editingPageId = ref<string | null>(null)
+const editingPageName = ref('')
+const pageNameInputRef = ref<HTMLInputElement | null>(null)
+
+const startPageRename = async (index: number) => {
+    const page = project.pages[index]
+    if (!page) return
+    editingPageId.value = String(page.id)
+    editingPageName.value = String(page.name || '')
+    await nextTick()
+    pageNameInputRef.value?.focus()
+    pageNameInputRef.value?.select()
+}
+
+const cancelPageRename = () => {
+    editingPageId.value = null
+    editingPageName.value = ''
+}
+
+const commitPageRename = (index: number) => {
+    const page = project.pages[index]
+    if (!page || !editingPageId.value || String(page.id) !== editingPageId.value) {
+        cancelPageRename()
+        return
+    }
+    renamePage(index, editingPageName.value)
+    cancelPageRename()
 }
 </script>
 
@@ -106,12 +135,29 @@ const createPage = (preset: string) => {
                      class="flex items-center h-8 px-2 gap-2 cursor-pointer group transition-all rounded-lg"
                      :class="index === project.activePageIndex ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-zinc-400'"
                      @click="switchPage(index)"
+                     @dblclick.stop="startPageRename(index)"
                    >
                      <FileText class="w-3.5 h-3.5 opacity-70 shrink-0" />
-                     <span class="text-xs font-medium truncate flex-1">{{ page.name }}</span>
+                     <input
+                       v-if="editingPageId === page.id"
+                       ref="pageNameInputRef"
+                       v-model="editingPageName"
+                       type="text"
+                       class="text-xs font-medium flex-1 h-6 bg-transparent border border-white/20 rounded px-1.5 outline-none focus:border-violet-400"
+                       @click.stop
+                       @dblclick.stop
+                       @keydown.enter.prevent="commitPageRename(index)"
+                       @keydown.escape.prevent="cancelPageRename()"
+                       @blur="commitPageRename(index)"
+                     />
+                     <span
+                       v-else
+                       class="text-xs font-medium truncate flex-1"
+                       :title="page.name"
+                     >{{ page.name }}</span>
                      
                      <!-- Actions (Hover) -->
-                     <div class="hidden group-hover:flex items-center gap-0.5 ml-auto">
+                     <div v-if="editingPageId !== page.id" class="hidden group-hover:flex items-center gap-0.5 ml-auto">
                        <button @click.stop="duplicatePage(index)" title="Duplicar" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all"><Copy class="w-3 h-3" /></button>
                        <button @click.stop="deletePage(index)" title="Excluir" class="w-6 h-6 hover:bg-red-500/10 rounded flex items-center justify-center text-zinc-400 hover:text-red-400 transition-all"><Trash2 class="w-3 h-3" /></button>
                      </div>

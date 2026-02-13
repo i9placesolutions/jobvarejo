@@ -113,6 +113,17 @@ const isProductCard = computed(() => {
   return obj.type === 'group' && (obj.isSmartObject || obj.isProductCard || String(obj.name || '').startsWith('product-card'))
 })
 
+const isChildInsideProductCard = computed(() => {
+  const obj: any = props.selectedObject
+  const parent = obj?.group
+  if (!parent) return false
+  return parent.type === 'group' && (parent.isSmartObject || parent.isProductCard || String(parent.name || '').startsWith('product-card'))
+})
+
+const canReplaceProductCardImage = computed(() => {
+  return isProductCard.value || isChildInsideProductCard.value
+})
+
 // Helper to get the background element of a ProductCard/SmartGroup for styling
 const getBackgroundElement = computed(() => {
   const obj = props.selectedObject
@@ -371,6 +382,57 @@ const focusedInput = ref<string | null>(null)
 // Helper to safely get value
 const getVal = (prop: string, defaultVal: any = '') => props.selectedObject ? (props.selectedObject[prop] ?? defaultVal) : defaultVal
 
+const textSelectionActive = computed(() => {
+  if (!isText.value) return false
+  return !!(props.selectedObject as any)?.__textSelectionActive
+})
+
+const textFillMixed = computed(() => {
+  if (!textSelectionActive.value) return false
+  return !!(props.selectedObject as any)?.__textFillMixed
+})
+
+const textFillValue = computed(() => {
+  const selectionVal = (props.selectedObject as any)?.__textFillValue
+  if (textSelectionActive.value && typeof selectionVal === 'string' && selectionVal.trim().length) {
+    return selectionVal
+  }
+  return String(getVal('fill', '#000000') || '#000000')
+})
+
+const fillControlValue = computed(() => textFillValue.value)
+const fillHexInputValue = computed(() => textFillMixed.value ? '' : fillControlValue.value.toString().replace('#', '').toUpperCase())
+const fillHexInputPlaceholder = computed(() => textFillMixed.value ? 'MISTO' : '1E1E1E')
+
+const textFontSizeMixed = computed(() => {
+  if (!textSelectionActive.value) return false
+  return !!(props.selectedObject as any)?.__textFontSizeMixed
+})
+
+const textFontSizeValue = computed(() => {
+  const selectionVal = Number((props.selectedObject as any)?.__textFontSizeValue)
+  if (textSelectionActive.value && Number.isFinite(selectionVal) && selectionVal > 0) {
+    return selectionVal
+  }
+  const base = Number(getVal('fontSize', 20))
+  return Number.isFinite(base) && base > 0 ? base : 20
+})
+
+const fontSizeInputValue = computed(() => textFontSizeMixed.value ? '' : String(Math.round(textFontSizeValue.value)))
+const fontSizeInputPlaceholder = computed(() => textFontSizeMixed.value ? 'MISTO' : '')
+
+const handleFillHexChange = (raw: any) => {
+  const cleaned = String(raw ?? '').replace('#', '').trim()
+  if (!cleaned) return
+  emit('update-property', 'fill', `#${cleaned}`)
+}
+
+const handleFontSizeChange = (raw: any) => {
+  const next = Number(String(raw ?? '').replace(',', '.').trim())
+  if (!Number.isFinite(next) || next <= 0) return
+  emit('update-property', 'fontSize', next)
+}
+
 // Safe getters for Fabric.js methods (defined early for use in computed)
 const getScaledWidth = () => {
   if (!props.selectedObject) return 0
@@ -465,7 +527,7 @@ const handlePageOpacityChange = (opacity: number) => {
 
 const handleAddColorStyle = () => {
   // Use selected object's fill color if available, otherwise use page background
-  const colorToAdd = props.selectedObject && getVal('fill') ? getVal('fill') : getPageColorHex()
+  const colorToAdd = props.selectedObject ? fillControlValue.value : getPageColorHex()
   emit('add-color-style', colorToAdd)
 }
 
@@ -905,7 +967,13 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </select>
               <div class="flex items-center bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6">
                   <span class="text-[9px] text-zinc-500 mr-1" title="Tamanho da fonte">Tam</span>
-                  <input type="number" :value="getVal('fontSize', 20)" @input="e => $emit('update-property', 'fontSize', Number((e.target as any).value))" class="bg-transparent w-full text-[11px] text-white focus:outline-none" />
+                  <input
+                    type="text"
+                    :value="fontSizeInputValue"
+                    :placeholder="fontSizeInputPlaceholder"
+                    @input="e => handleFontSizeChange((e.target as any).value)"
+                    class="bg-transparent w-full text-[11px] text-white focus:outline-none"
+                  />
               </div>
           </div>
 
@@ -1004,23 +1072,24 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               >
                 <div 
                   class="w-5 h-5 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
-                  :style="{ backgroundColor: getVal('fill', '#000000') }"
+                  :style="{ backgroundColor: fillControlValue }"
                   @click="showFillColorPicker = true"
                 ></div>
                 <ColorPicker
                   :show="showFillColorPicker"
-                  :model-value="getVal('fill', '#000000')"
+                  :model-value="fillControlValue"
                   :trigger-element="fillColorPickerRef"
                   @update:show="showFillColorPicker = $event"
                   @update:model-value="(val: string) => $emit('update-property', 'fill', val)"
                 />
               </div>
+              <div v-if="textFillMixed" class="text-[9px] text-amber-400 font-bold uppercase tracking-widest shrink-0">MISTO</div>
               <input 
                 type="text" 
-                :value="getVal('fill', '#000000').toString().replace('#', '').toUpperCase()" 
-                @change="e => $emit('update-property', 'fill', '#' + (e.target as any).value.replace('#', ''))" 
+                :value="fillHexInputValue" 
+                @change="e => handleFillHexChange((e.target as any).value)" 
                 class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-violet-500/50 uppercase min-w-0" 
-                placeholder="1E1E1E"
+                :placeholder="fillHexInputPlaceholder"
                 maxlength="6"
               />
               <input 
@@ -1034,7 +1103,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <!-- Ações de Gradiente -->
           <div class="flex justify-between items-center">
              <div class="text-[9px] text-violet-400 cursor-pointer hover:underline" @click="$emit('update-property', 'fill-gradient', 'linear')">Usar Gradiente</div>
-             <button class="text-[9px] text-zinc-500 hover:text-white" @click="$emit('add-color-style', getVal('fill', '#000000'))">+ Estilo</button>
+             <button class="text-[9px] text-zinc-500 hover:text-white" @click="$emit('add-color-style', fillControlValue)">+ Estilo</button>
           </div>
           
           <!-- Color Styles List -->
@@ -1491,7 +1560,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	              </div>
 
 	              <!-- Image-only effects -->
-	              <div v-if="canRemoveImageBg" class="bg-[#1e1e1e] border border-white/10 rounded-lg p-2 space-y-2">
+              <div v-if="canRemoveImageBg || canReplaceProductCardImage" class="bg-[#1e1e1e] border border-white/10 rounded-lg p-2 space-y-2">
 	                  <div class="flex items-center justify-between">
 	                      <div class="flex items-center gap-2">
 	                          <Scan class="w-3 h-3 text-pink-300" />
@@ -1507,14 +1576,52 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                            <Sparkles class="w-2.5 h-2.5" />
 	                            IA
 	                          </button>
-	                          <button
-	                            type="button"
-	                            @click="$emit('action', 'remove-image-bg')"
-	                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
-	                            title="Remover fundo da imagem"
-	                          >
-	                            Fundo
-	                          </button>
+                          <button
+                            v-if="canReplaceProductCardImage"
+                            type="button"
+                            @click="$emit('action', 'replace-product-image-upload')"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            title="Substituir imagem usando uploads"
+                          >
+                            Upload
+                          </button>
+                          <button
+                            v-if="canReplaceProductCardImage"
+                            type="button"
+                            @click="$emit('action', 'replace-product-image')"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            title="Substituir imagem por arquivo local"
+                          >
+                            Arquivo
+                          </button>
+                          <button
+                            v-if="canReplaceProductCardImage"
+                            type="button"
+                            @click="$emit('action', 'add-product-image-upload')"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            title="Adicionar imagem do upload mantendo a atual"
+                          >
+                            +Upload
+                          </button>
+                          <button
+                            v-if="canReplaceProductCardImage"
+                            type="button"
+                            @click="$emit('action', 'add-product-image-local')"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            title="Adicionar arquivo local mantendo a imagem atual"
+                          >
+                            +Arquivo
+                          </button>
+                          <button
+                            type="button"
+                            @click="$emit('action', 'remove-image-bg')"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            title="Remover fundo da imagem"
+                            :disabled="!canRemoveImageBg"
+                            :class="{ 'opacity-50 cursor-not-allowed': !canRemoveImageBg }"
+                          >
+                            Fundo
+                          </button>
 	                      </div>
 	                  </div>
 

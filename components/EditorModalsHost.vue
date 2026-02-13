@@ -2,6 +2,18 @@
 import { defineAsyncComponent } from 'vue'
 import type { LabelTemplate } from '~/types/label-template'
 
+type ImportTargetMode = 'zone' | 'multi-frame'
+type FrameAssignment = { productId: string; frameId: string | null }
+type ProductImportOptions = {
+  mode?: 'replace' | 'append'
+  labelTemplateId?: string
+  targetMode?: ImportTargetMode
+  selectedFrameIds?: string[]
+  frameAssignments?: FrameAssignment[]
+  countRule?: 'min'
+  cardsPerFrame?: 1
+}
+
 const SaveProjectDialog = defineAsyncComponent(() => import('./SaveProjectDialog.vue'))
 const LabelTemplatesDialog = defineAsyncComponent(() => import('./LabelTemplatesDialog.vue'))
 const AIPromptDialog = defineAsyncComponent(() => import('./AIPromptDialog.vue'))
@@ -37,6 +49,7 @@ defineProps<{
   showExportModal: boolean
   exportSettings: any
   availableFramesForExport: any[]
+  availableFramesForImport: any[]
   showShareModal: boolean
   shareSettings: any
   showPresentationModal: boolean
@@ -75,7 +88,7 @@ const emit = defineEmits<{
   (e: 'update:showDeletePageModal', value: boolean): void
   (e: 'confirm-delete-page'): void
   (e: 'update:showProductReviewModal', value: boolean): void
-  (e: 'import-products', products: any[]): void
+  (e: 'import-products', products: any[], opts?: ProductImportOptions): void
   (e: 'update:showExportModal', value: boolean): void
   (e: 'export'): void
   (e: 'update:showShareModal', value: boolean): void
@@ -159,8 +172,9 @@ const emit = defineEmits<{
     :existing-count="productImportExistingCount"
     :label-templates="labelTemplates"
     :initial-label-template-id="importZoneLabelTemplateId"
+    :available-frames-for-import="availableFramesForImport"
     @update:model-value="emit('update:showProductReviewModal', $event)"
-    @import="emit('import-products', $event)"
+    @import="(products, opts) => emit('import-products', products, opts)"
   />
 
   <ExportDialog

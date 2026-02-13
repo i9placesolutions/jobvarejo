@@ -286,6 +286,13 @@ watch(() => auth.user.value, (newUser) => {
   }
 })
 
+// Prevent stale folder filter from hiding all projects when user switches view.
+watch(activeView, (view) => {
+  if (view !== 'all' && activeFolderId.value) {
+    setActiveFolder(null)
+  }
+})
+
 // Computed: Folder tree with expansion state
 type FolderTreeNode = FolderModel & {
   children: FolderTreeNode[]
@@ -372,7 +379,7 @@ const filteredProjects = computed(() => {
     result = viewProjects.value.filter(p =>
       p.name?.toLowerCase().includes(searchQuery.value.toLowerCase())
     )
-  } else if (activeFolderId.value) {
+  } else if (activeFolderId.value && activeView.value === 'all') {
     // Filter by folder
     const folderIds = [activeFolderId.value]
     const getFolderTreeIds = (folderId: string): string[] => {

@@ -39,6 +39,10 @@ import {
 const isDrawing = ref(false)
 const isNodeEditing = ref(false)
 const isPenMode = ref(false) // Pen Tool mode (vector path creation)
+const fileInput = ref<HTMLInputElement | null>(null)
+const pendingImageReplaceTargetId = ref<string | null>(null)
+const pendingImageAddCardId = ref<string | null>(null)
+const pendingLocalImageActionMode = ref<'replace' | 'add' | null>(null)
 const penPathPoints = ref<Array<{x: number, y: number, handles?: {in: {x: number, y: number}, out: {x: number, y: number}}}>>([])
 const currentPenPath = ref<any>(null) // Current path being created
 const currentPenPoint = ref<any>(null) // Current point circle
@@ -67,6 +71,11 @@ const aiStudio = useAiImageStudio()
 const aiStudioOpen = aiStudio.open
 const aiStudioOptions = aiStudio.options
 const aiStudioUploads = ref<Array<{ id: string; name: string; url: string }>>([])
+const showProductImageUploadPicker = ref(false)
+const productImagePickerMode = ref<'replace' | 'add'>('replace')
+const productImagePickerSearch = ref('')
+const productImagePickerTargetImageId = ref<string | null>(null)
+const productImagePickerTargetCardId = ref<string | null>(null)
 
 // === Figma-style Crop Overlay ===
 const figmaCrop = useFigmaCrop()
@@ -106,6 +115,22 @@ const refreshAiStudioUploads = async () => {
     }
 }
 
+const normalizeImageSearch = (value: string) => String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+const filteredProductImageUploads = computed(() => {
+    const list = Array.isArray(aiStudioUploads.value) ? aiStudioUploads.value : [];
+    const q = normalizeImageSearch(productImagePickerSearch.value);
+    if (!q) return list;
+    return list.filter((item: any) => {
+        const hay = normalizeImageSearch(`${item?.name || ''} ${item?.id || ''} ${item?.url || ''}`);
+        return hay.includes(q);
+    });
+});
+
 const guessAiSizeFromObject = (obj: any): '1024x1024' | '1024x1536' | '1536x1024' => {
     const w = Math.max(1, Number(obj?.getScaledWidth?.() ?? ((obj?.width || 1) * (obj?.scaleX || 1))) || 1)
     const h = Math.max(1, Number(obj?.getScaledHeight?.() ?? ((obj?.height || 1) * (obj?.scaleY || 1))) || 1)
@@ -126,6 +151,54 @@ const findImageTargetInSelection = (obj: any): { img: any; parent: any | null } 
     }
     return null
 }
+
+const getPreferredProductImageFromGroup = (group: any): any | null => {
+    if (!group || typeof group.getObjects !== 'function') return null;
+    const list = group.getObjects() || [];
+    const preferred = list.find((o: any) => {
+        if (String(o?.type || '').toLowerCase() !== 'image') return false;
+        const n = String(o?.name || '').trim();
+        return n === 'smart_image' || n === 'product_image' || n === 'productImage';
+    });
+    if (preferred) return preferred;
+    return list.find((o: any) => String(o?.type || '').toLowerCase() === 'image') || null;
+};
+
+const resolveSelectedProductCardContext = (active: any): { card: any | null; image: any | null } => {
+    if (!active) return { card: null, image: null };
+
+    if (isProductCardContainer(active)) {
+        return { card: active, image: getPreferredProductImageFromGroup(active) };
+    }
+
+    const t = String(active.type || '').toLowerCase();
+    if (t === 'image') {
+        const parentCard = findProductCardParentGroup(active);
+        return { card: parentCard, image: active };
+    }
+
+    const directParentCard = findProductCardParentGroup(active);
+    if (directParentCard) {
+        return { card: directParentCard, image: t === 'image' ? active : getPreferredProductImageFromGroup(directParentCard) };
+    }
+
+    if (t === 'activeselection' && typeof active.getObjects === 'function') {
+        const list = active.getObjects() || [];
+        for (const member of list) {
+            if (isProductCardContainer(member)) {
+                return { card: member, image: getPreferredProductImageFromGroup(member) };
+            }
+            const card = findProductCardParentGroup(member);
+            if (card) {
+                const mt = String(member?.type || '').toLowerCase();
+                const image = mt === 'image' ? member : getPreferredProductImageFromGroup(card);
+                return { card, image };
+            }
+        }
+    }
+
+    return { card: null, image: null };
+};
 
 /**
  * Safe wrapper for requestRenderAll that checks if canvas is valid before rendering.
@@ -561,6 +634,7 @@ const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
 const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
 const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
 const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
+const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur']
 
@@ -645,6 +719,7 @@ const ensureLabelTemplatesReady = async () => {
     await loadLabelTemplatesFromDb();
     await ensureBuiltInDefaultLabelTemplate();
     await ensureBuiltInBlackYellowLabelTemplate();
+    await ensureBuiltInRedBurstLabelTemplate();
     await ensureBuiltInAtacarejoLabelTemplate();
 
     // Generate missing previews lazily (not persisted in the project JSON).
@@ -3396,7 +3471,16 @@ const setupAltDragDuplicate = () => {
         original.setCoords?.();
 
         // Clone via Fabric's native clone
-        const CLONE_PROPS = ['_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'name', 'smartGridId', 'unitLabel', 'price', 'pricePack', 'priceUnit', 'priceSpecial', 'priceSpecialUnit', 'specialCondition', 'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel', 'unit', 'limit', '_productData', '_cardWidth', '_cardHeight', 'subTargetCheck', 'interactive'];
+        const CLONE_PROPS = [
+            '_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId',
+            'isSmartObject', 'isProductCard', 'name', 'smartGridId', 'unitLabel',
+            'price', 'pricePack', 'priceUnit', 'priceSpecial', 'priceSpecialUnit', 'specialCondition',
+            'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel',
+            'unit', 'limit', '_productData', '_cardWidth', '_cardHeight', 'subTargetCheck', 'interactive',
+            '__preserveManualLayout', '__isCustomTemplate', '__forceAtacarejoCanonical',
+            '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale',
+            '__atacValueVariants', '__atacVariantGroups'
+        ];
 
         const doClone = async () => {
             let cloned: any = null;
@@ -4663,6 +4747,212 @@ const canvasObjects = shallowRef<any[]>([]) // Reactive list (shallow for perfor
 const selectedObjectId = ref<string | null>(null)
 const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
 
+const isTextStyleObject = (obj: any): boolean => {
+    const t = String(obj?.type || '').toLowerCase();
+    return t === 'i-text' || t === 'textbox' || t === 'text';
+};
+
+const getTextSelectionRange = (obj: any): { start: number; end: number; length: number } | null => {
+    if (!isTextStyleObject(obj)) return null;
+    const startRaw = Number(obj?.selectionStart);
+    const endRaw = Number(obj?.selectionEnd);
+    const textLength = String(obj?.text ?? '').length;
+    const start = Number.isFinite(startRaw) ? Math.max(0, Math.min(Math.floor(startRaw), textLength)) : 0;
+    const end = Number.isFinite(endRaw) ? Math.max(0, Math.min(Math.floor(endRaw), textLength)) : start;
+    if (end <= start) return null;
+    return { start, end, length: end - start };
+};
+
+const getTextSelectionSnapshotMeta = (obj: any): Record<string, any> => {
+    if (!isTextStyleObject(obj)) {
+        return {
+            __textSelectionActive: false,
+            __textSelectionStart: null,
+            __textSelectionEnd: null,
+            __textFillValue: null,
+            __textFillMixed: false,
+            __textFontSizeValue: null,
+            __textFontSizeMixed: false
+        };
+    }
+
+    const range = getTextSelectionRange(obj);
+    const baseFill = String(obj?.fill || '#000000');
+    const baseFontSize = Number(obj?.fontSize);
+    const defaultFontSize = Number.isFinite(baseFontSize) && baseFontSize > 0 ? baseFontSize : 20;
+
+    const meta = {
+        __textSelectionActive: !!range,
+        __textSelectionStart: range?.start ?? null,
+        __textSelectionEnd: range?.end ?? null,
+        __textFillValue: baseFill,
+        __textFillMixed: false,
+        __textFontSizeValue: defaultFontSize,
+        __textFontSizeMixed: false
+    } as Record<string, any>;
+
+    if (!range || typeof obj?.getSelectionStyles !== 'function') return meta;
+
+    let styles: any[] = [];
+    try {
+        styles = obj.getSelectionStyles(range.start, range.end, true) || [];
+    } catch {
+        styles = [];
+    }
+    if (!Array.isArray(styles) || styles.length === 0) return meta;
+
+    const normalizeFill = (input: any): string => {
+        if (typeof input === 'string' && input.trim().length > 0) return input.trim();
+        return baseFill;
+    };
+    const normalizeFontSize = (input: any): number => {
+        const n = Number(input);
+        if (Number.isFinite(n) && n > 0) return n;
+        return defaultFontSize;
+    };
+
+    const fills = styles.map((style: any) => normalizeFill(style?.fill));
+    const fontSizes = styles.map((style: any) => normalizeFontSize(style?.fontSize));
+    const firstFill = fills[0];
+    const firstFontSize = fontSizes[0];
+
+    meta.__textFillMixed = fills.some((value) => value !== firstFill);
+    meta.__textFillValue = firstFill;
+    meta.__textFontSizeMixed = fontSizes.some((value) => value !== firstFontSize);
+    meta.__textFontSizeValue = firstFontSize;
+    return meta;
+};
+
+const replaceObjectInContext = (original: any, replacement: any): boolean => {
+    if (!canvas.value || !original || !replacement) return false;
+
+    const parent = original.group;
+    if (parent && typeof parent.getObjects === 'function') {
+        const siblings = parent.getObjects() || [];
+        const index = siblings.indexOf(original);
+        try { parent.remove?.(original); } catch {}
+        if (typeof (parent as any).insertAt === 'function' && index >= 0) {
+            (parent as any).insertAt(index, replacement);
+        } else {
+            parent.add?.(replacement);
+        }
+        safeAddWithUpdate(parent);
+        parent.setCoords?.();
+        return true;
+    }
+
+    const objects = canvas.value.getObjects();
+    const index = objects.indexOf(original);
+    try { canvas.value.remove(original); } catch {}
+    if (typeof (canvas.value as any).insertAt === 'function' && index >= 0) {
+        (canvas.value as any).insertAt(index, replacement);
+    } else {
+        canvas.value.add(replacement);
+    }
+    return true;
+};
+
+const convertStaticTextToIText = (obj: any): any => {
+    if (!canvas.value || !fabric?.IText || String(obj?.type || '').toLowerCase() !== 'text') return obj;
+
+    const includeProps = Array.from(
+        new Set<string>([
+            ...((Array.isArray(CANVAS_CUSTOM_PROPS) ? CANVAS_CUSTOM_PROPS : []) as any),
+            'data',
+            'styles'
+        ])
+    );
+
+    const serialized = typeof obj?.toObject === 'function'
+        ? obj.toObject(includeProps as any)
+        : null;
+
+    const textValue = String(serialized?.text ?? obj?.text ?? '');
+    const options: any = { ...(serialized || {}) };
+    delete options.type;
+    delete options.version;
+    delete options.canvas;
+    delete options.group;
+    delete options.clipPath;
+    delete options._objects;
+    delete options.objects;
+
+    let next: any = null;
+    try {
+        next = new fabric.IText(textValue, options);
+    } catch (e) {
+        console.warn('[rich-text] Falha ao converter text -> i-text:', e);
+        return obj;
+    }
+
+    if (obj?.styles && !next.styles) {
+        try {
+            next.styles = JSON.parse(JSON.stringify(obj.styles));
+        } catch {
+            next.styles = obj.styles;
+        }
+    }
+
+    // Preserve runtime metadata that may not survive constructor options.
+    try {
+        ((CANVAS_CUSTOM_PROPS as unknown as string[]) || []).forEach((key: string) => {
+            if (obj?.[key] !== undefined) (next as any)[key] = obj[key];
+        });
+    } catch {
+        // ignore
+    }
+    ['data', 'visible', 'evented', 'selectable', 'hasControls', 'hasBorders', 'hoverCursor', 'moveCursor', 'excludeFromExport'].forEach((key) => {
+        if (obj?.[key] !== undefined) (next as any)[key] = obj[key];
+    });
+
+    const replaced = replaceObjectInContext(obj, next);
+    if (!replaced) return obj;
+
+    next.initDimensions?.();
+    next.setCoords?.();
+    if (next.parentFrameId) {
+        try { syncObjectFrameClip(next); } catch {}
+    }
+
+    try {
+        canvas.value.setActiveObject(next);
+    } catch {
+        try {
+            if (next.group) canvas.value.setActiveObject(next.group);
+        } catch {}
+    }
+    canvas.value.requestRenderAll();
+    canvasObjects.value = [...canvas.value.getObjects()];
+    return next;
+};
+
+const applySelectionTextStyle = (obj: any, prop: 'fill' | 'fontSize', value: any): boolean => {
+    const range = getTextSelectionRange(obj);
+    if (!range || typeof obj?.setSelectionStyles !== 'function') return false;
+
+    const patch: Record<string, any> = {};
+    if (prop === 'fill') patch.fill = value;
+    if (prop === 'fontSize') {
+        const nextSize = Number(value);
+        if (!Number.isFinite(nextSize) || nextSize <= 0) return false;
+        patch.fontSize = nextSize;
+    }
+    if (!Object.keys(patch).length) return false;
+
+    try {
+        obj.setSelectionStyles(patch, range.start, range.end);
+    } catch {
+        return false;
+    }
+
+    obj.initDimensions?.();
+    obj.setCoords?.();
+    obj.dirty = true;
+    if (obj.group) safeAddWithUpdate(obj.group);
+    else safeAddWithUpdate(obj);
+    return true;
+};
+
 /** Create a stable snapshot for the PropertiesPanel (keeps non-enumerable fields like `type`). */
 const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>) => {
     if (!obj) return obj;
@@ -4707,6 +4997,8 @@ const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>) => {
     if (obj._objects != null) snap._objects = obj._objects;
     // Preserve getObjects method reference for PropertiesPanel zone detection
     if (typeof obj.getObjects === 'function') snap.getObjects = () => obj.getObjects();
+    // Preserve text-selection derived metadata for partial rich-text editing controls.
+    Object.assign(snap, getTextSelectionSnapshotMeta(obj));
 
     // CRITICAL: If the real Fabric object is a product zone (detected by ANY method including
     // strokeDashArray fallback), ALWAYS ensure zone flags are set on the snapshot.
@@ -4954,6 +5246,24 @@ const showProductReviewModal = ref(false)
 const reviewProducts = ref<any[]>([])
 const productImportExistingCount = ref(0)
 const targetGridZone = ref<any>(null) // Reference to the Grid Zone that was double-clicked
+
+type ImportTargetMode = 'zone' | 'multi-frame'
+type FrameAssignment = { productId: string; frameId: string | null }
+type ProductImportOptions = {
+    mode?: 'replace' | 'append'
+    labelTemplateId?: string
+    targetMode?: ImportTargetMode
+    selectedFrameIds?: string[]
+    frameAssignments?: FrameAssignment[]
+    countRule?: 'min'
+    cardsPerFrame?: 1
+}
+
+type SmartGridRunOptions = {
+    mode?: 'replace' | 'append'
+    labelTemplateId?: string
+    persist?: boolean
+}
 
 const isPriceGroupOrPriceChild = (obj: any): boolean => {
     if (!obj) return false;
@@ -5235,6 +5545,22 @@ const availableFramesForExport = computed(() => {
     });
 
     return Array.from(byId.values());
+})
+
+const availableFramesForImport = computed(() => {
+    const frames = availableFramesForExport.value || []
+    return frames.map((frame: any, index: number) => {
+        const id = String(frame?.id || '').trim() || `frame-${index + 1}`
+        const name = String(frame?.name || '').trim() || `Frame ${index + 1}`
+        const runtime = getFrameById(id)
+        const bounds = runtime ? getFrameBounds(runtime) : null
+        return {
+            id,
+            name,
+            left: bounds?.left,
+            top: bounds?.top
+        }
+    })
 })
 
 const selectedFrameForExport = computed(() => {
@@ -5655,7 +5981,7 @@ const renderProducts = (products: any[]) => {
 watch(activePage, async (newPage, oldPage) => {
     if (!canvas.value || !fabric) return;
     if (!newPage) return;
-    if (oldPage && newPage.id === oldPage.id) return;
+    if (oldPage && newPage === oldPage) return;
     if (!isProjectLoaded.value && project.id && !project.id.startsWith('proj_')) return;
 
     const loadSessionId = ++activePageLoadSessionId;
@@ -5721,72 +6047,17 @@ watch(activePage, async (newPage, oldPage) => {
 	                    console.warn('⚠️ Erro ao carregar imagem durante loadFromJSON:', imageLoadErr);
 	                    console.warn('   Tentando gerar novas URLs presignadas para imagens da Contabo...');
 
-	                    // IMPORTANT: Use the pre-processed canvasDataToLoad instead of newPage.canvasData
-	                    const safeCanvasData = prepareCanvasDataForLoad(canvasDataToLoad);
-	                    if (safeCanvasData?.objects && Array.isArray(safeCanvasData.objects)) {
-	                        const imagesToUpdate: any[] = [];
-	                        
-	                        // Find all Contabo images and generate new presigned URLs
-	                        for (const obj of safeCanvasData.objects) {
-	                            const src = obj?.src;
-	                            const objType = (obj?.type || '').toLowerCase();
-	                            const isImage = objType === 'image' && typeof src === 'string' && src.length > 0;
-	                            if (!isImage) continue;
-	                            
-	                            const isContabo = src.includes('contabostorage.com') || src.includes('usc1.contabostorage.com');
-	                            if (isContabo) {
-	                                imagesToUpdate.push(obj);
-	                            }
-	                        }
-
-	                        console.log(`🔄 Gerando novas URLs presignadas para ${imagesToUpdate.length} imagem(ns)...`);
-
-	                        const imagesToRemove: any[] = [];
-	                        // Generate new presigned URLs for each image
-	                        for (const imgObj of imagesToUpdate) {
-	                            try {
-	                                // Extract key from URL (works with both presigned and permanent URLs)
-	                                const result = extractContaboBucketAndKey(imgObj.src);
-	                                const key = result?.key;
-	                                if (!key) {
-	                                    console.warn(`⚠️ Não foi possível extrair chave da URL: ${imgObj.src?.substring(0, 80)}...`);
-	                                    imagesToRemove.push(imgObj);
-	                                    continue;
-	                                }
-
-	                                // Generate new presigned URL from key
-	                                const newUrl = await generatePresignedUrl(key);
-	                                if (newUrl) {
-	                                    console.log(`✅ Nova URL presignada gerada para imagem: ${key.substring(0, 50)}...`);
-	                                    imgObj.src = newUrl;
-	                                } else {
-	                                    console.error(`❌ Falha ao gerar URL presignada para: ${key.substring(0, 50)}...`);
-	                                    imagesToRemove.push(imgObj);
-	                                }
-	                            } catch (err) {
-	                                console.error(`❌ Erro ao gerar URL presignada:`, err);
-	                                console.error(`   URL original: ${imgObj.src?.substring(0, 100)}`);
-	                                imagesToRemove.push(imgObj);
-	                            }
-	                        }
-
-	                        // Remove images that failed to generate new presigned URLs
-	                        if (imagesToRemove.length > 0) {
-	                            console.warn(`⚠️ Removendo ${imagesToRemove.length} imagem(ns) que falharam ao gerar novas URLs...`);
-	                            safeCanvasData.objects = safeCanvasData.objects.filter((obj: any) => !imagesToRemove.includes(obj));
-	                        }
-
-	                        // Try loading again with updated URLs
-	                        await canvas.value.loadFromJSON(safeCanvasData);
-	                        didLoadNewPage = true;
-	                        // Only mark as degraded if we couldn't generate URLs for some images
-	                        degradedNewPage = imagesToUpdate.some((img, idx) => {
-	                            const updatedObj = safeCanvasData.objects.find((o: any) => o === img);
-	                            return updatedObj && updatedObj.src === img.src; // URL didn't change
-	                        });
-	                    } else {
-	                        // No objects array, use pre-processed data
-	                        await canvas.value.loadFromJSON(canvasDataToLoad);
+		                    // IMPORTANT: Use a clone of already-processed canvasDataToLoad (avoid re-running heavy prepare).
+		                    const safeCanvasData = cloneCanvasDataForLoad(canvasDataToLoad);
+		                    if (safeCanvasData?.objects && Array.isArray(safeCanvasData.objects)) {
+		                        const refreshStats = await refreshContaboUrlsInCanvasData(safeCanvasData, { concurrency: 6 });
+		                        degradedNewPage = refreshStats.failed > 0;
+		                        // Try loading again with updated URLs (or placeholders for failed entries)
+		                        await canvas.value.loadFromJSON(safeCanvasData);
+		                        didLoadNewPage = true;
+		                    } else {
+		                        // No objects array, use pre-processed data
+		                        await canvas.value.loadFromJSON(canvasDataToLoad);
 	                        didLoadNewPage = true;
 	                    }
 	                }
@@ -5819,9 +6090,7 @@ watch(activePage, async (newPage, oldPage) => {
                             // Last attempt: load without ANY images (never throw due to broken image)
                             try {
                                 const safeData = JSON.parse(JSON.stringify(canvasDataToLoad));
-                                if (safeData?.objects && Array.isArray(safeData.objects)) {
-                                    safeData.objects = safeData.objects.filter((obj: any) => obj?.type !== 'image');
-                                }
+                                removeImageObjectsDeep(safeData);
                                 await canvas.value.loadFromJSON(safeData);
                                 didLoadNewPage = true;
                                 degradedNewPage = true;
@@ -6697,6 +6966,9 @@ onMounted(async () => {
       } catch (err) {
           console.warn('[boot] loadCollaborators falhou:', err)
       }
+
+      // Retry image recovery once auth/session is stabilized.
+      scheduleMissingProductImageRecovery(260, 8);
   })()
   
   // Initialize Project Store ONLY if it's a new project (default ID)
@@ -6720,7 +6992,8 @@ onMounted(async () => {
 		            '__stickerOutlineColor',
 		            '__stickerOutlineOpacity',
 		            '__stickerNoTransparency',
-		            'crossOrigin'
+		            'crossOrigin',
+                    '__originalSrc'
 	        ];
 	        const addCustomProps = (Ctor: any, props: string[]) => {
 	            if (!Ctor) return;
@@ -6808,10 +7081,50 @@ onMounted(async () => {
                         if (String(o.type || '').toLowerCase() !== 'group') return false;
                         return !!(o.isSmartObject || o.isProductCard || String(o.name || '').startsWith('product-card') || isLikelyProductCard(o));
                     };
+                    const isFrameLikeHitTarget = (o: any) => {
+                        if (!o) return false;
+                        if (o.isFrame === true) return true;
+                        const layerName = String(o.layerName || '').trim().toUpperCase();
+                        const name = String(o.name || '').trim().toUpperCase();
+                        return layerName === 'FRAMER' || layerName === 'FRAME' || name === 'FRAMER' || name === 'FRAME';
+                    };
+                    const isInteractiveHitCandidate = (o: any) => {
+                        if (!o) return false;
+                        if (o.excludeFromExport) return false;
+                        if (o.visible === false) return false;
+                        if (o.evented === false && o.selectable === false) return false;
+                        return true;
+                    };
+                    const hitObjectByPoints = (o: any, pts: any[]) => {
+                        if (!o || !pts.length) return false;
+                        try {
+                            if (typeof o.containsPoint === 'function') {
+                                for (const pt of pts) {
+                                    if (o.containsPoint(pt, undefined, true)) return true;
+                                }
+                            }
+                        } catch {
+                            // ignore containsPoint failures and fallback to bounds
+                        }
+                        try {
+                            const r = o.getBoundingRect?.(true, true);
+                            if (!r) return false;
+                            for (const pt of pts) {
+                                if (pt.x >= r.left && pt.x <= (r.left + r.width) && pt.y >= r.top && pt.y <= (r.top + r.height)) {
+                                    return true;
+                                }
+                            }
+                        } catch {
+                            // ignore
+                        }
+                        return false;
+                    };
                     c.findTarget = function (evt: any, skipGroup?: boolean) {
                         const info = originalFindTarget(evt, skipGroup) || {};
-                        const target = info?.target;
-                        const shouldOverride = !target || isLikelyProductZone(target);
+                        const target = info?.target ?? info;
+                        const targetIsZone = !!(target && isLikelyProductZone(target));
+                        const targetIsFrame = !!(target && isFrameLikeHitTarget(target));
+                        const shouldOverride = !target || targetIsZone || targetIsFrame;
                         if (!shouldOverride) return info;
 
                         const pts: any[] = [];
@@ -6842,15 +7155,25 @@ onMounted(async () => {
                         const list = (typeof this.getObjects === 'function' ? this.getObjects() : (this._objects || [])).slice().reverse();
                         for (const o of list) {
                             if (!isProductCardGroup(o)) continue;
-                            try {
-                                const r = o.getBoundingRect(true, true);
-                                for (const pt of pts) {
-                                    if (pt.x >= r.left && pt.x <= (r.left + r.width) && pt.y >= r.top && pt.y <= (r.top + r.height)) {
-                                        return { ...info, target: o };
-                                    }
-                                }
-                            } catch {
-                                // ignore
+                            if (hitObjectByPoints(o, pts)) return { ...(info || {}), target: o };
+                        }
+
+                        // If Fabric already hit a product zone and there is no product card
+                        // under pointer, keep the zone as selected target.
+                        // This prevents clicks on zone area from being stolen by background objects.
+                        if (targetIsZone) {
+                            return info;
+                        }
+
+                        // Generic fallback:
+                        // if Fabric resolved the frame/zone itself (or nothing), prefer the
+                        // top-most interactive non-frame object under the pointer.
+                        for (const o of list) {
+                            if (!isInteractiveHitCandidate(o)) continue;
+                            if (isFrameLikeHitTarget(o)) continue;
+                            if (isLikelyProductZone(o)) continue;
+                            if (hitObjectByPoints(o, pts)) {
+                                return { ...(info || {}), target: o };
                             }
                         }
 
@@ -7126,7 +7449,7 @@ onMounted(async () => {
                               console.warn('⚠️ Erro ao carregar canvas:', imageLoadErr);
                               
                               // Try again with failed images replaced by placeholders
-                              const safeCanvasData = replaceContaboImagesWithPlaceholder(prepareCanvasDataForLoad(canvasDataToLoad));
+                              const safeCanvasData = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
                               await loadFromJsonSafe(safeCanvasData);
                               didLoadPage = true;
                               degradedPage = true;
@@ -7681,16 +8004,45 @@ const CANVAS_CUSTOM_PROPS = [
     '_zoneOrder',
     '_cardWidth',
     '_cardHeight',
+    '_productData',
+    'imageUrl',
     'subTargetCheck',
     'interactive',
     // When true on a child object, prevents auto-layout from overriding user placement (persisted).
     '__manualTransform',
-    '__manualTransformCardW',
-    '__manualTransformCardH',
-    '__priceLayoutSnapshot',
-    '__priceLayoutSnapshotAt',
-    '__atacValueVariants',
-    '__atacVariantGroups',
+	    '__manualTransformCardW',
+	    '__manualTransformCardH',
+	    '__priceLayoutSnapshot',
+	    '__priceLayoutSnapshotAt',
+	    '__atacValueVariants',
+	    '__atacVariantGroups',
+	    '__preserveManualLayout',
+	    '__isCustomTemplate',
+	    '__forceAtacarejoCanonical',
+	    '__manualTemplateBaseW',
+	    '__manualTemplateBaseH',
+	    '__manualGapSingle',
+	    '__manualGapRetail',
+	    '__manualGapWholesale',
+	    '__fontScale',
+	    '__fontScaleBase',
+	    '__yOffsetRatio',
+	    '__strokeWidth',
+	    '__roundness',
+	    '__shadowBlur',
+	    '__originalWidth',
+	    '__originalHeight',
+	    '__originalFontSize',
+	    '__originalLeft',
+	    '__originalTop',
+	    '__originalOriginX',
+	    '__originalOriginY',
+	    '__originalScaleX',
+	    '__originalScaleY',
+	    '__originalRadius',
+	    '__originalRx',
+	    '__originalRy',
+	    '__originalStrokeWidth',
 
     // Product zone metadata
     'isGridZone',
@@ -7750,6 +8102,7 @@ const CANVAS_CUSTOM_PROPS = [
 
 	// Images: ensure CORS behavior survives reload (needed for pixel-based effects like Sticker Outline)
 	'crossOrigin',
+    '__originalSrc',
 
     // Locks (persist cadeado state across reload)
     'lockMovementX',
@@ -8033,15 +8386,118 @@ const extractWasabiBucketAndKey = (url: string): { bucket: string | null; key: s
  * Isso evita problemas com URLs presignadas, encoding de caracteres especiais e CORS.
  * O proxy busca a imagem diretamente do S3 no backend, sem problemas de assinatura.
  */
-const convertContaboToProxyUrls = (canvasData: any): any => {
-    const cloned = JSON.parse(JSON.stringify(canvasData));
+const cloneCanvasDataForLoad = (canvasData: any): any => {
+    try {
+        return JSON.parse(JSON.stringify(canvasData));
+    } catch {
+        return canvasData;
+    }
+};
+
+const walkCanvasObjects = (root: any, visitor: (obj: any) => void): void => {
+    if (!root || typeof root !== 'object') return;
+    const stack: any[] = Array.isArray(root.objects) ? [...root.objects] : [];
+    while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node || typeof node !== 'object') continue;
+        visitor(node);
+        if (Array.isArray(node.objects) && node.objects.length) {
+            for (let i = node.objects.length - 1; i >= 0; i--) {
+                stack.push(node.objects[i]);
+            }
+        }
+    }
+};
+
+const mapLimit = async <T>(
+    items: T[],
+    concurrency: number,
+    worker: (item: T, index: number) => Promise<void>
+): Promise<void> => {
+    const limit = Math.max(1, Math.floor(concurrency || 1));
+    let cursor = 0;
+    const runWorker = async () => {
+        while (true) {
+            const index = cursor++;
+            if (index >= items.length) return;
+            await worker(items[index] as T, index);
+        }
+    };
+    const tasks = Array.from({ length: Math.min(limit, items.length) }, () => runWorker());
+    await Promise.all(tasks);
+};
+
+const collectContaboImageNodes = (canvasData: any): any[] => {
+    const images: any[] = [];
+    walkCanvasObjects(canvasData, (node) => {
+        const src = String(node?.src || '');
+        if (String(node?.type || '').toLowerCase() !== 'image') return;
+        if (!src) return;
+        if (!src.includes('contabostorage.com') && !src.includes('usc1.contabostorage.com')) return;
+        images.push(node);
+    });
+    return images;
+};
+
+const refreshContaboUrlsInCanvasData = async (
+    canvasData: any,
+    opts: { concurrency?: number } = {}
+): Promise<{ total: number; refreshed: number; failed: number }> => {
+    const images = collectContaboImageNodes(canvasData);
+    if (!images.length) return { total: 0, refreshed: 0, failed: 0 };
+
+    const concurrency = Math.max(1, Number(opts.concurrency || 6));
+    let refreshed = 0;
+    let failed = 0;
+
+    console.log(`🔄 Gerando novas URLs presignadas para ${images.length} imagem(ns)...`);
+    await mapLimit(images, concurrency, async (imgObj) => {
+        try {
+            const result = extractContaboBucketAndKey(String(imgObj?.src || ''));
+            const key = result?.key;
+            if (!key) {
+                console.warn(`⚠️ Não foi possível extrair chave da URL: ${String(imgObj?.src || '').substring(0, 80)}...`);
+                if (!imgObj.__originalSrc) {
+                    imgObj.__originalSrc = String(imgObj?.src || '');
+                }
+                imgObj.src = PLACEHOLDER_IMAGE_DATA_URL;
+                failed++;
+                return;
+            }
+
+            const newUrl = await generatePresignedUrl(key);
+            if (newUrl) {
+                imgObj.src = newUrl;
+                refreshed++;
+            } else {
+                console.error(`❌ Falha ao gerar URL presignada para: ${key.substring(0, 50)}...`);
+                if (!imgObj.__originalSrc) {
+                    imgObj.__originalSrc = String(imgObj?.src || '');
+                }
+                imgObj.src = PLACEHOLDER_IMAGE_DATA_URL;
+                failed++;
+            }
+        } catch (err) {
+            console.error('❌ Erro ao gerar URL presignada:', err);
+            console.error(`   URL original: ${String(imgObj?.src || '').substring(0, 100)}`);
+            if (!imgObj.__originalSrc) {
+                imgObj.__originalSrc = String(imgObj?.src || '');
+            }
+            imgObj.src = PLACEHOLDER_IMAGE_DATA_URL;
+            failed++;
+        }
+    });
+
+    return { total: images.length, refreshed, failed };
+};
+
+const convertContaboToProxyUrls = (canvasData: any, opts: { clone?: boolean } = {}): any => {
+    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData);
     if (!cloned || typeof cloned !== 'object') return cloned;
 
     let contaboCount = 0;
     let wasabiCount = 0;
-    const walkAny = (node: any): void => {
-        if (!node || typeof node !== 'object') return;
-
+    walkCanvasObjects(cloned, (node) => {
         const objType = String(node.type || '').toLowerCase();
         if (objType === 'image' && !node.crossOrigin) {
             // Keep consistent CORS mode for Fabric image processing.
@@ -8050,6 +8506,9 @@ const convertContaboToProxyUrls = (canvasData: any): any => {
 
         if (typeof node.src === 'string' && node.src.trim()) {
             const src = node.src;
+            if (!node.__originalSrc) {
+                node.__originalSrc = src;
+            }
             const wasabiProxy = toWasabiProxyUrl(src);
 
             if (wasabiProxy && wasabiProxy !== src) {
@@ -8064,15 +8523,7 @@ const convertContaboToProxyUrls = (canvasData: any): any => {
                 }
             }
         }
-
-        Object.values(node).forEach((value: any) => {
-            if (!value) return;
-            if (Array.isArray(value)) value.forEach((item: any) => walkAny(item));
-            else if (typeof value === 'object') walkAny(value);
-        });
-    };
-
-    walkAny(cloned);
+    });
     if (contaboCount > 0) console.log(`🔄 Convertido ${contaboCount} URL(s) da Contabo para proxy local`);
     if (wasabiCount > 0) console.log(`🔄 Convertido ${wasabiCount} URL(s) do Wasabi para proxy local`);
     return cloned;
@@ -8080,9 +8531,9 @@ const convertContaboToProxyUrls = (canvasData: any): any => {
 
 const prepareCanvasDataForLoad = (raw: any): any => {
     try {
-        let out = JSON.parse(JSON.stringify(raw));
-        out = replaceBlobImagesWithPlaceholder(out);
-        out = convertContaboToProxyUrls(out);
+        let out = cloneCanvasDataForLoad(raw);
+        out = replaceBlobImagesWithPlaceholder(out, { clone: false });
+        out = convertContaboToProxyUrls(out, { clone: false });
         return out;
     } catch {
         return raw;
@@ -8093,65 +8544,73 @@ const prepareCanvasDataForLoad = (raw: any): any => {
  * Substitui src de imagens blob: (sessão/local) por placeholder.
  * Blob URLs não sobrevivem ao reload, então quebram o loadFromJSON.
  */
-const replaceBlobImagesWithPlaceholder = (canvasData: any): any => {
-    const cloned = JSON.parse(JSON.stringify(canvasData));
+const replaceBlobImagesWithPlaceholder = (canvasData: any, opts: { clone?: boolean } = {}): any => {
+    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData);
     if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned;
 
     let count = 0;
-    const processObject = (obj: any): void => {
-        if (!obj) return;
+    walkCanvasObjects(cloned, (obj) => {
         const objType = (obj.type || '').toLowerCase();
         if (objType === 'image' && typeof obj.src === 'string' && obj.src.startsWith('blob:')) {
             obj.src = PLACEHOLDER_IMAGE_DATA_URL;
             count++;
         }
-        if (obj.objects && Array.isArray(obj.objects)) {
-            obj.objects.forEach((child: any) => processObject(child));
-        }
-    };
-
-    cloned.objects.forEach((obj: any) => processObject(obj));
+    });
     if (count > 0) console.warn(`⚠️ Substituindo ${count} imagem(ns) blob por placeholder (URL temporária)`);
     return cloned;
 };
 
+const isPotentiallyBrokenRemoteImageSrc = (src: string): boolean => {
+    const value = String(src || '').trim().toLowerCase();
+    if (!value) return false;
+    if (value.startsWith('data:')) return false;
+    if (value.startsWith('blob:')) return true;
+    if (value.includes('contabostorage.com')) return true;
+    if (value.includes('wasabisys.com')) return true;
+    if (value.includes('/api/storage/proxy')) return true;
+    if (value.startsWith('http://') || value.startsWith('https://')) return true;
+    return false;
+};
+
 /**
- * Substitui src de imagens Contabo por placeholder para permitir loadFromJSON quando a URL retorna 500.
- * Preserva layout; imagens quebradas aparecem como quadrado transparente.
- * Processa recursivamente grupos aninhados.
+ * Substitui src de imagens remotas por placeholder para permitir loadFromJSON
+ * quando URLs expiraram/foram removidas (proxy 404, Contabo, Wasabi etc.).
+ * Preserva layout e processa grupos aninhados recursivamente.
  */
-const replaceContaboImagesWithPlaceholder = (canvasData: any): any => {
-    const cloned = JSON.parse(JSON.stringify(canvasData));
+const replaceContaboImagesWithPlaceholder = (canvasData: any, opts: { clone?: boolean } = {}): any => {
+    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData);
     if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned;
     
     let count = 0;
-    
-    // Função recursiva para processar objetos e grupos aninhados
-    const processObject = (obj: any): void => {
-        if (!obj) return;
-        
+    walkCanvasObjects(cloned, (obj) => {
         const objType = (obj.type || '').toLowerCase();
         
-        // Se é uma imagem Contabo ou blob, substituir pelo placeholder
+        // Se é uma imagem remota potencialmente quebrada, substituir pelo placeholder
         if (
             objType === 'image' &&
             typeof obj.src === 'string' &&
-            (obj.src.includes('contabostorage.com') || obj.src.startsWith('blob:'))
+            isPotentiallyBrokenRemoteImageSrc(obj.src)
         ) {
+            if (!obj.__originalSrc) {
+                obj.__originalSrc = obj.src;
+            }
             obj.src = PLACEHOLDER_IMAGE_DATA_URL;
             count++;
         }
-        
-        // Se é um grupo, processar seus objetos internos recursivamente
-        if (obj.objects && Array.isArray(obj.objects)) {
-            obj.objects.forEach((child: any) => processObject(child));
-        }
-    };
+    });
     
-    cloned.objects.forEach((obj: any) => processObject(obj));
-    
-    if (count > 0) console.warn(`⚠️ Substituindo ${count} imagem(ns) inválida(s) por placeholder (Contabo/blob)`);
+    if (count > 0) console.warn(`⚠️ Substituindo ${count} imagem(ns) remota(s) por placeholder`);
     return cloned;
+};
+
+const removeImageObjectsDeep = (node: any): any => {
+    if (!node || typeof node !== 'object') return node;
+    if (Array.isArray(node.objects)) {
+        node.objects = node.objects
+            .filter((child: any) => String(child?.type || '').toLowerCase() !== 'image')
+            .map((child: any) => removeImageObjectsDeep(child));
+    }
+    return node;
 };
 
 // Flag global para evitar logs repetidos de frames faltando
@@ -8193,6 +8652,9 @@ const setupHistory = () => {
     const resolvePageIndexById = (pageId: string): number => {
         const targetId = String(pageId || '').trim()
         if (!targetId) return -1
+        const activeIdx = Number(project.activePageIndex || 0)
+        const activeId = String(project.pages?.[activeIdx]?.id || '').trim()
+        if (activeId && activeId === targetId) return activeIdx
         return project.pages.findIndex((p: any) => String(p?.id || '').trim() === targetId)
     }
 
@@ -8290,6 +8752,7 @@ const setupHistory = () => {
             saveReason.includes('frame-fix') ||
             saveReason.includes('history') ||
             saveReason.includes('load');
+        restoreMissingManualTemplateFlagsInCanvas(canvasInstance, `saveState:${saveReason}`);
         if (shouldRunHeavySanitize) {
             sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}`);
             stabilizePriceGroupsForPersistence(canvasInstance, `saveState:${saveReason}`);
@@ -9059,6 +9522,43 @@ const repairZoneCardsAfterHistoryRestore = () => {
 };
 
 
+const parseHistoryStateJson = (stateStr: string): any | null => {
+    try {
+        return JSON.parse(stateStr);
+    } catch (err) {
+        console.warn('[history] Falha ao parsear estado JSON:', err);
+        return null;
+    }
+};
+
+const prepareHistoryStateFromString = (stateStr: string): any | null => {
+    const parsed = parseHistoryStateJson(stateStr);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return prepareCanvasDataForLoad(parsed);
+};
+
+const findPreparedNonEmptyHistoryState = (
+    startIndex: number,
+    direction: -1 | 1
+): { index: number; state: any } | null => {
+    let idx = startIndex;
+    const max = historyStack.value.length;
+    while (idx >= 0 && idx < max) {
+        const raw = historyStack.value[idx];
+        if (raw) {
+            const parsed = parseHistoryStateJson(raw);
+            if (parsed && Array.isArray(parsed.objects) && parsed.objects.length > 0) {
+                return {
+                    index: idx,
+                    state: prepareCanvasDataForLoad(parsed)
+                };
+            }
+        }
+        idx += direction;
+    }
+    return null;
+};
+
 const undo = async () => {
     if (historyIndex.value > 0 && !isHistoryProcessing.value) {
         isHistoryProcessing.value = true;
@@ -9072,25 +9572,25 @@ const undo = async () => {
             return;
         }
 
-        let state = prepareCanvasDataForLoad(JSON.parse(stateStr));
+        let state = prepareHistoryStateFromString(stateStr);
+        if (!state) {
+            console.error('❌ Estado inválido no histórico');
+            isHistoryProcessing.value = false;
+            return;
+        }
 
         // CRITICAL: Check if state has objects, try to find a valid one if empty
-        if (!state.objects || state.objects.length === 0) {
+        if (!Array.isArray(state.objects) || state.objects.length === 0) {
             console.warn('⚠️ Estado sem objetos - buscando próximo válido...');
-            // Try to find next valid state
-            while (historyIndex.value > 0) {
-                historyIndex.value--;
-                const nextStateStr = historyStack.value[historyIndex.value];
-                if (nextStateStr) {
-                    const nextState = JSON.parse(nextStateStr);
-                    if (nextState.objects && nextState.objects.length > 0) {
-                        // Update state to the valid one found
-                        state = nextState;
-                        console.log(`✅ Estado válido encontrado no índice ${historyIndex.value}`);
-                        break;
-                    }
-                }
+            const found = findPreparedNonEmptyHistoryState(historyIndex.value, -1);
+            if (!found) {
+                console.error('❌ Nenhum estado válido encontrado no histórico (undo)');
+                isHistoryProcessing.value = false;
+                return;
             }
+            historyIndex.value = found.index;
+            state = found.state;
+            console.log(`✅ Estado válido encontrado no índice ${historyIndex.value}`);
         }
 
         hydrateLabelTemplatesFromProjectJson(state);
@@ -9102,7 +9602,7 @@ const undo = async () => {
         canvas.value.renderOnAddRemove = false;
 
         try {
-            await canvas.value.loadFromJSON(state);
+            await loadFromJsonSafe(state);
             // CRITICAL: sanitize clipPaths BEFORE any render to avoid fabric crash (forEach of undefined)
             sanitizeAllClipPaths();
             rehydrateCanvasZones({ relayout: false, applyZoneStyles: false });
@@ -9119,7 +9619,8 @@ const undo = async () => {
                 const currentPage = project.pages[project.activePageIndex];
                 if (currentPage && currentPage.canvasData && currentPage.canvasData.objects && currentPage.canvasData.objects.length > 0) {
                     console.log('🔄 Recarregando canvasData da página...');
-                    await canvas.value.loadFromJSON(prepareCanvasDataForLoad(currentPage.canvasData));
+                    const fallbackPageState = prepareCanvasDataForLoad(currentPage.canvasData);
+                    await loadFromJsonSafe(fallbackPageState);
                     sanitizeAllClipPaths();
                     rehydrateCanvasZones({ relayout: false, applyZoneStyles: false });
                     repairZoneCardsAfterHistoryRestore();
@@ -9199,25 +9700,25 @@ const redo = async () => {
             return;
         }
 
-        let state = prepareCanvasDataForLoad(JSON.parse(stateStr));
+        let state = prepareHistoryStateFromString(stateStr);
+        if (!state) {
+            console.error('❌ Estado inválido no histórico');
+            isHistoryProcessing.value = false;
+            return;
+        }
 
         // CRITICAL: Check if state has objects, try to find a valid one if empty
-        if (!state.objects || state.objects.length === 0) {
+        if (!Array.isArray(state.objects) || state.objects.length === 0) {
             console.warn('⚠️ Estado sem objetos - buscando próximo válido...');
-            // Try to find next valid state
-            while (historyIndex.value < historyStack.value.length - 1) {
-                historyIndex.value++;
-                const nextStateStr = historyStack.value[historyIndex.value];
-                if (nextStateStr) {
-                    const nextState = JSON.parse(nextStateStr);
-                    if (nextState.objects && nextState.objects.length > 0) {
-                        // Update state to the valid one found
-                        state = nextState;
-                        console.log(`✅ Estado válido encontrado no índice ${historyIndex.value}`);
-                        break;
-                    }
-                }
+            const found = findPreparedNonEmptyHistoryState(historyIndex.value, 1);
+            if (!found) {
+                console.error('❌ Nenhum estado válido encontrado no histórico (redo)');
+                isHistoryProcessing.value = false;
+                return;
             }
+            historyIndex.value = found.index;
+            state = found.state;
+            console.log(`✅ Estado válido encontrado no índice ${historyIndex.value}`);
         }
 
         hydrateLabelTemplatesFromProjectJson(state);
@@ -9229,7 +9730,7 @@ const redo = async () => {
         canvas.value.renderOnAddRemove = false;
 
         try {
-            await canvas.value.loadFromJSON(state);
+            await loadFromJsonSafe(state);
             // CRITICAL: sanitize clipPaths BEFORE any render to avoid fabric crash (forEach of undefined)
             sanitizeAllClipPaths();
             rehydrateCanvasZones({ relayout: false, applyZoneStyles: false });
@@ -9246,7 +9747,8 @@ const redo = async () => {
                 const currentPage = project.pages[project.activePageIndex];
                 if (currentPage && currentPage.canvasData && currentPage.canvasData.objects && currentPage.canvasData.objects.length > 0) {
                     console.log('🔄 Recarregando canvasData da página...');
-                    await canvas.value.loadFromJSON(prepareCanvasDataForLoad(currentPage.canvasData));
+                    const fallbackPageState = prepareCanvasDataForLoad(currentPage.canvasData);
+                    await loadFromJsonSafe(fallbackPageState);
                     sanitizeAllClipPaths();
                     rehydrateCanvasZones({ relayout: false, applyZoneStyles: false });
                     repairZoneCardsAfterHistoryRestore();
@@ -12142,6 +12644,14 @@ const updateSelection = () => {
                 productZoneState.updateGlobalStyles(getZoneGlobalStyles(parentZone));
             }
         }
+
+        // If user selected a card that still has missing/broken image, try recovery immediately.
+        const selectedImage = getPreferredProductImageFromGroup(active);
+        const selectedSrc = selectedImage ? getImageSourceFromObject(selectedImage) : '';
+        const missingImageOnSelectedCard = !selectedImage || isLikelyPlaceholderImageSrc(selectedSrc);
+        if (missingImageOnSelectedCard) {
+            scheduleMissingProductImageRecovery(10, 2);
+        }
     }
 }
 
@@ -13105,6 +13615,14 @@ const setupReactivity = () => {
         if (!isCardImageScaling && shouldApplyContainmentConstraints(obj)) {
             applyContainmentConstraints(obj);
         }
+
+        // Force live redraw while resizing. In some Fabric/browser combinations the
+        // visual of simple shapes (ex: rect) can lag until the next interaction.
+        if (obj) {
+            obj.set?.('dirty', true);
+            obj.setCoords?.();
+        }
+        safeRequestRenderAll();
     });
 
     canvas.value.on('object:rotating', () => {
@@ -13127,6 +13645,19 @@ const setupReactivity = () => {
             }
         }
     });
+
+    const syncTextSelectionSnapshot = (e: any) => {
+        if (!canvas.value) return;
+        const activeObj = canvas.value.getActiveObject?.();
+        const target = e?.target;
+        if (!isTextStyleObject(activeObj) && !isTextStyleObject(target)) return;
+        refreshSelectedRef();
+    };
+
+    canvas.value.on('text:selection:changed', syncTextSelectionSnapshot);
+    canvas.value.on('text:editing:entered', syncTextSelectionSnapshot);
+    canvas.value.on('text:editing:exited', syncTextSelectionSnapshot);
+    canvas.value.on('text:changed', syncTextSelectionSnapshot);
     
     // 'selection:created', 'selection:updated', 'selection:cleared'
     canvas.value.on('selection:created', () => {
@@ -13450,7 +13981,7 @@ const updateObjectProperty = (prop: string, value: any) => {
     }
 
     if (!canvas.value) return; 
-    const active = canvas.value.getActiveObject();
+    let active = canvas.value.getActiveObject();
     
     if (active) {
         // If locked, ignore position/size/rotate changes from the inspector.
@@ -13459,6 +13990,19 @@ const updateObjectProperty = (prop: string, value: any) => {
             if ((prop === 'left' || prop === 'top') && (active.lockMovementX || active.lockMovementY)) return;
             if ((prop === 'width' || prop === 'height' || prop === 'scaleX' || prop === 'scaleY') && (active.lockScalingX || active.lockScalingY)) return;
             if (prop === 'angle' && active.lockRotation) return;
+        }
+
+        // Rich text: apply fill/fontSize only to selected text range when available.
+        if ((prop === 'fill' || prop === 'fontSize') && active.type !== 'activeSelection' && isTextStyleObject(active)) {
+            if (String(active.type || '').toLowerCase() === 'text') {
+                active = convertStaticTextToIText(active);
+            }
+            if (applySelectionTextStyle(active, prop as 'fill' | 'fontSize', value)) {
+                canvas.value.requestRenderAll();
+                debouncedSaveCurrentState();
+                refreshSelectedRef();
+                return;
+            }
         }
 
         // Resolve "style target" for groups/zones (Fabric groups don't have fill/stroke/radius).
@@ -14352,6 +14896,58 @@ const handleAction = async (action: string) => {
             replaceTargetId: String((img as any)._customId)
         });
         return;
+    }
+
+    // Product card image flows:
+    // - replace from local file
+    // - replace from uploads
+    // - add local file without replacing current image
+    // - add from uploads without replacing current image
+    if (
+        action === 'replace-product-image' ||
+        action === 'replace-product-image-upload' ||
+        action === 'add-product-image-local' ||
+        action === 'add-product-image-upload'
+    ) {
+        const ctx = resolveSelectedProductCardContext(active);
+        const card = ctx.card;
+        const image = ctx.image;
+
+        if (!card) {
+            alert('Selecione um card de produto primeiro.');
+            return;
+        }
+        if (!(card as any)._customId) (card as any)._customId = makeCanvasObjectId();
+
+        if (action === 'replace-product-image') {
+            if (image && !(image as any)._customId) (image as any)._customId = makeCanvasObjectId();
+            if (image?._customId) {
+                openLocalProductImagePicker('replace', { imageId: String(image._customId) });
+            } else {
+                openLocalProductImagePicker('add', { cardId: String((card as any)._customId) });
+            }
+            return;
+        }
+
+        if (action === 'replace-product-image-upload') {
+            if (image && !(image as any)._customId) (image as any)._customId = makeCanvasObjectId();
+            if (image?._customId) {
+                await openProductImageUploadPickerModal('replace', { imageId: String(image._customId) });
+            } else {
+                await openProductImageUploadPickerModal('add', { cardId: String((card as any)._customId) });
+            }
+            return;
+        }
+
+        if (action === 'add-product-image-local') {
+            openLocalProductImagePicker('add', { cardId: String((card as any)._customId) });
+            return;
+        }
+
+        if (action === 'add-product-image-upload') {
+            await openProductImageUploadPickerModal('add', { cardId: String((card as any)._customId) });
+            return;
+        }
     }
 
     // Remove Image Background
@@ -15672,38 +16268,18 @@ const loadCanvasData = async (data: any) => {
     hydrateLabelTemplatesFromProjectJson(json);
     
     try {
-        await canvas.value.loadFromJSON(json);
+        await loadFromJsonSafe(json);
     } catch (loadErr) {
         console.error('❌ Erro ao carregar JSON no canvas:', loadErr);
-        // Try to clear and retry once - but only if canvas is fully ready
-        if (canvas.value) {
-            try {
-                // Verificar se o contexto ainda existe antes de tentar clear
-                const ctx = canvas.value.getContext();
-                if (ctx && typeof ctx.clearRect === 'function') {
-                    canvas.value.clear();
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    await canvas.value.loadFromJSON(json);
-                } else {
-                    console.warn('⚠️ Contexto do canvas não está disponível, pulando clear()');
-                    // Tentar carregar diretamente sem clear
-                    await canvas.value.loadFromJSON(json);
-                }
-            } catch (retryErr) {
-                console.error('❌ Erro ao recarregar após clear:', retryErr);
-                // Se ainda falhar, tentar apenas loadFromJSON sem clear
-                try {
-                    await canvas.value.loadFromJSON(json);
-                    console.log('✅ loadFromJSON bem-sucedido após erro no clear');
-                } catch (finalErr) {
-                    console.error('❌ Erro final ao carregar:', finalErr);
-                    isHistoryProcessing.value = false;
-                    throw finalErr;
-                }
-            }
-        } else {
+        // Fallback rápido: substitui remotas por placeholder para preservar layout e evitar retries caros.
+        try {
+            const safeJson = replaceContaboImagesWithPlaceholder(json);
+            await loadFromJsonSafe(safeJson);
+            console.log('✅ loadFromJSON concluído com placeholders (fallback legacy-import)');
+        } catch (finalErr) {
+            console.error('❌ Erro final ao carregar:', finalErr);
             isHistoryProcessing.value = false;
-            throw loadErr;
+            throw finalErr;
         }
     }
     
@@ -15926,21 +16502,105 @@ const findObjectByCustomId = (id: string): { obj: any; parent: any | null } | nu
     return null;
 };
 
-const replaceImageByCustomId = async (targetId: string, newUrl: string) => {
-    if (!canvas.value || !fabric || !targetId || !newUrl) return;
+const findProductCardByCustomId = (id: string): any | null => {
+    const found = findObjectByCustomId(id);
+    if (!found) return null;
+    if (isProductCardContainer(found.obj) || isLikelyProductCard(found.obj)) return found.obj;
+    if (found.parent && (isProductCardContainer(found.parent) || isLikelyProductCard(found.parent))) return found.parent;
+    return null;
+};
+
+const addImageToProductCardByUrl = async (
+    card: any,
+    newUrl: string,
+    opts: { save?: boolean; setActive?: boolean } = {}
+) => {
+    if (!canvas.value || !fabric || !card || !newUrl) return false;
+    if (!isProductCardContainer(card) && !isLikelyProductCard(card)) return false;
+    const shouldSave = opts.save !== false;
+    const shouldSetActive = opts.setActive !== false;
+
+    try {
+        const proxiedUrl = toWasabiProxyUrl(newUrl) || newUrl;
+        const newImg: any = await fabric.Image.fromURL(proxiedUrl, { crossOrigin: 'anonymous' });
+        if (!newImg) return false;
+
+        if ((newImg.width || 0) > 500) {
+            newImg.scaleToWidth(500);
+        }
+
+        const existingProductImage = getPreferredProductImageFromGroup(card);
+        const targetLeft = existingProductImage ? ((Number(existingProductImage.left) || 0) + 10) : 0;
+        const targetTop = existingProductImage ? ((Number(existingProductImage.top) || 0) + 10) : 0;
+        const targetCanvas = groupLocalToCanvasPoint(card, targetLeft, targetTop);
+        const imageName = existingProductImage ? `extra_image_${Date.now()}` : 'smart_image';
+
+        newImg.set({
+            left: targetCanvas.x,
+            top: targetCanvas.y,
+            originX: 'center',
+            originY: 'center',
+            selectable: true,
+            evented: true,
+            hasControls: true,
+            hasBorders: true,
+            name: imageName,
+            _customId: makeCanvasObjectId()
+        });
+        (newImg as any).src = newUrl;
+
+        safeAddWithUpdate(card, newImg);
+        card.set({ subTargetCheck: true, interactive: true });
+        card.setCoords?.();
+        card.dirty = true;
+
+        if (!existingProductImage) {
+            (card as any).imageUrl = newUrl;
+            if ((card as any)._productData && typeof (card as any)._productData === 'object') {
+                (card as any)._productData = {
+                    ...(card as any)._productData,
+                    imageUrl: newUrl,
+                    image: newUrl
+                };
+            }
+        }
+
+        if (shouldSetActive) {
+            canvas.value.setActiveObject(newImg);
+        }
+        canvas.value.requestRenderAll();
+        canvasObjects.value = [...canvas.value.getObjects()];
+        if (shouldSave) {
+            saveCurrentState();
+        }
+        return true;
+    } catch (e) {
+        console.warn('[product-image] Falha ao adicionar imagem ao card:', e);
+        return false;
+    }
+};
+
+const replaceImageByCustomId = async (
+    targetId: string,
+    newUrl: string,
+    opts: { save?: boolean; setActive?: boolean } = {}
+): Promise<boolean> => {
+    if (!canvas.value || !fabric || !targetId || !newUrl) return false;
+    const shouldSave = opts.save !== false;
+    const shouldSetActive = opts.setActive !== false;
 
     const found = findObjectByCustomId(targetId);
-    if (!found) return;
+    if (!found) return false;
 
     const target = found.obj;
-    if (String(target?.type || '').toLowerCase() !== 'image') return;
+    if (String(target?.type || '').toLowerCase() !== 'image') return false;
 
     try {
         const oldDisplayW = Math.abs((target.width || 1) * (target.scaleX || 1));
         const oldDisplayH = Math.abs((target.height || 1) * (target.scaleY || 1));
         const proxiedNewUrl = toWasabiProxyUrl(newUrl) || newUrl;
         const newImg: any = await fabric.Image.fromURL(proxiedNewUrl, { crossOrigin: 'anonymous' });
-        if (!newImg) return;
+        if (!newImg) return false;
 
         const newW = newImg.width || 1;
         const newH = newImg.height || 1;
@@ -15974,7 +16634,21 @@ const replaceImageByCustomId = async (targetId: string, newUrl: string) => {
             else parent.add(newImg);
             safeAddWithUpdate(parent);
             parent.setCoords?.();
-            canvas.value.setActiveObject(parent);
+
+            if (isProductCardContainer(parent) || isLikelyProductCard(parent)) {
+                (parent as any).imageUrl = newUrl;
+                if ((parent as any)._productData && typeof (parent as any)._productData === 'object') {
+                    (parent as any)._productData = {
+                        ...(parent as any)._productData,
+                        imageUrl: newUrl,
+                        image: newUrl
+                    };
+                }
+            }
+
+            if (shouldSetActive) {
+                canvas.value.setActiveObject(parent);
+            }
         } else {
             const oldIndex = canvas.value.getObjects().indexOf(target);
             canvas.value.remove(target);
@@ -15983,14 +16657,279 @@ const replaceImageByCustomId = async (targetId: string, newUrl: string) => {
             } else {
                 canvas.value.add(newImg);
             }
-            canvas.value.setActiveObject(newImg);
+            if (shouldSetActive) {
+                canvas.value.setActiveObject(newImg);
+            }
         }
 
         canvas.value.requestRenderAll();
-        saveCurrentState();
+        if (shouldSave) {
+            saveCurrentState();
+        }
+        return true;
     } catch (e) {
         console.warn('[ai-studio] Falha ao substituir imagem:', e);
+        return false;
     }
+};
+
+let missingProductImageRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+let isRecoveringMissingProductImages = false;
+
+const isLikelyPlaceholderImageSrc = (src: string): boolean => {
+    const value = String(src || '').trim();
+    if (!value) return true;
+    return value === PLACEHOLDER_IMAGE_DATA_URL;
+};
+
+const getImageSourceFromObject = (img: any): string => {
+    const direct = String((img as any)?.src || '').trim();
+    if (direct) return direct;
+    const fromGetter = typeof (img as any)?.getSrc === 'function' ? String((img as any).getSrc() || '').trim() : '';
+    if (fromGetter) return fromGetter;
+    const fromEl = String((img as any)?._element?.src || '').trim();
+    return fromEl;
+};
+
+const normalizeRecoveryImageUrl = (src: string): string => {
+    const value = String(src || '').trim();
+    if (!value) return '';
+    const proxied = toWasabiProxyUrl(value);
+    if (proxied && proxied !== value) return proxied;
+    if (value.includes('contabostorage.com')) {
+        const { bucket, key } = extractContaboBucketAndKey(value);
+        if (key) {
+            if (bucket) {
+                return `/api/storage/proxy?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+            }
+            return `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+        }
+    }
+    return value;
+};
+
+const buildCardRecoverySearchPayload = (card: any): { term: string; brand?: string; flavor?: string; weight?: string } | null => {
+    const pd = ((card as any)?._productData && typeof (card as any)._productData === 'object') ? (card as any)._productData : {};
+    const titleObj = typeof getCardTitleText === 'function' ? getCardTitleText(card) : null;
+    const titleText = String((titleObj as any)?.text || '').trim();
+    const name = String(pd?.name || titleText || (card as any)?.layerName || '').trim();
+    const brand = String(pd?.brand || '').trim();
+    const flavor = String(pd?.flavor || '').trim();
+    const weight = String(pd?.weight || '').trim();
+    if (!name) return null;
+
+    const parts = [name];
+    if (brand && !name.toLowerCase().includes(brand.toLowerCase())) parts.push(brand);
+    if (flavor && !name.toLowerCase().includes(flavor.toLowerCase())) parts.push(flavor);
+    if (weight && !name.toLowerCase().includes(weight.toLowerCase())) parts.push(weight);
+
+    const term = parts.join(' ').trim();
+    if (!term) return null;
+    return {
+        term,
+        ...(brand ? { brand } : {}),
+        ...(flavor ? { flavor } : {}),
+        ...(weight ? { weight } : {})
+    };
+};
+
+type RecoveryLookupResult = {
+    status: 'ok' | 'empty' | 'auth' | 'error';
+    url: string | null;
+};
+
+const isAuthLookupError = (err: any): boolean => {
+    const code = Number(err?.statusCode || err?.status || err?.response?.status || 0);
+    if (code === 401 || code === 403) return true;
+    const msg = String(err?.message || err || '').toLowerCase();
+    if (!msg) return false;
+    return msg.includes('sessão expirada') || msg.includes('session') || msg.includes('unauthorized') || msg.includes('forbidden');
+};
+
+const fetchRecoveryImageUrlForCard = async (card: any): Promise<RecoveryLookupResult> => {
+    const payload = buildCardRecoverySearchPayload(card);
+    if (!payload?.term) return { status: 'empty', url: null };
+
+    try {
+        const headers = await getApiAuthHeaders();
+        const result = await $fetch<{ url?: string }>('/api/process-product-image', {
+            method: 'POST',
+            headers,
+            body: payload
+        });
+        const url = String(result?.url || '').trim();
+        if (url) return { status: 'ok', url };
+        return { status: 'empty', url: null };
+    } catch (err) {
+        if (isAuthLookupError(err)) {
+            return { status: 'auth', url: null };
+        }
+        console.warn('[recover-missing-product-images] Falha ao buscar imagem por termo:', err);
+        return { status: 'error', url: null };
+    }
+};
+
+const fetchRecoveryImageUrlFromAssets = async (term: string): Promise<RecoveryLookupResult> => {
+    const query = String(term || '').trim();
+    if (!query) return { status: 'empty', url: null };
+    try {
+        const result = await $fetch<any>('/api/assets', {
+            query: {
+                q: query,
+                limit: 1
+            }
+        });
+        if (Array.isArray(result) && result[0]?.url) {
+            return { status: 'ok', url: String(result[0].url || '').trim() || null };
+        }
+        if (result && Array.isArray(result.items) && result.items[0]?.url) {
+            return { status: 'ok', url: String(result.items[0].url || '').trim() || null };
+        }
+        return { status: 'empty', url: null };
+    } catch (err) {
+        console.warn('[recover-missing-product-images] Falha no fallback /api/assets:', err);
+        return { status: 'error', url: null };
+    }
+};
+
+const recoverMissingProductCardImages = async (): Promise<{ recoveredCount: number; pendingCount: number }> => {
+    if (!canvas.value || isCanvasDestroyed.value || isRecoveringMissingProductImages) {
+        return { recoveredCount: 0, pendingCount: 0 };
+    }
+    isRecoveringMissingProductImages = true;
+    try {
+        const cards = collectObjectsDeep(canvas.value)
+            .filter((obj: any) => !!(obj?.type === 'group' && (obj?.isSmartObject || obj?.isProductCard || isLikelyProductCard(obj))));
+
+        let recoveredCount = 0;
+        let pendingCount = 0;
+        let remoteLookupsLeft = 30;
+        for (const card of cards) {
+            const imageObj = getPreferredProductImageFromGroup(card);
+            const hasImageObject = !!imageObj;
+
+            let needsRecovery = !hasImageObject;
+            if (imageObj) {
+                const currentSrc = getImageSourceFromObject(imageObj);
+                const hasBrokenSource = isLikelyPlaceholderImageSrc(currentSrc);
+                const hasInvalidGeometry = !Number.isFinite(Number(imageObj.width)) || Number(imageObj.width) <= 0 || !Number.isFinite(Number(imageObj.height)) || Number(imageObj.height) <= 0;
+                const imageEl: any = (imageObj as any)?._originalElement || (imageObj as any)?._element || null;
+                const naturalW = Number(imageEl?.naturalWidth ?? imageEl?.width ?? 0);
+                const naturalH = Number(imageEl?.naturalHeight ?? imageEl?.height ?? 0);
+                const hasLikelyBrokenElement = Number.isFinite(naturalW) && Number.isFinite(naturalH) && naturalW <= 1 && naturalH <= 1;
+                needsRecovery = hasBrokenSource || hasInvalidGeometry || hasLikelyBrokenElement;
+            }
+            if (!needsRecovery) continue;
+            pendingCount += 1;
+
+            const triedMap = (((card as any).__missingImageRecoveryTried && typeof (card as any).__missingImageRecoveryTried === 'object')
+                ? (card as any).__missingImageRecoveryTried
+                : {}) as Record<string, true>;
+            (card as any).__missingImageRecoveryTried = triedMap;
+
+            const rawCandidates = [
+                String((card as any)?.imageUrl || '').trim(),
+                String((card as any)?._productData?.imageUrl || '').trim(),
+                String((card as any)?._productData?.image || '').trim(),
+                String((imageObj as any)?.__originalSrc || '').trim(),
+                String((imageObj as any)?.src || '').trim(),
+                String((imageObj as any)?._element?.src || '').trim(),
+                String((imageObj as any)?._originalElement?.src || '').trim(),
+                String((imageObj as any)?._fallbackSrc || '').trim()
+            ].filter(Boolean);
+            const normalizedCandidates = Array.from(new Set(rawCandidates))
+                .map((src) => normalizeRecoveryImageUrl(src))
+                .filter((src) => !!src && !isLikelyPlaceholderImageSrc(src));
+
+            const tryApplyImageUrl = async (url: string): Promise<boolean> => {
+                if (!url) return false;
+                if (triedMap[url]) return false;
+                triedMap[url] = true;
+
+                if (hasImageObject) {
+                    if (!(imageObj as any)._customId) {
+                        (imageObj as any)._customId = makeCanvasObjectId();
+                    }
+                    return await replaceImageByCustomId(String((imageObj as any)._customId), url, {
+                        save: false,
+                        setActive: false
+                    });
+                }
+                return await addImageToProductCardByUrl(card, url, {
+                    save: false,
+                    setActive: false
+                });
+            };
+
+            let restored = false;
+            for (const candidate of normalizedCandidates) {
+                restored = await tryApplyImageUrl(candidate);
+                if (restored) break;
+            }
+
+            if (!restored && remoteLookupsLeft > 0 && !(card as any).__missingImageRemoteLookupDone) {
+                remoteLookupsLeft -= 1;
+                const fetchedResult = await fetchRecoveryImageUrlForCard(card);
+                if (fetchedResult.url) {
+                    const normalizedFetched = normalizeRecoveryImageUrl(fetchedResult.url);
+                    restored = await tryApplyImageUrl(normalizedFetched);
+                }
+                const payload = buildCardRecoverySearchPayload(card);
+                const assetsResult = !restored
+                    ? await fetchRecoveryImageUrlFromAssets(String(payload?.term || ''))
+                    : { status: 'empty', url: null as string | null };
+                if (!restored) {
+                    if (assetsResult.url) {
+                        const normalizedAssetsUrl = normalizeRecoveryImageUrl(assetsResult.url);
+                        restored = await tryApplyImageUrl(normalizedAssetsUrl);
+                    }
+                }
+
+                // Só "congela" lookup remoto quando foi uma resposta determinística.
+                // Em erro de auth/rede, mantém aberto para novo retry após sessão estabilizar.
+                const retryableError =
+                    fetchedResult.status === 'auth' ||
+                    fetchedResult.status === 'error' ||
+                    assetsResult.status === 'error';
+                if (!retryableError) {
+                    (card as any).__missingImageRemoteLookupDone = true;
+                } else {
+                    delete (card as any).__missingImageRemoteLookupDone;
+                }
+            }
+
+            if (restored) {
+                recoveredCount += 1;
+                pendingCount = Math.max(0, pendingCount - 1);
+            }
+        }
+
+        if (recoveredCount > 0 && canvas.value) {
+            canvasObjects.value = [...canvas.value.getObjects()];
+            safeRequestRenderAll();
+            saveCurrentState({
+                reason: 'recover-missing-product-images',
+                source: 'system',
+                skipIfUnchanged: true
+            });
+        }
+        return { recoveredCount, pendingCount };
+    } finally {
+        isRecoveringMissingProductImages = false;
+    }
+};
+
+const scheduleMissingProductImageRecovery = (delayMs = 140, retries = 6) => {
+    if (missingProductImageRecoveryTimer) {
+        clearTimeout(missingProductImageRecoveryTimer);
+    }
+    missingProductImageRecoveryTimer = setTimeout(async () => {
+        missingProductImageRecoveryTimer = null;
+        const result = await recoverMissingProductCardImages();
+        if (result && result.pendingCount > 0 && retries > 0) {
+            scheduleMissingProductImageRecovery(900, retries - 1);
+        }
+    }, Math.max(0, Number(delayMs) || 0));
 };
 
 const handleAiStudioCreated = async (asset: { id: string; name: string; url: string }) => {
@@ -16006,6 +16945,56 @@ const handleAiStudioCreated = async (asset: { id: string; name: string; url: str
 
     aiStudio.handleCreated(asset);
     aiStudio.open.value = false;
+};
+
+const clearPendingProductImageOperation = () => {
+    pendingLocalImageActionMode.value = null;
+    pendingImageReplaceTargetId.value = null;
+    pendingImageAddCardId.value = null;
+    productImagePickerTargetImageId.value = null;
+    productImagePickerTargetCardId.value = null;
+};
+
+const openLocalProductImagePicker = (mode: 'replace' | 'add', opts: { imageId?: string | null; cardId?: string | null } = {}) => {
+    pendingLocalImageActionMode.value = mode;
+    pendingImageReplaceTargetId.value = mode === 'replace' ? (opts.imageId || null) : null;
+    pendingImageAddCardId.value = mode === 'add' ? (opts.cardId || null) : null;
+    if (fileInput.value) {
+        fileInput.value.value = '';
+        fileInput.value.click();
+    }
+};
+
+const openProductImageUploadPickerModal = async (
+    mode: 'replace' | 'add',
+    opts: { imageId?: string | null; cardId?: string | null } = {}
+) => {
+    productImagePickerMode.value = mode;
+    productImagePickerTargetImageId.value = mode === 'replace' ? (opts.imageId || null) : null;
+    productImagePickerTargetCardId.value = mode === 'add' ? (opts.cardId || null) : null;
+    productImagePickerSearch.value = '';
+    showProductImageUploadPicker.value = true;
+    await refreshAiStudioUploads();
+};
+
+const applyProductImageFromUploadPicker = async (asset: { id?: string; name?: string; url: string }) => {
+    if (!asset?.url) return;
+
+    try {
+        if (productImagePickerMode.value === 'replace' && productImagePickerTargetImageId.value) {
+            await replaceImageByCustomId(productImagePickerTargetImageId.value, asset.url);
+        } else if (productImagePickerMode.value === 'add' && productImagePickerTargetCardId.value) {
+            const targetCard = findProductCardByCustomId(productImagePickerTargetCardId.value);
+            if (!targetCard) {
+                alert('Card de produto não encontrado.');
+                return;
+            }
+            await addImageToProductCardByUrl(targetCard, asset.url);
+        }
+    } finally {
+        showProductImageUploadPicker.value = false;
+        clearPendingProductImageOperation();
+    }
 };
 
 const handlePaste = async (e: ClipboardEvent) => {
@@ -16597,6 +17586,24 @@ const createSmartObject = async (
         const pg = await instantiatePriceGroupFromTemplate(tpl);
         pg.set({ left: 0, top: 0, name: 'priceGroup' });
         setPriceOnPriceGroup(pg, priceStr, unitText);
+        const isRedBurst = isRedBurstPriceGroup(pg) || String(tpl?.id || '') === BUILTIN_RED_BURST_LABEL_TEMPLATE_ID;
+        const headerParts = inferHeaderPartsFromProduct(product, 'OFERTA', {
+            preferFullNameWithWeight: isRedBurst,
+            splitUnitIntoDedicatedField: !isRedBurst
+        });
+        const headerTextObj = collectObjectsDeep(pg).find((o: any) => o?.name === 'price_header_text');
+        if (headerTextObj && isTextLikeObject(headerTextObj)) {
+            const defaultHeader = String(headerTextObj.text || '').trim() || 'OFERTA';
+            headerTextObj.set('text', headerParts.title || defaultHeader);
+            if (typeof headerTextObj.initDimensions === 'function') headerTextObj.initDimensions();
+        }
+        const headerUnitObj = collectObjectsDeep(pg).find((o: any) => o?.name === 'price_header_unit_text');
+        if (headerUnitObj && isTextLikeObject(headerUnitObj)) {
+            headerUnitObj.set('text', isRedBurst ? '' : (headerParts.unit || ''));
+            headerUnitObj.set('visible', !isRedBurst && !!headerParts.unit);
+            if (typeof headerUnitObj.initDimensions === 'function') headerUnitObj.initDimensions();
+        }
+        if (isRedBurst) tuneRedBurstPriceGroupLayout(pg);
         applyAtacarejoPricingToPriceGroup(pg, product);
         return pg;
     };
@@ -16662,11 +17669,28 @@ const createSmartObject = async (
         });
     }
 
+    const isRedBurstCard = isRedBurstPriceGroup(priceTagGroup) || String(labelTpl?.id || '') === BUILTIN_RED_BURST_LABEL_TEMPLATE_ID;
+    if (isRedBurstCard) {
+        title.set({
+            visible: false,
+            selectable: false,
+            evented: false
+        });
+    }
+    const groupChildren: any[] = [
+        bg,
+        imgObj,
+        title,
+        ...(limitObj ? [limitObj] : []),
+        priceTagGroup
+    ];
+
     // Main Product Card Group
     // NOTE: keep title above the image in stacking order (prevents it being hidden by tall images).
-    const group = new fabric.Group([bg, imgObj, title, ...(limitObj ? [limitObj] : []), priceTagGroup], {
+    const group = new fabric.Group(groupChildren, {
         left: x,
         top: y,
+        name: 'product-card',
         originX: 'center',
         originY: 'center',
         isSmartObject: true,
@@ -16820,36 +17844,291 @@ const handlePasteList = async () => {
     pastedImage.value = null;
 }
 
-// Confirm import from review modal
-const confirmProductImport = async (products: any[], opts?: { mode?: 'replace' | 'append'; labelTemplateId?: string }) => {
-    showProductReviewModal.value = false;
-    
-    if (!products || products.length === 0) {
-        console.warn('[confirmProductImport] No products to import!');
-        return;
+const resolveOrCreateZoneForFrame = (frame: any): any | null => {
+    if (!canvas.value || !fabric || !frame) return null
+    const frameId = String((frame as any)?._customId || '').trim()
+    if (!frameId) return null
+
+    const zonesForFrame = canvas.value
+        .getObjects()
+        .filter((obj: any) => isLikelyProductZone(obj) && String((obj as any)?.parentFrameId || '').trim() === frameId)
+
+    if (zonesForFrame.length === 1) {
+        ensureZoneSanity(zonesForFrame[0])
+        return zonesForFrame[0]
     }
-    
-    // Get the saved zone reference and pass it to simulateSmartGrid
-    const zone = targetGridZone.value;
-    
-    // Add to canvas using the products received from the modal (with edits applied)
-    const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace';
-    const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined;
-    await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, { mode, labelTemplateId });
-    
-    // Clear review state and zone reference
-    reviewProducts.value = [];
-    targetGridZone.value = null;
-    productImportExistingCount.value = 0;
-    
-    // Update layer panel
-    if (canvas.value) {
-        canvasObjects.value = [...canvas.value.getObjects()];
+
+    if (zonesForFrame.length > 1) {
+        const pickLargest = zonesForFrame.reduce((best: any, candidate: any) => {
+            const b = getZoneMetrics(best) || best?.getBoundingRect?.(true)
+            const c = getZoneMetrics(candidate) || candidate?.getBoundingRect?.(true)
+            const bestArea = Number(b?.width || 0) * Number(b?.height || 0)
+            const candidateArea = Number(c?.width || 0) * Number(c?.height || 0)
+            return candidateArea > bestArea ? candidate : best
+        }, zonesForFrame[0])
+        ensureZoneSanity(pickLargest)
+        return pickLargest
+    }
+
+    const frameBounds = getFrameBounds(frame)
+    if (!frameBounds) return null
+
+    const innerPadding = Math.max(12, Math.min(64, Math.round(Math.min(frameBounds.width, frameBounds.height) * 0.04)))
+    const zoneWidth = Math.max(80, frameBounds.width - innerPadding * 2)
+    const zoneHeight = Math.max(80, frameBounds.height - innerPadding * 2)
+    const zoneCenterX = frameBounds.left + (frameBounds.width / 2)
+    const zoneCenterY = frameBounds.top + (frameBounds.height / 2)
+
+    const zoneRect = new fabric.Rect({
+        width: zoneWidth,
+        height: zoneHeight,
+        fill: 'rgba(0,0,0,0)',
+        stroke: '#404040',
+        strokeWidth: 2,
+        strokeDashArray: [10, 10],
+        strokeUniform: true,
+        rx: 16,
+        ry: 16,
+        originX: 'center',
+        originY: 'center',
+        name: 'zoneRect',
+        selectable: false,
+        evented: false
+    })
+
+    const zone = new fabric.Group([zoneRect], {
+        left: zoneCenterX,
+        top: zoneCenterY,
+        originX: 'center',
+        originY: 'center',
+        isGridZone: true,
+        isProductZone: true,
+        name: 'productZoneContainer',
+        columns: 0,
+        rows: 0,
+        gapHorizontal: 20,
+        gapVertical: 20,
+        cardAspectRatio: 'auto',
+        lastRowBehavior: 'fill',
+        layoutDirection: 'horizontal',
+        verticalAlign: 'stretch',
+        subTargetCheck: false,
+        hoverCursor: 'move',
+        moveCursor: 'move',
+        lockMovementX: false,
+        lockMovementY: false,
+        lockScalingFlip: true,
+        selectable: true,
+        evented: true,
+        hasControls: true,
+        hasBorders: true,
+        transparentCorners: false,
+        cornerColor: '#8b5cf6',
+        cornerStyle: 'circle',
+        cornerSize: 10,
+        padding: 0,
+        excludeFromExport: false,
+        objectCaching: false,
+        statefullCache: false
+    })
+
+    ;(zone as any)._customId = makeCanvasObjectId()
+    ;(zone as any)._zonePadding = 20
+    ;(zone as any)._zoneWidth = zoneWidth
+    ;(zone as any)._zoneHeight = zoneHeight
+    ;(zone as any).parentFrameId = frameId
+
+    canvas.value.add(zone)
+    ensureZoneSanity(zone)
+    getResolvedZoneFrameId(zone)
+    zone.setCoords?.()
+    ensureFramesBelowContents()
+    return zone
+}
+
+const importProductsToMultipleFrames = async (products: any[], opts?: ProductImportOptions) => {
+    if (!canvas.value || !Array.isArray(products) || products.length === 0) return
+
+    const selectedFrameIds = Array.from(
+        new Set(
+            (Array.isArray(opts?.selectedFrameIds) ? opts?.selectedFrameIds : [])
+                .map((id: any) => String(id || '').trim())
+                .filter(Boolean)
+        )
+    )
+    const frameById = new Map<string, any>()
+    getAllFrames().forEach((frame: any) => {
+        const id = String(frame?._customId || frame?.id || '').trim()
+        if (id) frameById.set(id, frame)
+    })
+
+    const validFrameIds = selectedFrameIds.filter(id => frameById.has(id))
+    if (validFrameIds.length === 0) {
+        console.warn('[importProductsToMultipleFrames] No valid selected frames to import.')
+        return
+    }
+
+    const productById = new Map<string, any>()
+    const orderedProductIds: string[] = []
+    products.forEach((product: any, index: number) => {
+        const id = String(product?.id || `tmp-product-${index + 1}`).trim()
+        if (!productById.has(id)) {
+            productById.set(id, product)
+            orderedProductIds.push(id)
+        }
+    })
+
+    const validFrameIdSet = new Set(validFrameIds)
+    const pairs: Array<{ product: any; productId: string; frameId: string }> = []
+    const usedFrameIds = new Set<string>()
+    const usedProductIds = new Set<string>()
+
+    const rawAssignments = Array.isArray(opts?.frameAssignments) ? opts.frameAssignments : []
+    rawAssignments.forEach((assignment: any) => {
+        const productId = String(assignment?.productId || '').trim()
+        const frameId = String(assignment?.frameId || '').trim()
+        if (!productId || !frameId) return
+        if (!validFrameIdSet.has(frameId)) return
+        if (!productById.has(productId)) return
+        if (usedFrameIds.has(frameId)) return
+        if (usedProductIds.has(productId)) return
+
+        usedFrameIds.add(frameId)
+        usedProductIds.add(productId)
+        pairs.push({
+            product: productById.get(productId),
+            productId,
+            frameId
+        })
+    })
+
+    if (pairs.length === 0) {
+        const fallbackLimit = Math.min(orderedProductIds.length, validFrameIds.length)
+        for (let i = 0; i < fallbackLimit; i += 1) {
+            const productId = orderedProductIds[i]
+            const frameId = validFrameIds[i]
+            if (!productId || !frameId) continue
+            pairs.push({
+                product: productById.get(productId),
+                productId,
+                frameId
+            })
+        }
+    }
+
+    const effectiveLimit = Math.min(orderedProductIds.length, validFrameIds.length)
+    const effectivePairs = pairs.slice(0, effectiveLimit)
+    if (effectivePairs.length === 0) {
+        console.warn('[importProductsToMultipleFrames] No valid product/frame pairs to import.')
+        return
+    }
+
+    const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined
+    let applied = 0
+
+    for (const pair of effectivePairs) {
+        const frame = frameById.get(pair.frameId)
+        if (!frame) continue
+        const zone = resolveOrCreateZoneForFrame(frame)
+        if (!zone) {
+            console.warn('[importProductsToMultipleFrames] Could not resolve zone for frame:', pair.frameId)
+            continue
+        }
+
+        await simulateSmartGrid(
+            [pair.product],
+            { margin: 10, gap: 15, orphanBehavior: 'fill' },
+            zone,
+            {
+                mode: 'replace',
+                labelTemplateId,
+                persist: false
+            }
+        )
+        applied += 1
+    }
+
+    if (applied > 0) {
+        canvasObjects.value = [...canvas.value.getObjects()]
+        canvas.value.requestRenderAll()
+        refreshSelectedRef()
+        saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid-multi-frame' })
+        flushPersistenceNow('simulate-smart-grid-multi-frame')
     }
 }
 
-const handleFileUpload = (e: any) => {
-    // ... Existing logic stub
+// Confirm import from review modal
+const confirmProductImport = async (products: any[], opts?: ProductImportOptions) => {
+    showProductReviewModal.value = false
+
+    if (!products || products.length === 0) {
+        console.warn('[confirmProductImport] No products to import!')
+        return
+    }
+
+    try {
+        const targetMode: ImportTargetMode = opts?.targetMode === 'multi-frame' ? 'multi-frame' : 'zone'
+        if (targetMode === 'multi-frame') {
+            await importProductsToMultipleFrames(products, opts)
+        } else {
+            // Get the saved zone reference and pass it to simulateSmartGrid
+            const zone = targetGridZone.value
+
+            // Add to canvas using the products received from the modal (with edits applied)
+            const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace'
+            const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined
+            await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, { mode, labelTemplateId })
+        }
+    } finally {
+        // Clear review state and zone reference
+        reviewProducts.value = []
+        targetGridZone.value = null
+        productImportExistingCount.value = 0
+
+        // Update layer panel
+        if (canvas.value) {
+            canvasObjects.value = [...canvas.value.getObjects()]
+        }
+    }
+}
+
+const handleFileUpload = async (e: any) => {
+    const input = e?.target as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (input) input.value = '';
+    if (!file) {
+        clearPendingProductImageOperation();
+        return;
+    }
+
+    try {
+        const uploaded = await uploadFile(file);
+        if (!uploaded?.success || !uploaded?.url) {
+            throw new Error('Upload falhou');
+        }
+
+        if (pendingLocalImageActionMode.value === 'replace' && pendingImageReplaceTargetId.value) {
+            await replaceImageByCustomId(pendingImageReplaceTargetId.value, uploaded.url);
+        } else if (pendingLocalImageActionMode.value === 'add' && pendingImageAddCardId.value) {
+            const card = findProductCardByCustomId(pendingImageAddCardId.value);
+            if (!card) {
+                throw new Error('Card de produto não encontrado.');
+            }
+            const added = await addImageToProductCardByUrl(card, uploaded.url);
+            if (!added) throw new Error('Não foi possível adicionar imagem ao card.');
+        } else {
+            await insertAssetToCanvas({
+                id: makeCanvasObjectId(),
+                name: file.name || 'Imagem',
+                url: uploaded.url
+            });
+        }
+    } catch (err: any) {
+        console.error('❌ [upload] Erro ao processar imagem:', err);
+        alert('Erro ao enviar imagem: ' + (err?.message || 'Erro desconhecido'));
+    } finally {
+        clearPendingProductImageOperation();
+    }
 }
 
 const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
@@ -17005,13 +18284,15 @@ const simulateSmartGrid = async (
     customData: any[] = [],
     config = { margin: 10, gap: 15, orphanBehavior: 'fill' },
     zone: any = null,
-    opts: { mode?: 'replace' | 'append'; labelTemplateId?: string } = {}
+    opts: SmartGridRunOptions = {}
 ) => {
     if (!canvas.value || !fabric) {
         console.error('[simulateSmartGrid] Canvas or fabric not available!');
         return;
     }
     await ensureLabelTemplatesReady();
+    const mode: 'replace' | 'append' = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace';
+    const requestedTplId = typeof opts?.labelTemplateId === 'string' && opts.labelTemplateId.trim().length ? opts.labelTemplateId.trim() : undefined;
 
     // 1. Identify Target Context (Zone vs Page) and Template
     // Use the passed zone if available, otherwise try to get from active selection
@@ -17024,7 +18305,7 @@ const simulateSmartGrid = async (
             // Check for product zone using isLikelyProductZone to handle both isGridZone and isProductZone
             if (isLikelyProductZone(activeObj)) {
                 targetZone = activeObj;
-            } else if (activeObj.type === 'group') {
+            } else if (activeObj.type === 'group' && !requestedTplId) {
                 templateObject = activeObj;
             }
         }
@@ -17080,9 +18361,6 @@ const simulateSmartGrid = async (
         };
         
     }
-
-    const mode: 'replace' | 'append' = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace';
-    const requestedTplId = typeof opts?.labelTemplateId === 'string' && opts.labelTemplateId.trim().length ? opts.labelTemplateId.trim() : undefined;
 
     // 3. Prepare Data
     let products = Array.isArray(customData) && customData.length > 0 ? customData : MOCK_PRODUCTS;
@@ -17313,6 +18591,10 @@ const simulateSmartGrid = async (
                      subTargetCheck: false,
                      interactive: false
                   });
+                  const clonedName = String((cloned as any)?.name || '').trim();
+                  if (!clonedName || clonedName === 'priceGroup') {
+                      cloned.set('name', 'product-card');
+                  }
 
                   // Ensure internal elements are selectable
                   const objects = cloned.getObjects ? cloned.getObjects() : [];
@@ -17530,8 +18812,10 @@ const simulateSmartGrid = async (
         invalidateScrollbarBounds();
         updateScrollbars();
         canvas.value.requestRenderAll();
-        saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid' });
-        flushPersistenceNow('simulate-smart-grid');
+        if (opts?.persist !== false) {
+            saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid' });
+            flushPersistenceNow('simulate-smart-grid');
+        }
     }
 }
 
@@ -18112,9 +19396,7 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
         String(priceGroup?.type || '').toLowerCase() === 'group' &&
         typeof priceGroup.getObjects === 'function'
     ) {
-        const preserveTemplateVisual =
-            (priceGroup as any).__preserveManualLayout === true ||
-            (priceGroup as any).__isCustomTemplate === true;
+        const preserveTemplateVisual = shouldPreserveManualTemplateVisual(priceGroup);
         if (preserveTemplateVisual) {
             // Respect Mini Editor template geometry/typography for manual templates.
             // Price-layer global tweaks should not override authored label internals.
@@ -18946,11 +20228,216 @@ const normalizeManualPriceChain = (group: any, cacheKey: string, integer: any, d
     });
 };
 
+const readSingleManualPriceAnchors = (priceGroup: any) => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
+    const cached = (priceGroup as any).__manualSingleAnchors;
+    if (cached && typeof cached === 'object') return cached;
+
+    const all = collectObjectsDeep(priceGroup);
+    const priceBg = findByName(all, 'price_bg');
+    const currency = findByName(all, 'price_currency_text') || findByName(all, 'priceSymbol') || findByName(all, 'price_currency');
+    const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer');
+    const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
+    const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
+    if (!priceBg || !integer || !decimal) return null;
+
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+    const bgBounds = getObjectHorizontalBoundsLocal(priceBg);
+    const intBounds = getObjectHorizontalBoundsLocal(integer);
+    const decBounds = getObjectHorizontalBoundsLocal(decimal);
+    const unitShown = isObjectShownForBounds(unit) && String(unit?.text || '').trim().length > 0;
+    const chain = [integer, decimal, unitShown ? unit : null].filter(Boolean) as any[];
+    const chainBounds = measureHorizontalBoundsLocal(chain);
+    const curBounds = getObjectHorizontalBoundsLocal(currency);
+    const full = [currency, ...chain].filter((o: any) => isObjectShownForBounds(o));
+    const fullBounds = measureHorizontalBoundsLocal(full);
+
+    const fallbackPad = Math.max(8, (Math.abs(Number(priceBg.width || 0) * Number(priceBg.scaleX ?? 1)) || 120) * 0.08);
+    const padLeft = bgBounds && fullBounds
+        ? clamp(fullBounds.left - bgBounds.left, 4, 80)
+        : fallbackPad;
+    const padRight = bgBounds && fullBounds
+        ? clamp(bgBounds.right - fullBounds.right, 4, 80)
+        : fallbackPad;
+
+    const targetCenterX = fullBounds
+        ? ((fullBounds.left + fullBounds.right) / 2)
+        : (chainBounds ? ((chainBounds.left + chainBounds.right) / 2) : 0);
+    const intDecGap = (intBounds && decBounds)
+        ? clamp(decBounds.left - intBounds.right, -24, 24)
+        : -4;
+    const currencyGap = (curBounds && chainBounds)
+        ? clamp(chainBounds.left - curBounds.right, -8, 36)
+        : 6;
+
+    const anchors = {
+        targetCenterX,
+        intY: Number(integer.top || 0),
+        decY: Number(decimal.top || 0),
+        unitY: Number(unit?.top || decimal.top || 0),
+        currencyY: Number(currency?.top || integer.top || 0),
+        intDecGap,
+        currencyGap,
+        padLeft,
+        padRight
+    };
+    (priceGroup as any).__manualSingleAnchors = anchors;
+    return anchors;
+};
+
+const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return;
+    const preserveTemplateVisual = shouldPreserveManualTemplateVisual(priceGroup);
+    if (!preserveTemplateVisual) return;
+
+    const all = collectObjectsDeep(priceGroup);
+    const hasAtacarejo = !!findByName(all, 'atac_retail_bg');
+    if (hasAtacarejo) return;
+    if (isRedBurstPriceGroup(priceGroup)) return;
+
+    const priceBg = findByName(all, 'price_bg');
+    const currency = findByName(all, 'price_currency_text') || findByName(all, 'priceSymbol') || findByName(all, 'price_currency');
+    const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer');
+    const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
+    const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
+    if (!priceBg || !integer || !decimal) return;
+
+    const anchors = readSingleManualPriceAnchors(priceGroup) || {};
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+    const getW = (obj: any) => (obj && typeof obj.getScaledWidth === 'function') ? Number(obj.getScaledWidth()) : 0;
+
+    const digits = Math.max(1, String(integer?.text || '').replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '').length || 1);
+    const variant = digits <= 1
+        ? { chainWidthRatio: 0.66, minScale: 0.58, fallbackGap: -6, currencyGapRatio: 0.020 }
+        : digits === 2
+            ? { chainWidthRatio: 0.76, minScale: 0.50, fallbackGap: -4, currencyGapRatio: 0.018 }
+            : { chainWidthRatio: 0.88, minScale: 0.40, fallbackGap: -2, currencyGapRatio: 0.014 };
+
+    const restoreBaseScale = (obj: any) => {
+        if (!obj || typeof obj.set !== 'function') return;
+        const sx = Number((obj as any).__originalScaleX);
+        const sy = Number((obj as any).__originalScaleY);
+        obj.set({
+            scaleX: Number.isFinite(sx) && sx > 0 ? sx : 1,
+            scaleY: Number.isFinite(sy) && sy > 0 ? sy : 1
+        });
+        obj.initDimensions?.();
+    };
+    const centerObjectsX = (objs: any[], centerX = 0) => {
+        const shown = (objs || []).filter((o: any) => isObjectShownForBounds(o));
+        const bounds = measureHorizontalBoundsLocal(shown);
+        if (!bounds) return;
+        const currentCenter = (bounds.left + bounds.right) / 2;
+        const dx = centerX - currentCenter;
+        if (Math.abs(dx) < 0.001) return;
+        shown.forEach((obj: any) => obj?.set?.({ left: Number(obj.left || 0) + dx }));
+    };
+    const fitChainToWidth = (objs: any[], maxW: number, minScale: number) => {
+        const shown = (objs || []).filter((o: any) => isObjectShownForBounds(o));
+        if (!shown.length || !Number.isFinite(maxW) || maxW <= 0) return;
+        const bounds = measureHorizontalBoundsLocal(shown);
+        if (!bounds || bounds.width <= maxW) return;
+        const s = clamp(maxW / bounds.width, minScale, 1);
+        shown.forEach((obj: any) => obj?.set?.({
+            scaleX: Number(obj.scaleX || 1) * s,
+            scaleY: Number(obj.scaleY || 1) * s
+        }));
+    };
+
+    restoreBaseScale(integer);
+    restoreBaseScale(decimal);
+    restoreBaseScale(unit);
+    restoreBaseScale(currency);
+
+    const bgBounds = getObjectHorizontalBoundsLocal(priceBg);
+    const bgW = Math.max(1, Number(priceBg.width || 0) * Math.abs(Number(priceBg.scaleX ?? 1) || 1));
+    const rawPadLeft = Number((anchors as any).padLeft);
+    const rawPadRight = Number((anchors as any).padRight);
+    const padLeft = clamp(
+        Number.isFinite(rawPadLeft) ? rawPadLeft : Math.max(8, bgW * 0.08),
+        4,
+        Math.max(10, bgW * 0.25)
+    );
+    const padRight = clamp(
+        Number.isFinite(rawPadRight) ? rawPadRight : Math.max(8, bgW * 0.08),
+        4,
+        Math.max(10, bgW * 0.25)
+    );
+    const maxTotalW = bgBounds
+        ? Math.max(20, (bgBounds.right - bgBounds.left) - padLeft - padRight)
+        : Math.max(20, bgW - padLeft - padRight);
+    const intDecGap = Number.isFinite(Number((anchors as any).intDecGap))
+        ? clamp(Number((anchors as any).intDecGap), -24, 24)
+        : variant.fallbackGap;
+    const intY = Number.isFinite(Number((anchors as any).intY)) ? Number((anchors as any).intY) : Number(integer.top || 0);
+    const decY = Number.isFinite(Number((anchors as any).decY)) ? Number((anchors as any).decY) : Number(decimal.top || intY);
+    const unitY = Number.isFinite(Number((anchors as any).unitY)) ? Number((anchors as any).unitY) : Number(unit?.top || decY);
+    const unitVisible = isObjectShownForBounds(unit) && String(unit?.text || '').trim().length > 0;
+
+    let currencyGap = Number((anchors as any).currencyGap);
+    if (!Number.isFinite(currencyGap)) currencyGap = Math.max(2, bgW * variant.currencyGapRatio);
+
+    const currencyW = currency ? getW(currency) : 0;
+    const chainMaxW = Math.max(20, maxTotalW * variant.chainWidthRatio - (currency ? (currencyW + currencyGap) : 0));
+
+    layoutPrice({
+        priceInteger: integer,
+        priceDecimal: decimal,
+        priceUnit: unitVisible ? unit : undefined,
+        intX: 0,
+        intY,
+        decY,
+        unitY,
+        maxWidth: chainMaxW,
+        gapPx: intDecGap,
+        minGapPx: -24,
+        maxGapPx: 24
+    });
+
+    const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[];
+    const chainBounds = measureHorizontalBoundsLocal(chain);
+    if (currency && chainBounds) {
+        currency.set?.({
+            originX: 'left',
+            originY: 'center',
+            left: chainBounds.left - currencyGap - getW(currency),
+            top: Number.isFinite(Number((anchors as any).currencyY))
+                ? Number((anchors as any).currencyY)
+                : Number(integer.top || intY)
+        });
+    }
+
+    const full = [currency, ...chain].filter((o: any) => isObjectShownForBounds(o));
+    const targetCenterX = Number.isFinite(Number((anchors as any).targetCenterX))
+        ? Number((anchors as any).targetCenterX)
+        : 0;
+    centerObjectsX(full, targetCenterX);
+    fitChainToWidth(full, maxTotalW, variant.minScale);
+    centerObjectsX(full, targetCenterX);
+
+    if (bgBounds) {
+        const bounds = measureHorizontalBoundsLocal(full);
+        if (bounds) {
+            const leftLimit = bgBounds.left + padLeft;
+            const rightLimit = bgBounds.right - padRight;
+            let dx = 0;
+            if (bounds.left < leftLimit) dx += (leftLimit - bounds.left);
+            if ((bounds.right + dx) > rightLimit) dx += (rightLimit - (bounds.right + dx));
+            if (Math.abs(dx) > 0.001) {
+                full.forEach((obj: any) => obj?.set?.({ left: Number(obj.left || 0) + dx }));
+            }
+        }
+    }
+
+    const parts = priceGroup.getObjects?.() || [];
+    parts.forEach((o: any) => o?.setCoords?.());
+    priceGroup.dirty = true;
+    priceGroup.setCoords?.();
+};
+
 const expandManualTemplateWidthForDynamicPrice = (priceGroup: any) => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return;
-    const preserveTemplateVisual =
-        !!((priceGroup as any).__preserveManualLayout) ||
-        !!((priceGroup as any).__isCustomTemplate);
+    const preserveTemplateVisual = shouldPreserveManualTemplateVisual(priceGroup);
     if (!preserveTemplateVisual) return;
 
     const all = collectObjectsDeep(priceGroup);
@@ -19082,9 +20569,7 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
     // values into the CURRENT instance geometry. This does not mutate the stored snapshots; it only
     // adjusts the objects inside this card's `priceGroup` to avoid overlaps.
 
-    const preserveTemplateVisual =
-        !!((priceGroup as any).__preserveManualLayout) ||
-        !!((priceGroup as any).__isCustomTemplate);
+    const preserveTemplateVisual = shouldPreserveManualTemplateVisual(priceGroup);
     if (!preserveTemplateVisual) return;
 
     const all = collectObjectsDeep(priceGroup);
@@ -19606,9 +21091,7 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
         setText(bannerText, `\u2605 ${bannerLabel} \u2605`);
     }
 
-    const preserveTemplateVisual =
-        !!((pg as any)?.__preserveManualLayout) ||
-        !!((pg as any)?.__isCustomTemplate);
+    const preserveTemplateVisual = shouldPreserveManualTemplateVisual(pg);
     const forceCanonicalAtac = (pg as any)?.__forceAtacarejoCanonical === true;
     // Canonical layout: runtime layout function will place/fit values. Do not pre-fit here.
     if (preserveTemplateVisual && !forceCanonicalAtac) {
@@ -19958,6 +21441,236 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
     return { pillW: totalW, pillH: totalH };
 };
 
+function isRedBurstPriceGroup(priceGroup: any): boolean {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;
+    const all = collectObjectsDeep(priceGroup);
+    return !!(
+        findByName(all, 'price_bg') &&
+        findByName(all, 'price_header_bg') &&
+        findByName(all, 'price_header_text') &&
+        findByName(all, 'price_burst_line_a') &&
+        findByName(all, 'price_integer_text') &&
+        findByName(all, 'price_decimal_text')
+    );
+}
+
+function shouldPreserveManualTemplateVisual(priceGroup: any): boolean {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;
+    if ((priceGroup as any).__preserveManualLayout === true || (priceGroup as any).__isCustomTemplate === true) return true;
+    if ((priceGroup as any).__forceAtacarejoCanonical === true) return false;
+
+    if (isRedBurstPriceGroup(priceGroup)) return true;
+
+    const all = collectObjectsDeep(priceGroup);
+    if (!all.length) return false;
+
+    const hasAtacStructure = !!findByName(all, 'atac_retail_bg');
+    if (hasAtacStructure) return false;
+
+    if (findByName(all, 'price_header_bg') || findByName(all, 'price_header_text')) return true;
+
+    const hasTemplateMetrics = all.some((obj: any) => (
+        Number.isFinite(Number((obj as any)?.__originalLeft)) ||
+        Number.isFinite(Number((obj as any)?.__originalTop)) ||
+        Number.isFinite(Number((obj as any)?.__originalFontSize)) ||
+        Number.isFinite(Number((obj as any)?.__originalWidth)) ||
+        Number.isFinite(Number((obj as any)?.__originalHeight))
+    ));
+    return hasTemplateMetrics;
+}
+
+const restoreMissingManualTemplateFlags = (priceGroup: any): boolean => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;
+    if (!shouldPreserveManualTemplateVisual(priceGroup)) return false;
+
+    let changed = false;
+    if ((priceGroup as any).__preserveManualLayout !== true) {
+        (priceGroup as any).__preserveManualLayout = true;
+        changed = true;
+    }
+    if ((priceGroup as any).__isCustomTemplate !== true) {
+        (priceGroup as any).__isCustomTemplate = true;
+        changed = true;
+    }
+
+    const hasBaseW = Number.isFinite(Number((priceGroup as any).__manualTemplateBaseW));
+    const hasBaseH = Number.isFinite(Number((priceGroup as any).__manualTemplateBaseH));
+    if (!hasBaseW || !hasBaseH) {
+        const rawW = Number(priceGroup.width || 0);
+        const rawH = Number(priceGroup.height || 0);
+        const sx = Math.abs(Number(priceGroup.scaleX ?? 1)) || 1;
+        const sy = Math.abs(Number(priceGroup.scaleY ?? 1)) || 1;
+        const scaledW = Number(priceGroup.getScaledWidth?.() || 0);
+        const scaledH = Number(priceGroup.getScaledHeight?.() || 0);
+        const baseW = rawW > 0 ? rawW : (scaledW > 0 ? (scaledW / sx) : 0);
+        const baseH = rawH > 0 ? rawH : (scaledH > 0 ? (scaledH / sy) : 0);
+        if (!hasBaseW && Number.isFinite(baseW) && baseW > 0) {
+            (priceGroup as any).__manualTemplateBaseW = baseW;
+            changed = true;
+        }
+        if (!hasBaseH && Number.isFinite(baseH) && baseH > 0) {
+            (priceGroup as any).__manualTemplateBaseH = baseH;
+            changed = true;
+        }
+    }
+
+    return changed;
+};
+
+const restoreMissingManualTemplateFlagsInCanvas = (canvasInstance: any, reason: string = 'unknown') => {
+    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return 0;
+
+    const roots = canvasInstance.getObjects() || [];
+    const stack = [...roots];
+    let restored = 0;
+    while (stack.length) {
+        const obj = stack.pop();
+        if (!obj) continue;
+        if (isLikelyPriceGroupObject(obj) && restoreMissingManualTemplateFlags(obj)) {
+            restored += 1;
+        }
+        if (typeof obj.getObjects === 'function') {
+            (obj.getObjects() || []).forEach((child: any) => stack.push(child));
+        }
+    }
+
+    if (restored > 0) {
+        console.log(`[price-template] Restauradas flags de template manual em ${restored} etiqueta(s) (${reason})`);
+    }
+    return restored;
+};
+
+function tuneRedBurstPriceGroupLayout(priceGroup: any) {
+    if (!isRedBurstPriceGroup(priceGroup)) return false;
+    const all = collectObjectsDeep(priceGroup);
+    const priceBg = findByName(all, 'price_bg');
+    const headerBg = findByName(all, 'price_header_bg');
+    const headerText = findByName(all, 'price_header_text');
+    const headerUnitText = findByName(all, 'price_header_unit_text');
+    const currencyText = findByName(all, 'price_currency_text');
+    const priceInteger = findByName(all, 'price_integer_text');
+    const priceDecimal = findByName(all, 'price_decimal_text');
+    if (!priceBg || !headerBg || !headerText || !currencyText || !priceInteger || !priceDecimal) return false;
+
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+    const bgW = Math.max(1, Number(priceBg.width || 0));
+    const bgH = Math.max(1, Number(priceBg.height || 0));
+    const headerW = Math.max(1, Number(headerBg.width || (bgW * 0.92)));
+    const headerH = Math.max(1, Number(headerBg.height || (bgH * 0.27)));
+    const headerY = Number(headerBg.top || (-(bgH / 2) + headerH * 0.72));
+    const ensureTextDims = (obj: any) => {
+        if (!isTextLikeObject(obj)) return;
+        if (typeof obj.initDimensions === 'function') obj.initDimensions();
+    };
+
+    if (headerUnitText && isTextLikeObject(headerUnitText)) {
+        headerUnitText.set({ text: '', visible: false });
+        ensureTextDims(headerUnitText);
+    }
+
+    if (isTextLikeObject(headerText)) {
+        const originalHeaderFont = Number((headerText as any).__originalFontSize || headerText.fontSize || Math.max(16, headerH * 0.56));
+        headerText.set({
+            originX: 'center',
+            originY: 'center',
+            left: 0,
+            top: headerY + (headerH * 0.01),
+            width: headerW * 0.9,
+            fontSize: originalHeaderFont,
+            scaleX: 1,
+            scaleY: 1
+        });
+        ensureTextDims(headerText);
+        const headerMaxW = headerW * 0.9;
+        const measuredHeaderW = Number(headerText.getScaledWidth?.() || 0);
+        if (measuredHeaderW > headerMaxW && measuredHeaderW > 0) {
+            const ratio = clamp(headerMaxW / measuredHeaderW, 0.55, 1);
+            headerText.set({ fontSize: Math.max(12, originalHeaderFont * ratio) });
+            ensureTextDims(headerText);
+        }
+    }
+
+    if (!isTextLikeObject(currencyText) || !isTextLikeObject(priceInteger) || !isTextLikeObject(priceDecimal)) {
+        return false;
+    }
+
+    const originalCurrencyFont = Number((currencyText as any).__originalFontSize || currencyText.fontSize || Math.max(20, bgH * 0.2));
+    const originalIntegerFont = Number((priceInteger as any).__originalFontSize || priceInteger.fontSize || Math.max(56, bgH * 0.78));
+    const originalDecimalFont = Number((priceDecimal as any).__originalFontSize || priceDecimal.fontSize || Math.max(28, bgH * 0.44));
+
+    const priceBaselineY = bgH * 0.2;
+    const innerLeftPad = bgW * 0.08;
+    const innerRightPad = bgW * 0.06;
+    const textGap = Math.max(2, bgW * 0.008);
+    const currencyGap = Math.max(4, bgW * 0.02);
+
+    currencyText.set({
+        originX: 'center',
+        originY: 'center',
+        fontSize: originalCurrencyFont,
+        scaleX: 1,
+        scaleY: 1,
+        top: priceBaselineY + (bgH * 0.01)
+    });
+    priceInteger.set({
+        originX: 'left',
+        originY: 'center',
+        fontSize: originalIntegerFont,
+        scaleX: 1,
+        scaleY: 1,
+        top: priceBaselineY + (bgH * 0.01)
+    });
+    priceDecimal.set({
+        originX: 'left',
+        originY: 'center',
+        fontSize: originalDecimalFont,
+        scaleX: 1,
+        scaleY: 1,
+        top: priceBaselineY - (bgH * 0.145)
+    });
+
+    ensureTextDims(currencyText);
+    ensureTextDims(priceInteger);
+    ensureTextDims(priceDecimal);
+
+    const currencyX = -(bgW / 2) + innerLeftPad + (Number(currencyText.getScaledWidth?.() || 0) / 2);
+    currencyText.set({ left: currencyX });
+    ensureTextDims(currencyText);
+
+    const layoutPriceTexts = () => {
+        const currencyW = Number(currencyText.getScaledWidth?.() || 0);
+        const intW = Number(priceInteger.getScaledWidth?.() || 0);
+        const decW = Number(priceDecimal.getScaledWidth?.() || 0);
+        const textStartX = currencyX + (currencyW / 2) + currencyGap;
+        const maxRight = (bgW / 2) - innerRightPad;
+        const availableW = Math.max(1, maxRight - textStartX);
+        const totalW = intW + textGap + decW;
+        return { textStartX, totalW, availableW };
+    };
+
+    let integerFont = originalIntegerFont;
+    let decimalFont = originalDecimalFont;
+    for (let i = 0; i < 4; i++) {
+        const layout = layoutPriceTexts();
+        if (layout.totalW <= layout.availableW) break;
+        const ratio = clamp(layout.availableW / layout.totalW, 0.7, 1);
+        integerFont = Math.max(36, integerFont * ratio);
+        decimalFont = Math.max(20, decimalFont * ratio);
+        priceInteger.set({ fontSize: integerFont, scaleX: 1, scaleY: 1 });
+        priceDecimal.set({ fontSize: decimalFont, scaleX: 1, scaleY: 1 });
+        ensureTextDims(priceInteger);
+        ensureTextDims(priceDecimal);
+    }
+
+    const finalLayout = layoutPriceTexts();
+    priceInteger.set({ left: finalLayout.textStartX });
+    ensureTextDims(priceInteger);
+    const intWFinal = Number(priceInteger.getScaledWidth?.() || 0);
+    priceDecimal.set({ left: finalLayout.textStartX + intWFinal + textGap });
+    ensureTextDims(priceDecimal);
+    return true;
+}
+
 /**
  * Preserve manual layout edits from mini editor:
  * scales the entire template proportionally without reflowing text blocks.
@@ -19966,6 +21679,9 @@ const layoutManualTemplateGroup = (priceGroup: any, cardW: number, cardH: number
     if (!priceGroup) return null;
 
     const all = collectObjectsDeep(priceGroup);
+    if (isRedBurstPriceGroup(priceGroup)) {
+        tuneRedBurstPriceGroupLayout(priceGroup);
+    }
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const toFinite = (v: any, fb: number) => {
         const n = Number(v);
@@ -20416,10 +22132,33 @@ const isPriceLayoutNode = (obj: any) => {
     return PRICE_LAYOUT_NODE_PREFIXES.some((prefix) => name.startsWith(prefix));
 };
 
+const isCardContainerLikeGroup = (group: any) => {
+    if (!group || String(group?.type || '').toLowerCase() !== 'group') return false;
+    if (group?.isSmartObject || group?.isProductCard) return true;
+    if (String(group?.name || '').startsWith('product-card')) return true;
+    if (String((group as any)?.parentZoneId || '').trim()) return true;
+    if (String((group as any)?.smartGridId || '').trim()) return true;
+    if (typeof group.getObjects !== 'function') return false;
+    const children = group.getObjects() || [];
+    if (!children.length) return false;
+    return children.some((child: any) => {
+        const n = String(child?.name || '');
+        return n === 'offerBackground' || n === 'smart_title' || n === 'smart_limit' || n === 'smart_image' || n === 'product_image' || n === 'productImage';
+    });
+};
+
+const isMisnamedProductCardGroup = (group: any) => {
+    if (!group || String(group?.type || '').toLowerCase() !== 'group') return false;
+    if (String(group?.name || '') !== 'priceGroup') return false;
+    return isCardContainerLikeGroup(group);
+};
+
 const isLikelyPriceGroupObject = (group: any) => {
     if (!group || String(group?.type || '').toLowerCase() !== 'group') return false;
+    if (isMisnamedProductCardGroup(group)) return false;
     if (String(group?.name || '') === 'priceGroup') return true;
-    if ((group as any).__isCustomTemplate === true || (group as any).__preserveManualLayout === true) return true;
+    if (isCardContainerLikeGroup(group)) return false;
+    if (shouldPreserveManualTemplateVisual(group)) return true;
     if (typeof group.getObjects !== 'function') return false;
     return (group.getObjects() || []).some((child: any) => isPriceLayoutNode(child));
 };
@@ -20658,9 +22397,7 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     if (!priceGroup || !priceGroup.getObjects) {
         return null;
     }
-    const preserveManualLayout = (priceGroup as any).__preserveManualLayout === true;
-    const hasCustomTemplateFlag = (priceGroup as any).__isCustomTemplate === true;
-    const preferManualTemplateLayout = preserveManualLayout || hasCustomTemplateFlag;
+    const preferManualTemplateLayout = shouldPreserveManualTemplateVisual(priceGroup);
     const forceCanonicalAtacarejoLayout = (priceGroup as any).__forceAtacarejoCanonical === true;
 
     // Atacarejo template (2-tier label)
@@ -20985,8 +22722,12 @@ function getPriceGroupFromAny(obj: any): any | null {
     // and optionally a circle/ellipse (currency symbol).
     const looksLikePriceGroup = (g: any): boolean => {
         if (!g || g.type !== 'group' || typeof g.getObjects !== 'function') return false;
+        if (isCardContainerLikeGroup(g)) return false;
         const kids = g.getObjects() || [];
         if (kids.length < 2 || kids.length > 10) return false;
+
+        // Prefer deterministic signals from named template nodes when available.
+        if (kids.some((k: any) => isPriceLayoutNode(k))) return true;
         
         let hasRect = false;
         let textCount = 0;
@@ -21004,7 +22745,9 @@ function getPriceGroupFromAny(obj: any): any | null {
     };
 
     // Direct selection (group by name)
-    if (obj.type === 'group' && obj.name === 'priceGroup') return obj;
+    if (obj.type === 'group' && obj.name === 'priceGroup') {
+        if (!isMisnamedProductCardGroup(obj)) return obj;
+    }
     
     // Heuristic fallback for direct selection when name is missing
     if (obj.type === 'group' && !obj.name && looksLikePriceGroup(obj)) {
@@ -21016,7 +22759,9 @@ function getPriceGroupFromAny(obj: any): any | null {
     // If user selected a child inside the price group, walk up the group chain.
     let cur: any = obj;
     while (cur && cur.group) {
-        if (cur.group.type === 'group' && cur.group.name === 'priceGroup') return cur.group;
+        if (cur.group.type === 'group' && cur.group.name === 'priceGroup') {
+            if (!isMisnamedProductCardGroup(cur.group)) return cur.group;
+        }
         // Heuristic fallback
         if (cur.group.type === 'group' && !cur.group.name && looksLikePriceGroup(cur.group)) {
             cur.group.name = 'priceGroup';
@@ -21031,7 +22776,9 @@ function getPriceGroupFromAny(obj: any): any | null {
         while (queue.length) {
             const cur = queue.shift();
             if (!cur) continue;
-            if (cur.type === 'group' && cur.name === 'priceGroup') return cur;
+            if (cur.type === 'group' && cur.name === 'priceGroup') {
+                if (!isMisnamedProductCardGroup(cur)) return cur;
+            }
             // Heuristic fallback for nested groups
             if (cur.type === 'group' && !cur.name && looksLikePriceGroup(cur)) {
                 cur.name = 'priceGroup';
@@ -21524,11 +23271,11 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
             unitTxt.set?.('text', u);
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
         }
-        const preserveTemplateVisual =
-            !!((pg as any)?.__preserveManualLayout) ||
-            !!((pg as any)?.__isCustomTemplate);
-        // Keep Mini Editor templates visually identical (no auto width expansion).
-        if (!preserveTemplateVisual) {
+        const preserveTemplateVisual = shouldPreserveManualTemplateVisual(pg);
+        // Keep Mini Editor templates visually identical and only fit dynamic values.
+        if (preserveTemplateVisual) {
+            fitManualSinglePriceValuesIntoTemplate(pg);
+        } else {
             expandManualTemplateWidthForDynamicPrice(pg);
         }
         return;
@@ -21538,13 +23285,84 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
         legacy.set?.('text', `${integer}${decimalText}`);
         if (typeof legacy.initDimensions === 'function') legacy.initDimensions();
     }
-    const preserveTemplateVisual =
-        !!((pg as any)?.__preserveManualLayout) ||
-        !!((pg as any)?.__isCustomTemplate);
-    // Keep Mini Editor templates visually identical (no auto width expansion).
-    if (!preserveTemplateVisual) {
+    const preserveTemplateVisual = shouldPreserveManualTemplateVisual(pg);
+    // Keep Mini Editor templates visually identical and only fit dynamic values.
+    if (preserveTemplateVisual) {
+        fitManualSinglePriceValuesIntoTemplate(pg);
+    } else {
         expandManualTemplateWidthForDynamicPrice(pg);
     }
+}
+
+function extractWeightTokenForHeader(product: any): string {
+    const nameRaw = String(product?.name || '').toUpperCase();
+    const weightRaw = String(product?.weight || '').toUpperCase();
+    const probe = `${nameRaw} ${weightRaw}`;
+    const match = probe.match(/(\d+\s*[Xx×]\s*\d+(?:[.,]\d+)?\s*(?:KG|KGS|G|GR|GRS|MG|ML|MLS|L|LT|LTS|UN)\b|\d+(?:[.,]\d+)?\s*(?:KG|KGS|G|GR|GRS|MG|ML|MLS|L|LT|LTS|UN)\b)/i);
+    if (!match) return '';
+    return String(match[1] || '')
+        .toUpperCase()
+        .replace(/\s*[Xx×]\s*/g, 'X')
+        .replace(/\s+/g, '')
+        .replace(/GRS?\b/g, 'G')
+        .replace(/KGS\b/g, 'KG')
+        .replace(/MLS\b/g, 'ML')
+        .replace(/LTS\b/g, 'L');
+}
+
+function normalizeHeaderWeightToken(value: string): string {
+    return String(value || '')
+        .toUpperCase()
+        .replace(/\s+/g, '')
+        .replace(/GRS?\b/g, 'G')
+        .replace(/KGS\b/g, 'KG')
+        .replace(/MLS\b/g, 'ML')
+        .replace(/LTS\b/g, 'L');
+}
+
+function inferHeaderPartsFromProduct(
+    product: any,
+    fallback?: string,
+    opts: { preferFullNameWithWeight?: boolean; splitUnitIntoDedicatedField?: boolean } = {}
+): { title: string; unit: string } {
+    const fallbackText = String(fallback || 'OFERTA').trim() || 'OFERTA';
+    const rawName = String(product?.name || '').replace(/\s+/g, ' ').trim();
+    const { cleanedName } = extractLimitFromName(rawName);
+    const inferredUnit = inferUnitLabelFromProduct(product);
+    const unit = inferredUnit === 'KG' ? 'KG' : (inferredUnit === 'UN' ? 'UN' : '');
+    const splitUnitIntoDedicatedField = opts.splitUnitIntoDedicatedField !== false;
+
+    let title = String(cleanedName || fallbackText).toUpperCase();
+    title = title
+        .replace(/\bR\$\s*[\d\.,]+\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const weightToken = extractWeightTokenForHeader(product);
+    if (opts.preferFullNameWithWeight && weightToken && !normalizeHeaderWeightToken(title).includes(normalizeHeaderWeightToken(weightToken))) {
+        title = `${title} ${weightToken}`.replace(/\s+/g, ' ').trim();
+    }
+    if (opts.preferFullNameWithWeight && !weightToken && unit === 'KG' && !/\bKG\b/i.test(title)) {
+        title = `${title} KG`.replace(/\s+/g, ' ').trim();
+    }
+
+    // If the template uses a dedicated unit field, avoid duplicate unit suffix in title.
+    if (splitUnitIntoDedicatedField && unit && new RegExp(`\\b${unit}\\b$`, 'i').test(title)) {
+        title = title.replace(new RegExp(`\\b${unit}\\b$`, 'i'), '').trim();
+    }
+
+    if (!title) title = fallbackText.toUpperCase();
+    const maxLen = opts.preferFullNameWithWeight ? 36 : 26;
+    if (title.length > maxLen) {
+        if (opts.preferFullNameWithWeight && weightToken && maxLen > weightToken.length + 6) {
+            const prefixMax = maxLen - (weightToken.length + 1);
+            const withoutWeight = title.replace(weightToken, '').replace(/\s+/g, ' ').trim();
+            title = `${withoutWeight.slice(0, prefixMax).trim()} ${weightToken}`.trim();
+        } else {
+            title = `${title.slice(0, maxLen).trim()}...`;
+        }
+    }
+    return { title, unit: splitUnitIntoDedicatedField ? unit : '' };
 }
 
 function inferUnitFromCard(card: any): string | undefined {
@@ -21562,6 +23380,56 @@ function inferUnitFromCard(card: any): string | undefined {
     return 'UN';
 }
 
+function inferHeaderPartsForPriceTemplate(
+    card: any,
+    fallback?: string,
+    opts: { preferFullNameWithWeight?: boolean; splitUnitIntoDedicatedField?: boolean } = {}
+): { title: string; unit: string } {
+    const fallbackText = String(fallback || 'OFERTA').trim() || 'OFERTA';
+    const productData = (card as any)?._productData || {};
+    const titleObj = getCardTitleText(card);
+    const rawFromCard = String(titleObj?.text || '').replace(/\s+/g, ' ').trim();
+    const titleRaw = String(productData?.name || rawFromCard).replace(/\s+/g, ' ').trim();
+
+    const inferredUnit = inferUnitFromCard(card);
+    const unit = inferredUnit === 'KG' ? 'KG' : (inferredUnit === 'UN' ? 'UN' : '');
+    const splitUnitIntoDedicatedField = opts.splitUnitIntoDedicatedField !== false;
+    const weightToken = extractWeightTokenForHeader({
+        name: productData?.name || titleRaw,
+        weight: productData?.weight || ''
+    });
+
+    let title = titleRaw ? titleRaw.toUpperCase() : fallbackText.toUpperCase();
+    title = title
+        .replace(/\bR\$\s*[\d\.,]+\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (opts.preferFullNameWithWeight && weightToken && !normalizeHeaderWeightToken(title).includes(normalizeHeaderWeightToken(weightToken))) {
+        title = `${title} ${weightToken}`.replace(/\s+/g, ' ').trim();
+    }
+    if (opts.preferFullNameWithWeight && !weightToken && unit === 'KG' && !/\bKG\b/i.test(title)) {
+        title = `${title} KG`.replace(/\s+/g, ' ').trim();
+    }
+    if (splitUnitIntoDedicatedField) {
+        title = title.replace(/\b(KG|UN)\b$/i, '').trim();
+    }
+
+    if (!title) title = fallbackText.toUpperCase();
+    const maxLen = opts.preferFullNameWithWeight ? 36 : 22;
+    if (title.length > maxLen) {
+        if (opts.preferFullNameWithWeight && weightToken && maxLen > weightToken.length + 6) {
+            const prefixMax = maxLen - (weightToken.length + 1);
+            const withoutWeight = title.replace(weightToken, '').replace(/\s+/g, ' ').trim();
+            title = `${withoutWeight.slice(0, prefixMax).trim()} ${weightToken}`.trim();
+        } else {
+            title = `${title.slice(0, maxLen).trim()}...`;
+        }
+    }
+
+    return { title, unit: splitUnitIntoDedicatedField ? unit : '' };
+}
+
 async function renderLabelTemplatePreview(tpl: LabelTemplate): Promise<string | undefined> {
     if (!fabric) return undefined;
     try {
@@ -21570,9 +23438,7 @@ async function renderLabelTemplatePreview(tpl: LabelTemplate): Promise<string | 
         el.height = 110;
         const sc = new fabric.StaticCanvas(el, { backgroundColor: 'transparent' });
         const g = await instantiatePriceGroupFromTemplate(tpl);
-        const preserveTemplateVisual =
-            !!((g as any)?.__preserveManualLayout) ||
-            !!((g as any)?.__isCustomTemplate);
+        const preserveTemplateVisual = shouldPreserveManualTemplateVisual(g);
         // Keep preview 1:1 with Mini Editor template; avoid auto-normalization/reflow.
         if (!preserveTemplateVisual) {
             normalizePriceGroupForPreview(g);
@@ -21775,6 +23641,33 @@ async function ensureBuiltInBlackYellowLabelTemplate() {
     saveCurrentState();
 }
 
+async function ensureBuiltInRedBurstLabelTemplate() {
+    // Seed a red "burst" premium template inspired by market spotlight labels.
+    if (!fabric) return;
+    const exists = (labelTemplates.value || []).some(t => t.id === BUILTIN_RED_BURST_LABEL_TEMPLATE_ID);
+    if (exists) return;
+
+    const now = new Date().toISOString();
+    const pg = buildRedBurstPriceGroupForCard('39,99', 320, 450, 0, 'KG');
+    pg.set({ name: 'priceGroup', subTargetCheck: true, interactive: true });
+    if (typeof pg.getObjects === 'function') {
+        pg.getObjects().forEach((child: any) => child.set({ selectable: true, evented: true, hasControls: true, hasBorders: true }));
+    }
+
+    const tpl: LabelTemplate = {
+        id: BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
+        name: 'Vermelho Explosao',
+        kind: 'priceGroup-v1',
+        group: serializePriceGroupForTemplate(pg),
+        isBuiltIn: true,
+        createdAt: now,
+        updatedAt: now
+    };
+    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
+    saveCurrentState();
+}
+
 async function updateLabelTemplateFromSelection(templateId: string) {
     if (!canvas.value) return;
     const pg = getPriceGroupFromAny(canvas.value.getActiveObject());
@@ -21877,14 +23770,30 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
         await resetCardPriceGroupToDefault(card);
         return;
     }
-    const preserveManualTemplateLayout =
-        (newPg as any).__preserveManualLayout === true ||
-        (newPg as any).__isCustomTemplate === true;
+    const preserveManualTemplateLayout = shouldPreserveManualTemplateVisual(newPg);
     if (typeof oldPriceText === 'string') setPriceOnPriceGroup(newPg, oldPriceText, typeof inferredUnit === 'string' ? inferredUnit : undefined);
     if (typeof oldCurrencyText === 'string') {
         const c = newPg.getObjects?.().find((o: any) => o.name === 'price_currency_text');
         if (c && typeof c.set === 'function') c.set('text', oldCurrencyText);
     }
+    const isRedBurst = isRedBurstPriceGroup(newPg) || String(templateId || '') === BUILTIN_RED_BURST_LABEL_TEMPLATE_ID;
+    const headerParts = inferHeaderPartsForPriceTemplate(card, 'OFERTA', {
+        preferFullNameWithWeight: isRedBurst,
+        splitUnitIntoDedicatedField: !isRedBurst
+    });
+    const headerTextObj = newPg.getObjects?.().find((o: any) => o.name === 'price_header_text');
+    if (headerTextObj && isTextLikeObject(headerTextObj)) {
+        const defaultHeader = String(headerTextObj.text || '').trim() || 'OFERTA';
+        headerTextObj.set('text', headerParts.title || defaultHeader);
+        if (typeof headerTextObj.initDimensions === 'function') headerTextObj.initDimensions();
+    }
+    const headerUnitObj = newPg.getObjects?.().find((o: any) => o.name === 'price_header_unit_text');
+    if (headerUnitObj && isTextLikeObject(headerUnitObj)) {
+        headerUnitObj.set('text', isRedBurst ? '' : (headerParts.unit || ''));
+        headerUnitObj.set('visible', !isRedBurst && !!headerParts.unit);
+        if (typeof headerUnitObj.initDimensions === 'function') headerUnitObj.initDimensions();
+    }
+    if (isRedBurst) tuneRedBurstPriceGroupLayout(newPg);
     // Apply wholesale/pack metadata when the template supports it (no-op otherwise).
     applyAtacarejoPricingToPriceGroup(newPg, {
         price: typeof oldPriceText === 'string' ? oldPriceText : null,
@@ -21934,6 +23843,16 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
             const hForAnchor = layout?.pillH ?? (newPg.getScaledHeight?.() ?? newPg.height ?? (cardH * 0.18));
             newPg.set({ top: halfH - (hForAnchor / 2) - marginBottom });
         }
+    }
+
+    const titleObj = getCardTitleText(card);
+    if (titleObj && typeof titleObj.set === 'function') {
+        titleObj.set({
+            visible: !isRedBurst,
+            selectable: !isRedBurst,
+            evented: !isRedBurst
+        });
+        if (typeof titleObj.initDimensions === 'function') titleObj.initDimensions();
     }
 
     // Freeze card dimensions (do NOT call safeAddWithUpdate which expands bounds)
@@ -22148,6 +24067,293 @@ function buildBlackYellowPriceGroupForCard(priceStr: string, cardW: number, card
         name: 'priceGroup'
     });
     layoutPriceGroup(pg, cardW, cardH);
+    return pg;
+}
+
+function buildRedBurstPriceGroupForCard(priceStr: string, cardW: number, cardH: number, top: number, unitText?: string) {
+    const labelW = Math.min(cardW * 0.97, 352);
+    const labelH = Math.min(cardH * 0.47, 206);
+    const corner = Math.max(14, labelH * 0.12);
+
+    const fillRed =
+        fabric?.Gradient
+            ? new fabric.Gradient({
+                type: 'linear',
+                coords: { x1: 0, y1: 0, x2: labelW, y2: labelH },
+                colorStops: [
+                    { offset: 0, color: '#7c0301' },
+                    { offset: 0.26, color: '#c80a06' },
+                    { offset: 0.58, color: '#f24612' },
+                    { offset: 0.82, color: '#c40a07' },
+                    { offset: 1, color: '#7e0201' }
+                ]
+            })
+            : '#c40c08';
+
+    const outerGlow = new fabric.Rect({
+        width: labelW + 10,
+        height: labelH + 10,
+        rx: corner + 5,
+        ry: corner + 5,
+        fill: 'rgba(255,150,30,0.2)',
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: 0,
+        selectable: false,
+        evented: false,
+        name: 'price_burst_outer_glow'
+    });
+
+    const priceBg = new fabric.Rect({
+        width: labelW,
+        height: labelH,
+        rx: corner,
+        ry: corner,
+        fill: fillRed as any,
+        stroke: '#ffd24d',
+        strokeWidth: Math.max(2, labelH * 0.015),
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: 0,
+        name: 'price_bg',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.3)', blur: 13, offsetX: 0, offsetY: 8 }),
+        __roundness: (corner * 2) / labelH
+    });
+
+    const innerBorder = new fabric.Rect({
+        width: labelW * 0.97,
+        height: labelH * 0.95,
+        rx: Math.max(10, corner * 0.84),
+        ry: Math.max(10, corner * 0.84),
+        fill: 'transparent',
+        stroke: 'rgba(255,255,255,0.26)',
+        strokeWidth: Math.max(1, labelH * 0.008),
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: 0,
+        selectable: false,
+        evented: false,
+        name: 'price_inner_border'
+    });
+
+    const burstA = new fabric.Line(
+        [-labelW * 0.49, labelH * 0.28, labelW * 0.14, -labelH * 0.12],
+        {
+            stroke: 'rgba(255,230,130,0.24)',
+            strokeWidth: Math.max(2, labelH * 0.018),
+            selectable: false,
+            evented: false,
+            name: 'price_burst_line_a'
+        }
+    );
+    const burstB = new fabric.Line(
+        [-labelW * 0.18, labelH * 0.35, labelW * 0.48, labelH * 0.02],
+        {
+            stroke: 'rgba(255,118,38,0.4)',
+            strokeWidth: Math.max(2, labelH * 0.022),
+            selectable: false,
+            evented: false,
+            name: 'price_burst_line_b'
+        }
+    );
+    const burstC = new fabric.Circle({
+        radius: Math.max(10, labelH * 0.1),
+        fill: 'rgba(255,245,200,0.24)',
+        originX: 'center',
+        originY: 'center',
+        left: labelW * 0.32,
+        top: -labelH * 0.24,
+        selectable: false,
+        evented: false,
+        name: 'price_burst_glow'
+    });
+
+    const centerGlow = new fabric.Ellipse({
+        rx: labelW * 0.32,
+        ry: labelH * 0.19,
+        fill: 'rgba(255,170,70,0.12)',
+        originX: 'center',
+        originY: 'center',
+        left: -labelW * 0.03,
+        top: labelH * 0.08,
+        selectable: false,
+        evented: false,
+        name: 'price_center_glow'
+    });
+
+    const headerW = labelW * 0.92;
+    const headerH = labelH * 0.27;
+    const headerY = -(labelH / 2) + headerH * 0.72;
+
+    const headerBg = new fabric.Rect({
+        width: headerW,
+        height: headerH,
+        rx: headerH * 0.22,
+        ry: headerH * 0.22,
+        fill: fabric?.Gradient
+            ? new fabric.Gradient({
+                type: 'linear',
+                coords: { x1: 0, y1: 0, x2: headerW, y2: 0 },
+                colorStops: [
+                    { offset: 0, color: '#8d0200' },
+                    { offset: 0.52, color: '#d61009' },
+                    { offset: 1, color: '#870100' }
+                ]
+            })
+            : '#a10703',
+        stroke: '#f5cb45',
+        strokeWidth: Math.max(1, headerH * 0.052),
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: headerY,
+        name: 'price_header_bg',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.28)', blur: 8, offsetX: 0, offsetY: 4 })
+    });
+
+    const headerHighlight = new fabric.Rect({
+        width: headerW * 0.93,
+        height: Math.max(4, headerH * 0.2),
+        rx: headerH * 0.09,
+        ry: headerH * 0.09,
+        fill: 'rgba(255,240,208,0.46)',
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: headerY - (headerH * 0.3),
+        selectable: false,
+        evented: false,
+        name: 'price_header_highlight'
+    });
+
+    const headerUnit = normalizeUnitForLabel(unitText);
+    const hasHeaderUnit = headerUnit === 'KG' || headerUnit === 'UN';
+    const headerText = new fabric.Textbox('FRALDINHA', {
+        width: headerW * (hasHeaderUnit ? 0.76 : 0.86),
+        fontSize: Math.max(18, headerH * 0.58),
+        fontFamily: 'Inter',
+        fontWeight: '900',
+        textAlign: 'center',
+        fill: '#ffd94c',
+        originX: 'center',
+        originY: 'center',
+        left: hasHeaderUnit ? -headerW * 0.055 : 0,
+        top: headerY + (headerH * 0.01),
+        name: 'price_header_text',
+        charSpacing: 20,
+        shadow: new fabric.Shadow({ color: 'rgba(44,0,0,0.62)', blur: 2, offsetX: 0, offsetY: 2 })
+    });
+
+    const headerUnitText = new fabric.Text(headerUnit || 'KG', {
+        fontSize: Math.max(16, headerH * 0.5),
+        fontFamily: 'Inter',
+        fontWeight: '900',
+        fill: '#ffffff',
+        originX: 'center',
+        originY: 'center',
+        left: headerW * 0.33,
+        top: headerY + (headerH * 0.02),
+        name: 'price_header_unit_text',
+        visible: hasHeaderUnit,
+        shadow: new fabric.Shadow({ color: 'rgba(34,0,0,0.6)', blur: 2, offsetX: 0, offsetY: 2 })
+    });
+
+    const parts = splitPriceParts(priceStr);
+    const integer = parts.integer;
+    const dec = parts.dec;
+
+    const priceBaselineY = labelH * 0.2;
+    const currencyX = -(labelW / 2) + (labelW * 0.11);
+
+    const currencyText = new fabric.Text('R$', {
+        fontSize: Math.max(22, labelH * 0.21),
+        fontFamily: 'Inter',
+        fontWeight: '900',
+        fill: '#ffffff',
+        originX: 'center',
+        originY: 'center',
+        left: currencyX,
+        top: priceBaselineY + (labelH * 0.015),
+        name: 'price_currency_text',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.38)', blur: 3, offsetX: 0, offsetY: 2 })
+    });
+
+    const integerX = -labelW * 0.02;
+    const priceInteger = new fabric.IText(integer, {
+        fontSize: Math.max(64, labelH * 0.82),
+        fontFamily: 'Inter',
+        fontWeight: '900',
+        fill: '#ffffff',
+        stroke: '#a5a5a5',
+        strokeWidth: Math.max(1, labelH * 0.008),
+        originX: 'center',
+        originY: 'center',
+        left: integerX,
+        top: priceBaselineY + (labelH * 0.01),
+        name: 'price_integer_text',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.35)', blur: 5, offsetX: 0, offsetY: 3 })
+    });
+
+    const priceDecimal = new fabric.IText(`,${dec}`, {
+        fontSize: Math.max(30, labelH * 0.46),
+        fontFamily: 'Inter',
+        fontWeight: '900',
+        fill: '#ffffff',
+        stroke: '#b8b8b8',
+        strokeWidth: Math.max(1, labelH * 0.006),
+        originX: 'left',
+        originY: 'center',
+        left: integerX + (labelW * 0.145),
+        top: priceBaselineY - (labelH * 0.145),
+        name: 'price_decimal_text',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.33)', blur: 4, offsetX: 0, offsetY: 2 })
+    });
+
+    // Unit is displayed on the top strip for this style.
+    const priceUnit = new fabric.IText(headerUnit || '', {
+        fontSize: Math.max(12, labelH * 0.16),
+        fontFamily: 'Inter',
+        fontWeight: '800',
+        fill: '#ffe07a',
+        originX: 'left',
+        originY: 'center',
+        left: integerX + (labelW * 0.15),
+        top: priceBaselineY + (labelH * 0.18),
+        name: 'price_unit_text',
+        visible: false
+    });
+
+    const pg = new fabric.Group([
+        outerGlow,
+        priceBg,
+        innerBorder,
+        burstA,
+        burstB,
+        burstC,
+        centerGlow,
+        headerBg,
+        headerHighlight,
+        headerText,
+        headerUnitText,
+        currencyText,
+        priceInteger,
+        priceDecimal,
+        priceUnit
+    ], {
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top,
+        name: 'priceGroup'
+    });
+
+    // Preserve authored geometry and only apply uniform card fitting later.
+    (pg as any).__preserveManualLayout = true;
+    (pg as any).__isCustomTemplate = true;
+    safeAddWithUpdate(pg);
     return pg;
 }
 
@@ -22510,9 +24716,7 @@ async function insertLabelTemplateToCanvas(templateId: string) {
     if (!tpl) return;
     try {
         const g = await instantiatePriceGroupFromTemplate(tpl);
-        const preserveTemplateVisual =
-            !!((g as any)?.__preserveManualLayout) ||
-            !!((g as any)?.__isCustomTemplate);
+        const preserveTemplateVisual = shouldPreserveManualTemplateVisual(g);
         if (!preserveTemplateVisual) {
             layoutPriceGroup(g, 320, 220);
         }
@@ -22716,10 +24920,81 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
 }
 
 // Helper for Responsive Card Layout
+const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
+    const num = (v: any, precision = 3) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return null;
+        return Number(n.toFixed(precision));
+    };
+    const txt = (v: any) => {
+        if (v === null || v === undefined) return '';
+        return String(v);
+    };
+
+    const productData = ((group as any)?._productData && typeof (group as any)._productData === 'object')
+        ? ((group as any)._productData as Record<string, any>)
+        : {};
+    const s = (styles && typeof styles === 'object') ? styles : ({} as Partial<GlobalStyles>);
+
+    // Keep only layout-relevant values so auto-save noise does not retrigger relayout.
+    const styleSig = {
+        splashTemplateId: txt((s as any).splashTemplateId),
+        splashScale: num((s as any).splashScale),
+        splashOffsetY: num((s as any).splashOffsetY),
+        splashTextScale: num((s as any).splashTextScale),
+        splashFill: txt((s as any).splashFill),
+        splashColor: txt((s as any).splashColor ?? (s as any).accentColor),
+        splashTextColor: txt((s as any).splashTextColor),
+        priceTextColor: txt((s as any).priceTextColor),
+        priceCurrencyColor: txt((s as any).priceCurrencyColor),
+        priceFont: txt((s as any).priceFont),
+        priceFontWeight: txt((s as any).priceFontWeight),
+        prodNameScale: num((s as any).prodNameScale),
+        prodNameTransform: txt((s as any).prodNameTransform),
+        prodNameLineHeight: num((s as any).prodNameLineHeight),
+        cardBorderRadius: num((s as any).cardBorderRadius)
+    };
+
+    const pricingSig = {
+        price: txt((group as any)?.price ?? productData.price),
+        pricePack: txt((group as any)?.pricePack ?? productData.pricePack),
+        priceUnit: txt((group as any)?.priceUnit ?? productData.priceUnit),
+        priceSpecial: txt((group as any)?.priceSpecial ?? productData.priceSpecial),
+        priceSpecialUnit: txt((group as any)?.priceSpecialUnit ?? productData.priceSpecialUnit),
+        priceWholesale: txt((group as any)?.priceWholesale ?? productData.priceWholesale),
+        wholesaleTrigger: txt((group as any)?.wholesaleTrigger ?? productData.wholesaleTrigger),
+        wholesaleTriggerUnit: txt((group as any)?.wholesaleTriggerUnit ?? productData.wholesaleTriggerUnit),
+        packQuantity: txt((group as any)?.packQuantity ?? productData.packQuantity),
+        packUnit: txt((group as any)?.packUnit ?? productData.packUnit),
+        packageLabel: txt((group as any)?.packageLabel ?? productData.packageLabel),
+        specialCondition: txt((group as any)?.specialCondition ?? productData.specialCondition),
+        imageUrl: txt((group as any)?.imageUrl ?? productData.imageUrl ?? productData.image)
+    };
+
+    return JSON.stringify({
+        w: num(w),
+        h: num(h),
+        styleSig,
+        pricingSig
+    });
+};
+
 const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
     // Reset Group Scale/Skew to ensure clean internal layout
     group.scale(1);
     group.set({ width: w, height: h });
+
+    const relayoutSignature = buildCardRelayoutSignature(group, w, h, styles);
+    const forceRelayout = (group as any).__forceCardRelayout === true;
+    if (!forceRelayout && (group as any).__lastCardRelayoutSignature === relayoutSignature) {
+        (group as any)._cardWidth = w;
+        (group as any)._cardHeight = h;
+        group.dirty = true;
+        group.setCoords?.();
+        return;
+    }
+    (group as any).__lastCardRelayoutSignature = relayoutSignature;
+    (group as any).__forceCardRelayout = false;
     
     const halfW = w / 2;
     const halfH = h / 2;
@@ -23004,9 +25279,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         let priceBg: any = null;
 
         if (splash.type === 'group' && splash.name === 'priceGroup') {
-            preserveTemplateVisual =
-                (splash as any).__preserveManualLayout === true ||
-                (splash as any).__isCustomTemplate === true;
+            preserveTemplateVisual = shouldPreserveManualTemplateVisual(splash);
             // Apply label styling overrides (local to the selected zone/design; never mutates templates).
             if (styles && typeof splash.getObjects === 'function' && !preserveTemplateVisual) {
                 const parts = splash.getObjects();
@@ -23450,7 +25723,7 @@ const repairLegacyProductCardImageTransforms = (
 
     cards.forEach((card: any) => {
         if (!card || card.type !== 'group') return;
-        if (String(card.name || '') === 'priceGroup') return;
+        if (isStandalonePriceGroup(card)) return;
 
         cardsScanned += 1;
         const descendants = typeof card.getObjects === 'function' ? collectObjectsDeep(card) : [];
@@ -24384,6 +26657,16 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
         // CRITICAL: Clear clipPath from all product zones to prevent rendering errors
         // Product zones should not have clipPath as cards are added separately to canvas
         objs.forEach((o: any) => {
+            if (isMisnamedProductCardGroup(o)) {
+                const currentLayerName = String((o as any)?.layerName || '').trim();
+                const repairedName = currentLayerName && currentLayerName !== 'priceGroup'
+                    ? currentLayerName
+                    : 'product-card';
+                o.name = repairedName;
+                if (!currentLayerName || currentLayerName === 'priceGroup') {
+                    (o as any).layerName = repairedName;
+                }
+            }
             if (o.clipPath && (o.isGridZone || o.isProductZone || o.name === 'gridZone' || o.name === 'productZoneContainer')) {
                 o.clipPath = null;
             }
@@ -24397,7 +26680,10 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
             // - Default: select/move the whole card (subTargetCheck OFF)
             // - Double click: enable deep select for inner elements (handled elsewhere)
             // Also supports legacy projects where flags were not serialized yet (heuristic-based detection).
-            const isCardLike = (o.isProductCard || o.isSmartObject || isLikelyProductCard(o)) && o.type === 'group' && String(o.name || '') !== 'priceGroup';
+            const isCardLike =
+                (o.isProductCard || o.isSmartObject || isLikelyProductCard(o)) &&
+                o.type === 'group' &&
+                !isLikelyPriceGroupObject(o);
             if (isCardLike) {
                 if (!o.isProductCard && !o.isSmartObject && isLikelyProductCard(o)) {
                     o.isProductCard = true;
@@ -24612,6 +26898,7 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
         }
 
         const zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
+        restoreMissingManualTemplateFlagsInCanvas(canvas.value, 'rehydrate');
         
         if (LEGACY_PRODUCT_ZONE_RENDERER_ENABLED) {
             // Legacy only: reconnect zone rect reference used by renderProductZone().
@@ -24941,6 +27228,7 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
         // Frames sempre atrás do conteúdo (evita bloquear drag do mouse em imagens)
         ensureFramesBelowContents();
         stabilizePriceGroupsForPersistence(canvas.value, 'rehydrate');
+        scheduleMissingProductImageRecovery();
 
         canvasObjects.value = [...canvas.value.getObjects()];
         canvas.value.requestRenderAll();
@@ -24982,6 +27270,61 @@ const handleRecalculateLayout = () => {
         :initial="aiStudioOptions.initial"
         @created="handleAiStudioCreated"
       />
+
+      <div
+        v-if="showProductImageUploadPicker"
+        class="fixed inset-0 z-140 bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4"
+        @click.self="showProductImageUploadPicker = false; clearPendingProductImageOperation()"
+      >
+        <div class="w-full max-w-5xl max-h-[85vh] bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl flex flex-col overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <div>
+              <h3 class="text-sm font-semibold text-white">Selecionar do Upload</h3>
+              <p class="text-[11px] text-zinc-400">
+                {{ productImagePickerMode === 'replace' ? 'Substituir imagem do produto' : 'Adicionar imagem mantendo a atual' }}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="text-zinc-400 hover:text-white text-lg leading-none"
+              @click="showProductImageUploadPicker = false; clearPendingProductImageOperation()"
+            >
+              ×
+            </button>
+          </div>
+
+          <div class="px-4 py-3 border-b border-white/10">
+            <input
+              v-model="productImagePickerSearch"
+              type="text"
+              placeholder="Buscar imagem no upload..."
+              class="w-full h-10 bg-zinc-900 border border-white/10 rounded px-3 text-sm text-white focus:outline-none focus:border-violet-500/50"
+            />
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-4">
+            <div v-if="!filteredProductImageUploads.length" class="text-xs text-zinc-500">
+              Nenhuma imagem encontrada no upload.
+            </div>
+            <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <button
+                v-for="asset in filteredProductImageUploads"
+                :key="asset.id"
+                type="button"
+                class="bg-zinc-900 border border-white/10 rounded-lg overflow-hidden text-left hover:border-violet-500/50 transition-colors"
+                @click="applyProductImageFromUploadPicker(asset)"
+              >
+                <div class="aspect-square">
+                  <img :src="toWasabiProxyUrl(asset.url) || asset.url" class="w-full h-full object-cover" />
+                </div>
+                <div class="px-2 py-1.5 border-t border-white/10">
+                  <p class="text-[10px] text-zinc-200 truncate">{{ asset.name || 'Sem nome' }}</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Central Workspace -->
       <div class="flex flex-1 min-h-0 min-w-0 overflow-hidden relative bg-[#1a1a1a]">
@@ -25136,6 +27479,7 @@ const handleRecalculateLayout = () => {
         :show-export-modal="showExportModal"
         :export-settings="exportSettings"
         :available-frames-for-export="availableFramesForExport"
+        :available-frames-for-import="availableFramesForImport"
         :show-share-modal="showShareModal"
         :share-settings="shareSettings"
         :show-presentation-modal="showPresentationModal"

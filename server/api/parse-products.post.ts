@@ -443,6 +443,79 @@ ${text ? `"${text}"` : '(image attached)'}
         return s.toUpperCase().replace(/\s+/g, '');
     };
 
+    const normalizePackageUnit = (v: any): string | null => {
+        const tok = normalizeToken(v);
+        if (!tok) return null;
+        const compact = tok.replace(/[.]/g, '');
+        if (compact === 'CX' || compact === 'CAIXA' || compact === 'CAIXAS') return 'CX';
+        if (compact === 'FD' || compact === 'FARDO' || compact === 'FARDOS') return 'FD';
+        if (
+            compact === 'UN' ||
+            compact === 'UND' ||
+            compact === 'UNID' ||
+            compact === 'UNIDADE' ||
+            compact === 'UNIDADES' ||
+            compact === 'UNIT'
+        ) return 'UN';
+        if (compact === 'PCT' || compact === 'PACOTE' || compact === 'PACOTES') return 'PCT';
+        if (compact === 'EMB' || compact === 'EMBAL' || compact === 'EMBALAGEM' || compact === 'EMBALAGENS') return 'EMB';
+        return compact;
+    };
+
+    const extractDefaultSpecialRuleFromSource = (sourceText?: string | null): { minQty: number; unitHint: string | null } | null => {
+        if (!sourceText) return null;
+
+        const rawLines = String(sourceText)
+            .split(/\r?\n/)
+            .map(l => l.trim())
+            .filter(Boolean);
+
+        if (!rawLines.length) return null;
+
+        const normalizeLine = (line: string) =>
+            line
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toUpperCase();
+
+        const parseLine = (line: string): { minQty: number; unitHint: string | null } | null => {
+            const normalized = normalizeLine(line);
+            const matches = Array.from(
+                normalized.matchAll(
+                    /\bACIMA(?:\s+DE)?\s*(\d{1,3})(?:\s*(EMB(?:ALAGEM)?|CX|CAIXA|FD|FARDO|UN|UND|UNID(?:ADE)?|PCT|PACOTE))?/g
+                )
+            );
+            if (!matches.length) return null;
+
+            for (const m of matches) {
+                const minQty = Number.parseInt(m[1] || '', 10);
+                if (!Number.isFinite(minQty) || minQty <= 0) continue;
+                const unitHint = normalizePackageUnit(m[2] || null);
+                return { minQty, unitHint };
+            }
+            return null;
+        };
+
+        // Priorizar cabeçalhos das primeiras linhas que normalmente contêm nomes de colunas.
+        const headerCandidates = rawLines.slice(0, 5);
+        for (const line of headerCandidates) {
+            const probe = normalizeLine(line);
+            if (!probe.includes('PRECO') || !probe.includes('ACIMA')) continue;
+            const parsed = parseLine(line);
+            if (parsed) return parsed;
+        }
+
+        // Fallback: tentar só se a primeira linha tiver cara de cabeçalho tabular.
+        const first = rawLines[0] || '';
+        const firstProbe = normalizeLine(first);
+        const looksTabularHeader = /[;,|\t]/.test(first) || firstProbe.includes('PRODUTO') || firstProbe.includes('EMBAL');
+        if (looksTabularHeader && firstProbe.includes('ACIMA')) {
+            return parseLine(first);
+        }
+
+        return null;
+    };
+
     const parseNumber = (v: any): number | null => {
         if (v === null || v === undefined) return null;
         if (typeof v === 'number' && Number.isFinite(v)) return v;
@@ -496,6 +569,7 @@ ${text ? `"${text}"` : '(image attached)'}
         
         const result = JSON.parse(content);
         const rawProducts = Array.isArray(result?.products) ? result.products : [];
+        const defaultSpecialRule = extractDefaultSpecialRuleFromSource(text);
         const products = rawProducts.map((p: any) => {
             const name = String(p?.name || '').trim();
             const price = normalizePrice(p?.price);
@@ -547,7 +621,7 @@ ${text ? `"${text}"` : '(image attached)'}
         // Quando a IA não extrai todos os campos (ex: gpt-4o-mini pode pular pricePack quando = priceUnit),
         // inferimos os valores faltantes com base na lógica de embalagem/unidade.
         for (const prod of products) {
-            const isUnitPackaging = prod.packageLabel === 'UN' || prod.packageLabel === 'UND' || prod.packageLabel === 'UNIDADE';
+            const isUnitPackaging = normalizePackageUnit(prod.packageLabel) === 'UN';
             const isSingleUnit = (prod.packQuantity === 1 || prod.packQuantity === null) && isUnitPackaging;
             
             // Quando embalagem = UNIDADE e quantidade = 1, CX e UN são iguais
@@ -572,6 +646,25 @@ ${text ? `"${text}"` : '(image attached)'}
             // Se nenhum preço principal foi definido, mas tem priceUnit ou pricePack
             if (!prod.price) {
                 prod.price = prod.priceUnit || prod.pricePack || null;
+            }
+
+            // Se a linha não trouxe condição especial, usar regra padrão do cabeçalho
+            // (ex.: "PREÇO ACIMA 10 EMB"), respeitando a embalagem do produto.
+            const hasSpecialPrice = !!(prod.priceSpecial || prod.priceSpecialUnit);
+            const hasSpecialCondition = !!String(prod.specialCondition || '').trim();
+            if (hasSpecialPrice && !hasSpecialCondition && defaultSpecialRule) {
+                const productUnit =
+                    normalizePackageUnit(prod.packageLabel) ||
+                    normalizePackageUnit(prod.wholesaleTriggerUnit) ||
+                    normalizePackageUnit(prod.packUnit);
+
+                const effectiveUnit = (defaultSpecialRule.unitHint && defaultSpecialRule.unitHint !== 'EMB')
+                    ? defaultSpecialRule.unitHint
+                    : (productUnit || 'UN');
+
+                prod.specialCondition = `ACIMA DE ${defaultSpecialRule.minQty} ${effectiveUnit}`;
+                if (!prod.wholesaleTrigger) prod.wholesaleTrigger = defaultSpecialRule.minQty;
+                if (!prod.wholesaleTriggerUnit) prod.wholesaleTriggerUnit = effectiveUnit;
             }
         }
 
