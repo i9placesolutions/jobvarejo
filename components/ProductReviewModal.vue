@@ -179,6 +179,18 @@ const resolveProductImageUrl = (rawUrl: any): string => {
     if (value.startsWith('http://') || value.startsWith('https://')) {
         try {
             const urlObj = new URL(value)
+            if (urlObj.pathname.endsWith('/api/storage/proxy') || urlObj.pathname.endsWith('/proxy')) {
+                const key = urlObj.searchParams.get('key')
+                if (key) {
+                    const params = new URLSearchParams()
+                    params.set('key', key)
+                    const bucket = urlObj.searchParams.get('bucket')
+                    if (bucket) params.set('bucket', bucket)
+                    const version = urlObj.searchParams.get('v')
+                    if (version) params.set('v', version)
+                    return `/api/storage/proxy?${params.toString()}`
+                }
+            }
             const endpoint = String(runtimeConfig.public?.wasabiEndpoint || runtimeConfig.wasabiEndpoint || '').trim().toLowerCase()
             const bucket = String(runtimeConfig.public?.wasabiBucket || runtimeConfig.wasabiBucket || '').trim()
             const pathParts = decodeURIComponent(urlObj.pathname || '').split('/').filter(Boolean)

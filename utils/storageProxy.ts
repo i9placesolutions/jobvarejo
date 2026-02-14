@@ -1,5 +1,6 @@
 type ProxyUrlOptions = {
   version?: string | number | Date | null
+  bucket?: string | null
 }
 
 const normalizeVersion = (value?: string | number | Date | null): string | null => {
@@ -28,11 +29,65 @@ const extractVersionFromUrl = (value: string): string | null => {
   }
 }
 
-const buildProxyUrl = (key: string, version?: string | null): string => {
+const buildProxyUrl = (key: string, version?: string | null, bucket?: string | null): string => {
   const params = new URLSearchParams()
   params.set('key', key)
+  const cleanBucket = String(bucket || '').trim()
+  if (cleanBucket) params.set('bucket', cleanBucket)
   if (version) params.set('v', version)
   return `/api/storage/proxy?${params.toString()}`
+}
+
+const normalizeProxyLikeInput = (value: string): string[] => {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) return []
+
+  const candidates = [trimmed]
+
+  if (trimmed.startsWith('proxy?')) {
+    candidates.push(`http://local/${trimmed}`)
+  } else if (trimmed.startsWith('/proxy?') || trimmed.startsWith('/api/storage/proxy?')) {
+    candidates.push(`http://local${trimmed}`)
+  }
+
+  // Legacy malformed absolute without protocol, e.g. "localhost:3000/api/storage/proxy?..."
+  if (/^[a-z0-9.-]+:\d+\/.+/i.test(trimmed) && !trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    candidates.push(`http://${trimmed}`)
+  }
+
+  return [...new Set(candidates)]
+}
+
+const toRelativeStorageProxyUrl = (
+  value: string,
+  options?: ProxyUrlOptions,
+  fallbackVersion?: string | null
+): string | null => {
+  for (const candidate of normalizeProxyLikeInput(value)) {
+    try {
+      const parsed = candidate.startsWith('http://') || candidate.startsWith('https://')
+        ? new URL(candidate)
+        : new URL(candidate, 'http://local')
+      const pathname = String(parsed.pathname || '')
+      const isStorageProxyPath =
+        pathname.endsWith('/api/storage/proxy') ||
+        pathname === '/api/storage/proxy' ||
+        pathname.endsWith('/proxy') ||
+        pathname === '/proxy'
+      if (!isStorageProxyPath) continue
+
+      const key = parsed.searchParams.get('key')
+      if (!key) continue
+
+      const bucket = options?.bucket ?? parsed.searchParams.get('bucket')
+      const existingV = parsed.searchParams.get('v')
+      const version = normalizeVersion(options?.version) || existingV || fallbackVersion || null
+      return buildProxyUrl(key, version, bucket)
+    } catch {
+      // try next candidate
+    }
+  }
+  return null
 }
 
 export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOptions): string | null => {
@@ -42,17 +97,9 @@ export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOption
   // Common keys in this project: `projects/...`, `imagens/...`, `logo/...`.
   const trimmed = input.trim()
   const version = normalizeVersion(options?.version) || extractVersionFromUrl(trimmed)
-  if (trimmed.startsWith('/api/storage/proxy')) {
-    try {
-      const existing = new URL(trimmed, 'http://local')
-      const key = existing.searchParams.get('key')
-      if (!key) return trimmed
-      const existingV = existing.searchParams.get('v')
-      return buildProxyUrl(key, existingV || version)
-    } catch {
-      return trimmed
-    }
-  }
+  const proxiedFromLegacy = toRelativeStorageProxyUrl(trimmed, options, version)
+  if (proxiedFromLegacy) return proxiedFromLegacy
+
   const keyLike = trimmed.replace(/^\/+/, '')
   if (
     keyLike.startsWith('projects/') ||
@@ -60,10 +107,10 @@ export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOption
     keyLike.startsWith('uploads/') ||
     keyLike.startsWith('logo/')
   ) {
-    return buildProxyUrl(keyLike, version)
+    return buildProxyUrl(keyLike, version, options?.bucket)
   }
   if (/^[^/]+\.(png|jpe?g|webp|gif|svg|avif)$/i.test(keyLike)) {
-    return buildProxyUrl(keyLike, version)
+    return buildProxyUrl(keyLike, version, options?.bucket)
   }
 
   const cfg = useRuntimeConfig?.()?.public?.wasabi || {}
@@ -87,7 +134,7 @@ export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOption
     const keyParts = (!hostHasBucket && parts[0] === bucket) ? parts.slice(1) : parts
     const key = keyParts.join('/')
     if (!key) return input
-    return buildProxyUrl(key, version)
+    return buildProxyUrl(key, version, options?.bucket)
   } catch {
     return input
   }
