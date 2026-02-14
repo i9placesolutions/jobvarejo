@@ -851,6 +851,7 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
                 result = await withRequestTimeout(MANUAL_UPLOAD_API_TIMEOUT_MS, (signal) =>
                     $fetch('/api/upload', {
                         method: 'POST',
+                        headers,
                         body: createUploadForm(false),
                         signal: signal as any
                     }) as Promise<any>

@@ -683,11 +683,20 @@ const handleDragStart = (e: DragEvent, asset: any) => {
 
 // Upload Logic
 import { useUpload } from '../composables/useUpload'
-const { isUploading, error: uploadError } = useUpload()
+const { uploadFile, isUploading, error: uploadError } = useUpload()
 const fileInput = ref<HTMLInputElement | null>(null)
 
 const triggerUpload = () => {
     fileInput.value?.click()
+}
+
+const getApiAuthHeaders = async () => {
+    const { data, error } = await supabase.auth.getSession()
+    const token = data?.session?.access_token
+    if (error || !token) {
+        throw new Error('Sessão expirada. Faça login novamente.')
+    }
+    return { Authorization: `Bearer ${token}` }
 }
 
 const handleFileUpload = async (event: Event) => {
@@ -699,13 +708,20 @@ const handleFileUpload = async (event: Event) => {
         try {
             // Upload para endpoint correto dependendo da categoria
             const endpoint = activeCategory.value === 'brand' ? '/api/brands/upload' : '/api/upload'
-            const formData = new FormData()
-            formData.append('file', file)
+            let result: { success: boolean, url: string, key?: string }
 
-            const result = await ($fetch as any)(endpoint, {
-                method: 'POST',
-                body: formData
-            }) as { success: boolean, url: string, key?: string }
+            if (endpoint === '/api/upload') {
+                result = await uploadFile(file) as any
+            } else {
+                const formData = new FormData()
+                formData.append('file', file)
+                const headers = await getApiAuthHeaders()
+                result = await ($fetch as any)(endpoint, {
+                    method: 'POST',
+                    headers,
+                    body: formData
+                }) as any
+            }
 
             if (result.success) {
                 // Optimistically add the item to the local list for instant feedback
