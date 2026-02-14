@@ -4094,6 +4094,7 @@ const isInitialCanvasHydrationDone = ref(false)
 let isBulkProductMutation = false
 let lastTransformMutationAt = 0
 let activePageLoadSessionId = 0
+let lastLoadedPageId: string | null = null
 const ENABLE_LEGACY_WATCH_EFFECT_LOADER = false
 
 const getActiveProjectPageId = (): string => {
@@ -5694,6 +5695,7 @@ const confirmDeletePage = () => {
 }
 
 let fabric: any = null;
+const isFabricReady = ref(false)
 
 // Mock Data for Smart Grid (Fallback) - Empty, real data comes from API
 const MOCK_PRODUCTS: any[] = [];
@@ -5982,16 +5984,28 @@ const renderProducts = (products: any[]) => {
 }
 
 // --- Watch for Page Switching ---
-watch(activePage, async (newPage, oldPage) => {
-    if (!canvas.value || !fabric) return;
+watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady], async ([newPage, canvasInstance, loaded], prev) => {
+    const oldPage = (prev?.[0] as any) || null
     if (!newPage) return;
-    if (oldPage && newPage === oldPage) return;
-    if (!isProjectLoaded.value && project.id && !project.id.startsWith('proj_')) return;
+    if (!canvasInstance || !fabric || !isFabricReady.value) return;
+    if (!loaded && project.id && !project.id.startsWith('proj_')) return;
+
+    const nextPageId = String((newPage as any)?.id || '').trim()
+    if (nextPageId && lastLoadedPageId === nextPageId) {
+        // If we already loaded this page and it has real objects, don't reload just because canvas/fabric became ready.
+        try {
+            const hasRealObjects = (canvas.value?.getObjects?.() || []).some((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg')
+            if (hasRealObjects) return
+        } catch {
+            // ignore
+        }
+    }
 
     const loadSessionId = ++activePageLoadSessionId;
     const isStaleLoad = () => loadSessionId !== activePageLoadSessionId || isCanvasDestroyed.value;
 
     const savedVpt = newPage.canvasData ? getSavedViewportTransform(newPage.canvasData) : null;
+    let loadedOk = false
 
     // 1. Snapshot logic...
     
@@ -6011,9 +6025,9 @@ watch(activePage, async (newPage, oldPage) => {
         canvas.value.setDimensions({ width: ww, height: wh });
     }
 
-	    // 3. Load Data
-	    try {
-	        if (newPage.canvasData) {
+		    // 3. Load Data
+		    try {
+		        if (newPage.canvasData) {
 	            // CRITICAL: Ensure canvas is fully initialized before loading
 	            if (!canvas.value || !canvas.value.getContext) {
 	                console.warn('⚠️ Canvas não inicializado, aguardando...');
@@ -6109,11 +6123,12 @@ watch(activePage, async (newPage, oldPage) => {
                     throw loadErr;
                 }
             }
-	            // If we couldn't load, do NOT continue (prevents wiping saved data with empty state).
-	            if (!didLoadNewPage) {
-		                isHistoryProcessing.value = false;
-		                return;
-		            }
+		            // If we couldn't load, do NOT continue (prevents wiping saved data with empty state).
+		            if (!didLoadNewPage) {
+			                isHistoryProcessing.value = false;
+			                return;
+			            }
+                    loadedOk = true
                     if (isStaleLoad()) {
                         isHistoryProcessing.value = false;
                         return;
@@ -6267,17 +6282,18 @@ watch(activePage, async (newPage, oldPage) => {
             };
             canvas.value.getObjects().forEach(recalcAllText);
 
-            safeRequestRenderAll();
-        } else {
-            // New Blank Page starts with default settings
-            // canvas.value.backgroundColor = '#ffffff'; // NO! Workspace is dark. Artboard is white.
-            // Explicitly do nothing here, let updateArtboard() create the white rect.
-        }
-    } catch (err) {
-        console.error("Error loading page data:", err);
-    } finally {
-        isHistoryProcessing.value = false;
-    }
+	            safeRequestRenderAll();
+	        } else {
+	            // New Blank Page starts with default settings
+	            // canvas.value.backgroundColor = '#ffffff'; // NO! Workspace is dark. Artboard is white.
+	            // Explicitly do nothing here, let updateArtboard() create the white rect.
+                loadedOk = true
+	        }
+	    } catch (err) {
+	        console.error("Error loading page data:", err);
+	    } finally {
+	        isHistoryProcessing.value = false;
+	    }
     
     // 4. Reset History for this page context
     historyStack.value = [];
@@ -6365,6 +6381,10 @@ watch(activePage, async (newPage, oldPage) => {
     // CRITICAL: Update canvasObjects with deduplicated list (order preserved from original)
     // Don't reorder - maintain exact order from canvas.getObjects()
     canvasObjects.value = [...finalObjs];
+
+    if (loadedOk) {
+        lastLoadedPageId = nextPageId || null
+    }
 }, { deep: false, immediate: true }); // Watch the object reference change
 
 const zoomToFit = () => {
@@ -6986,6 +7006,7 @@ onMounted(async () => {
 	  try {
 	    const fabricModule = await import('fabric');
 	    fabric = fabricModule; 
+        isFabricReady.value = true
 
 		    // Ensure our custom properties are always serialized/deserialized by Fabric (even if a save path forgets to pass propsToInclude).
 		    try {
