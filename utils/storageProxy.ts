@@ -35,7 +35,8 @@ const buildProxyUrl = (key: string, version?: string | null, bucket?: string | n
   const cleanBucket = String(bucket || '').trim()
   if (cleanBucket) params.set('bucket', cleanBucket)
   if (version) params.set('v', version)
-  return `/api/storage/proxy?${params.toString()}`
+  // Prefer the alias `/api/storage/p` to avoid adblock rules matching "proxy".
+  return `/api/storage/p?${params.toString()}`
 }
 
 const normalizeProxyLikeInput = (value: string): string[] => {
@@ -46,7 +47,12 @@ const normalizeProxyLikeInput = (value: string): string[] => {
 
   if (trimmed.startsWith('proxy?')) {
     candidates.push(`http://local/${trimmed}`)
-  } else if (trimmed.startsWith('/proxy?') || trimmed.startsWith('/api/storage/proxy?')) {
+  } else if (
+    trimmed.startsWith('/proxy?') ||
+    trimmed.startsWith('/api/storage/proxy?') ||
+    trimmed.startsWith('/api/storage/p?') ||
+    trimmed.startsWith('/p?')
+  ) {
     candidates.push(`http://local${trimmed}`)
   }
 
@@ -72,8 +78,12 @@ const toRelativeStorageProxyUrl = (
       const isStorageProxyPath =
         pathname.endsWith('/api/storage/proxy') ||
         pathname === '/api/storage/proxy' ||
+        pathname.endsWith('/api/storage/p') ||
+        pathname === '/api/storage/p' ||
         pathname.endsWith('/proxy') ||
-        pathname === '/proxy'
+        pathname === '/proxy' ||
+        pathname.endsWith('/p') ||
+        pathname === '/p'
       if (!isStorageProxyPath) continue
 
       const key = parsed.searchParams.get('key')

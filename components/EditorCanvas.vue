@@ -3962,7 +3962,24 @@ import { GOOGLE_WEBFONT_FAMILIES } from '~/utils/font-catalog'
 // Import fabric type for TS (optional if we had types, using any for now to be fast)
 // import { fabric } from 'fabric'
 
-const { project, activePage, initProject, updatePageData, updatePageThumbnail, deletePage, resizePage, saveProjectDB, triggerAutoSave, cancelAutoSave, flushAutoSave, isProjectLoaded, hasUnsavedChanges } = useProject()
+const {
+  project,
+  activePage,
+  initProject,
+  updatePageData,
+  updatePageThumbnail,
+  deletePage,
+  resizePage,
+  saveProjectDB,
+  triggerAutoSave,
+  cancelAutoSave,
+  flushAutoSave,
+  isSaving,
+  saveStatus,
+  lastSavedAt,
+  isProjectLoaded,
+  hasUnsavedChanges
+} = useProject()
 const auth = useAuth()
 const supabase = useSupabase()
 const getApiAuthHeaders = async () => {
@@ -4088,14 +4105,500 @@ const canvas = shallowRef<any>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const wrapperEl = ref<HTMLDivElement | null>(null)
 const isProcessing = ref(false)
+// Separate from isHistoryProcessing: we only want a UX loader during (initial) design/page load,
+// not during undo/redo or other history operations.
+const isDesignLoading = ref(false)
 const currentZoom = ref(100) // Zoom state
 let isCanvasJsonLoadInProgress = false
 const isInitialCanvasHydrationDone = ref(false)
+const isInitialDesignLoadDone = ref(false)
 let isBulkProductMutation = false
 let lastTransformMutationAt = 0
 let activePageLoadSessionId = 0
 let lastLoadedPageId: string | null = null
+const pageReloadToken = ref(0)
+const storageDegraded = ref(false)
+const storageDegradedHint = ref<string>('')
+const storageDegradedFailedCount = ref<number | null>(null)
+const designLoadExpectedCounts = ref<{ objects: number; images: number } | null>(null)
+const designLoadActualCounts = ref<{ objects: number; images: number } | null>(null)
+const designLoadImageProgress = ref<{ expected: number; loaded: number; failed: number } | null>(null)
+
+type ImageLoadTracker = {
+    sessionId: number
+    expected: number
+    loaded: number
+    failed: number
+    remainingBySrc: Map<string, number>
+}
+
+let activeImageLoadTracker: ImageLoadTracker | null = null
+let imageProgressRafId: number | null = null
+let originalFabricLoadImage: any = null
+
+const scheduleImageProgressFlush = () => {
+    if (typeof window === 'undefined') return
+    if (imageProgressRafId != null) return
+    imageProgressRafId = window.requestAnimationFrame(() => {
+        imageProgressRafId = null
+        const tracker = activeImageLoadTracker
+        if (!tracker) return
+        // Ignore stale sessions
+        if (tracker.sessionId !== activePageLoadSessionId) return
+        designLoadImageProgress.value = {
+            expected: tracker.expected,
+            loaded: tracker.loaded,
+            failed: tracker.failed
+        }
+    })
+}
+
+const collectTrackableImageSrcCounts = (canvasData: any): Map<string, number> => {
+    const counts = new Map<string, number>()
+    const visited = new Set<any>()
+
+    const isTrackableSrc = (src: string): boolean => {
+        const s = String(src || '').trim()
+        if (!s) return false
+        // We only track remote-ish images; data URLs are instant and would just spam the counter.
+        if (s.startsWith('data:')) return false
+        if (s.startsWith('blob:')) return false
+        return true
+    }
+
+    const walk = (node: any) => {
+        if (!node) return
+        if (typeof node === 'object') {
+            if (visited.has(node)) return
+            visited.add(node)
+        }
+
+        if (Array.isArray(node)) {
+            node.forEach(walk)
+            return
+        }
+
+        if (typeof node !== 'object') return
+
+        const t = String((node as any).type || '').toLowerCase()
+        if (t === 'image') {
+            const src = String((node as any).src || (node as any).__originalSrc || '').trim()
+            if (src && isTrackableSrc(src)) {
+                counts.set(src, (counts.get(src) || 0) + 1)
+            }
+        }
+
+        const children = (node as any).objects
+        if (Array.isArray(children)) walk(children)
+        const clip = (node as any).clipPath
+        if (clip && typeof clip === 'object') walk(clip)
+    }
+
+    walk(canvasData)
+    return counts
+}
+
+const startImageLoadTracking = (sessionId: number, canvasData: any) => {
+    const counts = collectTrackableImageSrcCounts(canvasData)
+    let expected = 0
+    counts.forEach((n) => { expected += Number(n || 0) || 0 })
+    if (!expected) {
+        activeImageLoadTracker = null
+        designLoadImageProgress.value = null
+        return
+    }
+
+    activeImageLoadTracker = {
+        sessionId,
+        expected,
+        loaded: 0,
+        failed: 0,
+        remainingBySrc: new Map(counts)
+    }
+    designLoadImageProgress.value = { expected, loaded: 0, failed: 0 }
+}
+
+const stopImageLoadTracking = (sessionId: number) => {
+    if (activeImageLoadTracker?.sessionId === sessionId) {
+        // Keep last known progress for the overlay, but stop counting new loads.
+        activeImageLoadTracker = null
+    }
+}
+
+const patchFabricLoadImageProgress = () => {
+    try {
+        const util = (fabric as any)?.util
+        if (!util || (util as any).__jobvarejoPatchedLoadImage) return
+        if (typeof util.loadImage !== 'function') return
+        originalFabricLoadImage = util.loadImage
+
+        util.loadImage = function (url: any, ...rest: any[]) {
+            const tracker = activeImageLoadTracker
+            const urlStr = String(url || '').trim()
+            let shouldCount = false
+            let sessionAtCall = 0
+
+            if (tracker && urlStr) {
+                const remaining = tracker.remainingBySrc.get(urlStr) || 0
+                if (remaining > 0) {
+                    shouldCount = true
+                    sessionAtCall = tracker.sessionId
+                    tracker.remainingBySrc.set(urlStr, remaining - 1)
+                }
+            }
+
+            const countDone = (ok: boolean) => {
+                const t = activeImageLoadTracker
+                // Only count if the same session is still active.
+                if (!shouldCount || !t || t.sessionId !== sessionAtCall) return
+                if (ok) t.loaded += 1
+                else t.failed += 1
+                scheduleImageProgressFlush()
+            }
+
+            // Callback-style
+            const cbIdx = rest.findIndex((a: any) => typeof a === 'function')
+            if (cbIdx >= 0) {
+                const origCb = rest[cbIdx]
+                const wrapped = (img: any, ...cbRest: any[]) => {
+                    countDone(!!img)
+                    return origCb(img, ...cbRest)
+                }
+                const nextArgs = rest.slice()
+                nextArgs[cbIdx] = wrapped
+                try {
+                    return originalFabricLoadImage.call(this, url, ...nextArgs)
+                } catch (e) {
+                    countDone(false)
+                    throw e
+                }
+            }
+
+            // Promise-style
+            try {
+                const res = originalFabricLoadImage.call(this, url, ...rest)
+                if (res && typeof res.then === 'function') {
+                    return res
+                        .then((img: any) => {
+                            countDone(!!img)
+                            return img
+                        })
+                        .catch((err: any) => {
+                            countDone(false)
+                            throw err
+                        })
+                }
+                return res
+            } catch (e) {
+                countDone(false)
+                throw e
+            }
+        }
+
+        ;(util as any).__jobvarejoPatchedLoadImage = true
+        console.log('🩹 Fabric patch aplicado: image load progress (util.loadImage)')
+    } catch (e) {
+        console.warn('⚠️ Falha ao aplicar patch do Fabric (loadImage progress):', e)
+    }
+}
+
 const ENABLE_LEGACY_WATCH_EFFECT_LOADER = false
+
+const designLoadMessage = computed(() => {
+    if (!isProjectLoaded.value) return 'Carregando projeto...'
+    if (!isFabricReady.value) return 'Preparando editor...'
+    if (!canvas.value) return 'Preparando canvas...'
+    if (isDesignLoading.value || isCanvasJsonLoadInProgress) return 'Carregando design...'
+    if (!isInitialDesignLoadDone.value) return 'Carregando design...'
+    return 'Carregando...'
+})
+
+const designLoadProgressLine = computed(() => {
+    const exp = designLoadExpectedCounts.value
+    if (!exp) return ''
+    const parts: string[] = []
+    if (Number.isFinite(exp.objects) && exp.objects > 0) parts.push(`${exp.objects} objeto(s)`)
+    const imgProg = designLoadImageProgress.value
+    if (imgProg && imgProg.expected > 0) {
+        const done = Math.min(imgProg.loaded + imgProg.failed, imgProg.expected)
+        const tail = imgProg.failed > 0 ? ` (${imgProg.failed} falha)` : ''
+        parts.push(`Imagens ${done}/${imgProg.expected}${tail}`)
+    } else if (Number.isFinite(exp.images) && exp.images > 0) {
+        parts.push(`${exp.images} imagem(ns)`)
+    }
+    const main = parts.join(', ')
+    if (!main) return ''
+    const act = designLoadActualCounts.value
+    if (act && (act.objects > 0 || act.images > 0)) {
+        const actParts: string[] = []
+        if (Number.isFinite(act.objects) && act.objects > 0) actParts.push(`${act.objects} carregados`)
+        // Only show image counts if we are not already showing live image progress.
+        if ((!imgProg || imgProg.expected <= 0) && Number.isFinite(act.images) && act.images > 0) actParts.push(`${act.images} imagens`)
+        const actStr = actParts.join(', ')
+        return actStr ? `${main} (${actStr})` : main
+    }
+    return main
+})
+
+const showDesignLoaderOverlay = computed(() => {
+    if (!isProjectLoaded.value) return true
+    if (!isFabricReady.value) return true
+    if (!canvas.value) return true
+    if (!isInitialDesignLoadDone.value) return true
+    if (isDesignLoading.value) return true
+    if (isCanvasJsonLoadInProgress) return true
+    return false
+})
+
+const showStorageDegradedBanner = computed(() => storageDegraded.value && !showDesignLoaderOverlay.value)
+
+const retryStorageReload = () => {
+    storageDegraded.value = false
+    storageDegradedHint.value = ''
+    storageDegradedFailedCount.value = null
+    // Force re-run of the page loader watch even if the page id didn't change.
+    lastLoadedPageId = null
+    pageReloadToken.value++
+}
+
+const canRecoverLatestNonEmpty = computed(() => {
+    const pid = String(project.id || '').trim()
+    const pageId = String(activePage.value?.id || '').trim()
+    return !!pid && !pid.startsWith('proj_') && !!pageId
+})
+
+const isRecoveringLatestNonEmpty = ref(false)
+const recoverLatestNonEmptyForActivePage = async () => {
+    if (!canRecoverLatestNonEmpty.value || isRecoveringLatestNonEmpty.value) return
+    const pid = String(project.id || '').trim()
+    const pageId = String(activePage.value?.id || '').trim()
+    if (!pid || !pageId) return
+
+    const ok = typeof window !== 'undefined'
+        ? window.confirm('Recuperar a ultima versao nao-vazia desta pagina? Isso pode desfazer alteracoes recentes.')
+        : true
+    if (!ok) return
+
+    isRecoveringLatestNonEmpty.value = true
+    try {
+        const headers = await getApiAuthHeaders()
+        const result: any = await $fetch('/api/storage/recover-latest-non-empty', {
+            method: 'POST',
+            headers,
+            body: { projectId: pid, pageId }
+        })
+	        if (result?.json) {
+	            // Sync local in-memory page with the recovered payload without marking it as unsaved.
+	            updatePageData(project.activePageIndex, result.json, { source: 'system', markUnsaved: false })
+	            const page = project.pages?.[project.activePageIndex]
+	            if (page) {
+	                page.canvasDataPath = String(result.key || page.canvasDataPath || '')
+	            }
+	            retryStorageReload()
+	        }
+    } catch (e: any) {
+        console.warn('[recovery] Falha ao recuperar versao nao-vazia:', e?.message || e)
+        storageDegraded.value = true
+        storageDegradedHint.value = 'Falha ao recuperar versao nao-vazia.'
+    } finally {
+        isRecoveringLatestNonEmpty.value = false
+    }
+}
+
+type PageHistoryItem = {
+    source: 'version' | 'history'
+    key: string
+    versionId?: string | null
+    lastModified: string
+    size?: number | null
+    objectCount?: number | null
+}
+
+const showHistoryModal = ref(false)
+const historyLoading = ref(false)
+const historyError = ref<string>('')
+const historyItems = ref<PageHistoryItem[]>([])
+
+const openHistoryModal = async () => {
+    if (!canRecoverLatestNonEmpty.value) return
+    const pid = String(project.id || '').trim()
+    const pageId = String(activePage.value?.id || '').trim()
+    if (!pid || !pageId) return
+
+    showHistoryModal.value = true
+    historyLoading.value = true
+    historyError.value = ''
+    historyItems.value = []
+
+    try {
+        const headers = await getApiAuthHeaders()
+        const res: any = await $fetch('/api/storage/history', {
+            method: 'GET',
+            headers,
+            query: { projectId: pid, pageId }
+        })
+        historyItems.value = Array.isArray(res?.items) ? res.items : []
+    } catch (e: any) {
+        historyError.value = String(e?.statusMessage || e?.message || 'Falha ao carregar histórico')
+    } finally {
+        historyLoading.value = false
+    }
+}
+
+const restoringHistoryKey = ref<string>('')
+const restoreFromHistoryItem = async (item: PageHistoryItem) => {
+    if (!item?.key || restoringHistoryKey.value) return
+    if (!canRecoverLatestNonEmpty.value) return
+
+    const ok = typeof window !== 'undefined'
+        ? window.confirm('Restaurar esta versao? Isso vai substituir o conteudo atual desta pagina.')
+        : true
+    if (!ok) return
+
+    restoringHistoryKey.value = `${item.source}:${item.key}:${item.versionId || ''}`
+    try {
+        const pid = String(project.id || '').trim()
+        const pageId = String(activePage.value?.id || '').trim()
+        const headers = await getApiAuthHeaders()
+        const result: any = await $fetch('/api/storage/restore', {
+            method: 'POST',
+            headers,
+            body: {
+                projectId: pid,
+                pageId,
+                source: {
+                    kind: item.source,
+                    key: item.key,
+                    versionId: item.source === 'version' ? (item.versionId || null) : null
+                }
+            }
+        })
+        if (result?.ok) {
+            showHistoryModal.value = false
+            retryStorageReload()
+        }
+    } catch (e: any) {
+        historyError.value = String(e?.statusMessage || e?.message || 'Falha ao restaurar')
+    } finally {
+        restoringHistoryKey.value = ''
+    }
+}
+
+const formatShortTime = (d: Date | null): string => {
+    if (!d) return ''
+    try {
+        return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    } catch {
+        return ''
+    }
+}
+
+const saveIndicatorText = computed(() => {
+    if (!isProjectLoaded.value) return ''
+    if (!project.id || project.id.startsWith('proj_')) return 'Nao salvo'
+    if (isSaving.value || saveStatus.value === 'saving') return 'Salvando...'
+    if (saveStatus.value === 'error') return 'Falha ao salvar'
+    if (hasUnsavedChanges.value) return 'Alteracoes pendentes'
+    if (saveStatus.value === 'saved') return 'Salvo'
+    return 'Salvo'
+})
+
+const saveIndicatorSubtext = computed(() => {
+    if (saveStatus.value !== 'saved') return ''
+    const t = formatShortTime(lastSavedAt.value)
+    return t ? `as ${t}` : ''
+})
+
+const retrySaveNow = async () => {
+    try {
+        triggerAutoSave()
+        await flushAutoSave()
+    } catch (e) {
+        console.warn('[save] Falha no retrySaveNow:', e)
+    }
+}
+
+const countCanvasJsonObjectsAndImages = (canvasData: any): { objects: number; images: number } => {
+    const visited = new Set<any>()
+    let objects = 0
+    let images = 0
+
+    const walk = (node: any) => {
+        if (!node) return
+        if (visited.has(node)) return
+        if (typeof node === 'object') visited.add(node)
+
+        if (Array.isArray(node)) {
+            node.forEach(walk)
+            return
+        }
+
+        if (typeof node !== 'object') return
+
+        const t = String((node as any).type || '').toLowerCase()
+        if (t) objects++
+        if (t === 'image') images++
+
+        const children = (node as any).objects
+        if (Array.isArray(children)) walk(children)
+
+        const clip = (node as any).clipPath
+        if (clip && typeof clip === 'object') walk(clip)
+    }
+
+    walk(canvasData)
+    return { objects, images }
+}
+
+const countFabricObjectsAndImages = (fabricCanvas: any): { objects: number; images: number } => {
+    let objects = 0
+    let images = 0
+    const visited = new Set<any>()
+
+    const walk = (obj: any) => {
+        if (!obj) return
+        if (visited.has(obj)) return
+        visited.add(obj)
+
+        const t = String(obj.type || '').toLowerCase()
+        if (t) objects++
+        if (t === 'image') images++
+
+        if (typeof obj.getObjects === 'function') {
+            try {
+                const kids = obj.getObjects() || []
+                kids.forEach(walk)
+            } catch {
+                // ignore
+            }
+        }
+        const clip = (obj as any).clipPath
+        if (clip && typeof clip === 'object') walk(clip)
+    }
+
+    try {
+        const top = fabricCanvas?.getObjects?.() || []
+        top.forEach(walk)
+    } catch {
+        // ignore
+    }
+
+    return { objects, images }
+}
+
+const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Promise<void> => {
+    if (!canvas.value) throw new Error('Canvas indisponível para loadFromJSON')
+    // Reset progress for each attempt; it reflects the current load pipeline.
+    startImageLoadTracking(sessionId, json)
+    scheduleImageProgressFlush()
+    try {
+        await canvas.value.loadFromJSON(json)
+    } finally {
+        // Ensure the UI shows the final numbers for this attempt before we clear tracker.
+        scheduleImageProgressFlush()
+        stopImageLoadTracking(sessionId)
+    }
+}
 
 const getActiveProjectPageId = (): string => {
     const page = project.pages?.[project.activePageIndex]
@@ -5984,14 +6487,17 @@ const renderProducts = (products: any[]) => {
 }
 
 // --- Watch for Page Switching ---
-watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady], async ([newPage, canvasInstance, loaded], prev) => {
+watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloadToken], async ([newPage, canvasInstance, loaded, _fabricReady, reloadToken], prev) => {
     const oldPage = (prev?.[0] as any) || null
     if (!newPage) return;
     if (!canvasInstance || !fabric || !isFabricReady.value) return;
     if (!loaded && project.id && !project.id.startsWith('proj_')) return;
 
     const nextPageId = String((newPage as any)?.id || '').trim()
-    if (nextPageId && lastLoadedPageId === nextPageId) {
+    const prevReloadToken = Number((prev as any)?.[4] ?? 0)
+    const forceReload = Number(reloadToken ?? 0) !== prevReloadToken
+
+    if (nextPageId && lastLoadedPageId === nextPageId && !forceReload) {
         // If we already loaded this page and it has real objects, don't reload just because canvas/fabric became ready.
         try {
             const hasRealObjects = (canvas.value?.getObjects?.() || []).some((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg')
@@ -6006,28 +6512,33 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady], async ([
 
     const savedVpt = newPage.canvasData ? getSavedViewportTransform(newPage.canvasData) : null;
     let loadedOk = false
+    isDesignLoading.value = true
+    designLoadExpectedCounts.value = newPage.canvasData ? countCanvasJsonObjectsAndImages(newPage.canvasData) : { objects: 0, images: 0 }
+    designLoadActualCounts.value = null
+    let degradedFailedCount: number | null = null
 
-    // 1. Snapshot logic...
-    
-    // 2. Clear & Resize Canvas
-    isHistoryProcessing.value = true;
-    clearCanvasForPageSwitch(canvas.value)
-    // THE WORKSPACE BACKGROUND IS DYNAMIC
-    if (canvas.value) {
-        canvas.value.backgroundColor = pageSettings.value.backgroundColor;
-    } 
-    
-    // Infinite canvas: the Fabric canvas must match the visible wrapper size,
-    // NOT the page/frame dimensions (those are represented by Frame objects).
-    const ww = wrapperEl.value?.clientWidth || canvas.value.getWidth?.() || 0;
-    const wh = wrapperEl.value?.clientHeight || canvas.value.getHeight?.() || 0;
-    if (ww && wh) {
-        canvas.value.setDimensions({ width: ww, height: wh });
-    }
+    try {
+        // 1. Snapshot logic...
+        
+        // 2. Clear & Resize Canvas
+        isHistoryProcessing.value = true;
+        clearCanvasForPageSwitch(canvas.value)
+        // THE WORKSPACE BACKGROUND IS DYNAMIC
+        if (canvas.value) {
+            canvas.value.backgroundColor = pageSettings.value.backgroundColor;
+        } 
+        
+        // Infinite canvas: the Fabric canvas must match the visible wrapper size,
+        // NOT the page/frame dimensions (those are represented by Frame objects).
+        const ww = wrapperEl.value?.clientWidth || canvas.value.getWidth?.() || 0;
+        const wh = wrapperEl.value?.clientHeight || canvas.value.getHeight?.() || 0;
+        if (ww && wh) {
+            canvas.value.setDimensions({ width: ww, height: wh });
+        }
 
-		    // 3. Load Data
-		    try {
-		        if (newPage.canvasData) {
+		        // 3. Load Data
+		        try {
+		            if (newPage.canvasData) {
 	            // CRITICAL: Ensure canvas is fully initialized before loading
 	            if (!canvas.value || !canvas.value.getContext) {
 	                console.warn('⚠️ Canvas não inicializado, aguardando...');
@@ -6050,7 +6561,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady], async ([
 	            let degradedNewPage = false;
 	            try {
 	                try {
-	                    await canvas.value.loadFromJSON(canvasDataToLoad);
+	                    await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
 	                    didLoadNewPage = true;
 	                } catch (imageLoadErr: any) {
 	                    const errorStr = imageLoadErr?.message || imageLoadErr?.toString?.() || '';
@@ -6070,12 +6581,13 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady], async ([
 		                    if (safeCanvasData?.objects && Array.isArray(safeCanvasData.objects)) {
 		                        const refreshStats = await refreshContaboUrlsInCanvasData(safeCanvasData, { concurrency: 6 });
 		                        degradedNewPage = refreshStats.failed > 0;
+                                degradedFailedCount = Number(refreshStats.failed || 0) || null
 		                        // Try loading again with updated URLs (or placeholders for failed entries)
-		                        await canvas.value.loadFromJSON(safeCanvasData);
+		                        await loadFromJSONWithImageProgress(safeCanvasData, loadSessionId);
 		                        didLoadNewPage = true;
 		                    } else {
 		                        // No objects array, use pre-processed data
-		                        await canvas.value.loadFromJSON(canvasDataToLoad);
+		                        await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
 	                        didLoadNewPage = true;
 	                    }
 	                }
@@ -6089,29 +6601,31 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady], async ([
 	                        if (ctx && typeof ctx.clearRect === 'function') {
 	                            canvas.value.clear();
 	                            await new Promise(resolve => setTimeout(resolve, 50));
-	                            await canvas.value.loadFromJSON(canvasDataToLoad);
+	                            await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
 	                        } else {
 	                            console.warn('⚠️ Contexto do canvas não está disponível, pulando clear()');
 	                            // Tentar carregar diretamente sem clear
-	                            await canvas.value.loadFromJSON(canvasDataToLoad);
+	                            await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
 	                        }
                     } catch (retryErr) {
                         console.error('❌ Erro ao recarregar após clear:', retryErr);
                         // Penúltima tentativa: substituir imagens Contabo por placeholder (mantém layout)
                         try {
                             const dataWithPlaceholders = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
-                            await canvas.value.loadFromJSON(dataWithPlaceholders);
+                            await loadFromJSONWithImageProgress(dataWithPlaceholders, loadSessionId);
                             didLoadNewPage = true;
                             degradedNewPage = true;
+                            degradedFailedCount = null
                             console.log('✅ loadFromJSON concluído com placeholder para imagens que falharam');
                         } catch (placeholderErr) {
                             // Last attempt: load without ANY images (never throw due to broken image)
                             try {
                                 const safeData = JSON.parse(JSON.stringify(canvasDataToLoad));
                                 removeImageObjectsDeep(safeData);
-                                await canvas.value.loadFromJSON(safeData);
+                                await loadFromJSONWithImageProgress(safeData, loadSessionId);
                                 didLoadNewPage = true;
                                 degradedNewPage = true;
+                                degradedFailedCount = null
                                 console.log('✅ loadFromJSON concluído sem imagens (fallback final)');
                             } catch (finalErr) {
                                 console.error('❌ Erro final ao carregar:', finalErr);
@@ -6123,12 +6637,17 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady], async ([
                     throw loadErr;
                 }
             }
-		            // If we couldn't load, do NOT continue (prevents wiping saved data with empty state).
-		            if (!didLoadNewPage) {
+		                    // If we couldn't load, do NOT continue (prevents wiping saved data with empty state).
+		                    if (!didLoadNewPage) {
 			                isHistoryProcessing.value = false;
 			                return;
 			            }
                     loadedOk = true
+                    storageDegraded.value = degradedNewPage
+                    storageDegradedFailedCount.value = degradedFailedCount
+                    storageDegradedHint.value = degradedNewPage
+                        ? (degradedFailedCount ? `Algumas imagens nao carregaram (${degradedFailedCount}).` : 'Algumas imagens nao carregaram.')
+                        : ''
                     if (isStaleLoad()) {
                         isHistoryProcessing.value = false;
                         return;
@@ -6283,14 +6802,20 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady], async ([
             canvas.value.getObjects().forEach(recalcAllText);
 
 	            safeRequestRenderAll();
-	        } else {
-	            // New Blank Page starts with default settings
-	            // canvas.value.backgroundColor = '#ffffff'; // NO! Workspace is dark. Artboard is white.
-	            // Explicitly do nothing here, let updateArtboard() create the white rect.
+	            } else {
+	                // New Blank Page starts with default settings
+	                // canvas.value.backgroundColor = '#ffffff'; // NO! Workspace is dark. Artboard is white.
+	                // Explicitly do nothing here, let updateArtboard() create the white rect.
                 loadedOk = true
+                storageDegraded.value = false
+                storageDegradedFailedCount.value = null
+                storageDegradedHint.value = ''
 	        }
 	    } catch (err) {
 	        console.error("Error loading page data:", err);
+            storageDegraded.value = true
+            storageDegradedFailedCount.value = null
+            storageDegradedHint.value = 'Falha ao carregar imagens do storage.'
 	    } finally {
 	        isHistoryProcessing.value = false;
 	    }
@@ -6382,8 +6907,18 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady], async ([
     // Don't reorder - maintain exact order from canvas.getObjects()
     canvasObjects.value = [...finalObjs];
 
+    try {
+        designLoadActualCounts.value = countFabricObjectsAndImages(canvas.value)
+    } catch {
+        designLoadActualCounts.value = null
+    }
+
     if (loadedOk) {
         lastLoadedPageId = nextPageId || null
+        isInitialDesignLoadDone.value = true
+    }
+    } finally {
+        if (!isStaleLoad()) isDesignLoading.value = false
     }
 }, { deep: false, immediate: true }); // Watch the object reference change
 
@@ -7006,6 +7541,8 @@ onMounted(async () => {
 	  try {
 	    const fabricModule = await import('fabric');
 	    fabric = fabricModule; 
+        // Patch Fabric image loader once so we can report real image-load progress on tablets/slow networks.
+        patchFabricLoadImageProgress()
         isFabricReady.value = true
 
 		    // Ensure our custom properties are always serialized/deserialized by Fabric (even if a save path forgets to pass propsToInclude).
@@ -7069,28 +7606,62 @@ onMounted(async () => {
         console.warn('⚠️ Falha ao aplicar patch do Fabric (_drawClipPath):', e);
     }
     
-    if (canvasEl.value && wrapperEl.value) {
-      try {
-        // Init Infinite Canvas (Full Wrapper Size)
-        canvas.value = new fabric.Canvas(canvasEl.value, {
-          width: wrapperEl.value.clientWidth,
-          height: wrapperEl.value.clientHeight,
-          backgroundColor: '#1e1e1e', // Dark Workspace
-          preserveObjectStacking: true, 
-          renderOnAddRemove: true,
-          selection: true,
-          // Required for deep-select (sub-target selection inside Fabric groups).
-          subTargetCheck: true,
-          // CRITICAL: Enable renderOnAddRemove and skipTargetFind to prevent trails
-          skipTargetFind: false,
-          // Force full render to clear previous positions
-          enableRetinaScaling: true,
-          // IMPORTANT: Disable clipTo to allow preview lines to extend beyond viewport
-          clipTo: undefined,
-        });
+	    if (canvasEl.value && wrapperEl.value) {
+	      try {
+	        // Init Infinite Canvas (Full Wrapper Size)
+	        canvas.value = new fabric.Canvas(canvasEl.value, {
+	          width: wrapperEl.value.clientWidth,
+	          height: wrapperEl.value.clientHeight,
+	          backgroundColor: '#1e1e1e', // Dark Workspace
+	          preserveObjectStacking: true, 
+	          renderOnAddRemove: true,
+	          selection: true,
+	          // Required for deep-select (sub-target selection inside Fabric groups).
+	          subTargetCheck: true,
+	          // CRITICAL: Enable renderOnAddRemove and skipTargetFind to prevent trails
+	          skipTargetFind: false,
+	          // Force full render to clear previous positions
+	          enableRetinaScaling: true,
+	          // IMPORTANT: Disable clipTo to allow preview lines to extend beyond viewport
+	          clipTo: undefined,
+	        });
 
-        // Prevent black-screen render failures by guarding Fabric rendering.
-        patchCanvasRenderSafety(canvas.value);
+            // Tablet/Touch UX + performance: bigger handles and cheaper hit-tests.
+            // This makes selection/resizing usable on iPad/Android tablets.
+            try {
+                const isCoarsePointer =
+                    typeof window !== 'undefined' &&
+                    typeof window.matchMedia === 'function' &&
+                    window.matchMedia('(pointer: coarse)').matches;
+
+                if (isCoarsePointer && canvas.value) {
+                    // Big canvases render faster if we skip objects outside viewport.
+                    // Safe for interactive editing; exports should use their own render path.
+                    (canvas.value as any).skipOffscreen = true;
+                    // Per-pixel hit-testing is expensive and unnecessary for touch.
+                    (canvas.value as any).perPixelTargetFind = false;
+                    // Increase tolerance so taps select objects more reliably.
+                    const prevTol = Number((canvas.value as any).targetFindTolerance || 0);
+                    (canvas.value as any).targetFindTolerance = Math.max(prevTol, 12);
+
+                    const Obj = (fabric as any)?.Object || (fabric as any)?.FabricObject;
+                    if (Obj?.prototype) {
+                        // Fabric uses touchCornerSize on touch devices; keep cornerSize untouched for desktop.
+                        if (typeof Obj.prototype.touchCornerSize !== 'number' || Obj.prototype.touchCornerSize < 22) {
+                            Obj.prototype.touchCornerSize = 22;
+                        }
+                        // Slightly stronger border scale helps on high-DPI tablets.
+                        if (typeof Obj.prototype.borderScaleFactor !== 'number' || Obj.prototype.borderScaleFactor < 1.2) {
+                            Obj.prototype.borderScaleFactor = 1.2;
+                        }
+                    }
+                }
+            } catch {
+                // ignore
+            }
+
+	        // Prevent black-screen render failures by guarding Fabric rendering.
+	        patchCanvasRenderSafety(canvas.value);
 
         // PATCH: Improve hit-testing for product cards inside zones.
         // Some interactions (deep select, non-evented children, transparent areas) can make Fabric miss the card and start a group selection rectangle.
@@ -7851,9 +8422,10 @@ onMounted(async () => {
                       console.warn('⚠️ Carregamento degradado (imagens com erro). Pulando auto-save para não sobrescrever o projeto.');
                   }
 
-                      // Stop watching after successful load
-                      console.log('✅ Carregamento concluído, parando watch');
+                  // Stop watching after successful load
+                  console.log('✅ Carregamento concluído, parando watch');
                   isInitialCanvasHydrationDone.value = true;
+                  isInitialDesignLoadDone.value = true;
                   if (stopWatchFn) stopWatchFn();
               } catch (err) {
                   console.error('❌ Error loading canvas data:', err);
@@ -7875,6 +8447,7 @@ onMounted(async () => {
 onUnmounted(() => {
   isCanvasDestroyed.value = true;
   isCanvasJsonLoadInProgress = false;
+  isDesignLoading.value = false
   if (frameLabelUpdateTimer) {
     clearTimeout(frameLabelUpdateTimer);
     frameLabelUpdateTimer = null;
@@ -8564,8 +9137,8 @@ const convertContaboToProxyUrls = (canvasData: any, opts: { clone?: boolean } = 
             } else if (src.includes('contabostorage.com')) {
                 const { bucket, key } = extractContaboBucketAndKey(src);
                 if (key) {
-                    if (bucket) node.src = `/api/storage/proxy?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
-                    else node.src = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+                    if (bucket) node.src = `/api/storage/p?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+                    else node.src = `/api/storage/p?key=${encodeURIComponent(key)}`;
                     contaboCount++;
                 }
             }
@@ -8615,6 +9188,7 @@ const isPotentiallyBrokenRemoteImageSrc = (src: string): boolean => {
     if (value.includes('contabostorage.com')) return true;
     if (value.includes('wasabisys.com')) return true;
     if (value.includes('/api/storage/proxy')) return true;
+    if (value.includes('/api/storage/p')) return true;
     if (value.startsWith('http://') || value.startsWith('https://')) return true;
     return false;
 };
@@ -11049,6 +11623,11 @@ const setupZoomPan = () => {
     let touchStartDistance = 0;
     let touchStartZoom = 1;
     let touchLastCenter = { x: 0, y: 0 };
+    let touchPrevSkipTargetFind: boolean | null = null;
+    let touchPrevSelection: boolean | null = null;
+    let touchRafPending = false;
+    let touchPendingCenter: { x: number; y: number } | null = null;
+    let touchPendingDistance = 0;
 
     const clampZoom = (value: number) => {
         if (value > 20) return 20;
@@ -11093,32 +11672,37 @@ const setupZoomPan = () => {
         touchStartDistance = Math.max(1, getTouchDistance(touches));
         touchStartZoom = canvas.value.getZoom() || 1;
         touchLastCenter = getTouchCenter(touches);
+        touchPendingCenter = touchLastCenter;
+        touchPendingDistance = touchStartDistance;
+
+        // Performance: while multi-touching, we don't need Fabric hit-tests.
+        if (touchPrevSkipTargetFind === null) touchPrevSkipTargetFind = !!canvas.value.skipTargetFind;
+        if (touchPrevSelection === null) touchPrevSelection = !!canvas.value.selection;
+        canvas.value.skipTargetFind = true;
+        canvas.value.selection = false;
     };
 
     const endTouchGesture = () => {
         isTouchGestureActive = false;
         touchStartDistance = 0;
+        touchPendingCenter = null;
+        touchPendingDistance = 0;
+        // Restore Fabric hit-test flags.
+        if (canvas.value) {
+            if (touchPrevSkipTargetFind !== null) canvas.value.skipTargetFind = touchPrevSkipTargetFind;
+            if (touchPrevSelection !== null) canvas.value.selection = touchPrevSelection;
+        }
+        touchPrevSkipTargetFind = null;
+        touchPrevSelection = null;
     };
 
     if (canvas.value?.upperCanvasEl && !domCanvasTouchStartHandler) {
-        domCanvasTouchStartHandler = (evt: TouchEvent) => {
-            if (!canvas.value) return;
-            if (evt.touches.length < 2) return;
-            beginTouchGesture(evt.touches);
-            evt.preventDefault();
-            evt.stopPropagation();
-        };
+        const flushTouchGesture = () => {
+            touchRafPending = false;
+            if (!canvas.value || !isTouchGestureActive || !touchPendingCenter) return;
 
-        domCanvasTouchMoveHandler = (evt: TouchEvent) => {
-            if (!canvas.value) return;
-            if (evt.touches.length < 2) return;
-
-            if (!isTouchGestureActive) {
-                beginTouchGesture(evt.touches);
-            }
-
-            const currentCenter = getTouchCenter(evt.touches);
-            const currentDistance = Math.max(1, getTouchDistance(evt.touches));
+            const currentCenter = touchPendingCenter;
+            const currentDistance = Math.max(1, touchPendingDistance || 1);
             const scaleFactor = currentDistance / Math.max(1, touchStartDistance);
             const nextZoom = clampZoom(touchStartZoom * scaleFactor);
 
@@ -11136,6 +11720,34 @@ const setupZoomPan = () => {
             safeRequestRenderAll();
             updateFloatingUI();
             throttledUpdateScrollbars();
+        };
+
+        const scheduleTouchFlush = () => {
+            if (touchRafPending) return;
+            touchRafPending = true;
+            requestAnimationFrame(flushTouchGesture);
+        };
+
+        domCanvasTouchStartHandler = (evt: TouchEvent) => {
+            if (!canvas.value) return;
+            if (evt.touches.length < 2) return;
+            beginTouchGesture(evt.touches);
+            evt.preventDefault();
+            evt.stopPropagation();
+        };
+
+        domCanvasTouchMoveHandler = (evt: TouchEvent) => {
+            if (!canvas.value) return;
+            if (evt.touches.length < 2) return;
+
+            if (!isTouchGestureActive) {
+                beginTouchGesture(evt.touches);
+            }
+
+            // Coalesce high-frequency touch events into a single RAF update (much smoother on tablets).
+            touchPendingCenter = getTouchCenter(evt.touches);
+            touchPendingDistance = Math.max(1, getTouchDistance(evt.touches));
+            scheduleTouchFlush();
 
             evt.preventDefault();
             evt.stopPropagation();
@@ -16861,9 +17473,9 @@ const normalizeRecoveryImageUrl = (src: string): string => {
         const { bucket, key } = extractContaboBucketAndKey(value);
         if (key) {
             if (bucket) {
-                return `/api/storage/proxy?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+                return `/api/storage/p?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
             }
-            return `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+            return `/api/storage/p?key=${encodeURIComponent(key)}`;
         }
     }
     return value;
@@ -27580,8 +28192,80 @@ const handleRecalculateLayout = () => {
           <!-- Canvas Stage -->
           <main class="flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing">
               <!-- Infinite Canvas Effect (Wrapper) -->
-              <div ref="wrapperEl" class="w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
+                  <div ref="wrapperEl" class="w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
+
+                  <!-- Design loader overlay (prevents "blank canvas until click" confusion) -->
+                  <div
+                    v-show="showDesignLoaderOverlay"
+                    class="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px] cursor-wait"
+                    style="z-index: 200;"
+                    aria-live="polite"
+                  >
+                    <div class="px-4 py-3 rounded-lg bg-zinc-950/70 border border-white/10 shadow-xl">
+                      <div class="flex items-center gap-2">
+                        <div class="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
+                        <p class="text-sm text-white/90">{{ designLoadMessage }}</p>
+                      </div>
+                      <p class="text-[11px] text-white/55 mt-1">{{ designLoadProgressLine || 'Aguarde alguns segundos.' }}</p>
+                    </div>
+                  </div>
+
+                  <!-- Storage degraded banner (missing/blocked images) -->
+                  <div
+                    v-show="showStorageDegradedBanner"
+                    class="absolute top-3 left-1/2 -translate-x-1/2"
+                    style="z-index: 210;"
+                  >
+                    <div class="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-950/60 border border-amber-300/20 text-amber-100 shadow-lg">
+                      <span class="text-xs">{{ storageDegradedHint || 'Algumas imagens nao carregaram.' }}</span>
+                      <button
+                        type="button"
+                        class="text-xs px-2 py-1 rounded-full bg-amber-200/10 hover:bg-amber-200/15 border border-amber-200/20"
+                        @click="retryStorageReload"
+                      >
+                        Recarregar
+                      </button>
+                      <button
+                        v-if="canRecoverLatestNonEmpty"
+                        type="button"
+                        class="text-xs px-2 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10"
+                        @click="openHistoryModal"
+                      >
+                        Historico
+                      </button>
+                      <button
+                        v-if="canRecoverLatestNonEmpty"
+                        type="button"
+                        class="text-xs px-2 py-1 rounded-full bg-red-200/10 hover:bg-red-200/15 border border-red-200/20"
+                        :disabled="isRecoveringLatestNonEmpty"
+                        @click="recoverLatestNonEmptyForActivePage"
+                      >
+                        {{ isRecoveringLatestNonEmpty ? 'Recuperando...' : 'Recuperar' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Save status pill -->
+                  <div
+                    v-show="!!saveIndicatorText"
+                    class="absolute top-3 right-3"
+                    style="z-index: 210;"
+                  >
+                    <div class="flex items-center gap-2 px-3 py-2 rounded-full bg-zinc-950/60 border border-white/10 text-white/90 shadow-lg">
+                      <span class="text-xs">{{ saveIndicatorText }}</span>
+                      <span v-if="saveIndicatorSubtext" class="text-[11px] text-white/55">{{ saveIndicatorSubtext }}</span>
+                      <button
+                        v-if="saveStatus === 'error' || (hasUnsavedChanges && !isSaving)"
+                        type="button"
+                        class="text-xs px-2 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10"
+                        @click="retrySaveNow"
+                      >
+                        Tentar
+                      </button>
+                    </div>
+                  </div>
+
                   <ContextMenu
                     v-model="canvasContextMenu.show"
                     :x="canvasContextMenu.x"
@@ -27759,6 +28443,48 @@ const handleRecalculateLayout = () => {
         @update:crop-frame-rect="handleCropRectUpdate"
         @crop-complete="handleCropComplete"
       />
+
+      <!-- Page History / Restore Modal -->
+      <div v-if="showHistoryModal" class="fixed inset-0 z-9999">
+        <div class="absolute inset-0 bg-black/60" @click="showHistoryModal = false"></div>
+        <div class="absolute left-1/2 top-1/2 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-zinc-950/90 shadow-2xl">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <div>
+              <p class="text-sm text-white/90">Historico da pagina</p>
+              <p class="text-[11px] text-white/55">Escolha uma versao para restaurar.</p>
+            </div>
+            <button type="button" class="text-white/70 hover:text-white text-lg leading-none" @click="showHistoryModal = false">×</button>
+          </div>
+          <div class="px-4 py-3">
+            <div v-if="historyLoading" class="text-sm text-white/70">Carregando...</div>
+            <div v-else-if="historyError" class="text-sm text-red-300">{{ historyError }}</div>
+            <div v-else-if="!historyItems.length" class="text-sm text-white/60">Nenhuma versao encontrada.</div>
+            <div v-else class="max-h-[60vh] overflow-auto divide-y divide-white/10">
+              <div v-for="it in historyItems" :key="`${it.source}:${it.key}:${it.versionId || ''}:${it.lastModified}`" class="py-3 flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-xs text-white/80 truncate">
+                    <span class="font-medium">{{ it.source === 'version' ? 'Versao' : 'Snapshot' }}</span>
+                    <span class="text-white/40"> · </span>
+                    <span class="text-white/60">{{ new Date(it.lastModified).toLocaleString('pt-BR') }}</span>
+                  </p>
+                  <p class="text-[11px] text-white/50 truncate">
+                    {{ it.objectCount != null ? `${it.objectCount} objetos` : '' }}
+                    <span v-if="it.size != null" class="text-white/40"> · {{ Math.max(1, Math.round((it.size || 0) / 1024)) }} KB</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="shrink-0 text-xs px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-50"
+                  :disabled="!!restoringHistoryKey"
+                  @click="restoreFromHistoryItem(it as any)"
+                >
+                  {{ restoringHistoryKey ? 'Restaurando...' : 'Restaurar' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
   </div>
 </template>

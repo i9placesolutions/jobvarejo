@@ -174,12 +174,17 @@ const resolveProductImageUrl = (rawUrl: any): string => {
     const value = String(rawUrl || '').trim()
     if (!value) return ''
     if (value.startsWith('blob:') || value.startsWith('data:')) return value
-    if (value.startsWith('/api/storage/proxy?')) return value
+    if (value.startsWith('/api/storage/proxy?') || value.startsWith('/api/storage/p?')) return value
 
     if (value.startsWith('http://') || value.startsWith('https://')) {
         try {
             const urlObj = new URL(value)
-            if (urlObj.pathname.endsWith('/api/storage/proxy') || urlObj.pathname.endsWith('/proxy')) {
+            if (
+                urlObj.pathname.endsWith('/api/storage/proxy') ||
+                urlObj.pathname.endsWith('/api/storage/p') ||
+                urlObj.pathname.endsWith('/proxy') ||
+                urlObj.pathname.endsWith('/p')
+            ) {
                 const key = urlObj.searchParams.get('key')
                 if (key) {
                     const params = new URLSearchParams()
@@ -188,7 +193,7 @@ const resolveProductImageUrl = (rawUrl: any): string => {
                     if (bucket) params.set('bucket', bucket)
                     const version = urlObj.searchParams.get('v')
                     if (version) params.set('v', version)
-                    return `/api/storage/proxy?${params.toString()}`
+                    return `/api/storage/p?${params.toString()}`
                 }
             }
             const endpoint = String(runtimeConfig.public?.wasabiEndpoint || runtimeConfig.wasabiEndpoint || '').trim().toLowerCase()
@@ -196,10 +201,10 @@ const resolveProductImageUrl = (rawUrl: any): string => {
             const pathParts = decodeURIComponent(urlObj.pathname || '').split('/').filter(Boolean)
             if (endpoint && urlObj.host.toLowerCase().includes(endpoint) && bucket) {
                 if (pathParts[0] === bucket && pathParts.length > 1) {
-                    return `/api/storage/proxy?key=${encodeURIComponent(pathParts.slice(1).join('/'))}`
+                    return `/api/storage/p?key=${encodeURIComponent(pathParts.slice(1).join('/'))}`
                 }
                 if (urlObj.host.startsWith(`${bucket}.`) && pathParts.length > 0) {
-                    return `/api/storage/proxy?key=${encodeURIComponent(pathParts.join('/'))}`
+                    return `/api/storage/p?key=${encodeURIComponent(pathParts.join('/'))}`
                 }
             }
         } catch {
@@ -209,7 +214,7 @@ const resolveProductImageUrl = (rawUrl: any): string => {
     }
 
     if (value.startsWith('/')) return value
-    return `/api/storage/proxy?key=${encodeURIComponent(value)}`
+    return `/api/storage/p?key=${encodeURIComponent(value)}`
 }
 
 const withRequestTimeout = async <T>(
@@ -356,7 +361,7 @@ const uploadManualViaPresigned = async (
     }
 
     return {
-        url: `/api/storage/proxy?key=${encodeURIComponent(key)}`,
+        url: `/api/storage/p?key=${encodeURIComponent(key)}`,
         publicUrl: '',
         key,
         source: 'manual-presigned'

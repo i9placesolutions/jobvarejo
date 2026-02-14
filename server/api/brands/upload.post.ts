@@ -59,7 +59,7 @@ export default defineEventHandler(async (event) => {
         console.log('✅ Brand logo uploaded to Wasabi:', key);
 
         return {
-            url: `/api/storage/proxy?key=${encodeURIComponent(key)}`,
+            url: `/api/storage/p?key=${encodeURIComponent(key)}`,
             key: key,
             success: true
         };

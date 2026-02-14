@@ -8,7 +8,7 @@ import { enforceRateLimit } from "../utils/rate-limit";
 import { getCachedS3Objects } from "../utils/s3-object-cache";
 
 /** Build a same-origin proxy URL for a given S3 key (avoids CORS + no expiration) */
-const proxyUrl = (key: string) => `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+const proxyUrl = (key: string) => `/api/storage/p?key=${encodeURIComponent(key)}`;
 
 type ProcessProductImageResponse = {
     source: string;

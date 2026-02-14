@@ -14,7 +14,7 @@ const normalizeStorageKey = (input: string): string => {
 
   try {
     const parsed = new URL(raw, 'http://localhost')
-    if (parsed.pathname.endsWith('/api/storage/proxy')) {
+    if (parsed.pathname.endsWith('/api/storage/proxy') || parsed.pathname.endsWith('/api/storage/p')) {
       const keyParam = String(parsed.searchParams.get('key') || '').trim()
       if (keyParam) return keyParam.replace(/^\/+/, '')
     }

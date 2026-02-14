@@ -11,7 +11,7 @@ import { getS3Client } from "../utils/s3";
 export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig();
     const bucketName = config.wasabiBucket;
-    const toProxyUrl = (key: string) => `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+    const toProxyUrl = (key: string) => `/api/storage/p?key=${encodeURIComponent(key)}`;
 
     if (!bucketName) {
         throw createError({

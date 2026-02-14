@@ -154,7 +154,7 @@ const resolveProxyGetUrl = (keyOrUrl: string): string | null => {
     trimmed.startsWith('uploads/') ||
     trimmed.startsWith('logo/')
   ) {
-    return `/api/storage/proxy?key=${encodeURIComponent(trimmed.replace(/^\/+/, ''))}`
+    return `/api/storage/p?key=${encodeURIComponent(trimmed.replace(/^\/+/, ''))}`
   }
 
   return null
@@ -393,8 +393,11 @@ export const useStorage = () => {
     if (!opts?.projectId || !opts?.pageId) return null
 
     try {
+      const headers = await getAuthHeaders()
+      if (!headers) return null
       const result = await $fetch<RecoverLatestNonEmptyResult>('/api/storage/recover-latest-non-empty', {
         method: 'POST',
+        headers,
         body: {
           projectId: opts.projectId,
           pageId: opts.pageId,
@@ -488,7 +491,7 @@ export const useStorage = () => {
       }
 
       // Return a same-origin proxy URL so thumbnails work even when the bucket is private.
-      return `/api/storage/proxy?key=${encodeURIComponent(key)}`
+      return `/api/storage/p?key=${encodeURIComponent(key)}`
     } catch (error: any) {
       console.error('Erro ao salvar thumbnail:', error)
       return null

@@ -47,7 +47,7 @@ const normalizeText = (value: string) =>
         .replace(/\s+/g, " ")
         .trim();
 
-const toProxyUrl = (key: string) => `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+const toProxyUrl = (key: string) => `/api/storage/p?key=${encodeURIComponent(key)}`;
 
 const resolveWasabiKeyFromUrl = (rawUrl: string, bucketName: string, endpoint: string): string | null => {
     const value = String(rawUrl || "").trim();
@@ -60,7 +60,7 @@ const resolveWasabiKeyFromUrl = (rawUrl: string, bucketName: string, endpoint: s
         return value;
     }
 
-    if (value.startsWith("/api/storage/proxy?")) {
+    if (value.startsWith("/api/storage/proxy?") || value.startsWith("/api/storage/p?")) {
         try {
             const parsed = new URL(value, "http://local");
             const key = parsed.searchParams.get("key");

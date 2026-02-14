@@ -113,7 +113,7 @@ export default defineEventHandler(async (event) => {
         else await s3.send(putCommand);
 
         const publicUrl = getPublicUrl(key);
-        const proxyUrl = `/api/storage/proxy?key=${encodeURIComponent(key)}`;
+        const proxyUrl = `/api/storage/p?key=${encodeURIComponent(key)}`;
 
         // Salvar no cache do banco (fire-and-forget — não bloqueia resposta)
         const supabase = createSupabaseAdmin();

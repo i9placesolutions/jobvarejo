@@ -1,6 +1,7 @@
 import { GetObjectCommand, ListObjectVersionsCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { Readable } from 'node:stream'
 import { createSupabaseAdmin } from '../../utils/supabase'
+import { requireAuthenticatedUser } from '../../utils/auth'
 
 type RecoverBody = {
   projectId?: string
@@ -157,6 +158,7 @@ const findLatestNonEmptyByHistoryPrefix = async (
 }
 
 export default defineEventHandler(async (event) => {
+  const user = await requireAuthenticatedUser(event)
   const body = await readBody<RecoverBody>(event)
   const projectId = String(body?.projectId || '').trim()
   const pageId = String(body?.pageId || '').trim()
@@ -187,6 +189,7 @@ export default defineEventHandler(async (event) => {
     .from('projects')
     .select('id, user_id, canvas_data')
     .eq('id', projectId)
+    .eq('user_id', user.id)
     .single()
 
   if (projectError || !projectRow) {
