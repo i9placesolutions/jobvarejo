@@ -36,6 +36,8 @@ export interface SmartProduct {
     raw?: any;
 }
 
+type BgPolicy = 'auto' | 'never' | 'always';
+
 // Normaliza search term no frontend (espelha lógica do backend)
 const normalizeForDedup = (term: string): string => {
     const unitMap: Record<string, string> = {
@@ -267,9 +269,17 @@ export const useProductProcessor = () => {
         }
     };
 
-    const processProductImage = async (index: number) => {
+    const processProductImage = async (
+        index: number,
+        options: { bgPolicy?: BgPolicy; force?: boolean } = {}
+    ) => {
         const product = products.value[index];
         if (!product || product.status === 'processing') return;
+        if (!options.force && product.imageUrl) {
+            product.status = 'done';
+            product.error = undefined;
+            return;
+        }
 
         product.status = 'processing';
         product.error = undefined;
@@ -295,7 +305,8 @@ export const useProductProcessor = () => {
                     term: searchTerm,
                     brand: product.brand || undefined,
                     flavor: product.flavor || undefined,
-                    weight: effectiveWeight
+                    weight: effectiveWeight,
+                    bgPolicy: options.bgPolicy || 'auto'
                 }
             });
 
@@ -323,15 +334,29 @@ export const useProductProcessor = () => {
         }
     }
 
-    const processAllImages = async () => {
+    const processAllImages = async (options: { bgPolicy?: BgPolicy } = {}) => {
         console.log('[ProductProcessor] processAllImages called, products:', products.value.length);
+        const resolvedBySignature = new Map<string, string>();
         
         // ===== DEDUPLICAÇÃO: agrupar produtos com mesmo search term normalizado =====
         const dedupMap = new Map<string, number[]>(); // normalizedKey → [indices]
         
         products.value.forEach((p, i) => {
-            if (p.imageUrl || p.status === 'processing') return;
             const signature = buildDedupSignature(p);
+            if (p.imageUrl) {
+                resolvedBySignature.set(signature, p.imageUrl);
+                p.status = 'done';
+                p.error = undefined;
+                return;
+            }
+            if (p.status === 'processing') return;
+            const resolvedImage = resolvedBySignature.get(signature);
+            if (resolvedImage) {
+                p.imageUrl = resolvedImage;
+                p.status = 'done';
+                p.error = undefined;
+                return;
+            }
             if (!dedupMap.has(signature)) {
                 dedupMap.set(signature, []);
             }
@@ -349,10 +374,11 @@ export const useProductProcessor = () => {
             if (!primaryProduct) continue;
             console.log(`[ProductProcessor] Processing: ${primaryProduct.name} (${indices.length} duplicata(s), assinatura="${signature}")`);
             
-            await processProductImage(primaryIndex);
+            await processProductImage(primaryIndex, { bgPolicy: options.bgPolicy || 'auto' });
             
             // Replicar resultado para duplicatas
             if (indices.length > 1 && primaryProduct.imageUrl) {
+                resolvedBySignature.set(signature, primaryProduct.imageUrl);
                 for (let i = 1; i < indices.length; i++) {
                     const duplicateIndex = indices[i];
                     if (duplicateIndex === undefined) continue;

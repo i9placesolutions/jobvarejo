@@ -8,6 +8,7 @@ import { useProductProcessor, type SmartProduct } from '../composables/useProduc
 import type { LabelTemplate } from '~/types/label-template'
 
 type ImportTargetMode = 'zone' | 'multi-frame'
+type ImageBgPolicy = 'auto' | 'never' | 'always'
 type FrameCandidate = { id: string; name: string; left?: number; top?: number }
 type FrameAssignment = { productId: string; frameId: string | null }
 type ProductImportOptions = {
@@ -52,6 +53,7 @@ const importMode = ref<'replace' | 'append'>('replace')
 const targetMode = ref<ImportTargetMode>('zone')
 const selectedFrameIds = ref<string[]>([])
 const frameAssignmentsMap = ref<Record<string, string | null>>({})
+const imageBgPolicy = ref<ImageBgPolicy>('auto')
 
 const LIST_FILE_ACCEPT = 'image/*,.csv,.tsv,.xlsx,.xls,.pdf,text/plain'
 
@@ -80,6 +82,7 @@ watch(() => props.modelValue, (newVal) => {
         targetMode.value = 'zone'
         selectedFrameIds.value = []
         frameAssignmentsMap.value = {}
+        imageBgPolicy.value = 'auto'
         if (props.initialProducts && props.initialProducts.length > 0) {
             // Load external products directly into review mode
             products.value = [...props.initialProducts]
@@ -99,7 +102,7 @@ const handleParse = async () => {
     if (products.value.length > 0) {
         step.value = 'review';
         // Process all images automatically
-        await processAllImages();
+        await processAllImages({ bgPolicy: imageBgPolicy.value });
     }
 }
 
@@ -117,7 +120,7 @@ const handleFileSelected = async (event: Event) => {
 
     if (products.value.length > 0) {
         step.value = 'review'
-        await processAllImages()
+        await processAllImages({ bgPolicy: imageBgPolicy.value })
     }
 }
 
@@ -127,7 +130,7 @@ const handleDropFile = async (event: DragEvent) => {
     await parseFile(file)
     if (products.value.length > 0) {
         step.value = 'review'
-        await processAllImages()
+        await processAllImages({ bgPolicy: imageBgPolicy.value })
     }
 }
 
@@ -158,7 +161,7 @@ const assets = ref<any[]>([])
 const assetSearch = ref('')
 const selectedProductIndex = ref<number | null>(null)
 const showLabelPreview = ref(false)
-const MIN_ASSET_SEARCH_CHARS = 2
+const MIN_ASSET_SEARCH_CHARS = 1
 
 const reviewSearch = ref('')
 const selectedLabelTemplateId = ref<string>('')
@@ -494,10 +497,17 @@ const fetchAssets = async () => {
 
     isLoadingAssets.value = true
     try {
+        const headers = await getApiAuthHeaders()
+        const product = selectedProductForAssetPicker.value
         const data = await $fetch('/api/assets', {
+            headers,
             query: {
                 q: query,
-                limit: 90
+                limit: 120,
+                productName: String(product?.name || ''),
+                brand: String(product?.brand || ''),
+                flavor: String(product?.flavor || ''),
+                weight: String(product?.weight || '')
             }
         })
         if (data && Array.isArray(data)) {
@@ -583,11 +593,49 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
         if (product.flavor) form.append('flavor', product.flavor)
         if (product.weight) form.append('weight', product.weight)
 
-        const result = await $fetch('/api/upload-product-image', {
-            method: 'POST',
-            headers,
-            body: form
-        }) as any
+        let result: any = null
+        try {
+            result = await $fetch('/api/upload-product-image', {
+                method: 'POST',
+                headers,
+                body: form,
+                timeout: 25000
+            }) as any
+        } catch (primaryErr) {
+            console.warn('[Upload Manual] Endpoint inteligente indisponível, tentando upload direto...', primaryErr)
+            const fallbackForm = new FormData()
+            fallbackForm.append('file', file)
+            result = await $fetch('/api/upload', {
+                method: 'POST',
+                body: fallbackForm,
+                timeout: 25000
+            }) as any
+        }
+
+        if (result?.url) {
+            // Se veio pelo fallback simples, salvar cache para próximas buscas
+            if (!result?.source || result?.source === 'manual' || result?.source === 'manual-fallback') {
+                try {
+                    const searchTerm = buildCacheSearchTerm(product)
+                    await $fetch('/api/cache-product-image', {
+                        method: 'POST',
+                        headers,
+                        body: {
+                            searchTerm,
+                            productName: product.name || 'Produto',
+                            brand: product.brand || null,
+                            flavor: product.flavor || null,
+                            weight: product.weight || null,
+                            imageUrl: result.publicUrl || result.url,
+                            s3Key: result.key || null,
+                            source: result?.source || 'manual-fallback'
+                        }
+                    })
+                } catch (cacheErr) {
+                    console.warn('[Upload Manual] Falha ao salvar fallback no cache:', cacheErr)
+                }
+            }
+        }
 
         if (result?.url) {
             product.imageUrl = result.url
@@ -668,9 +716,9 @@ const getAssetDisplayName = (asset: any): string => {
         :model-value="modelValue" 
         @update:model-value="$emit('update:modelValue', $event)" 
         title="Importação Inteligente"
-        width="800px"
+        width="1160px"
     >
-        <div class="flex flex-col gap-4 min-h-100">
+        <div class="flex flex-col gap-4 min-h-[640px] max-h-[82vh]">
             
             <!-- STEP 1: INPUT -->
             <div v-if="step === 'input'" class="flex flex-col gap-4 flex-1">
@@ -729,32 +777,35 @@ const getAssetDisplayName = (asset: any): string => {
             <!-- STEP 2: REVIEW -->
             <div v-else class="flex flex-col gap-4 flex-1 h-full overflow-hidden">
                 <!-- Review Header / Controls -->
-                <div class="p-3 rounded-lg border border-white/10 bg-zinc-900/40">
-                    <div class="flex items-start justify-between gap-3">
+                <div class="p-4 rounded-xl border border-white/10 bg-zinc-900/45 space-y-4">
+                    <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
                         <div class="min-w-0">
-                            <div class="text-xs font-semibold text-zinc-100 truncate">Revisão dos produtos</div>
-                            <div class="text-[10px] text-zinc-500">
-                                Mostrando <span class="text-zinc-300 font-medium">{{ filteredProducts.length }}</span> de
-                                <span class="text-zinc-300 font-medium">{{ products.length }}</span>
+                            <div class="text-sm font-semibold text-zinc-100 truncate">Revisão dos produtos</div>
+                            <div class="text-[11px] text-zinc-500">
+                                Mostrando <span class="text-zinc-300 font-semibold">{{ filteredProducts.length }}</span> de
+                                <span class="text-zinc-300 font-semibold">{{ products.length }}</span>
                             </div>
                         </div>
-                        <div class="w-70 max-w-[45%]">
-                            <Input v-model="reviewSearch" placeholder="Buscar (nome, marca, preço...)" class="h-9 text-sm" />
+                        <div class="w-full xl:w-96 shrink-0">
+                            <Input v-model="reviewSearch" placeholder="Buscar (nome, marca, preço...)" class="h-10 text-sm" />
                         </div>
                     </div>
 
-                    <div class="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-3">
-                        <div v-if="props.showImportMode" class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10 bg-black/20">
-                            <div class="min-w-0">
+                    <div
+                        class="grid gap-3"
+                        :class="props.showImportMode ? 'grid-cols-1 xl:grid-cols-4' : 'grid-cols-1 xl:grid-cols-3'"
+                    >
+                        <div v-if="props.showImportMode" class="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
+                            <div>
                                 <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Modo</div>
-                                <div class="text-[10px] text-zinc-500 truncate">
-                                    Zona tem <span class="text-zinc-300 font-medium">{{ Math.max(0, Number(props.existingCount || 0)) }}</span> itens
+                                <div class="text-[11px] text-zinc-500">
+                                    Zona tem <span class="text-zinc-300 font-semibold">{{ Math.max(0, Number(props.existingCount || 0)) }}</span> itens
                                 </div>
                             </div>
-                            <div class="flex items-center gap-1">
+                            <div class="grid grid-cols-2 gap-1">
                                 <button
                                     type="button"
-                                    class="h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all"
+                                    class="h-9 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all"
                                     :class="importMode === 'replace' ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
                                     @click="importMode = 'replace'"
                                     title="Remove os produtos atuais da zona e recria a grade"
@@ -763,7 +814,7 @@ const getAssetDisplayName = (asset: any): string => {
                                 </button>
                                 <button
                                     type="button"
-                                    class="h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all"
+                                    class="h-9 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all"
                                     :class="importMode === 'append' ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
                                     @click="importMode = 'append'"
                                     title="Adiciona ao que já existe e reorganiza a grade"
@@ -773,23 +824,21 @@ const getAssetDisplayName = (asset: any): string => {
                             </div>
                         </div>
 
-                        <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10 bg-black/20">
-                            <div class="min-w-0">
+                        <div class="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
+                            <div>
                                 <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Etiqueta</div>
-                                <div class="text-[10px] text-zinc-500 truncate">
-                                    Modelo aplicado aos novos cards
-                                </div>
+                                <div class="text-[11px] text-zinc-500">Modelo aplicado aos novos cards</div>
                             </div>
                             <div class="flex items-center gap-2">
                                 <img
                                     v-if="selectedLabelTemplate?.previewDataUrl"
                                     :src="selectedLabelTemplate.previewDataUrl"
                                     alt="preview"
-                                    class="w-16 h-6.5 object-contain rounded bg-zinc-800/60 border border-zinc-700 cursor-pointer hover:border-zinc-500 transition-colors"
+                                    class="w-18 h-8 object-contain rounded bg-zinc-800/60 border border-zinc-700 cursor-pointer hover:border-zinc-500 transition-colors"
                                     @click="showLabelPreview = true"
                                 />
                                 <select
-                                    class="h-8 bg-transparent border border-zinc-700 rounded px-2 text-xs text-zinc-200 focus:outline-none min-w-45"
+                                    class="h-9 flex-1 bg-transparent border border-zinc-700 rounded px-2 text-xs text-zinc-200 focus:outline-none min-w-0"
                                     :value="selectedLabelTemplateId"
                                     @change="selectedLabelTemplateId = String(($event.target as HTMLSelectElement).value || '')"
                                 >
@@ -801,17 +850,15 @@ const getAssetDisplayName = (asset: any): string => {
                             </div>
                         </div>
 
-                        <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10 bg-black/20">
-                            <div class="min-w-0">
+                        <div class="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
+                            <div>
                                 <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Destino</div>
-                                <div class="text-[10px] text-zinc-500 truncate">
-                                    Escolha entre zona atual e multi-frame
-                                </div>
+                                <div class="text-[11px] text-zinc-500">Escolha entre zona atual e multi-frame</div>
                             </div>
-                            <div class="flex items-center gap-1">
+                            <div class="grid grid-cols-2 gap-1">
                                 <button
                                     type="button"
-                                    class="h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all"
+                                    class="h-9 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all"
                                     :class="targetMode === 'zone' ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
                                     @click="targetMode = 'zone'"
                                 >
@@ -819,13 +866,32 @@ const getAssetDisplayName = (asset: any): string => {
                                 </button>
                                 <button
                                     type="button"
-                                    class="h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    class="h-9 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                     :class="targetMode === 'multi-frame' ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
                                     :disabled="!canUseMultiFrame"
                                     @click="targetMode = 'multi-frame'"
                                 >
                                     Multi-frame
                                 </button>
+                            </div>
+                        </div>
+
+                        <div class="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
+                            <div>
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Tratamento de imagem</div>
+                                <div class="text-[11px] text-zinc-500">Define quando remover fundo na busca automática</div>
+                            </div>
+                            <select
+                                v-model="imageBgPolicy"
+                                class="h-9 w-full bg-transparent border border-zinc-700 rounded px-2 text-xs text-zinc-200 focus:outline-none"
+                                :disabled="isProcessingProducts"
+                            >
+                                <option value="auto">Auto (recomendado)</option>
+                                <option value="never">Nunca remover fundo</option>
+                                <option value="always">Sempre remover fundo</option>
+                            </select>
+                            <div class="text-[10px] text-zinc-500 leading-relaxed">
+                                Auto preserva qualidade e evita recortes agressivos.
                             </div>
                         </div>
                     </div>
@@ -910,22 +976,22 @@ const getAssetDisplayName = (asset: any): string => {
                     </div>
                 </div>
 
-                <div class="overflow-y-auto custom-scrollbar flex-1 border border-zinc-800 rounded-lg bg-zinc-900/50">
+                <div class="overflow-y-auto custom-scrollbar flex-1 border border-zinc-800 rounded-xl bg-zinc-900/50">
                     <table class="w-full text-left text-xs border-collapse">
                         <thead class="bg-zinc-800 text-zinc-400 sticky top-0 z-10">
                             <tr>
-                                <th class="p-3 w-28">Img</th>
+                                <th class="p-3 w-32">Img</th>
                                 <th class="p-3">Produto</th>
-                                <th class="p-3 w-80">Preços (Und | Emb | +Esp | Esp)</th>
-                                <th class="p-3 w-20">Status</th>
-                                <th class="p-3 w-10"></th>
+                                <th class="p-3 min-w-[430px]">Preços e Regras</th>
+                                <th class="p-3 w-24 text-center">Status</th>
+                                <th class="p-3 w-12"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-800">
-                            <tr v-for="product in filteredProducts" :key="product.id" class="hover:bg-white/5 group">
+                            <tr v-for="product in filteredProducts" :key="product.id" class="hover:bg-white/5 group align-top">
                                 <!-- Image Column -->
-                                <td class="p-2">
-                                    <div class="w-24 h-24 rounded bg-zinc-800 flex items-center justify-center overflow-hidden border border-zinc-700 relative">
+                                <td class="p-3">
+                                    <div class="w-26 h-26 rounded-lg bg-zinc-800/80 flex items-center justify-center overflow-hidden border border-zinc-700 relative">
                                         <img v-if="product.imageUrl" :src="product.imageUrl" class="w-full h-full object-contain" />
                                         <Loader2 v-else-if="product.status === 'processing'" class="w-4 h-4 text-blue-500 animate-spin" />
                                         <AlertCircle v-else-if="product.status === 'error'" class="w-4 h-4 text-red-500" />
@@ -953,7 +1019,7 @@ const getAssetDisplayName = (asset: any): string => {
                                         <div 
                                             v-if="!product.imageUrl && product.status !== 'processing'" 
                                             class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer z-10"
-                                            @click="processProductImage(resolveProductIndex(product))"
+                                            @click="processProductImage(resolveProductIndex(product), { bgPolicy: imageBgPolicy })"
                                             title="Buscar Imagem"
                                         >
                                             <Search class="w-3 h-3 text-white" />
@@ -969,137 +1035,164 @@ const getAssetDisplayName = (asset: any): string => {
                                 </td>
                                 
                                 <!-- Name Input -->
-                                <td class="p-2">
+                                <td class="p-3 align-middle">
                                     <input 
                                         v-model="product.name" 
-                                        class="w-full bg-transparent border-none text-white focus:ring-0 p-0 text-xs font-medium placeholder-zinc-600"
+                                        class="w-full bg-transparent border-none text-white focus:ring-0 p-0 text-sm font-semibold placeholder-zinc-600"
                                         placeholder="Nome do Produto"
                                     />
                                     <input 
                                         v-model="product.brand" 
-                                        class="w-full bg-transparent border-none text-zinc-500 focus:ring-0 p-0 text-[10px]"
+                                        class="w-full bg-transparent border-none text-zinc-500 focus:ring-0 p-0 text-xs mt-1"
                                         placeholder="Marca (opcional)"
                                     />
                                 </td>
 
                                 <!-- Price Input -->
-                                <td class="p-2">
-                                    <!-- ===== PREÇOS PRINCIPAIS ===== -->
-                                    <div class="space-y-1">
-                                        <!-- Preço Unitário (Principal) -->
-                                        <div class="flex items-center text-zinc-400 gap-1">
-                                            <span class="text-[9px] uppercase text-zinc-500">Und</span>
-                                            <input
-                                                v-model="product.priceUnit"
-                                                class="w-full bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-white text-xs focus:outline-none focus:border-blue-500"
-                                                placeholder="0,00"
-                                            />
-                                            <span class="text-[9px] uppercase text-zinc-500">Emb</span>
-                                            <input
-                                                v-model="product.pricePack"
-                                                class="w-full bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-white text-xs focus:outline-none focus:border-blue-500"
-                                                placeholder="0,00"
-                                            />
+                                <td class="p-3">
+                                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                                        <div class="rounded-md border border-zinc-800 bg-zinc-950/45 p-2 space-y-1.5">
+                                            <div class="text-[10px] uppercase tracking-widest text-zinc-400 font-semibold">Preço Base</div>
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <label class="text-[10px] text-zinc-500 uppercase">
+                                                    Und
+                                                    <input
+                                                        v-model="product.priceUnit"
+                                                        class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500"
+                                                        placeholder="0,00"
+                                                    />
+                                                </label>
+                                                <label class="text-[10px] text-zinc-500 uppercase">
+                                                    Emb
+                                                    <input
+                                                        v-model="product.pricePack"
+                                                        class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500"
+                                                        placeholder="0,00"
+                                                    />
+                                                </label>
+                                            </div>
                                         </div>
 
-                                        <!-- Preços Especiais/Promocionais -->
-                                        <div class="flex items-center text-green-400 gap-1">
-                                            <span class="text-[9px] uppercase text-green-500">+Esp</span>
-                                            <input
-                                                v-model="product.priceSpecialUnit"
-                                                class="w-full bg-transparent border border-green-900/50 rounded px-1 py-0.5 text-green-300 text-xs focus:outline-none focus:border-green-500"
-                                                placeholder="0,00"
-                                            />
-                                            <span class="text-[9px] uppercase text-green-500">Esp</span>
-                                            <input
-                                                v-model="product.priceSpecial"
-                                                class="w-full bg-transparent border border-green-900/50 rounded px-1 py-0.5 text-green-300 text-xs focus:outline-none focus:border-green-500"
-                                                placeholder="0,00"
-                                            />
+                                        <div class="rounded-md border border-emerald-900/40 bg-emerald-950/15 p-2 space-y-1.5">
+                                            <div class="text-[10px] uppercase tracking-widest text-emerald-400 font-semibold">Preço Especial</div>
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <label class="text-[10px] text-emerald-400 uppercase">
+                                                    +Esp
+                                                    <input
+                                                        v-model="product.priceSpecialUnit"
+                                                        class="mt-1 w-full bg-transparent border border-emerald-900/50 rounded px-2 py-1 text-emerald-300 text-xs focus:outline-none focus:border-emerald-500"
+                                                        placeholder="0,00"
+                                                    />
+                                                </label>
+                                                <label class="text-[10px] text-emerald-400 uppercase">
+                                                    Esp
+                                                    <input
+                                                        v-model="product.priceSpecial"
+                                                        class="mt-1 w-full bg-transparent border border-emerald-900/50 rounded px-2 py-1 text-emerald-300 text-xs focus:outline-none focus:border-emerald-500"
+                                                        placeholder="0,00"
+                                                    />
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <!-- ===== METADATA DE EMBALAGEM ===== -->
-                                    <div class="mt-2 flex items-center gap-1 text-[10px] text-zinc-500">
-                                        <span class="uppercase">Emb</span>
-                                        <input
-                                            :value="product.packageLabel ?? ''"
-                                            @input="e => product.packageLabel = String((e.target as any).value || '').toUpperCase()"
-                                            class="w-10 bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-zinc-200 focus:outline-none"
-                                            placeholder="FD"
-                                        />
-                                        <span class="uppercase">C/</span>
-                                        <input
-                                            type="number"
-                                            :value="product.packQuantity ?? ''"
-                                            @input="e => { const v = Number((e.target as any).value); product.packQuantity = Number.isFinite(v) && v > 0 ? v : null }"
-                                            class="w-14 bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-zinc-200 focus:outline-none"
-                                            placeholder="12"
-                                        />
-                                        <input
-                                            :value="product.packUnit ?? ''"
-                                            @input="e => product.packUnit = String((e.target as any).value || '').toUpperCase()"
-                                            class="w-10 bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-zinc-200 focus:outline-none"
-                                            placeholder="UN"
-                                        />
+                                    <div class="mt-2 grid grid-cols-3 gap-2">
+                                        <label class="text-[10px] text-zinc-500 uppercase">
+                                            Emb
+                                            <input
+                                                :value="product.packageLabel ?? ''"
+                                                @input="e => product.packageLabel = String((e.target as any).value || '').toUpperCase()"
+                                                class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs focus:outline-none"
+                                                placeholder="FD"
+                                            />
+                                        </label>
+                                        <label class="text-[10px] text-zinc-500 uppercase">
+                                            C/
+                                            <input
+                                                type="number"
+                                                :value="product.packQuantity ?? ''"
+                                                @input="e => { const v = Number((e.target as any).value); product.packQuantity = Number.isFinite(v) && v > 0 ? v : null }"
+                                                class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs focus:outline-none"
+                                                placeholder="12"
+                                            />
+                                        </label>
+                                        <label class="text-[10px] text-zinc-500 uppercase">
+                                            Un
+                                            <input
+                                                :value="product.packUnit ?? ''"
+                                                @input="e => product.packUnit = String((e.target as any).value || '').toUpperCase()"
+                                                class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs focus:outline-none"
+                                                placeholder="UN"
+                                            />
+                                        </label>
                                     </div>
 
-                                    <!-- ===== CONDIÇÃO ESPECIAL ===== -->
-                                    <div class="mt-1 flex items-center gap-1 text-[10px] text-zinc-500">
-                                        <span class="uppercase">Condição</span>
-                                        <input
-                                            :value="product.specialCondition ?? ''"
-                                            @input="e => product.specialCondition = String((e.target as any).value || '')"
-                                            class="flex-1 bg-transparent border border-zinc-800 rounded px-1 py-0.5 text-zinc-200 focus:outline-none"
-                                            placeholder="ACIMA DE 36 UN."
-                                        />
+                                    <div class="mt-2">
+                                        <label class="text-[10px] text-zinc-500 uppercase">
+                                            Condição
+                                            <input
+                                                :value="product.specialCondition ?? ''"
+                                                @input="e => product.specialCondition = String((e.target as any).value || '')"
+                                                class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs focus:outline-none"
+                                                placeholder="ACIMA DE 36 UN."
+                                            />
+                                        </label>
                                     </div>
 
                                     <!-- ===== PREÇO LEGADO (opcional, colapsado) ===== -->
-                                    <details class="mt-1">
-                                        <summary class="text-[9px] text-zinc-600 cursor-pointer hover:text-zinc-400">Legado</summary>
-                                        <div class="mt-1 flex items-center gap-1 text-[10px] text-zinc-600">
-                                            <span>R$</span>
-                                            <input
-                                                :value="product.price ?? ''"
-                                                @input="e => product.price = String((e.target as any).value || '')"
-                                                class="w-full bg-transparent border border-zinc-800/50 rounded px-1 py-0.5 text-zinc-500 focus:outline-none"
-                                                placeholder="0,00"
-                                            />
-                                            <span class="uppercase">Atac.</span>
-                                            <input
-                                                type="number"
-                                                :value="product.wholesaleTrigger ?? ''"
-                                                @input="e => { const v = Number((e.target as any).value); product.wholesaleTrigger = Number.isFinite(v) && v > 0 ? v : null }"
-                                                class="w-10 bg-transparent border border-zinc-800/50 rounded px-1 py-0.5 text-zinc-500 focus:outline-none"
-                                                placeholder="10"
-                                            />
-                                            <input
-                                                :value="product.wholesaleTriggerUnit ?? ''"
-                                                @input="e => product.wholesaleTriggerUnit = String((e.target as any).value || '').toUpperCase()"
-                                                class="w-8 bg-transparent border border-zinc-800/50 rounded px-1 py-0.5 text-zinc-500 focus:outline-none"
-                                                placeholder="FD"
-                                            />
-                                            <span>R$</span>
-                                            <input
-                                                :value="product.priceWholesale ?? ''"
-                                                @input="e => product.priceWholesale = String((e.target as any).value || '')"
-                                                class="w-full bg-transparent border border-zinc-800/50 rounded px-1 py-0.5 text-zinc-500 focus:outline-none"
-                                                placeholder="0,00"
-                                            />
+                                    <details class="mt-2">
+                                        <summary class="text-[10px] text-zinc-600 cursor-pointer hover:text-zinc-400">Legado</summary>
+                                        <div class="mt-2 grid grid-cols-1 xl:grid-cols-2 gap-2 text-[10px] text-zinc-600">
+                                            <label class="uppercase">
+                                                Preço
+                                                <input
+                                                    :value="product.price ?? ''"
+                                                    @input="e => product.price = String((e.target as any).value || '')"
+                                                    class="mt-1 w-full bg-transparent border border-zinc-800/50 rounded px-2 py-1 text-zinc-500 focus:outline-none"
+                                                    placeholder="0,00"
+                                                />
+                                            </label>
+                                            <label class="uppercase">
+                                                R$ Atacado
+                                                <input
+                                                    :value="product.priceWholesale ?? ''"
+                                                    @input="e => product.priceWholesale = String((e.target as any).value || '')"
+                                                    class="mt-1 w-full bg-transparent border border-zinc-800/50 rounded px-2 py-1 text-zinc-500 focus:outline-none"
+                                                    placeholder="0,00"
+                                                />
+                                            </label>
+                                            <label class="uppercase">
+                                                Trigger
+                                                <input
+                                                    type="number"
+                                                    :value="product.wholesaleTrigger ?? ''"
+                                                    @input="e => { const v = Number((e.target as any).value); product.wholesaleTrigger = Number.isFinite(v) && v > 0 ? v : null }"
+                                                    class="mt-1 w-full bg-transparent border border-zinc-800/50 rounded px-2 py-1 text-zinc-500 focus:outline-none"
+                                                    placeholder="10"
+                                                />
+                                            </label>
+                                            <label class="uppercase">
+                                                Unidade Trigger
+                                                <input
+                                                    :value="product.wholesaleTriggerUnit ?? ''"
+                                                    @input="e => product.wholesaleTriggerUnit = String((e.target as any).value || '').toUpperCase()"
+                                                    class="mt-1 w-full bg-transparent border border-zinc-800/50 rounded px-2 py-1 text-zinc-500 focus:outline-none"
+                                                    placeholder="FD"
+                                                />
+                                            </label>
                                         </div>
                                     </details>
                                 </td>
                                 
                                 <!-- Status -->
-                                <td class="p-2">
+                                <td class="p-3 text-center align-middle">
                                     <span :class="['text-[10px] font-medium uppercase', getStatusColor(product.status)]">
                                         {{ product.status }}
                                     </span>
                                 </td>
 
                                 <!-- Actions -->
-                                <td class="p-2 text-right">
+                                <td class="p-3 text-right align-middle">
                                     <button @click="removeProduct(resolveProductIndex(product))" class="text-zinc-500 hover:text-red-400 p-1">
                                         <X class="w-3.5 h-3.5" />
                                     </button>
@@ -1109,12 +1202,12 @@ const getAssetDisplayName = (asset: any): string => {
                     </table>
                 </div>
 
-                <div class="flex justify-between items-center pt-2 border-t border-white/5">
+                <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pt-2 border-t border-white/5">
                     <button @click="step = 'input'" class="text-xs text-zinc-500 hover:text-white flex items-center gap-1">
                          <X class="w-3 h-3" /> Voltar
                     </button>
-                    <div class="flex gap-2">
-                        <Button variant="ghost" size="sm" @click="processAllImages">
+                    <div class="flex flex-wrap gap-2">
+                        <Button variant="ghost" size="sm" @click="processAllImages({ bgPolicy: imageBgPolicy })">
                             <Search class="w-3.5 h-3.5 mr-2" />
                             Reprocessar Imagens
                         </Button>

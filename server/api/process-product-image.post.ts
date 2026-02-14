@@ -1,6 +1,6 @@
 import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, getPublicUrl } from "../utils/s3";
-import { processImageStrict, downloadImage } from "../utils/image-processor";
+import { processImage, processImageStrict, downloadImage } from "../utils/image-processor";
 import { createSupabaseAdmin } from "../utils/supabase";
 import { createHash } from 'crypto';
 import { requireAuthenticatedUser } from "../utils/auth";
@@ -19,6 +19,8 @@ type ProcessProductImageResponse = {
     aiConfidence?: number;
     aiBestIndex?: number;
 };
+
+type BgPolicy = 'auto' | 'never' | 'always';
 
 // ========================================
 // Normalização avançada de search term
@@ -315,6 +317,32 @@ const buildSourceDerivedS3Key = (sourceKey: string): string => {
         .toLowerCase();
     const sourceHash = createHash('sha256').update(normalizedSource).digest('hex').substring(0, 16);
     return `imagens/smart-src-${sourceHash}-${PROCESS_VERSION}.webp`;
+};
+
+// Chave canônica por URL de origem externa.
+// Evita uploads duplicados quando a mesma imagem externa é escolhida para termos diferentes.
+const normalizeExternalImageUrl = (rawUrl: string): string => {
+    const value = String(rawUrl || '').trim();
+    if (!value) return '';
+    try {
+        const parsed = new URL(value);
+        const host = parsed.host.toLowerCase();
+        const pathname = decodeURIComponent(parsed.pathname || '/')
+            .replace(/\/+/g, '/')
+            .replace(/\/$/, '') || '/';
+        return `${parsed.protocol}//${host}${pathname}`;
+    } catch {
+        return value.split('?')[0] || value;
+    }
+};
+
+const buildExternalSourceDerivedS3Key = (imageUrl: string): string => {
+    const normalizedExternal = normalizeExternalImageUrl(imageUrl);
+    const sourceHash = createHash('sha256')
+        .update(normalizedExternal || imageUrl)
+        .digest('hex')
+        .substring(0, 16);
+    return `imagens/smart-ext-${sourceHash}-${PROCESS_VERSION}.webp`;
 };
 
 const isProcessedSmartKey = (key: string): boolean => {
@@ -663,6 +691,14 @@ async function s3KeyExists(s3: any, bucket: string, key: string): Promise<boolea
     }
 }
 
+const optimizeImageWithoutBg = async (rawBuffer: Buffer): Promise<Buffer> => {
+    const sharp = (await import('sharp')).default;
+    return await sharp(rawBuffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 85 })
+        .toBuffer();
+};
+
 // ========================================
 // Helper: garante que imagem tem fundo removido
 // Sempre verifica se a versão processada (deterministicKey com PROCESS_VERSION)
@@ -796,34 +832,6 @@ async function ensureBgRemoved(opts: {
 
 const inFlightExternalPipeline = new Map<string, Promise<ProcessProductImageResponse>>();
 
-const findReusableCachedKeyByImageUrl = async (opts: {
-    imageUrl: string;
-    s3: any;
-    bucketName: string;
-}): Promise<string | null> => {
-    const imageUrl = String(opts.imageUrl || '').trim();
-    if (!imageUrl) return null;
-    try {
-        const supabase = createSupabaseAdmin();
-        const { data, error } = await (supabase.from as any)('product_image_cache')
-            .select('s3_key')
-            .eq('image_url', imageUrl)
-            .not('s3_key', 'is', null)
-            .limit(12);
-        if (error || !Array.isArray(data) || data.length === 0) return null;
-
-        for (const row of data) {
-            const candidate = String((row as any)?.s3_key || '').trim();
-            if (!candidate) continue;
-            const exists = await s3KeyExists(opts.s3, opts.bucketName, candidate);
-            if (exists) return candidate;
-        }
-    } catch (err) {
-        console.warn('⚠️ [Cache DB] Falha ao buscar reuso por image_url:', (err as any)?.message);
-    }
-    return null;
-};
-
 const runExternalPipelineOnce = async (opts: {
     s3: any;
     bucketName: string;
@@ -834,76 +842,66 @@ const runExternalPipelineOnce = async (opts: {
     flavor?: string;
     weight?: string;
     selectedImageUrl: string;
+    bgPolicy: BgPolicy;
 }): Promise<ProcessProductImageResponse> => {
-    const lockKey = `${opts.bucketName}:${opts.deterministicKey}`;
+    const externalSourceKey = buildExternalSourceDerivedS3Key(opts.selectedImageUrl);
+    const targetUploadKey = externalSourceKey || opts.deterministicKey;
+    const lockKey = `${opts.bucketName}:${targetUploadKey}`;
     const ongoing = inFlightExternalPipeline.get(lockKey);
     if (ongoing) {
-        console.log(`⏳ [External Pipeline] Aguardando processamento em andamento para "${opts.deterministicKey}"`);
+        console.log(`⏳ [External Pipeline] Aguardando processamento em andamento para "${targetUploadKey}"`);
         return ongoing;
     }
 
     const job = (async (): Promise<ProcessProductImageResponse> => {
-        // Reuso por URL da imagem já cacheada (evita novo upload do mesmo arquivo externo
-        // com outro nome/chave quando já existe no bucket).
-        const reusableByImageUrl = await findReusableCachedKeyByImageUrl({
-            imageUrl: opts.selectedImageUrl,
-            s3: opts.s3,
-            bucketName: opts.bucketName
-        });
-        if (reusableByImageUrl) {
-            console.log(`♻️ [External Pipeline] Reuso por image_url: "${reusableByImageUrl}"`);
+        const reusableKeys = [...new Set([targetUploadKey, opts.deterministicKey])].filter(Boolean);
+        for (const reusableKey of reusableKeys) {
+            const existsNow = await s3KeyExists(opts.s3, opts.bucketName, reusableKey);
+            if (!existsNow) continue;
+            console.log(`✅ [S3 Guard] Reuso de key existente: "${reusableKey}"`);
             await saveToCacheDB({
                 searchTerm: opts.normalizedTerm,
                 productName: opts.term,
                 brand: opts.brand,
                 flavor: opts.flavor,
                 weight: opts.weight,
-                imageUrl: getPublicUrl(reusableByImageUrl),
-                s3Key: reusableByImageUrl,
-                source: 'cache-image-url'
+                imageUrl: getPublicUrl(reusableKey),
+                s3Key: reusableKey,
+                source: 'cache-s3'
             });
-            return { source: 'cache-image-url', url: proxyUrl(reusableByImageUrl) };
-        }
-
-        const existsNow = await s3KeyExists(opts.s3, opts.bucketName, opts.deterministicKey);
-        if (existsNow) {
-            console.log(`✅ [S3 Guard] Key criada por outro request: "${opts.deterministicKey}"`);
-            await saveToCacheDB({
-                searchTerm: opts.normalizedTerm,
-                productName: opts.term,
-                brand: opts.brand,
-                flavor: opts.flavor,
-                weight: opts.weight,
-                imageUrl: getPublicUrl(opts.deterministicKey),
-                s3Key: opts.deterministicKey,
-                source: 'serper'
-            });
-            return { source: 'cache-s3', url: proxyUrl(opts.deterministicKey) };
+            return { source: 'cache-s3', url: proxyUrl(reusableKey) };
         }
 
         const rawBuffer = await downloadImage(opts.selectedImageUrl);
         let processedBuffer: Buffer;
-        try {
-            processedBuffer = await processImageStrict(rawBuffer);
-            console.log('✅ [Serper] Background removido com sucesso');
-        } catch (bgErr) {
-            console.warn('⚠️ [Serper] processImageStrict falhou, mantendo imagem original otimizada:', (bgErr as any)?.message);
-            const sharp = (await import('sharp')).default;
-            processedBuffer = await sharp(rawBuffer)
-                .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-                .webp({ quality: 85 })
-                .toBuffer();
+        let processingMode: string = 'optimized-original';
+        if (opts.bgPolicy === 'never') {
+            processedBuffer = await optimizeImageWithoutBg(rawBuffer);
+            processingMode = 'optimized-no-bg-removal';
+        } else if (opts.bgPolicy === 'always') {
+            try {
+                processedBuffer = await processImageStrict(rawBuffer);
+                processingMode = 'bg-removed-strict';
+            } catch (bgErr) {
+                console.warn('⚠️ [Serper] processImageStrict falhou no modo always, fallback processImage:', (bgErr as any)?.message);
+                processedBuffer = await processImage(rawBuffer);
+                processingMode = 'bg-removed-fallback-auto';
+            }
+        } else {
+            // "auto" prioriza fidelidade: não remove fundo automaticamente para evitar recortes agressivos.
+            processedBuffer = await optimizeImageWithoutBg(rawBuffer);
+            processingMode = 'auto-preserve';
         }
 
         await opts.s3.send(new PutObjectCommand({
             Bucket: opts.bucketName,
-            Key: opts.deterministicKey,
+            Key: targetUploadKey,
             Body: processedBuffer,
             ContentType: 'image/webp',
             ACL: 'public-read'
         }));
 
-        console.log(`📤 [S3] Upload: "${opts.deterministicKey}" (${processedBuffer.length} bytes)`);
+        console.log(`📤 [S3] Upload: "${targetUploadKey}" (${processedBuffer.length} bytes) | mode=${processingMode}`);
 
         await saveToCacheDB({
             searchTerm: opts.normalizedTerm,
@@ -911,15 +909,15 @@ const runExternalPipelineOnce = async (opts: {
             brand: opts.brand,
             flavor: opts.flavor,
             weight: opts.weight,
-            imageUrl: getPublicUrl(opts.deterministicKey),
-            s3Key: opts.deterministicKey,
-            source: 'serper'
+            imageUrl: getPublicUrl(targetUploadKey),
+            s3Key: targetUploadKey,
+            source: `serper-${opts.bgPolicy}`
         });
 
         return {
             source: 'external',
-            processing: 'processed',
-            url: proxyUrl(opts.deterministicKey)
+            processing: processingMode,
+            url: proxyUrl(targetUploadKey)
         };
     })();
 
@@ -942,6 +940,11 @@ export default defineEventHandler(async (event) => {
 
     const body = await readBody(event);
     const { term, brand, flavor, weight } = body;
+    const rawBgPolicy = String(body?.bgPolicy || '').trim().toLowerCase();
+    const bgPolicy: BgPolicy =
+        rawBgPolicy === 'always' || rawBgPolicy === 'never' || rawBgPolicy === 'auto'
+            ? (rawBgPolicy as BgPolicy)
+            : 'auto';
 
     if (!term) {
         throw createError({ statusCode: 400, statusMessage: "Search term required" });
@@ -1027,25 +1030,25 @@ export default defineEventHandler(async (event) => {
         });
 
         if (found) {
-            // Garantir que imagem interna tem fundo removido
-            const processed = await ensureBgRemoved({
-                s3, bucketName,
-                sourceKey: found,
-                deterministicKey,
-                normalizedTerm, term, brand, flavor, weight
-            });
-            if (processed) {
-                return { source: processed.processed ? 'internal-processed' : 'internal', url: proxyUrl(processed.key) };
+            if (bgPolicy === 'always') {
+                const processed = await ensureBgRemoved({
+                    s3, bucketName,
+                    sourceKey: found,
+                    deterministicKey,
+                    normalizedTerm, term, brand, flavor, weight
+                });
+                if (processed) {
+                    return { source: processed.processed ? 'internal-processed' : 'internal', url: proxyUrl(processed.key) };
+                }
             }
 
-            // Fallback: retornar imagem crua se processamento falhou
             await saveToCacheDB({
                 searchTerm: normalizedTerm,
                 productName: term,
                 brand, flavor, weight,
                 imageUrl: getPublicUrl(found),
                 s3Key: found,
-                source: 'internal'
+                source: bgPolicy === 'always' ? 'internal-fallback' : 'internal'
             });
 
             return { source: 'internal', url: proxyUrl(found) };
@@ -1085,15 +1088,16 @@ export default defineEventHandler(async (event) => {
                 // Incrementar usage_count (fire-and-forget — OK para counter)
                 void (supabase.rpc as any)('increment_product_image_usage', { row_id: cacheHit.id });
 
-                // Garantir que imagem do cache tem fundo removido
-                const processed = await ensureBgRemoved({
-                    s3, bucketName,
-                    sourceKey: cacheHit.s3_key,
-                    deterministicKey,
-                    normalizedTerm, term, brand, flavor, weight
-                });
-                if (processed) {
-                    return { source: 'cache-processed', url: proxyUrl(processed.key) };
+                if (bgPolicy === 'always') {
+                    const processed = await ensureBgRemoved({
+                        s3, bucketName,
+                        sourceKey: cacheHit.s3_key,
+                        deterministicKey,
+                        normalizedTerm, term, brand, flavor, weight
+                    });
+                    if (processed) {
+                        return { source: 'cache-processed', url: proxyUrl(processed.key) };
+                    }
                 }
                 return { source: 'cache', url: proxyUrl(cacheHit.s3_key) };
             }
@@ -1213,7 +1217,8 @@ export default defineEventHandler(async (event) => {
             brand,
             flavor,
             weight,
-            selectedImageUrl
+            selectedImageUrl,
+            bgPolicy
         });
     } catch (err: any) {
         console.error("Processing pipeline failed:", err);

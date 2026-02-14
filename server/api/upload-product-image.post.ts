@@ -1,7 +1,6 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, getPublicUrl } from "../utils/s3";
 import { createSupabaseAdmin } from "../utils/supabase";
-import { processImage, processImageStrict } from "../utils/image-processor";
 import { createHash } from "crypto";
 import { requireAuthenticatedUser } from "../utils/auth";
 
@@ -64,24 +63,22 @@ export default defineEventHandler(async (event) => {
     const bucketName = config.wasabiBucket;
 
     try {
-        // Processar a imagem (resize + remove bg)
+        // Processamento rápido e estável para upload manual (sem remoção de fundo automática)
         let processedBuffer: Buffer = fileBuffer as Buffer;
         let contentType = mime;
         
         try {
-            processedBuffer = await processImageStrict(fileBuffer) as Buffer;
+            const sharp = (await import('sharp')).default;
+            processedBuffer = await sharp(fileBuffer)
+                .rotate()
+                .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+                .webp({ quality: 88, effort: 4 })
+                .toBuffer();
             contentType = 'image/webp';
-            console.log('✅ [Manual Upload] Fundo removido (strict)');
+            console.log('✅ [Manual Upload] Otimização rápida aplicada');
         } catch (err) {
-            console.warn('⚠️ [Manual Upload] processImageStrict falhou, fallback processImage:', (err as any)?.message);
-            try {
-                processedBuffer = await processImage(fileBuffer) as Buffer;
-                contentType = 'image/webp';
-                console.log('✅ [Manual Upload] Processamento fallback aplicado');
-            } catch (err2) {
-                console.warn('⚠️ [Manual Upload] processImage fallback falhou, usando original:', (err2 as any)?.message);
-                // Usar original somente no pior caso
-            }
+            console.warn('⚠️ [Manual Upload] Otimização falhou, usando original:', (err as any)?.message);
+            // Usar original somente no pior caso
         }
 
         // Upload para Wasabi

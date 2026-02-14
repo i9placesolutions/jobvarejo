@@ -636,7 +636,7 @@ const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
 const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
 const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
-const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur']
+const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors']
 
 const serializeLabelTemplatesForProject = () => {
     // Keep project JSON lean: previews can be regenerated client-side.
@@ -20591,27 +20591,27 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
     const DEFAULT_ATAC_VALUE_VARIANTS: Record<AtacValueVariantKey, AtacValueVariantConfig> = {
         // 1,99 / 0,33
         tiny: {
-            chainWidthRatio: 0.62,
-            minScale: 0.58,
+            chainWidthRatio: 0.48,
+            minScale: 0.62,
             intDecimalGap: -8,
-            currencyGapRatio: 0.018,
-            packWidthRatio: 0.90
+            currencyGapRatio: 0.02,
+            packWidthRatio: 0.86
         },
         // 12,99
         normal: {
-            chainWidthRatio: 0.74,
-            minScale: 0.52,
-            intDecimalGap: -3,
-            currencyGapRatio: 0.020,
-            packWidthRatio: 0.92
+            chainWidthRatio: 0.64,
+            minScale: 0.56,
+            intDecimalGap: -4,
+            currencyGapRatio: 0.024,
+            packWidthRatio: 0.9
         },
         // 119,99 / 1.299,99+
         large: {
-            chainWidthRatio: 0.90,
-            minScale: 0.40,
-            intDecimalGap: -2,
-            currencyGapRatio: 0.015,
-            packWidthRatio: 0.94
+            chainWidthRatio: 0.82,
+            minScale: 0.44,
+            intDecimalGap: -1,
+            currencyGapRatio: 0.03,
+            packWidthRatio: 0.95
         }
     };
     const asFinite = (value: any, fallback: number) => {
@@ -23036,6 +23036,15 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
     const enlivened = await enlivenObjectsAsync(objectsJson);
     if (!Array.isArray(enlivened) || enlivened.length === 0) throw new Error('Template group failed to enliven objects');
     const g = new fabric.Group(enlivened, groupOpts);
+    const cloneSafe = <T>(value: T): T => {
+        try {
+            return typeof structuredClone === 'function'
+                ? structuredClone(value)
+                : JSON.parse(JSON.stringify(value));
+        } catch {
+            return value;
+        }
+    };
     // IMPORTANT: Any label template coming from the template system must preserve
     // the geometry authored in Mini Editor. Automatic reflow is only for legacy/default
     // programmatic groups, not for user template instances.
@@ -23050,11 +23059,24 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
     (g as any).__forceAtacarejoCanonical = shouldForceCanonicalAtacForTemplateJson(baseGroupJson);
     const useVariantSnapshots = shouldUseAtacVariantSnapshotsForTemplate(baseGroupJson);
     if (baseGroupJson && typeof baseGroupJson === 'object') {
+        const rehydrateKeys = [
+            '__manualTemplateBaseW',
+            '__manualTemplateBaseH',
+            '__manualGapSingle',
+            '__manualGapRetail',
+            '__manualGapWholesale',
+            '__manualSingleAnchors'
+        ] as const;
+        for (const key of rehydrateKeys) {
+            if (key in (baseGroupJson as any)) {
+                (g as any)[key] = cloneSafe((baseGroupJson as any)[key]);
+            }
+        }
         if (typeof (baseGroupJson as any).__atacValueVariants === 'object') {
-            (g as any).__atacValueVariants = (baseGroupJson as any).__atacValueVariants;
+            (g as any).__atacValueVariants = cloneSafe((baseGroupJson as any).__atacValueVariants);
         }
         if (useVariantSnapshots && typeof (baseGroupJson as any).__atacVariantGroups === 'object') {
-            (g as any).__atacVariantGroups = (baseGroupJson as any).__atacVariantGroups;
+            (g as any).__atacVariantGroups = cloneSafe((baseGroupJson as any).__atacVariantGroups);
         } else {
             (g as any).__atacVariantGroups = {};
         }
@@ -24856,6 +24878,7 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
         delete nextGroup.layout;
         // Mini editor is explicit manual mode: preserve exact element layout on cards/reload.
         nextGroup.__preserveManualLayout = true;
+        nextGroup.__isCustomTemplate = true;
         // Preserve explicit canonical flag (only if the template opted into it).
         if (nextGroup.__forceAtacarejoCanonical == null && prev?.group && (prev.group as any).__forceAtacarejoCanonical != null) {
             nextGroup.__forceAtacarejoCanonical = (prev.group as any).__forceAtacarejoCanonical;
@@ -24893,6 +24916,25 @@ async function handleUpdateTemplateFromMiniEditor(templateId: string, updates: {
                         : JSON.parse(JSON.stringify((prev.group as any).__atacVariantGroups));
             } catch {
                 (nextGroup as any).__atacVariantGroups = (prev.group as any).__atacVariantGroups;
+            }
+        }
+        const manualTemplateProps = [
+            '__manualTemplateBaseW',
+            '__manualTemplateBaseH',
+            '__manualGapSingle',
+            '__manualGapRetail',
+            '__manualGapWholesale',
+            '__manualSingleAnchors'
+        ] as const;
+        for (const key of manualTemplateProps) {
+            if ((nextGroup as any)[key] == null && prev?.group && (prev.group as any)[key] != null) {
+                try {
+                    (nextGroup as any)[key] = typeof structuredClone === 'function'
+                        ? structuredClone((prev.group as any)[key])
+                        : JSON.parse(JSON.stringify((prev.group as any)[key]));
+                } catch {
+                    (nextGroup as any)[key] = (prev.group as any)[key];
+                }
             }
         }
     }
@@ -25351,8 +25393,11 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 const { pillH } = layout;
                 layoutScaleX = Number(splash.scaleX) || 1;
                 layoutScaleY = Number(splash.scaleY) || 1;
-                const scale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
-                const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+                const rawScale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
+                const rawOffsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+                // Keep Mini Editor templates faithful on cards: only dynamic values/text adapt.
+                const scale = preserveTemplateVisual ? 1 : rawScale;
+                const offsetY = preserveTemplateVisual ? 0 : rawOffsetY;
 
                 // Update shadow color to match accent (after we have pillH for proper blur calculation)
                 const accent = styles?.splashColor ?? styles?.accentColor;

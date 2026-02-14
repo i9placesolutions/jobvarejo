@@ -149,7 +149,13 @@ const TEMPLATE_EXTRA_PROPS = [
   '__originalRx',
   '__originalRy',
   '__originalStrokeWidth',
-  '__shadowBlur'
+  '__shadowBlur',
+  '__manualTemplateBaseW',
+  '__manualTemplateBaseH',
+  '__manualGapSingle',
+  '__manualGapRetail',
+  '__manualGapWholesale',
+  '__manualSingleAnchors'
 ]
 
 const FONT_WEIGHT_OPTIONS: Array<{ label: string; value: number }> = [
@@ -1250,7 +1256,13 @@ const instantiateGroupFromTemplate = async (tpl: LabelTemplate) => {
       '__forceAtacarejoCanonical',
       '__atacValueVariants',
       '__atacVariantGroups',
-      '__isCustomTemplate'
+      '__isCustomTemplate',
+      '__manualTemplateBaseW',
+      '__manualTemplateBaseH',
+      '__manualGapSingle',
+      '__manualGapRetail',
+      '__manualGapWholesale',
+      '__manualSingleAnchors'
     ] as const
     for (const key of rehydrateKeys) {
       if (key in baseGroupJson) {
@@ -1328,6 +1340,12 @@ const serializeGroupForTemplate = (g: any) => {
   json.__forceAtacarejoCanonical = false
   if ((g as any).__atacValueVariants && typeof (g as any).__atacValueVariants === 'object') {
     json.__atacValueVariants = cloneSafe((g as any).__atacValueVariants)
+  } else if (findObjectByNameDeep(g, 'atac_retail_bg')) {
+    json.__atacValueVariants = {
+      tiny: { ...DEFAULT_ATAC_VALUE_VARIANTS.tiny },
+      normal: { ...DEFAULT_ATAC_VALUE_VARIANTS.normal },
+      large: { ...DEFAULT_ATAC_VALUE_VARIANTS.large }
+    }
   }
   if ((g as any).__atacVariantGroups && typeof (g as any).__atacVariantGroups === 'object') {
     if (shouldUseAtacVariantSnapshots()) json.__atacVariantGroups = cloneSafe((g as any).__atacVariantGroups)
