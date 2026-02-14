@@ -51,6 +51,12 @@ export default defineEventHandler(async (event) => {
   // Usa pasta 'imagens/' conforme solicitado
   const key = `imagens/${Date.now()}-${file.filename}`;
 
+  const getAbortSignal = (timeoutMs: number): AbortSignal | undefined => {
+    const timeoutFactory = (AbortSignal as any)?.timeout
+    if (typeof timeoutFactory !== 'function') return undefined
+    return timeoutFactory(timeoutMs)
+  }
+
   try {
     const command = new PutObjectCommand({
       Bucket: bucketName,
@@ -60,7 +66,9 @@ export default defineEventHandler(async (event) => {
       ACL: 'public-read'
     });
 
-    await s3Client.send(command);
+    const abortSignal = getAbortSignal(90_000)
+    if (abortSignal) await s3Client.send(command, { abortSignal })
+    else await s3Client.send(command)
 
     console.log('✅ File uploaded to Wasabi:', key);
 

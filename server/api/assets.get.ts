@@ -49,6 +49,58 @@ const normalizeText = (value: string) =>
 
 const toProxyUrl = (key: string) => `/api/storage/proxy?key=${encodeURIComponent(key)}`;
 
+const resolveWasabiKeyFromUrl = (rawUrl: string, bucketName: string, endpoint: string): string | null => {
+    const value = String(rawUrl || "").trim();
+    if (!value) return null;
+
+    const directKeyPrefixes = ["imagens/", "uploads/", "logo/", "projects/"];
+    if (directKeyPrefixes.some((prefix) => value.startsWith(prefix))) return value;
+
+    if (/^[^/]+\.(png|jpe?g|webp|gif|svg|avif)$/i.test(value)) {
+        return value;
+    }
+
+    if (value.startsWith("/api/storage/proxy?")) {
+        try {
+            const parsed = new URL(value, "http://local");
+            const key = parsed.searchParams.get("key");
+            return key ? decodeURIComponent(key) : null;
+        } catch {
+            return null;
+        }
+    }
+
+    if (!(value.startsWith("http://") || value.startsWith("https://"))) return null;
+    try {
+        const parsed = new URL(value);
+        const host = parsed.host.toLowerCase();
+        const pathParts = decodeURIComponent(parsed.pathname || "").split("/").filter(Boolean);
+
+        const hostLooksLikeStorage =
+            (endpoint && host.includes(endpoint)) ||
+            host.includes("wasabisys.com") ||
+            host.includes("contabostorage.com");
+        if (!hostLooksLikeStorage || pathParts.length === 0) return null;
+
+        // Path-style: https://endpoint/bucket/key...
+        if (pathParts[0] === bucketName && pathParts.length > 1) {
+            return pathParts.slice(1).join("/");
+        }
+        // Virtual-host-style: https://bucket.endpoint/key...
+        if (bucketName && host.startsWith(`${bucketName}.`) && pathParts.length > 0) {
+            return pathParts.join("/");
+        }
+        // Fallback: path já parece ser uma key completa
+        if (directKeyPrefixes.some((prefix) => pathParts[0]?.startsWith(prefix.replace("/", "")))) {
+            return pathParts.join("/");
+        }
+    } catch {
+        return null;
+    }
+
+    return null;
+};
+
 const tokenize = (text: string): string[] =>
     normalizeText(text)
         .split(" ")
@@ -190,6 +242,7 @@ const buildHeuristicVariants = (opts: {
 export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig();
     const bucketName = String(config.wasabiBucket || "");
+    const endpoint = String(config.wasabiEndpoint || "").toLowerCase();
     const query = getQuery(event);
 
     const rawSearch = typeof query.q === "string" ? query.q.trim() : "";
@@ -276,16 +329,21 @@ export default defineEventHandler(async (event) => {
 
         const cacheItems: AssetItem[] = [];
         for (const row of cacheRows) {
-            const resolvedUrl = row.s3_key ? toProxyUrl(row.s3_key) : String(row.image_url || "").trim();
+            const imageUrlRaw = String(row.image_url || "").trim();
+            const resolvedKey =
+                String(row.s3_key || "").trim() ||
+                resolveWasabiKeyFromUrl(imageUrlRaw, bucketName, endpoint) ||
+                "";
+            const resolvedUrl = resolvedKey ? toProxyUrl(resolvedKey) : imageUrlRaw;
             if (!resolvedUrl) continue;
             const displayName =
                 String(row.product_name || "").trim() ||
                 String(row.search_term || "").trim() ||
-                String(row.s3_key || "").trim() ||
+                resolvedKey ||
                 "Imagem de produto";
             const item: AssetItem = {
-                id: `cache:${row.id || row.s3_key || row.image_url}`,
-                key: row.s3_key || null,
+                id: `cache:${row.id || resolvedKey || row.image_url}`,
+                key: resolvedKey || null,
                 name: displayName,
                 url: resolvedUrl,
                 source: "cache",

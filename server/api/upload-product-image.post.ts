@@ -34,6 +34,12 @@ const normalizeSearchTerm = (term: string): string => {
         .join(' ');
 };
 
+const getAbortSignal = (timeoutMs: number): AbortSignal | undefined => {
+    const timeoutFactory = (AbortSignal as any)?.timeout;
+    if (typeof timeoutFactory !== 'function') return undefined;
+    return timeoutFactory(timeoutMs);
+};
+
 export default defineEventHandler(async (event) => {
     await requireAuthenticatedUser(event);
     const form = await readMultipartFormData(event);
@@ -94,13 +100,17 @@ export default defineEventHandler(async (event) => {
         const ext = contentType === 'image/webp' ? 'webp' : mime.split('/')[1] || 'png';
         const key = `imagens/manual-${safeName}-${hash}-${PROCESS_VERSION}.${ext}`;
 
-        await s3.send(new PutObjectCommand({
+        const putCommand = new PutObjectCommand({
             Bucket: bucketName,
             Key: key,
             Body: processedBuffer,
             ContentType: contentType,
             ACL: 'public-read'
-        }));
+        });
+
+        const abortSignal = getAbortSignal(90_000);
+        if (abortSignal) await s3.send(putCommand, { abortSignal });
+        else await s3.send(putCommand);
 
         const publicUrl = getPublicUrl(key);
         const proxyUrl = `/api/storage/proxy?key=${encodeURIComponent(key)}`;

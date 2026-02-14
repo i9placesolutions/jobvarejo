@@ -85,7 +85,10 @@ watch(() => props.modelValue, (newVal) => {
         imageBgPolicy.value = 'auto'
         if (props.initialProducts && props.initialProducts.length > 0) {
             // Load external products directly into review mode
-            products.value = [...props.initialProducts]
+            products.value = props.initialProducts.map((p: any) => ({
+                ...p,
+                imageUrl: resolveProductImageUrl(p?.imageUrl || '')
+            }))
             step.value = 'review'
         } else if (products.value.length === 0) {
             step.value = 'input'
@@ -165,6 +168,188 @@ const MIN_ASSET_SEARCH_CHARS = 1
 
 const reviewSearch = ref('')
 const selectedLabelTemplateId = ref<string>('')
+const runtimeConfig = useRuntimeConfig()
+
+const resolveProductImageUrl = (rawUrl: any): string => {
+    const value = String(rawUrl || '').trim()
+    if (!value) return ''
+    if (value.startsWith('blob:') || value.startsWith('data:')) return value
+    if (value.startsWith('/api/storage/proxy?')) return value
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+        try {
+            const urlObj = new URL(value)
+            const endpoint = String(runtimeConfig.public?.wasabiEndpoint || runtimeConfig.wasabiEndpoint || '').trim().toLowerCase()
+            const bucket = String(runtimeConfig.public?.wasabiBucket || runtimeConfig.wasabiBucket || '').trim()
+            const pathParts = decodeURIComponent(urlObj.pathname || '').split('/').filter(Boolean)
+            if (endpoint && urlObj.host.toLowerCase().includes(endpoint) && bucket) {
+                if (pathParts[0] === bucket && pathParts.length > 1) {
+                    return `/api/storage/proxy?key=${encodeURIComponent(pathParts.slice(1).join('/'))}`
+                }
+                if (urlObj.host.startsWith(`${bucket}.`) && pathParts.length > 0) {
+                    return `/api/storage/proxy?key=${encodeURIComponent(pathParts.join('/'))}`
+                }
+            }
+        } catch {
+            // keep original URL
+        }
+        return value
+    }
+
+    if (value.startsWith('/')) return value
+    return `/api/storage/proxy?key=${encodeURIComponent(value)}`
+}
+
+const withRequestTimeout = async <T>(
+    timeoutMs: number,
+    executor: (signal: AbortSignal) => Promise<T>
+): Promise<T> => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+        return await executor(controller.signal)
+    } finally {
+        clearTimeout(timeoutId)
+    }
+}
+
+const MANUAL_UPLOAD_API_TIMEOUT_MS = 20_000
+const MANUAL_UPLOAD_PRESIGNED_TIMEOUT_MS = 30_000
+const MANUAL_UPLOAD_REMOTE_COOLDOWN_MS = 2 * 60_000
+let manualUploadRemoteDisabledUntil = 0
+
+const isManualUploadRemoteTemporarilyDisabled = (): boolean => Date.now() < manualUploadRemoteDisabledUntil
+
+const isLikelyConnectivityError = (err: any): boolean => {
+    const normalized = [
+        String(err?.message || ''),
+        String(err?.statusMessage || ''),
+        String(err?.cause?.message || ''),
+        String(err?.cause || '')
+    ].join(' ').toLowerCase()
+
+    return (
+        normalized.includes('failed to fetch') ||
+        normalized.includes('<no response>') ||
+        normalized.includes('network') ||
+        normalized.includes('timed out') ||
+        normalized.includes('timeout') ||
+        normalized.includes('abort')
+    )
+}
+
+const disableManualUploadRemoteTemporarily = (err: any) => {
+    if (!isLikelyConnectivityError(err)) return
+    manualUploadRemoteDisabledUntil = Date.now() + MANUAL_UPLOAD_REMOTE_COOLDOWN_MS
+}
+
+const sanitizeFilenameBase = (value: string): string => {
+    const normalized = String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9-_]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+    return normalized || `produto-${Date.now()}`
+}
+
+const compressImageInBrowser = async (file: File): Promise<Blob> => {
+    const objectUrl = URL.createObjectURL(file)
+    try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const image = new Image()
+            image.onload = () => resolve(image)
+            image.onerror = reject
+            image.src = objectUrl
+        })
+        const maxSide = 1200
+        const ratio = Math.min(1, maxSide / Math.max(img.width, img.height))
+        const width = Math.max(1, Math.round(img.width * ratio))
+        const height = Math.max(1, Math.round(img.height * ratio))
+        const canvasEl = document.createElement('canvas')
+        canvasEl.width = width
+        canvasEl.height = height
+        const ctx = canvasEl.getContext('2d')
+        if (!ctx) throw new Error('Canvas 2D indisponível')
+        ctx.drawImage(img, 0, 0, width, height)
+        const blob = await new Promise<Blob>((resolve, reject) => {
+            canvasEl.toBlob((b) => {
+                if (!b) reject(new Error('Falha ao gerar blob comprimido'))
+                else resolve(b)
+            }, 'image/webp', 0.86)
+        })
+        return blob
+    } finally {
+        URL.revokeObjectURL(objectUrl)
+    }
+}
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ''))
+        reader.onerror = () => reject(new Error('Falha ao converter imagem para Data URL'))
+        reader.readAsDataURL(blob)
+    })
+
+const createLocalImageFallbackUrl = async (preferredBlob: Blob, originalFile: File): Promise<string | null> => {
+    try {
+        const preferred = await blobToDataUrl(preferredBlob)
+        if (preferred) return preferred
+    } catch {
+        // try original file below
+    }
+    try {
+        const original = await blobToDataUrl(originalFile)
+        if (original) return original
+    } catch {
+        // caller handles null fallback
+    }
+    return null
+}
+
+const uploadManualViaPresigned = async (
+    product: any,
+    uploadBlob: Blob,
+    contentType: string,
+    originalName: string
+) => {
+    const base = sanitizeFilenameBase(product?.name || originalName || 'produto')
+    const ext = contentType.includes('webp') ? 'webp' : (contentType.split('/')[1] || 'png')
+    const key = `imagens/manual-presigned-${Date.now()}-${base}.${ext}`
+
+    const presigned = await withRequestTimeout(20000, (signal) =>
+        $fetch('/api/storage/presigned', {
+            method: 'POST',
+            body: { key, contentType, operation: 'put' },
+            signal: signal as any
+        }) as Promise<any>
+    )
+
+    if (!presigned?.url) {
+        throw new Error('Não foi possível obter URL assinada para upload')
+    }
+
+    const putResponse = await withRequestTimeout(MANUAL_UPLOAD_PRESIGNED_TIMEOUT_MS, (signal) =>
+        fetch(String(presigned.url), {
+            method: 'PUT',
+            body: uploadBlob,
+            headers: { 'Content-Type': contentType },
+            signal
+        })
+    )
+    if (!putResponse.ok) {
+        throw new Error(`Upload direto falhou (${putResponse.status})`)
+    }
+
+    return {
+        url: `/api/storage/proxy?key=${encodeURIComponent(key)}`,
+        publicUrl: '',
+        key,
+        source: 'manual-presigned'
+    }
+}
 
 watch(
     () => props.modelValue,
@@ -542,7 +727,7 @@ const handleAssetSelect = async (asset: any) => {
     if (selectedProductIndex.value === null) return
     const product = products.value[selectedProductIndex.value]
     if (!product) return
-    product.imageUrl = asset.url
+    product.imageUrl = resolveProductImageUrl(asset.url)
     product.status = 'done'
     product.error = undefined
     showAssetPicker.value = false
@@ -561,7 +746,7 @@ const handleAssetSelect = async (asset: any) => {
                 brand: product.brand || null,
                 flavor: product.flavor || null,
                 weight: product.weight || null,
-                imageUrl: asset.url,
+                imageUrl: resolveProductImageUrl(asset.url),
                 s3Key: asset.key || asset.id || null,
                 source: 'storage'
             }
@@ -579,37 +764,97 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
     const prevImage = product.imageUrl
     // Mostrar preview local imediato enquanto faz upload
     const localPreview = URL.createObjectURL(file)
+    let shouldRevokeLocalPreview = true
     product.imageUrl = localPreview
     product.status = 'processing'
     product.error = undefined
 
     try {
+        const compressed = await compressImageInBrowser(file).catch(() => file)
+        const uploadBlob = compressed instanceof Blob ? compressed : file
+        const contentType = String((uploadBlob as any)?.type || file.type || 'image/png')
+        const uploadFilenameBase = sanitizeFilenameBase(product?.name || file.name || 'produto')
+        const uploadFilenameExt = contentType.includes('webp') ? 'webp' : (contentType.split('/')[1] || 'png')
+        const uploadFilename = `${uploadFilenameBase}.${uploadFilenameExt}`
+        const browserOffline = typeof navigator !== 'undefined' && navigator.onLine === false
+        const remoteDisabled = isManualUploadRemoteTemporarilyDisabled()
+        const applyLocalFallback = async () => {
+            const localDataUrl = await createLocalImageFallbackUrl(uploadBlob, file)
+            if (localDataUrl) {
+                product.imageUrl = localDataUrl
+            } else {
+                shouldRevokeLocalPreview = false
+                product.imageUrl = localPreview
+            }
+            product.status = 'done'
+            product.error = undefined
+        }
+
+        if (browserOffline || remoteDisabled) {
+            await applyLocalFallback()
+            if (remoteDisabled) {
+                console.warn('[Upload Manual] Upload remoto em cooldown por falhas recentes. Usando fallback local.')
+            }
+            return
+        }
+
         // Upload para Wasabi + salvar no cache do banco
         const headers = await getApiAuthHeaders()
-        const form = new FormData()
-        form.append('file', file)
-        form.append('productName', product.name || 'Produto')
-        if (product.brand) form.append('brand', product.brand)
-        if (product.flavor) form.append('flavor', product.flavor)
-        if (product.weight) form.append('weight', product.weight)
+        const createUploadForm = (includeMetadata: boolean) => {
+            const fd = new FormData()
+            fd.append('file', uploadBlob, uploadFilename)
+            if (includeMetadata) {
+                fd.append('productName', product.name || 'Produto')
+                if (product.brand) fd.append('brand', product.brand)
+                if (product.flavor) fd.append('flavor', product.flavor)
+                if (product.weight) fd.append('weight', product.weight)
+            }
+            return fd
+        }
 
         let result: any = null
         try {
-            result = await $fetch('/api/upload-product-image', {
-                method: 'POST',
-                headers,
-                body: form,
-                timeout: 25000
-            }) as any
+            result = await withRequestTimeout(MANUAL_UPLOAD_API_TIMEOUT_MS, (signal) =>
+                $fetch('/api/upload-product-image', {
+                    method: 'POST',
+                    headers,
+                    body: createUploadForm(true),
+                    signal: signal as any
+                }) as Promise<any>
+            )
         } catch (primaryErr) {
+            disableManualUploadRemoteTemporarily(primaryErr)
+            if (isManualUploadRemoteTemporarilyDisabled()) {
+                console.warn('[Upload Manual] Falha de conectividade detectada. Aplicando fallback local imediato.')
+                await applyLocalFallback()
+                return
+            }
             console.warn('[Upload Manual] Endpoint inteligente indisponível, tentando upload direto...', primaryErr)
-            const fallbackForm = new FormData()
-            fallbackForm.append('file', file)
-            result = await $fetch('/api/upload', {
-                method: 'POST',
-                body: fallbackForm,
-                timeout: 25000
-            }) as any
+            try {
+                result = await withRequestTimeout(MANUAL_UPLOAD_API_TIMEOUT_MS, (signal) =>
+                    $fetch('/api/upload', {
+                        method: 'POST',
+                        body: createUploadForm(false),
+                        signal: signal as any
+                    }) as Promise<any>
+                )
+            } catch (fallbackErr) {
+                disableManualUploadRemoteTemporarily(fallbackErr)
+                if (isManualUploadRemoteTemporarilyDisabled()) {
+                    console.warn('[Upload Manual] Falha de conectividade persistente. Aplicando fallback local.')
+                    await applyLocalFallback()
+                    return
+                }
+                console.warn('[Upload Manual] Upload via API falhou, tentando presigned direto...', fallbackErr)
+                try {
+                    result = await uploadManualViaPresigned(product, uploadBlob, contentType, file.name)
+                } catch (presignedErr) {
+                    disableManualUploadRemoteTemporarily(presignedErr)
+                    console.warn('[Upload Manual] Presigned também falhou, aplicando fallback local...', presignedErr)
+                    await applyLocalFallback()
+                    return
+                }
+            }
         }
 
         if (result?.url) {
@@ -638,7 +883,7 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
         }
 
         if (result?.url) {
-            product.imageUrl = result.url
+            product.imageUrl = resolveProductImageUrl(result.url)
             product.status = 'done'
             product.error = undefined
             console.log('[Upload Manual] Imagem salva no Wasabi:', product.name)
@@ -653,7 +898,9 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
         product.status = 'error'
         product.error = err?.message || 'Falha no upload'
     } finally {
-        URL.revokeObjectURL(localPreview)
+        if (shouldRevokeLocalPreview) {
+            URL.revokeObjectURL(localPreview)
+        }
     }
 }
 
@@ -992,7 +1239,7 @@ const getAssetDisplayName = (asset: any): string => {
                                 <!-- Image Column -->
                                 <td class="p-3">
                                     <div class="w-26 h-26 rounded-lg bg-zinc-800/80 flex items-center justify-center overflow-hidden border border-zinc-700 relative">
-                                        <img v-if="product.imageUrl" :src="product.imageUrl" class="w-full h-full object-contain" />
+                                        <img v-if="product.imageUrl" :src="resolveProductImageUrl(product.imageUrl)" class="w-full h-full object-contain" />
                                         <Loader2 v-else-if="product.status === 'processing'" class="w-4 h-4 text-blue-500 animate-spin" />
                                         <AlertCircle v-else-if="product.status === 'error'" class="w-4 h-4 text-red-500" />
                                         <div v-else class="text-zinc-600 font-xs">?</div>

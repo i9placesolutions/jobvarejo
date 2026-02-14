@@ -14,6 +14,7 @@ import {
   migrateProduct,
   createDefaultSplash
 } from '~/utils/product-zone-helpers';
+import { toWasabiProxyUrl } from '~/utils/storageProxy';
 import { DEFAULT_PRODUCT_ZONE, DEFAULT_GLOBAL_STYLES } from '~/types/product-zone';
 
 declare var fabric: any;
@@ -339,7 +340,8 @@ export const useProductLayout = () => {
     // 5. Product Image (Center)
     // -------------------------------------------------------------------------
     let imgObj: any = null;
-    const imageUrl = prod.images?.[0]?.src || (product as any).imageUrl || (product as any).url || (product as any).image;
+    const rawImageUrl = prod.images?.[0]?.src || (product as any).imageUrl || (product as any).url || (product as any).image;
+    const imageUrl = toWasabiProxyUrl(String(rawImageUrl || '').trim()) || rawImageUrl;
     
     if (imageUrl) {
       try {

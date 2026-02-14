@@ -62,12 +62,18 @@ export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOption
   ) {
     return buildProxyUrl(keyLike, version)
   }
+  if (/^[^/]+\.(png|jpe?g|webp|gif|svg|avif)$/i.test(keyLike)) {
+    return buildProxyUrl(keyLike, version)
+  }
 
   const cfg = useRuntimeConfig?.()?.public?.wasabi || {}
   const endpoint = (cfg.endpoint || 's3.wasabisys.com').toString()
   const bucket = (cfg.bucket || 'jobvarejo').toString()
 
-  const isMaybeWasabi = trimmed.includes('wasabisys.com') || (endpoint && trimmed.includes(endpoint))
+  const isMaybeWasabi =
+    trimmed.includes('wasabisys.com') ||
+    trimmed.includes('contabostorage.com') ||
+    (endpoint && trimmed.includes(endpoint))
   if (!isMaybeWasabi) return input
 
   try {

@@ -57,10 +57,21 @@ export default defineEventHandler(async (event) => {
       forcePathStyle: true
     })
 
-    const keyCandidates = Array.from(new Set([
+    const baseKeyCandidates = Array.from(new Set([
       key,
       ...(requestedBucket && key.startsWith(`${requestedBucket}/`) ? [key.slice(requestedBucket.length + 1)] : []),
       ...(bucket && key.startsWith(`${bucket}/`) ? [key.slice(bucket.length + 1)] : [])
+    ].filter(Boolean)))
+
+    const hasPathPrefix = (candidate: string) => String(candidate || '').includes('/')
+    const legacyPrefixCandidates = baseKeyCandidates.flatMap((candidate) => {
+      if (!candidate || hasPathPrefix(candidate)) return []
+      return [`imagens/${candidate}`, `uploads/${candidate}`, `logo/${candidate}`]
+    })
+
+    const keyCandidates = Array.from(new Set([
+      ...baseKeyCandidates,
+      ...legacyPrefixCandidates
     ].filter(Boolean)))
 
     const bucketCandidates = Array.from(new Set([

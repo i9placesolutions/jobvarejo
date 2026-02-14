@@ -57,6 +57,10 @@ let globalEscKeyHandler: ((e: KeyboardEvent) => void) | null = null
 let globalKeyUpHandler: ((e: KeyboardEvent) => void) | null = null
 let teardownSnapping: (() => void) | null = null
 let domCanvasDblClickHandler: ((e: MouseEvent) => void) | null = null
+let domCanvasTouchStartHandler: ((e: TouchEvent) => void) | null = null
+let domCanvasTouchMoveHandler: ((e: TouchEvent) => void) | null = null
+let domCanvasTouchEndHandler: ((e: TouchEvent) => void) | null = null
+let domCanvasTouchCancelHandler: ((e: TouchEvent) => void) | null = null
 let lastDomDblClickAt = 0
 let wrapperResizeObserver: ResizeObserver | null = null
 let isSpacePanPressed = false
@@ -7890,6 +7894,28 @@ onUnmounted(() => {
         }
         domCanvasDblClickHandler = null;
     }
+  if (canvas.value?.upperCanvasEl) {
+    try {
+      if (domCanvasTouchStartHandler) {
+        canvas.value.upperCanvasEl.removeEventListener('touchstart', domCanvasTouchStartHandler as any);
+      }
+      if (domCanvasTouchMoveHandler) {
+        canvas.value.upperCanvasEl.removeEventListener('touchmove', domCanvasTouchMoveHandler as any);
+      }
+      if (domCanvasTouchEndHandler) {
+        canvas.value.upperCanvasEl.removeEventListener('touchend', domCanvasTouchEndHandler as any);
+      }
+      if (domCanvasTouchCancelHandler) {
+        canvas.value.upperCanvasEl.removeEventListener('touchcancel', domCanvasTouchCancelHandler as any);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  domCanvasTouchStartHandler = null;
+  domCanvasTouchMoveHandler = null;
+  domCanvasTouchEndHandler = null;
+  domCanvasTouchCancelHandler = null;
   if (globalMouseUpHandler) {
     window.removeEventListener('mouseup', globalMouseUpHandler);
     globalMouseUpHandler = null;
@@ -10995,6 +11021,120 @@ const setupZoomPan = () => {
         evt.preventDefault();
         evt.stopPropagation();
     });
+
+    // Touch Gesture (tablet): two-finger pinch to zoom + pan viewport.
+    // Keep one-finger interaction untouched so object selection/editing keeps working.
+    let isTouchGestureActive = false;
+    let touchStartDistance = 0;
+    let touchStartZoom = 1;
+    let touchLastCenter = { x: 0, y: 0 };
+
+    const clampZoom = (value: number) => {
+        if (value > 20) return 20;
+        if (value < 0.01) return 0.01;
+        return value;
+    };
+
+    const getTouchCenter = (touches: TouchList) => {
+        const t1 = touches[0];
+        const t2 = touches[1];
+        if (!t1 || !t2) {
+            return { x: 0, y: 0 };
+        }
+        return {
+            x: (t1.clientX + t2.clientX) / 2,
+            y: (t1.clientY + t2.clientY) / 2
+        };
+    };
+
+    const getTouchDistance = (touches: TouchList) => {
+        const t1 = touches[0];
+        const t2 = touches[1];
+        if (!t1 || !t2) return 1;
+        const dx = t2.clientX - t1.clientX;
+        const dy = t2.clientY - t1.clientY;
+        return Math.hypot(dx, dy);
+    };
+
+    const centerToCanvasPoint = (clientX: number, clientY: number) => {
+        const canvasElement = canvasEl.value || canvas.value?.getElement?.();
+        if (!canvasElement) return { x: 0, y: 0 };
+        const rect = canvasElement.getBoundingClientRect();
+        return {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+        };
+    };
+
+    const beginTouchGesture = (touches: TouchList) => {
+        if (!canvas.value || touches.length < 2) return;
+        isTouchGestureActive = true;
+        touchStartDistance = Math.max(1, getTouchDistance(touches));
+        touchStartZoom = canvas.value.getZoom() || 1;
+        touchLastCenter = getTouchCenter(touches);
+    };
+
+    const endTouchGesture = () => {
+        isTouchGestureActive = false;
+        touchStartDistance = 0;
+    };
+
+    if (canvas.value?.upperCanvasEl && !domCanvasTouchStartHandler) {
+        domCanvasTouchStartHandler = (evt: TouchEvent) => {
+            if (!canvas.value) return;
+            if (evt.touches.length < 2) return;
+            beginTouchGesture(evt.touches);
+            evt.preventDefault();
+            evt.stopPropagation();
+        };
+
+        domCanvasTouchMoveHandler = (evt: TouchEvent) => {
+            if (!canvas.value) return;
+            if (evt.touches.length < 2) return;
+
+            if (!isTouchGestureActive) {
+                beginTouchGesture(evt.touches);
+            }
+
+            const currentCenter = getTouchCenter(evt.touches);
+            const currentDistance = Math.max(1, getTouchDistance(evt.touches));
+            const scaleFactor = currentDistance / Math.max(1, touchStartDistance);
+            const nextZoom = clampZoom(touchStartZoom * scaleFactor);
+
+            const centerPoint = centerToCanvasPoint(currentCenter.x, currentCenter.y);
+            canvas.value.zoomToPoint(centerPoint as any, nextZoom);
+
+            const vpt = canvas.value.viewportTransform;
+            if (vpt) {
+                vpt[4] += currentCenter.x - touchLastCenter.x;
+                vpt[5] += currentCenter.y - touchLastCenter.y;
+            }
+
+            touchLastCenter = currentCenter;
+            updateZoomState();
+            safeRequestRenderAll();
+            updateFloatingUI();
+            throttledUpdateScrollbars();
+
+            evt.preventDefault();
+            evt.stopPropagation();
+        };
+
+        domCanvasTouchEndHandler = (evt: TouchEvent) => {
+            if (evt.touches.length < 2) {
+                endTouchGesture();
+            }
+        };
+
+        domCanvasTouchCancelHandler = () => {
+            endTouchGesture();
+        };
+
+        canvas.value.upperCanvasEl.addEventListener('touchstart', domCanvasTouchStartHandler, { passive: false });
+        canvas.value.upperCanvasEl.addEventListener('touchmove', domCanvasTouchMoveHandler as EventListener, { passive: false });
+        canvas.value.upperCanvasEl.addEventListener('touchend', domCanvasTouchEndHandler, { passive: true });
+        canvas.value.upperCanvasEl.addEventListener('touchcancel', domCanvasTouchCancelHandler, { passive: true });
+    }
 
     // Middle Click Pan / Space Pan logic often handled by keydown space
     let isDragging = false;
@@ -27420,7 +27560,7 @@ const handleRecalculateLayout = () => {
           <main class="flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing">
               <!-- Infinite Canvas Effect (Wrapper) -->
               <div ref="wrapperEl" class="w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
-                  <canvas ref="canvasEl" class="block" @contextmenu.prevent.stop></canvas>
+                  <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
                   <ContextMenu
                     v-model="canvasContextMenu.show"
                     :x="canvasContextMenu.x"
@@ -27608,9 +27748,13 @@ const handleRecalculateLayout = () => {
      background-color: transparent !important;
      box-shadow: 0 0 40px rgba(0,0,0,0.5); /* Figma-like page shadow */
  }
- main {
+main {
      background-color: #1a1a1a !important;
  }
+
+.canvas-touch-surface {
+    touch-action: none;
+}
 
 /* Keep floating toolbar from "jumping" near bottom (safe area / scrollbars) */
 .floating-toolbar {
