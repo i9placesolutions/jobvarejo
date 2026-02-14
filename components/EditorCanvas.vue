@@ -20824,10 +20824,16 @@ const inferUnitLabelFromProduct = (product: any): 'KG' | 'UN' => {
     return 'UN';
 };
 
-const computePackLine = (opts: { packageLabel?: any; packQuantity?: any; packUnit?: any; packPrice?: any }): string | null => {
+const computePackLine = (opts: { packageLabel?: any; packQuantity?: any; packUnit?: any; packPrice?: any; itemUnit?: any }): string | null => {
     const label = String(opts.packageLabel ?? '').trim().toUpperCase().replace(/\s+/g, '');
     const q = Number.parseInt(String(opts.packQuantity ?? '').replace(/[^\d]/g, ''), 10);
-    const unit = String(opts.packUnit ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    const packUnitToken = String(opts.packUnit ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    const itemUnit = normalizeUnitForLabel(opts.itemUnit ?? '');
+    const packagingTokens = new Set(['FD', 'FARDO', 'FARDOS', 'CX', 'CAIXA', 'CAIXAS', 'PCT', 'PACOTE', 'PACOTES', 'PC']);
+    // If `packUnit` is actually another package token (e.g. FD/CX), use the product unit (UN/KG) on "C/X".
+    const unit = (!packUnitToken || packUnitToken === label || packagingTokens.has(packUnitToken))
+        ? itemUnit
+        : normalizeUnitForLabel(packUnitToken);
     const price = String(opts.packPrice ?? '').trim();
     if (!label || !Number.isFinite(q) || q <= 0 || !unit || !price) return null;
     if (q === 1) return `1 ${unit}: R$ ${price}`;
@@ -21041,8 +21047,8 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
         ? formatCentsToPrice(wholesaleCents * packQuantity)
         : null;
 
-    const retailPackLine = computePackLine({ packageLabel, packQuantity, packUnit, packPrice: retailPackPrice });
-    const wholesalePackLine = computePackLine({ packageLabel, packQuantity, packUnit, packPrice: wholesalePackPrice });
+    const retailPackLine = computePackLine({ packageLabel, packQuantity, packUnit, packPrice: retailPackPrice, itemUnit: unitLabel });
+    const wholesalePackLine = computePackLine({ packageLabel, packQuantity, packUnit, packPrice: wholesalePackPrice, itemUnit: unitLabel });
 
     if (retailPack) {
         const txt = retailPackLine || '';
@@ -26960,13 +26966,20 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
             // Ensure Fabric v7 group bounds match the inner rect (prevents the "outer container" selection bug).
             safeAddWithUpdate(z);
             
-            // Normalize zone styles to a complete object (defaults + overrides) so
-            // cards never render "unstyled" after reload when persisted styles are partial/empty.
-            (z as any)._zoneGlobalStyles = normalizeGlobalStyles((z as any)._zoneGlobalStyles as Partial<GlobalStyles>);
-            const zoneStyles = getZoneGlobalStyles(z);
-            console.log('[rehydrateCanvasZones] Zone has normalized _zoneGlobalStyles:', Object.keys(zoneStyles));
-            if (applyZoneStyles) {
-                console.log('[rehydrateCanvasZones] Applying global styles to cards for zone:', z._customId);
+            const rawZoneStyles = (z as any)._zoneGlobalStyles;
+            const hasPersistedZoneStyles =
+                !!rawZoneStyles &&
+                typeof rawZoneStyles === 'object' &&
+                !Array.isArray(rawZoneStyles) &&
+                Object.keys(rawZoneStyles).length > 0;
+
+            // Only normalize and re-apply when styles were explicitly persisted for the zone.
+            // This avoids overriding card visuals on reload with fresh defaults.
+            if (hasPersistedZoneStyles) {
+                (z as any)._zoneGlobalStyles = normalizeGlobalStyles(rawZoneStyles as Partial<GlobalStyles>);
+            }
+            const zoneStyles = hasPersistedZoneStyles ? getZoneGlobalStyles(z) : null;
+            if (applyZoneStyles && zoneStyles) {
                 const zoneCards = getZoneChildren(z);
                 if (zoneCards.length > 0) {
                     applyGlobalStylesToCards(zoneStyles, z);
@@ -27087,6 +27100,7 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
         }
 
         // Repair missing parentZoneId by intersection (helps after old history/undo states)
+        const cardsWithSavedParentZone = new Set<any>();
         cards.forEach((card: any) => {
             if (!card._customId) card._customId = Math.random().toString(36).substr(2, 9);
             if (card._cardWidth == null) card._cardWidth = card.width;
@@ -27094,6 +27108,7 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
 
             // If card already has a valid parentZoneId from saved data, preserve it
             if (card.parentZoneId && zonesById.has(card.parentZoneId)) {
+                cardsWithSavedParentZone.add(card);
                 return;
             }
             
@@ -27177,9 +27192,19 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
             zones.forEach((z: any) => {
                 if (z.isProductZone || zoneIdsWithCards.has(z._customId)) {
                     try {
-                        // Always normalize zone grid after reload. This prevents stale layouts
-                        // (holes/cards outside) when old coordinates were persisted from buggy states.
-                        recalculateZoneLayout(z);
+                        // Preserve manually-saved placements after reload.
+                        // Reflow only when this zone has cards without reliable saved positions.
+                        const zoneCards = cards.filter((c: any) => String((c as any).parentZoneId || '').trim() === String(z._customId || '').trim());
+                        const hasAllSavedPositions =
+                            zoneCards.length > 0 &&
+                            zoneCards.every((c: any) =>
+                                cardsWithSavedParentZone.has(c) &&
+                                Number.isFinite(Number(c.left)) &&
+                                Number.isFinite(Number(c.top))
+                            );
+                        if (!hasAllSavedPositions) {
+                            recalculateZoneLayout(z);
+                        }
                     } catch (err) {
                         console.warn('[rehydrateCanvasZones] Failed to relayout zone', err);
                     }

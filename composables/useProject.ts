@@ -177,6 +177,54 @@ const clearDraft = (projectId: string, pageId: string) => {
     }
 }
 
+const resolveCanvasDataWithDraft = (opts: {
+    projectId: string
+    pageId: string
+    remoteCanvasData: any
+    draft: DraftPayload | null
+}) => {
+    const remoteData = opts.remoteCanvasData || null
+    const remoteCount = getCanvasObjectCount(remoteData)
+    const draft = opts.draft
+    if (!draft?.canvasData) {
+        return { canvasData: remoteData, source: 'remote-no-draft', needsRemoteSync: false as const }
+    }
+
+    const draftData = draft.canvasData
+    const draftCount = getCanvasObjectCount(draftData)
+    const draftIsValid = draftCount > 0
+    const remoteTs = getCanvasSavedAt(remoteData)
+    const draftJsonTs = getCanvasSavedAt(draftData)
+    const draftLocalTs = Number(draft.updatedAt || 0)
+    const draftTs = Math.max(draftJsonTs, draftLocalTs)
+    const sameFingerprint = computeCanvasFingerprint(remoteData) === computeCanvasFingerprint(draftData)
+
+    if (!draftIsValid) {
+        if (remoteCount > 0) {
+            clearDraft(opts.projectId, opts.pageId)
+        }
+        return { canvasData: remoteData, source: 'remote-draft-invalid', needsRemoteSync: false as const }
+    }
+
+    if (remoteCount === 0) {
+        return { canvasData: draftData, source: 'draft-remote-empty', needsRemoteSync: true as const }
+    }
+
+    if (sameFingerprint) {
+        clearDraft(opts.projectId, opts.pageId)
+        return { canvasData: remoteData, source: 'remote-same-as-draft', needsRemoteSync: false as const }
+    }
+
+    // Protect unsynced changes on reload:
+    // if local draft is newer than remote payload, prefer local draft and resync.
+    const draftIsNewer = draftTs > 0 && (remoteTs === 0 || draftTs > (remoteTs + 1500))
+    if (draftIsNewer) {
+        return { canvasData: draftData, source: 'draft-newer-than-remote', needsRemoteSync: true as const }
+    }
+
+    return { canvasData: remoteData, source: 'remote-newer-than-draft', needsRemoteSync: false as const }
+}
+
 const readProjectDraft = (projectId: string): ProjectDraftPayload | null => {
     if (import.meta.server) return null
     try {
@@ -706,6 +754,8 @@ export const useProject = () => {
 
             // Carregar cada página
             project.pages = []
+            let recoveredFromNewerDraft = false
+            const recoveredDraftPages: string[] = []
 
             const loadedPageIds = new Set<string>()
             for (const pageMeta of storedPages) {
@@ -759,41 +809,30 @@ export const useProject = () => {
                     console.log(`📦 CanvasData remoto selecionado: ${bestRemote.source} (${objectCount} objetos)`)
                 }
 
-                // Offline-safe: Verificar draft local, mas só usar se for válido e mais recente
+                // Offline-safe: comparar rascunho local vs remoto e preservar o mais novo.
                 const draft = readDraft(data.id, pageId)
                 if (draft?.canvasData) {
-                    const draftObjectCount = draft.canvasData?.objects?.length || 0
-                    const draftAge = Date.now() - draft.updatedAt
+                    const draftObjectCount = getCanvasObjectCount(draft.canvasData)
+                    const draftAge = Date.now() - Number(draft.updatedAt || 0)
                     const draftAgeMin = Math.floor(draftAge / 60000)
-
-                    // Verificar se o draft tem conteúdo válido (deve ter objetos > 0)
-                    const draftIsValid = draftObjectCount > 0
-                    const serverObjectCount = serverCanvasData?.objects?.length || 0
-
+                    const remoteObjectCount = getCanvasObjectCount(serverCanvasData)
                     console.log(`📝 Draft encontrado para página ${pageId}: ${draftObjectCount} objetos (idade: ${draftAgeMin}min)`)
-                    console.log(`📝 Servidor tem: ${serverObjectCount} objetos`)
-
-                    // REGRA DE SEGURANÇA (anti-tela em branco):
-                    // Se o servidor já tem conteúdo, SEMPRE priorizar servidor e ignorar draft local.
-                    // Draft local só entra quando servidor vier vazio/indisponível.
-                    if (serverObjectCount > 0) {
-                        canvasData = serverCanvasData
-                        if (!draftIsValid || draftObjectCount === 0) {
-                            clearDraft(data.id, pageId)
-                            console.log(`🗑️ Draft inválido/vazio removido; servidor tem ${serverObjectCount} objetos`)
-                        } else {
-                            console.log(`ℹ️ Ignorando draft local (${draftObjectCount}) porque servidor já tem ${serverObjectCount} objeto(s)`)
-                        }
-                    } else if (draftIsValid) {
-                        canvasData = draft.canvasData
-                        console.log(`📝 Usando rascunho local (servidor vazio) para a página ${pageId} (${draftAgeMin}min atrás, ${draftObjectCount} objetos)`)
-                    } else {
-                        canvasData = serverCanvasData
-                    }
-                } else {
-                    // Sem draft, usar dados do servidor
-                    canvasData = serverCanvasData
+                    console.log(`📝 Remoto tem: ${remoteObjectCount} objetos`)
                 }
+
+                const draftDecision = resolveCanvasDataWithDraft({
+                    projectId: data.id,
+                    pageId,
+                    remoteCanvasData: serverCanvasData,
+                    draft
+                })
+                canvasData = draftDecision.canvasData
+
+                if (draftDecision.needsRemoteSync) {
+                    recoveredFromNewerDraft = true
+                    recoveredDraftPages.push(pageId)
+                }
+                console.log(`📦 Fonte final da página ${pageId}: ${draftDecision.source}`)
 
                 // Validação final: garantir que temos dados válidos
                 if (canvasData) {
@@ -831,9 +870,19 @@ export const useProject = () => {
             normalizeProjectPageIds(project.pages as any[], 'loadProjectDB:final')
 
             project.activePageIndex = 0
-            hasUnsavedChanges.value = false
-            saveStatus.value = 'saved'
+            hasUnsavedChanges.value = recoveredFromNewerDraft
+            saveStatus.value = recoveredFromNewerDraft ? 'idle' : 'saved'
             isProjectLoaded.value = true // Marca que o projeto foi carregado
+
+            if (recoveredFromNewerDraft && !project.id.startsWith('proj_')) {
+                console.warn('📝 Projeto restaurado com rascunho local mais novo; agendando re-sync remoto.', {
+                    pages: recoveredDraftPages
+                })
+                setTimeout(() => {
+                    if (currentSession !== projectLoadSession.value) return
+                    triggerAutoSave()
+                }, 400)
+            }
 
             console.log('✅ Projeto carregado com sucesso:', { pagesCount: project.pages.length, activePageHasData: !!project.pages[0]?.canvasData })
             return true
