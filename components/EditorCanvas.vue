@@ -639,6 +639,7 @@ const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
 const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
 const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
 const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
+const BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID = 'tpl_oferta_amarela'
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors']
 
@@ -723,6 +724,7 @@ const ensureLabelTemplatesReady = async () => {
     await loadLabelTemplatesFromDb();
     await ensureBuiltInDefaultLabelTemplate();
     await ensureBuiltInBlackYellowLabelTemplate();
+    await ensureBuiltInOfertaAmarelaLabelTemplate();
     await ensureBuiltInRedBurstLabelTemplate();
     await ensureBuiltInAtacarejoLabelTemplate();
 
@@ -17152,12 +17154,12 @@ const getCenterOfView = () => {
 
 const { uploadFile } = useUpload()
 
-const insertAssetToCanvas = async (asset: any) => {
+const insertAssetToCanvas = async (asset: any, opts?: { pos?: { x: number; y: number } }) => {
     if (!canvas.value || !fabric) return;
     if (!asset?.url) return;
 
     try {
-        const center = getCenterOfView();
+        const center = opts?.pos ?? getCenterOfView();
         const proxiedUrl = toWasabiProxyUrl(asset.url, { version: asset?.lastModified || asset?.updatedAt || null }) || asset.url;
         const img: any = await fabric.Image.fromURL(proxiedUrl, { crossOrigin: 'anonymous' });
 
@@ -17528,7 +17530,8 @@ const fetchRecoveryImageUrlForCard = async (card: any): Promise<RecoveryLookupRe
         const result = await $fetch<{ url?: string }>('/api/process-product-image', {
             method: 'POST',
             headers,
-            body: payload
+            // For product cards we want the API to return the cached bg-removed variant when possible.
+            body: { ...payload, bgPolicy: 'always' }
         });
         const url = String(result?.url || '').trim();
         if (url) return { status: 'ok', url };
@@ -18577,7 +18580,14 @@ const handlePasteList = async () => {
                 const result = await $fetch<{ url?: string }>('/api/process-product-image', {
                     method: 'POST',
                     headers,
-                    body: { term: searchTerm }
+                    // When importing products, default to bg-removed variants (cached) for better card visuals.
+                    body: {
+                        term: String(product?.name || searchTerm || '').trim(),
+                        ...(product?.brand ? { brand: String(product.brand).trim() } : {}),
+                        ...(product?.flavor ? { flavor: String(product.flavor).trim() } : {}),
+                        ...(product?.weight ? { weight: String(product.weight).trim() } : {}),
+                        bgPolicy: 'always'
+                    }
                 });
                 
                 return {
@@ -18867,34 +18877,59 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
 
 const handleFileUpload = async (e: any) => {
     const input = e?.target as HTMLInputElement | null;
-    const file = input?.files?.[0];
+    const files = Array.from(input?.files || []).filter(Boolean) as File[];
     if (input) input.value = '';
-    if (!file) {
+    if (!files.length) {
         clearPendingProductImageOperation();
         return;
     }
 
     try {
-        const uploaded = await uploadFile(file);
-        if (!uploaded?.success || !uploaded?.url) {
-            throw new Error('Upload falhou');
+        const mode = pendingLocalImageActionMode.value;
+
+        // Replace mode: only first file is meaningful.
+        if (mode === 'replace' && pendingImageReplaceTargetId.value) {
+            const file = files[0];
+            if (!file) {
+                clearPendingProductImageOperation();
+                return;
+            }
+            const uploaded = await uploadFile(file);
+            if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou');
+            await replaceImageByCustomId(pendingImageReplaceTargetId.value, uploaded.url);
+            return;
         }
 
-        if (pendingLocalImageActionMode.value === 'replace' && pendingImageReplaceTargetId.value) {
-            await replaceImageByCustomId(pendingImageReplaceTargetId.value, uploaded.url);
-        } else if (pendingLocalImageActionMode.value === 'add' && pendingImageAddCardId.value) {
+        // Add to card: allow multiple files (they'll stack; user can reposition).
+        if (mode === 'add' && pendingImageAddCardId.value) {
             const card = findProductCardByCustomId(pendingImageAddCardId.value);
-            if (!card) {
-                throw new Error('Card de produto não encontrado.');
+            if (!card) throw new Error('Card de produto não encontrado.');
+
+            for (const file of files) {
+                const uploaded = await uploadFile(file);
+                if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou');
+                const added = await addImageToProductCardByUrl(card, uploaded.url);
+                if (!added) throw new Error('Não foi possível adicionar imagem ao card.');
             }
-            const added = await addImageToProductCardByUrl(card, uploaded.url);
-            if (!added) throw new Error('Não foi possível adicionar imagem ao card.');
-        } else {
+            return;
+        }
+
+        // Default: insert all files into the canvas (spread to avoid overlap).
+        const base = getCenterOfView();
+        const cols = Math.max(1, Math.ceil(Math.sqrt(files.length)));
+        const gap = 34;
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i]!;
+            const uploaded = await uploadFile(file);
+            if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou');
+            const row = Math.floor(i / cols);
+            const col = i % cols;
+            const pos = { x: base.x + (col * gap), y: base.y + (row * gap) };
             await insertAssetToCanvas({
                 id: makeCanvasObjectId(),
                 name: file.name || 'Imagem',
                 url: uploaded.url
-            });
+            }, { pos });
         }
     } catch (err: any) {
         console.error('❌ [upload] Erro ao processar imagem:', err);
@@ -24442,6 +24477,34 @@ async function ensureBuiltInBlackYellowLabelTemplate() {
     saveCurrentState();
 }
 
+async function ensureBuiltInOfertaAmarelaLabelTemplate() {
+    // Seed a "Oferta (amarela)" template inspired by common market tags (yellow bg + red border + top strip).
+    // Dynamic fitting for values like 1,99 / 12,99 / 124,99 is handled by setPriceOnPriceGroup().
+    if (!fabric) return;
+    const exists = (labelTemplates.value || []).some(t => t.id === BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID);
+    if (exists) return;
+
+    const now = new Date().toISOString();
+    const pg = buildOfertaAmarelaPriceGroupForCard('12,99', 320, 450, 0, 'UN');
+    pg.set({ name: 'priceGroup', subTargetCheck: true, interactive: true });
+    if (typeof pg.getObjects === 'function') {
+        pg.getObjects().forEach((child: any) => child.set({ selectable: true, evented: true, hasControls: true, hasBorders: true }));
+    }
+
+    const tpl: LabelTemplate = {
+        id: BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID,
+        name: 'Oferta (amarela)',
+        kind: 'priceGroup-v1',
+        group: serializePriceGroupForTemplate(pg),
+        isBuiltIn: true,
+        createdAt: now,
+        updatedAt: now
+    };
+    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
+    saveCurrentState();
+}
+
 async function ensureBuiltInRedBurstLabelTemplate() {
     // Seed a red "burst" premium template inspired by market spotlight labels.
     if (!fabric) return;
@@ -24868,6 +24931,150 @@ function buildBlackYellowPriceGroupForCard(priceStr: string, cardW: number, card
         name: 'priceGroup'
     });
     layoutPriceGroup(pg, cardW, cardH);
+    return pg;
+}
+
+function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _cardH: number, top: number, unitText?: string) {
+    // Base geometry for the built-in template; runtime uses layoutManualTemplateGroup (uniform scale)
+    // and setPriceOnPriceGroup() (dynamic text fitting).
+    const labelW = 300;
+    const labelH = 140;
+    const corner = 18;
+
+    const priceBg = new fabric.Rect({
+        width: labelW,
+        height: labelH,
+        rx: corner,
+        ry: corner,
+        fill: '#FDE047',
+        stroke: '#B91C1C',
+        strokeWidth: 10,
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: 0,
+        name: 'price_bg',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.22)', blur: 10, offsetX: 0, offsetY: 6 }),
+        __roundness: (corner * 2) / labelH,
+        __strokeWidth: 10
+    });
+
+    const headerW = labelW * 0.86;
+    const headerH = labelH * 0.26;
+    const headerY = -(labelH / 2) + (headerH / 2) + 12;
+
+    const offerHeaderBg = new fabric.Rect({
+        width: headerW,
+        height: headerH,
+        rx: headerH * 0.28,
+        ry: headerH * 0.28,
+        fill: '#DC2626',
+        stroke: '#7F1D1D',
+        strokeWidth: Math.max(2, headerH * 0.10),
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: headerY,
+        selectable: false,
+        evented: false,
+        name: 'offer_header_bg'
+    });
+
+    const offerHeaderText = new fabric.Text('OFERTA!', {
+        fontSize: Math.max(18, headerH * 0.62),
+        fontFamily: 'Inter',
+        fontWeight: '900',
+        fill: '#FDE047',
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: headerY + 1,
+        selectable: true,
+        evented: true,
+        name: 'offer_header_text',
+        charSpacing: 120,
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.18)', blur: 2, offsetX: 0, offsetY: 2 })
+    });
+
+    const parts = splitPriceParts(priceStr);
+    const integer = parts.integer;
+    const dec = parts.dec;
+
+    const priceAreaCenterY = 18;
+
+    const currencyText = new fabric.Text('R$', {
+        fontSize: 32,
+        fontFamily: 'Inter',
+        fontWeight: '900',
+        fill: '#B91C1C',
+        originX: 'left',
+        originY: 'center',
+        left: -110,
+        top: priceAreaCenterY + 4,
+        name: 'price_currency_text',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.12)', blur: 2, offsetX: 0, offsetY: 2 })
+    });
+
+    const priceInteger = new fabric.IText(integer, {
+        fontSize: 86,
+        fontFamily: 'Inter',
+        fontWeight: '900',
+        fill: '#B91C1C',
+        originX: 'left',
+        originY: 'center',
+        left: -70,
+        top: priceAreaCenterY + 8,
+        name: 'price_integer_text',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.10)', blur: 2, offsetX: 0, offsetY: 2 })
+    });
+
+    const priceDecimal = new fabric.IText(`,${dec}`, {
+        fontSize: 46,
+        fontFamily: 'Inter',
+        fontWeight: '900',
+        fill: '#B91C1C',
+        originX: 'left',
+        originY: 'center',
+        left: 40,
+        top: priceAreaCenterY - 10,
+        name: 'price_decimal_text',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.10)', blur: 2, offsetX: 0, offsetY: 2 })
+    });
+
+    const u = normalizeUnitForLabel(unitText);
+    const priceUnit = new fabric.IText(u || '', {
+        fontSize: 20,
+        fontFamily: 'Inter',
+        fontWeight: '800',
+        fill: '#B91C1C',
+        originX: 'left',
+        originY: 'center',
+        left: 40,
+        top: priceAreaCenterY + 34,
+        name: 'price_unit_text',
+        visible: false
+    });
+
+    const pg = new fabric.Group([
+        priceBg,
+        offerHeaderBg,
+        offerHeaderText,
+        currencyText,
+        priceInteger,
+        priceDecimal,
+        priceUnit
+    ], {
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top,
+        name: 'priceGroup'
+    });
+
+    // Mark as manual template so runtime preserves geometry and only fits values.
+    (pg as any).__preserveManualLayout = true;
+    (pg as any).__isCustomTemplate = true;
+    safeAddWithUpdate(pg);
     return pg;
 }
 
@@ -28295,7 +28502,7 @@ const handleRecalculateLayout = () => {
                     @label-mousedown="handleFrameLabelMouseDown"
                   />
 
-                  <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" accept="image/*" />
+                  <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" accept="image/*" multiple />
               </div>
 
               <!-- Contextual Toolbar for Vector Paths (Above Main Toolbar) -->

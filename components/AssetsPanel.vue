@@ -51,12 +51,24 @@ const assetFolderMap = ref<Map<string, string | null>>(new Map())
 
 const ASSET_FOLDERS_MIGRATION_MSG = 'A tabela asset_folders não existe. Execute o SQL em database/asset_folders_migration.sql no Supabase (Dashboard → SQL Editor) para persistir a movimentação de imagens.'
 
+// Mapeamento asset_key -> display_name para persistência de "renomear"
+const assetNameMap = ref<Map<string, string>>(new Map())
+const ASSET_NAMES_MIGRATION_MSG = 'A tabela asset_names não existe. Execute o SQL em database/asset_names_migration.sql no Supabase (Dashboard → SQL Editor) para persistir o renomeio de imagens.'
+
 function isAssetFoldersTableMissing(err: any): boolean {
     if (!err) return false
     const e = err as { message?: string; code?: string; status?: number }
     const m = String(e?.message ?? '').toLowerCase()
     const c = String(e?.code ?? '')
     return (e?.status === 404) || m.includes('asset_folders') || m.includes('does not exist') || c === '42P01' || c === 'PGRST116'
+}
+
+function isAssetNamesTableMissing(err: any): boolean {
+    if (!err) return false
+    const e = err as { message?: string; code?: string; status?: number }
+    const m = String(e?.message ?? '').toLowerCase()
+    const c = String(e?.code ?? '')
+    return (e?.status === 404) || m.includes('asset_names') || m.includes('does not exist') || c === '42P01' || c === 'PGRST116'
 }
 
 const loadAssetFolders = async () => {
@@ -78,6 +90,31 @@ const loadAssetFolders = async () => {
             console.warn('asset_folders: tabela ausente.', ASSET_FOLDERS_MIGRATION_MSG)
         } else {
             console.error('Erro ao carregar asset_folders:', e)
+        }
+    }
+}
+
+const loadAssetNames = async () => {
+    const user = auth.user.value
+    if (!user) return
+    try {
+        const { data, error } = await supabase
+            .from('asset_names')
+            .select('asset_key, display_name')
+            .eq('user_id', user.id)
+        if (error) throw error
+        const map = new Map<string, string>()
+        ;(data || []).forEach((row: { asset_key: string; display_name: string }) => {
+            const k = String(row.asset_key || '').trim()
+            if (!k) return
+            map.set(k, String(row.display_name || '').trim())
+        })
+        assetNameMap.value = map
+    } catch (e) {
+        if (isAssetNamesTableMissing(e)) {
+            console.warn('asset_names: tabela ausente.', ASSET_NAMES_MIGRATION_MSG)
+        } else {
+            console.error('Erro ao carregar asset_names:', e)
         }
     }
 }
@@ -114,9 +151,15 @@ const assetsScrollRef = ref<HTMLElement | null>(null)
 
 const normalizeUploadAsset = (item: any) => {
     const map = assetFolderMap.value
+    const names = assetNameMap.value
+    const id = String(item?.id || '').trim()
+    const key = String(item?.key || '').trim()
+    const folderId = (id && map.get(id) !== undefined) ? map.get(id) : (key ? map.get(key) : null)
+    const overrideName = (id && names.get(id)) ? names.get(id) : (key ? names.get(key) : undefined)
     return {
         ...item,
-        folderId: map.get(item.id) ?? null
+        folderId: folderId ?? null,
+        name: (typeof overrideName === 'string' && overrideName.trim().length) ? overrideName : item?.name
     }
 }
 
@@ -221,7 +264,7 @@ const fetchRecents = async () => {
         // Combine and sort by lastModified (most recent first)
         const allItems = [
             ...(Array.isArray(uploadsData) ? uploadsData.map((item: any) => ({
-                ...item,
+                ...normalizeUploadAsset(item),
                 type: 'upload'
             })) : []),
             ...(Array.isArray(brandsData) ? brandsData.map((item: any) => ({
@@ -264,6 +307,7 @@ watch(() => aiStudio.refreshTick.value, async () => {
 onMounted(async () => {
     await loadFolders()
     await loadAssetFolders()
+    await loadAssetNames()
     await fetchAssets()
     if (activeCategory.value === 'recents') {
         await fetchRecents()
@@ -415,9 +459,11 @@ const confirmDelete = async () => {
     } else {
          // Deletar do Contabo Storage
          try {
+             const assetKey = String(item?.key || item?.id || '').trim()
+             if (!assetKey) throw new Error('Chave do asset ausente')
              await $fetch('/api/assets/delete', {
                  method: 'POST',
-                 body: { key: item.id }
+                 body: { key: assetKey }
              })
              // Remover da lista local apenas após sucesso
              assets.value.uploads = assets.value.uploads.filter(u => u.id !== item.id)
@@ -548,8 +594,27 @@ const handleDialogConfirm = async () => {
                 return
             }
         } else {
+             const user = auth.user.value
              const file = assets.value.uploads.find(u => u.id === targetItem.id)
-             if (file) file.name = inputValue
+             const nextName = String(inputValue || '').trim()
+             if (file && nextName) file.name = nextName
+
+             const assetKey = String(targetItem?.key || targetItem?.id || '').trim()
+             const looksLikeWasabiKey = assetKey.includes('/') && !assetKey.startsWith('cache:')
+             if (user && nextName && looksLikeWasabiKey) {
+                 try {
+                     await supabase.from('asset_names').upsert(
+                         { user_id: user.id, asset_key: assetKey, display_name: nextName },
+                         { onConflict: 'user_id,asset_key' }
+                     )
+                     assetNameMap.value.set(assetKey, nextName)
+                     assetNameMap.value = new Map(assetNameMap.value)
+                 } catch (e) {
+                     console.error('Erro ao persistir renomeio do asset:', e)
+                     alert(isAssetNamesTableMissing(e) ? ASSET_NAMES_MIGRATION_MSG : 'Erro ao renomear arquivo. Tente novamente.')
+                     return
+                 }
+             }
         }
     } else if (type === 'new_folder') {
         // If targetItem exists (from 'new_folder_inside'), use it as parent.
@@ -593,13 +658,14 @@ const handleDialogConfirm = async () => {
              if (file) {
                  const folderId = moveTargetId.value || null
                  const user = auth.user.value
+                 const assetKey = String(targetItem?.key || targetItem?.id || '').trim()
                  if (user) {
                      try {
                          await supabase.from('asset_folders').upsert(
-                             { user_id: user.id, asset_key: targetItem.id, folder_id: folderId },
+                             { user_id: user.id, asset_key: assetKey || targetItem.id, folder_id: folderId },
                              { onConflict: 'user_id,asset_key' }
                          )
-                         assetFolderMap.value.set(targetItem.id, folderId)
+                         assetFolderMap.value.set(assetKey || targetItem.id, folderId)
                          assetFolderMap.value = new Map(assetFolderMap.value)
                      } catch (e) {
                          console.error('Erro ao persistir movimento do asset:', e)
@@ -683,8 +749,18 @@ const handleDragStart = (e: DragEvent, asset: any) => {
 
 // Upload Logic
 import { useUpload } from '../composables/useUpload'
-const { uploadFile, isUploading, error: uploadError } = useUpload()
+const { uploadFile, uploadFiles, isUploading, error: uploadError } = useUpload()
 const fileInput = ref<HTMLInputElement | null>(null)
+const isBrandUploading = ref(false)
+const uploadBatch = ref<{ active: boolean; done: number; total: number; failed: number }>({ active: false, done: 0, total: 0, failed: 0 })
+
+const isAnyUploading = computed(() => isUploading.value || isBrandUploading.value)
+const uploadButtonText = computed(() => {
+    if (!isAnyUploading.value) return (activeCategory.value === 'brand' ? 'Marca' : 'Upload')
+    const b = uploadBatch.value
+    if (b.active && b.total > 1) return `Enviando ${b.done}/${b.total}`
+    return 'Enviando...'
+})
 
 const triggerUpload = () => {
     fileInput.value?.click()
@@ -701,32 +777,19 @@ const getApiAuthHeaders = async () => {
 
 const handleFileUpload = async (event: Event) => {
     const target = event.target as HTMLInputElement
-    if (target.files && target.files.length > 0) {
-        const file = target.files[0]
-        if (!file) return;
+    const files = Array.from(target.files || []).filter(Boolean)
+    if (target) target.value = ''
+    if (files.length > 0) {
+        // Upload para endpoint correto dependendo da categoria
+        const endpoint = activeCategory.value === 'brand' ? '/api/brands/upload' : '/api/upload'
+        uploadBatch.value = { active: files.length > 1, done: 0, total: files.length, failed: 0 }
 
         try {
-            // Upload para endpoint correto dependendo da categoria
-            const endpoint = activeCategory.value === 'brand' ? '/api/brands/upload' : '/api/upload'
-            let result: { success: boolean, url: string, key?: string }
+            const upsertItem = async (file: File, result: { success: boolean, url: string, key?: string } | null) => {
+                if (!result?.success) return
 
-            if (endpoint === '/api/upload') {
-                result = await uploadFile(file) as any
-            } else {
-                const formData = new FormData()
-                formData.append('file', file)
-                const headers = await getApiAuthHeaders()
-                result = await ($fetch as any)(endpoint, {
-                    method: 'POST',
-                    headers,
-                    body: formData
-                }) as any
-            }
-
-            if (result.success) {
-                // Optimistically add the item to the local list for instant feedback
                 const newItem = {
-                    id: result.key || `upload-${Date.now()}`,
+                    id: result.key || `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
                     url: result.url,
                     name: file.name.replace(/\.[^/.]+$/, ''),
                     folderId: activeCategory.value === 'folders' ? currentFolderId.value : null,
@@ -739,7 +802,6 @@ const handleFileUpload = async (event: Event) => {
                     assets.value.uploads = [newItem, ...assets.value.uploads]
                 }
 
-                // If uploaded inside a folder view, persist folder mapping immediately.
                 if (activeCategory.value === 'folders' && currentFolderId.value && result.key) {
                     const user = auth.user.value
                     if (user) {
@@ -759,24 +821,61 @@ const handleFileUpload = async (event: Event) => {
                     }
                 }
 
-                // Also refresh recents
                 assets.value.recents = [{ ...newItem, type: activeCategory.value === 'brand' ? 'brand' : 'upload' }, ...assets.value.recents].slice(0, 50)
+            }
 
-                // Refresh only the first page (fresh) to avoid stale cache and heavy full reload.
-                if (activeCategory.value === 'brand') {
-                    await fetchBrands()
-                } else {
-                    await fetchAssets({ fresh: true })
-                    await nextTick()
-                    await maybeLoadMoreUploads()
+            if (endpoint === '/api/upload') {
+                const results = await uploadFiles(files, {
+                    continueOnError: true,
+                    onProgress: ({ done, total, ok }) => {
+                        uploadBatch.value = { ...uploadBatch.value, active: total > 1, done, total, failed: uploadBatch.value.failed + (ok ? 0 : 1) }
+                    }
+                })
+
+                for (const r of results) {
+                    if (r?.result?.success) {
+                        await upsertItem(r.file, r.result as any)
+                    }
                 }
+            } else {
+                // Brand endpoint doesn't use composable; keep its own uploading state.
+                isBrandUploading.value = true
+                let done = 0
+                for (const file of files) {
+                    try {
+                        const formData = new FormData()
+                        formData.append('file', file)
+                        const headers = await getApiAuthHeaders()
+                        const result = await ($fetch as any)(endpoint, { method: 'POST', headers, body: formData }) as any
+                        done += 1
+                        uploadBatch.value = { ...uploadBatch.value, active: files.length > 1, done, total: files.length }
+                        await upsertItem(file, result)
+                    } catch (e) {
+                        done += 1
+                        uploadBatch.value = { ...uploadBatch.value, active: files.length > 1, done, total: files.length, failed: uploadBatch.value.failed + 1 }
+                        console.error(e)
+                    }
+                }
+            }
+
+            if (uploadBatch.value.failed > 0) {
+                uploadError.value = `Falha em ${uploadBatch.value.failed} arquivo(s)`
+            }
+
+            // Refresh only once at the end (avoid heavy reload per file).
+            if (activeCategory.value === 'brand') {
+                await fetchBrands()
+            } else {
+                await fetchAssets({ fresh: true })
+                await nextTick()
+                await maybeLoadMoreUploads()
             }
         } catch (e) {
             console.error(e)
             uploadError.value = 'Erro ao fazer upload'
         } finally {
-            // Reset input
-            if (fileInput.value) fileInput.value.value = ''
+            isBrandUploading.value = false
+            uploadBatch.value = { active: false, done: 0, total: 0, failed: 0 }
         }
     }
 }
@@ -802,19 +901,19 @@ const handleFileUpload = async (event: Event) => {
         </div>
 
         <div v-if="activeCategory === 'uploads' || activeCategory === 'brand' || (activeCategory === 'folders' && currentFolderId)" class="px-2 py-1.5 border-b border-white/5">
-            <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleFileUpload" />
+            <input type="file" ref="fileInput" class="hidden" accept="image/*" multiple @change="handleFileUpload" />
             <div class="flex items-center gap-1.5">
                 <button 
                     @click="triggerUpload" 
-                    :disabled="isUploading"
+                    :disabled="isAnyUploading"
                     class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer disabled:opacity-40"
                 >
-                    <template v-if="isUploading">
-                        <span class="animate-pulse">Enviando...</span>
+                    <template v-if="isAnyUploading">
+                        <span class="animate-pulse">{{ uploadButtonText }}</span>
                     </template>
                     <template v-else>
                         <Upload class="w-3 h-3" />
-                        {{ activeCategory === 'brand' ? 'Marca' : 'Upload' }}
+                        {{ uploadButtonText }}
                     </template>
                 </button>
                 <button
