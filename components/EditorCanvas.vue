@@ -6802,6 +6802,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 }
             };
             canvas.value.getObjects().forEach(recalcAllText);
+            // Same issue as webfont load: JSON could have been measured with fallback fonts.
+            // Re-fit manual label templates so cards match the mini editor geometry.
+            refitManualLabelTemplatesAfterFontMetrics(canvas.value);
 
 	            safeRequestRenderAll();
 	            } else {
@@ -12614,6 +12617,70 @@ const removePathPoint = (pathObj: any, index: number) => {
 }
 
 let didLoadFonts = false
+
+// When webfonts finish loading, Fabric's previous measurements may have been done with fallback fonts.
+// That can permanently "shrink" manual templates because the fitting algorithm runs with wrong glyph widths.
+// After clearing Fabric's font cache and re-initializing text dimensions, re-fit manual label templates.
+const refitManualLabelTemplatesAfterFontMetrics = (canvasInstance: any) => {
+    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return;
+
+    const seen = new Set<any>();
+    const stack: any[] = [...(canvasInstance.getObjects() || [])];
+
+    const isGroup = (o: any) => String(o?.type || '').toLowerCase() === 'group';
+    const isPriceGroupCandidate = (o: any) => {
+        if (!isGroup(o)) return false;
+        if (String(o?.name || '') === 'priceGroup') return true;
+        // Fallback heuristic (runtime-created groups might lose `name`).
+        try {
+            return typeof (isLikelyPriceGroupObject as any) === 'function' && (isLikelyPriceGroupObject as any)(o);
+        } catch {
+            return false;
+        }
+    };
+
+    while (stack.length) {
+        const obj = stack.pop();
+        if (!obj || seen.has(obj)) continue;
+        seen.add(obj);
+
+        if (isPriceGroupCandidate(obj)) {
+            try {
+                // Ensure flags/base sizes exist (some older JSON may miss them).
+                try {
+                    restoreMissingManualTemplateFlags(obj);
+                } catch {
+                    // ignore
+                }
+
+                if (shouldPreserveManualTemplateVisual(obj)) {
+                    // Force anchors to be recomputed with real font metrics (prevents stale currency/gap offsets).
+                    try { delete (obj as any).__manualSingleAnchors; } catch { /* ignore */ }
+                    // Re-fit dynamic values with correct font metrics.
+                    if (isRedBurstPriceGroup(obj)) {
+                        tuneRedBurstPriceGroupLayout(obj);
+                    } else {
+                        const all = collectObjectsDeep(obj);
+                        const hasAtac = !!findByName(all, 'atac_retail_bg');
+                        if (hasAtac) {
+                            fitManualAtacarejoValuesIntoTemplate(obj);
+                        } else {
+                            fitManualSinglePriceValuesIntoTemplate(obj);
+                        }
+                    }
+                }
+            } catch {
+                // best-effort only
+            }
+        }
+
+        if (typeof obj.getObjects === 'function') {
+            const kids = obj.getObjects() || [];
+            for (const k of kids) stack.push(k);
+        }
+    }
+};
+
 const loadFonts = () => {
     if (didLoadFonts) return
     didLoadFonts = true
@@ -12654,6 +12721,9 @@ const loadFonts = () => {
                             }
                         };
                         canvas.value.getObjects().forEach(recalcText);
+                        // Re-run manual template fitting now that real font metrics are available.
+                        // This is what keeps the product card label identical to the mini editor.
+                        refitManualLabelTemplatesAfterFontMetrics(canvas.value);
                         canvas.value.requestRenderAll();
                     }
                 }
@@ -21036,10 +21106,12 @@ const normalizeManualPriceChain = (group: any, cacheKey: string, integer: any, d
     });
 };
 
-const readSingleManualPriceAnchors = (priceGroup: any) => {
+const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean } = {}) => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
     const cached = (priceGroup as any).__manualSingleAnchors;
-    if (cached && typeof cached === 'object') return cached;
+    // Anchor cache can become stale if it was computed before webfonts loaded.
+    // Allow callers to force a recompute (used by fitting code after price text changes).
+    if (!opts.force && cached && typeof cached === 'object') return cached;
 
     const all = collectObjectsDeep(priceGroup);
     const priceBg = findByName(all, 'price_bg');
@@ -21048,6 +21120,12 @@ const readSingleManualPriceAnchors = (priceGroup: any) => {
     const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
     const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
     if (!priceBg || !integer || !decimal) return null;
+
+    // Ensure text objects have up-to-date width/height before measuring bounds.
+    [currency, integer, decimal, unit].forEach((obj: any) => {
+        if (!obj) return;
+        if (isTextLikeObject(obj) && typeof obj.initDimensions === 'function') obj.initDimensions();
+    });
 
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const bgBounds = getObjectHorizontalBoundsLocal(priceBg);
@@ -21060,6 +21138,10 @@ const readSingleManualPriceAnchors = (priceGroup: any) => {
     const full = [currency, ...chain].filter((o: any) => isObjectShownForBounds(o));
     const fullBounds = measureHorizontalBoundsLocal(full);
 
+    // Anchor the chain start to the integer's authored left edge.
+    // This prevents "R$ outside" glitches if centering cannot run due to missing bounds.
+    const intX = intBounds ? intBounds.left : Number(integer?.left ?? 0);
+
     const fallbackPad = Math.max(8, (Math.abs(Number(priceBg.width || 0) * Number(priceBg.scaleX ?? 1)) || 120) * 0.08);
     const padLeft = bgBounds && fullBounds
         ? clamp(fullBounds.left - bgBounds.left, 4, 80)
@@ -21068,9 +21150,13 @@ const readSingleManualPriceAnchors = (priceGroup: any) => {
         ? clamp(bgBounds.right - fullBounds.right, 4, 80)
         : fallbackPad;
 
+    // Prefer the authored center of the full block, otherwise fall back to bg center.
+    // Using bg center avoids "stuck at x=0" when text widths aren't measurable yet.
     const targetCenterX = fullBounds
         ? ((fullBounds.left + fullBounds.right) / 2)
-        : (chainBounds ? ((chainBounds.left + chainBounds.right) / 2) : 0);
+        : (bgBounds
+            ? ((bgBounds.left + bgBounds.right) / 2)
+            : (chainBounds ? ((chainBounds.left + chainBounds.right) / 2) : 0));
     const intDecGap = (intBounds && decBounds)
         ? clamp(decBounds.left - intBounds.right, -24, 24)
         : -4;
@@ -21080,6 +21166,7 @@ const readSingleManualPriceAnchors = (priceGroup: any) => {
 
     const anchors = {
         targetCenterX,
+        intX,
         intY: Number(integer.top || 0),
         decY: Number(decimal.top || 0),
         unitY: Number(unit?.top || decimal.top || 0),
@@ -21110,7 +21197,8 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
     const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
     if (!priceBg || !integer || !decimal) return;
 
-    const anchors = readSingleManualPriceAnchors(priceGroup) || {};
+    // Force recompute: cached anchors can be wrong if they were computed with fallback font metrics.
+    const anchors = readSingleManualPriceAnchors(priceGroup, { force: true }) || {};
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const getW = (obj: any) => (obj && typeof obj.getScaledWidth === 'function') ? Number(obj.getScaledWidth()) : 0;
 
@@ -21177,6 +21265,7 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
     const intDecGap = Number.isFinite(Number((anchors as any).intDecGap))
         ? clamp(Number((anchors as any).intDecGap), -24, 24)
         : variant.fallbackGap;
+    const intX = Number.isFinite(Number((anchors as any).intX)) ? Number((anchors as any).intX) : 0;
     const intY = Number.isFinite(Number((anchors as any).intY)) ? Number((anchors as any).intY) : Number(integer.top || 0);
     const decY = Number.isFinite(Number((anchors as any).decY)) ? Number((anchors as any).decY) : Number(decimal.top || intY);
     const unitY = Number.isFinite(Number((anchors as any).unitY)) ? Number((anchors as any).unitY) : Number(unit?.top || decY);
@@ -21185,18 +21274,16 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
     let currencyGap = Number((anchors as any).currencyGap);
     if (!Number.isFinite(currencyGap)) currencyGap = Math.max(2, bgW * variant.currencyGapRatio);
 
-    const currencyW = currency ? getW(currency) : 0;
-    const chainMaxW = Math.max(20, maxTotalW * variant.chainWidthRatio - (currency ? (currencyW + currencyGap) : 0));
-
     layoutPrice({
         priceInteger: integer,
         priceDecimal: decimal,
         priceUnit: unitVisible ? unit : undefined,
-        intX: 0,
+        intX,
         intY,
         decY,
         unitY,
-        maxWidth: chainMaxW,
+        // Manual templates (Mini Editor) must preserve the authored size hierarchy:
+        // we don't shrink the integer alone here; if needed we uniformly scale the whole chain below.
         gapPx: intDecGap,
         minGapPx: -24,
         maxGapPx: 24
@@ -21513,8 +21600,6 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
         const digits = getIntegerDigitsCount(integer);
         const variant = getMergedVariant(resolveVariantKey(digits));
         const maxW = getInnerWidth(bg, 0.075, 12, 34);
-        const chainMaxW = Math.max(20, maxW * variant.chainWidthRatio);
-
         restoreBaseScale(integer);
         restoreBaseScale(decimal);
         restoreBaseScale(unit);
@@ -21533,7 +21618,8 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
             intY,
             decY,
             unitY,
-            maxWidth: chainMaxW,
+            // Manual templates (Mini Editor): keep authored hierarchy and avoid "integer-only shrink".
+            // If values overflow, we uniformly scale the whole chain afterwards.
             gapPx: variant.intDecimalGap,
             minGapPx: -24,
             maxGapPx: 14
@@ -27600,19 +27686,50 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
                         // Last row fill
                         const isLastRow = row === normRowCount - 1;
                         const itemsInRow = isLastRow ? (normCards.length % normalCols || normalCols) : normalCols;
-                        const shouldFill = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < normalCols && itemsInRow > 1;
-                        const shouldCenterSingle = isLastRow && itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch');
-                        const cellW = shouldFill
-                            ? (normSectionW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow)
-                            : baseNormCellW;
-
-                        let x = normSectionX + col * (cellW + gapX);
-
-                        // Center last row if needed
-                        if ((isLastRow && lastRowBehavior === 'center' && itemsInRow < normalCols) || shouldCenterSingle) {
-                            const rowW = (itemsInRow * cellW) + ((itemsInRow - 1) * gapX);
-                            x = normSectionX + (normSectionW - rowW) / 2 + col * (cellW + gapX);
+                        // Match standard grid semantics:
+                        // - fill: keep card size, expand gaps (but clamp to avoid huge "holes" on sparse last rows)
+                        // - stretch: stretch cards
+                        // - center: keep card size, center row
+                        let cellW = baseNormCellW;
+                        let rowGapX = gapX;
+                        let rowStartX = normSectionX;
+                        if (isLastRow && itemsInRow < normalCols) {
+                            // For a single item, "fill" should actually fill the entire row width.
+                            // Expanding gaps is impossible with 1 item, so we span the full section.
+                            if (itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch')) {
+                                cellW = normSectionW;
+                                rowGapX = 0;
+                                rowStartX = normSectionX;
+                            }
+                            if (lastRowBehavior === 'stretch' && itemsInRow > 1) {
+                                cellW = (normSectionW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow);
+                                rowGapX = gapX;
+                            } else if (lastRowBehavior === 'fill' && itemsInRow > 1) {
+                                const remaining = normSectionW - (itemsInRow * cellW);
+                                const desiredGap = remaining / Math.max(1, (itemsInRow - 1));
+                                // Prevent massive gaps when the last row is sparse (e.g. 3 items in a 4-col grid).
+                                // If the gap would be too large, we switch to a "fill by stretching cards a bit"
+                                // so the row reaches both edges without huge holes.
+                                const maxGap = Math.max(gapX * 1.75, cellW * 0.25);
+                                if (desiredGap > maxGap + 0.5) {
+                                    rowGapX = maxGap;
+                                    cellW = (normSectionW - ((itemsInRow - 1) * rowGapX)) / Math.max(1, itemsInRow);
+                                } else {
+                                    rowGapX = clamp(desiredGap, 0, Math.max(0, maxGap));
+                                }
+                            }
+                            const rowW = (itemsInRow * cellW) + ((itemsInRow - 1) * rowGapX);
+                            const shouldCenter =
+                                lastRowBehavior === 'center' ||
+                                (itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch'));
+                            if (shouldCenter) {
+                                rowStartX = normSectionX + (normSectionW - rowW) / 2;
+                            } else if (lastRowBehavior === 'left') {
+                                rowStartX = normSectionX;
+                            }
                         }
+
+                        let x = rowStartX + col * (cellW + rowGapX);
 
                         const y = startY + row * (normCardH + gapY);
                         placeCard(card, x, y, cellW, normCardH, cards.indexOf(card));
@@ -27646,20 +27763,66 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
 
         const isLastRow = layoutDirection !== 'vertical' && row === effectiveRows - 1;
         const itemsInRow = isLastRow ? (count % cols || cols) : cols;
-        const shouldFillRow = isLastRow && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow < cols && itemsInRow > 1;
-        const shouldCenterSingleLastItem = isLastRow && itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch');
-        const rowItemW = shouldFillRow
-            ? (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow)
-            : itemW;
+        // Last row handling:
+        // - center: keep card size, center the row
+        // - fill: keep card size, expand gaps to occupy full width (preserves label/card proportions)
+        // - stretch: stretch card width to occupy full width
+        // - left: keep card size, align left
+                        let rowItemW = itemW;
+                        let rowGapX = gapX;
+                        let rowStartX = startX;
 
-        let x = startX + (col * (rowItemW + gapX));
-        let y = startY + (row * (itemH + gapY));
+                        if (isLastRow && itemsInRow < cols) {
+                            // For a single item, "fill" should actually fill the entire row width.
+                            // Expanding gaps is impossible with 1 item, so we span the full row.
+                            if (itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch')) {
+                                rowItemW = usableW;
+                                rowGapX = 0;
+                                rowStartX = startX;
+                            }
+                            const rowWBase = (itemsInRow * rowItemW) + ((itemsInRow - 1) * rowGapX);
+                            let fillUsedStretch = false;
 
-        // Center last row if needed
-        if ((isLastRow && lastRowBehavior === 'center' && itemsInRow < cols) || shouldCenterSingleLastItem) {
-            const rowWidth = (itemsInRow * rowItemW) + ((itemsInRow - 1) * gapX);
-            x = startX + (usableW - rowWidth) / 2 + (col * (rowItemW + gapX));
+                            if (lastRowBehavior === 'stretch' && itemsInRow > 1) {
+                                // Stretch cards: preserve original behavior.
+                rowItemW = (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow);
+                rowGapX = gapX;
+            } else if (lastRowBehavior === 'fill' && itemsInRow > 1) {
+                // Fill via spacing (not resizing): keeps all cards the same size across rows.
+                const remaining = usableW - (itemsInRow * rowItemW);
+                const desiredGap = remaining / Math.max(1, (itemsInRow - 1));
+                // Clamp so sparse last rows don't end up with absurd gaps ("buracos") between cards.
+                // If the gap would be too large, fill the width by stretching cards a bit instead.
+                const maxGap = Math.max(gapX * 1.75, rowItemW * 0.25);
+                if (desiredGap > maxGap + 0.5) {
+                    rowGapX = maxGap;
+                    rowItemW = (usableW - ((itemsInRow - 1) * rowGapX)) / Math.max(1, itemsInRow);
+                    fillUsedStretch = true;
+                } else {
+                    rowGapX = clamp(desiredGap, 0, Math.max(0, maxGap));
+                }
+            }
+
+            const rowW = (itemsInRow * rowItemW) + ((itemsInRow - 1) * rowGapX);
+
+            const shouldCenter =
+                lastRowBehavior === 'center' ||
+                (itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch'));
+            if (shouldCenter) {
+                rowStartX = startX + (usableW - rowW) / 2;
+            } else if (lastRowBehavior === 'left') {
+                rowStartX = startX;
+            } else if (lastRowBehavior === 'fill' && itemsInRow > 1) {
+                // When the row width is fully used (via gaps or stretch), we can keep startX.
+                rowStartX = startX;
+            } else {
+                // Default fallback: behave like center to avoid unexpected overflow.
+                rowStartX = startX + (usableW - rowWBase) / 2;
+            }
         }
+
+        let x = rowStartX + (col * (rowItemW + rowGapX));
+        let y = startY + (row * (itemH + gapY));
 
         x = clamp(x, startX, Math.max(startX, maxSlotX - rowItemW));
         y = clamp(y, startY, Math.max(startY, maxSlotY - itemH));
