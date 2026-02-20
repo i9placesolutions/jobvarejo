@@ -47,6 +47,7 @@ const selectedFrameIds = ref<string[]>([])
 const frameAssignmentsMap = ref<Record<string, string | null>>({})
 // Importacao inteligente: por padrao, queremos remover o fundo das imagens encontradas.
 const imageBgPolicy = ref<ImageBgPolicy>('always')
+const isSubmittingImport = ref(false)
 
 const LIST_FILE_ACCEPT = 'image/*,.csv,.tsv,.xlsx,.xls,.pdf,text/plain'
 
@@ -70,23 +71,27 @@ const resolveProductIndex = (p: any) => {
 
 // Watcher to reset state when opening
 watch(() => props.modelValue, (newVal) => {
-    if (newVal) {
-        importMode.value = 'replace'
-        targetMode.value = 'zone'
-        selectedFrameIds.value = []
-        frameAssignmentsMap.value = {}
-        imageBgPolicy.value = 'always'
-        if (props.initialProducts && props.initialProducts.length > 0) {
-            // Load external products directly into review mode
-            products.value = props.initialProducts.map((p: any) => ({
-                ...p,
-                imageUrl: resolveProductImageUrl(p?.imageUrl || '')
-            }))
-            step.value = 'review'
-        } else if (products.value.length === 0) {
-            step.value = 'input'
-            textInput.value = ''
-        }
+    if (!newVal) {
+        isSubmittingImport.value = false
+        return
+    }
+
+    isSubmittingImport.value = false
+    importMode.value = 'replace'
+    targetMode.value = 'zone'
+    selectedFrameIds.value = []
+    frameAssignmentsMap.value = {}
+    imageBgPolicy.value = 'always'
+    if (props.initialProducts && props.initialProducts.length > 0) {
+        // Load external products directly into review mode
+        products.value = props.initialProducts.map((p: any) => ({
+            ...p,
+            imageUrl: resolveProductImageUrl(p?.imageUrl || '')
+        }))
+        step.value = 'review'
+    } else if (products.value.length === 0) {
+        step.value = 'input'
+        textInput.value = ''
     }
 })
 
@@ -131,6 +136,9 @@ const handleDropFile = async (event: DragEvent) => {
 }
 
 const handleImport = () => {
+    if (isSubmittingImport.value || importButtonDisabled.value) return
+    isSubmittingImport.value = true
+
     const opts: ProductImportOptions = {
         mode: importMode.value,
         labelTemplateId: selectedLabelTemplateId.value || undefined,
@@ -586,6 +594,7 @@ const hasInvalidMultiFrameAssignments = computed(() => {
 })
 
 const importButtonDisabled = computed(() => {
+    if (isSubmittingImport.value) return true
     if (isProcessingProducts.value) return true
     if (targetMode.value !== 'multi-frame') return false
     if (!canUseMultiFrame.value) return true
@@ -1554,7 +1563,7 @@ const getAssetDisplayName = (asset: any): string => {
                             class="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                             :disabled="importButtonDisabled"
                         >
-                            <Loader2 v-if="isProcessingProducts" class="w-3.5 h-3.5 mr-2 animate-spin" />
+                            <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="w-3.5 h-3.5 mr-2 animate-spin" />
                             <Check v-else class="w-3.5 h-3.5 mr-2" />
                             Importar {{ targetMode === 'multi-frame' ? multiFrameImportCount : products.length }} Produtos
                         </Button>

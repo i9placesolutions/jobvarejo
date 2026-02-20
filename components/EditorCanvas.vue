@@ -6362,6 +6362,7 @@ const showProductReviewModal = ref(false)
 const reviewProducts = ref<any[]>([])
 const productImportExistingCount = ref(0)
 const targetGridZone = ref<any>(null) // Reference to the Grid Zone that was double-clicked
+const isConfirmingProductImport = ref(false)
 
 type ImportTargetMode = 'zone' | 'multi-frame'
 type FrameAssignment = { productId: string; frameId: string | null }
@@ -20674,14 +20675,20 @@ const importProductsToMultipleFrames = async (products: any[], opts?: ProductImp
 
 // Confirm import from review modal
 const confirmProductImport = async (products: any[], opts?: ProductImportOptions) => {
-    showProductReviewModal.value = false
-
-    if (!products || products.length === 0) {
-        console.warn('[confirmProductImport] No products to import!')
+    if (isConfirmingProductImport.value) {
+        console.warn('[confirmProductImport] Import already running, ignoring duplicate trigger.')
         return
     }
 
+    isConfirmingProductImport.value = true
+    showProductReviewModal.value = false
+
     try {
+        if (!products || products.length === 0) {
+            console.warn('[confirmProductImport] No products to import!')
+            return
+        }
+
         const targetMode: ImportTargetMode = opts?.targetMode === 'multi-frame' ? 'multi-frame' : 'zone'
         if (targetMode === 'multi-frame') {
             await importProductsToMultipleFrames(products, opts)
@@ -20704,6 +20711,7 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
         if (canvas.value) {
             refreshCanvasObjects()
         }
+        isConfirmingProductImport.value = false
     }
 }
 
@@ -21343,8 +21351,13 @@ const simulateSmartGrid = async (
 
             // Get existing objects from zone (like background rect, labels)
             const existingZoneObjects = targetZone.getObjects ? targetZone.getObjects() : [];
-            const canvasObjects = canvas.value.getObjects();
-            const existingCards = canvasObjects.filter((obj: any) => (obj.isSmartObject || obj.isProductCard) && obj.parentZoneId === targetZone._customId);
+            const existingCards = (() => {
+                try {
+                    return getZoneChildren(targetZone);
+                } catch {
+                    return [];
+                }
+            })();
 
             const zoneBounds = targetZone.getBoundingRect(true);
             const zoneRect = existingZoneObjects.find((obj: any) => obj.type === 'rect' && obj.strokeDashArray);
