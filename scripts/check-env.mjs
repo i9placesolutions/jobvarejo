@@ -67,6 +67,14 @@ const hasValue = (env, key) => {
 
 const hasAny = (env, keys) => keys.some((key) => hasValue(env, key))
 
+const hasAppBaseUrlLikeValue = (env) =>
+  hasAny(env, [
+    'APP_BASE_URL',
+    'VERCEL_PROJECT_PRODUCTION_URL',
+    'VERCEL_URL',
+    'URL'
+  ])
+
 const fail = (lines) => {
   for (const line of lines) console.error(line)
   process.exit(1)
@@ -99,7 +107,6 @@ const run = () => {
 
   if (args.profile === 'full') {
     const fullRequired = [
-      'APP_BASE_URL',
       'SMTP_HOST',
       'SMTP_PORT',
       'SMTP_SECURE',
@@ -111,6 +118,10 @@ const run = () => {
       if (!hasValue(env, key)) missing.push(key)
     }
 
+    if (!hasAppBaseUrlLikeValue(env)) {
+      missing.push('APP_BASE_URL|VERCEL_PROJECT_PRODUCTION_URL|VERCEL_URL|URL')
+    }
+
     if (!hasAny(env, ['NUXT_SERPER_API_KEY', 'SERPER_API_KEY'])) {
       missing.push('NUXT_SERPER_API_KEY|SERPER_API_KEY')
     }
@@ -118,8 +129,8 @@ const run = () => {
     if (!hasAny(env, ['NUXT_SERPER_API_KEY', 'SERPER_API_KEY'])) {
       warnings.push('NUXT_SERPER_API_KEY|SERPER_API_KEY (features de busca externa)')
     }
-    if (!hasValue(env, 'APP_BASE_URL')) {
-      warnings.push('APP_BASE_URL (links corretos em e-mail de recuperação)')
+    if (!hasAppBaseUrlLikeValue(env)) {
+      warnings.push('APP_BASE_URL|VERCEL_PROJECT_PRODUCTION_URL|VERCEL_URL|URL (links corretos em e-mail de recuperação)')
     }
   }
 
