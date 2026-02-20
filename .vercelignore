@@ -10,7 +10,8 @@
 .agent/
 
 # Scripts e testes
-scripts/
+scripts/*
+!scripts/check-env.mjs
 patches/
 database/
 
