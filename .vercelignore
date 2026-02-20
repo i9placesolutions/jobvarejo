@@ -1,0 +1,38 @@
+# Arquivos de desenvolvimento
+*.md
+*.txt
+!robots.txt
+.git
+.gitignore
+.nuxt
+.output
+.vercel
+.agent/
+
+# Scripts e testes
+scripts/
+patches/
+database/
+
+# Backups
+*.bak
+*_old/
+app_old/
+
+# Documentação
+ANALISE_*.md
+*_README.md
+*_STATUS.md
+*_PORTABILITY_*.md
+DEPLOY_*.md
+VERCEL_*.md
+
+# Node modules (será reinstalado)
+node_modules/
+
+# Cache
+.cache/
+dist/
+
+# Package lock (reinstalado no build)
+package-lock.json

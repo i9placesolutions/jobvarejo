@@ -1,0 +1,59 @@
+{
+  "name": "JobVarejoPROV2",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "env:check": "node scripts/check-env.mjs --profile=core",
+    "env:check:full": "node scripts/check-env.mjs --profile=full",
+    "env:sync:github": "bash scripts/sync-github-secrets.sh",
+    "predev": "npm run env:check",
+    "prebuild": "npm run env:check:full",
+    "prepreview": "npm run env:check:full",
+    "pregenerate": "npm run env:check:full",
+    "build": "nuxt build",
+    "build:vercel": "NODE_OPTIONS='--max-old-space-size=4096' nuxt build",
+    "check:bundle": "bash scripts/check-bundle-size.sh",
+    "check:client-chunk": "bash scripts/check-client-chunk-size.sh",
+    "check": "npm run build && npm run check:client-chunk",
+    "db:set-password": "bash scripts/db/set-user-password.sh",
+    "db:smoke": "bash scripts/db/smoke-test.sh",
+    "db:sync:data": "bash scripts/db/incremental-sync-data.sh",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "typecheck": "nuxt typecheck",
+    "preview": "nuxt preview",
+    "postinstall": "patch-package && nuxt prepare"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.975.0",
+    "@aws-sdk/s3-request-presigner": "^3.975.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "fabric": "^7.1.0",
+    "lucide-vue-next": "^0.562.0",
+    "nodemailer": "^8.0.1",
+    "nuxt": "^4.2.2",
+    "openai": "^6.16.0",
+    "pdf2json": "^4.0.2",
+    "pg": "^8.18.0",
+    "pngjs": "^7.0.0",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss": "^4.1.18",
+    "vue": "^3.5.27",
+    "vue-router": "^4.6.4",
+    "webfontloader": "^1.6.28",
+    "xlsx": "^0.18.5"
+  },
+  "optionalDependencies": {
+    "@imgly/background-removal": "^1.7.0",
+    "@imgly/background-removal-node": "^1.4.5",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^7.0.10",
+    "@types/pg": "^8.16.0",
+    "@types/webfontloader": "^1.6.38",
+    "patch-package": "^8.0.0"
+  }
+}
