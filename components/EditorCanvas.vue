@@ -11807,20 +11807,27 @@ const handleKeyDown = async (e: KeyboardEvent) => {
 
     if (isCtrl && String(e.key || '').toLowerCase() === 'v') {
         let clipAny = (window as any)._clipboard;
-        const crossTabPayload = !clipAny ? readCrossTabClipboardPayload() : null;
-        if (!clipAny && crossTabPayload) {
+        const localCopiedAt = Number((clipAny as any)?.copiedAt || 0);
+        const crossTabPayload = readCrossTabClipboardPayload();
+        const crossCopiedAt = Number((crossTabPayload as any)?.copiedAt || 0);
+        const shouldHydrateFromCrossTab = !!crossTabPayload && (
+            !clipAny ||
+            (Number.isFinite(crossCopiedAt) && crossCopiedAt > localCopiedAt)
+        );
+
+        if (shouldHydrateFromCrossTab) {
             e.preventDefault();
             try {
                 const hydrated = await hydrateRuntimeClipboardFromCrossTabPayload(crossTabPayload);
                 if (hydrated) {
                     clipAny = hydrated;
                     (window as any)._clipboard = hydrated;
-                } else {
+                } else if (!clipAny) {
                     return;
                 }
             } catch (err) {
                 console.warn('[clipboard] Falha ao hidratar clipboard cross-tab', err);
-                return;
+                if (!clipAny) return;
             }
         }
         if (clipAny) {
