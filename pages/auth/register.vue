@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Sparkles, Check, Crown } from 'lucide-vue-next'
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Check, Crown } from 'lucide-vue-next'
 
 definePageMeta({
   layout: 'auth',
@@ -56,9 +56,9 @@ const passwordStrengthLabel = computed(() => {
 })
 
 const passwordStrengthColor = computed(() => {
-  if (passwordStrength.value <= 2) return 'bg-red-500'
-  if (passwordStrength.value <= 3) return 'bg-yellow-500'
-  return 'bg-green-500'
+  if (passwordStrength.value <= 2) return 'bg-[#d95c4f]'
+  if (passwordStrength.value <= 3) return 'bg-[#cf9a3e]'
+  return 'bg-[#27a06f]'
 })
 
 const handleRegister = async () => {
@@ -118,52 +118,49 @@ const handleRegister = async () => {
       <div class="glass-card">
         <!-- Logo & Header -->
         <div class="text-center mb-6">
-          <div class="inline-flex items-center justify-center w-14 h-14 bg-violet-500/20 backdrop-blur-sm rounded-xl mb-3 border border-violet-500/30 shadow-lg">
-            <Sparkles class="w-7 h-7 text-violet-400" />
-          </div>
-          <h1 class="text-xl font-bold mb-1 text-white">Crie sua conta</h1>
-          <p class="text-sm text-zinc-400">
+          <h1 class="text-2xl font-extrabold mb-1 tracking-tight text-[#2a2117]">Crie sua conta</h1>
+          <p class="text-sm text-[#756453]">
             Comece sua jornada criativa
           </p>
         </div>
 
         <!-- First User - Super Admin Banner -->
-        <div v-if="isFirstUser" class="mb-4 p-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-lg backdrop-blur-sm">
+        <div v-if="isFirstUser" class="alert-box alert-premium mb-4">
           <div class="flex items-center gap-3">
-            <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+            <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg shadow-amber-900/25">
               <Crown class="w-4 h-4 text-white" />
             </div>
             <div class="text-left">
-              <p class="text-sm font-semibold text-amber-400">Primeiro Usuário - Super Admin</p>
-              <p class="text-xs text-amber-400/70">Você será o administrador principal do sistema</p>
+              <p class="text-sm font-semibold text-[#7c3d00]">Primeiro Usuário - Super Admin</p>
+              <p class="text-xs text-[#9a5b1e]">Você será o administrador principal do sistema</p>
             </div>
           </div>
         </div>
 
         <!-- Success Message -->
-        <div v-if="successMessage" class="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg backdrop-blur-sm">
+        <div v-if="successMessage" class="alert-box alert-success mb-4">
           <div class="flex items-start gap-3">
-            <div class="flex-shrink-0 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+            <div class="flex-shrink-0 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
               <Check class="w-3 h-3 text-white" />
             </div>
-            <p class="text-sm text-green-400">{{ successMessage }}</p>
+            <p class="text-sm text-[#0f6a46] font-medium">{{ successMessage }}</p>
           </div>
         </div>
 
         <!-- Error Message -->
-        <div v-if="errorMessage" class="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg backdrop-blur-sm">
-          <p class="text-sm text-red-400 text-center">{{ errorMessage }}</p>
+        <div v-if="errorMessage" class="alert-box alert-error mb-4">
+          <p class="text-sm text-[#8f1e19] text-center font-medium">{{ errorMessage }}</p>
         </div>
 
         <!-- Register Form -->
         <form @submit.prevent="handleRegister" class="space-y-4">
           <!-- Name Input -->
           <div class="form-group">
-            <label class="form-label text-zinc-300" for="name">
+            <label class="form-label" for="name">
               Nome completo
             </label>
             <div class="relative">
-              <User class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+              <User class="input-icon absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors peer-focus:text-[#b3261e]" />
               <input
                 id="name"
                 v-model="name"
@@ -179,11 +176,11 @@ const handleRegister = async () => {
 
           <!-- Email Input -->
           <div class="form-group">
-            <label class="form-label text-zinc-300" for="email">
+            <label class="form-label" for="email">
               E-mail
             </label>
             <div class="relative">
-              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+              <Mail class="input-icon absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors peer-focus:text-[#b3261e]" />
               <input
                 id="email"
                 v-model="email"
@@ -199,11 +196,11 @@ const handleRegister = async () => {
 
           <!-- Password Input -->
           <div class="form-group">
-            <label class="form-label text-zinc-300" for="password">
+            <label class="form-label" for="password">
               Senha
             </label>
             <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+              <Lock class="input-icon absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors peer-focus:text-[#b3261e]" />
               <input
                 id="password"
                 v-model="password"
@@ -217,7 +214,7 @@ const handleRegister = async () => {
               <button
                 type="button"
                 @click="showPassword = !showPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
+                class="input-action absolute right-4 top-1/2 -translate-y-1/2 transition-colors p-1"
                 tabindex="-1"
               >
                 <EyeOff v-if="showPassword" class="w-5 h-5" />
@@ -228,8 +225,8 @@ const handleRegister = async () => {
             <!-- Password Strength Indicator -->
             <div v-if="password" class="mt-2">
               <div class="flex items-center justify-between mb-1.5">
-                <span class="text-xs text-zinc-500">Força da senha</span>
-                <span class="text-xs font-medium" :class="passwordStrength <= 2 ? 'text-red-400' : passwordStrength <= 3 ? 'text-yellow-400' : 'text-green-400'">
+                <span class="text-xs text-[#7a6756]">Força da senha</span>
+                <span class="text-xs font-semibold" :class="passwordStrength <= 2 ? 'text-[#b53a2b]' : passwordStrength <= 3 ? 'text-[#b0691b]' : 'text-[#0f6a46]'">
                   {{ passwordStrengthLabel }}
                 </span>
               </div>
@@ -238,10 +235,10 @@ const handleRegister = async () => {
                   v-for="i in 5"
                   :key="i"
                   class="h-1 flex-1 rounded-full transition-colors duration-300"
-                  :class="i <= passwordStrength ? passwordStrengthColor : 'bg-zinc-700'"
+                  :class="i <= passwordStrength ? passwordStrengthColor : 'bg-[#d5c4a8]'"
                 ></div>
               </div>
-              <p class="text-xs text-zinc-500 mt-2">
+              <p class="text-xs text-[#7a6756] mt-2">
                 Mínimo 8 caracteres. Recomendado: maiúsculas, minúsculas, números e símbolos.
               </p>
             </div>
@@ -249,11 +246,11 @@ const handleRegister = async () => {
 
           <!-- Confirm Password Input -->
           <div class="form-group">
-            <label class="form-label text-zinc-300" for="confirmPassword">
+            <label class="form-label" for="confirmPassword">
               Confirmar senha
             </label>
             <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+              <Lock class="input-icon absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors peer-focus:text-[#b3261e]" />
               <input
                 id="confirmPassword"
                 v-model="confirmPassword"
@@ -267,7 +264,7 @@ const handleRegister = async () => {
               <button
                 type="button"
                 @click="showConfirmPassword = !showConfirmPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
+                class="input-action absolute right-4 top-1/2 -translate-y-1/2 transition-colors p-1"
                 tabindex="-1"
               >
                 <EyeOff v-if="showConfirmPassword" class="w-5 h-5" />
@@ -282,13 +279,13 @@ const handleRegister = async () => {
               id="terms"
               type="checkbox"
               required
-              class="mt-1 w-4 h-4 rounded border-zinc-600 bg-[#2c2c2c] text-violet-600 focus:ring-2 focus:ring-violet-500/30"
+              class="mt-1 w-4 h-4 rounded border-[#c9b395] bg-white text-[#b3261e] focus:ring-2 focus:ring-[#b3261e]/30"
             />
-            <label for="terms" class="text-sm text-zinc-400 leading-tight">
+            <label for="terms" class="text-sm text-[#746250] leading-tight">
               Eu concordo com os
-              <NuxtLink to="/terms" class="text-violet-400 hover:underline">Termos de Uso</NuxtLink>
+              <NuxtLink to="/terms" class="text-[#9c2f24] hover:text-[#7e241b] font-semibold">Termos de Uso</NuxtLink>
               e
-              <NuxtLink to="/privacy" class="text-violet-400 hover:underline">Política de Privacidade</NuxtLink>
+              <NuxtLink to="/privacy" class="text-[#9c2f24] hover:text-[#7e241b] font-semibold">Política de Privacidade</NuxtLink>
             </label>
           </div>
 
@@ -307,11 +304,11 @@ const handleRegister = async () => {
         </form>
 
         <!-- Sign In Link -->
-        <p class="text-center text-sm text-zinc-400 mt-6">
+        <p class="text-center text-sm text-[#7c6959] mt-6">
           Já tem uma conta?
           <NuxtLink
             to="/auth/login"
-            class="text-violet-400 hover:text-violet-300 font-medium transition-colors"
+            class="text-[#9c2f24] hover:text-[#7e241b] font-semibold transition-colors"
           >
             Fazer login
           </NuxtLink>
@@ -319,9 +316,9 @@ const handleRegister = async () => {
       </div>
 
       <!-- Trust Badges -->
-      <div class="mt-4 flex items-center justify-center gap-4 text-xs text-zinc-500">
+      <div class="mt-4 flex items-center justify-center gap-4 text-xs text-[#6f5f4f]">
         <div class="flex items-center gap-1.5">
-          <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
           <span>Gratuito para começar</span>
         </div>
         <div class="flex items-center gap-1.5">
@@ -336,22 +333,43 @@ const handleRegister = async () => {
 </template>
 
 <style scoped>
-/* Glassmorphism Card */
 .glass-card {
-  background: rgba(30, 30, 30, 0.9);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1.25rem;
-  padding: 1.5rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  animation: cardEntry 0.5s ease-out;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(175deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 248, 238, 0.96) 100%);
+  backdrop-filter: blur(14px);
+  border: 1px solid #e8d8bc;
+  border-radius: 1.35rem;
+  padding: 1.65rem;
+  box-shadow: 0 24px 50px -28px rgba(58, 32, 14, 0.38), 0 16px 30px -18px rgba(179, 38, 30, 0.22);
+  animation: cardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Entry Animation */
+.glass-card::before {
+  content: '';
+  position: absolute;
+  left: 1.1rem;
+  right: 1.1rem;
+  top: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #d1831f, #b3261e 55%, #d1831f);
+  opacity: 0.78;
+}
+
+.glass-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 1.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
 @keyframes cardEntry {
   from {
     opacity: 0;
-    transform: translateY(20px) scale(0.95);
+    transform: translateY(22px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -359,76 +377,111 @@ const handleRegister = async () => {
   }
 }
 
-/* Form Group */
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.55rem;
 }
 
 .form-label {
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
+  color: #4b3d30;
+  letter-spacing: 0.01em;
 }
 
-/* Input Field */
 .input-field {
   width: 100%;
-  padding: 0.75rem 1rem;
-  background: rgba(44, 44, 44, 0.8);
-  backdrop-filter: blur(4px);
-  border: 1px solid #3f3f46;
+  padding-top: 0.78rem;
+  padding-bottom: 0.78rem;
+  background: linear-gradient(180deg, #fffcf8 0%, #fff9f1 100%);
+  border: 1px solid #dcc7a8;
   border-radius: 0.75rem;
-  color: white;
+  color: #2f2419;
   font-size: 0.875rem;
-  transition: all 0.2s;
+  transition: all 0.22s ease;
 }
 
 .input-field::placeholder {
-  color: #71717a;
+  color: #9f8b74;
 }
 
 .input-field:hover {
-  background: rgba(60, 60, 60, 0.8);
-  border-color: #52525b;
+  background: #fffdf9;
+  border-color: #cdb18a;
 }
 
 .input-field:focus {
   outline: none;
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+  border-color: #b53a2b;
+  box-shadow: 0 0 0 3px rgba(181, 58, 43, 0.2);
 }
 
 .input-field.border-red-500 {
-  border-color: #ef4444;
+  border-color: #dc4d45;
+  box-shadow: 0 0 0 2px rgba(220, 77, 69, 0.14);
 }
 
-/* Primary Button */
+.input-icon {
+  color: #9c866e;
+  pointer-events: none;
+}
+
+.input-action {
+  color: #8c7660;
+}
+
+.input-action:hover {
+  color: #493526;
+}
+
+.alert-box {
+  border-radius: 0.85rem;
+  padding: 0.8rem 0.9rem;
+}
+
+.alert-premium {
+  background: linear-gradient(180deg, rgba(255, 244, 221, 0.88) 0%, rgba(255, 236, 201, 0.72) 100%);
+  border: 1px solid rgba(208, 133, 33, 0.35);
+}
+
+.alert-success {
+  background: linear-gradient(180deg, rgba(229, 252, 242, 0.9) 0%, rgba(213, 247, 233, 0.75) 100%);
+  border: 1px solid rgba(24, 163, 105, 0.28);
+}
+
+.alert-error {
+  background: linear-gradient(180deg, rgba(255, 236, 233, 0.88) 0%, rgba(255, 232, 228, 0.7) 100%);
+  border: 1px solid rgba(220, 77, 69, 0.32);
+}
+
 .btn-primary {
   position: relative;
-  padding: 0.875rem 1.5rem;
-  background: #7c3aed;
+  padding: 0.9rem 1.5rem;
+  background: linear-gradient(135deg, #b3261e 0%, #cf4a2b 100%);
   color: white;
   border-radius: 0.75rem;
-  font-weight: 600;
-  box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
-  transition: all 0.2s;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 14px 24px -12px rgba(179, 38, 30, 0.52);
+  transition: all 0.22s ease;
   overflow: hidden;
 }
 
 .btn-primary:hover {
-  box-shadow: 0 20px 25px -5px rgba(124, 58, 237, 0.3);
+  background: linear-gradient(135deg, #9f2119 0%, #be4226 100%);
+  box-shadow: 0 20px 28px -12px rgba(159, 33, 25, 0.48);
   transform: translateY(-2px);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.2);
+  box-shadow: 0 4px 10px -3px rgba(179, 38, 30, 0.25);
 }
 
 .btn-primary:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.5), 0 0 0 4px rgba(124, 58, 237, 0.2);
+  box-shadow: 0 0 0 2px rgba(181, 58, 43, 0.35), 0 0 0 4px rgba(181, 58, 43, 0.14);
 }
 
 .btn-primary:disabled {
@@ -441,7 +494,7 @@ const handleRegister = async () => {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0.2), transparent);
+  background: linear-gradient(110deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 72%);
   border-radius: 0.75rem;
   opacity: 0;
   transition: opacity 0.3s;

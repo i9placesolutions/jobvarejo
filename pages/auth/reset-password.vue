@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Eye, EyeOff, Lock, Check, ArrowRight, Sparkles, ArrowLeft } from 'lucide-vue-next'
+import { Eye, EyeOff, Lock, Check, ArrowRight, ArrowLeft } from 'lucide-vue-next'
 
 definePageMeta({
   layout: 'auth',
@@ -103,10 +103,15 @@ const handleResetPassword = async () => {
       <div class="glass-card">
         <!-- Logo & Header -->
         <div class="text-center mb-6">
-          <div class="inline-flex items-center justify-center w-14 h-14 bg-violet-500/20 backdrop-blur-sm rounded-xl mb-3 border border-violet-500/30 shadow-lg">
-            <Lock class="w-7 h-7 text-violet-400" />
+          <div class="inline-flex items-center justify-center w-14 h-14 bg-[#fdf2d6] backdrop-blur-sm rounded-xl mb-3 border border-[#e5d4a1] shadow-lg overflow-hidden">
+            <img
+              src="/logo.png"
+              alt="Job Varejo"
+              class="w-full h-full object-cover"
+              loading="eager"
+            />
           </div>
-          <h1 class="text-xl font-bold mb-1 text-white">Redefinir senha</h1>
+          <h1 class="text-xl font-bold mb-1 text-zinc-900">Redefinir senha</h1>
           <p class="text-sm text-zinc-400">
             Crie sua nova senha abaixo
           </p>
@@ -134,11 +139,11 @@ const handleResetPassword = async () => {
         <form @submit.prevent="handleResetPassword" class="space-y-4">
           <!-- Password Input -->
           <div class="form-group">
-            <label class="form-label text-zinc-300" for="password">
+            <label class="form-label text-zinc-700" for="password">
               Nova senha
             </label>
             <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-[#b3261e]" />
               <input
                 id="password"
                 v-model="password"
@@ -152,7 +157,7 @@ const handleResetPassword = async () => {
               <button
                 type="button"
                 @click="showPassword = !showPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
+                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-900 transition-colors p-1"
                 tabindex="-1"
               >
                 <EyeOff v-if="showPassword" class="w-5 h-5" />
@@ -184,11 +189,11 @@ const handleResetPassword = async () => {
 
           <!-- Confirm Password Input -->
           <div class="form-group">
-            <label class="form-label text-zinc-300" for="confirmPassword">
+            <label class="form-label text-zinc-700" for="confirmPassword">
               Confirmar nova senha
             </label>
             <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-[#b3261e]" />
               <input
                 id="confirmPassword"
                 v-model="confirmPassword"
@@ -202,7 +207,7 @@ const handleResetPassword = async () => {
               <button
                 type="button"
                 @click="showConfirmPassword = !showConfirmPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
+                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-900 transition-colors p-1"
                 tabindex="-1"
               >
                 <EyeOff v-if="showConfirmPassword" class="w-5 h-5" />
@@ -244,7 +249,7 @@ const handleResetPassword = async () => {
         <div class="mt-6 text-center">
           <NuxtLink
             to="/auth/login"
-            class="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
+            class="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 transition-colors"
           >
             <ArrowLeft class="w-4 h-4" />
             Voltar para o login
@@ -258,12 +263,12 @@ const handleResetPassword = async () => {
 <style scoped>
 /* Glassmorphism Card */
 .glass-card {
-  background: rgba(30, 30, 30, 0.9);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid #e8dfcf;
   border-radius: 1.25rem;
   padding: 1.5rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 45px -18px rgba(17, 17, 17, 0.18);
   animation: cardEntry 0.5s ease-out;
 }
 
@@ -294,12 +299,12 @@ const handleResetPassword = async () => {
 /* Input Field */
 .input-field {
   width: 100%;
-  padding: 0.75rem 1rem;
-  background: rgba(44, 44, 44, 0.8);
-  backdrop-filter: blur(4px);
-  border: 1px solid #3f3f46;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  background: #f8f8f8;
+    border: 1px solid #dadada;
   border-radius: 0.75rem;
-  color: white;
+  color: #18181b;
   font-size: 0.875rem;
   transition: all 0.2s;
 }
@@ -309,14 +314,14 @@ const handleResetPassword = async () => {
 }
 
 .input-field:hover {
-  background: rgba(60, 60, 60, 0.8);
-  border-color: #52525b;
+  background: #ffffff;
+  border-color: #c9c9c9;
 }
 
 .input-field:focus {
   outline: none;
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+  border-color: rgba(179, 38, 30, 0.5);
+  box-shadow: 0 0 0 2px rgba(179, 38, 30, 0.16);
 }
 
 .input-field.border-red-500 {
@@ -327,28 +332,29 @@ const handleResetPassword = async () => {
 .btn-primary {
   position: relative;
   padding: 0.875rem 1.5rem;
-  background: #7c3aed;
+  background: #b3261e;
   color: white;
   border-radius: 0.75rem;
   font-weight: 600;
-  box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 10px 20px -8px rgba(179, 38, 30, 0.45);
   transition: all 0.2s;
   overflow: hidden;
 }
 
 .btn-primary:hover {
-  box-shadow: 0 20px 25px -5px rgba(124, 58, 237, 0.3);
+  background: #9f221b;
+  box-shadow: 0 20px 28px -10px rgba(179, 38, 30, 0.38);
   transform: translateY(-2px);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.2);
+  box-shadow: 0 4px 10px -3px rgba(179, 38, 30, 0.25);
 }
 
 .btn-primary:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.5), 0 0 0 4px rgba(124, 58, 237, 0.2);
+  box-shadow: 0 0 0 2px rgba(179, 38, 30, 0.45), 0 0 0 4px rgba(179, 38, 30, 0.16);
 }
 
 .btn-primary:disabled {

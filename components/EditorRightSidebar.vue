@@ -63,8 +63,8 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <aside class="w-75 border-l border-white/5 h-full bg-[#1a1a1a] text-white flex flex-col shrink-0 z-10 overflow-hidden">
-    <div class="h-10 px-2 flex items-center justify-end border-b border-white/5 shrink-0 min-w-0">
+  <aside class="editor-right-sidebar w-75 border-l h-full text-zinc-900 flex flex-col shrink-0 z-10 overflow-hidden">
+    <div class="h-11 px-2.5 flex items-center justify-end border-b border-[var(--editor-right-border)] shrink-0 min-w-0">
       <EditorTopControls
         :collaborators="collaborators"
         :current-user="currentUser"
@@ -128,3 +128,11 @@ const emit = defineEmits<{
     </div>
   </aside>
 </template>
+
+<style scoped>
+.editor-right-sidebar {
+  --editor-right-border: #e8dccb;
+  background: linear-gradient(180deg, #fffefb 0%, #fcf8f1 100%);
+  border-color: var(--editor-right-border);
+}
+</style>

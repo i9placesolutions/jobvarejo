@@ -199,11 +199,11 @@ defineExpose({
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-transparent">
+  <div class="layers-panel flex flex-col h-full bg-transparent">
     <!-- Layers Header -->
-    <div class="px-3 py-2 border-b border-white/5 shrink-0 flex items-center gap-2">
-      <Layers class="w-3 h-3 text-zinc-500" />
-      <span class="text-[10px] font-semibold uppercase text-zinc-500">Camadas</span>
+    <div class="px-3 py-2 border-b border-[var(--layers-border)] shrink-0 flex items-center gap-2">
+      <Layers class="w-3 h-3 text-[var(--layers-muted)]" />
+      <span class="text-[10px] font-semibold uppercase text-[var(--layers-muted)]">Camadas</span>
     </div>
 
     <div class="flex-1 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
@@ -211,10 +211,8 @@ defineExpose({
         v-for="item in buildLayerTree"
         :key="item.id"
         :class="[
-          'flex items-center gap-2 py-1.5 rounded-xs transition-all duration-150 group cursor-default select-none border border-transparent',
-          item.id === selectedId
-            ? 'bg-violet-500 text-white font-medium'
-            : 'hover:bg-white/5 text-zinc-400 hover:text-white'
+          'layer-row flex items-center gap-2 py-1.5 rounded-md transition-all duration-150 group cursor-default select-none border border-transparent',
+          item.id === selectedId ? 'is-active' : ''
         ]"
         :style="{ paddingLeft: `${item.depth * 12 + 6}px` }"
         @click="emit('select', item.id)"
@@ -223,7 +221,7 @@ defineExpose({
         <button
           v-if="item.isFrame"
           @click.stop="toggleExpand(item.id)"
-          class="w-4 h-4 flex items-center justify-center shrink-0 hover:bg-white/10 rounded transition-colors"
+          class="layer-expand-btn w-4 h-4 flex items-center justify-center shrink-0 rounded transition-colors"
         >
           <ChevronRight v-if="!item.isExpanded" class="w-3 h-3 transition-transform" />
           <ChevronDown v-else class="w-3 h-3 transition-transform" />
@@ -249,15 +247,15 @@ defineExpose({
             @blur="finishEditing"
             @keyup.enter="finishEditing"
             @keyup.esc="editingId = null"
-            class="w-full bg-[#1e1e1e] text-white text-[10px] px-1 py-0.5 border border-violet-500 rounded focus:outline-none"
+            class="w-full bg-[#fffdf9] text-[var(--layers-text)] text-[10px] px-1 py-0.5 border border-[var(--layers-border)] rounded focus:outline-none focus:border-[#b53a2b]"
             autoFocus
           />
           <template v-else>
-            <span :class="['text-[10px] font-bold uppercase tracking-wider truncate block transition-all', item.id === selectedId ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300']">
+            <span :class="['text-[10px] font-bold uppercase tracking-wider truncate block transition-all', item.id === selectedId ? 'text-[var(--layers-text)]' : 'text-[var(--layers-muted)] group-hover:text-[var(--layers-text)]']">
               {{ item.name }}
             </span>
             <!-- Child count badge for frames -->
-            <span v-if="item.isFrame && item.childCount !== undefined" class="text-[8px] px-1 rounded bg-white/10 text-zinc-400 shrink-0">
+            <span v-if="item.isFrame && item.childCount !== undefined" class="layer-count text-[8px] px-1 rounded shrink-0">
               {{ item.childCount }}
             </span>
           </template>
@@ -265,32 +263,32 @@ defineExpose({
 
         <!-- Actions -->
         <div :class="['flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity', item.id === selectedId ? 'opacity-100' : '']">
-          <button @click.stop="emit('toggle-visible', item.id)" class="p-1.5 hover:text-white transition-colors text-zinc-600">
+          <button @click.stop="emit('toggle-visible', item.id)" class="layer-action-btn p-1.5 transition-colors">
             <Eye v-if="item.visible" class="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />
             <EyeOff v-else class="w-3.5 h-3.5 text-red-500" />
           </button>
-          <button @click.stop="emit('toggle-lock', item.id)" class="p-1.5 hover:text-white transition-colors text-zinc-600">
+          <button @click.stop="emit('toggle-lock', item.id)" class="layer-action-btn p-1.5 transition-colors">
             <Unlock v-if="!item.locked" class="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />
             <Lock v-else class="w-3.5 h-3.5 text-amber-500" />
           </button>
-          <button @click.stop="emit('delete', item.id)" class="p-1.5 hover:text-red-500 transition-colors text-zinc-600">
+          <button @click.stop="emit('delete', item.id)" class="layer-action-btn is-danger p-1.5 transition-colors">
             <Trash2 class="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />
           </button>
         </div>
       </div>
 
-      <div v-if="buildLayerTree.length === 0" class="flex flex-col items-center justify-center py-20 opacity-20">
-        <Layers class="w-10 h-10 mb-3 text-zinc-600" />
-        <p class="text-[9px] uppercase tracking-[0.3em] font-black text-zinc-600">Nenhuma Camada</p>
+      <div v-if="buildLayerTree.length === 0" class="flex flex-col items-center justify-center py-20 opacity-60">
+        <Layers class="w-10 h-10 mb-3 text-[var(--layers-muted)]" />
+        <p class="text-[9px] uppercase tracking-[0.3em] font-black text-[var(--layers-muted)]">Nenhuma Camada</p>
       </div>
     </div>
 
     <!-- Move Actions -->
-    <div class="px-3 py-4 border-t border-zinc-800 flex items-center gap-2 bg-[#09090b]">
-      <button @click="selectedId && emit('move-up', selectedId)" :disabled="!selectedId" class="flex-1 h-8 flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-[0.15em] border border-zinc-700 rounded bg-zinc-800 text-white hover:bg-zinc-700 disabled:opacity-30 transition-all active:scale-95 shadow-sm">
+    <div class="px-3 py-3 border-t border-[var(--layers-border)] flex items-center gap-2 bg-[var(--layers-surface-soft)]">
+      <button @click="selectedId && emit('move-up', selectedId)" :disabled="!selectedId" class="layer-move-btn flex-1 h-8 flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-[0.15em] rounded disabled:opacity-35 transition-all active:scale-95 shadow-sm">
         <ArrowUp class="w-3 h-3" /> Subir
       </button>
-      <button @click="selectedId && emit('move-down', selectedId)" :disabled="!selectedId" class="flex-1 h-8 flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-[0.15em] border border-zinc-700 rounded bg-zinc-800 text-white hover:bg-zinc-700 disabled:opacity-30 transition-all active:scale-95 shadow-sm">
+      <button @click="selectedId && emit('move-down', selectedId)" :disabled="!selectedId" class="layer-move-btn flex-1 h-8 flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-[0.15em] rounded disabled:opacity-35 transition-all active:scale-95 shadow-sm">
         <ArrowDown class="w-3 h-3" /> Descer
       </button>
     </div>
@@ -298,17 +296,77 @@ defineExpose({
 </template>
 
 <style scoped>
+.layers-panel {
+  --layers-text: #2f2419;
+  --layers-muted: #7f6e5d;
+  --layers-border: #e8dccb;
+  --layers-surface-soft: #fcf8f1;
+}
+
+.layer-row {
+  color: var(--layers-muted);
+}
+
+.layer-row:hover {
+  color: var(--layers-text);
+  background: rgba(179, 38, 30, 0.08);
+}
+
+.layer-row.is-active {
+  color: var(--layers-text);
+  background: #fde9e4;
+  border-color: rgba(179, 38, 30, 0.16);
+}
+
+.layer-expand-btn:hover {
+  background: rgba(179, 38, 30, 0.12);
+}
+
+.layer-count {
+  color: #7f6e5d;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(232, 220, 203, 0.85);
+}
+
+.layer-row.is-active .layer-count {
+  color: #7a1d19;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.layer-action-btn {
+  color: #9b8a78;
+}
+
+.layer-action-btn:hover {
+  color: var(--layers-text);
+}
+
+.layer-action-btn.is-danger:hover {
+  color: #b3261e;
+}
+
+.layer-move-btn {
+  color: #5f4e3f;
+  border: 1px solid var(--layers-border);
+  background: linear-gradient(180deg, #fffefb 0%, #fff8ee 100%);
+}
+
+.layer-move-btn:hover:not(:disabled) {
+  border-color: #d8bea0;
+  background: #fff6e8;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 8px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(239, 229, 215, 0.45);
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 10px;
+  background: #cfbea7;
+  border-radius: 999px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: #bca488;
 }
 </style>

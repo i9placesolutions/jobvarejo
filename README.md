@@ -65,6 +65,8 @@ Para recuperacao de senha em producao:
 - `SMTP_USER`
 - `SMTP_PASS`
 - `SMTP_FROM`
+- opcionais de branding do e-mail: `EMAIL_BRAND_NAME`, `EMAIL_LOGO_URL`, `EMAIL_SUPPORT_EMAIL`, `EMAIL_SIGNATURE_NAME`
+- se `EMAIL_LOGO_URL` estiver vazio e `APP_BASE_URL` definido, a logo usada no e-mail sera `APP_BASE_URL/logo.png`
 
 Para busca externa de imagens de produto:
 - `NUXT_SERPER_API_KEY` (ou `SERPER_API_KEY`)

@@ -284,12 +284,12 @@ const insertElement = (item: ElementItem) => {
 </script>
 
 <template>
-    <div class="flex flex-col h-full text-white">
+    <div class="elements-panel flex flex-col h-full">
 
         <!-- ── Resultados de busca ────────────────────────────────── -->
         <template v-if="filteredItems">
             <div class="px-3 pt-2 pb-1 shrink-0">
-                <span class="text-[10px] font-semibold uppercase text-zinc-500">
+                <span class="text-[10px] font-semibold uppercase text-[var(--elements-muted)]">
                     {{ filteredItems.length }} resultado{{ filteredItems.length !== 1 ? 's' : '' }}
                 </span>
             </div>
@@ -299,29 +299,29 @@ const insertElement = (item: ElementItem) => {
                         v-for="item in filteredItems"
                         :key="item.id"
                         @click="insertElement(item)"
-                        class="group flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-white/10 active:bg-white/15 transition-all cursor-pointer"
+                        class="element-item group flex flex-col items-center gap-1 p-2 rounded-lg transition-all cursor-pointer"
                         :title="item.name"
                     >
-                        <div class="w-full aspect-square flex items-center justify-center bg-white/5 rounded-lg group-hover:bg-white/10 transition-colors">
-                            <svg viewBox="0 0 48 48" class="w-8 h-8 text-zinc-300 group-hover:text-white transition-colors" v-html="item.preview"></svg>
+                        <div class="element-preview w-full aspect-square flex items-center justify-center rounded-lg transition-colors">
+                            <svg viewBox="0 0 48 48" class="w-8 h-8 text-[var(--elements-muted)] group-hover:text-[var(--elements-text)] transition-colors" v-html="item.preview"></svg>
                         </div>
-                        <span class="text-[9px] text-zinc-500 group-hover:text-zinc-300 truncate w-full text-center leading-tight">{{ item.name }}</span>
+                        <span class="text-[9px] text-[var(--elements-muted)] group-hover:text-[var(--elements-text)] truncate w-full text-center leading-tight">{{ item.name }}</span>
                     </button>
                 </div>
             </div>
             <div v-else class="flex-1 flex items-center justify-center px-6 text-center">
-                <span class="text-xs text-zinc-500">Nenhum elemento encontrado para "{{ effectiveSearch }}"</span>
+                <span class="text-xs text-[var(--elements-muted)]">Nenhum elemento encontrado para "{{ effectiveSearch }}"</span>
             </div>
         </template>
 
         <!-- ── Categoria expandida ────────────────────────────────── -->
         <template v-else-if="activeCategoryObj">
-            <div class="px-2 pt-2 pb-1 flex items-center gap-2 shrink-0 border-b border-white/5">
-                <button @click="goBack" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors cursor-pointer">
-                    <ChevronLeft class="w-4 h-4 text-zinc-400" />
+            <div class="px-2 pt-2 pb-1 flex items-center gap-2 shrink-0 border-b border-[var(--elements-border)]">
+                <button @click="goBack" class="elements-back-btn w-7 h-7 flex items-center justify-center rounded-lg transition-colors cursor-pointer">
+                    <ChevronLeft class="w-4 h-4 text-[var(--elements-muted)]" />
                 </button>
-                <span class="text-xs font-semibold text-white">{{ activeCategoryObj.name }}</span>
-                <span class="text-[10px] text-zinc-500 ml-auto pr-1">{{ activeCategoryObj.items.length }}</span>
+                <span class="text-xs font-semibold text-[var(--elements-text)]">{{ activeCategoryObj.name }}</span>
+                <span class="text-[10px] text-[var(--elements-muted)] ml-auto pr-1">{{ activeCategoryObj.items.length }}</span>
             </div>
             <div class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-4">
                 <div class="grid grid-cols-3 gap-1.5 mt-2">
@@ -329,13 +329,13 @@ const insertElement = (item: ElementItem) => {
                         v-for="item in activeCategoryObj.items"
                         :key="item.id"
                         @click="insertElement(item)"
-                        class="group flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-white/10 active:bg-white/15 transition-all cursor-pointer"
+                        class="element-item group flex flex-col items-center gap-1 p-2 rounded-lg transition-all cursor-pointer"
                         :title="item.name"
                     >
-                        <div class="w-full aspect-square flex items-center justify-center bg-white/5 rounded-lg group-hover:bg-white/10 transition-colors">
-                            <svg viewBox="0 0 48 48" class="w-8 h-8 text-zinc-300 group-hover:text-white transition-colors" v-html="item.preview"></svg>
+                        <div class="element-preview w-full aspect-square flex items-center justify-center rounded-lg transition-colors">
+                            <svg viewBox="0 0 48 48" class="w-8 h-8 text-[var(--elements-muted)] group-hover:text-[var(--elements-text)] transition-colors" v-html="item.preview"></svg>
                         </div>
-                        <span class="text-[9px] text-zinc-500 group-hover:text-zinc-300 truncate w-full text-center leading-tight">{{ item.name }}</span>
+                        <span class="text-[9px] text-[var(--elements-muted)] group-hover:text-[var(--elements-text)] truncate w-full text-center leading-tight">{{ item.name }}</span>
                     </button>
                 </div>
             </div>
@@ -345,51 +345,127 @@ const insertElement = (item: ElementItem) => {
         <template v-else>
             <!-- Quick shapes -->
             <div class="px-3 pt-3 pb-2 shrink-0">
-                <span class="text-[10px] font-semibold uppercase text-zinc-500 mb-2 block">Formas rápidas</span>
+                <span class="text-[10px] font-semibold uppercase text-[var(--elements-muted)] mb-2 block">Formas rápidas</span>
                 <div class="flex gap-1 flex-wrap">
                     <button
                         v-for="item in basicShapes.slice(0, 8)"
                         :key="item.id"
                         @click="insertElement(item)"
-                        class="w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/15 active:bg-white/20 transition-all cursor-pointer group"
+                        class="quick-shape-btn w-9 h-9 flex items-center justify-center rounded-lg transition-all cursor-pointer group"
                         :title="item.name"
                     >
-                        <svg viewBox="0 0 48 48" class="w-5 h-5 text-zinc-400 group-hover:text-white transition-colors" v-html="item.preview"></svg>
+                        <svg viewBox="0 0 48 48" class="w-5 h-5 text-[var(--elements-muted)] group-hover:text-[var(--elements-text)] transition-colors" v-html="item.preview"></svg>
                     </button>
                 </div>
             </div>
 
-            <div class="border-b border-white/5 mx-3"></div>
+            <div class="border-b border-[var(--elements-border)] mx-3"></div>
 
             <!-- Category list -->
             <div class="flex-1 overflow-y-auto custom-scrollbar px-2 py-2">
-                <span class="text-[10px] font-semibold uppercase text-zinc-500 px-1 mb-1.5 block">Categorias</span>
+                <span class="text-[10px] font-semibold uppercase text-[var(--elements-muted)] px-1 mb-1.5 block">Categorias</span>
                 <div class="flex flex-col gap-0.5">
                     <button
                         v-for="cat in categories"
                         :key="cat.id"
                         @click="openCategory(cat.id)"
-                        class="flex items-center gap-3 px-2.5 py-2.5 rounded-lg hover:bg-white/8 active:bg-white/12 transition-all cursor-pointer group"
+                        class="category-entry flex items-center gap-3 px-2.5 py-2.5 rounded-lg transition-all cursor-pointer group"
                     >
-                        <div class="w-10 h-10 rounded-lg bg-white/5 group-hover:bg-white/10 flex items-center justify-center transition-colors shrink-0 overflow-hidden">
+                        <div class="category-entry-icon w-10 h-10 rounded-lg flex items-center justify-center transition-colors shrink-0 overflow-hidden">
                             <div class="grid grid-cols-2 gap-0.5 p-1.5">
                                 <svg
                                     v-for="(item, i) in cat.items.slice(0, 4)"
                                     :key="i"
                                     viewBox="0 0 48 48"
-                                    class="w-3 h-3 text-zinc-400 group-hover:text-zinc-200 transition-colors"
+                                    class="w-3 h-3 text-[var(--elements-muted)] group-hover:text-[var(--elements-text)] transition-colors"
                                     v-html="item.preview"
                                 ></svg>
                             </div>
                         </div>
                         <div class="flex-1 min-w-0 text-left">
-                            <span class="text-xs font-medium text-zinc-200 group-hover:text-white block">{{ cat.name }}</span>
-                            <span class="text-[10px] text-zinc-500">{{ cat.items.length }} elementos</span>
+                            <span class="text-xs font-medium text-[var(--elements-text)] block">{{ cat.name }}</span>
+                            <span class="text-[10px] text-[var(--elements-muted)]">{{ cat.items.length }} elementos</span>
                         </div>
-                        <ArrowRight class="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />
+                        <ArrowRight class="w-3.5 h-3.5 text-[var(--elements-muted)] group-hover:text-[var(--elements-text)] transition-colors shrink-0" />
                     </button>
                 </div>
             </div>
         </template>
     </div>
 </template>
+
+<style scoped>
+.elements-panel {
+    --elements-text: #2f2419;
+    --elements-muted: #7f6d5c;
+    --elements-border: #e8dccb;
+    color: var(--elements-text);
+}
+
+.element-item:hover {
+    background: rgba(179, 38, 30, 0.08);
+}
+
+.element-item:active {
+    background: rgba(179, 38, 30, 0.14);
+}
+
+.element-preview {
+    background: rgba(255, 255, 255, 0.76);
+    border: 1px solid rgba(232, 220, 203, 0.9);
+}
+
+.element-item:hover .element-preview {
+    background: #fffefb;
+    border-color: #d7bb97;
+}
+
+.elements-back-btn:hover {
+    background: rgba(179, 38, 30, 0.1);
+}
+
+.quick-shape-btn {
+    background: rgba(255, 255, 255, 0.76);
+    border: 1px solid rgba(232, 220, 203, 0.9);
+}
+
+.quick-shape-btn:hover {
+    background: #fffefb;
+    border-color: #d7bb97;
+}
+
+.quick-shape-btn:active {
+    background: #fff4e5;
+}
+
+.category-entry {
+    border: 1px solid transparent;
+}
+
+.category-entry:hover {
+    background: rgba(179, 38, 30, 0.08);
+    border-color: rgba(179, 38, 30, 0.15);
+}
+
+.category-entry-icon {
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(232, 220, 203, 0.9);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(239, 229, 215, 0.45);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cfbea7;
+    border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #bca488;
+}
+</style>

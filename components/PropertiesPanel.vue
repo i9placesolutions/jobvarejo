@@ -496,7 +496,7 @@ const handlePropertyInput = (prop: string, value: any) => {
 
 // Helper functions for page color/opacity
 const getPageColorHex = () => {
-  const bg = props.pageSettings.backgroundColor || '#1e1e1e'
+  const bg = props.pageSettings.backgroundColor || '#e9edf2'
   if (bg.startsWith('rgba') || bg.startsWith('rgb')) {
     const match = bg.match(/rgba?\(([^)]+)\)/)
     if (match) {
@@ -512,7 +512,7 @@ const getPageColorHex = () => {
 }
 
 const getPageOpacity = () => {
-  const bg = props.pageSettings.backgroundColor || '#1e1e1e'
+  const bg = props.pageSettings.backgroundColor || '#e9edf2'
   if (bg.startsWith('rgba')) {
     const match = bg.match(/rgba\(([^)]+)\)/)
     if (match) {
@@ -624,15 +624,15 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 </script>
 
 <template>
-  <div v-if="selectedObject" class="h-full bg-[#1a1a1a] text-white min-h-0 flex flex-col font-sans select-none overflow-hidden">
+  <div v-if="selectedObject" class="h-full bg-white text-zinc-900 min-h-0 flex flex-col font-sans select-none overflow-hidden">
 
     <!-- Abas (Design / Protótipo) -->
-    <div class="flex items-center gap-1 px-2 py-1.5 border-b border-white/5 bg-[#1a1a1a] shrink-0">
-      <div @click="emit('change-mode', 'design')" class="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide cursor-pointer transition-all" :class="activeTab === 'design' ? 'bg-violet-500/15 text-violet-400' : 'text-zinc-500 hover:text-zinc-400'">
+    <div class="flex items-center gap-1 px-2 py-1.5 border-b border-[#e7e7e7] bg-white shrink-0">
+      <div @click="emit('change-mode', 'design')" class="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide cursor-pointer transition-all" :class="activeTab === 'design' ? 'bg-[#fde9e7] text-[#b3261e]' : 'text-zinc-500 hover:text-zinc-400'">
         <Palette class="w-3 h-3" />
         <span>Design</span>
       </div>
-      <div @click="emit('change-mode', 'prototype')" class="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide cursor-pointer transition-all" :class="activeTab === 'prototype' ? 'bg-violet-500/15 text-violet-400' : 'text-zinc-500 hover:text-zinc-400'">
+      <div @click="emit('change-mode', 'prototype')" class="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide cursor-pointer transition-all" :class="activeTab === 'prototype' ? 'bg-[#fde9e7] text-[#b3261e]' : 'text-zinc-500 hover:text-zinc-400'">
         <MousePointer2 class="w-3 h-3" />
         <span>Protótipo</span>
       </div>
@@ -645,7 +645,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       <div v-if="activeTab === 'prototype'" class="p-3 space-y-3">
         <!-- Empty state for prototype -->
         <div v-if="!getVal('interactionDestination', '')" class="text-center py-8">
-          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-800/50 flex items-center justify-center">
+          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-200/50 flex items-center justify-center">
             <MousePointer2 class="w-5 h-5 text-zinc-600" />
           </div>
           <p class="text-xs text-zinc-500 mb-1">Sem interações</p>
@@ -656,22 +656,22 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
         <div v-else class="pp-interaction-card">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
-              <div class="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
-                <MousePointer2 class="w-3.5 h-3.5 text-violet-400" />
+              <div class="w-7 h-7 rounded-lg bg-[#fde9e7] flex items-center justify-center">
+                <MousePointer2 class="w-3.5 h-3.5 text-[#b3261e]" />
               </div>
               <div>
-                <p class="text-xs font-medium text-white">Ao clicar</p>
+                <p class="text-xs font-medium text-zinc-900">Ao clicar</p>
                 <p class="text-[10px] text-zinc-500">Ação de navegação</p>
               </div>
             </div>
-            <button @click="$emit('update-property', 'interactionDestination', '')" class="w-6 h-6 rounded hover:bg-white/10 flex items-center justify-center text-zinc-500 hover:text-red-400 transition-colors" title="Remover interação">
+            <button @click="$emit('update-property', 'interactionDestination', '')" class="w-6 h-6 rounded hover:bg-[#ececec] flex items-center justify-center text-zinc-500 hover:text-red-400 transition-colors" title="Remover interação">
               <Trash2 class="w-3 h-3" />
             </button>
           </div>
 
           <div class="space-y-2">
             <label class="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Navegar para</label>
-            <select :value="getVal('interactionDestination', '')" @change="e => $emit('update-property', 'interactionDestination', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-xs text-white rounded-lg border border-zinc-800 h-9 px-3 focus:outline-none focus:border-violet-500/50">
+            <select :value="getVal('interactionDestination', '')" @change="e => $emit('update-property', 'interactionDestination', (e.target as any).value)" class="w-full bg-[#f7f7f7] text-xs text-zinc-900 rounded-lg border border-zinc-800 h-9 px-3 focus:outline-none focus:border-[#b3261e]/55">
               <option value="">Selecionar página...</option>
               <option v-for="page in targetPages" :key="page.id" :value="page.id">{{ page.name }}</option>
             </select>
@@ -688,7 +688,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             <ChevronsDown class="w-4 h-4 text-zinc-600 transition-transform" :class="{ '-rotate-90': isSectionCollapsed('prototype-info') }" />
           </button>
           <div v-show="!isSectionCollapsed('prototype-info')" class="mt-2 text-[10px] text-zinc-500 leading-relaxed">
-            No modo <span class="text-violet-400">Apresentar</span>, clique em elementos com interações para navegar entre páginas.
+            No modo <span class="text-[#b3261e]">Apresentar</span>, clique em elementos com interações para navegar entre páginas.
           </div>
         </div>
       </div>
@@ -697,11 +697,11 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       <div v-else class="pp-design-panel">
 
       <!-- Ações Rápidas (Visibilidade, Bloquear, Excluir) -->
-      <div class="flex items-center justify-between px-2 py-1 border-b border-white/5 bg-[#1e1e1e]/50">
+      <div class="flex items-center justify-between px-2 py-1 border-b border-[#e7e7e7] bg-[#f7f7f7]/50">
         <div class="flex items-center gap-1">
           <button
             class="w-6 h-6 rounded flex items-center justify-center transition-all"
-            :class="getVal('visible', true) ? 'text-violet-400 bg-violet-500/10' : 'text-zinc-500 hover:text-white hover:bg-white/10'"
+            :class="getVal('visible', true) ? 'text-[#b3261e] bg-[#fde9e7]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-[#ececec]'"
             @click="$emit('update-property', 'visible', !getVal('visible', true))"
             :title="getVal('visible', true) ? 'Ocultar elemento' : 'Mostrar elemento'"
           >
@@ -709,7 +709,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </button>
           <button
             class="w-6 h-6 rounded flex items-center justify-center transition-all"
-            :class="isLocked ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-white hover:bg-white/10'"
+            :class="isLocked ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-zinc-900 hover:bg-[#ececec]'"
             @click="$emit('update-property', 'lockMovement', !isLocked)"
             :title="isLocked ? 'Desbloquear movimento' : 'Bloquear movimento'"
           >
@@ -718,7 +718,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             </svg>
           </button>
           <button
-            class="w-6 h-6 rounded flex items-center justify-center transition-all text-zinc-500 hover:text-white hover:bg-white/10"
+            class="w-6 h-6 rounded flex items-center justify-center transition-all text-zinc-500 hover:text-zinc-900 hover:bg-[#ececec]"
             @click="$emit('action', 'duplicate')"
             title="Duplicar"
           >
@@ -735,79 +735,79 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- Alinhamento e Distribuição -->
-      <div class="px-2 py-1 border-b border-white/5 flex flex-wrap gap-1 justify-between text-zinc-400">
+      <div class="px-2 py-1 border-b border-[#e7e7e7] flex flex-wrap gap-1 justify-between text-zinc-400">
           <div class="flex gap-0.5">
-            <button @click="$emit('update-property', 'alignment', 'left')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar à esquerda"><AlignLeft class="w-3 h-3" /></button>
-            <button @click="$emit('update-property', 'alignment', 'center')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Centralizar"><AlignCenter class="w-3 h-3" /></button>
-            <button @click="$emit('update-property', 'alignment', 'right')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar à direita"><AlignRight class="w-3 h-3" /></button>
+            <button @click="$emit('update-property', 'alignment', 'left')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Alinhar à esquerda"><AlignLeft class="w-3 h-3" /></button>
+            <button @click="$emit('update-property', 'alignment', 'center')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Centralizar"><AlignCenter class="w-3 h-3" /></button>
+            <button @click="$emit('update-property', 'alignment', 'right')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Alinhar à direita"><AlignRight class="w-3 h-3" /></button>
           </div>
           
-          <div class="w-px h-3 bg-white/10 my-auto"></div>
+          <div class="w-px h-3 bg-[#ececec] my-auto"></div>
 
           <div class="flex gap-0.5">
-             <button @click="$emit('action', 'center-h')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Centralizar horizontalmente"><AlignHorizontalJustifyCenter class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'center-v')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Centralizar verticalmente"><AlignVerticalJustifyCenter class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'center-both')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Centralizar (ambos)"><Target class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'center-h')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Centralizar horizontalmente"><AlignHorizontalJustifyCenter class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'center-v')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Centralizar verticalmente"><AlignVerticalJustifyCenter class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'center-both')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Centralizar (ambos)"><Target class="w-3 h-3" /></button>
           </div>
 
-          <div class="w-px h-3 bg-white/10 my-auto"></div>
+          <div class="w-px h-3 bg-[#ececec] my-auto"></div>
 
           <div class="flex gap-0.5">
-             <button @click="$emit('action', 'align-top')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar ao topo"><ChevronsUp class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'align-middle')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar ao meio"><Minus class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'align-bottom')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar à base"><ChevronsDown class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'align-top')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Alinhar ao topo"><ChevronsUp class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'align-middle')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Alinhar ao meio"><Minus class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'align-bottom')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Alinhar à base"><ChevronsDown class="w-3 h-3" /></button>
           </div>
 
-          <div class="w-px h-3 bg-white/10 my-auto"></div>
+          <div class="w-px h-3 bg-[#ececec] my-auto"></div>
 
           <div class="flex gap-0.5">
-             <button @click="$emit('action', 'distribute-h')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Distribuir horizontalmente"><ArrowRightFromLine class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'distribute-v')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Distribuir verticalmente"><ArrowDownFromLine class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'distribute-h')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Distribuir horizontalmente"><ArrowRightFromLine class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'distribute-v')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Distribuir verticalmente"><ArrowDownFromLine class="w-3 h-3" /></button>
           </div>
 
-          <div class="w-px h-3 bg-white/10 my-auto"></div>
+          <div class="w-px h-3 bg-[#ececec] my-auto"></div>
 
           <div class="flex gap-0.5">
-            <button @click="$emit('action', 'flip-h')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Espelhar horizontal"><FlipHorizontal class="w-3 h-3" /></button>
-            <button @click="$emit('action', 'flip-v')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Espelhar vertical"><FlipVertical class="w-3 h-3" /></button>
+            <button @click="$emit('action', 'flip-h')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Espelhar horizontal"><FlipHorizontal class="w-3 h-3" /></button>
+            <button @click="$emit('action', 'flip-v')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Espelhar vertical"><FlipVertical class="w-3 h-3" /></button>
           </div>
 
-          <div v-if="isGroup" class="w-px h-3 bg-white/10 my-auto"></div>
+          <div v-if="isGroup" class="w-px h-3 bg-[#ececec] my-auto"></div>
           
           <div v-if="isGroup" class="flex gap-0.5">
-             <button v-if="selectedObject.type === 'activeSelection'" @click="$emit('action', 'group')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Agrupar"><Group class="w-3 h-3" /></button>
-             <button v-if="selectedObject.type === 'group'" @click="$emit('action', 'ungroup')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Desagrupar"><Ungroup class="w-3 h-3" /></button>
+             <button v-if="selectedObject.type === 'activeSelection'" @click="$emit('action', 'group')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Agrupar"><Group class="w-3 h-3" /></button>
+             <button v-if="selectedObject.type === 'group'" @click="$emit('action', 'ungroup')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Desagrupar"><Ungroup class="w-3 h-3" /></button>
           </div>
 
           <!-- Operações Booleanas -->
-          <div v-if="isMultiSelect" class="w-px h-3 bg-white/10 my-auto"></div>
+          <div v-if="isMultiSelect" class="w-px h-3 bg-[#ececec] my-auto"></div>
           <div v-if="isMultiSelect" class="flex gap-0.5">
-             <button @click="$emit('action', 'union')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Unir seleção"><Combine class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'subtract')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Subtrair seleção"><Scissors class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'union')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Unir seleção"><Combine class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'subtract')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Subtrair seleção"><Scissors class="w-3 h-3" /></button>
           </div>
 
           <!-- Máscara -->
-          <div v-if="canMask" class="w-px h-3 bg-white/10 my-auto"></div>
+          <div v-if="canMask" class="w-px h-3 bg-[#ececec] my-auto"></div>
           <div v-if="canMask" class="flex gap-0.5">
-             <button @click="$emit('action', 'toggle-mask')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" :class="selectedObject.isMask ? 'text-violet-400 bg-violet-500/10' : ''" title="Usar como máscara"><Scan class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'toggle-mask')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" :class="selectedObject.isMask ? 'text-[#b3261e] bg-[#fde9e7]' : ''" title="Usar como máscara"><Scan class="w-3 h-3" /></button>
           </div>
 
           <!-- Recortar -->
-          <div v-if="canCrop" class="w-px h-3 bg-white/10 my-auto"></div>
+          <div v-if="canCrop" class="w-px h-3 bg-[#ececec] my-auto"></div>
           <div v-if="canCrop" class="flex gap-0.5">
-             <button @click="$emit('action', 'activate-crop')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Ativar modo de recorte"><Crop class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'activate-crop')" class="hover:text-zinc-900 p-1 rounded hover:bg-[#f4f4f4] transition-colors" title="Ativar modo de recorte"><Crop class="w-3 h-3" /></button>
           </div>
 
           <!-- Espaçamento do Layout -->
-          <div v-if="isGroup" class="w-px h-3 bg-white/10 my-auto"></div>
-          <div v-if="isGroup" class="flex items-center gap-0.5 bg-[#2c2c2c] rounded px-1 h-5" title="Espaçamento entre itens">
+          <div v-if="isGroup" class="w-px h-3 bg-[#ececec] my-auto"></div>
+          <div v-if="isGroup" class="flex items-center gap-0.5 bg-[#f2f2f2] rounded px-1 h-5" title="Espaçamento entre itens">
               <GripVertical class="w-2.5 h-2.5 text-zinc-500" />
-              <input type="number" :value="selectedObject.gap || 0" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="bg-transparent w-6 text-[9px] text-white focus:outline-none text-center" />
+              <input type="number" :value="selectedObject.gap || 0" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="bg-transparent w-6 text-[9px] text-zinc-900 focus:outline-none text-center" />
           </div>
       </div>
 
       <!-- Posição e Tamanho -->
-      <div class="border-b border-white/5">
+      <div class="border-b border-[#e7e7e7]">
         <button
           class="pp-section-header"
           :class="{ 'pp-section-header--collapsed': isSectionCollapsed('transform') }"
@@ -851,7 +851,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="pp-number-input" />
             </div>
             <div class="flex-1 flex items-center gap-1 min-w-0">
-              <input type="range" min="0" max="1" step="0.05" :value="Number(getVal('opacity', 1))" @input="$emit('update-property', 'opacity', Number(($event.target as any).value))" class="flex-1 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500 min-w-0" title="Opacidade" />
+              <input type="range" min="0" max="1" step="0.05" :value="Number(getVal('opacity', 1))" @input="$emit('update-property', 'opacity', Number(($event.target as any).value))" class="flex-1 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#b3261e] min-w-0" title="Opacidade" />
               <span class="text-[9px] text-zinc-500 w-7 text-right shrink-0">{{ Math.round(Number(getVal('opacity', 1)) * 100) }}%</span>
             </div>
           </div>
@@ -859,7 +859,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- Seção Vetor -->
-      <div v-if="isVectorPath" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <div v-if="isVectorPath" class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5">
           <div class="flex items-center gap-1.5">
               <svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2L2 7l10 5 10-5-10-5z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 17l10 5 10-5" /></svg>
               <span class="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Vetor</span>
@@ -869,13 +869,13 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <div class="space-y-1">
               <label class="text-[9px] text-zinc-500 font-medium">Alinhamento</label>
               <div class="flex items-center gap-0.5 flex-wrap">
-                  <button @click="$emit('update-property', 'textAlign', 'left')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar à esquerda"><AlignLeft class="w-3 h-3" /></button>
-                  <button @click="$emit('update-property', 'textAlign', 'center')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Centralizar"><AlignCenter class="w-3 h-3" /></button>
-                  <button @click="$emit('update-property', 'textAlign', 'right')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar à direita"><AlignRight class="w-3 h-3" /></button>
-                  <button @click="$emit('action', 'align-top')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar ao topo"><ChevronsUp class="w-3 h-3" /></button>
-                  <button @click="$emit('action', 'align-middle')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar ao meio"><Minus class="w-3 h-3" /></button>
-                  <button @click="$emit('action', 'align-bottom')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar à base"><ChevronsDown class="w-3 h-3" /></button>
-                  <button @click="$emit('action', 'distribute-h')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Distribuir horizontalmente"><ArrowRightFromLine class="w-3 h-3" /></button>
+                  <button @click="$emit('update-property', 'textAlign', 'left')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Alinhar à esquerda"><AlignLeft class="w-3 h-3" /></button>
+                  <button @click="$emit('update-property', 'textAlign', 'center')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Centralizar"><AlignCenter class="w-3 h-3" /></button>
+                  <button @click="$emit('update-property', 'textAlign', 'right')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Alinhar à direita"><AlignRight class="w-3 h-3" /></button>
+                  <button @click="$emit('action', 'align-top')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Alinhar ao topo"><ChevronsUp class="w-3 h-3" /></button>
+                  <button @click="$emit('action', 'align-middle')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Alinhar ao meio"><Minus class="w-3 h-3" /></button>
+                  <button @click="$emit('action', 'align-bottom')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Alinhar à base"><ChevronsDown class="w-3 h-3" /></button>
+                  <button @click="$emit('action', 'distribute-h')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Distribuir horizontalmente"><ArrowRightFromLine class="w-3 h-3" /></button>
               </div>
           </div>
           
@@ -885,11 +885,11 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <div class="grid grid-cols-2 gap-1.5">
                   <div class="flex items-center gap-1">
                       <span class="text-[9px] text-zinc-500">X</span>
-                      <input type="number" :value="Math.round(getVal('left', 0))" @input="e => $emit('update-property', 'left', Number((e.target as any).value))" class="flex-1 bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" />
+                      <input type="number" :value="Math.round(getVal('left', 0))" @input="e => $emit('update-property', 'left', Number((e.target as any).value))" class="flex-1 bg-[#f7f7f7] text-[11px] text-zinc-900 rounded border border-[#dfdfdf] px-1.5 h-6 focus:outline-none focus:border-[#b3261e]/55" />
                   </div>
                   <div class="flex items-center gap-1">
                       <span class="text-[9px] text-zinc-500">Y</span>
-                      <input type="number" :value="Math.round(getVal('top', 0))" @input="e => $emit('update-property', 'top', Number((e.target as any).value))" class="flex-1 bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" />
+                      <input type="number" :value="Math.round(getVal('top', 0))" @input="e => $emit('update-property', 'top', Number((e.target as any).value))" class="flex-1 bg-[#f7f7f7] text-[11px] text-zinc-900 rounded border border-[#dfdfdf] px-1.5 h-6 focus:outline-none focus:border-[#b3261e]/55" />
                   </div>
               </div>
           </div>
@@ -898,12 +898,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <div class="space-y-1">
               <label class="text-[9px] text-zinc-500 font-medium">Tipo de Ponto</label>
               <div class="flex items-center gap-0.5">
-                  <button @click="$emit('action', 'convert-to-smooth')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Converter para suave (S)">
+                  <button @click="$emit('action', 'convert-to-smooth')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Converter para suave (S)">
                       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                       </svg>
                   </button>
-                  <button @click="$emit('action', 'convert-to-corner')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Converter para canto (C)">
+                  <button @click="$emit('action', 'convert-to-corner')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Converter para canto (C)">
                       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                       </svg>
@@ -915,17 +915,17 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <div class="space-y-1">
               <label class="text-[9px] text-zinc-500 font-medium">Espelhamento</label>
               <div class="flex items-center gap-0.5">
-                  <button @click="$emit('action', 'mirror-handles')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Espelhar alças (M)">
+                  <button @click="$emit('action', 'mirror-handles')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Espelhar alças (M)">
                       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                       </svg>
                   </button>
-                  <button @click="$emit('action', 'reset-handles')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Redefinir alças">
+                  <button @click="$emit('action', 'reset-handles')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Redefinir alças">
                       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                   </button>
-                  <button @click="$emit('action', 'smooth-handles')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Suavizar alças (S)">
+                  <button @click="$emit('action', 'smooth-handles')" class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Suavizar alças (S)">
                       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
@@ -937,25 +937,25 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <div class="space-y-1">
               <div class="flex items-center justify-between">
                   <label class="text-[9px] text-zinc-500 font-medium">Raio dos cantos</label>
-                  <button class="w-4 h-4 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Cantos independentes">
+                  <button class="w-4 h-4 hover:bg-[#ececec] rounded flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-all" title="Cantos independentes">
                       <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                       </svg>
                   </button>
               </div>
-              <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="w-full bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" />
+              <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="w-full bg-[#f7f7f7] text-[11px] text-zinc-900 rounded border border-[#dfdfdf] px-1.5 h-6 focus:outline-none focus:border-[#b3261e]/55" />
           </div>
       </div>
 
       <!-- Frame -->
-      <div v-if="isFrame" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <div v-if="isFrame" class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5">
           <div class="flex items-center gap-1.5">
               <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2"/></svg>
               <span class="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Frame</span>
           </div>
           <button
             type="button"
-            class="w-full flex items-center justify-between rounded px-2 py-1.5 bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
+            class="w-full flex items-center justify-between rounded px-2 py-1.5 bg-[#f2f2f2] border border-[#dfdfdf] hover:bg-[#ececec] transition-colors"
             @click="$emit('update-property', 'clipContent', !clipContentEnabled)"
           >
             <span class="text-[11px] text-zinc-200">Recortar conteúdo</span>
@@ -969,48 +969,48 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- Camada (Blend Mode) -->
-      <div class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <div class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5">
           <div class="flex items-center gap-1.5">
               <Layers class="w-3 h-3 text-zinc-400" />
               <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Camada</span>
           </div>
           <div class="grid grid-cols-2 gap-1.5">
-              <select :value="getVal('globalCompositeOperation', 'source-over')" @change="e => $emit('update-property', 'globalCompositeOperation', (e.target as any).value)" class="bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50">
+              <select :value="getVal('globalCompositeOperation', 'source-over')" @change="e => $emit('update-property', 'globalCompositeOperation', (e.target as any).value)" class="bg-[#f7f7f7] text-[11px] text-zinc-900 rounded border border-[#dfdfdf] px-1.5 h-6 focus:outline-none focus:border-[#b3261e]/55">
                   <option value="source-over">Normal</option>
                   <option v-for="mode in BLEND_MODES" :key="mode" :value="mode">{{ mode }}</option>
               </select>
-              <div class="flex items-center gap-1.5 bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6">
+              <div class="flex items-center gap-1.5 bg-[#f7f7f7] rounded border border-[#dfdfdf] px-1.5 h-6">
                   <span class="text-[9px] text-zinc-500">%</span>
-                  <input type="number" :value="Math.round(getVal('opacity', 1) * 100)" @input="e => $emit('update-property', 'opacity', Number((e.target as any).value) / 100)" class="bg-transparent w-full text-[11px] text-white focus:outline-none text-right" title="Opacidade" />
+                  <input type="number" :value="Math.round(getVal('opacity', 1) * 100)" @input="e => $emit('update-property', 'opacity', Number((e.target as any).value) / 100)" class="bg-transparent w-full text-[11px] text-zinc-900 focus:outline-none text-right" title="Opacidade" />
               </div>
           </div>
       </div>
 
       <!-- Texto -->
-      <div v-if="isText" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <div v-if="isText" class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5">
           <div class="flex items-center gap-1.5">
               <Type class="w-3 h-3 text-orange-400" />
               <span class="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Texto</span>
           </div>
           
-          <select :value="getVal('fontFamily', 'Arial')" @change="e => $emit('update-property', 'fontFamily', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50">
+          <select :value="getVal('fontFamily', 'Arial')" @change="e => $emit('update-property', 'fontFamily', (e.target as any).value)" class="w-full bg-[#f7f7f7] text-[11px] text-zinc-900 rounded border border-[#dfdfdf] px-1.5 h-6 focus:outline-none focus:border-[#b3261e]/55">
               <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
           </select>
 
           <div class="grid grid-cols-2 gap-1.5">
-              <select :value="getVal('fontWeight', 'normal')" @change="e => $emit('update-property', 'fontWeight', (e.target as any).value)" class="bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50">
+              <select :value="getVal('fontWeight', 'normal')" @change="e => $emit('update-property', 'fontWeight', (e.target as any).value)" class="bg-[#f7f7f7] text-[11px] text-zinc-900 rounded border border-[#dfdfdf] px-1.5 h-6 focus:outline-none focus:border-[#b3261e]/55">
                   <option value="normal">Regular</option>
                   <option value="bold">Negrito</option>
                   <option value="900">Extra Negrito</option>
               </select>
-              <div class="flex items-center bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6">
+              <div class="flex items-center bg-[#f7f7f7] rounded border border-[#dfdfdf] px-1.5 h-6">
                   <span class="text-[9px] text-zinc-500 mr-1" title="Tamanho da fonte">Tam</span>
                   <input
                     type="text"
                     :value="fontSizeInputValue"
                     :placeholder="fontSizeInputPlaceholder"
                     @input="e => handleFontSizeChange((e.target as any).value)"
-                    class="bg-transparent w-full text-[11px] text-white focus:outline-none"
+                    class="bg-transparent w-full text-[11px] text-zinc-900 focus:outline-none"
                   />
               </div>
           </div>
@@ -1018,32 +1018,32 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <!-- Text Style Buttons (Bold, Italic, Underline) -->
           <div class="flex gap-0.5">
             <button
-              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
-              :class="{ 'bg-violet-500/20 text-violet-400': getVal('fontWeight') === 'bold' || getVal('fontWeight') === '700' || getVal('fontWeight') === 700 }"
+              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-900 hover:bg-[#ececec] transition-all"
+              :class="{ 'bg-[#fde9e7] text-[#b3261e]': getVal('fontWeight') === 'bold' || getVal('fontWeight') === '700' || getVal('fontWeight') === 700 }"
               @click="$emit('update-property', 'fontWeight', getVal('fontWeight') === 'bold' || getVal('fontWeight') === '700' || getVal('fontWeight') === 700 ? 'normal' : 'bold')"
               title="Negrito"
             >
               <Bold class="w-3 h-3" />
             </button>
             <button
-              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
-              :class="{ 'bg-violet-500/20 text-violet-400': getVal('fontStyle') === 'italic' }"
+              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-900 hover:bg-[#ececec] transition-all"
+              :class="{ 'bg-[#fde9e7] text-[#b3261e]': getVal('fontStyle') === 'italic' }"
               @click="$emit('update-property', 'fontStyle', getVal('fontStyle') === 'italic' ? 'normal' : 'italic')"
               title="Itálico"
             >
               <Italic class="w-3 h-3" />
             </button>
             <button
-              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
-              :class="{ 'bg-violet-500/20 text-violet-400': !!getVal('underline') }"
+              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-900 hover:bg-[#ececec] transition-all"
+              :class="{ 'bg-[#fde9e7] text-[#b3261e]': !!getVal('underline') }"
               @click="$emit('update-property', 'underline', !getVal('underline'))"
               title="Sublinhado"
             >
               <Underline class="w-3 h-3" />
             </button>
             <button
-              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
-              :class="{ 'bg-violet-500/20 text-violet-400': !!getVal('linethrough') }"
+              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-900 hover:bg-[#ececec] transition-all"
+              :class="{ 'bg-[#fde9e7] text-[#b3261e]': !!getVal('linethrough') }"
               @click="$emit('update-property', 'linethrough', !getVal('linethrough'))"
               title="Tachado"
             >
@@ -1055,32 +1055,32 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 
           <!-- Propriedades avançadas de texto -->
           <div class="grid grid-cols-2 gap-1.5">
-               <div class="flex items-center bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6" title="Altura da linha">
+               <div class="flex items-center bg-[#f7f7f7] rounded border border-[#dfdfdf] px-1.5 h-6" title="Altura da linha">
                   <span class="text-[9px] text-zinc-500 mr-1">Alt.L</span>
-                  <input type="number" step="0.1" :value="getVal('lineHeight', 1.2)" @input="e => $emit('update-property', 'lineHeight', Number((e.target as any).value))" class="bg-transparent w-full text-[11px] text-white focus:outline-none" />
+                  <input type="number" step="0.1" :value="getVal('lineHeight', 1.2)" @input="e => $emit('update-property', 'lineHeight', Number((e.target as any).value))" class="bg-transparent w-full text-[11px] text-zinc-900 focus:outline-none" />
               </div>
-              <div class="flex items-center bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6" title="Espaçamento entre letras">
+              <div class="flex items-center bg-[#f7f7f7] rounded border border-[#dfdfdf] px-1.5 h-6" title="Espaçamento entre letras">
                   <span class="text-[9px] text-zinc-500 mr-1">Esp.</span>
-                  <input type="number" :value="getVal('charSpacing', 0)" @input="e => $emit('update-property', 'charSpacing', Number((e.target as any).value))" class="bg-transparent w-full text-[11px] text-white focus:outline-none" />
+                  <input type="number" :value="getVal('charSpacing', 0)" @input="e => $emit('update-property', 'charSpacing', Number((e.target as any).value))" class="bg-transparent w-full text-[11px] text-zinc-900 focus:outline-none" />
               </div>
           </div>
           
           <!-- Alinhamento e Maiúsculas/Minúsculas -->
           <div class="flex gap-1.5">
-            <div class="flex flex-1 bg-[#1e1e1e] rounded border border-white/10 p-0.5 gap-0.5">
-                <button class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'left' ? 'bg-violet-500/20 text-violet-400' : ''" @click="$emit('update-property', 'textAlign', 'left')" title="Alinhar à esquerda"><AlignLeft class="w-3 h-3"/></button>
-                <button class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'center' ? 'bg-violet-500/20 text-violet-400' : ''" @click="$emit('update-property', 'textAlign', 'center')" title="Centralizar"><AlignCenter class="w-3 h-3"/></button>
-                <button class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'right' ? 'bg-violet-500/20 text-violet-400' : ''" @click="$emit('update-property', 'textAlign', 'right')" title="Alinhar à direita"><AlignRight class="w-3 h-3"/></button>
+            <div class="flex flex-1 bg-[#f7f7f7] rounded border border-[#dfdfdf] p-0.5 gap-0.5">
+                <button class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-900 hover:bg-[#ececec] transition-all" :class="getVal('textAlign') == 'left' ? 'bg-[#fde9e7] text-[#b3261e]' : ''" @click="$emit('update-property', 'textAlign', 'left')" title="Alinhar à esquerda"><AlignLeft class="w-3 h-3"/></button>
+                <button class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-900 hover:bg-[#ececec] transition-all" :class="getVal('textAlign') == 'center' ? 'bg-[#fde9e7] text-[#b3261e]' : ''" @click="$emit('update-property', 'textAlign', 'center')" title="Centralizar"><AlignCenter class="w-3 h-3"/></button>
+                <button class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-900 hover:bg-[#ececec] transition-all" :class="getVal('textAlign') == 'right' ? 'bg-[#fde9e7] text-[#b3261e]' : ''" @click="$emit('update-property', 'textAlign', 'right')" title="Alinhar à direita"><AlignRight class="w-3 h-3"/></button>
             </div>
-            <div class="flex bg-[#1e1e1e] rounded border border-white/10 p-0.5 gap-0.5">
-                <button class="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded text-[9px] font-bold text-zinc-400 hover:text-white transition-all" title="Maiúsculas" @click="$emit('action', 'text-upper')">AG</button>
-                <button class="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded text-[9px] text-zinc-400 hover:text-white transition-all" title="Minúsculas" @click="$emit('action', 'text-lower')">ag</button>
+            <div class="flex bg-[#f7f7f7] rounded border border-[#dfdfdf] p-0.5 gap-0.5">
+                <button class="w-6 h-6 flex items-center justify-center hover:bg-[#ececec] rounded text-[9px] font-bold text-zinc-400 hover:text-zinc-900 transition-all" title="Maiúsculas" @click="$emit('action', 'text-upper')">AG</button>
+                <button class="w-6 h-6 flex items-center justify-center hover:bg-[#ececec] rounded text-[9px] text-zinc-400 hover:text-zinc-900 transition-all" title="Minúsculas" @click="$emit('action', 'text-lower')">ag</button>
             </div>
           </div>
 
           <!-- Botão Componente -->
           <div class="flex justify-center">
-             <button @click="$emit('action', 'create-component')" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all text-[9px] font-bold uppercase tracking-widest" :class="isComponent ? 'border-violet-500 text-violet-400 bg-violet-500/10' : 'border-zinc-700 text-zinc-400 hover:border-violet-500 hover:text-violet-400'">
+             <button @click="$emit('action', 'create-component')" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all text-[9px] font-bold uppercase tracking-widest" :class="isComponent ? 'border-[#b3261e] text-[#b3261e] bg-[#fde9e7]' : 'border-zinc-700 text-zinc-400 hover:border-[#b3261e] hover:text-[#b3261e]'">
                  <Component class="w-3 h-3" />
                  <span>{{ isComponent ? 'Componente Principal' : 'Criar Componente' }}</span>
              </button>
@@ -1088,7 +1088,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- Preenchimento -->
-      <div v-if="!isImage && !isLineLike" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <div v-if="!isImage && !isLineLike" class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5">
           <div class="flex items-center justify-between group">
               <div class="flex items-center gap-1.5">
                 <Palette class="w-3 h-3 text-zinc-400" />
@@ -1096,7 +1096,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </div>
               <button
                 type="button"
-                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
+                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#f2f2f2] border border-[#dfdfdf] hover:bg-[#ececec] transition-colors"
                 @click="$emit('update-property', 'fillEnabled', !fillEnabled)"
               >
                 <span :class="fillEnabled ? 'text-green-400' : 'text-red-400'">{{ fillEnabled ? 'ATIVO' : 'INATIVO' }}</span>
@@ -1109,7 +1109,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 class="relative"
               >
                 <div 
-                  class="w-5 h-5 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
+                  class="w-5 h-5 rounded border border-[#dfdfdf] cursor-pointer shrink-0 relative overflow-hidden"
                   :style="{ backgroundColor: fillControlValue }"
                   @click="showFillColorPicker = true"
                 ></div>
@@ -1126,22 +1126,22 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 type="text" 
                 :value="fillHexInputValue" 
                 @change="e => handleFillHexChange((e.target as any).value)" 
-                class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-violet-500/50 uppercase min-w-0" 
+                class="flex-1 h-6 bg-[#f7f7f7] border border-[#dfdfdf] rounded text-[11px] text-zinc-900 px-1.5 font-mono focus:outline-none focus:border-[#b3261e]/55 uppercase min-w-0" 
                 :placeholder="fillHexInputPlaceholder"
                 maxlength="6"
               />
               <input 
                 type="text" 
                 value="100" 
-                class="w-10 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1 text-center focus:outline-none focus:border-violet-500/50" 
+                class="w-10 h-6 bg-[#f7f7f7] border border-[#dfdfdf] rounded text-[11px] text-zinc-900 px-1 text-center focus:outline-none focus:border-[#b3261e]/55" 
               />
               <span class="text-[10px] text-zinc-400 shrink-0">%</span>
           </div>
           
           <!-- Ações de Gradiente -->
           <div class="flex justify-between items-center">
-             <div class="text-[9px] text-violet-400 cursor-pointer hover:underline" @click="$emit('update-property', 'fill-gradient', 'linear')">Usar Gradiente</div>
-             <button class="text-[9px] text-zinc-500 hover:text-white" @click="$emit('add-color-style', fillControlValue)">+ Estilo</button>
+             <div class="text-[9px] text-[#b3261e] cursor-pointer hover:underline" @click="$emit('update-property', 'fill-gradient', 'linear')">Usar Gradiente</div>
+             <button class="text-[9px] text-zinc-500 hover:text-zinc-900" @click="$emit('add-color-style', fillControlValue)">+ Estilo</button>
           </div>
           
           <!-- Color Styles List -->
@@ -1150,7 +1150,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 v-for="style in colorStyles" 
                 :key="style.id" 
                 @click="$emit('apply-color-style', style.id)"
-                class="w-4 h-4 rounded-full border border-white/10 hover:border-white transition-all"
+                class="w-4 h-4 rounded-full border border-[#dfdfdf] hover:border-[#b3261e]/45 transition-all"
                 :style="{backgroundColor: style.value}"
                 :title="style.name"
               ></button>
@@ -1158,37 +1158,37 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
 	      <!-- Layout Automático -->
-	      <div v-if="isGroup" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+	      <div v-if="isGroup" class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5">
           <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
                 <svg class="w-3 h-3 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
                 <span class="text-[10px] font-bold text-teal-400 uppercase tracking-widest">Layout Automático</span>
               </div>
-              <div class="flex items-center gap-0.5 bg-[#2c2c2c] rounded px-1 h-5">
+              <div class="flex items-center gap-0.5 bg-[#f2f2f2] rounded px-1 h-5">
                   <GripVertical class="w-2.5 h-2.5 text-zinc-500" />
-                  <input type="number" :value="getVal('gap', 0)" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="bg-transparent w-5 text-[9px] text-white focus:outline-none text-center" placeholder="0" title="Espaçamento" />
+                  <input type="number" :value="getVal('gap', 0)" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="bg-transparent w-5 text-[9px] text-zinc-900 focus:outline-none text-center" placeholder="0" title="Espaçamento" />
               </div>
           </div>
           
           <div class="grid grid-cols-2 gap-1.5">
-              <div class="flex items-center gap-1.5 bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6" title="Preenchimento horizontal">
+              <div class="flex items-center gap-1.5 bg-[#f7f7f7] rounded border border-[#dfdfdf] px-1.5 h-6" title="Preenchimento horizontal">
                   <span class="text-[9px] text-zinc-500">PH</span>
-                  <input type="number" :value="getVal('paddingX', 0)" @input="e => $emit('action', 'update-padding-x:' + (e.target as any).value)" class="bg-transparent w-full text-[11px] text-white focus:outline-none" />
+                  <input type="number" :value="getVal('paddingX', 0)" @input="e => $emit('action', 'update-padding-x:' + (e.target as any).value)" class="bg-transparent w-full text-[11px] text-zinc-900 focus:outline-none" />
               </div>
-              <div class="flex items-center gap-1.5 bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6" title="Preenchimento vertical">
+              <div class="flex items-center gap-1.5 bg-[#f7f7f7] rounded border border-[#dfdfdf] px-1.5 h-6" title="Preenchimento vertical">
                   <span class="text-[9px] text-zinc-500">PV</span>
-                  <input type="number" :value="getVal('paddingY', 0)" @input="e => $emit('action', 'update-padding-y:' + (e.target as any).value)" class="bg-transparent w-full text-[11px] text-white focus:outline-none" />
+                  <input type="number" :value="getVal('paddingY', 0)" @input="e => $emit('action', 'update-padding-y:' + (e.target as any).value)" class="bg-transparent w-full text-[11px] text-zinc-900 focus:outline-none" />
               </div>
           </div>
           
           <div class="flex gap-1">
-              <button @click="$emit('action', 'layout-hug')" class="flex-1 py-1 text-[9px] bg-[#1e1e1e] border border-white/10 rounded hover:border-zinc-500 transition-colors text-zinc-400 hover:text-white" title="Ajustar ao conteúdo">Ajustar</button>
-              <button @click="$emit('action', 'layout-fill')" class="flex-1 py-1 text-[9px] bg-[#1e1e1e] border border-white/10 rounded hover:border-zinc-500 transition-colors text-zinc-400 hover:text-white" title="Preencher container">Preencher</button>
+              <button @click="$emit('action', 'layout-hug')" class="flex-1 py-1 text-[9px] bg-[#f7f7f7] border border-[#dfdfdf] rounded hover:border-zinc-500 transition-colors text-zinc-400 hover:text-zinc-900" title="Ajustar ao conteúdo">Ajustar</button>
+              <button @click="$emit('action', 'layout-fill')" class="flex-1 py-1 text-[9px] bg-[#f7f7f7] border border-[#dfdfdf] rounded hover:border-zinc-500 transition-colors text-zinc-400 hover:text-zinc-900" title="Preencher container">Preencher</button>
           </div>
       </div>
 
       <!-- Contorno Sticker (alpha-based, somente imagens) -->
-      <div v-if="isImage" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <div v-if="isImage" class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5">
           <div class="flex items-center justify-between group">
               <div class="flex items-center gap-1.5">
                 <svg class="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
@@ -1196,7 +1196,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </div>
               <button
                 type="button"
-                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
+                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#f2f2f2] border border-[#dfdfdf] hover:bg-[#ececec] transition-colors"
                 @click="$emit('update-property', 'stickerOutlineEnabled', !stickerOutlineEnabled)"
               >
                 <span :class="stickerOutlineEnabled ? 'text-green-400' : 'text-red-400'">{{ stickerOutlineEnabled ? 'ATIVO' : 'INATIVO' }}</span>
@@ -1213,20 +1213,20 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	              <!-- Posição (Interno / Externo) -->
 	              <div class="flex items-center justify-between gap-2">
 	                  <span class="text-[9px] text-zinc-500">Posição</span>
-	                  <div class="flex items-center bg-[#2a2a2a] border border-white/10 rounded overflow-hidden h-6">
+	                  <div class="flex items-center bg-[#f7f7f7] border border-[#dfdfdf] rounded overflow-hidden h-6">
 	                      <button
 	                        type="button"
 	                        class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
-	                        :class="stickerOutlineMode === 'outside' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400 hover:text-white'"
+	                        :class="stickerOutlineMode === 'outside' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400 hover:text-zinc-900'"
 	                        @click="$emit('update-property', 'stickerOutlineMode', 'outside')"
 	                      >
 	                        Externo
 	                      </button>
-	                      <div class="w-px h-full bg-white/10"></div>
+	                      <div class="w-px h-full bg-[#ececec]"></div>
 	                      <button
 	                        type="button"
 	                        class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
-	                        :class="stickerOutlineMode === 'inside' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400 hover:text-white'"
+	                        :class="stickerOutlineMode === 'inside' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400 hover:text-zinc-900'"
 	                        @click="$emit('update-property', 'stickerOutlineMode', 'inside')"
 	                      >
 	                        Interno
@@ -1241,7 +1241,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                     class="relative"
                   >
                     <div
-                      class="w-5 h-5 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
+                      class="w-5 h-5 rounded border border-[#dfdfdf] cursor-pointer shrink-0 relative overflow-hidden"
                       :style="{ backgroundColor: stickerOutlineColor }"
                       @click="showStickerOutlineColorPicker = true"
                     ></div>
@@ -1257,7 +1257,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                     type="text"
                     :value="stickerOutlineColor.replace('#', '').toUpperCase()"
                     @change="e => $emit('update-property', 'stickerOutlineColor', '#' + (e.target as any).value.replace('#', ''))"
-                    class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-amber-500/50 uppercase min-w-0"
+                    class="flex-1 h-6 bg-[#f7f7f7] border border-[#dfdfdf] rounded text-[11px] text-zinc-900 px-1.5 font-mono focus:outline-none focus:border-amber-500/50 uppercase min-w-0"
                     placeholder="FFFFFF"
                     maxlength="6"
                   />
@@ -1267,7 +1267,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                       type="number"
                       :value="stickerOutlineWidth"
                       @input="e => $emit('update-property', 'stickerOutlineWidth', Math.max(1, Number((e.target as any).value)))"
-                      class="w-10 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 text-center focus:outline-none focus:border-amber-500/50"
+                      class="w-10 h-6 bg-[#f7f7f7] border border-[#dfdfdf] rounded text-[11px] text-zinc-900 px-1.5 text-center focus:outline-none focus:border-amber-500/50"
                       title="Espessura do contorno sticker (px)"
                       min="1"
                       max="50"
@@ -1295,7 +1295,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- Contorno -->
-      <div class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <div class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5">
           <div class="flex items-center justify-between group">
               <div class="flex items-center gap-1.5">
                 <svg class="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" stroke-dasharray="4 2"/></svg>
@@ -1303,7 +1303,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </div>
               <button
                 type="button"
-                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
+                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#f2f2f2] border border-[#dfdfdf] hover:bg-[#ececec] transition-colors"
                 @click="$emit('update-property', 'strokeEnabled', !strokeEnabled)"
               >
                 <span :class="strokeEnabled ? 'text-green-400' : 'text-red-400'">{{ strokeEnabled ? 'ATIVO' : 'INATIVO' }}</span>
@@ -1316,7 +1316,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 class="relative"
               >
                 <div 
-                  class="w-5 h-5 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
+                  class="w-5 h-5 rounded border border-[#dfdfdf] cursor-pointer shrink-0 relative overflow-hidden"
                   :style="{ backgroundColor: getVal('stroke', '#000000') || '#000000' }"
                   @click="showStrokeColorPicker = true"
                 ></div>
@@ -1332,12 +1332,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 type="text" 
                 :value="(getVal('stroke', '') || '#000000').toString().replace('#', '').toUpperCase()" 
                 @change="e => $emit('update-property', 'stroke', '#' + (e.target as any).value.replace('#', ''))" 
-                class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-violet-500/50 uppercase min-w-0" 
+                class="flex-1 h-6 bg-[#f7f7f7] border border-[#dfdfdf] rounded text-[11px] text-zinc-900 px-1.5 font-mono focus:outline-none focus:border-[#b3261e]/55 uppercase min-w-0" 
                 placeholder="1E1E1E"
                 maxlength="6"
               />
               
-              <input type="number" :value="getVal('strokeWidth', 0)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="w-10 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 text-center focus:outline-none focus:border-violet-500/50" title="Espessura do contorno" />
+              <input type="number" :value="getVal('strokeWidth', 0)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="w-10 h-6 bg-[#f7f7f7] border border-[#dfdfdf] rounded text-[11px] text-zinc-900 px-1.5 text-center focus:outline-none focus:border-[#b3261e]/55" title="Espessura do contorno" />
           </div>
           
           <!-- Opções do Contorno -->
@@ -1345,7 +1345,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                <!-- Posição (Interno/Centro/Externo) -->
                <div v-if="isVectorPath" class="space-y-0.5">
                    <label class="text-[9px] text-zinc-500 font-medium">Posição</label>
-                   <select :value="getVal('strokePosition', 'center')" @change="e => $emit('update-property', 'strokePosition', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-[10px] text-white rounded border border-white/10 h-5 px-1.5 focus:outline-none focus:border-violet-500/50">
+                   <select :value="getVal('strokePosition', 'center')" @change="e => $emit('update-property', 'strokePosition', (e.target as any).value)" class="w-full bg-[#f7f7f7] text-[10px] text-zinc-900 rounded border border-[#dfdfdf] h-5 px-1.5 focus:outline-none focus:border-[#b3261e]/55">
                        <option value="inside">Interno</option>
                        <option value="center">Centro</option>
                        <option value="outside">Externo</option>
@@ -1356,17 +1356,17 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                <div v-if="isVectorPath" class="space-y-0.5">
                    <label class="text-[9px] text-zinc-500 font-medium">Espessura</label>
                    <div class="flex items-center gap-1.5">
-                       <input type="number" :value="getVal('strokeWidth', 1)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="flex-1 bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" />
+                       <input type="number" :value="getVal('strokeWidth', 1)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="flex-1 bg-[#f7f7f7] text-[11px] text-zinc-900 rounded border border-[#dfdfdf] px-1.5 h-6 focus:outline-none focus:border-[#b3261e]/55" />
                    </div>
                </div>
                
                <div class="grid grid-cols-2 gap-1.5">
-                    <select :value="getVal('strokeLineCap', 'butt')" @change="e => $emit('update-property', 'strokeLineCap', (e.target as any).value)" class="bg-[#1e1e1e] text-[9px] text-white rounded border border-white/10 h-5 px-1 focus:outline-none focus:border-violet-500/50">
+                    <select :value="getVal('strokeLineCap', 'butt')" @change="e => $emit('update-property', 'strokeLineCap', (e.target as any).value)" class="bg-[#f7f7f7] text-[9px] text-zinc-900 rounded border border-[#dfdfdf] h-5 px-1 focus:outline-none focus:border-[#b3261e]/55">
                         <option value="butt">Terminal: Reto</option>
                         <option value="round">Terminal: Arredondado</option>
                         <option value="square">Terminal: Quadrado</option>
                     </select>
-                    <select :value="getVal('strokeLineJoin', 'miter')" @change="e => $emit('update-property', 'strokeLineJoin', (e.target as any).value)" class="bg-[#1e1e1e] text-[9px] text-white rounded border border-white/10 h-5 px-1 focus:outline-none focus:border-violet-500/50">
+                    <select :value="getVal('strokeLineJoin', 'miter')" @change="e => $emit('update-property', 'strokeLineJoin', (e.target as any).value)" class="bg-[#f7f7f7] text-[9px] text-zinc-900 rounded border border-[#dfdfdf] h-5 px-1 focus:outline-none focus:border-[#b3261e]/55">
                         <option value="miter">Junção: Esquadro</option>
                         <option value="round">Junção: Arredondada</option>
                         <option value="bevel">Junção: Chanfro</option>
@@ -1376,21 +1376,21 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                <!-- Limite de Esquadro -->
                <div v-if="getVal('strokeLineJoin', 'miter') === 'miter'" class="space-y-0.5">
                    <label class="text-[9px] text-zinc-500 font-medium">Limite de esquadro</label>
-                   <input type="number" :value="getVal('strokeMiterLimit', 4)" @input="e => $emit('update-property', 'strokeMiterLimit', Number((e.target as any).value))" class="w-full bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" min="1" max="100" step="0.1" />
+                   <input type="number" :value="getVal('strokeMiterLimit', 4)" @input="e => $emit('update-property', 'strokeMiterLimit', Number((e.target as any).value))" class="w-full bg-[#f7f7f7] text-[11px] text-zinc-900 rounded border border-[#dfdfdf] px-1.5 h-6 focus:outline-none focus:border-[#b3261e]/55" min="1" max="100" step="0.1" />
                </div>
                
                <!-- Padrão de Traço -->
                <div class="space-y-0.5">
                    <label class="text-[9px] text-zinc-500 font-medium">Padrão de traço</label>
                    <div class="flex justify-between items-center">
-                       <button class="text-[9px] px-2 py-0.5 rounded hover:bg-white/10 transition-colors" :class="!getVal('strokeDashArray') ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-400 hover:text-white'" @click="$emit('update-property', 'strokeDashArray', null)">Sólido</button>
-                       <button class="text-[9px] px-2 py-0.5 rounded hover:bg-white/10 transition-colors" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([12, 8]) ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-400 hover:text-white'" @click="$emit('update-property', 'strokeDashArray', [12, 8])">Tracejado</button>
-                       <button class="text-[9px] px-2 py-0.5 rounded hover:bg-white/10 transition-colors" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([2, 6]) ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-400 hover:text-white'" @click="$emit('update-property', 'strokeDashArray', [2, 6])">Pontilhado</button>
+                       <button class="text-[9px] px-2 py-0.5 rounded hover:bg-[#ececec] transition-colors" :class="!getVal('strokeDashArray') ? 'bg-[#fde9e7] text-[#b3261e]' : 'text-zinc-400 hover:text-zinc-900'" @click="$emit('update-property', 'strokeDashArray', null)">Sólido</button>
+                       <button class="text-[9px] px-2 py-0.5 rounded hover:bg-[#ececec] transition-colors" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([12, 8]) ? 'bg-[#fde9e7] text-[#b3261e]' : 'text-zinc-400 hover:text-zinc-900'" @click="$emit('update-property', 'strokeDashArray', [12, 8])">Tracejado</button>
+                       <button class="text-[9px] px-2 py-0.5 rounded hover:bg-[#ececec] transition-colors" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([2, 6]) ? 'bg-[#fde9e7] text-[#b3261e]' : 'text-zinc-400 hover:text-zinc-900'" @click="$emit('update-property', 'strokeDashArray', [2, 6])">Pontilhado</button>
                    </div>
                </div>
                
                <!-- Botão Avançado -->
-               <button class="w-full flex items-center justify-between px-1.5 py-1 bg-[#1e1e1e] border border-white/10 rounded hover:bg-white/5 transition-colors text-[9px] text-zinc-400 hover:text-white">
+               <button class="w-full flex items-center justify-between px-1.5 py-1 bg-[#f7f7f7] border border-[#dfdfdf] rounded hover:bg-[#f4f4f4] transition-colors text-[9px] text-zinc-400 hover:text-zinc-900">
                    <span>Avançado</span>
                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -1400,7 +1400,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- Arredondamento -->
-      <div v-if="isRectLike && !isImage" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <div v-if="isRectLike && !isImage" class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5">
           <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
                 <svg class="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2M16 4h2a2 2 0 012 2v2M16 20h2a2 2 0 002-2v-2"/></svg>
@@ -1408,7 +1408,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </div>
               <button
                 type="button"
-                class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+                class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#f2f2f2] border border-[#dfdfdf] hover:bg-[#ececec] transition-colors text-zinc-400 hover:text-zinc-900"
                 @click="() => {
                   if (useIndividualRadii) {
                     $emit('update-property', 'cornerRadius', Number(cornerRadii.tl || 0))
@@ -1423,13 +1423,13 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
 
           <div class="grid grid-cols-2 gap-1.5">
-              <div class="flex items-center gap-1.5 bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6">
+              <div class="flex items-center gap-1.5 bg-[#f7f7f7] rounded border border-[#dfdfdf] px-1.5 h-6">
                   <span class="text-[9px] text-zinc-500">R</span>
                   <input
                     type="number"
                     :value="Math.round(cornerRadii.tl || 0)"
                     @input="e => $emit('update-property', 'cornerRadius', Number((e.target as any).value))"
-                    class="bg-transparent w-full text-[11px] text-white focus:outline-none"
+                    class="bg-transparent w-full text-[11px] text-zinc-900 focus:outline-none"
                   />
               </div>
               <div class="text-[9px] text-zinc-500 flex items-center justify-end">
@@ -1440,34 +1440,34 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <div class="grid grid-cols-4 gap-1.5" v-if="useIndividualRadii">
               <div class="flex flex-col gap-0.5">
                   <label class="text-[8px] text-zinc-500" title="Superior esquerdo">SE</label>
-                  <input type="number" class="w-full bg-[#1e1e1e] border border-white/10 rounded px-1.5 h-6 text-[11px] text-white focus:outline-none focus:border-violet-500/50" :value="cornerRadii.tl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tl: Number((e.target as any).value) })" />
+                  <input type="number" class="w-full bg-[#f7f7f7] border border-[#dfdfdf] rounded px-1.5 h-6 text-[11px] text-zinc-900 focus:outline-none focus:border-[#b3261e]/55" :value="cornerRadii.tl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tl: Number((e.target as any).value) })" />
               </div>
               <div class="flex flex-col gap-0.5">
                   <label class="text-[8px] text-zinc-500" title="Superior direito">SD</label>
-                  <input type="number" class="w-full bg-[#1e1e1e] border border-white/10 rounded px-1.5 h-6 text-[11px] text-white focus:outline-none focus:border-violet-500/50" :value="cornerRadii.tr" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tr: Number((e.target as any).value) })" />
+                  <input type="number" class="w-full bg-[#f7f7f7] border border-[#dfdfdf] rounded px-1.5 h-6 text-[11px] text-zinc-900 focus:outline-none focus:border-[#b3261e]/55" :value="cornerRadii.tr" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tr: Number((e.target as any).value) })" />
               </div>
               <div class="flex flex-col gap-0.5">
                   <label class="text-[8px] text-zinc-500" title="Inferior direito">ID</label>
-                  <input type="number" class="w-full bg-[#1e1e1e] border border-white/10 rounded px-1.5 h-6 text-[11px] text-white focus:outline-none focus:border-violet-500/50" :value="cornerRadii.br" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, br: Number((e.target as any).value) })" />
+                  <input type="number" class="w-full bg-[#f7f7f7] border border-[#dfdfdf] rounded px-1.5 h-6 text-[11px] text-zinc-900 focus:outline-none focus:border-[#b3261e]/55" :value="cornerRadii.br" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, br: Number((e.target as any).value) })" />
               </div>
               <div class="flex flex-col gap-0.5">
                   <label class="text-[8px] text-zinc-500" title="Inferior esquerdo">IE</label>
-                  <input type="number" class="w-full bg-[#1e1e1e] border border-white/10 rounded px-1.5 h-6 text-[11px] text-white focus:outline-none focus:border-violet-500/50" :value="cornerRadii.bl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, bl: Number((e.target as any).value) })" />
+                  <input type="number" class="w-full bg-[#f7f7f7] border border-[#dfdfdf] rounded px-1.5 h-6 text-[11px] text-zinc-900 focus:outline-none focus:border-[#b3261e]/55" :value="cornerRadii.bl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, bl: Number((e.target as any).value) })" />
               </div>
           </div>
       </div>
 
 	      <!-- Efeitos (Geral / Texto / Imagem) -->
-	      <div class="border-b border-white/5">
+	      <div class="border-b border-[#e7e7e7]">
 	          <button
 	            type="button"
-	            class="w-full px-3 py-2 flex items-center justify-between hover:bg-white/5 transition-colors"
+	            class="w-full px-3 py-2 flex items-center justify-between hover:bg-[#f4f4f4] transition-colors"
 	            @click="toggleSection('effects')"
 	          >
 	              <div class="flex items-center gap-2">
 	                <Sparkles class="w-3 h-3 text-zinc-300" />
 	                <span class="text-[10px] font-bold text-zinc-200 uppercase tracking-widest">Efeitos</span>
-	                <span v-if="effectsCount > 0" class="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/20">
+	                <span v-if="effectsCount > 0" class="text-[9px] font-black px-1.5 py-0.5 rounded bg-[#fde9e7] text-[#8f1e19] border border-[#b3261e]/20">
 	                  {{ effectsCount }}
 	                </span>
 	              </div>
@@ -1475,7 +1475,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                <button
 	                  v-if="effectsCount > 0"
 	                  type="button"
-	                  class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+	                  class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#f2f2f2] border border-[#dfdfdf] hover:bg-[#ececec] transition-colors text-zinc-400 hover:text-zinc-900"
 	                  @click.stop="$emit('update-property', 'effects-reset', true)"
 	                  title="Resetar efeitos"
 	                >
@@ -1488,7 +1488,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 
 	          <div v-show="!isSectionCollapsed('effects')" class="px-3 pb-3 space-y-3">
 	              <!-- Shadow / Glow -->
-	              <div class="bg-[#1e1e1e] border border-white/10 rounded-lg p-2 space-y-2">
+	              <div class="bg-[#f7f7f7] border border-[#dfdfdf] rounded-lg p-2 space-y-2">
 	                  <div class="flex items-center justify-between">
 	                      <div class="flex items-center gap-2">
 	                          <Zap class="w-3 h-3 text-amber-300" />
@@ -1497,7 +1497,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                      </div>
 	                      <button
 	                        type="button"
-	                        class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
+	                        class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#f2f2f2] border border-[#dfdfdf] hover:bg-[#ececec] transition-colors"
 	                        @click="$emit('update-property', 'shadow', shadowEnabled ? null : { color: 'rgba(0,0,0,0.35)', blur: 12, x: 0, y: 6 })"
 	                      >
 	                        <span :class="shadowEnabled ? 'text-green-400' : 'text-red-400'">{{ shadowEnabled ? 'ATIVO' : 'INATIVO' }}</span>
@@ -1507,20 +1507,20 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                  <div :class="!shadowEnabled ? 'opacity-50 pointer-events-none' : ''" class="space-y-2">
 	                      <div class="flex items-center justify-between gap-2">
 	                          <span class="text-[9px] text-zinc-500">Tipo</span>
-	                          <div class="flex items-center bg-[#2a2a2a] border border-white/10 rounded overflow-hidden h-6">
+	                          <div class="flex items-center bg-[#f7f7f7] border border-[#dfdfdf] rounded overflow-hidden h-6">
 	                              <button
 	                                type="button"
 	                                class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
-	                                :class="shadowType === 'drop' ? 'bg-amber-500/20 text-amber-200' : 'text-zinc-400 hover:text-white'"
+	                                :class="shadowType === 'drop' ? 'bg-amber-500/20 text-amber-200' : 'text-zinc-400 hover:text-zinc-900'"
 	                                @click="$emit('update-property', 'shadow-x', Number(selectedShadow?.offsetX || 0)); $emit('update-property', 'shadow-y', 6)"
 	                              >
 	                                Sombra
 	                              </button>
-	                              <div class="w-px h-full bg-white/10"></div>
+	                              <div class="w-px h-full bg-[#ececec]"></div>
 	                              <button
 	                                type="button"
 	                                class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
-	                                :class="shadowType === 'glow' ? 'bg-amber-500/20 text-amber-200' : 'text-zinc-400 hover:text-white'"
+	                                :class="shadowType === 'glow' ? 'bg-amber-500/20 text-amber-200' : 'text-zinc-400 hover:text-zinc-900'"
 	                                @click="$emit('update-property', 'shadow-x', 0); $emit('update-property', 'shadow-y', 0)"
 	                              >
 	                                Glow
@@ -1531,7 +1531,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                      <div class="flex items-center gap-1.5">
 	                          <div ref="shadowColorPickerRef" class="relative">
 	                              <div
-	                                class="w-5 h-5 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
+	                                class="w-5 h-5 rounded border border-[#dfdfdf] cursor-pointer shrink-0 relative overflow-hidden"
 	                                :style="{ backgroundColor: shadowHex }"
 	                                @click="showShadowColorPicker = true"
 	                              ></div>
@@ -1553,7 +1553,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                              const c = parseColorToRgba('#' + (e.target as any).value.replace('#',''))
 	                              $emit('update-property', 'shadow-color', rgbaString(c.r, c.g, c.b, shadowOpacity))
 	                            }"
-	                            class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-amber-500/40 uppercase min-w-0"
+	                            class="flex-1 h-6 bg-[#f7f7f7] border border-[#dfdfdf] rounded text-[11px] text-zinc-900 px-1.5 font-mono focus:outline-none focus:border-amber-500/40 uppercase min-w-0"
 	                            maxlength="6"
 	                          />
 	                          <div class="flex items-center gap-1">
@@ -1598,7 +1598,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	              </div>
 
 	              <!-- Image-only effects -->
-              <div v-if="canRemoveImageBg || canReplaceProductCardImage" class="bg-[#1e1e1e] border border-white/10 rounded-lg p-2 space-y-2">
+              <div v-if="canRemoveImageBg || canReplaceProductCardImage" class="bg-[#f7f7f7] border border-[#dfdfdf] rounded-lg p-2 space-y-2">
 	                  <div class="flex items-center justify-between">
 	                      <div class="flex items-center gap-2">
 	                          <Scan class="w-3 h-3 text-pink-300" />
@@ -1608,7 +1608,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                          <button
 	                            type="button"
 	                            @click="$emit('action', 'ai-edit-image')"
-	                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+	                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-200 hover:bg-zinc-300 rounded transition-colors border border-[#dfdfdf]"
 	                            title="Editar imagem com IA"
 	                          >
 	                            <Sparkles class="w-2.5 h-2.5" />
@@ -1618,7 +1618,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                             v-if="canReplaceProductCardImage"
                             type="button"
                             @click="$emit('action', 'replace-product-image-upload')"
-                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-200 hover:bg-zinc-300 rounded transition-colors border border-[#dfdfdf]"
                             title="Substituir imagem usando uploads"
                           >
                             Upload
@@ -1627,7 +1627,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                             v-if="canReplaceProductCardImage"
                             type="button"
                             @click="$emit('action', 'replace-product-image')"
-                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-200 hover:bg-zinc-300 rounded transition-colors border border-[#dfdfdf]"
                             title="Substituir imagem por arquivo local"
                           >
                             Arquivo
@@ -1636,7 +1636,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                             v-if="canReplaceProductCardImage"
                             type="button"
                             @click="$emit('action', 'add-product-image-upload')"
-                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-200 hover:bg-zinc-300 rounded transition-colors border border-[#dfdfdf]"
                             title="Adicionar imagem do upload mantendo a atual"
                           >
                             +Upload
@@ -1645,7 +1645,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                             v-if="canReplaceProductCardImage"
                             type="button"
                             @click="$emit('action', 'add-product-image-local')"
-                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-200 hover:bg-zinc-300 rounded transition-colors border border-[#dfdfdf]"
                             title="Adicionar arquivo local mantendo a imagem atual"
                           >
                             +Arquivo
@@ -1653,7 +1653,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                           <button
                             type="button"
                             @click="$emit('action', 'remove-image-bg')"
-                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-200 hover:bg-zinc-300 rounded transition-colors border border-[#dfdfdf]"
                             title="Remover fundo da imagem"
                             :disabled="!canRemoveImageBg"
                             :class="{ 'opacity-50 cursor-not-allowed': !canRemoveImageBg }"
@@ -1669,7 +1669,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                            <span class="text-[9px] text-zinc-500">Desfoque</span>
 	                            <span class="text-[9px] text-zinc-400">{{ filterBlurPx }}px</span>
 	                          </div>
-	                          <input type="range" min="0" max="20" step="1" :value="filterBlurPx" @input="e => $emit('update-property', 'filter-blur', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                          <input type="range" min="0" max="20" step="1" :value="filterBlurPx" @input="e => $emit('update-property', 'filter-blur', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#b3261e]" />
 	                      </div>
 
 	                      <div class="space-y-0.5">
@@ -1677,7 +1677,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                            <span class="text-[9px] text-zinc-500">Brilho</span>
 	                            <span class="text-[9px] text-zinc-400">{{ filterBrightness.toFixed(2) }}</span>
 	                          </div>
-	                          <input type="range" min="-1" max="1" step="0.05" :value="filterBrightness" @input="e => $emit('update-property', 'filter-brightness', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                          <input type="range" min="-1" max="1" step="0.05" :value="filterBrightness" @input="e => $emit('update-property', 'filter-brightness', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#b3261e]" />
 	                      </div>
 
 	                      <div class="space-y-0.5">
@@ -1685,7 +1685,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                            <span class="text-[9px] text-zinc-500">Contraste</span>
 	                            <span class="text-[9px] text-zinc-400">{{ filterContrast.toFixed(2) }}</span>
 	                          </div>
-	                          <input type="range" min="-1" max="1" step="0.05" :value="filterContrast" @input="e => $emit('update-property', 'filter-contrast', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                          <input type="range" min="-1" max="1" step="0.05" :value="filterContrast" @input="e => $emit('update-property', 'filter-contrast', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#b3261e]" />
 	                      </div>
 
 	                      <div class="space-y-0.5">
@@ -1693,7 +1693,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                            <span class="text-[9px] text-zinc-500">Saturação</span>
 	                            <span class="text-[9px] text-zinc-400">{{ filterSaturation.toFixed(2) }}</span>
 	                          </div>
-	                          <input type="range" min="-1" max="1" step="0.05" :value="filterSaturation" @input="e => $emit('update-property', 'filter-saturation', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                          <input type="range" min="-1" max="1" step="0.05" :value="filterSaturation" @input="e => $emit('update-property', 'filter-saturation', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#b3261e]" />
 	                      </div>
 
 	                      <div class="space-y-0.5">
@@ -1701,19 +1701,19 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                            <span class="text-[9px] text-zinc-500">Matiz</span>
 	                            <span class="text-[9px] text-zinc-400">{{ filterHue.toFixed(2) }}</span>
 	                          </div>
-	                          <input type="range" min="-1" max="1" step="0.05" :value="filterHue" @input="e => $emit('update-property', 'filter-hue', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+	                          <input type="range" min="-1" max="1" step="0.05" :value="filterHue" @input="e => $emit('update-property', 'filter-hue', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#b3261e]" />
 	                      </div>
 
 	                      <div class="grid grid-cols-3 gap-1.5">
-	                          <button type="button" class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterGrayscale ? 'bg-violet-500/20 text-violet-200 border-violet-500/30' : 'bg-[#2a2a2a] text-zinc-400 hover:text-white'" @click="$emit('update-property', 'filter-grayscale', !filterGrayscale)">P&B</button>
-	                          <button type="button" class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterSepia ? 'bg-violet-500/20 text-violet-200 border-violet-500/30' : 'bg-[#2a2a2a] text-zinc-400 hover:text-white'" @click="$emit('update-property', 'filter-sepia', !filterSepia)">Sépia</button>
-	                          <button type="button" class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterInvert ? 'bg-violet-500/20 text-violet-200 border-violet-500/30' : 'bg-[#2a2a2a] text-zinc-400 hover:text-white'" @click="$emit('update-property', 'filter-invert', !filterInvert)">Inverter</button>
+	                          <button type="button" class="h-7 rounded border border-[#dfdfdf] text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterGrayscale ? 'bg-[#fde9e7] text-[#8f1e19] border-[#b3261e]/30' : 'bg-[#f7f7f7] text-zinc-400 hover:text-zinc-900'" @click="$emit('update-property', 'filter-grayscale', !filterGrayscale)">P&B</button>
+	                          <button type="button" class="h-7 rounded border border-[#dfdfdf] text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterSepia ? 'bg-[#fde9e7] text-[#8f1e19] border-[#b3261e]/30' : 'bg-[#f7f7f7] text-zinc-400 hover:text-zinc-900'" @click="$emit('update-property', 'filter-sepia', !filterSepia)">Sépia</button>
+	                          <button type="button" class="h-7 rounded border border-[#dfdfdf] text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterInvert ? 'bg-[#fde9e7] text-[#8f1e19] border-[#b3261e]/30' : 'bg-[#f7f7f7] text-zinc-400 hover:text-zinc-900'" @click="$emit('update-property', 'filter-invert', !filterInvert)">Inverter</button>
 	                      </div>
 
 	                      <div class="flex justify-end">
 	                          <button
 	                            type="button"
-	                            class="text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+	                            class="text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-[#f2f2f2] border border-[#dfdfdf] hover:bg-[#ececec] transition-colors text-zinc-400 hover:text-zinc-900"
 	                            @click="$emit('update-property', 'filters-reset', true)"
 	                            title="Resetar ajustes da imagem"
 	                          >
@@ -1728,7 +1728,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	              </div>
 
 	              <!-- Text helper effects (quick access) -->
-	              <div v-if="isText" class="bg-[#1e1e1e] border border-white/10 rounded-lg p-2 space-y-2">
+	              <div v-if="isText" class="bg-[#f7f7f7] border border-[#dfdfdf] rounded-lg p-2 space-y-2">
 	                  <div class="flex items-center gap-2">
 	                      <Type class="w-3 h-3 text-teal-300" />
 	                      <span class="text-[10px] font-bold text-teal-200 uppercase tracking-widest">Efeitos de Texto</span>
@@ -1737,7 +1737,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                      <button
 	                        type="button"
 	                        class="h-7 rounded border text-[9px] font-bold uppercase tracking-widest transition-colors"
-	                        :class="getVal('__text3dEnabled', false) ? 'border-amber-400/60 bg-amber-500/20 text-amber-200' : 'border-white/10 bg-[#2a2a2a] text-zinc-400 hover:text-white'"
+	                        :class="getVal('__text3dEnabled', false) ? 'border-amber-400/60 bg-amber-500/20 text-amber-200' : 'border-[#dfdfdf] bg-[#f7f7f7] text-zinc-400 hover:text-zinc-900'"
 	                        @click="$emit('action', 'text-3d-gold')"
 	                        title="Aplicar efeito 3D dourado"
 	                      >
@@ -1745,7 +1745,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                      </button>
 	                      <button
 	                        type="button"
-	                        class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors bg-[#2a2a2a] text-zinc-400 hover:text-white"
+	                        class="h-7 rounded border border-[#dfdfdf] text-[9px] font-bold uppercase tracking-widest transition-colors bg-[#f7f7f7] text-zinc-400 hover:text-zinc-900"
 	                        @click="$emit('action', 'text-gradient-gold')"
 	                        title="Aplicar gradiente dourado"
 	                      >
@@ -1753,7 +1753,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                      </button>
 	                      <button
 	                        type="button"
-	                        class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors bg-[#2a2a2a] text-zinc-400 hover:text-white"
+	                        class="h-7 rounded border border-[#dfdfdf] text-[9px] font-bold uppercase tracking-widest transition-colors bg-[#f7f7f7] text-zinc-400 hover:text-zinc-900"
 	                        @click="$emit('action', 'text-gradient-sunset')"
 	                        title="Aplicar gradiente quente"
 	                      >
@@ -1761,7 +1761,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                      </button>
 	                      <button
 	                        type="button"
-	                        class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors bg-[#2a2a2a] text-zinc-400 hover:text-white"
+	                        class="h-7 rounded border border-[#dfdfdf] text-[9px] font-bold uppercase tracking-widest transition-colors bg-[#f7f7f7] text-zinc-400 hover:text-zinc-900"
 	                        @click="$emit('action', 'text-3d-clear')"
 	                        title="Remover efeito 3D e sombra"
 	                      >
@@ -1773,14 +1773,14 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	      </div>
 
       <!-- Grade Inteligente -->
-      <div v-if="isSmartGroup" class="px-3 py-2 border-b border-white/5 space-y-1.5 bg-violet-500/5">
+      <div v-if="isSmartGroup" class="px-3 py-2 border-b border-[#e7e7e7] space-y-1.5 bg-[#fde9e7]/45">
           <div class="flex items-center gap-1.5">
-             <Box class="w-3 h-3 text-violet-400" />
-             <span class="text-[10px] font-bold text-violet-400 uppercase tracking-widest">Item de Grade Inteligente</span>
+             <Box class="w-3 h-3 text-[#b3261e]" />
+             <span class="text-[10px] font-bold text-[#b3261e] uppercase tracking-widest">Item de Grade Inteligente</span>
           </div>
           <div class="space-y-1">
                <label class="text-[9px] text-zinc-400 font-medium">Modo</label>
-               <select :value="getVal('priceMode', 'standard')" @change="e => $emit('update-smart-group', 'priceMode', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 h-6 px-1.5 focus:outline-none focus:border-violet-500/50">
+               <select :value="getVal('priceMode', 'standard')" @change="e => $emit('update-smart-group', 'priceMode', (e.target as any).value)" class="w-full bg-[#f7f7f7] text-[11px] text-zinc-900 rounded border border-[#dfdfdf] h-6 px-1.5 focus:outline-none focus:border-[#b3261e]/55">
                    <option value="standard">Padrão</option>
                    <option value="de_por">De / Por</option>
                    <option value="clube">Clube</option>
@@ -1790,8 +1790,8 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- 9. Zona de Produtos -->
-      <div v-show="isProductZone" class="border-b border-white/5">
-          <div class="px-3 py-1.5 flex items-center gap-1.5 border-b border-white/5">
+      <div v-show="isProductZone" class="border-b border-[#e7e7e7]">
+          <div class="px-3 py-1.5 flex items-center gap-1.5 border-b border-[#e7e7e7]">
              <LayoutGrid class="w-3 h-3 text-green-400" />
              <span class="text-[10px] font-bold text-green-400 uppercase tracking-widest">Zona de Produtos</span>
           </div>
@@ -1815,15 +1815,15 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       <!-- Prototype Tab -->
       <div v-if="activeTab === 'prototype'" class="flex-1 overflow-y-auto">
         <!-- Seção de Interações -->
-        <div v-if="selectedObject" class="p-4 border-b border-white/5 space-y-3">
+        <div v-if="selectedObject" class="p-4 border-b border-[#e7e7e7] space-y-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <MousePointer2 class="w-3.5 h-3.5 text-violet-400" />
-              <span class="text-[11px] font-bold text-violet-400 uppercase tracking-widest">Interações</span>
+              <MousePointer2 class="w-3.5 h-3.5 text-[#b3261e]" />
+              <span class="text-[11px] font-bold text-[#b3261e] uppercase tracking-widest">Interações</span>
             </div>
             <button
               @click="$emit('add-interaction')"
-              class="w-6 h-6 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all"
+              class="w-6 h-6 hover:bg-[#ececec] rounded-lg flex items-center justify-center transition-all"
               title="Adicionar interação"
             >
               <Plus class="w-3 h-3 text-zinc-400" />
@@ -1832,15 +1832,15 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           
           <!-- Lista de Interações -->
           <div v-if="getVal('interactionDestination')" class="space-y-2">
-            <div class="flex items-center justify-between p-2.5 bg-[#2a2a2a] rounded-lg border border-white/10">
+            <div class="flex items-center justify-between p-2.5 bg-[#f7f7f7] rounded-lg border border-[#dfdfdf]">
               <div class="flex items-center gap-2">
-                <ArrowRightFromLine class="w-3 h-3 text-violet-400" />
-                <span class="text-xs text-white">Navegar para página</span>
+                <ArrowRightFromLine class="w-3 h-3 text-[#b3261e]" />
+                <span class="text-xs text-zinc-900">Navegar para página</span>
               </div>
               <select
                 :value="getVal('interactionDestination')"
                 @change="e => $emit('update-property', 'interactionDestination', (e.target as any).value)"
-                class="bg-[#1a1a1a] border border-white/10 rounded-md text-xs text-white px-2 py-1 focus:outline-none focus:border-violet-500/50"
+                class="bg-white border border-[#dfdfdf] rounded-md text-xs text-zinc-900 px-2 py-1 focus:outline-none focus:border-[#b3261e]/55"
               >
                 <option value="">Nenhuma</option>
                 <option v-for="(page, idx) in targetPages" :key="idx" :value="idx">{{ page.name }}</option>
@@ -1854,7 +1854,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
         </div>
 
         <!-- Seção de Animação -->
-        <div v-if="selectedObject" class="p-4 border-b border-white/5 space-y-3">
+        <div v-if="selectedObject" class="p-4 border-b border-[#e7e7e7] space-y-3">
           <div class="flex items-center gap-2">
             <Zap class="w-3.5 h-3.5 text-amber-400" />
             <span class="text-[11px] font-bold text-amber-400 uppercase tracking-widest">Animação</span>
@@ -1865,7 +1865,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             <select
               :value="getVal('animationType', 'none')"
               @change="e => $emit('update-property', 'animationType', (e.target as any).value)"
-              class="w-full bg-[#1e1e1e] text-xs text-white rounded-md border border-white/10 px-2 h-7 focus:outline-none focus:border-violet-500/50"
+              class="w-full bg-[#f7f7f7] text-xs text-zinc-900 rounded-md border border-[#dfdfdf] px-2 h-7 focus:outline-none focus:border-[#b3261e]/55"
             >
               <option value="none">Nenhuma</option>
               <option value="fade">Desvanecer</option>
@@ -1880,7 +1880,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               type="number"
               :value="getVal('animationDuration', 300)"
               @input="e => $emit('update-property', 'animationDuration', Number((e.target as any).value))"
-              class="w-full bg-[#1e1e1e] border border-white/10 rounded-md px-2 h-7 text-xs text-white focus:outline-none focus:border-violet-500/50"
+              class="w-full bg-[#f7f7f7] border border-[#dfdfdf] rounded-md px-2 h-7 text-xs text-zinc-900 focus:outline-none focus:border-[#b3261e]/55"
               min="0"
               max="5000"
             />
@@ -1892,11 +1892,11 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
   </div>
 
   <!-- Estado vazio (sem seleção) -->
-  <div v-else class="h-full bg-[#1a1a1a] text-white flex flex-col font-sans border-l border-white/5 overflow-y-auto">
+  <div v-else class="h-full bg-white text-zinc-900 flex flex-col font-sans border-l border-[#e7e7e7] overflow-y-auto">
       <!-- Seção Página -->
-      <div class="border-b border-white/5">
+      <div class="border-b border-[#e7e7e7]">
         <div class="px-3 py-2.5">
-          <span class="text-xs font-semibold text-white">Página</span>
+          <span class="text-xs font-semibold text-zinc-900">Página</span>
         </div>
         
         <!-- Propriedades da Página -->
@@ -1908,7 +1908,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               class="relative shrink-0"
             >
               <div 
-                class="w-6 h-6 rounded-md border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
+                class="w-6 h-6 rounded-md border border-[#dfdfdf] cursor-pointer shrink-0 relative overflow-hidden"
                 :style="{ backgroundColor: getPageColorHex() }"
                 @click="showPageColorPicker = true"
               ></div>
@@ -1929,7 +1929,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 const hex = '#' + (e.target as any).value.replace('#', '');
                 handlePageColorChange(hex);
               }"
-              class="flex-1 min-w-15 h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-2 font-mono focus:outline-none focus:border-violet-500/50 uppercase"
+              class="flex-1 min-w-15 h-7 bg-[#f7f7f7] border border-[#dfdfdf] rounded text-xs text-zinc-900 px-2 font-mono focus:outline-none focus:border-[#b3261e]/55 uppercase"
               placeholder="1E1E1E"
               maxlength="6"
             />
@@ -1942,7 +1942,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 const opacity = Number((e.target as any).value) / 100;
                 handlePageOpacityChange(opacity);
               }"
-              class="w-9 h-7 bg-[#2a2a2a] border border-white/10 rounded text-xs text-white px-1 text-center focus:outline-none focus:border-violet-500/50"
+              class="w-9 h-7 bg-[#f7f7f7] border border-[#dfdfdf] rounded text-xs text-zinc-900 px-1 text-center focus:outline-none focus:border-[#b3261e]/55"
               min="0"
               max="100"
             />
@@ -1950,7 +1950,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             <span class="text-xs text-zinc-400 shrink-0">%</span>
             
             <!-- Visibilidade -->
-            <button class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center transition-all shrink-0 ml-auto" title="Alternar visibilidade da página">
+            <button class="w-6 h-6 hover:bg-[#ececec] rounded flex items-center justify-center transition-all shrink-0 ml-auto" title="Alternar visibilidade da página">
               <Eye class="w-3.5 h-3.5 text-zinc-400" />
             </button>
           </div>
@@ -1958,8 +1958,8 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
       
       <!-- Seção Variáveis -->
-      <div class="border-b border-white/5">
-        <div class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors">
+      <div class="border-b border-[#e7e7e7]">
+        <div class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-[#f4f4f4] transition-colors">
           <div class="flex items-center gap-2">
             <!-- Ícone de variáveis -->
             <svg class="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 16 16">
@@ -1969,18 +1969,18 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <line x1="12" y1="6" x2="12" y2="10" stroke="currentColor" stroke-width="1"/>
               <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1"/>
             </svg>
-            <span class="text-xs font-semibold text-white">Variáveis</span>
+            <span class="text-xs font-semibold text-zinc-900">Variáveis</span>
           </div>
         </div>
       </div>
       
       <!-- Seção Estilos -->
-      <div class="border-b border-white/5">
-        <div class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors">
-          <span class="text-xs font-semibold text-white">Estilos</span>
+      <div class="border-b border-[#e7e7e7]">
+        <div class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-[#f4f4f4] transition-colors">
+          <span class="text-xs font-semibold text-zinc-900">Estilos</span>
           <button 
             @click="handleAddColorStyle"
-            class="w-5 h-5 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all shrink-0"
+            class="w-5 h-5 hover:bg-[#ececec] rounded-lg flex items-center justify-center transition-all shrink-0"
             title="Adicionar estilo de cor"
           >
             <Plus class="w-3.5 h-3.5 text-zinc-400" />
@@ -1991,11 +1991,11 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             v-for="style in colorStyles"
             :key="style.id"
             @click="$emit('apply-color-style', style.id)"
-            class="w-5 h-5 rounded border border-white/10 hover:border-white/30 transition-all relative shrink-0"
+            class="w-5 h-5 rounded border border-[#dfdfdf] hover:border-[#cfcfcf] transition-all relative shrink-0"
             :style="{ backgroundColor: style.value }"
             :title="style.name || style.value"
           >
-            <span v-if="getPageColorHex() === style.value || (props.selectedObject && getVal('fill') === style.value)" class="absolute inset-0 border-2 border-white rounded"></span>
+            <span v-if="getPageColorHex() === style.value || (props.selectedObject && getVal('fill') === style.value)" class="absolute inset-0 border-2 border-[#111111] rounded"></span>
           </button>
         </div>
         <div v-else class="px-3 pb-2 text-[10px] text-zinc-500">
@@ -2004,12 +2004,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
       
       <!-- Seção Exportar -->
-      <div class="border-b border-white/5">
-        <div class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors">
-          <span class="text-xs font-semibold text-white">Exportar</span>
+      <div class="border-b border-[#e7e7e7]">
+        <div class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-[#f4f4f4] transition-colors">
+          <span class="text-xs font-semibold text-zinc-900">Exportar</span>
           <button 
             @click="$emit('action', 'export-png')"
-            class="w-5 h-5 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all"
+            class="w-5 h-5 hover:bg-[#ececec] rounded-lg flex items-center justify-center transition-all"
             title="Exportar página"
           >
             <Plus class="w-3.5 h-3.5 text-zinc-400" />
@@ -2018,19 +2018,19 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
         <div class="px-3 pb-2 space-y-1">
           <button
             @click="$emit('action', 'export-png')"
-            class="w-full text-left px-2 py-1.5 text-[10px] text-zinc-400 hover:text-white hover:bg-white/5 rounded-md transition-all"
+            class="w-full text-left px-2 py-1.5 text-[10px] text-zinc-400 hover:text-zinc-900 hover:bg-[#f4f4f4] rounded-md transition-all"
           >
             Exportar como PNG
           </button>
           <button
             @click="$emit('action', 'export-svg')"
-            class="w-full text-left px-2 py-1.5 text-[10px] text-zinc-400 hover:text-white hover:bg-white/5 rounded-md transition-all"
+            class="w-full text-left px-2 py-1.5 text-[10px] text-zinc-400 hover:text-zinc-900 hover:bg-[#f4f4f4] rounded-md transition-all"
           >
             Exportar como SVG
           </button>
           <button
             @click="$emit('action', 'export-jpg')"
-            class="w-full text-left px-2 py-1.5 text-[10px] text-zinc-400 hover:text-white hover:bg-white/5 rounded-md transition-all"
+            class="w-full text-left px-2 py-1.5 text-[10px] text-zinc-400 hover:text-zinc-900 hover:bg-[#f4f4f4] rounded-md transition-all"
           >
             Exportar como JPG
           </button>
@@ -2039,8 +2039,8 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       
       <!-- Botão Ajuda -->
       <div class="mt-auto p-3 flex justify-end">
-        <button class="w-7 h-7 hover:bg-white/10 rounded-full flex items-center justify-center transition-all" title="Ajuda">
-          <span class="text-xs text-white font-semibold">?</span>
+        <button class="w-7 h-7 hover:bg-[#ececec] rounded-full flex items-center justify-center transition-all" title="Ajuda">
+          <span class="text-xs text-zinc-900 font-semibold">?</span>
         </button>
       </div>
   </div>
@@ -2069,8 +2069,8 @@ input[type=number] { -moz-appearance: textfield; }
 .pp-interaction-card {
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  background: rgba(139, 92, 246, 0.05);
+  border: 1px solid rgba(179, 38, 30, 0.25);
+  background: rgba(179, 38, 30, 0.06);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2079,12 +2079,12 @@ input[type=number] { -moz-appearance: textfield; }
 .pp-info-box {
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(24, 24, 27, 0.5);
+  border: 1px solid #e7e7e7;
+  background: #f8f8f8;
 }
 
 .pp-info-box--collapsed {
-  background: rgba(24, 24, 27, 0.3);
+  background: #f2f2f2;
 }
 
 /* Painel Design */
@@ -2104,11 +2104,11 @@ input[type=number] { -moz-appearance: textfield; }
   text-align: left;
   transition: background-color 0.15s;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid #e7e7e7;
 }
 
 .pp-section-header:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: #f4f4f4;
 }
 
 .pp-section-header span {
@@ -2136,7 +2136,7 @@ input[type=number] { -moz-appearance: textfield; }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid #e7e7e7;
 }
 
 /* Linha de input */
@@ -2158,40 +2158,40 @@ input[type=number] { -moz-appearance: textfield; }
 /* Campo de input genérico */
 .pp-input-field {
   flex: 1;
-  background: rgba(39, 39, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #f7f7f7;
+  border: 1px solid #dfdfdf;
   border-radius: 4px;
   padding: 3px 6px;
   font-size: 11px;
-  color: white;
+  color: #111827;
   transition: border-color 0.15s;
 }
 
 .pp-input-field:focus {
   outline: none;
-  border-color: rgba(139, 92, 246, 0.5);
+  border-color: rgba(179, 38, 30, 0.5);
 }
 
 /* Input numérico */
 .pp-number-input {
   width: 100%;
-  background: rgba(39, 39, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #f7f7f7;
+  border: 1px solid #dfdfdf;
   border-radius: 4px;
   padding: 3px 6px;
   font-size: 11px;
-  color: white;
+  color: #111827;
   text-align: center;
   transition: border-color 0.15s;
 }
 
 .pp-number-input:focus {
   outline: none;
-  border-color: rgba(139, 92, 246, 0.5);
+  border-color: rgba(179, 38, 30, 0.5);
 }
 
 .pp-number-input:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: #cfcfcf;
 }
 
 /* Slider com estilo */
@@ -2199,7 +2199,7 @@ input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   height: 3px;
-  background: #3f3f46;
+  background: #d1d5db;
   border-radius: 3px;
   cursor: pointer;
 }
@@ -2209,8 +2209,8 @@ input[type="range"]::-webkit-slider-thumb {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #8b5cf6;
-  border: 2px solid #1a1a1a;
+  background: #b3261e;
+  border: 2px solid #ffffff;
   cursor: pointer;
   transition: transform 0.1s;
 }
@@ -2226,7 +2226,7 @@ select {
 }
 
 select:hover {
-  border-color: rgba(255, 255, 255, 0.15) !important;
+  border-color: #cfcfcf !important;
 }
 
 /* Grids de layout */

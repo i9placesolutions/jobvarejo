@@ -909,16 +909,16 @@ const handleFileUpload = async (event: Event) => {
 </script>
 
 <template>
-    <div class="flex flex-col h-full bg-[#1a1a1a]">
+    <div class="assets-panel flex flex-col h-full">
         <!-- Category Nav (compact, matching PropertiesPanel) -->
-        <div class="flex items-center gap-0.5 px-2 py-1.5 border-b border-white/5 shrink-0 overflow-x-auto nav-scrollbar">
+        <div class="flex items-center gap-0.5 px-2 py-1.5 border-b border-[var(--assets-border)] shrink-0 overflow-x-auto nav-scrollbar">
             <button 
                 v-for="cat in categories" 
                 :key="cat.id"
                 @click="activeCategory = cat.id; currentFolderId = null"
                 :class="[
-                    'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide cursor-pointer transition-all whitespace-nowrap shrink-0',
-                    activeCategory === cat.id ? 'bg-violet-500/15 text-violet-400' : 'text-zinc-500 hover:text-zinc-400'
+                    'assets-category-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide cursor-pointer transition-all whitespace-nowrap shrink-0',
+                    activeCategory === cat.id ? 'is-active' : ''
                 ]"
             >
                 <component :is="cat.icon" class="w-3 h-3" />
@@ -926,13 +926,13 @@ const handleFileUpload = async (event: Event) => {
             </button>
         </div>
 
-        <div v-if="activeCategory === 'uploads' || activeCategory === 'brand' || (activeCategory === 'folders' && currentFolderId)" class="px-2 py-1.5 border-b border-white/5">
+        <div v-if="activeCategory === 'uploads' || activeCategory === 'brand' || (activeCategory === 'folders' && currentFolderId)" class="px-2 py-1.5 border-b border-[var(--assets-border)]">
             <input type="file" ref="fileInput" class="hidden" accept="image/*" multiple @change="handleFileUpload" />
             <div class="flex items-center gap-1.5">
                 <button 
                     @click="triggerUpload" 
                     :disabled="isAnyUploading"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer disabled:opacity-40"
+                    class="assets-cta-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer disabled:opacity-40"
                 >
                     <template v-if="isAnyUploading">
                         <span class="animate-pulse">{{ uploadButtonText }}</span>
@@ -944,7 +944,7 @@ const handleFileUpload = async (event: Event) => {
                 </button>
                 <button
                     @click="aiStudio.openStudio({ initial: { mode: 'generate', filenameBase: 'ai-image' }, applyMode: 'insert' })"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
+                    class="assets-cta-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer"
                 >
                     <Sparkles class="w-3 h-3" />
                     IA
@@ -954,16 +954,16 @@ const handleFileUpload = async (event: Event) => {
         </div>
 
         <!-- Breadcrumb / Header for Folders -->
-        <div v-if="activeCategory === 'folders'" class="px-2 py-1.5 border-b border-white/5 flex items-center justify-between text-zinc-400">
+        <div v-if="activeCategory === 'folders'" class="px-2 py-1.5 border-b border-[var(--assets-border)] flex items-center justify-between text-[var(--assets-muted)]">
             <div class="flex items-center gap-1.5">
                 <template v-if="currentFolderId">
-                    <button @click="goBack" class="p-0.5 hover:bg-white/10 rounded">
+                    <button @click="goBack" class="folder-header-btn p-0.5 rounded">
                         <ArrowLeft class="w-3.5 h-3.5" />
                     </button>
                     <div class="flex items-center gap-1 text-[10px]">
-                        <span class="cursor-pointer hover:text-white" @click="currentFolderId = null">Raiz</span>
+                        <span class="cursor-pointer hover:text-[var(--assets-text)]" @click="currentFolderId = null">Raiz</span>
                         <ChevronRight class="w-2.5 h-2.5" />
-                        <span class="text-white font-semibold uppercase tracking-wide">{{ currentFolder?.name }}</span>
+                        <span class="text-[var(--assets-text)] font-semibold uppercase tracking-wide">{{ currentFolder?.name }}</span>
                     </div>
                 </template>
                 <template v-else>
@@ -972,7 +972,7 @@ const handleFileUpload = async (event: Event) => {
             </div>
             <button 
                 @click="dialog = { show: true, type: 'new_folder', inputValue: '', targetItem: null }" 
-                class="p-1 hover:bg-white/10 rounded text-zinc-400 hover:text-white transition-colors"
+                class="folder-header-btn p-1 rounded text-[var(--assets-muted)] transition-colors"
                 title="Nova Pasta"
             >
                 <FolderInput class="w-3 h-3" />
@@ -1000,12 +1000,12 @@ const handleFileUpload = async (event: Event) => {
                         @mouseup="cancelLongPress"
                         @mouseleave="cancelLongPress"
                         @touchend="cancelLongPress"
-                        class="col-span-2 flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer text-zinc-400 hover:text-white border border-transparent hover:border-white/10 transition-all select-none"
+                        class="folder-row col-span-2 flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer border border-transparent transition-all select-none"
                     >
-                        <Folder class="w-3.5 h-3.5 text-yellow-500 fill-yellow-500/20" />
+                        <Folder class="w-3.5 h-3.5 text-[#a8864f] fill-[#d2ba89]/35" />
                         <div class="flex flex-col">
                              <span class="text-[11px] font-medium">{{ item.name }}</span>
-                             <span class="text-[9px] text-zinc-500">Pasta</span>
+                             <span class="text-[9px] text-[var(--assets-muted)]">Pasta</span>
                         </div>
                     </div>
 
@@ -1013,7 +1013,7 @@ const handleFileUpload = async (event: Event) => {
                     <div 
                         v-for="asset in currentItems.filter(i => i.type !== 'folder')" 
                         :key="asset.id"
-                        class="aspect-square bg-[#1e1e1e] rounded overflow-hidden relative group cursor-grab active:cursor-grabbing border border-white/5 hover:border-white/15 transition-all"
+                        class="asset-card aspect-square rounded-lg overflow-hidden relative group cursor-grab active:cursor-grabbing border transition-all"
                         draggable="true"
                         @click="handleAssetClick(asset)"
                         @dragstart="(e) => handleDragStart(e, asset)"
@@ -1034,7 +1034,7 @@ const handleFileUpload = async (event: Event) => {
                 <!-- Assets Grid -->
                 <template v-else>
                     <!-- Empty state for recents -->
-                    <div v-if="activeCategory === 'recents' && currentItems.length === 0" class="col-span-2 flex flex-col items-center justify-center py-6 text-zinc-500">
+                    <div v-if="activeCategory === 'recents' && currentItems.length === 0" class="col-span-2 flex flex-col items-center justify-center py-6 text-[var(--assets-muted)]">
                         <Clock class="w-6 h-6 mb-2 opacity-40" />
                         <p class="text-[10px] font-semibold uppercase tracking-wide">Nenhum item recente</p>
                         <p class="text-[9px] mt-1 opacity-60">Os arquivos usados aparecerão aqui</p>
@@ -1043,7 +1043,7 @@ const handleFileUpload = async (event: Event) => {
                     <div 
                         v-for="asset in currentItems" 
                         :key="asset.id"
-                        class="aspect-square bg-[#1e1e1e] rounded overflow-hidden relative group cursor-grab active:cursor-grabbing border border-white/5 hover:border-white/15 transition-all"
+                        class="asset-card aspect-square rounded-lg overflow-hidden relative group cursor-grab active:cursor-grabbing border transition-all"
                         draggable="true"
                         @click="handleAssetClick(asset)"
                         @dragstart="(e) => handleDragStart(e, asset)"
@@ -1061,9 +1061,9 @@ const handleFileUpload = async (event: Event) => {
                             </div>
                         </template>
                         <template v-else>
-                             <div class="w-full h-full flex flex-col items-center justify-center p-2 text-zinc-500 bg-[#1e1e1e]">
+                             <div class="w-full h-full flex flex-col items-center justify-center p-2 text-[var(--assets-muted)] bg-[var(--assets-card-bg)]">
                                 <ShoppingCart class="w-5 h-5 mb-1 opacity-20" />
-                                <span class="text-[9px] text-zinc-300 font-medium text-center line-clamp-2 leading-tight">{{ asset.name }}</span>
+                                <span class="text-[9px] text-[var(--assets-text)] font-medium text-center line-clamp-2 leading-tight">{{ asset.name }}</span>
                                 <span v-if="asset.price" class="text-[10px] text-green-400 font-bold mt-1">R$ {{ asset.price }}</span>
                             </div>
                         </template>
@@ -1078,15 +1078,15 @@ const handleFileUpload = async (event: Event) => {
                 <button
                     v-if="uploadsHasMore && !uploadsLoadingMore"
                     @click="fetchMoreAssets"
-                    class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 bg-white/5 hover:bg-white/10 rounded-md border border-white/10 transition-colors"
+                    class="load-more-btn px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide rounded-md border transition-colors"
                 >
                     Carregar mais
                 </button>
-                <div v-else class="text-[10px] text-zinc-500 animate-pulse">Carregando mais uploads...</div>
+                <div v-else class="text-[10px] text-[var(--assets-muted)] animate-pulse">Carregando mais uploads...</div>
             </div>
             
             <!-- Empty state (only show if not already showing empty state for recents) -->
-            <div v-if="!currentItems.length && !(activeCategory === 'recents')" class="text-center py-8 text-zinc-600">
+            <div v-if="!currentItems.length && !(activeCategory === 'recents')" class="text-center py-8 text-[var(--assets-muted)]">
                 <p class="text-[10px] font-semibold uppercase tracking-widest">Vazio</p>
                 <p v-if="activeCategory === 'folders' && !currentFolderId" class="text-[9px] mt-2">Clique com o botão direito para criar pasta</p>
             </div>
@@ -1107,8 +1107,8 @@ const handleFileUpload = async (event: Event) => {
             <div class="flex flex-col gap-4">
                 <template v-if="dialog.type === 'move'">
                      <div class="flex flex-col gap-2">
-                        <label class="text-xs text-zinc-400">Mover para:</label>
-                        <select v-model="moveTargetId" class="bg-zinc-800 border-zinc-700 rounded text-xs p-2 text-white">
+                        <label class="text-xs text-[var(--assets-muted)]">Mover para:</label>
+                        <select v-model="moveTargetId" class="assets-select rounded text-xs p-2">
                             <option value="">📁 Raiz</option>
                             <option v-for="target in availableMoveTargets" :key="target.id" :value="target.id">
                                 {{ '\u00A0\u00A0'.repeat(target.depth) }}{{ target.depth > 0 ? '└ ' : '' }}{{ target.name }}
@@ -1142,18 +1142,105 @@ const handleFileUpload = async (event: Event) => {
 </template>
 
 <style scoped>
+.assets-panel {
+    --assets-bg: #fdfbf7;
+    --assets-bg-strong: #fffefb;
+    --assets-text: #2f2419;
+    --assets-muted: #7f6d5c;
+    --assets-border: #e8dccb;
+    --assets-card-bg: #fffdfa;
+    --assets-accent-soft: #fde9e4;
+    color: var(--assets-text);
+    background: linear-gradient(180deg, var(--assets-bg-strong) 0%, var(--assets-bg) 100%);
+}
+
+.assets-category-btn {
+    color: var(--assets-muted);
+}
+
+.assets-category-btn:hover {
+    color: var(--assets-text);
+    background: rgba(179, 38, 30, 0.08);
+}
+
+.assets-category-btn.is-active {
+    color: #7a1d19;
+    background: var(--assets-accent-soft);
+    box-shadow: inset 0 0 0 1px rgba(179, 38, 30, 0.16);
+}
+
+.assets-cta-btn {
+    color: #5f4e3f;
+    background: linear-gradient(180deg, #fffefb 0%, #fff8ee 100%);
+    border: 1px solid var(--assets-border);
+}
+
+.assets-cta-btn:hover:not(:disabled) {
+    color: #432f21;
+    border-color: #d6b793;
+    background: #fff6e8;
+}
+
+.folder-header-btn:hover {
+    color: var(--assets-text);
+    background: rgba(179, 38, 30, 0.1);
+}
+
+.folder-row {
+    color: var(--assets-muted);
+}
+
+.folder-row:hover {
+    color: var(--assets-text);
+    background: rgba(179, 38, 30, 0.08);
+    border-color: rgba(179, 38, 30, 0.14);
+}
+
+.asset-card {
+    background: var(--assets-card-bg);
+    border-color: rgba(232, 220, 203, 0.9);
+}
+
+.asset-card:hover {
+    border-color: #d6b793;
+    box-shadow: 0 12px 20px -18px rgba(64, 41, 23, 0.6);
+}
+
+.load-more-btn {
+    color: #5f4e3f;
+    background: #fffefb;
+    border-color: var(--assets-border);
+}
+
+.load-more-btn:hover {
+    background: #fff6e8;
+    border-color: #d6b793;
+}
+
+.assets-select {
+    color: var(--assets-text);
+    background: #fffefb;
+    border: 1px solid var(--assets-border);
+}
+
+.assets-select:focus {
+    outline: none;
+    border-color: #b53a2b;
+    box-shadow: 0 0 0 3px rgba(181, 58, 43, 0.14);
+}
+
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cfbea7; border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #333 transparent;
+    scrollbar-color: #cfbea7 transparent;
 }
 .nav-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #444 transparent;
+    scrollbar-color: #cfbea7 transparent;
 }
 .nav-scrollbar::-webkit-scrollbar { height: 3px; }
-.nav-scrollbar::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+.nav-scrollbar::-webkit-scrollbar-thumb { background: #cfbea7; border-radius: 3px; }
 .nav-scrollbar::-webkit-scrollbar-track { background: transparent; }
 </style>

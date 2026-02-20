@@ -1117,8 +1117,8 @@ const addFrame = () => {
         width: frameWidth,
         height: frameHeight,
         fill: '#ffffff',
-        stroke: 'transparent',
-        strokeWidth: 2,
+        stroke: '#d6dbe3',
+        strokeWidth: 1,
         strokeUniform: true, // Stroke não afeta dimensões (1080 fica 1080, não 1082)
         isFrame: true, // Custom Flag used by after:render
         clipContent: true,
@@ -1128,14 +1128,14 @@ const addFrame = () => {
         noScaleCache: true,
         hasBorders: true,
         transparentCorners: false,
-        cornerColor: '#0d99ff',
+        cornerColor: '#b3261e',
         cornerSize: 8,
         padding: 0,
         // Controle preciso de resize (1 pixel por vez)
         lockScalingX: false,
         lockScalingY: false,
         // Usa controles de escala suave mas precisos
-        cornerStrokeColor: '#0d99ff',
+        cornerStrokeColor: '#b3261e',
         borderScaleFactor: 1
     });
 
@@ -3677,7 +3677,7 @@ const setupAltDragDuplicate = () => {
             'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel',
             'unit', 'limit', '_productData', '_cardWidth', '_cardHeight', 'subTargetCheck', 'interactive',
             '__preserveManualLayout', '__isCustomTemplate', '__forceAtacarejoCanonical',
-            '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale',
+            '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors',
             '__atacValueVariants', '__atacVariantGroups'
         ];
 
@@ -4826,8 +4826,72 @@ const scheduleIdleWork = (work: () => void, timeoutMs = 2200) => {
     window.setTimeout(work, Math.min(1200, timeoutMs));
 }
 
+const DEFAULT_WORKSPACE_BACKGROUND = '#ece9e2'
+
+const clampRgbChannel = (value: number): number => {
+    if (!Number.isFinite(value)) return 0
+    return Math.max(0, Math.min(255, Math.round(value)))
+}
+
+const parseColorToRgb = (value: any): { r: number; g: number; b: number } | null => {
+    const raw = String(value ?? '').trim()
+    if (!raw) return null
+
+    if (raw.startsWith('#')) {
+        const hex = raw.slice(1)
+        if (hex.length === 3) {
+            return {
+                r: clampRgbChannel(parseInt(`${hex[0]}${hex[0]}`, 16)),
+                g: clampRgbChannel(parseInt(`${hex[1]}${hex[1]}`, 16)),
+                b: clampRgbChannel(parseInt(`${hex[2]}${hex[2]}`, 16))
+            }
+        }
+        if (hex.length >= 6) {
+            return {
+                r: clampRgbChannel(parseInt(hex.slice(0, 2), 16)),
+                g: clampRgbChannel(parseInt(hex.slice(2, 4), 16)),
+                b: clampRgbChannel(parseInt(hex.slice(4, 6), 16))
+            }
+        }
+    }
+
+    const rgb = raw.match(/rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)/i)
+    if (rgb) {
+        return {
+            r: clampRgbChannel(Number(rgb[1])),
+            g: clampRgbChannel(Number(rgb[2])),
+            b: clampRgbChannel(Number(rgb[3]))
+        }
+    }
+
+    return null
+}
+
+const getRelativeLuminance = (r: number, g: number, b: number): number => {
+    const normalize = (v: number) => {
+        const s = v / 255
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+    }
+    const rr = normalize(r)
+    const gg = normalize(g)
+    const bb = normalize(b)
+    return (0.2126 * rr) + (0.7152 * gg) + (0.0722 * bb)
+}
+
+const resolveWorkspaceBackgroundColor = (value: any): string => {
+    const parsed = parseColorToRgb(value)
+    if (!parsed) return DEFAULT_WORKSPACE_BACKGROUND
+
+    // Legacy projects sometimes persisted very dark workspace backgrounds.
+    // Keep workspace readable by clamping to the light default when too dark.
+    const luminance = getRelativeLuminance(parsed.r, parsed.g, parsed.b)
+    if (luminance < 0.12) return DEFAULT_WORKSPACE_BACKGROUND
+
+    return `rgb(${parsed.r}, ${parsed.g}, ${parsed.b})`
+}
+
 const pageSettings = ref({
-    backgroundColor: '#1e1e1e' // Match default dark workspace
+    backgroundColor: DEFAULT_WORKSPACE_BACKGROUND
 })
 
 // === Frame Label Overlays (clickable HTML labels for all frames) ===
@@ -6086,14 +6150,16 @@ const toggleGrid = () => {
     applyGridBackground()
 }
 
-const createGridPatternSource = (size: number) => {
+const createGridPatternSource = (size: number, baseColor: string) => {
     const cell = Math.max(4, Math.round(Number(size) || 20))
     const canvasGrid = document.createElement('canvas');
     canvasGrid.width = cell;
     canvasGrid.height = cell;
     const ctx = canvasGrid.getContext('2d');
     if (ctx) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillStyle = baseColor
+        ctx.fillRect(0, 0, cell, cell)
+        ctx.strokeStyle = 'rgba(112, 92, 72, 0.13)';
         ctx.lineWidth = 0.5;
         ctx.beginPath();
         ctx.moveTo(cell, 0);
@@ -6109,18 +6175,19 @@ const applyGridBackground = () => {
     if (!import.meta.client) return
     if (!canvas.value) return
     try {
+        const workspaceColor = resolveWorkspaceBackgroundColor(pageSettings.value.backgroundColor)
         if (viewShowGrid.value) {
-            const src = createGridPatternSource(gridSize.value)
+            const src = createGridPatternSource(gridSize.value, workspaceColor)
             const pattern = fabric?.Pattern ? new fabric.Pattern({ source: src, repeat: 'repeat' }) : null
             if (pattern) {
                 // backgroundColor accepts Pattern in Fabric v7
                 canvas.value.set?.('backgroundColor', pattern)
             } else {
-                // Fallback: just keep dark background
-                canvas.value.set?.('backgroundColor', '#1e1e1e')
+                // Fallback: keep light workspace background
+                canvas.value.set?.('backgroundColor', workspaceColor)
             }
         } else {
-            canvas.value.set?.('backgroundColor', '#1e1e1e')
+            canvas.value.set?.('backgroundColor', workspaceColor)
         }
         canvas.value.requestRenderAll?.()
     } catch (e) {
@@ -7103,10 +7170,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             // ignore
         }
         clearCanvasForPageSwitch(canvas.value)
-        // THE WORKSPACE BACKGROUND IS DYNAMIC
         if (canvas.value) {
-            canvas.value.backgroundColor = pageSettings.value.backgroundColor;
-        } 
+            canvas.value.backgroundColor = resolveWorkspaceBackgroundColor(pageSettings.value.backgroundColor);
+        }
         
         // Infinite canvas: the Fabric canvas must match the visible wrapper size,
         // NOT the page/frame dimensions (those are represented by Frame objects).
@@ -7343,7 +7409,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 artboard = canvas.value.getObjects().find((o: any) => o.id === 'artboard-bg');
             }
             if (artboard && artboard.fill) {
-                pageSettings.value.backgroundColor = artboard.fill as string;
+                pageSettings.value.backgroundColor = resolveWorkspaceBackgroundColor(artboard.fill as string);
             }
             
             // Restore IDs if lost - BUT exclude frames and selectable objects
@@ -8195,7 +8261,7 @@ onMounted(async () => {
 	        canvas.value = new fabric.Canvas(canvasEl.value, {
 	          width: wrapperEl.value.clientWidth,
 	          height: wrapperEl.value.clientHeight,
-	          backgroundColor: '#1e1e1e', // Dark Workspace
+	          backgroundColor: DEFAULT_WORKSPACE_BACKGROUND,
 	          preserveObjectStacking: true, 
 	          renderOnAddRemove: true,
 	          selection: true,
@@ -8434,8 +8500,8 @@ onMounted(async () => {
       // Initialize Smart Grid
       initProductZone();
       
-      // Force workspace to dark
-      wrapperEl.value.style.backgroundColor = '#121212';
+      // Keep wrapper color consistent with sanitized workspace background.
+      wrapperEl.value.style.backgroundColor = resolveWorkspaceBackgroundColor(pageSettings.value.backgroundColor);
       
       // --- Frame Labels: update HTML overlay positions on every render ---
       canvas.value.on('after:render', handleAfterRenderPerf);
@@ -9276,6 +9342,7 @@ const CANVAS_CUSTOM_PROPS = [
 	    '__manualGapSingle',
 	    '__manualGapRetail',
 	    '__manualGapWholesale',
+	    '__manualSingleAnchors',
 	    '__fontScale',
 	    '__fontScaleBase',
 	    '__yOffsetRatio',
@@ -15544,31 +15611,20 @@ const setupReactivity = () => {
 // Properties Updates
 const updatePageSettings = (prop: string, value: any) => {
     if (prop === 'backgroundColor') {
-        pageSettings.value.backgroundColor = value;
+        const nextWorkspaceColor = resolveWorkspaceBackgroundColor(value);
+        pageSettings.value.backgroundColor = nextWorkspaceColor;
         if (canvas.value) {
-            // Convert rgba to hex if needed for canvas background
-            let bgColor = value;
-            if (value.startsWith('rgba')) {
-                // Extract RGB values (ignore alpha for canvas background)
-                const rgba = value.match(/rgba?\(([^)]+)\)/);
-                if (rgba) {
-                    const parts = rgba[1].split(',').map((s: string) => s.trim());
-                    const r = parseInt(parts[0]);
-                    const g = parseInt(parts[1]);
-                    const b = parseInt(parts[2]);
-                    bgColor = `rgb(${r}, ${g}, ${b})`;
-                }
-            }
-            canvas.value.backgroundColor = bgColor;
+            canvas.value.backgroundColor = nextWorkspaceColor;
+            applyGridBackground();
             canvas.value.requestRenderAll();
             saveCurrentState();
         }
         // Also update activePage background
         if (activePage.value) {
-            (activePage.value as any).backgroundColor = value;
+            (activePage.value as any).backgroundColor = nextWorkspaceColor;
             const currentCanvasData = project.pages?.[project.activePageIndex]?.canvasData;
             if (currentCanvasData && typeof currentCanvasData === 'object') {
-                updatePageData(project.activePageIndex, { ...currentCanvasData, backgroundColor: value });
+                updatePageData(project.activePageIndex, { ...currentCanvasData, backgroundColor: nextWorkspaceColor });
             }
         }
     }
@@ -16364,14 +16420,14 @@ const updateObjectProperty = (prop: string, value: any) => {
         // --- Gradient Logic (Simple Linear) ---
         else if (prop === 'fill-gradient') {
              // Basic Gradient Mock
-             const grad = new fabric.Gradient({
-                type: 'linear',
-                coords: { x1: 0, y1: 0, x2: active.width, y2: active.height },
-                colorStops: [
-                    { offset: 0, color: 'red' },
-                    { offset: 1, color: '#8b5cf6' }
-                ]
-             });
+	             const grad = new fabric.Gradient({
+	                type: 'linear',
+	                coords: { x1: 0, y1: 0, x2: active.width, y2: active.height },
+	                colorStops: [
+	                    { offset: 0, color: 'red' },
+	                    { offset: 1, color: '#b3261e' }
+	                ]
+	             });
              active.set('fill', grad);
         }
         // --- Text Advanced ---
@@ -17028,7 +17084,7 @@ const handleAction = async (action: string) => {
 
         // Show loading indicator
         const loadingIndicator = document.createElement('div');
-        loadingIndicator.className = 'fixed top-4 right-4 bg-zinc-900 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2 border border-white/10';
+        loadingIndicator.className = 'fixed top-4 right-4 bg-white text-zinc-900 px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2 border border-[#dfdfdf]';
         loadingIndicator.innerHTML = '<span class="animate-spin mr-2">⟳</span> Removendo fundo...';
         document.body.appendChild(loadingIndicator);
 
@@ -17440,10 +17496,10 @@ const handleAction = async (action: string) => {
         
         if (target) {
             target.isComponent = true;
-            // Visual indicator: Purple Border
+            // Visual indicator: Brand Border
             target.set({
-                borderColor: '#8b5cf6', // Violet-500
-                cornerColor: '#8b5cf6',
+                borderColor: '#b3261e',
+                cornerColor: '#b3261e',
                 cornerStrokeColor: '#fff',
                 borderDashArray: [0, 0], // Solid
                 padding: 5
@@ -19542,8 +19598,8 @@ const clearCanvas = () => {
     // Clear all objects but keep configuration
     canvas.value.clear();
     
-    // ENSURE WORKSPACE IS DARK
-    canvas.value.backgroundColor = '#1e1e1e';
+    // Ensure light workspace
+    canvas.value.backgroundColor = resolveWorkspaceBackgroundColor(pageSettings.value.backgroundColor);
     
     // Reset Data
     canvasObjects.value = [];
@@ -20221,7 +20277,7 @@ const resolveOrCreateZoneForFrame = (frame: any): any | null => {
         hasControls: true,
         hasBorders: true,
         transparentCorners: false,
-        cornerColor: '#8b5cf6',
+        cornerColor: '#b3261e',
         cornerStyle: 'circle',
         cornerSize: 10,
         padding: 0,
@@ -20486,9 +20542,9 @@ const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
                 originY: 'center',
                 width: cellW,
                 height: cellH,
-                fill: '#e0e0e0',
-                stroke: 'transparent',
-                strokeWidth: 0,
+                fill: '#ffffff',
+                stroke: '#d6dbe3',
+                strokeWidth: 1,
                 strokeUniform: true,
                 isFrame: true,
                 clipContent: true,
@@ -20498,12 +20554,12 @@ const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
                 noScaleCache: true,
                 hasBorders: true,
                 transparentCorners: false,
-                cornerColor: '#0d99ff',
+                cornerColor: '#b3261e',
                 cornerSize: 8,
                 padding: 0,
                 lockScalingX: false,
                 lockScalingY: false,
-                cornerStrokeColor: '#0d99ff',
+                cornerStrokeColor: '#b3261e',
                 borderScaleFactor: 1
             });
 
@@ -20539,13 +20595,12 @@ const addGridZone = () => {
     if (!canvas.value) return;
     
     const center = getCenterOfView();
-    // Create a nicer placeholder zone
-    // Background with Glass/Dark aesthetic
+    // Create a placeholder zone
     const zone = new fabric.Rect({
         width: 400, 
         height: 600, 
         fill: 'rgba(0,0,0,0)', 
-        stroke: '#404040', 
+        stroke: '#b0b7c3', 
         strokeWidth: 2, 
         strokeDashArray: [10, 10], 
         strokeUniform: true,
@@ -20581,7 +20636,7 @@ const addGridZone = () => {
         hasControls: true,
         hasBorders: true,
         transparentCorners: false,
-        cornerColor: '#8b5cf6',
+        cornerColor: '#b3261e',
         cornerStyle: 'circle',
         cornerSize: 10,
         padding: 0,
@@ -22395,11 +22450,28 @@ const layoutPrice = (opts: {
     if (!integer || !decimal) return null;
 
     const getW = (t: any) => (t && typeof t.getScaledWidth === 'function' ? t.getScaledWidth() : 0);
-    const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX;
-    const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX;
-    const autoGap = PRICE_INTEGER_DECIMAL_GAP_PX;
-    let gap = Number.isFinite(Number(opts.gapPx)) ? Number(opts.gapPx) : autoGap;
+    const getH = (t: any) => (t && typeof t.getScaledHeight === 'function' ? t.getScaledHeight() : 0);
+    const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : -8;
+    const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : 6;
+    const digitsCount = String(integer?.text || '').replace(/[^\d]/g, '').length || 1;
+    const hasExplicitGap = Number.isFinite(Number(opts.gapPx));
+    const autoGap = digitsCount <= 1 ? -7 : (digitsCount === 2 ? -6 : (digitsCount === 3 ? -5 : -4));
+    let gap = hasExplicitGap ? Number(opts.gapPx) : autoGap;
     gap = Math.min(maxGap, Math.max(minGap, gap));
+
+    // Optical kerning for ",99": keep cents visually close to the integer.
+    const decimalRaw = String(decimal?.text || '').trim();
+    const hasLeadingComma = /^,/.test(decimalRaw);
+    if (hasLeadingComma) {
+        if (!hasExplicitGap) {
+            const tighten = digitsCount >= 3 ? 1.3 : (digitsCount === 2 ? 1.1 : 0.9);
+            gap -= tighten;
+        } else if (gap > -1) {
+            // Legacy stale anchors can carry positive/loose gaps; cap to a tighter baseline.
+            gap = -1;
+        }
+        gap = Math.min(maxGap, Math.max(minGap, gap));
+    }
 
     integer.set?.({ originX: 'left', originY: 'center' });
     decimal.set?.({ originX: 'left', originY: 'center' });
@@ -22459,22 +22531,48 @@ const layoutPrice = (opts: {
     const decW = getW(decimal);
     if (unitObj && unitObj.visible !== false) {
         const decCenterX = centsX + (decW / 2);
+        const decY = Number(opts.decY || 0);
+        const requestedUnitY = Number(opts.unitY || decY);
+        const decH = Math.max(1, getH(decimal));
+        const unitH = Math.max(1, getH(unitObj));
+
+        // Keep KG/UN visually close to the cents text.
+        // Legacy templates may carry oversized offsets that leave the unit too far away.
+        const requestedDelta = requestedUnitY - decY;
+        // Keep unit close to cents; only clamp extreme offsets.
+        const minDelta = -Math.max(3, decH * 0.08);
+        const maxDelta = Math.max(8, (decH * 0.44) + (unitH * 0.1));
+        const clampedUnitY = decY + Math.min(maxDelta, Math.max(minDelta, requestedDelta));
+
         unitObj.set?.({
             originX: 'center',
             originY: 'center',
             left: decCenterX,
-            top: opts.unitY
+            top: clampedUnitY
         });
 
         const unitW = getW(unitObj);
+        const unitScaleX = Number(unitObj.scaleX || 1);
+        const unitScaleY = Number(unitObj.scaleY || 1);
         if (decW > 0 && unitW > decW) {
             const s = decW / unitW;
-            unitObj.set?.({ scaleX: s, scaleY: s });
-            unitObj.set?.({ left: decCenterX });
-        } else {
-            unitObj.set?.({ scaleX: 1, scaleY: 1 });
+            unitObj.set?.({ scaleX: unitScaleX * s, scaleY: unitScaleY * s });
             unitObj.set?.({ left: decCenterX });
         }
+
+        // Keep unit legible relative to cents (prevents tiny KG/UN).
+        const minUnitH = decH * 0.42;
+        const nextUnitH = getH(unitObj);
+        if (nextUnitH > 0 && nextUnitH < minUnitH) {
+            const grow = minUnitH / nextUnitH;
+            unitObj.set?.({
+                scaleX: Number(unitObj.scaleX || 1) * grow,
+                scaleY: Number(unitObj.scaleY || 1) * grow
+            });
+            unitObj.set?.({ left: decCenterX });
+        }
+
+        unitObj.set?.({ left: decCenterX });
     }
 
     // Keep the "inteiro + centavos (+ unidade)" block visually centered when requested.
@@ -24563,8 +24661,8 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
         if (hasSplitPrice) {
             // Position integer and decimal dynamically
-        const intY = (typeof priceInteger.__yOffsetRatio === 'number' ? priceInteger.__yOffsetRatio : 0) * newH;
-        const decY = (typeof priceDecimal.__yOffsetRatio === 'number' ? priceDecimal.__yOffsetRatio : -0.18) * newH;
+            const intY = (typeof priceInteger.__yOffsetRatio === 'number' ? priceInteger.__yOffsetRatio : 0) * newH;
+            const decY = (typeof priceDecimal.__yOffsetRatio === 'number' ? priceDecimal.__yOffsetRatio : -0.18) * newH;
             const unitY = (typeof priceUnit?.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * newH;
             const rightPad = newH * 0.35;
             const maxTextW = Math.max(20, (newW / 2) - rightPad - textStartX);
@@ -24576,10 +24674,7 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
                 intY,
                 decY,
                 unitY,
-                maxWidth: maxTextW,
-                gapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
-                minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
-                maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
+                maxWidth: maxTextW
             });
         } else if (priceText) {
             // Single price text
@@ -25217,10 +25312,7 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             intY,
             decY,
             unitY,
-            maxWidth: maxTextW,
-            gapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
-            minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
-            maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
+            maxWidth: maxTextW
         });
     } else if (priceText) {
         const scaledTextWidth = priceText.getScaledWidth();
@@ -25721,6 +25813,12 @@ function serializePriceGroupForTemplate(pg: any) {
     // Normalize so saved templates are position/scale-independent.
     pg.set({ left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0, originX: 'center', originY: 'center' });
     safeAddWithUpdate(pg);
+    const manualAnchors = readSingleManualPriceAnchors(pg, { force: true });
+    if (manualAnchors && typeof manualAnchors === 'object') {
+        (pg as any).__manualSingleAnchors = manualAnchors;
+        const manualGap = Number((manualAnchors as any).intDecGap);
+        if (Number.isFinite(manualGap)) (pg as any).__manualGapSingle = manualGap;
+    }
     const j: any = pg.toObject(LABEL_TEMPLATE_EXTRA_PROPS);
     const useVariantSnapshots = shouldUseAtacVariantSnapshotsForTemplate(pg);
     if (typeof (pg as any).__atacValueVariants === 'object') {
@@ -25826,8 +25924,18 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     if (intTxt && decTxt) {
         // Capture authored Mini Editor anchors BEFORE changing text,
         // so dynamic values keep the exact original spacing.
-        if (preserveTemplateVisual && !(pg as any).__manualSingleAnchors) {
-            readSingleManualPriceAnchors(pg, { force: true });
+        if (preserveTemplateVisual) {
+            const currentIntBounds = getObjectHorizontalBoundsLocal(intTxt);
+            const currentDecBounds = getObjectHorizontalBoundsLocal(decTxt);
+            const liveGap = (currentIntBounds && currentDecBounds)
+                ? Number(currentDecBounds.left - currentIntBounds.right)
+                : Number.NaN;
+            const cachedGap = Number((pg as any)?.__manualSingleAnchors?.intDecGap);
+            const anchorsMissing = !((pg as any)?.__manualSingleAnchors);
+            const anchorsStale = Number.isFinite(liveGap) && Number.isFinite(cachedGap) && Math.abs(liveGap - cachedGap) > 0.75;
+            if (anchorsMissing || anchorsStale) {
+                readSingleManualPriceAnchors(pg, { force: true });
+            }
         }
         intTxt.set?.('text', integer);
         decTxt.set?.('text', decimalText);
@@ -30282,29 +30390,29 @@ const handleRecalculateLayout = () => {
         class="fixed inset-0 z-140 bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4"
         @click.self="showProductImageUploadPicker = false; clearPendingProductImageOperation()"
       >
-        <div class="w-full max-w-5xl max-h-[85vh] bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl flex flex-col overflow-hidden">
-          <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+        <div class="w-full max-w-5xl max-h-[85vh] bg-white border border-[#e0e0e0] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-[#e5e7eb]">
             <div>
-              <h3 class="text-sm font-semibold text-white">Selecionar do Upload</h3>
-              <p class="text-[11px] text-zinc-400">
+              <h3 class="text-sm font-semibold text-zinc-900">Selecionar do Upload</h3>
+              <p class="text-[11px] text-zinc-500">
                 {{ productImagePickerMode === 'replace' ? 'Substituir imagem do produto' : 'Adicionar imagem mantendo a atual' }}
               </p>
             </div>
             <button
               type="button"
-              class="text-zinc-400 hover:text-white text-lg leading-none"
+              class="text-zinc-500 hover:text-zinc-900 text-lg leading-none"
               @click="showProductImageUploadPicker = false; clearPendingProductImageOperation()"
             >
               ×
             </button>
           </div>
 
-          <div class="px-4 py-3 border-b border-white/10">
+          <div class="px-4 py-3 border-b border-[#e5e7eb]">
             <input
               v-model="productImagePickerSearch"
               type="text"
               placeholder="Buscar imagem no upload..."
-              class="w-full h-10 bg-zinc-900 border border-white/10 rounded px-3 text-sm text-white focus:outline-none focus:border-violet-500/50"
+              class="w-full h-10 bg-[#f6f6f6] border border-[#dadada] rounded px-3 text-sm text-zinc-900 focus:outline-none focus:border-[#b3261e]/55"
             />
           </div>
 
@@ -30317,14 +30425,14 @@ const handleRecalculateLayout = () => {
                 v-for="asset in filteredProductImageUploads"
                 :key="asset.id"
                 type="button"
-                class="bg-zinc-900 border border-white/10 rounded-lg overflow-hidden text-left hover:border-violet-500/50 transition-colors"
+                class="bg-[#f8f8f8] border border-[#e2e2e2] rounded-lg overflow-hidden text-left hover:border-[#b3261e]/45 transition-colors"
                 @click="applyProductImageFromUploadPicker(asset)"
               >
                 <div class="aspect-square">
                   <img :src="toWasabiProxyUrl(asset.url) || asset.url" class="w-full h-full object-cover" />
                 </div>
-                <div class="px-2 py-1.5 border-t border-white/10">
-                  <p class="text-[10px] text-zinc-200 truncate">{{ asset.name || 'Sem nome' }}</p>
+                <div class="px-2 py-1.5 border-t border-[#e5e7eb]">
+                  <p class="text-[10px] text-zinc-700 truncate">{{ asset.name || 'Sem nome' }}</p>
                 </div>
               </button>
             </div>
@@ -30333,7 +30441,7 @@ const handleRecalculateLayout = () => {
       </div>
 
       <!-- Central Workspace -->
-      <div class="flex flex-1 min-h-0 min-w-0 overflow-hidden relative bg-[#1a1a1a]">
+      <div class="editor-workspace-shell flex flex-1 min-h-0 min-w-0 overflow-hidden relative">
           <!-- Left Sidebar (New Component) -->
           <SidebarLeft @insert-asset="insertAssetToCanvas" @insert-element="insertElementToCanvas" @open-menu="showProjectManager = true">
               <template #layers-panel>
@@ -30353,9 +30461,9 @@ const handleRecalculateLayout = () => {
           </SidebarLeft>
 
           <!-- Canvas Stage -->
-          <main class="flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing">
+          <main class="editor-canvas-stage flex-1 min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing">
               <!-- Infinite Canvas Effect (Wrapper) -->
-                  <div ref="wrapperEl" class="w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
+                  <div ref="wrapperEl" class="editor-canvas-wrapper w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
 
                   <CanvasRulers
@@ -30375,12 +30483,12 @@ const handleRecalculateLayout = () => {
                     style="z-index: 200;"
                     aria-live="polite"
                   >
-                    <div class="px-4 py-3 rounded-lg bg-zinc-950/70 border border-white/10 shadow-xl">
+                    <div class="px-4 py-3 rounded-lg bg-white border border-[#e0e0e0] shadow-xl">
                       <div class="flex items-center gap-2">
-                        <div class="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
-                        <p class="text-sm text-white/90">{{ designLoadMessage }}</p>
+                        <div class="w-4 h-4 rounded-full border-2 border-zinc-300 border-t-[#b3261e] animate-spin"></div>
+                        <p class="text-sm text-zinc-900">{{ designLoadMessage }}</p>
                       </div>
-                      <p class="text-[11px] text-white/55 mt-1">{{ designLoadProgressLine || 'Aguarde alguns segundos.' }}</p>
+                      <p class="text-[11px] text-zinc-500 mt-1">{{ designLoadProgressLine || 'Aguarde alguns segundos.' }}</p>
                     </div>
                   </div>
 
@@ -30402,7 +30510,7 @@ const handleRecalculateLayout = () => {
                       <button
                         v-if="canRecoverLatestNonEmpty"
                         type="button"
-                        class="text-xs px-2 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10"
+                        class="text-xs px-2 py-1 rounded-full bg-white/80 hover:bg-white border border-[#dfdfdf]"
                         @click="openHistoryModal"
                       >
                         Historico
@@ -30430,13 +30538,13 @@ const handleRecalculateLayout = () => {
                   <!-- Virtual Scrollbars (Figma Style) -->
                   <div 
                     v-show="scrollV.visible" 
-                    class="absolute right-1 w-1.5 bg-white/20 hover:bg-white/40 rounded-full z-50 transition-colors cursor-pointer" 
+                    class="absolute right-1 w-1.5 bg-zinc-400/40 hover:bg-zinc-500/60 rounded-full z-50 transition-colors cursor-pointer" 
                     :style="{ top: scrollV.top + 'px', height: scrollV.height + 'px' }"
                     @mousedown="handleVerticalScrollbarDrag"
                   ></div>
                   <div 
                     v-show="scrollH.visible" 
-                                        class="absolute bottom-1 h-1.5 bg-white/20 hover:bg-white/40 rounded-full z-60 transition-colors cursor-pointer" 
+                                        class="absolute bottom-1 h-1.5 bg-zinc-400/40 hover:bg-zinc-500/60 rounded-full z-60 transition-colors cursor-pointer" 
                     :style="{ left: scrollH.left + 'px', width: scrollH.width + 'px' }"
                     @mousedown="handleHorizontalScrollbarDrag"
                   ></div>
@@ -30639,11 +30747,11 @@ const handleRecalculateLayout = () => {
         v-if="isExportDownloadInProgress"
         class="fixed inset-0 z-10002 pointer-events-none flex items-center justify-center"
       >
-        <div class="flex items-center gap-3 rounded-xl border border-violet-400/35 bg-zinc-950/90 px-4 py-3 shadow-2xl">
-          <span class="inline-block h-4 w-4 rounded-full border-2 border-violet-300/30 border-t-violet-300 animate-spin" />
+        <div class="flex items-center gap-3 rounded-xl border border-[#b3261e]/35 bg-white px-4 py-3 shadow-2xl">
+          <span class="inline-block h-4 w-4 rounded-full border-2 border-[#b3261e]/30 border-t-[#b3261e] animate-spin" />
           <div class="text-left">
-            <p class="text-sm font-semibold text-violet-100">{{ exportDownloadStatus }}</p>
-            <p class="text-[11px] text-violet-200/75">Preparando download...</p>
+            <p class="text-sm font-semibold text-zinc-900">{{ exportDownloadStatus }}</p>
+            <p class="text-[11px] text-zinc-500">Preparando download...</p>
           </div>
         </div>
       </div>
@@ -30651,34 +30759,34 @@ const handleRecalculateLayout = () => {
       <!-- Page History / Restore Modal -->
       <div v-if="showHistoryModal" class="fixed inset-0 z-9999">
         <div class="absolute inset-0 bg-black/60" @click="showHistoryModal = false"></div>
-        <div class="absolute left-1/2 top-1/2 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-zinc-950/90 shadow-2xl">
-          <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+        <div class="absolute left-1/2 top-1/2 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[#dfdfdf] bg-white shadow-2xl">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-[#e7e7e7]">
             <div>
-              <p class="text-sm text-white/90">Historico da pagina</p>
-              <p class="text-[11px] text-white/55">Escolha uma versao para restaurar.</p>
+              <p class="text-sm text-zinc-900">Historico da pagina</p>
+              <p class="text-[11px] text-zinc-500">Escolha uma versao para restaurar.</p>
             </div>
-            <button type="button" class="text-white/70 hover:text-white text-lg leading-none" @click="showHistoryModal = false">×</button>
+            <button type="button" class="text-zinc-500 hover:text-zinc-900 text-lg leading-none" @click="showHistoryModal = false">×</button>
           </div>
           <div class="px-4 py-3">
-            <div v-if="historyLoading" class="text-sm text-white/70">Carregando...</div>
+            <div v-if="historyLoading" class="text-sm text-zinc-600">Carregando...</div>
             <div v-else-if="historyError" class="text-sm text-red-300">{{ historyError }}</div>
-            <div v-else-if="!historyItems.length" class="text-sm text-white/60">Nenhuma versao encontrada.</div>
-            <div v-else class="max-h-[60vh] overflow-auto divide-y divide-white/10">
+            <div v-else-if="!historyItems.length" class="text-sm text-zinc-500">Nenhuma versao encontrada.</div>
+            <div v-else class="max-h-[60vh] overflow-auto divide-y divide-[#ececec]">
               <div v-for="it in historyItems" :key="`${it.source}:${it.key}:${it.versionId || ''}:${it.lastModified}`" class="py-3 flex items-center justify-between gap-3">
                 <div class="min-w-0">
-                  <p class="text-xs text-white/80 truncate">
+                  <p class="text-xs text-zinc-700 truncate">
                     <span class="font-medium">{{ it.source === 'version' ? 'Versao' : 'Snapshot' }}</span>
-                    <span class="text-white/40"> · </span>
-                    <span class="text-white/60">{{ new Date(it.lastModified).toLocaleString('pt-BR') }}</span>
+                    <span class="text-zinc-400"> · </span>
+                    <span class="text-zinc-500">{{ new Date(it.lastModified).toLocaleString('pt-BR') }}</span>
                   </p>
-                  <p class="text-[11px] text-white/50 truncate">
+                  <p class="text-[11px] text-zinc-500 truncate">
                     {{ it.objectCount != null ? `${it.objectCount} objetos` : '' }}
-                    <span v-if="it.size != null" class="text-white/40"> · {{ Math.max(1, Math.round((it.size || 0) / 1024)) }} KB</span>
+                    <span v-if="it.size != null" class="text-zinc-400"> · {{ Math.max(1, Math.round((it.size || 0) / 1024)) }} KB</span>
                   </p>
                 </div>
                 <button
                   type="button"
-                  class="shrink-0 text-xs px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-50"
+                  class="shrink-0 text-xs px-3 py-1.5 rounded-full bg-[#f4f4f4] hover:bg-[#ececec] border border-[#dfdfdf] disabled:opacity-50"
                   :disabled="!!restoringHistoryKey"
                   @click="restoreFromHistoryItem(it as any)"
                 >
@@ -30694,13 +30802,25 @@ const handleRecalculateLayout = () => {
 </template>
 
 <style scoped>
+.editor-workspace-shell {
+    background: linear-gradient(180deg, #f3f1eb 0%, #ece9e2 100%);
+}
+
+.editor-canvas-stage {
+    background:
+      radial-gradient(140% 120% at 50% 8%, rgba(255, 255, 255, 0.65) 0%, rgba(238, 236, 230, 0.7) 48%, rgba(224, 221, 214, 0.88) 100%);
+}
+
+.editor-canvas-wrapper {
+    background:
+      linear-gradient(180deg, rgba(246, 245, 241, 0.93) 0%, rgba(234, 232, 226, 0.9) 100%),
+      radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.72) 0%, rgba(239, 236, 229, 0.35) 100%);
+}
+
 /* Ensure canvas container handles canvas element correctly */
  :deep(.canvas-container) {
      background-color: transparent !important;
-     box-shadow: 0 0 40px rgba(0,0,0,0.5); /* Figma-like page shadow */
- }
-main {
-     background-color: #1a1a1a !important;
+     box-shadow: 0 20px 44px rgba(43, 29, 16, 0.18);
  }
 
 .canvas-touch-surface {
@@ -30719,18 +30839,18 @@ main {
      height: 10px;
  }
  .custom-scrollbar::-webkit-scrollbar-track {
-     background: #1e1e1e;
-     border-left: 1px solid #333;
+     background: #eef1f6;
+     border-left: 1px solid #d8dde6;
  }
  .custom-scrollbar::-webkit-scrollbar-thumb {
-     background: #444;
+     background: #c2c8d3;
      border-radius: 5px;
-     border: 2px solid #1e1e1e; /* Creates padding effect */
+     border: 2px solid #eef1f6; /* Creates padding effect */
  }
  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-     background: #666;
+     background: #a8b1c0;
  }
  .custom-scrollbar::-webkit-scrollbar-corner {
-     background: #1e1e1e;
+     background: #eef1f6;
  }
 </style>

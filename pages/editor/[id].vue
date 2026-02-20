@@ -84,39 +84,39 @@ const saveSubtext = computed(() => {
 // Save status color
 const saveColor = computed(() => {
   switch (saveStatus.value) {
-    case 'saving': return 'text-blue-400'
-    case 'saved': return 'text-green-400'
-    case 'error': return 'text-red-400'
-    default: return hasUnsavedChanges.value ? 'text-yellow-400' : 'text-zinc-500'
+    case 'saving': return 'text-[#2563eb]'
+    case 'saved': return 'text-[#16a34a]'
+    case 'error': return 'text-[#dc2626]'
+    default: return hasUnsavedChanges.value ? 'text-[#b45309]' : 'text-[#7b6a58]'
   }
 })
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-[#0f0f0f]">
+  <div class="h-screen flex flex-col bg-[#f8f5ee]">
     <!-- Project Name Header -->
-    <div class="h-8 border-b border-white/5 flex items-center justify-between px-3 bg-[#1e1e1e] shrink-0">
+    <div class="editor-page-topbar h-11 border-b flex items-center justify-between px-3.5 shrink-0">
       <div class="flex items-center gap-2">
         <button
           @click="navigateTo('/')"
-          class="p-1 hover:bg-white/5 rounded transition-colors text-zinc-400 hover:text-white"
+          class="topbar-back-btn p-1.5 rounded-lg transition-colors"
           title="Voltar"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <span class="text-xs font-medium text-white">{{ activePage?.name || 'Sem título' }}</span>
+        <span class="text-sm font-semibold text-[#2f2419]">{{ activePage?.name || 'Sem título' }}</span>
       </div>
 
       <!-- Save Status Indicator -->
       <div class="flex items-center gap-2">
-        <div :class="['flex items-center gap-1.5 text-[10px]', saveColor]">
+        <div :class="['save-status-chip flex items-center gap-1.5 text-[10px]', saveColor]">
           <span v-html="saveIcon"></span>
           <span>{{ saveText }}</span>
-          <span v-if="saveSubtext" class="text-zinc-400">{{ saveSubtext }}</span>
+          <span v-if="saveSubtext" class="text-[#7b6a58]">{{ saveSubtext }}</span>
         </div>
-        <span class="text-[10px] text-zinc-500">Studio PRO Editor</span>
+        <span class="text-[10px] text-[#7b6a58]">Job Varejo Editor</span>
       </div>
     </div>
 
@@ -125,7 +125,7 @@ const saveColor = computed(() => {
       <ClientOnly>
         <EditorCanvas @auto-save="triggerAutoSave" />
         <template #fallback>
-          <div class="flex items-center justify-center h-full text-zinc-500">
+          <div class="flex items-center justify-center h-full text-[#7b6a58] bg-[#f8f5ee]">
             Carregando editor...
           </div>
         </template>
@@ -135,5 +135,24 @@ const saveColor = computed(() => {
 </template>
 
 <style scoped>
-/* Editor page styles */
+.editor-page-topbar {
+  background: linear-gradient(180deg, #fffefb 0%, #fcf8f1 100%);
+  border-color: #e8dccb;
+}
+
+.topbar-back-btn {
+  color: #7b6a58;
+}
+
+.topbar-back-btn:hover {
+  color: #2f2419;
+  background: rgba(179, 38, 30, 0.1);
+}
+
+.save-status-chip {
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(232, 220, 203, 0.95);
+  background: rgba(255, 255, 255, 0.82);
+}
 </style>

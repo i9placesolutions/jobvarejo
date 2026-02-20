@@ -62,6 +62,10 @@ export default defineNuxtConfig({
     smtpUser: process.env.SMTP_USER || '',
     smtpPass: process.env.SMTP_PASS || '',
     smtpFrom: process.env.SMTP_FROM || '',
+    emailBrandName: process.env.EMAIL_BRAND_NAME || 'Job Varejo',
+    emailLogoUrl: process.env.EMAIL_LOGO_URL || '',
+    emailSupportEmail: process.env.EMAIL_SUPPORT_EMAIL || '',
+    emailSignatureName: process.env.EMAIL_SIGNATURE_NAME || '',
     postgresDatabaseUrl:
       process.env.POSTGRES_DATABASE_URL ||
       process.env.DATABASE_URL ||
