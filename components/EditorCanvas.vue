@@ -10994,6 +10994,14 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         console.warn('[duplicateFrameWithContents] failed to rebuild frame clips', err);
     }
 
+    try {
+        clones.forEach((o: any) => {
+            if (o) reapplyRuntimeVisualPatchesTree(o);
+        });
+    } catch (err) {
+        console.warn('[duplicateFrameWithContents] failed to reapply runtime visual patches', err);
+    }
+
     canvas.value.setActiveObject(rootClone);
     canvas.value.requestRenderAll();
     refreshCanvasObjects();
@@ -11401,12 +11409,52 @@ const remapOrClearBindingsRecursive = (root: any, idMap: Map<string, string>, ex
     }
 };
 
+const reapplyRuntimeVisualPatchesTree = (root: any) => {
+    const patchNode = (node: any) => {
+        if (!node) return;
+
+        if (isRectObject(node) && (node as any).cornerRadii) {
+            applyRectCornerRadiiPatch(node);
+        }
+
+        const type = String((node as any)?.type || '').toLowerCase();
+        if (type === 'image') {
+            // Filters can be present but stale after clone; force a lightweight refresh.
+            if (Array.isArray((node as any).filters) && (node as any).filters.length > 0 && typeof (node as any).applyFilters === 'function') {
+                try { (node as any).applyFilters(); } catch {}
+            }
+
+            // Sticker outline uses a runtime render patch and cache that must be rebuilt on clones.
+            if ((node as any).__stickerOutlineEnabled) {
+                applyStickerOutlinePatch(node);
+                setTimeout(() => {
+                    if ((node as any)?.__stickerOutlineEnabled && !(node as any)?.__stickerOutlineCache) {
+                        applyStickerOutlinePatch(node);
+                    }
+                }, 1200);
+                setTimeout(() => {
+                    if ((node as any)?.__stickerOutlineEnabled && !(node as any)?.__stickerOutlineCache) {
+                        applyStickerOutlinePatch(node);
+                    }
+                }, 3200);
+            }
+        }
+
+        if (type === 'group' && typeof (node as any).getObjects === 'function') {
+            ((node as any).getObjects() || []).forEach((child: any) => patchNode(child));
+        }
+    };
+
+    patchNode(root);
+};
+
 const finalizeDuplicatedObjects = (clones: any[]) => {
     if (!canvas.value || !Array.isArray(clones) || clones.length === 0) return;
 
     const affectedZones = new Map<string, any>();
     clones.forEach((obj: any) => {
         if (!obj) return;
+        reapplyRuntimeVisualPatchesTree(obj);
         if (obj?.isFrame) {
             getOrCreateFrameClipRect(obj);
             syncFrameClips(obj);
