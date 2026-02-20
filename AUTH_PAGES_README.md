@@ -99,14 +99,6 @@ SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=
-
-# Branding opcional do e-mail
-# Se EMAIL_LOGO_URL ficar vazio e APP_BASE_URL estiver definido,
-# a logo usada no template sera: ${APP_BASE_URL}/logo.png
-EMAIL_BRAND_NAME=Job Varejo
-EMAIL_LOGO_URL=
-EMAIL_SUPPORT_EMAIL=
-EMAIL_SIGNATURE_NAME=
 ```
 
 Observações importantes:

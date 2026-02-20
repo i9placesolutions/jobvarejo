@@ -55,8 +55,8 @@ const isChildEditing = (childId: string): boolean => {
   <div class="folder-item">
     <div
       :class="[
-        'folder-row flex items-center gap-2 h-9 px-3 cursor-pointer transition-all group relative rounded-lg',
-        isActive ? 'is-active' : ''
+        'flex items-center gap-2 h-9 px-3 cursor-pointer transition-all group relative rounded-lg',
+        isActive ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-zinc-400'
       ]"
       :style="{ paddingLeft: `${level * 16 + 12}px` }"
       @click="emit('select', folder.id)"
@@ -67,16 +67,16 @@ const isChildEditing = (childId: string): boolean => {
       <!-- Expand/Collapse chevron -->
       <button
         v-if="hasChildren"
-        class="folder-toggle p-1 rounded-md transition-all"
+        class="p-1 hover:bg-white/10 rounded-md transition-all"
         @click.stop="emit('toggle', folder.id)"
       >
-        <ChevronRight v-if="!isExpanded" class="w-3.5 h-3.5 folder-chevron" />
-        <ChevronDown v-else class="w-3.5 h-3.5 folder-chevron" />
+        <ChevronRight v-if="!isExpanded" class="w-3.5 h-3.5 text-zinc-500" />
+        <ChevronDown v-else class="w-3.5 h-3.5 text-zinc-500" />
       </button>
       <span v-else class="w-5.5"></span>
 
       <!-- Folder icon -->
-      <Folder class="w-4 h-4 shrink-0 folder-icon" />
+      <Folder :class="['w-4 h-4 shrink-0', isActive ? 'fill-violet-400 text-violet-400' : 'text-zinc-500']" />
 
       <!-- Folder name -->
       <input
@@ -87,22 +87,22 @@ const isChildEditing = (childId: string): boolean => {
         @keyup.enter="emit('saveEdit')"
         @keyup.escape="emit('cancelEdit')"
         @blur="emit('saveEdit')"
-        class="folder-edit-input flex-1 min-w-0 rounded-lg px-2 py-1 text-xs focus:outline-none transition-all"
+        class="flex-1 min-w-0 bg-[#2a2a2a] border border-white/10 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-violet-500/50 text-white transition-all"
         autofocus
       />
       <span v-else class="flex-1 min-w-0 truncate text-xs font-medium">{{ folder.name }}</span>
 
       <!-- Project count badge -->
-      <span v-if="projectCount > 0" class="folder-count text-[10px] px-1.5 py-0.5 rounded">
+      <span v-if="projectCount > 0" class="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">
         {{ projectCount }}
       </span>
 
       <!-- More options button -->
       <button
-        class="folder-more-btn opacity-0 group-hover:opacity-100 p-1.5 rounded-lg transition-all"
+        class="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-white/10 rounded-lg transition-all"
         @click.stop="(e: MouseEvent) => emit('contextMenu', e, folder.id)"
       >
-        <MoreVertical class="w-3.5 h-3.5 folder-chevron" />
+        <MoreVertical class="w-3.5 h-3.5 text-zinc-500" />
       </button>
     </div>
 
@@ -140,69 +140,5 @@ const isChildEditing = (childId: string): boolean => {
 
 .folder-item {
   user-select: none;
-}
-
-.folder-row {
-  color: #7d6d5c;
-}
-
-.folder-row:hover {
-  background: rgba(179, 38, 30, 0.08);
-  color: var(--dash-text, #2f2419);
-}
-
-.folder-row.is-active {
-  background: var(--dash-accent-soft, #fde9e4);
-  color: var(--dash-text, #2f2419);
-}
-
-.folder-row.is-active:hover {
-  background: var(--dash-accent-soft-hover, #f9d8d2);
-}
-
-.folder-toggle:hover,
-.folder-more-btn:hover {
-  background: rgba(179, 38, 30, 0.12);
-}
-
-.folder-chevron {
-  color: #8d7a66;
-}
-
-.folder-row.is-active .folder-chevron {
-  color: #8a2f25;
-}
-
-.folder-icon {
-  color: #8d7a66;
-  fill: transparent;
-  transition: color 0.2s ease, fill 0.2s ease;
-}
-
-.folder-row.is-active .folder-icon {
-  color: #b3261e;
-  fill: rgba(179, 38, 30, 0.12);
-}
-
-.folder-edit-input {
-  background: #fffdf9;
-  border: 1px solid var(--dash-border, #e7d8c3);
-  color: var(--dash-text, #2f2419);
-}
-
-.folder-edit-input:focus {
-  border-color: #b53a2b;
-  box-shadow: 0 0 0 3px rgba(181, 58, 43, 0.14);
-}
-
-.folder-count {
-  color: #8d7a66;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(231, 216, 195, 0.85);
-}
-
-.folder-row.is-active .folder-count {
-  color: #7a1d19;
-  background: rgba(255, 255, 255, 0.9);
 }
 </style>

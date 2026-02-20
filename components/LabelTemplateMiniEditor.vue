@@ -563,27 +563,11 @@ const layoutPriceLocal = (opts: {
   const decimal = opts.decimal
   if (!integer || !decimal) return
 
-  const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : -8
-  const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : 6
-  const digitsCount = String(integer?.text || '').replace(/[^\d]/g, '').length || 1
-  const hasExplicitGap = Number.isFinite(Number(opts.gapPx))
-  const autoGap = digitsCount <= 1 ? -7 : (digitsCount === 2 ? -6 : (digitsCount === 3 ? -5 : -4))
-  let gap = hasExplicitGap ? Number(opts.gapPx) : autoGap
+  const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX
+  const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX
+  const autoGap = PRICE_INTEGER_DECIMAL_GAP_PX
+  let gap = Number.isFinite(Number(opts.gapPx)) ? Number(opts.gapPx) : autoGap
   gap = Math.min(maxGap, Math.max(minGap, gap))
-
-  // Optical kerning for ",99": keep cents visually close to the integer.
-  const decimalRaw = String(decimal?.text || '').trim()
-  const hasLeadingComma = /^,/.test(decimalRaw)
-  if (hasLeadingComma) {
-    if (!hasExplicitGap) {
-      const tighten = digitsCount >= 3 ? 1.3 : (digitsCount === 2 ? 1.1 : 0.9)
-      gap -= tighten
-    } else if (gap > -1) {
-      // Legacy stale anchors can carry positive/loose gaps; cap to a tighter baseline.
-      gap = -1
-    }
-    gap = Math.min(maxGap, Math.max(minGap, gap))
-  }
 
   integer.set?.({ originX: 'left', originY: 'center' })
   decimal.set?.({ originX: 'left', originY: 'center' })
@@ -1380,68 +1364,6 @@ const serializeGroupForTemplate = (g: any) => {
       return value
     }
   }
-
-  // Persist the exact authored spacing/anchors for integer<->decimal<->unit
-  // so the product canvas can respect Mini Editor geometry.
-  const priceBg = byNameDeep('price_bg')
-  const currency = byNameDeep('price_currency_text') || byNameDeep('priceSymbol') || byNameDeep('price_currency')
-  const integer = byNameDeep('price_integer_text') || byNameDeep('priceInteger') || byNameDeep('price_integer')
-  const decimal = byNameDeep('price_decimal_text') || byNameDeep('priceDecimal') || byNameDeep('price_decimal')
-  const unit = byNameDeep('price_unit_text') || byNameDeep('priceUnit') || byNameDeep('price_unit')
-  if (priceBg && integer && decimal) {
-    ;[currency, integer, decimal, unit].forEach((obj: any) => {
-      const t = String(obj?.type || '').toLowerCase()
-      if ((t === 'text' || t === 'i-text' || t === 'textbox') && typeof obj?.initDimensions === 'function') {
-        obj.initDimensions()
-      }
-    })
-    const clampAnchors = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
-    const bgBounds = getObjectHorizontalBoundsLocal(priceBg)
-    const intBounds = getObjectHorizontalBoundsLocal(integer)
-    const decBounds = getObjectHorizontalBoundsLocal(decimal)
-    const unitShown = isObjectShownForBoundsLocal(unit) && String(unit?.text || '').trim().length > 0
-    const chain = [integer, decimal, unitShown ? unit : null].filter(Boolean) as any[]
-    const chainBounds = measureHorizontalBoundsLocal(chain)
-    const curBounds = getObjectHorizontalBoundsLocal(currency)
-    const full = [currency, ...chain].filter((o: any) => isObjectShownForBoundsLocal(o))
-    const fullBounds = measureHorizontalBoundsLocal(full)
-    const intX = intBounds ? intBounds.left : Number(integer?.left ?? 0)
-    const fallbackPad = Math.max(8, (Math.abs(Number(priceBg.width || 0) * Number(priceBg.scaleX ?? 1)) || 120) * 0.08)
-    const padLeft = bgBounds && fullBounds
-      ? clampAnchors(fullBounds.left - bgBounds.left, 4, 80)
-      : fallbackPad
-    const padRight = bgBounds && fullBounds
-      ? clampAnchors(bgBounds.right - fullBounds.right, 4, 80)
-      : fallbackPad
-    const targetCenterX = fullBounds
-      ? ((fullBounds.left + fullBounds.right) / 2)
-      : (bgBounds
-        ? ((bgBounds.left + bgBounds.right) / 2)
-        : (chainBounds ? ((chainBounds.left + chainBounds.right) / 2) : 0))
-    const intDecGap = (intBounds && decBounds)
-      ? clampAnchors(decBounds.left - intBounds.right, -24, 24)
-      : -4
-    const currencyGap = (curBounds && chainBounds)
-      ? clampAnchors(chainBounds.left - curBounds.right, -8, 36)
-      : 6
-    const anchors = {
-      targetCenterX,
-      intX,
-      intY: Number(integer.top || 0),
-      decY: Number(decimal.top || 0),
-      unitY: Number(unit?.top || decimal.top || 0),
-      currencyY: Number(currency?.top || integer.top || 0),
-      intDecGap,
-      currencyGap,
-      padLeft,
-      padRight
-    }
-    json.__manualSingleAnchors = anchors
-    json.__manualGapSingle = intDecGap
-    ;(g as any).__manualSingleAnchors = cloneSafe(anchors)
-    ;(g as any).__manualGapSingle = intDecGap
-  }
-
   json.__preserveManualLayout = true
   // Never persist canonical enforcement from mini editor.
   json.__forceAtacarejoCanonical = false

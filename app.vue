@@ -20,10 +20,7 @@ onMounted(async () => {
 
 <style>
 :root {
-  --primary-rgb: 179, 38, 30; /* Job Varejo red */
-  --brand-red: #b3261e;
-  --brand-yellow: #f2c230;
-  --brand-ink: #111111;
+  --primary-rgb: 124, 58, 237; /* Base violet */
 }
 
 /* Global scrollbar styling */

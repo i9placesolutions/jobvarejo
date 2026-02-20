@@ -13,10 +13,6 @@ interface NuxtRuntimeConfig {
   smtpUser?: string
   smtpPass?: string
   smtpFrom?: string
-  emailBrandName?: string
-  emailLogoUrl?: string
-  emailSupportEmail?: string
-  emailSignatureName?: string
 }
 
 interface NuxtRuntimeConfigPublic {

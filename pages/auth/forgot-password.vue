@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Mail, ArrowLeft, ArrowRight, Check } from 'lucide-vue-next'
+import { Mail, ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-vue-next'
 
 definePageMeta({
   layout: 'auth',
@@ -47,25 +47,28 @@ const handleSubmit = async () => {
       <div class="glass-card">
         <!-- Logo & Header -->
         <div class="text-center mb-6">
-          <h1 class="text-2xl font-extrabold mb-1 tracking-tight text-[#2a2117]">Recuperar senha</h1>
-          <p class="text-sm text-[#756453]">
+          <div class="inline-flex items-center justify-center w-14 h-14 bg-violet-500/20 backdrop-blur-sm rounded-xl mb-3 border border-violet-500/30 shadow-lg">
+            <Sparkles class="w-7 h-7 text-violet-400" />
+          </div>
+          <h1 class="text-xl font-bold mb-1 text-white">Recuperar senha</h1>
+          <p class="text-sm text-zinc-400">
             Digite seu e-mail e enviaremos instruções
           </p>
         </div>
 
         <!-- Success Message -->
-        <div v-if="successMessage" class="alert-box alert-success mb-4">
+        <div v-if="successMessage" class="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg backdrop-blur-sm">
           <div class="flex items-start gap-3">
-            <div class="flex-shrink-0 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+            <div class="flex-shrink-0 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
               <Check class="w-3 h-3 text-white" />
             </div>
             <div>
-              <p class="text-sm text-[#0f6a46] font-semibold">Solicitação recebida!</p>
-              <p class="text-sm text-[#0f6a46]">{{ successMessage }}</p>
+              <p class="text-sm text-green-400 font-medium">Solicitação recebida!</p>
+              <p class="text-sm text-green-400">{{ successMessage }}</p>
               <a
                 v-if="debugResetUrl"
                 :href="debugResetUrl"
-                class="text-xs text-[#8f1e19] hover:text-[#6f1714] underline mt-2 inline-block font-semibold"
+                class="text-xs text-violet-300 hover:text-violet-200 underline mt-2 inline-block"
               >
                 Abrir link de reset (modo desenvolvimento)
               </a>
@@ -74,19 +77,19 @@ const handleSubmit = async () => {
         </div>
 
         <!-- Error Message -->
-        <div v-if="errorMessage" class="alert-box alert-error mb-4">
-          <p class="text-sm text-[#8f1e19] text-center font-medium">{{ errorMessage }}</p>
+        <div v-if="errorMessage" class="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg backdrop-blur-sm">
+          <p class="text-sm text-red-400 text-center">{{ errorMessage }}</p>
         </div>
 
         <!-- Forgot Password Form -->
         <form @submit.prevent="handleSubmit" class="space-y-4">
           <!-- Email Input -->
           <div class="form-group">
-            <label class="form-label" for="email">
+            <label class="form-label text-zinc-300" for="email">
               E-mail
             </label>
             <div class="relative">
-              <Mail class="input-icon absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors peer-focus:text-[#b3261e]" />
+              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
               <input
                 id="email"
                 v-model="email"
@@ -115,24 +118,24 @@ const handleSubmit = async () => {
         </form>
 
         <!-- Tips -->
-        <div v-if="!successMessage" class="tip-card mt-6 p-4 rounded-xl">
-          <h3 class="text-sm font-semibold mb-2 text-[#2a2117] flex items-center gap-2">
-            <svg class="w-4 h-4 text-[#b3261e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div v-if="!successMessage" class="mt-6 p-4 bg-[#2c2c2c]/50 rounded-xl border border-white/5">
+          <h3 class="text-sm font-semibold mb-2 text-white flex items-center gap-2">
+            <svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             Dicas
           </h3>
-          <ul class="text-xs text-[#735f4f] space-y-1.5">
+          <ul class="text-xs text-zinc-400 space-y-1.5">
             <li class="flex items-start gap-2">
-              <span class="text-[#b3261e] mt-0.5">•</span>
+              <span class="text-violet-400 mt-0.5">•</span>
               <span>Verifique sua caixa de entrada e pasta de spam</span>
             </li>
             <li class="flex items-start gap-2">
-              <span class="text-[#b3261e] mt-0.5">•</span>
+              <span class="text-violet-400 mt-0.5">•</span>
               <span>O link expira em alguns minutos</span>
             </li>
             <li class="flex items-start gap-2">
-              <span class="text-[#b3261e] mt-0.5">•</span>
+              <span class="text-violet-400 mt-0.5">•</span>
               <span>Se não receber, tente novamente em alguns minutos</span>
             </li>
           </ul>
@@ -142,7 +145,7 @@ const handleSubmit = async () => {
         <div class="mt-6 text-center">
           <NuxtLink
             to="/auth/login"
-            class="inline-flex items-center gap-2 text-sm text-[#6f5f4f] hover:text-[#2f2419] transition-colors group font-medium"
+            class="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors group"
           >
             <ArrowLeft class="w-4 h-4 transition-transform group-hover:-translate-x-1" />
             Voltar para o login
@@ -152,9 +155,9 @@ const handleSubmit = async () => {
 
       <!-- Help Text -->
       <div class="mt-6 text-center">
-        <p class="text-sm text-[#7c6959]">
+        <p class="text-sm text-zinc-400">
           Precisa de ajuda?
-          <a href="mailto:atendimento@jobvarejo.com.br" class="text-[#9c2f24] hover:text-[#7e241b] font-semibold transition-colors">
+          <a href="mailto:support@studio.pro" class="text-violet-400 hover:text-violet-300 font-medium transition-colors">
             Entre em contato
           </a>
         </p>
@@ -164,43 +167,22 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
+/* Glassmorphism Card */
 .glass-card {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(175deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 248, 238, 0.96) 100%);
-  backdrop-filter: blur(14px);
-  border: 1px solid #e8d8bc;
-  border-radius: 1.35rem;
-  padding: 1.65rem;
-  box-shadow: 0 24px 50px -28px rgba(58, 32, 14, 0.38), 0 16px 30px -18px rgba(179, 38, 30, 0.22);
-  animation: cardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  background: rgba(30, 30, 30, 0.9);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.25rem;
+  padding: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  animation: cardEntry 0.5s ease-out;
 }
 
-.glass-card::before {
-  content: '';
-  position: absolute;
-  left: 1.1rem;
-  right: 1.1rem;
-  top: 0;
-  height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #d1831f, #b3261e 55%, #d1831f);
-  opacity: 0.78;
-}
-
-.glass-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 1.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  pointer-events: none;
-}
-
+/* Entry Animation */
 @keyframes cardEntry {
   from {
     opacity: 0;
-    transform: translateY(22px) scale(0.97);
+    transform: translateY(20px) scale(0.95);
   }
   to {
     opacity: 1;
@@ -208,103 +190,76 @@ const handleSubmit = async () => {
   }
 }
 
+/* Form Group */
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.5rem;
 }
 
 .form-label {
   font-size: 0.875rem;
-  font-weight: 600;
-  color: #4b3d30;
-  letter-spacing: 0.01em;
+  font-weight: 500;
 }
 
+/* Input Field */
 .input-field {
   width: 100%;
-  padding-top: 0.78rem;
-  padding-bottom: 0.78rem;
-  background: linear-gradient(180deg, #fffcf8 0%, #fff9f1 100%);
-  border: 1px solid #dcc7a8;
+  padding: 0.75rem 1rem;
+  background: rgba(44, 44, 44, 0.8);
+  backdrop-filter: blur(4px);
+  border: 1px solid #3f3f46;
   border-radius: 0.75rem;
-  color: #2f2419;
+  color: white;
   font-size: 0.875rem;
-  transition: all 0.22s ease;
+  transition: all 0.2s;
 }
 
 .input-field::placeholder {
-  color: #9f8b74;
+  color: #71717a;
 }
 
 .input-field:hover {
-  background: #fffdf9;
-  border-color: #cdb18a;
+  background: rgba(60, 60, 60, 0.8);
+  border-color: #52525b;
 }
 
 .input-field:focus {
   outline: none;
-  border-color: #b53a2b;
-  box-shadow: 0 0 0 3px rgba(181, 58, 43, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
 }
 
 .input-field.border-red-500 {
-  border-color: #dc4d45;
-  box-shadow: 0 0 0 2px rgba(220, 77, 69, 0.14);
+  border-color: #ef4444;
 }
 
-.input-icon {
-  color: #9c866e;
-  pointer-events: none;
-}
-
-.tip-card {
-  background: linear-gradient(180deg, rgba(255, 249, 236, 0.9) 0%, rgba(255, 244, 219, 0.72) 100%);
-  border: 1px solid #ead5b5;
-}
-
-.alert-box {
-  border-radius: 0.85rem;
-  padding: 0.8rem 0.9rem;
-}
-
-.alert-success {
-  background: linear-gradient(180deg, rgba(229, 252, 242, 0.9) 0%, rgba(213, 247, 233, 0.75) 100%);
-  border: 1px solid rgba(24, 163, 105, 0.28);
-}
-
-.alert-error {
-  background: linear-gradient(180deg, rgba(255, 236, 233, 0.88) 0%, rgba(255, 232, 228, 0.7) 100%);
-  border: 1px solid rgba(220, 77, 69, 0.32);
-}
-
+/* Primary Button */
 .btn-primary {
   position: relative;
-  padding: 0.9rem 1.5rem;
-  background: linear-gradient(135deg, #b3261e 0%, #cf4a2b 100%);
+  padding: 0.875rem 1.5rem;
+  background: #7c3aed;
   color: white;
   border-radius: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  box-shadow: 0 14px 24px -12px rgba(179, 38, 30, 0.52);
-  transition: all 0.22s ease;
+  font-weight: 600;
+  box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
+  transition: all 0.2s;
   overflow: hidden;
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #9f2119 0%, #be4226 100%);
-  box-shadow: 0 20px 28px -12px rgba(159, 33, 25, 0.48);
+  box-shadow: 0 20px 25px -5px rgba(124, 58, 237, 0.3);
   transform: translateY(-2px);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: 0 4px 10px -3px rgba(179, 38, 30, 0.25);
+  box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.2);
 }
 
 .btn-primary:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(181, 58, 43, 0.35), 0 0 0 4px rgba(181, 58, 43, 0.14);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.5), 0 0 0 4px rgba(124, 58, 237, 0.2);
 }
 
 .btn-primary:disabled {
@@ -317,7 +272,7 @@ const handleSubmit = async () => {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(110deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.08) 40%, transparent 72%);
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.2), transparent);
   border-radius: 0.75rem;
   opacity: 0;
   transition: opacity 0.3s;
