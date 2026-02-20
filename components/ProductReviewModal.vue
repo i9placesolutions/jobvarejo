@@ -156,6 +156,8 @@ const isLoadingAssets = ref(false)
 const assets = ref<any[]>([])
 const assetSearch = ref('')
 const selectedProductIndex = ref<number | null>(null)
+const selectedAssetKeys = ref<string[]>([])
+const isApplyingSelectedAssets = ref(false)
 const showLabelPreview = ref(false)
 const MIN_ASSET_SEARCH_CHARS = 1
 
@@ -685,6 +687,53 @@ const filteredAssets = computed(() => {
     return assets.value
 })
 
+const assetTempIdMap = new WeakMap<object, string>()
+let assetTempIdSeq = 0
+
+const getAssetSelectionKey = (asset: any): string => {
+    const raw = String(asset?.id || asset?.key || asset?.url || '').trim()
+    if (raw) return raw
+    if (asset && typeof asset === 'object') {
+        const existing = assetTempIdMap.get(asset)
+        if (existing) return existing
+        assetTempIdSeq += 1
+        const next = `asset-${assetTempIdSeq}`
+        assetTempIdMap.set(asset, next)
+        return next
+    }
+    return 'asset-fallback'
+}
+
+const selectedAssetsForApply = computed(() => {
+    if (!selectedAssetKeys.value.length) return []
+    const byKey = new Map<string, any>()
+    for (const asset of assets.value) {
+        byKey.set(getAssetSelectionKey(asset), asset)
+    }
+    return selectedAssetKeys.value
+        .map((key) => byKey.get(key))
+        .filter(Boolean)
+})
+
+const isAssetSelected = (asset: any): boolean => {
+    const key = getAssetSelectionKey(asset)
+    return selectedAssetKeys.value.includes(key)
+}
+
+const toggleAssetSelection = (asset: any) => {
+    const key = getAssetSelectionKey(asset)
+    if (!key) return
+    if (selectedAssetKeys.value.includes(key)) {
+        selectedAssetKeys.value = selectedAssetKeys.value.filter((k) => k !== key)
+        return
+    }
+    selectedAssetKeys.value = [...selectedAssetKeys.value, key]
+}
+
+const clearAssetSelection = () => {
+    selectedAssetKeys.value = []
+}
+
 const fetchAssets = async () => {
     const query = String(assetSearch.value || '').trim()
     if (query.length < MIN_ASSET_SEARCH_CHARS) {
@@ -721,8 +770,10 @@ const fetchAssets = async () => {
 }
 
 const openAssetPicker = (index: number) => {
+    if (!Number.isInteger(index) || index < 0) return
     selectedProductIndex.value = index
     assets.value = []
+    selectedAssetKeys.value = []
     const product = products.value[index]
     assetSearch.value = buildCacheSearchTerm(product)
     showAssetPicker.value = true
@@ -733,17 +784,16 @@ watch(showAssetPicker, (open) => {
     selectedProductIndex.value = null
     assets.value = []
     assetSearch.value = ''
+    selectedAssetKeys.value = []
+    isApplyingSelectedAssets.value = false
 })
 
-const handleAssetSelect = async (asset: any) => {
-    if (selectedProductIndex.value === null) return
-    const product = products.value[selectedProductIndex.value]
+const applyAssetToProduct = async (asset: any, productIndex: number) => {
+    const product = products.value[productIndex]
     if (!product) return
     product.imageUrl = resolveProductImageUrl(asset.url)
     product.status = 'done'
     product.error = undefined
-    showAssetPicker.value = false
-    selectedProductIndex.value = null
 
     // Salvar no cache do banco para próximas buscas
     try {
@@ -766,6 +816,33 @@ const handleAssetSelect = async (asset: any) => {
     } catch (err) {
         // Cache é opcional, não bloquear
         console.warn('[Cache] Falha ao salvar asset no cache:', err)
+    }
+}
+
+const assignableSelectedAssetCount = computed(() => {
+    const startIndex = Number(selectedProductIndex.value)
+    if (!Number.isInteger(startIndex) || startIndex < 0) return 0
+    const remainingProducts = Math.max(0, products.value.length - startIndex)
+    return Math.min(selectedAssetsForApply.value.length, remainingProducts)
+})
+
+const canApplySelectedAssets = computed(() => assignableSelectedAssetCount.value > 0)
+
+const applySelectedAssets = async () => {
+    if (!canApplySelectedAssets.value || selectedProductIndex.value === null) return
+    const startIndex = selectedProductIndex.value
+    isApplyingSelectedAssets.value = true
+    try {
+        const selected = selectedAssetsForApply.value
+        const maxCount = Math.min(selected.length, products.value.length - startIndex)
+        for (let i = 0; i < maxCount; i++) {
+            const asset = selected[i]
+            if (!asset) continue
+            await applyAssetToProduct(asset, startIndex + i)
+        }
+        showAssetPicker.value = false
+    } finally {
+        isApplyingSelectedAssets.value = false
     }
 }
 
@@ -1488,10 +1565,11 @@ const getAssetDisplayName = (asset: any): string => {
         </div>
     </Dialog>
 
-    <Dialog v-model="showAssetPicker" title="Selecionar imagem" width="720px">
+    <Dialog v-model="showAssetPicker" title="Selecionar imagens" width="720px">
         <div class="flex flex-col gap-3">
-            <div v-if="selectedProductForAssetPicker" class="text-xs text-zinc-400">
-                Produto: <span class="text-zinc-200 font-medium">{{ selectedProductForAssetPicker.name }}</span>
+            <div v-if="selectedProductForAssetPicker" class="text-xs text-zinc-400 leading-relaxed">
+                Produto inicial: <span class="text-zinc-200 font-medium">{{ selectedProductForAssetPicker.name }}</span>
+                <span class="text-zinc-500">. Selecione várias imagens e aplique em sequência nos próximos cards.</span>
             </div>
             <div class="flex items-center gap-2">
                 <Input
@@ -1506,6 +1584,35 @@ const getAssetDisplayName = (asset: any): string => {
                 </Button>
             </div>
 
+            <div class="flex items-center justify-between gap-2 text-[11px]">
+                <div class="text-zinc-500">
+                    Selecionadas: <span class="text-zinc-200 font-medium">{{ selectedAssetsForApply.length }}</span>
+                    <span v-if="selectedAssetsForApply.length" class="ml-1 text-zinc-500">
+                        ({{ assignableSelectedAssetCount }} serão aplicadas)
+                    </span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        @click="clearAssetSelection"
+                        :disabled="!selectedAssetsForApply.length || isApplyingSelectedAssets"
+                    >
+                        Limpar
+                    </Button>
+                    <Button
+                        size="sm"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        @click="applySelectedAssets"
+                        :disabled="!canApplySelectedAssets || isApplyingSelectedAssets"
+                    >
+                        <Loader2 v-if="isApplyingSelectedAssets" class="w-3.5 h-3.5 mr-2 animate-spin" />
+                        <Check v-else class="w-3.5 h-3.5 mr-2" />
+                        Aplicar selecionadas
+                    </Button>
+                </div>
+            </div>
+
             <div class="max-h-90 overflow-y-auto custom-scrollbar border border-zinc-800 rounded-lg bg-zinc-900/50 p-3">
                 <div v-if="isLoadingAssets" class="text-xs text-zinc-500">Carregando imagens...</div>
                 <div v-else-if="assetSearch.trim().length < MIN_ASSET_SEARCH_CHARS" class="text-xs text-zinc-500">
@@ -1515,10 +1622,21 @@ const getAssetDisplayName = (asset: any): string => {
                 <div v-else class="grid grid-cols-3 gap-2">
                     <button
                         v-for="asset in filteredAssets"
-                        :key="asset.id"
-                        class="bg-zinc-800 rounded-lg overflow-hidden border border-zinc-700 hover:border-zinc-500 transition-all text-left"
-                        @click="handleAssetSelect(asset)"
+                        :key="getAssetSelectionKey(asset)"
+                        :class="[
+                            'rounded-lg overflow-hidden border transition-all text-left relative',
+                            isAssetSelected(asset)
+                                ? 'bg-zinc-800 border-emerald-500 ring-1 ring-emerald-400/50'
+                                : 'bg-zinc-800 border-zinc-700 hover:border-zinc-500'
+                        ]"
+                        @click="toggleAssetSelection(asset)"
                     >
+                        <div
+                            v-if="isAssetSelected(asset)"
+                            class="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow"
+                        >
+                            <Check class="w-3 h-3" />
+                        </div>
                         <div class="aspect-square">
                             <img :src="asset.url" crossorigin="anonymous" class="w-full h-full object-cover" />
                         </div>
