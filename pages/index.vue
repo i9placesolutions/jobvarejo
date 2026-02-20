@@ -51,6 +51,10 @@ const projectMenuPosition = ref({ x: 0, y: 0 })
 const editingProjectId = ref<string | null>(null)
 const editingProjectName = ref('')
 const renamingProjectId = ref<string | null>(null)
+const showMoveProjectModal = ref(false)
+const projectToMoveId = ref<string | null>(null)
+const moveProjectFolderId = ref('')
+const isMovingProject = ref(false)
 
 // Confirmation dialog state
 const showConfirmDialog = ref(false)
@@ -437,6 +441,49 @@ const filteredProjects = computed(() => {
   return result
 })
 
+type FolderOption = {
+  id: string
+  label: string
+}
+
+const moveProjectFolderOptions = computed<FolderOption[]>(() => {
+  const list = Array.isArray(safeFolders.value) ? safeFolders.value : []
+  if (!list.length) return []
+
+  const byParent = new Map<string | null, FolderModel[]>()
+  for (const folder of list) {
+    const key = folder.parent_id ?? null
+    const bucket = byParent.get(key) || []
+    bucket.push(folder)
+    byParent.set(key, bucket)
+  }
+
+  byParent.forEach((bucket) => {
+    bucket.sort((a, b) => (a.order_index - b.order_index) || String(a.name || '').localeCompare(String(b.name || '')))
+  })
+
+  const options: FolderOption[] = []
+  const walk = (parentId: string | null = null, depth = 0) => {
+    const children = byParent.get(parentId) || []
+    for (const folder of children) {
+      options.push({
+        id: folder.id,
+        label: `${'  '.repeat(depth)}${folder.name}`
+      })
+      walk(folder.id, depth + 1)
+    }
+  }
+
+  walk(null, 0)
+  return options
+})
+
+const projectToMoveName = computed(() => {
+  const id = String(projectToMoveId.value || '').trim()
+  if (!id) return ''
+  return String(projects.value.find((p) => p.id === id)?.name || 'Projeto')
+})
+
 // Get project count for a folder
 const getProjectCount = (folderId: string): number => {
   return safeProjects.value.filter(p => p.folder_id === folderId).length
@@ -575,6 +622,57 @@ const duplicateProject = async (projectId: string) => {
   } catch (error) {
     console.error('Error duplicating project:', error)
     alert('Erro ao duplicar projeto.')
+  }
+}
+
+const moveProjectToFolder = async (projectId: string, folderId: string | null) => {
+  const id = String(projectId || '').trim()
+  if (!id) return
+  try {
+    const headers = await getApiAuthHeaders()
+    await $fetch('/api/projects', {
+      method: 'PATCH',
+      headers,
+      body: { id, folder_id: folderId }
+    })
+    const project = projects.value.find(p => p.id === id)
+    if (project) {
+      project.folder_id = folderId
+    }
+  } catch (error) {
+    console.error('Error moving project:', error)
+    alert('Erro ao mover projeto.')
+  }
+}
+
+const openMoveProjectModal = (projectId: string | null | undefined) => {
+  const id = String(projectId || '').trim()
+  if (!id) return
+  const project = projects.value.find((p) => p.id === id)
+  if (!project) return
+  projectToMoveId.value = id
+  moveProjectFolderId.value = String(project.folder_id || '')
+  showMoveProjectModal.value = true
+  showProjectMenu.value = null
+}
+
+const closeMoveProjectModal = () => {
+  showMoveProjectModal.value = false
+  projectToMoveId.value = null
+  moveProjectFolderId.value = ''
+  isMovingProject.value = false
+}
+
+const confirmMoveProjectModal = async () => {
+  const projectId = String(projectToMoveId.value || '').trim()
+  if (!projectId) return
+  isMovingProject.value = true
+  try {
+    const folderId = String(moveProjectFolderId.value || '').trim()
+    await moveProjectToFolder(projectId, folderId || null)
+    closeMoveProjectModal()
+  } finally {
+    isMovingProject.value = false
   }
 }
 
@@ -838,22 +936,7 @@ const handleDropOnFolder = async (folderId: string, event: DragEvent) => {
 
   if (!draggedProjectId.value) return
 
-  try {
-    const headers = await getApiAuthHeaders()
-    await $fetch('/api/projects', {
-      method: 'PATCH',
-      headers,
-      body: { id: draggedProjectId.value, folder_id: folderId }
-    })
-
-    const project = projects.value.find(p => p.id === draggedProjectId.value)
-    if (project) {
-      project.folder_id = folderId
-    }
-  } catch (error) {
-    console.error('Error moving project:', error)
-    alert('Erro ao mover projeto.')
-  }
+  await moveProjectToFolder(draggedProjectId.value, folderId)
 
   draggedProjectId.value = null
 }
@@ -864,22 +947,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
   if (!draggedProjectId.value) return
 
-  try {
-    const headers = await getApiAuthHeaders()
-    await $fetch('/api/projects', {
-      method: 'PATCH',
-      headers,
-      body: { id: draggedProjectId.value, folder_id: null }
-    })
-
-    const project = projects.value.find(p => p.id === draggedProjectId.value)
-    if (project) {
-      project.folder_id = null
-    }
-  } catch (error) {
-    console.error('Error moving project:', error)
-    alert('Erro ao mover projeto.')
-  }
+  await moveProjectToFolder(draggedProjectId.value, null)
 
   draggedProjectId.value = null
 }
@@ -1421,6 +1489,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
           Duplicar
         </button>
         <button
+          @click="openMoveProjectModal(showProjectMenu)"
+          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
+        >
+          <Folder class="w-4 h-4" />
+          Mover para pasta
+        </button>
+        <button
           @click="toggleStarred(showProjectMenu)"
           class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
         >
@@ -1437,6 +1512,51 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </button>
       </div>
     </teleport>
+
+    <!-- Move Project Modal -->
+    <div
+      v-if="showMoveProjectModal"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      @click.self="closeMoveProjectModal"
+    >
+      <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
+        <h3 class="text-base font-semibold text-white mb-1">Mover projeto</h3>
+        <p class="text-xs text-zinc-500 mb-4">
+          Projeto: <span class="text-zinc-300 font-medium">{{ projectToMoveName }}</span>
+        </p>
+
+        <label class="block text-[11px] text-zinc-400 mb-1">Pasta destino</label>
+        <select
+          v-model="moveProjectFolderId"
+          class="w-full h-10 px-3 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 mb-4 transition-all"
+        >
+          <option value="">Sem pasta (raiz)</option>
+          <option
+            v-for="folderOption in moveProjectFolderOptions"
+            :key="folderOption.id"
+            :value="folderOption.id"
+          >
+            {{ folderOption.label }}
+          </option>
+        </select>
+
+        <div class="flex gap-2">
+          <button
+            @click="closeMoveProjectModal"
+            class="flex-1 h-10 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="confirmMoveProjectModal"
+            :disabled="isMovingProject"
+            class="flex-1 h-10 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
+          >
+            {{ isMovingProject ? 'Movendo...' : 'Mover' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Confirm Dialog -->
     <ConfirmDialog
