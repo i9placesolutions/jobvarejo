@@ -37,6 +37,13 @@ const isLoading = ref(false)
 const isLoadingProjects = ref(true)
 const draggedProjectId = ref<string | null>(null)
 const isMounted = ref(false)
+const transparentDragImage = import.meta.client
+  ? (() => {
+      const img = new Image()
+      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+      return img
+    })()
+  : null
 
 // Project menu state
 const showProjectMenu = ref<string | null>(null)
@@ -240,10 +247,6 @@ const markAllAsRead = async () => {
 onMounted(async () => {
   isMounted.value = true
   await auth.getSession()
-  if (auth.user.value) {
-    loadData()
-    loadNotifications()
-  }
   
   // Global click handlers
   if (process.client) {
@@ -259,15 +262,16 @@ onUnmounted(() => {
   }
 })
 
-// Watch for auth user changes
-watch(() => auth.user.value, (newUser) => {
-  if (newUser) {
+// Watch for auth user changes (by id) to avoid duplicate bootstrap calls
+watch(() => auth.user.value?.id || null, (userId) => {
+  if (userId) {
     loadData()
     loadNotifications()
   } else {
+    projects.value = []
     notifications.value = []
   }
-})
+}, { immediate: true })
 
 // Prevent stale folder filter from hiding all projects when user switches view.
 watch(activeView, (view) => {
@@ -812,7 +816,16 @@ const handleDragStart = (projectId: string, event: DragEvent) => {
   draggedProjectId.value = projectId
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', projectId)
+    if (transparentDragImage) {
+      // Avoid heavy native drag snapshots (can trigger compositor glitches).
+      event.dataTransfer.setDragImage(transparentDragImage, 0, 0)
+    }
   }
+}
+
+const handleDragEnd = () => {
+  draggedProjectId.value = null
 }
 
 const handleDragOver = (event: DragEvent) => {
@@ -1182,6 +1195,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               class="group relative bg-[#1a1a1a] border border-white/10 hover:border-white/20 overflow-hidden transition-all duration-200 cursor-pointer rounded-xl hover:shadow-lg hover:shadow-black/20"
               draggable="true"
               @dragstart="handleDragStart(project.id, $event)"
+              @dragend="handleDragEnd"
               @click="openProject(project.id)"
             >
               <!-- Thumbnail (Rounded Top) -->
@@ -1219,7 +1233,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <!-- Actions Button (top right - Rounded) -->
                 <button
                   @click.stop="showProjectContextMenu(project.id, $event)"
-                  class="absolute top-2 right-2 p-2 bg-black/70 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-black/90 shadow-lg"
+                  class="absolute top-2 right-2 p-2 bg-black/75 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-black/90 shadow-lg"
                   title="Ações"
                 >
                   <MoreVertical class="w-4 h-4 text-white" />
@@ -1228,7 +1242,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <!-- Star Button (top left - Rounded) -->
                 <button
                   @click.stop="toggleStarred(project.id)"
-                  :class="['absolute top-2 left-2 p-2 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/70 text-white hover:bg-black/90']"
+                  :class="['absolute top-2 left-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/75 text-white hover:bg-black/90']"
                   title="Favoritar"
                 >
                   <Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" />
