@@ -3568,6 +3568,9 @@ const setupAltDragDuplicate = () => {
         // Track current pointer during async clone for smooth positioning
         lastPointerX: 0,
         lastPointerY: 0,
+        pointerDownX: 0,
+        pointerDownY: 0,
+        manualFollowClone: false,
     };
 
     const restoreOriginalLocks = (obj: any) => {
@@ -3588,17 +3591,109 @@ const setupAltDragDuplicate = () => {
         return true;
     };
 
+    const pickAltDragSource = (opt: any) => {
+        const candidates: any[] = [];
+        const seen = new Set<any>();
+        const push = (obj: any) => {
+            if (!obj || seen.has(obj)) return;
+            seen.add(obj);
+            candidates.push(obj);
+        };
+
+        if (Array.isArray(opt?.subTargets)) {
+            opt.subTargets.forEach((obj: any) => push(obj));
+        }
+        push(opt?.subTarget);
+        push(opt?.target);
+
+        const tr: any = (canvas.value as any)?._currentTransform;
+        push(tr?.target);
+
+        const active = canvas.value?.getActiveObject?.();
+        push((active as any)?._activeObject);
+        push(active);
+
+        return candidates.find((obj: any) => isEligibleTarget(obj)) || null;
+    };
+
+    const resolveSourceFromTransform = (source: any, transformTarget: any) => {
+        if (!isEligibleTarget(transformTarget)) return source;
+        if (!source) return transformTarget;
+        if (transformTarget === source) return source;
+
+        const sourceType = String(source?.type || '').toLowerCase();
+        const sourceIsGroup = sourceType === 'group';
+        if (sourceIsGroup && transformTarget.group === source) {
+            return transformTarget;
+        }
+
+        const sourceParent = source?.group;
+        if (sourceParent && transformTarget === sourceParent) {
+            // User may be deep-selecting a child while Fabric reports parent group as transform target.
+            return source;
+        }
+        if (sourceParent && transformTarget.group === sourceParent) {
+            return transformTarget;
+        }
+
+        return source;
+    };
+
+    const isTransformRelatedToSource = (source: any, transformTarget: any) => {
+        if (!source || !transformTarget) return false;
+        if (transformTarget === source) return true;
+        const sourceType = String(source?.type || '').toLowerCase();
+        if (sourceType === 'group' && transformTarget.group === source) return true;
+        const sourceParent = source?.group;
+        if (sourceParent && (transformTarget === sourceParent || transformTarget.group === sourceParent)) return true;
+        return false;
+    };
+
+    const syncCloneToPointerDelta = () => {
+        if (!state.clone || !isValidFabricObject(state.clone)) return;
+        if (!Number.isFinite(state.pointerDownX) || !Number.isFinite(state.pointerDownY)) return;
+
+        const worldDx = Number(state.lastPointerX || 0) - Number(state.pointerDownX || 0);
+        const worldDy = Number(state.lastPointerY || 0) - Number(state.pointerDownY || 0);
+
+        let localDx = worldDx;
+        let localDy = worldDy;
+        const parentGroup = (state.clone as any)?.group;
+        if (parentGroup) {
+            const angle = (Number((parentGroup as any)?.angle) || 0) * (Math.PI / 180);
+            const cos = Math.cos(-angle);
+            const sin = Math.sin(-angle);
+            const rotatedX = worldDx * cos - worldDy * sin;
+            const rotatedY = worldDx * sin + worldDy * cos;
+            const scaleX = Number((parentGroup as any)?.scaleX) || 1;
+            const scaleY = Number((parentGroup as any)?.scaleY) || 1;
+            localDx = rotatedX / (scaleX || 1);
+            localDy = rotatedY / (scaleY || 1);
+        }
+
+        state.clone.set({
+            left: Number(state.startLeft || 0) + localDx,
+            top: Number(state.startTop || 0) + localDy,
+        });
+        state.clone.setCoords?.();
+        if (shouldApplyContainmentConstraints(state.clone)) {
+            applyContainmentConstraints(state.clone);
+        }
+    };
+
     canvas.value.on('mouse:down', (opt: any) => {
         const evt: MouseEvent | undefined = opt?.e;
         if (!evt || evt.button !== 0 || !evt.altKey) {
             state.armed = false;
             state.activeCloneRequestId = 0;
+            state.manualFollowClone = false;
             return;
         }
-        let active = canvas.value?.getActiveObject?.();
-        if (!isEligibleTarget(active)) {
+        const source = pickAltDragSource(opt);
+        if (!isEligibleTarget(source)) {
             state.armed = false;
             state.activeCloneRequestId = 0;
+            state.manualFollowClone = false;
             return;
         }
 
@@ -3610,20 +3705,35 @@ const setupAltDragDuplicate = () => {
         state.armed = true;
         state.cloning = false;
         state.didDuplicate = false;
+        state.manualFollowClone = false;
         state.activeCloneRequestId = 0;
-        state.original = active;
-        state.startLeft = Number(active.left || 0);
-        state.startTop = Number(active.top || 0);
+        state.original = source;
+        state.startLeft = Number(source.left || 0);
+        state.startTop = Number(source.top || 0);
         // Initialize pointer tracking at mousedown position
         try {
             const ptr = canvas.value?.getViewportPoint?.(evt) || canvas.value?.getScenePoint?.(evt);
-            if (ptr) { state.lastPointerX = ptr.x; state.lastPointerY = ptr.y; }
-            else { state.lastPointerX = state.startLeft; state.lastPointerY = state.startTop; }
-        } catch { state.lastPointerX = state.startLeft; state.lastPointerY = state.startTop; }
+            if (ptr) {
+                state.lastPointerX = ptr.x;
+                state.lastPointerY = ptr.y;
+                state.pointerDownX = ptr.x;
+                state.pointerDownY = ptr.y;
+            } else {
+                state.lastPointerX = state.startLeft;
+                state.lastPointerY = state.startTop;
+                state.pointerDownX = state.startLeft;
+                state.pointerDownY = state.startTop;
+            }
+        } catch {
+            state.lastPointerX = state.startLeft;
+            state.lastPointerY = state.startTop;
+            state.pointerDownX = state.startLeft;
+            state.pointerDownY = state.startTop;
+        }
     });
 
     canvas.value.on('mouse:move:before', (opt: any) => {
-        if (!state.armed || state.cloning || state.didDuplicate) return;
+        if (!state.armed || state.cloning) return;
         if (!canvas.value) return;
 
         // Track pointer continuously for smooth clone positioning
@@ -3635,20 +3745,31 @@ const setupAltDragDuplicate = () => {
             }
         } catch { /* ignore */ }
 
+        if (state.didDuplicate) {
+            if (state.manualFollowClone && state.clone) {
+                syncCloneToPointerDelta();
+                canvas.value.requestRenderAll();
+            }
+            return;
+        }
+
         const tr: any = (canvas.value as any)._currentTransform;
-        // For interactive groups (product cards with subTargetCheck=true), the _currentTransform
-        // targets the child (deep-selected element), not necessarily state.original.
-        // Accept the transform if the target IS the original or IS a child of the original's group.
-        const isChildInGroup = state.original && state.original.group && tr?.target === state.original;
-        const isDirectMatch = tr && tr.target === state.original;
-        const isGroupChildMatch = state.original && state.original.type === 'group' && tr?.target?.group === state.original;
-        
-        if (!isDirectMatch && !isChildInGroup && !isGroupChildMatch) {
-            // No valid transform found. For objects inside interactive groups, the transform
-            // may target the child. Allow if we have any active transform at all and user is 
-            // in a group context.
-            const inInteractiveGroup = state.original && state.original.group && 
-                (state.original.group.interactive || state.original.group.subTargetCheck);
+        const transformTarget = tr?.target;
+        const resolvedSource = resolveSourceFromTransform(state.original, transformTarget);
+        if (resolvedSource && resolvedSource !== state.original) {
+            state.original = resolvedSource;
+            state.startLeft = Number(resolvedSource.left || 0);
+            state.startTop = Number(resolvedSource.top || 0);
+        }
+
+        // For interactive groups (product cards with subTargetCheck=true), Fabric may report
+        // transform target as either the child or its parent group depending on hit-test timing.
+        if (!isTransformRelatedToSource(state.original, transformTarget)) {
+            const sourceGroup = state.original?.group;
+            const inInteractiveGroup = !!(
+                sourceGroup &&
+                (sourceGroup.interactive || sourceGroup.subTargetCheck)
+            );
             if (!inInteractiveGroup || !tr) return;
         }
 
@@ -3657,6 +3778,17 @@ const setupAltDragDuplicate = () => {
         const original = state.original;
         const origLeft = state.startLeft;
         const origTop = state.startTop;
+
+        // Fabric can occasionally keep the transform bound to the parent group even when
+        // user is dragging a deep-selected child. Re-bind to child so clone handoff is stable.
+        const sourceParentGroup = (original as any)?.group;
+        if (tr && sourceParentGroup && tr.target === sourceParentGroup && tr.target !== original) {
+            tr.target = original;
+            if (tr.original && typeof tr.original === 'object') {
+                tr.original.left = origLeft;
+                tr.original.top = origTop;
+            }
+        }
 
         // Lock original IMMEDIATELY to prevent it from moving while clone is being created.
         // This is critical because doClone() is async (fabric.clone / enlivenObjects return Promises).
@@ -3836,6 +3968,9 @@ const setupAltDragDuplicate = () => {
 
                 cloned.setCoords?.();
                 parentGroup.set('dirty', true);
+                if (shouldApplyContainmentConstraints(cloned)) {
+                    applyContainmentConstraints(cloned);
+                }
                 state.cloneInGroup = true;
 
             } else {
@@ -3867,11 +4002,11 @@ const setupAltDragDuplicate = () => {
             // FIGMA/CANVA BEHAVIOR: original stays in place, CLONE follows mouse.
             // Swap Fabric's internal transform target from original → clone.
             const tr: any = (canvas.value as any)._currentTransform;
+            let didSwapTransform = false;
             if (tr) {
-                const isCardClone = !!(original.isSmartObject || original.isProductCard);
-                const shouldSwap = tr.target === original
-                    || (isCardClone && tr.target !== original && tr.target?.group === original)
-                    || (isInsideGroup && tr.target === original);
+                const parentGroup = (original as any)?.group;
+                const shouldSwap = isTransformRelatedToSource(original, tr.target)
+                    || (isInsideGroup && parentGroup && tr.target === parentGroup);
 
                 if (shouldSwap) {
                     tr.target = cloned;
@@ -3880,6 +4015,7 @@ const setupAltDragDuplicate = () => {
                         tr.original.left = cloned.left;
                         tr.original.top = cloned.top;
                     }
+                    didSwapTransform = true;
                 }
             }
 
@@ -3892,6 +4028,10 @@ const setupAltDragDuplicate = () => {
             
             state.clone = cloned;
             state.didDuplicate = true;
+            state.manualFollowClone = !didSwapTransform;
+            if (state.manualFollowClone) {
+                syncCloneToPointerDelta();
+            }
             state.cloning = false;
 
             canvas.value.requestRenderAll();
@@ -3907,8 +4047,11 @@ const setupAltDragDuplicate = () => {
             state.armed = false;
             state.cloning = false;
             state.didDuplicate = false;
+            state.manualFollowClone = false;
             state.original = null;
             state.clone = null;
+            state.pointerDownX = 0;
+            state.pointerDownY = 0;
             return;
         }
 
@@ -3946,10 +4089,13 @@ const setupAltDragDuplicate = () => {
         state.armed = false;
         state.cloning = false;
         state.didDuplicate = false;
+        state.manualFollowClone = false;
         state.original = null;
         state.clone = null;
         state.parentGroup = null;
         state.cloneInGroup = false;
+        state.pointerDownX = 0;
+        state.pointerDownY = 0;
 
         saveCurrentState();
     });
