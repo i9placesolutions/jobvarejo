@@ -277,9 +277,13 @@ export const useProject = () => {
 
     const activePage = computed(() => project.pages[project.activePageIndex])
 
-    // Watch storage save status
+    // Storage status is only a backup transport signal (Wasabi upload/proxy).
+    // Do not overwrite project-level save status with it, otherwise the UI can show
+    // "Falha ao salvar" even when Postgres persistence succeeded.
     watch(storageSaveStatus, (status) => {
-        saveStatus.value = status
+        if (status === 'error') {
+            console.warn('[useProject] Falha no backup de storage detectada; persistência principal (Postgres) segue ativa.')
+        }
     })
 
     const initProject = () => {
@@ -686,14 +690,19 @@ export const useProject = () => {
 
 		            console.log('Project Saved (Storage):', project.id)
 		            saveSucceeded = true
-		        } catch (e) {
-		            if (saveAbortedByContextSwitch) {
-		                saveStatus.value = 'idle'
-		            } else {
-		                console.error('Save Failed:', e)
-		                saveStatus.value = 'error'
-		            }
-		        } finally {
+		            } catch (e) {
+		                if (saveAbortedByContextSwitch) {
+		                    saveStatus.value = 'idle'
+		                } else {
+		                    console.error('Save Failed:', {
+		                        statusCode: (e as any)?.statusCode ?? (e as any)?.response?.status ?? null,
+		                        statusMessage: (e as any)?.statusMessage ?? (e as any)?.data?.statusMessage ?? null,
+		                        message: (e as any)?.message ?? null,
+		                        data: (e as any)?.data ?? null
+		                    })
+		                    saveStatus.value = 'error'
+		                }
+		            } finally {
 		            isSaving.value = false
 		            const shouldRunFollowUpSave = !saveAbortedByContextSwitch && saveSucceeded && (changedDuringSave || queuedSaveAfterCurrent.value)
 		            queuedSaveAfterCurrent.value = false

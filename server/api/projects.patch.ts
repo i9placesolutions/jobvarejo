@@ -122,6 +122,14 @@ export default defineEventHandler(async (event) => {
     return { success: true, project: row }
   } catch (error: any) {
     if (error?.statusCode) throw error
-    throw createError({ statusCode: 500, statusMessage: error?.message || 'Failed to update project' })
+    const message = String(error?.message || error?.detail || error?.hint || '').trim() || 'Failed to update project'
+    console.error('[api/projects:patch] Update failed', {
+      code: error?.code || null,
+      message,
+      detail: error?.detail || null,
+      hint: error?.hint || null,
+      constraint: error?.constraint || null
+    })
+    throw createError({ statusCode: 500, statusMessage: message })
   }
 })

@@ -5920,6 +5920,24 @@ const debouncedSaveCurrentState = () => {
     }, 150); // 150ms debounce for snappy feel but coalesces rapid changes
 };
 
+// Debounced save for text editing (typing in i-text/textbox does not always emit object:modified).
+let textEditSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const queueTextEditSave = (reason = 'text-edit') => {
+    if (textEditSaveTimer) clearTimeout(textEditSaveTimer);
+    textEditSaveTimer = setTimeout(() => {
+        saveCurrentState({ reason });
+        triggerAutoSave();
+    }, 180);
+};
+const flushTextEditSave = (reason = 'text-edit-exit') => {
+    if (textEditSaveTimer) {
+        clearTimeout(textEditSaveTimer);
+        textEditSaveTimer = null;
+    }
+    saveCurrentState({ reason });
+    triggerAutoSave();
+};
+
 let isLifecycleFlushInProgress = false;
 let lastLifecycleFlushAt = 0;
 
@@ -6002,6 +6020,10 @@ onUnmounted(() => {
     if (propertySaveTimer) {
         clearTimeout(propertySaveTimer);
         propertySaveTimer = null;
+    }
+    if (textEditSaveTimer) {
+        clearTimeout(textEditSaveTimer);
+        textEditSaveTimer = null;
     }
 });
 
@@ -6248,7 +6270,11 @@ const extractProductsFromZoneForReview = (zone: any): any[] => {
             ? { ...(card as any)._productData }
             : {}) as any;
 
-        const name = String(base.name || (card as any)?.layerName || `Produto ${index + 1}`).trim() || `Produto ${index + 1}`;
+        const titleObj = typeof getCardTitleText === 'function' ? getCardTitleText(card) : null;
+        const titleText = String((titleObj as any)?.text ?? '').replace(/\r\n?/g, '\n');
+        const fallbackName = `Produto ${index + 1}`;
+        const rawName = titleText || String(base.name ?? (card as any)?.layerName ?? '');
+        const name = /\S/.test(rawName) ? rawName : fallbackName;
         const imageUrlRaw = base.imageUrl ?? base.image ?? (card as any)?.imageUrl ?? null;
         const imageUrl = imageUrlRaw == null ? null : String(imageUrlRaw).trim() || null;
 
@@ -15277,10 +15303,60 @@ const setupReactivity = () => {
         refreshSelectedRef();
     };
 
+    const isTextTargetObject = (obj: any) => {
+        const t = String(obj?.type || '').toLowerCase();
+        return t === 'text' || t === 'i-text' || t === 'textbox';
+    };
+
+    // Keep `_productData.name` aligned with the visible title text so manual line breaks survive
+    // all persistence/rebuild paths (reload, re-import review modal, relayout side-effects).
+    const syncCardProductDataNameFromTitleTarget = (target: any): boolean => {
+        if (!target || !isTextTargetObject(target)) return false;
+
+        const card = findProductCardParentGroup(target);
+        if (!card || !isProductCardContainer(card)) return false;
+
+        const titleObj = getCardTitleText(card);
+        if (!titleObj || titleObj !== target) return false;
+
+        const nextName = String((titleObj as any).text ?? '').replace(/\r\n?/g, '\n');
+        (titleObj as any).__rawText = nextName;
+
+        const currentName = String((card as any)?._productData?.name ?? '');
+        if (currentName === nextName) return false;
+
+        const baseProductData = ((card as any)?._productData && typeof (card as any)._productData === 'object')
+            ? (card as any)._productData
+            : {};
+        (card as any)._productData = {
+            ...baseProductData,
+            name: nextName
+        };
+        return true;
+    };
+
+    const handleTextChanged = (e: any) => {
+        syncTextSelectionSnapshot(e);
+        const target = e?.target;
+        const didSyncCardName = syncCardProductDataNameFromTitleTarget(target);
+        if (didSyncCardName || isTextTargetObject(target)) {
+            queueTextEditSave('text-edit');
+        }
+    };
+
+    const handleTextEditingExited = (e: any) => {
+        syncTextSelectionSnapshot(e);
+        const target = e?.target;
+        const didSyncCardName = syncCardProductDataNameFromTitleTarget(target);
+        if (didSyncCardName || isTextTargetObject(target)) {
+            flushTextEditSave('text-edit-exit');
+        }
+    };
+
     canvas.value.on('text:selection:changed', syncTextSelectionSnapshot);
     canvas.value.on('text:editing:entered', syncTextSelectionSnapshot);
-    canvas.value.on('text:editing:exited', syncTextSelectionSnapshot);
-    canvas.value.on('text:changed', syncTextSelectionSnapshot);
+    canvas.value.on('text:editing:exited', handleTextEditingExited);
+    canvas.value.on('text:changed', handleTextChanged);
     
     // 'selection:created', 'selection:updated', 'selection:cleared'
     canvas.value.on('selection:created', () => {
