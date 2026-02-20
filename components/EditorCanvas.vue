@@ -10862,7 +10862,19 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         });
     }
 
-    const originals = all.filter((o: any) => o?._customId && toDuplicateIds.has(String(o._customId)));
+    const shouldSkipWhenDuplicatingFrameContent = (obj: any) => {
+        if (!obj) return false;
+        // Keep product zones (container/style), but do not duplicate any product instances/cards.
+        if (isLikelyProductZone(obj)) return false;
+        if (isLikelyProductCard(obj) || obj.isProductCard || obj.isSmartObject) return true;
+        const parentZoneId = String((obj as any).parentZoneId || '').trim();
+        if (parentZoneId) return true;
+        return false;
+    };
+
+    const originals = all
+        .filter((o: any) => o?._customId && toDuplicateIds.has(String(o._customId)))
+        .filter((o: any) => !shouldSkipWhenDuplicatingFrameContent(o));
     originals.sort((a: any, b: any) => (indexById.get(String(a._customId)) ?? 0) - (indexById.get(String(b._customId)) ?? 0));
     console.log(`[duplicateFrameWithContents] root=${rootId} totalDuplicated=${originals.length} framesInSet=${originals.filter((o: any) => isFrameContainerCandidate(o)).length}`);
 
