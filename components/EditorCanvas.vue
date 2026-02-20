@@ -22374,6 +22374,8 @@ const normalizeUnitForLabel = (raw: any): 'KG' | 'UN' => {
     return 'UN';
 };
 
+const PRICE_INTEGER_DECIMAL_GAP_PX = 1;
+
 const layoutPrice = (opts: {
     priceInteger: any;
     priceDecimal: any;
@@ -22393,10 +22395,9 @@ const layoutPrice = (opts: {
     if (!integer || !decimal) return null;
 
     const getW = (t: any) => (t && typeof t.getScaledWidth === 'function' ? t.getScaledWidth() : 0);
-    const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : -8;
-    const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : 6;
-    const digitsCount = String(integer?.text || '').replace(/[^\d]/g, '').length || 1;
-    const autoGap = digitsCount <= 1 ? -6 : (digitsCount === 2 ? -4 : (digitsCount === 3 ? -3 : -2));
+    const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX;
+    const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX;
+    const autoGap = PRICE_INTEGER_DECIMAL_GAP_PX;
     let gap = Number.isFinite(Number(opts.gapPx)) ? Number(opts.gapPx) : autoGap;
     gap = Math.min(maxGap, Math.max(minGap, gap));
 
@@ -22553,19 +22554,12 @@ const measureHorizontalBoundsLocal = (objects: any[]): { left: number; right: nu
 const normalizeManualPriceChain = (group: any, cacheKey: string, integer: any, decimal: any, unit: any) => {
     if (!group || !integer || !decimal) return;
     const intBounds = getObjectHorizontalBoundsLocal(integer);
-    const decBounds = getObjectHorizontalBoundsLocal(decimal);
     const intX = intBounds ? intBounds.left : Number(integer?.left ?? 0);
     const intY = Number(integer?.top ?? 0);
     const decY = Number(decimal?.top ?? 0);
     const unitY = Number(unit?.top ?? decY);
 
-    let gap = Number((group as any)[cacheKey]);
-    if (!Number.isFinite(gap)) {
-        const fallbackIntRight = intBounds?.right ?? intX;
-        const fallbackDecLeft = decBounds?.left ?? Number(decimal?.left ?? fallbackIntRight);
-        gap = fallbackDecLeft - fallbackIntRight;
-    }
-    gap = Math.max(-20, Math.min(28, gap));
+    const gap = PRICE_INTEGER_DECIMAL_GAP_PX;
     (group as any)[cacheKey] = gap;
 
     layoutPrice({
@@ -22577,8 +22571,8 @@ const normalizeManualPriceChain = (group: any, cacheKey: string, integer: any, d
         decY,
         unitY,
         gapPx: gap,
-        minGapPx: -20,
-        maxGapPx: 28
+        minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+        maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
     });
 };
 
@@ -22607,7 +22601,6 @@ const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean }
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const bgBounds = getObjectHorizontalBoundsLocal(priceBg);
     const intBounds = getObjectHorizontalBoundsLocal(integer);
-    const decBounds = getObjectHorizontalBoundsLocal(decimal);
     const unitShown = isObjectShownForBounds(unit) && String(unit?.text || '').trim().length > 0;
     const chain = [integer, decimal, unitShown ? unit : null].filter(Boolean) as any[];
     const chainBounds = measureHorizontalBoundsLocal(chain);
@@ -22634,9 +22627,7 @@ const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean }
         : (bgBounds
             ? ((bgBounds.left + bgBounds.right) / 2)
             : (chainBounds ? ((chainBounds.left + chainBounds.right) / 2) : 0));
-    const intDecGap = (intBounds && decBounds)
-        ? clamp(decBounds.left - intBounds.right, -24, 24)
-        : -4;
+    const intDecGap = PRICE_INTEGER_DECIMAL_GAP_PX;
     const currencyGap = (curBounds && chainBounds)
         ? clamp(chainBounds.left - curBounds.right, -8, 36)
         : 6;
@@ -22684,7 +22675,6 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const getW = (obj: any) => (obj && typeof obj.getScaledWidth === 'function') ? Number(obj.getScaledWidth()) : 0;
 
-    const fallbackManualGap = Number((priceGroup as any).__manualGapSingle);
     const minScale = 0.34;
     const normalizeTemplateScale = (raw: any, fallback: any, min = 0.12, max = 3.2) => {
         const fallbackNum = Number(fallback);
@@ -22752,9 +22742,7 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
     const maxTotalW = bgBounds
         ? Math.max(20, (bgBounds.right - bgBounds.left) - padLeft - padRight)
         : Math.max(20, bgW - padLeft - padRight);
-    const intDecGap = Number.isFinite(Number((anchors as any).intDecGap))
-        ? clamp(Number((anchors as any).intDecGap), -24, 24)
-        : (Number.isFinite(fallbackManualGap) ? clamp(fallbackManualGap, -24, 24) : -4);
+    const intDecGap = PRICE_INTEGER_DECIMAL_GAP_PX;
     const intX = Number.isFinite(Number((anchors as any).intX)) ? Number((anchors as any).intX) : 0;
     const intY = Number.isFinite(Number((anchors as any).intY)) ? Number((anchors as any).intY) : Number(integer.top || 0);
     const decY = Number.isFinite(Number((anchors as any).decY)) ? Number((anchors as any).decY) : Number(decimal.top || intY);
@@ -22775,8 +22763,8 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
         // Manual templates (Mini Editor) must preserve the authored size hierarchy:
         // we don't shrink the integer alone here; if needed we uniformly scale the whole chain below.
         gapPx: intDecGap,
-        minGapPx: -24,
-        maxGapPx: 24
+        minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+        maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
     });
 
     const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[];
@@ -23049,7 +23037,7 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
         tiny: {
             chainWidthRatio: 0.48,
             minScale: 0.62,
-            intDecimalGap: -8,
+            intDecimalGap: PRICE_INTEGER_DECIMAL_GAP_PX,
             currencyGapRatio: 0.02,
             packWidthRatio: 0.86
         },
@@ -23057,7 +23045,7 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
         normal: {
             chainWidthRatio: 0.64,
             minScale: 0.56,
-            intDecimalGap: -4,
+            intDecimalGap: PRICE_INTEGER_DECIMAL_GAP_PX,
             currencyGapRatio: 0.024,
             packWidthRatio: 0.9
         },
@@ -23065,7 +23053,7 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
         large: {
             chainWidthRatio: 0.82,
             minScale: 0.44,
-            intDecimalGap: -1,
+            intDecimalGap: PRICE_INTEGER_DECIMAL_GAP_PX,
             currencyGapRatio: 0.03,
             packWidthRatio: 0.95
         }
@@ -23091,7 +23079,7 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
         return {
             chainWidthRatio: clamp(asFinite(fromTemplate.chainWidthRatio, base.chainWidthRatio), 0.35, 0.95),
             minScale: clamp(asFinite(fromTemplate.minScale, base.minScale), 0.30, 1),
-            intDecimalGap: clamp(asFinite(fromTemplate.intDecimalGap, base.intDecimalGap), -18, 12),
+            intDecimalGap: PRICE_INTEGER_DECIMAL_GAP_PX,
             currencyGapRatio: clamp(asFinite(fromTemplate.currencyGapRatio, base.currencyGapRatio), 0.005, 0.08),
             packWidthRatio: clamp(asFinite(fromTemplate.packWidthRatio, base.packWidthRatio), 0.55, 0.99),
         };
@@ -23184,8 +23172,8 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
             // Manual templates (Mini Editor): keep authored hierarchy and avoid "integer-only shrink".
             // If values overflow, we uniformly scale the whole chain afterwards.
             gapPx: variant.intDecimalGap,
-            minGapPx: -24,
-            maxGapPx: 14
+            minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+            maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
         });
 
         const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[];
@@ -23777,7 +23765,7 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
 
         const maxPriceW = totalW - (padX * 2);
         const currencyGap = clamp(blockH * 0.045, 2, 9);
-        const integerDecimalGap = clamp(blockH * 0.02, 1, 4);
+        const integerDecimalGap = PRICE_INTEGER_DECIMAL_GAP_PX;
 
         const isHigh = emphasis === 'high';
         const integerScale = isHigh ? 0.72 : 0.60;
@@ -24589,9 +24577,9 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
                 decY,
                 unitY,
                 maxWidth: maxTextW,
-                gapPx: clamp(newH * 0.02, -1, 4),
-                minGapPx: -2,
-                maxGapPx: 6
+                gapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+                minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+                maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
             });
         } else if (priceText) {
             // Single price text
@@ -25230,9 +25218,9 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             decY,
             unitY,
             maxWidth: maxTextW,
-            gapPx: clamp(pillH * 0.02, -1, 4),
-            minGapPx: -2,
-            maxGapPx: 6
+            gapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+            minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+            maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
         });
     } else if (priceText) {
         const scaledTextWidth = priceText.getScaledWidth();

@@ -171,26 +171,27 @@ const ATAC_VALUE_VARIANT_KEYS = ['tiny', 'normal', 'large'] as const
 type AtacValueVariantKey = (typeof ATAC_VALUE_VARIANT_KEYS)[number]
 type AtacValueVariantField = 'chainWidthRatio' | 'minScale' | 'intDecimalGap' | 'currencyGapRatio' | 'packWidthRatio'
 type AtacValueVariantConfig = Record<AtacValueVariantField, number>
+const PRICE_INTEGER_DECIMAL_GAP_PX = 1
 
 const DEFAULT_ATAC_VALUE_VARIANTS: Record<AtacValueVariantKey, AtacValueVariantConfig> = {
   tiny: {
     chainWidthRatio: 0.48,
     minScale: 0.62,
-    intDecimalGap: -8,
+    intDecimalGap: PRICE_INTEGER_DECIMAL_GAP_PX,
     currencyGapRatio: 0.02,
     packWidthRatio: 0.86
   },
   normal: {
     chainWidthRatio: 0.64,
     minScale: 0.56,
-    intDecimalGap: -4,
+    intDecimalGap: PRICE_INTEGER_DECIMAL_GAP_PX,
     currencyGapRatio: 0.024,
     packWidthRatio: 0.9
   },
   large: {
     chainWidthRatio: 0.82,
     minScale: 0.44,
-    intDecimalGap: -1,
+    intDecimalGap: PRICE_INTEGER_DECIMAL_GAP_PX,
     currencyGapRatio: 0.03,
     packWidthRatio: 0.95
   }
@@ -199,7 +200,7 @@ const DEFAULT_ATAC_VALUE_VARIANTS: Record<AtacValueVariantKey, AtacValueVariantC
 const ATAC_VALUE_VARIANT_BOUNDS: Record<AtacValueVariantField, { min: number; max: number }> = {
   chainWidthRatio: { min: 0.35, max: 0.95 },
   minScale: { min: 0.3, max: 1 },
-  intDecimalGap: { min: -18, max: 12 },
+  intDecimalGap: { min: PRICE_INTEGER_DECIMAL_GAP_PX, max: PRICE_INTEGER_DECIMAL_GAP_PX },
   currencyGapRatio: { min: 0.005, max: 0.08 },
   packWidthRatio: { min: 0.55, max: 0.99 }
 }
@@ -562,10 +563,9 @@ const layoutPriceLocal = (opts: {
   const decimal = opts.decimal
   if (!integer || !decimal) return
 
-  const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : -8
-  const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : 6
-  const digitsCount = String(integer?.text || '').replace(/[^\d]/g, '').length || 1
-  const autoGap = digitsCount <= 1 ? -6 : (digitsCount === 2 ? -4 : (digitsCount === 3 ? -3 : -2))
+  const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX
+  const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX
+  const autoGap = PRICE_INTEGER_DECIMAL_GAP_PX
   let gap = Number.isFinite(Number(opts.gapPx)) ? Number(opts.gapPx) : autoGap
   gap = Math.min(maxGap, Math.max(minGap, gap))
 
@@ -726,8 +726,8 @@ const fitAtacarejoValuesForPreview = (priceGroup: any) => {
       unitY,
       maxWidth: chainMaxW,
       gapPx: variant.intDecimalGap,
-      minGapPx: -24,
-      maxGapPx: 14
+      minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+      maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
     })
 
     const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[]
@@ -1946,7 +1946,7 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
 
     const maxPriceW = totalW - (padX * 2)
     const currencyGap = clamp(blockH * 0.045, 2, 9)
-    const integerDecimalGap = clamp(blockH * 0.02, 1, 4)
+    const integerDecimalGap = PRICE_INTEGER_DECIMAL_GAP_PX
     const isHigh = emphasis === 'high'
     const integerScale = isHigh ? 0.72 : 0.60
     const decimalScale = isHigh ? 0.38 : 0.31
