@@ -3,6 +3,7 @@ import { getCachedS3Objects } from "../utils/s3-object-cache";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { pgQuery } from "../utils/postgres";
+import { normalizeSearchTerm } from "../utils/product-image-matching";
 
 type AssetItem = {
     id: string;
@@ -111,6 +112,37 @@ const tokenize = (text: string): string[] =>
 
 const uniqueStrings = (items: string[]) => [...new Set(items.map((i) => String(i || "").trim()).filter(Boolean))];
 
+const WEIGHT_TOKEN_RE = /^\d+(?:\.\d+)?(?:kg|g|mg|ml|l|un)$/
+const VARIANT_GROUP_TOKENS = new Set(['zero', 'diet', 'light'])
+
+const extractWeightTokensFromNormalized = (normalized: string): string[] => {
+    const out = new Set<string>()
+    for (const t of String(normalized || '').split(' ').filter(Boolean)) {
+        const token = String(t).trim().toLowerCase()
+        if (WEIGHT_TOKEN_RE.test(token)) out.add(token)
+    }
+    return [...out].sort()
+}
+
+const isVariantAndWeightCompatible = (queryNormalized: string, targetNormalized: string): boolean => {
+    const qSet = new Set(String(queryNormalized || '').split(' ').filter(Boolean))
+    const tSet = new Set(String(targetNormalized || '').split(' ').filter(Boolean))
+
+    const queryNeedsZero = [...VARIANT_GROUP_TOKENS].some((t) => qSet.has(t))
+    const targetHasZero = [...VARIANT_GROUP_TOKENS].some((t) => tSet.has(t))
+    if (queryNeedsZero && !targetHasZero) return false
+
+    const queryOriginal = qSet.has('original')
+    if (queryOriginal && targetHasZero) return false
+
+    const qWeights = extractWeightTokensFromNormalized(queryNormalized)
+    const tWeights = extractWeightTokensFromNormalized(targetNormalized)
+    if (qWeights.length > 0 && tWeights.length === 0) return false
+    if (qWeights.length > 0 && tWeights.length > 0 && qWeights.join('|') !== tWeights.join('|')) return false
+
+    return true
+}
+
 const buildSearchTextFromAsset = (asset: AssetItem): string =>
     normalizeText(`${asset.name || ""} ${asset.key || ""} ${asset.source || ""}`);
 
@@ -121,10 +153,15 @@ const buildSearchTextFromCache = (row: CacheRow): string =>
 
 const scoreByTokens = (targetText: string, queryVariants: string[]) => {
     if (!targetText) return 0;
+    const targetNormalized = normalizeSearchTerm(targetText)
     let best = 0;
     for (const variant of queryVariants) {
         const q = normalizeText(variant);
         if (!q) continue;
+        const qNormalized = normalizeSearchTerm(variant)
+        if (!isVariantAndWeightCompatible(qNormalized, targetNormalized)) {
+            continue;
+        }
         const qTokens = tokenize(q);
         if (!qTokens.length) continue;
 
@@ -230,6 +267,20 @@ const buildHeuristicVariants = (opts: {
     if (flavor && q) out.push(`${q} ${flavor}`);
     if (brand && name) out.push(`${brand} ${name}`);
     if (weight && name) out.push(`${name} ${weight}`);
+
+    const baseCombined = [q, name, brand, flavor, weight].filter(Boolean).join(' ').toLowerCase()
+    if (/\brefri\b/.test(baseCombined) || /\brefrigerante\b/.test(baseCombined)) {
+        out.push('refrigerante')
+    }
+    if (/\bcoca[\s-]*cola\b/.test(baseCombined) || /\bcoca\b/.test(baseCombined)) {
+        out.push('cocacola')
+    }
+    if (/\btradicional\b/.test(baseCombined) || /\bclassico\b/.test(baseCombined) || /\bclassic\b/.test(baseCombined)) {
+        out.push('original')
+    }
+    if (/\bzero\b/.test(baseCombined) || /\bsem acucar\b/.test(baseCombined) || /\bzero acucar\b/.test(baseCombined)) {
+        out.push('zero')
+    }
 
     const baseTokens = tokenize([q, name].filter(Boolean).join(" "));
     if (baseTokens.length >= 2) {

@@ -12,6 +12,42 @@ const UNIT_MAP: Record<string, string> = {
   fardo: 'fd', fardos: 'fd'
 }
 
+const TOKEN_ALIASES: Record<string, string> = {
+  // Beverage naming
+  refri: 'refrigerante',
+  refrigerantes: 'refrigerante',
+  coca: 'cocacola',
+  cocacola: 'cocacola',
+  cocacolaoriginal: 'cocacola',
+
+  // Variant canonicalization
+  tradicional: 'original',
+  classico: 'original',
+  classic: 'original',
+  regular: 'original',
+  normal: 'original',
+
+  // Sugar-free variants
+  zeroacucar: 'zero',
+  semacucar: 'zero',
+  sugarfree: 'zero',
+  semsugar: 'zero',
+}
+
+const normalizeQueryPhrases = (value: string): string => {
+  let text = String(value || '')
+  text = text
+    // Keep strong brand identity in one token.
+    .replace(/\bcoca[\s-]*cola\b/gi, ' cocacola ')
+    // Canonical variant synonyms.
+    .replace(/\b(zero\s+acucar|sem\s+acucar|sugar\s*free)\b/gi, ' zero ')
+    .replace(/\b(tradicional|classico|classic|regular)\b/gi, ' original ')
+    // Canonical unit expressions with quantity.
+    .replace(/(\d+(?:[.,]\d+)?)\s*(litros?|lts?|lt)\b/gi, '$1l')
+    .replace(/(\d+(?:[.,]\d+)?)\s*(mililitros?|mls?)\b/gi, '$1ml')
+  return text
+}
+
 const STOP_WORDS = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'e', 'para', 'por', 'no', 'na'])
 
 const normalizeWeightNumber = (value: string): string => {
@@ -66,7 +102,7 @@ const normalizeWeightToken = (rawWeight: string): string => {
 }
 
 export const normalizeSearchTerm = (term: string): string => {
-  const words = term
+  const words = normalizeQueryPhrases(term)
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -77,8 +113,15 @@ export const normalizeSearchTerm = (term: string): string => {
     .split(' ')
     .filter((w) => !STOP_WORDS.has(w) && w.length > 0)
     .map((w) => UNIT_MAP[w] || w)
+    .map((w) => TOKEN_ALIASES[w] || w)
 
-  return [...new Set(words)].sort().join(' ')
+  const set = new Set(words)
+  // If only "coca" appears in query, normalize to cocacola semantics.
+  if (set.has('coca')) set.add('cocacola')
+  // If query has both coca + cola tokens, force the single canonical token too.
+  if (set.has('coca') && set.has('cola')) set.add('cocacola')
+
+  return [...set].sort().join(' ')
 }
 
 const WEIGHT_TOKENS = new Set(['kg', 'kgs', 'g', 'gr', 'grs', 'mg', 'ml', 'mls', 'l', 'lt', 'lts', 'un', 'pct', 'cx', 'fd'])
@@ -103,7 +146,7 @@ const stripWeightLikeTokens = (normalizedTerm: string): string => {
 
 const VARIANT_KEYWORDS = new Set([
   'zero', 'light', 'diet', 'sem', 'sugar', 'free',
-  'original', 'tradicional', 'classic', 'classico',
+  'original',
   'plus', 'max', 'mini', 'mega', 'ultra', 'pro',
   'suave', 'forte', 'extra', 'premium', 'gold', 'silver',
   'integral', 'desnatado', 'semidesnatado', 'light',
