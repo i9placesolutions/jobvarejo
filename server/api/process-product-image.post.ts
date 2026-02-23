@@ -643,61 +643,75 @@ export default defineEventHandler(async (event) => {
     // ========================================
     // 3. PROCESS + UPLOAD PIPELINE (S3 key determinístico)
     // ========================================
-        try {
-            const pipelineResult = await runExternalPipelineOnce({
-                s3,
-                bucketName,
-                deterministicKey,
-                normalizedTerm,
-                term,
-                brand,
-                flavor,
-                weight,
-                selectedImageUrl,
-                bgPolicy
-            });
-            const resolvedKey = String(
-                (pipelineResult?.url && pipelineResult.url.includes('/api/storage/p?key='))
-                    ? decodeURIComponent((pipelineResult.url.split('key=')[1] || '').split('&')[0] || '')
-                    : deterministicKey
-            ).trim() || deterministicKey;
-            await safeUpsertRegistry({
-                productCode,
-                identityKey,
-                canonicalName: term,
-                brand,
-                flavor,
-                weight,
-                s3Key: resolvedKey,
-                source: providerUsed || 'external',
-                validationLevel: 'ocr+ai-strict',
-                validatedBy: user.id,
-                status: 'approved'
-            });
-            return pipelineResult;
-        } catch (err: any) {
-            // Never fail the whole UI with a 500 for image pipeline errors.
-            // The caller treats missing `url` as "no image" and continues processing other products.
-            console.error("Processing pipeline failed:", err);
-            await safeUpsertRegistry({
-                productCode,
-                identityKey,
-                canonicalName: term,
-                brand,
-                flavor,
-                weight,
-                source: providerUsed || 'external',
-                validationLevel: 'ocr+ai-strict',
-                validatedBy: user.id,
-                status: 'review_pending',
-                reason: 'processing_failed'
-            });
-            return noImageResponse('processing_failed', {
-                message: String(err?.message || err || 'unknown'),
-                code: err?.code,
-                name: err?.name
-            });
+        const fallbackUrls = candidates
+            .map((c) => String(c?.url || '').trim())
+            .filter(Boolean)
+            .filter((url, idx, arr) => arr.indexOf(url) === idx)
+            .filter((url) => url !== selectedImageUrl)
+            .slice(0, 3);
+        const pipelineTryUrls = [selectedImageUrl, ...fallbackUrls].filter(Boolean);
+        let pipelineLastErr: any = null;
+
+        for (const candidateUrl of pipelineTryUrls) {
+            try {
+                const pipelineResult = await runExternalPipelineOnce({
+                    s3,
+                    bucketName,
+                    deterministicKey,
+                    normalizedTerm,
+                    term,
+                    brand,
+                    flavor,
+                    weight,
+                    selectedImageUrl: candidateUrl,
+                    bgPolicy
+                });
+                const resolvedKey = String(
+                    (pipelineResult?.url && pipelineResult.url.includes('/api/storage/p?key='))
+                        ? decodeURIComponent((pipelineResult.url.split('key=')[1] || '').split('&')[0] || '')
+                        : deterministicKey
+                ).trim() || deterministicKey;
+                await safeUpsertRegistry({
+                    productCode,
+                    identityKey,
+                    canonicalName: term,
+                    brand,
+                    flavor,
+                    weight,
+                    s3Key: resolvedKey,
+                    source: providerUsed || 'external',
+                    validationLevel: 'ocr+ai-strict',
+                    validatedBy: user.id,
+                    status: 'approved'
+                });
+                return pipelineResult;
+            } catch (err: any) {
+                pipelineLastErr = err;
+                console.warn(`⚠️ [Pipeline] Falhou para candidata ${candidateUrl.slice(0, 120)}:`, err?.message || String(err));
+            }
         }
+
+        // Never fail the whole UI with a 500 for image pipeline errors.
+        // The caller treats missing `url` as "no image" and continues processing other products.
+        console.error("Processing pipeline failed (all candidates):", pipelineLastErr);
+        await safeUpsertRegistry({
+            productCode,
+            identityKey,
+            canonicalName: term,
+            brand,
+            flavor,
+            weight,
+            source: providerUsed || 'external',
+            validationLevel: 'ocr+ai-strict',
+            validatedBy: user.id,
+            status: 'review_pending',
+            reason: 'processing_failed_all_candidates'
+        });
+        return noImageResponse('processing_failed', {
+            message: String(pipelineLastErr?.message || pipelineLastErr || 'unknown'),
+            code: pipelineLastErr?.code,
+            name: pipelineLastErr?.name
+        });
     } catch (err: any) {
         // Preserve expected HTTP errors (auth, validation, rate limit).
         const statusCode = Number(err?.statusCode || err?.status || 0) || 0;

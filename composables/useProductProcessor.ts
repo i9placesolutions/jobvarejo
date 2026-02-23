@@ -419,7 +419,10 @@ export const useProductProcessor = () => {
                 console.log('[ProductProcessor] Image found:', product.name, result.url.substring(0, 80) + '...');
                 return { ok: true };
             } else {
-                const reason = String(result?.reason || result?.statusMessage || result?.message || 'Imagem não encontrada');
+                const rawReason = String(result?.reason || '').trim();
+                const reason = rawReason === 'processing_failed'
+                    ? String(result?.message || result?.statusMessage || rawReason || 'Falha no processamento da imagem')
+                    : String(result?.message || result?.statusMessage || rawReason || 'Imagem não encontrada');
                 const isReviewPending = !!result?.reviewPending;
                 product.status = isReviewPending ? 'review_pending' : 'error';
                 product.error = reason;
