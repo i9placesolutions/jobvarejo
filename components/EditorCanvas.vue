@@ -4849,6 +4849,10 @@ const restoreFromHistoryItem = async (item: PageHistoryItem) => {
     }
 }
 const getHistoryRestoreKey = (item: PageHistoryItem) => `${item.source}:${item.key}:${item.versionId || ''}`
+const handleOpenPageHistoryEvent = () => {
+    if (!canRecoverLatestNonEmpty.value) return
+    void openHistoryModal()
+}
 
 const countCanvasJsonObjectsAndImages = (canvasData: any): { objects: number; images: number } => {
     const visited = new Set<any>()
@@ -6169,12 +6173,14 @@ const handleEditorVisibilityChange = () => {
 onMounted(() => {
     window.addEventListener('beforeunload', handleEditorBeforeUnload);
     window.addEventListener('pagehide', handleEditorPageHide);
+    window.addEventListener('editor:open-page-history', handleOpenPageHistoryEvent as EventListener);
     document.addEventListener('visibilitychange', handleEditorVisibilityChange);
 });
 
 onUnmounted(() => {
     window.removeEventListener('beforeunload', handleEditorBeforeUnload);
     window.removeEventListener('pagehide', handleEditorPageHide);
+    window.removeEventListener('editor:open-page-history', handleOpenPageHistoryEvent as EventListener);
     document.removeEventListener('visibilitychange', handleEditorVisibilityChange);
     if (propertySaveTimer) {
         clearTimeout(propertySaveTimer);
@@ -30806,20 +30812,6 @@ const handleRecalculateLayout = () => {
                         {{ isRecoveringLatestNonEmpty ? 'Recuperando...' : 'Recuperar' }}
                       </button>
                     </div>
-                  </div>
-
-                  <div
-                    v-if="canRecoverLatestNonEmpty"
-                    class="absolute top-3 right-3"
-                    style="z-index: 210;"
-                  >
-                    <button
-                      type="button"
-                      class="text-xs px-3 py-1.5 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-white/15 text-white shadow-lg"
-                      @click="openHistoryModal"
-                    >
-                      Historico de versoes
-                    </button>
                   </div>
 
                   <ContextMenu

@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<RestoreBody>(event)
   const projectId = String(body?.projectId || '').trim()
   const pageId = String(body?.pageId || '').trim()
-  const kind = (body?.source?.kind || 'version') as 'version' | 'history'
+  const kind = (body?.source?.kind || 'history') as 'version' | 'history'
   const sourceKey = String(body?.source?.key || '').trim()
   const versionId = body?.source?.versionId ? String(body.source.versionId).trim() : null
 

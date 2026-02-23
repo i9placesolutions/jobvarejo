@@ -90,6 +90,11 @@ const saveColor = computed(() => {
     default: return hasUnsavedChanges.value ? 'text-yellow-400' : 'text-zinc-500'
   }
 })
+
+const openPageHistory = () => {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('editor:open-page-history'))
+}
 </script>
 
 <template>
@@ -116,6 +121,13 @@ const saveColor = computed(() => {
           <span>{{ saveText }}</span>
           <span v-if="saveSubtext" class="text-zinc-400">{{ saveSubtext }}</span>
         </div>
+        <button
+          type="button"
+          class="text-[10px] px-2 py-0.5 rounded-md border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 hover:bg-white/5 transition-colors"
+          @click="openPageHistory"
+        >
+          Histórico
+        </button>
         <span class="text-[10px] text-zinc-500">Studio PRO Editor</span>
       </div>
     </div>

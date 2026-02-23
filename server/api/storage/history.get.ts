@@ -1,16 +1,26 @@
-import { GetObjectCommand, ListObjectVersionsCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
+import { GetObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
 import { Readable } from 'node:stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { getOwnedProjectStorageRow } from '../../utils/project-repository'
 
 type HistoryItem = {
-  source: 'version' | 'history'
+  source: 'history'
   key: string
   versionId?: string | null
   lastModified: string
   size?: number | null
   objectCount?: number | null
+}
+
+const HISTORY_MAX_SNAPSHOTS = 3
+
+const extractHistorySlot = (key: string): number | null => {
+  const m = String(key || '').match(/\/v([1-9][0-9]*)\.json$/)
+  if (!m) return null
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n < 1 || n > HISTORY_MAX_SNAPSHOTS) return null
+  return n
 }
 
 const streamToString = async (body: any): Promise<string> => {
@@ -59,9 +69,6 @@ export default defineEventHandler(async (event) => {
 
   const pages = Array.isArray(projectRow.canvas_data) ? projectRow.canvas_data : []
   const pageMeta = pages.find((p: any) => String(p?.id || '') === pageId) || null
-  const targetKey =
-    String(pageMeta?.canvasDataPath || '').trim() ||
-    `projects/${projectRow.user_id}/${projectId}/page_${pageId}.json`
   const historyPrefix = `projects/${projectRow.user_id}/${projectId}/history/page_${pageId}/`
 
   const s3 = new S3Client({
@@ -73,47 +80,7 @@ export default defineEventHandler(async (event) => {
 
   const items: HistoryItem[] = []
 
-  // 1) S3 versions for the canonical page key (if bucket has versioning enabled).
-  try {
-    const versions: any[] = []
-    let keyMarker: string | undefined
-    let versionIdMarker: string | undefined
-    let truncated = true
-    while (truncated) {
-      const versionsResult = await s3.send(
-        new ListObjectVersionsCommand({
-          Bucket: bucket,
-          Prefix: targetKey,
-          MaxKeys: 1000,
-          KeyMarker: keyMarker,
-          VersionIdMarker: versionIdMarker
-        })
-      )
-      versions.push(...(versionsResult.Versions || []))
-      truncated = Boolean(versionsResult.IsTruncated)
-      keyMarker = versionsResult.NextKeyMarker
-      versionIdMarker = versionsResult.NextVersionIdMarker
-      if (!truncated) break
-    }
-
-    const sortedVersions = versions
-      .filter((v) => String(v.Key || '') === targetKey && !!v.VersionId)
-      .sort((a, b) => new Date(b.LastModified || 0).getTime() - new Date(a.LastModified || 0).getTime())
-
-    for (const v of sortedVersions) {
-      items.push({
-        source: 'version',
-        key: targetKey,
-        versionId: String(v.VersionId || ''),
-        lastModified: new Date(v.LastModified || 0).toISOString(),
-        size: Number(v.Size || 0) || null
-      })
-    }
-  } catch {
-    // ignore list versions failures
-  }
-
-  // 2) History snapshots (writes via /api/storage/history-snapshot)
+  // History snapshots (ring buffer: v1..v3)
   try {
     const objectsRaw: any[] = []
     let continuationToken: string | undefined
@@ -134,7 +101,11 @@ export default defineEventHandler(async (event) => {
     }
 
     const objects = objectsRaw
-      .filter((o) => !!o.Key && String(o.Key).endsWith('.json'))
+      .filter((o) => {
+        const key = String(o?.Key || '')
+        if (!key.endsWith('.json')) return false
+        return extractHistorySlot(key) != null
+      })
       .sort((a, b) => new Date(b.LastModified || 0).getTime() - new Date(a.LastModified || 0).getTime())
 
     for (const obj of objects) {
@@ -162,7 +133,6 @@ export default defineEventHandler(async (event) => {
       const getCmd = new GetObjectCommand({
         Bucket: bucket,
         Key: entry.key,
-        VersionId: entry.source === 'version' ? String(entry.versionId || '') : undefined
       })
       const object = await s3.send(getCmd)
       if (!object.Body) continue
@@ -177,7 +147,7 @@ export default defineEventHandler(async (event) => {
 
   const unique = new Map<string, HistoryItem>()
   for (const it of items) {
-    const k = `${it.source}:${it.key}:${it.source === 'version' ? it.versionId : ''}:${it.lastModified}`
+    const k = `${it.source}:${it.key}:${it.lastModified}`
     if (!unique.has(k)) unique.set(k, it)
   }
 
@@ -186,8 +156,8 @@ export default defineEventHandler(async (event) => {
   )
 
   return {
-    targetKey,
     historyPrefix,
+    maxSnapshots: HISTORY_MAX_SNAPSHOTS,
     items: finalItems
   }
 })

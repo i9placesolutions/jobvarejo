@@ -1,4 +1,4 @@
-import { CopyObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { CopyObjectCommand, HeadObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { isValidStoragePath } from '../../utils/storage-scope'
@@ -8,6 +8,16 @@ type HistorySnapshotBody = {
   projectId?: string
   pageId?: string
   key?: string
+}
+
+const HISTORY_MAX_SNAPSHOTS = 3
+
+const extractHistorySlot = (key: string): number | null => {
+  const m = String(key || '').match(/\/v([1-9][0-9]*)\.json$/)
+  if (!m) return null
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n < 1 || n > HISTORY_MAX_SNAPSHOTS) return null
+  return n
 }
 
 const normalizeStorageKey = (input: string): string => {
@@ -127,8 +137,40 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const historyKey = `projects/${user.id}/${projectId}/history/page_${pageId}/${timestamp}.json`
+  const historyPrefix = `projects/${user.id}/${projectId}/history/page_${pageId}/`
+  const list = await s3.send(
+    new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: historyPrefix,
+      MaxKeys: 100
+    })
+  )
+
+  const objects = (list.Contents || [])
+    .filter((obj) => !!obj.Key && String(obj.Key).endsWith('.json'))
+    .map((obj) => ({
+      key: String(obj.Key || ''),
+      slot: extractHistorySlot(String(obj.Key || '')),
+      lastModified: new Date(obj.LastModified || 0).getTime()
+    }))
+    .filter((obj) => obj.slot != null) as Array<{ key: string; slot: number; lastModified: number }>
+
+  const usedSlots = new Set<number>(objects.map((obj) => obj.slot))
+  let chosenSlot: number | null = null
+  for (let slot = 1; slot <= HISTORY_MAX_SNAPSHOTS; slot++) {
+    if (!usedSlots.has(slot)) {
+      chosenSlot = slot
+      break
+    }
+  }
+  if (!chosenSlot) {
+    const oldest = objects
+      .slice()
+      .sort((a, b) => a.lastModified - b.lastModified)[0]
+    chosenSlot = oldest?.slot || 1
+  }
+
+  const historyKey = `${historyPrefix}v${chosenSlot}.json`
 
   await s3.send(
     new CopyObjectCommand({
@@ -154,6 +196,8 @@ export default defineEventHandler(async (event) => {
     ok: true,
     sourceKey: resolvedSourceKey,
     historyKey,
+    slot: chosenSlot,
+    maxSnapshots: HISTORY_MAX_SNAPSHOTS,
     copiedAt
   }
 })
