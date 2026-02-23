@@ -61,6 +61,7 @@ CRITÉRIOS DE AVALIAÇÃO (em ordem de importância):
 3. O PESO/VOLUME/GRAMATURA deve bater exatamente quando informado (ex.: 500ml != 1L, 12x500ml != 6x1L)
 4. O SABOR/VARIANTE corresponde (se aplicável)
 5. A imagem tem boa qualidade e mostra o produto claramente
+6. Tolere pequenos erros de digitação no texto de entrada (OCR/typos), desde que embalagem/marca/gramatura visuais indiquem o mesmo produto.
 
 Responda EXCLUSIVAMENTE em JSON:
 {

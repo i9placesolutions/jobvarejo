@@ -64,6 +64,43 @@ const passesMetadataHardGate = (opts: {
     return hits >= Math.max(1, Math.ceil(termTokens.length * 0.5));
 };
 
+const buildExternalQueryVariants = (opts: {
+    primarySearchInput: string;
+    searchQuery: string;
+    term: string;
+    brand?: string;
+    weight?: string;
+    flavor?: string;
+}): string[] => {
+    const unique = new Set<string>();
+    const push = (value: string) => {
+        const text = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        unique.add(text);
+    };
+
+    push(opts.searchQuery);
+    push(opts.primarySearchInput);
+    push(opts.term);
+    push([opts.brand, opts.term, opts.weight].filter(Boolean).join(' '));
+
+    const termTokens = String(opts.term || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    if (termTokens.length >= 3) {
+        push(termTokens.slice(0, -1).join(' '));
+    }
+    if (termTokens.length >= 2) {
+        push(termTokens.slice(0, 2).join(' '));
+    }
+    if (opts.brand && termTokens.length >= 2) {
+        push([opts.brand, termTokens[0], termTokens[1]].join(' '));
+    }
+    if (opts.flavor) {
+        push([opts.term, opts.flavor].filter(Boolean).join(' '));
+    }
+
+    return Array.from(unique).slice(0, 6);
+};
+
 // ========================================
 // HANDLER PRINCIPAL
 // ========================================
@@ -409,45 +446,63 @@ export default defineEventHandler(async (event) => {
     let candidates: { url: string; title?: string; source?: string }[] = [];
     let providerUsed: 'google-cse' | 'serper' | null = null;
     let lastProviderError: Record<string, any> | null = null;
+    const externalQueryVariants = buildExternalQueryVariants({
+        primarySearchInput,
+        searchQuery,
+        term,
+        brand,
+        weight,
+        flavor
+    });
 
     if (hasGoogleCse) {
-        const googleCseResult = await searchGoogleCseImageCandidates({
-            apiKey: config.googleCseApiKey,
-            cx: config.googleCseCx,
-            query: `${searchQuery} produto embalagem`,
-            gl: 'br',
-            hl: 'pt-br',
-            num: 10,
-            maxCandidates: 5,
-            timeoutMs: 12_000
-        });
-        if (googleCseResult.error) {
-            lastProviderError = { provider: 'google-cse', ...googleCseResult.error };
-            console.warn(`⚠️ [Google CSE] erro (${googleCseResult.error.kind}) para query="${searchQuery}", tentando fallback.`);
-        } else if (googleCseResult.candidates.length > 0) {
-            candidates = googleCseResult.candidates;
-            providerUsed = 'google-cse';
-        } else {
-            console.warn(`⚠️ [Google CSE] 0 candidatas para query="${searchQuery}", tentando fallback.`);
+        for (const q of externalQueryVariants) {
+            const googleCseResult = await searchGoogleCseImageCandidates({
+                apiKey: config.googleCseApiKey,
+                cx: config.googleCseCx,
+                query: `${q} produto embalagem`,
+                gl: 'br',
+                hl: 'pt-br',
+                num: 10,
+                maxCandidates: 6,
+                timeoutMs: 12_000
+            });
+            if (googleCseResult.error) {
+                lastProviderError = { provider: 'google-cse', query: q, ...googleCseResult.error };
+                console.warn(`⚠️ [Google CSE] erro (${googleCseResult.error.kind}) para query="${q}", tentando próxima variação.`);
+                continue;
+            }
+            if (googleCseResult.candidates.length > 0) {
+                candidates = googleCseResult.candidates;
+                providerUsed = 'google-cse';
+                console.log(`✅ [Google CSE] candidatas encontradas com query="${q}"`);
+                break;
+            }
         }
     }
 
     if (candidates.length === 0 && hasSerper) {
-        const serperResult = await searchSerperImageCandidates({
-            apiKey: config.serperApiKey,
-            query: `${searchQuery} produto embalagem`,
-            gl: 'br',
-            hl: 'pt-br',
-            num: 10,
-            maxCandidates: 5,
-            timeoutMs: 12_000
-        });
-        if (serperResult.error) {
-            lastProviderError = { provider: 'serper', ...serperResult.error };
-            console.warn(`⚠️ [Serper] erro (${serperResult.error.kind}) para query="${searchQuery}".`);
-        } else if (serperResult.candidates.length > 0) {
-            candidates = serperResult.candidates;
-            providerUsed = 'serper';
+        for (const q of externalQueryVariants) {
+            const serperResult = await searchSerperImageCandidates({
+                apiKey: config.serperApiKey,
+                query: `${q} produto embalagem`,
+                gl: 'br',
+                hl: 'pt-br',
+                num: 10,
+                maxCandidates: 6,
+                timeoutMs: 12_000
+            });
+            if (serperResult.error) {
+                lastProviderError = { provider: 'serper', query: q, ...serperResult.error };
+                console.warn(`⚠️ [Serper] erro (${serperResult.error.kind}) para query="${q}".`);
+                continue;
+            }
+            if (serperResult.candidates.length > 0) {
+                candidates = serperResult.candidates;
+                providerUsed = 'serper';
+                console.log(`✅ [Serper] candidatas encontradas com query="${q}"`);
+                break;
+            }
         }
     }
 
