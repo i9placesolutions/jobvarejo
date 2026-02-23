@@ -3681,6 +3681,24 @@ const setupAltDragDuplicate = () => {
         }
     };
 
+    const getScenePointerFromEvent = (evt: any): { x: number; y: number } | null => {
+        if (!canvas.value || !evt) return null;
+        try {
+            // Use scene/world coords first (matches object left/top space).
+            const scene = canvas.value.getScenePoint?.(evt);
+            if (scene && Number.isFinite(scene.x) && Number.isFinite(scene.y)) {
+                return { x: Number(scene.x), y: Number(scene.y) };
+            }
+            const viewport = canvas.value.getViewportPoint?.(evt);
+            if (viewport && Number.isFinite(viewport.x) && Number.isFinite(viewport.y)) {
+                return { x: Number(viewport.x), y: Number(viewport.y) };
+            }
+        } catch {
+            // ignore
+        }
+        return null;
+    };
+
     canvas.value.on('mouse:down', (opt: any) => {
         const evt: MouseEvent | undefined = opt?.e;
         if (!evt || evt.button !== 0 || !evt.altKey) {
@@ -3711,20 +3729,13 @@ const setupAltDragDuplicate = () => {
         state.startLeft = Number(source.left || 0);
         state.startTop = Number(source.top || 0);
         // Initialize pointer tracking at mousedown position
-        try {
-            const ptr = canvas.value?.getViewportPoint?.(evt) || canvas.value?.getScenePoint?.(evt);
-            if (ptr) {
-                state.lastPointerX = ptr.x;
-                state.lastPointerY = ptr.y;
-                state.pointerDownX = ptr.x;
-                state.pointerDownY = ptr.y;
-            } else {
-                state.lastPointerX = state.startLeft;
-                state.lastPointerY = state.startTop;
-                state.pointerDownX = state.startLeft;
-                state.pointerDownY = state.startTop;
-            }
-        } catch {
+        const ptr = getScenePointerFromEvent(evt);
+        if (ptr) {
+            state.lastPointerX = ptr.x;
+            state.lastPointerY = ptr.y;
+            state.pointerDownX = ptr.x;
+            state.pointerDownY = ptr.y;
+        } else {
             state.lastPointerX = state.startLeft;
             state.lastPointerY = state.startTop;
             state.pointerDownX = state.startLeft;
@@ -3740,7 +3751,7 @@ const setupAltDragDuplicate = () => {
         try {
             const evt = opt?.e;
             if (evt) {
-                const ptr = canvas.value.getViewportPoint?.(evt) || canvas.value.getScenePoint?.(evt);
+                const ptr = getScenePointerFromEvent(evt);
                 if (ptr) { state.lastPointerX = ptr.x; state.lastPointerY = ptr.y; }
             }
         } catch { /* ignore */ }
@@ -3760,6 +3771,11 @@ const setupAltDragDuplicate = () => {
             state.original = resolvedSource;
             state.startLeft = Number(resolvedSource.left || 0);
             state.startTop = Number(resolvedSource.top || 0);
+            // Re-anchor drag delta when Fabric swaps parent->child target to avoid jump.
+            if (Number.isFinite(state.lastPointerX) && Number.isFinite(state.lastPointerY)) {
+                state.pointerDownX = Number(state.lastPointerX);
+                state.pointerDownY = Number(state.lastPointerY);
+            }
         }
 
         // For interactive groups (product cards with subTargetCheck=true), Fabric may report
@@ -4029,8 +4045,19 @@ const setupAltDragDuplicate = () => {
             state.clone = cloned;
             state.didDuplicate = true;
             state.manualFollowClone = !didSwapTransform;
-            if (state.manualFollowClone) {
-                syncCloneToPointerDelta();
+
+            // Always align clone to the current pointer delta on the first frame.
+            // This avoids the visual "jump" when async clone creation finishes.
+            syncCloneToPointerDelta();
+
+            // If Fabric transform was swapped, keep transform origin in sync with
+            // the corrected clone coordinates to avoid a follow-up snap.
+            if (didSwapTransform) {
+                const tr2: any = (canvas.value as any)?._currentTransform;
+                if (tr2?.original && typeof tr2.original === 'object') {
+                    tr2.original.left = cloned.left;
+                    tr2.original.top = cloned.top;
+                }
             }
             state.cloning = false;
 
@@ -11524,6 +11551,22 @@ const deleteActiveSelectionFromCanvas = (): boolean => {
 
     const active = (canvas.value.getActiveObjects?.() || []).filter((o: any) => !!o);
     if (!active.length) return false;
+
+    const containsFrameLikeObject = (items: any[]): boolean =>
+        items.some((item: any) => !!item && (item.isFrame || isFrameLikeObject(item)));
+
+    const confirmFrameDeletion = (origin: 'canvas' | 'layers'): boolean => {
+        if (typeof window === 'undefined') return true;
+        const where = origin === 'layers' ? 'painel de camadas' : 'canvas';
+        return window.confirm(
+            `Excluir Frame no ${where}? Isso remove tambem todo o conteudo dentro dele.`
+        );
+    };
+
+    if (containsFrameLikeObject(active) && !confirmFrameDeletion('canvas')) {
+        return false;
+    }
+
     const deleteTargets = new Set<any>(active);
 
     // Ao remover um frame, remover em cascata TODO o conteúdo interno (incluindo nested frames).
@@ -14191,6 +14234,7 @@ const setupSnapping = () => {
             isLikelyProductCard(obj) ||
             String((obj as any).parentZoneId || '').trim().length
         );
+        let handledCardZoneDrag = false;
         if (isCardLike) {
             // Upgrade legacy cards so downstream logic is consistent.
             if (!obj.isProductCard && !obj.isSmartObject && isLikelyProductCard(obj)) {
@@ -14277,8 +14321,17 @@ const setupSnapping = () => {
                     setObjCenterX(obj, cx);
                     setObjCenterY(obj, cy);
                     obj.setCoords();
+                    handledCardZoneDrag = true;
                 }
             }
+        }
+
+        // Product cards should feel fluid while dragging inside zones:
+        // apply zone containment only and skip expensive/global snapping.
+        if (handledCardZoneDrag) {
+            hideGuides();
+            syncMovingFrameClip(obj);
+            return;
         }
 
         // ProductZone containment
@@ -18149,12 +18202,31 @@ const deleteObject = (id: string) => {
     if (!canvas.value) return; 
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
+        const isFrameTarget = !!obj.isFrame || !!isFrameLikeObject(obj);
+        if (isFrameTarget && typeof window !== 'undefined') {
+            const ok = window.confirm(
+                'Excluir Frame no painel de camadas? Isso remove tambem todo o conteudo dentro dele.'
+            );
+            if (!ok) return;
+        }
+
         const active = canvas.value.getActiveObject?.();
         if (active && active === obj) canvas.value.discardActiveObject();
-        canvas.value.remove(obj);
+        if (isFrameTarget) {
+            const targets = collectFrameVisibilityTargets(obj);
+            targets.forEach((entry: any) => {
+                if (!entry) return;
+                if (isControlLikeObject(entry) || isTransientCanvasObject(entry)) return;
+                if (String(entry.id || '') === 'artboard-bg') return;
+                try { canvas.value!.remove(entry); } catch {}
+            });
+        } else {
+            canvas.value.remove(obj);
+        }
         canvas.value.requestRenderAll();
         refreshCanvasObjects();
         updateSelection();
+        saveCurrentState({ reason: 'layers-delete' });
     }
 }
 
