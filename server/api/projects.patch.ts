@@ -29,6 +29,12 @@ const parseSharedWith = (value: unknown): string[] => {
   return parsed
 }
 
+const ensureCanvasDataNotEmpty = (value: unknown) => {
+  if (Array.isArray(value) && value.length === 0) {
+    throw createError({ statusCode: 400, statusMessage: 'canvas_data cannot be an empty array' })
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   enforceRateLimit(event, `projects-patch:${user.id}`, 180, 60_000)
@@ -95,6 +101,7 @@ export default defineEventHandler(async (event) => {
     if (body?.canvas_data == null) {
       throw createError({ statusCode: 400, statusMessage: 'canvas_data cannot be empty' })
     }
+    ensureCanvasDataNotEmpty(body.canvas_data)
     const canvasDataJson = parseAndStringifyJsonbParam(body.canvas_data, 'canvas_data')
     updates.push(`canvas_data = ${pushParam(canvasDataJson)}::jsonb`)
   }

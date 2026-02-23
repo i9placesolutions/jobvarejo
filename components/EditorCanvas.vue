@@ -4771,6 +4771,18 @@ const showHistoryModal = ref(false)
 const historyLoading = ref(false)
 const historyError = ref<string>('')
 const historyItems = ref<PageHistoryItem[]>([])
+const formatHistoryDateTime = (value: string) => {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return value
+    return d.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    })
+}
 
 const openHistoryModal = async () => {
     if (!canRecoverLatestNonEmpty.value) return
@@ -4836,6 +4848,7 @@ const restoreFromHistoryItem = async (item: PageHistoryItem) => {
         restoringHistoryKey.value = ''
     }
 }
+const getHistoryRestoreKey = (item: PageHistoryItem) => `${item.source}:${item.key}:${item.versionId || ''}`
 
 const countCanvasJsonObjectsAndImages = (canvasData: any): { objects: number; images: number } => {
     const visited = new Set<any>()
@@ -30795,6 +30808,20 @@ const handleRecalculateLayout = () => {
                     </div>
                   </div>
 
+                  <div
+                    v-if="canRecoverLatestNonEmpty"
+                    class="absolute top-3 right-3"
+                    style="z-index: 210;"
+                  >
+                    <button
+                      type="button"
+                      class="text-xs px-3 py-1.5 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-white/15 text-white shadow-lg"
+                      @click="openHistoryModal"
+                    >
+                      Historico de versoes
+                    </button>
+                  </div>
+
                   <ContextMenu
                     v-model="canvasContextMenu.show"
                     :x="canvasContextMenu.x"
@@ -31031,7 +31058,7 @@ const handleRecalculateLayout = () => {
           <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <div>
               <p class="text-sm text-white/90">Historico da pagina</p>
-              <p class="text-[11px] text-white/55">Escolha uma versao para restaurar.</p>
+              <p class="text-[11px] text-white/55">Escolha uma versao para restaurar. Total: {{ historyItems.length }}</p>
             </div>
             <button type="button" class="text-white/70 hover:text-white text-lg leading-none" @click="showHistoryModal = false">×</button>
           </div>
@@ -31045,7 +31072,7 @@ const handleRecalculateLayout = () => {
                   <p class="text-xs text-white/80 truncate">
                     <span class="font-medium">{{ it.source === 'version' ? 'Versao' : 'Snapshot' }}</span>
                     <span class="text-white/40"> · </span>
-                    <span class="text-white/60">{{ new Date(it.lastModified).toLocaleString('pt-BR') }}</span>
+                    <span class="text-white/60">{{ formatHistoryDateTime(it.lastModified) }}</span>
                   </p>
                   <p class="text-[11px] text-white/50 truncate">
                     {{ it.objectCount != null ? `${it.objectCount} objetos` : '' }}
@@ -31058,7 +31085,7 @@ const handleRecalculateLayout = () => {
                   :disabled="!!restoringHistoryKey"
                   @click="restoreFromHistoryItem(it as any)"
                 >
-                  {{ restoringHistoryKey ? 'Restaurando...' : 'Restaurar' }}
+                  {{ restoringHistoryKey === getHistoryRestoreKey(it as any) ? 'Restaurando...' : 'Restaurar' }}
                 </button>
               </div>
             </div>

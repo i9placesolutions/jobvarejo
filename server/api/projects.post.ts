@@ -15,6 +15,12 @@ const toIsoOrNull = (value: unknown): string | null => {
   return date.toISOString()
 }
 
+const ensureCanvasDataNotEmpty = (value: unknown) => {
+  if (Array.isArray(value) && value.length === 0) {
+    throw createError({ statusCode: 400, statusMessage: 'canvas_data cannot be an empty array' })
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   enforceRateLimit(event, `projects-post:${user.id}`, 90, 60_000)
@@ -28,6 +34,7 @@ export default defineEventHandler(async (event) => {
   if (payload.canvas_data === null || payload.canvas_data === undefined) {
     throw createError({ statusCode: 400, statusMessage: 'canvas_data cannot be empty' })
   }
+  ensureCanvasDataNotEmpty(payload.canvas_data)
   const canvasDataJson = parseAndStringifyJsonbParam(payload.canvas_data, 'canvas_data')
 
   const projectId = String(payload.id || '').trim()

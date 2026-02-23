@@ -75,15 +75,32 @@ export default defineEventHandler(async (event) => {
 
   // 1) S3 versions for the canonical page key (if bucket has versioning enabled).
   try {
-    const versionsResult = await s3.send(
-      new ListObjectVersionsCommand({ Bucket: bucket, Prefix: targetKey, MaxKeys: 40 })
-    )
-    const versions = (versionsResult.Versions || [])
+    const versions: any[] = []
+    let keyMarker: string | undefined
+    let versionIdMarker: string | undefined
+    let truncated = true
+    while (truncated) {
+      const versionsResult = await s3.send(
+        new ListObjectVersionsCommand({
+          Bucket: bucket,
+          Prefix: targetKey,
+          MaxKeys: 1000,
+          KeyMarker: keyMarker,
+          VersionIdMarker: versionIdMarker
+        })
+      )
+      versions.push(...(versionsResult.Versions || []))
+      truncated = Boolean(versionsResult.IsTruncated)
+      keyMarker = versionsResult.NextKeyMarker
+      versionIdMarker = versionsResult.NextVersionIdMarker
+      if (!truncated) break
+    }
+
+    const sortedVersions = versions
       .filter((v) => String(v.Key || '') === targetKey && !!v.VersionId)
       .sort((a, b) => new Date(b.LastModified || 0).getTime() - new Date(a.LastModified || 0).getTime())
-      .slice(0, 12)
 
-    for (const v of versions) {
+    for (const v of sortedVersions) {
       items.push({
         source: 'version',
         key: targetKey,
@@ -98,13 +115,27 @@ export default defineEventHandler(async (event) => {
 
   // 2) History snapshots (writes via /api/storage/history-snapshot)
   try {
-    const listHistory = await s3.send(
-      new ListObjectsV2Command({ Bucket: bucket, Prefix: historyPrefix, MaxKeys: 60 })
-    )
-    const objects = (listHistory.Contents || [])
+    const objectsRaw: any[] = []
+    let continuationToken: string | undefined
+    let truncated = true
+    while (truncated) {
+      const listHistory = await s3.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: historyPrefix,
+          MaxKeys: 1000,
+          ContinuationToken: continuationToken
+        })
+      )
+      objectsRaw.push(...(listHistory.Contents || []))
+      truncated = Boolean(listHistory.IsTruncated)
+      continuationToken = listHistory.NextContinuationToken
+      if (!truncated) break
+    }
+
+    const objects = objectsRaw
       .filter((o) => !!o.Key && String(o.Key).endsWith('.json'))
       .sort((a, b) => new Date(b.LastModified || 0).getTime() - new Date(a.LastModified || 0).getTime())
-      .slice(0, 20)
 
     for (const obj of objects) {
       const key = String(obj.Key || '')
@@ -121,11 +152,10 @@ export default defineEventHandler(async (event) => {
     // ignore history list failures
   }
 
-  // Enrich a few recent entries with objectCount so the UI can show "non-empty".
+  // Enrich all entries with objectCount so the UI can compare versions safely.
   const toEnrich = items
     .slice()
     .sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime())
-    .slice(0, 8)
 
   for (const entry of toEnrich) {
     try {
