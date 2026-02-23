@@ -400,9 +400,15 @@ const getQueryTokens = (normalized: string): string[] =>
   normalized
     .split(' ')
     .filter(Boolean)
-    .filter((t) => t.length > 2)
-    .filter((t) => !/^\d+$/.test(t))
+    .filter((t) => t.length > 2 || /^\d{2,}$/.test(t))
     .filter((t) => !WEIGHT_TOKENS.has(t))
+
+const getCriticalNumericTokens = (normalized: string): string[] =>
+  normalized
+    .split(' ')
+    .filter(Boolean)
+    .filter((t) => /^\d{2,}$/.test(t))
+    .filter((t, idx, arr) => arr.indexOf(t) === idx)
 
 const scoreKeyMatch = (queryTokens: string[], keyTokenSet: Set<string>) => {
   if (!queryTokens.length) return { ratio: 0, overlap: 0 }
@@ -427,7 +433,11 @@ export const findBestS3Match = async (opts: {
 
   const queryVariants = opts.normalizedCandidates
     .filter(Boolean)
-    .map((normalized) => ({ normalized, tokens: getQueryTokens(normalized) }))
+    .map((normalized) => ({
+      normalized,
+      tokens: getQueryTokens(normalized),
+      criticalNumericTokens: getCriticalNumericTokens(normalized)
+    }))
     .filter((entry) => entry.tokens.length > 0)
 
   if (!queryVariants.length) {
@@ -476,6 +486,13 @@ export const findBestS3Match = async (opts: {
       if (!isFuzzyMatchValid(queryNormalized, normalizedKey, collectFuzzyReject)) continue
 
       const queryTokens = queryVariants[idx]!.tokens
+      const criticalNumericTokens = queryVariants[idx]!.criticalNumericTokens
+
+      // Guard rail: códigos numéricos curtos (ex: 51, 29) são discriminadores fortes.
+      if (criticalNumericTokens.length > 0 && criticalNumericTokens.some((token) => !keyTokens.has(token))) {
+        continue
+      }
+
       const { ratio, overlap } = scoreKeyMatch(queryTokens, keyTokens)
       const requiresWeightStrict = hasWeightInNormalized(queryNormalized)
       const minRatio = requiresWeightStrict
