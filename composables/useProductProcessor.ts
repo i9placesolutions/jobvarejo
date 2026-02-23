@@ -287,6 +287,46 @@ export const useProductProcessor = () => {
     };
 
     const isRateLimitError = (err: any): boolean => getHttpStatus(err) === 429;
+    const isTransientNetworkError = (err: any): boolean => {
+        const status = getHttpStatus(err);
+        if (status === 0) {
+            const msg = String(
+                err?.message ||
+                err?.statusMessage ||
+                err?.data?.message ||
+                err?.cause?.message ||
+                ''
+            ).toLowerCase();
+            if (
+                msg.includes('failed to fetch') ||
+                msg.includes('network changed') ||
+                msg.includes('networkerror') ||
+                msg.includes('<no response>') ||
+                msg.includes('load failed')
+            ) return true;
+        }
+        return status === 502 || status === 503 || status === 504;
+    };
+
+    const fetchParseProducts = async (body: any) => {
+        const headers = await getApiAuthHeaders();
+        let lastErr: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                return await $fetch('/api/parse-products', {
+                    method: 'POST',
+                    headers,
+                    body
+                });
+            } catch (err: any) {
+                lastErr = err;
+                if (!isTransientNetworkError(err) || attempt === 2) throw err;
+                const waitMs = 600 * (attempt + 1);
+                await sleep(waitMs);
+            }
+        }
+        throw lastErr || new Error('Falha ao processar produtos');
+    };
 
     const parseText = async (text: string) => {
         isParsing.value = true;
@@ -294,16 +334,13 @@ export const useProductProcessor = () => {
         products.value = [];
 
         try {
-            const headers = await getApiAuthHeaders();
-            const data = await $fetch('/api/parse-products', {
-                method: 'POST',
-                headers,
-                body: { text }
-            });
+            const data = await fetchParseProducts({ text });
             products.value = mapParsedProducts(data);
         } catch (err: any) {
             console.error(err);
-            parsingError.value = err.message || 'Falha ao processar texto';
+            parsingError.value = isTransientNetworkError(err)
+                ? 'Conexão com o servidor oscilou durante o parse. Tente novamente em alguns segundos.'
+                : (err.message || 'Falha ao processar texto');
         } finally {
             isParsing.value = false;
         }
@@ -315,18 +352,15 @@ export const useProductProcessor = () => {
         products.value = [];
 
         try {
-            const headers = await getApiAuthHeaders();
             const form = new FormData();
             form.append('file', file);
-            const data = await $fetch('/api/parse-products', {
-                method: 'POST',
-                headers,
-                body: form
-            });
+            const data = await fetchParseProducts(form);
             products.value = mapParsedProducts(data);
         } catch (err: any) {
             console.error(err);
-            parsingError.value = err.message || 'Falha ao processar arquivo';
+            parsingError.value = isTransientNetworkError(err)
+                ? 'Conexão com o servidor oscilou durante o envio do arquivo. Tente novamente em alguns segundos.'
+                : (err.message || 'Falha ao processar arquivo');
         } finally {
             isParsing.value = false;
         }
