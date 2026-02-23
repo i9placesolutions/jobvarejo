@@ -4,6 +4,8 @@ import { createHash } from "crypto";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { saveProductImageCache } from "../utils/product-image-cache";
+import { buildProductIdentityKey, upsertProductImageRegistry } from "../utils/product-image-registry";
+import { normalizeSearchTerm as normalizeSharedSearchTerm } from "../utils/product-image-matching";
 
 const UNIT_MAP: Record<string, string> = {
     mililitros: 'ml', mililitro: 'ml', mls: 'ml',
@@ -55,6 +57,7 @@ export default defineEventHandler(async (event) => {
     const brandPart = form.find(p => p.name === 'brand');
     const flavorPart = form.find(p => p.name === 'flavor');
     const weightPart = form.find(p => p.name === 'weight');
+    const productCodePart = form.find(p => p.name === 'productCode');
 
     if (!filePart?.data || !productNamePart?.data) {
         throw createError({ statusCode: 400, statusMessage: "File and product name required" });
@@ -75,10 +78,11 @@ export default defineEventHandler(async (event) => {
     const brand = brandPart?.data ? Buffer.from(brandPart.data).toString('utf8').trim() : null;
     const flavor = flavorPart?.data ? Buffer.from(flavorPart.data).toString('utf8').trim() : null;
     const weight = weightPart?.data ? Buffer.from(weightPart.data).toString('utf8').trim() : null;
+    const productCode = productCodePart?.data ? Buffer.from(productCodePart.data).toString('utf8').trim().replace(/[^a-zA-Z0-9]/g, '') : null;
     if (!productName || productName.length > 180) {
         throw createError({ statusCode: 400, statusMessage: "Invalid product name" });
     }
-    if ((brand && brand.length > 120) || (flavor && flavor.length > 120) || (weight && weight.length > 60)) {
+    if ((brand && brand.length > 120) || (flavor && flavor.length > 120) || (weight && weight.length > 60) || (productCode && productCode.length > 64)) {
         throw createError({ statusCode: 400, statusMessage: "Invalid metadata length" });
     }
 
@@ -109,6 +113,13 @@ export default defineEventHandler(async (event) => {
         const normalizedTerm = normalizeSearchTerm(
             [productName, brand, flavor, weight].filter(Boolean).join(' ')
         );
+        const identityKey = buildProductIdentityKey({
+            productCode: productCode || undefined,
+            normalizedTerm: normalizeSharedSearchTerm([productName, brand, flavor, weight].filter(Boolean).join(' ')),
+            brand: brand || undefined,
+            flavor: flavor || undefined,
+            weight: weight || undefined
+        });
         const safeName = (normalizedTerm || productName.toLowerCase())
             .replace(/[^a-z0-9]/g, '-')
             .replace(/-+/g, '-')
@@ -147,6 +158,19 @@ export default defineEventHandler(async (event) => {
         }).then((ok) => {
             if (!ok) console.warn('⚠️ [Cache DB] Falha ao salvar cache de upload manual');
             else console.log(`💾 [Manual Upload] Salvo no cache: "${productName}"`);
+        }).catch(() => { /* ignore */ });
+        void upsertProductImageRegistry({
+            productCode: productCode || undefined,
+            identityKey,
+            canonicalName: productName,
+            brand: brand || undefined,
+            flavor: flavor || undefined,
+            weight: weight || undefined,
+            s3Key: key,
+            source: 'manual',
+            validationLevel: 'manual-upload',
+            validatedBy: user.id,
+            status: 'approved'
         }).catch(() => { /* ignore */ });
 
         return {

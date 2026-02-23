@@ -1,5 +1,12 @@
 type CandidateImage = { url: string; title?: string; source?: string }
-type ProductInfo = { name: string; brand?: string; flavor?: string; weight?: string; normalizedQuery?: string }
+type ProductInfo = {
+  name: string
+  brand?: string
+  flavor?: string
+  weight?: string
+  productCode?: string
+  normalizedQuery?: string
+}
 
 let openaiInstance: any = null
 
@@ -15,7 +22,7 @@ const getOpenAI = async () => {
 export async function validateProductImageCandidatesWithAI(
   candidates: CandidateImage[],
   productInfo: ProductInfo
-): Promise<{ bestIndex: number; confidence: number; reason: string }> {
+): Promise<{ bestIndex: number; confidence: number; reason: string; isExactMatch: boolean; mismatchReasons: string[] }> {
   try {
     const openai = await getOpenAI()
 
@@ -23,6 +30,7 @@ export async function validateProductImageCandidatesWithAI(
     if (productInfo.brand) desc.push(`Marca: ${productInfo.brand}`)
     if (productInfo.flavor) desc.push(`Sabor/Variante: ${productInfo.flavor}`)
     if (productInfo.weight) desc.push(`Peso/Volume: ${productInfo.weight}`)
+    if (productInfo.productCode) desc.push(`Codigo Produto/EAN: ${productInfo.productCode}`)
     if (productInfo.normalizedQuery) desc.push(`Consulta Normalizada: ${productInfo.normalizedQuery}`)
     const productDescription = desc.join(' | ')
 
@@ -56,9 +64,11 @@ CRITÉRIOS DE AVALIAÇÃO (em ordem de importância):
 
 Responda EXCLUSIVAMENTE em JSON:
 {
-  "bestIndex": <número da melhor imagem (1-based), ou -1 se NENHUMA corresponde>,
+  "bestIndex": <numero da melhor imagem (1-based), ou -1 se NENHUMA corresponde>,
   "confidence": <0.0 a 1.0>,
-  "reason": "<explicação curta em português>"
+  "isExactMatch": <true|false>,
+  "mismatchReasons": ["<lista curta de motivos de rejeicao>"],
+  "reason": "<explicacao curta em portugues>"
 }`
         },
         {
@@ -81,12 +91,22 @@ Responda EXCLUSIVAMENTE em JSON:
       ? (parsed.bestIndex === -1 ? -1 : parsed.bestIndex - 1)
       : 0
     const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0.5
+    const isExactMatch = !!parsed.isExactMatch
+    const mismatchReasons = Array.isArray(parsed.mismatchReasons)
+      ? parsed.mismatchReasons.map((item: any) => String(item || '').trim()).filter(Boolean).slice(0, 6)
+      : []
     const reason = parsed.reason || ''
 
-    console.log(`🤖 [AI Validate] Produto: "${productInfo.name}" | Melhor: imagem ${bestIndex + 1}/${candidates.length} | Confiança: ${(confidence * 100).toFixed(0)}% | ${reason}`)
-    return { bestIndex, confidence, reason }
+    console.log(`🤖 [AI Validate] Produto: "${productInfo.name}" | Melhor: imagem ${bestIndex + 1}/${candidates.length} | Exata=${isExactMatch} | Confiança: ${(confidence * 100).toFixed(0)}% | ${reason}`)
+    return { bestIndex, confidence, reason, isExactMatch, mismatchReasons }
   } catch (err: any) {
     console.warn('⚠️ [AI Validate] Falha na validação por IA:', err?.message)
-    return { bestIndex: 0, confidence: 0.3, reason: 'Fallback - IA indisponível' }
+    return {
+      bestIndex: -1,
+      confidence: 0,
+      reason: 'IA indisponível para validação estrita',
+      isExactMatch: false,
+      mismatchReasons: ['ai_unavailable']
+    }
   }
 }

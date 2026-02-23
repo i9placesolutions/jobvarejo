@@ -303,6 +303,7 @@ Return STRICT JSON in the shape:
   "products": [
     {
       "name": string,
+      "productCode": string|null,
       "brand": string|null,
       "weight": string|null,
 
@@ -334,6 +335,8 @@ Return STRICT JSON in the shape:
 
 Rules:
 - Do not invent values; if missing, use null.
+- Extract productCode whenever available (EAN/GTIN/codigo interno em colunas como EAN, COD, CODIGO, SKU, GTIN).
+- productCode must preserve only alphanumeric chars (remove spaces/symbols).
 - Prices MUST be strings with comma decimal and 2 digits (e.g. "23,40").
 - For SIMPLE products with ONE price: populate BOTH "price" AND "priceUnit" with the same value.
 - If there are both pack price and unit price columns, populate BOTH pricePack AND priceUnit.
@@ -487,6 +490,21 @@ ${text ? `"${String(text).slice(0, MAX_PROMPT_SOURCE_CHARS)}"` : '(image attache
         return n.toFixed(2).replace('.', ',');
     };
 
+    const normalizeProductCode = (v: any): string | null => {
+        if (v === null || v === undefined) return null;
+        const code = String(v).trim().replace(/[^a-zA-Z0-9]/g, '');
+        if (!code) return null;
+        if (code.length < 6) return null;
+        return code.toUpperCase();
+    };
+
+    const extractProductCodeFromName = (name: string): string | null => {
+        const tokens = String(name || '').match(/\b\d{8,14}\b/g) || [];
+        if (!tokens.length) return null;
+        const candidate = tokens.sort((a, b) => b.length - a.length)[0];
+        return normalizeProductCode(candidate);
+    };
+
     try {
         const messages: any[] = imageDataUrl
             ? [{
@@ -536,6 +554,7 @@ ${text ? `"${String(text).slice(0, MAX_PROMPT_SOURCE_CHARS)}"` : '(image attache
 
             return {
                 name: name || 'Produto sem nome',
+                productCode: normalizeProductCode(p?.productCode) || extractProductCodeFromName(name),
                 brand: p?.brand ? String(p.brand).trim() : null,
                 weight: p?.weight ? String(p.weight).trim().toUpperCase().replace(/\s+/g, '') : null,
                 // Preço principal (legado)

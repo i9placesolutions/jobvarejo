@@ -2,6 +2,7 @@ import { getS3Client, getPublicUrl } from "../utils/s3";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { validateProductImageCandidatesWithAI } from "../utils/product-image-ai";
+import { searchGoogleCseImageCandidates } from "../utils/product-image-google-cse";
 import { searchSerperImageCandidates } from "../utils/product-image-serper";
 import {
     findProductImageCacheHitByTerms,
@@ -21,9 +22,47 @@ import {
     s3KeyExists,
     type BgPolicy
 } from "../utils/product-image-pipeline";
+import {
+    buildProductIdentityKey,
+    findRegistryApprovedImage,
+    upsertProductImageRegistry
+} from "../utils/product-image-registry";
 
 /** Build a same-origin proxy URL for a given S3 key (avoids CORS + no expiration) */
 const proxyUrl = (key: string) => `/api/storage/p?key=${encodeURIComponent(key)}`;
+
+const normalizeCompact = (value: string): string =>
+    String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+
+const passesMetadataHardGate = (opts: {
+    title?: string;
+    source?: string;
+    term: string;
+    brand?: string;
+    flavor?: string;
+    weight?: string;
+}): boolean => {
+    const haystack = normalizeCompact([opts.title, opts.source].filter(Boolean).join(' '));
+    const mustContain = [opts.brand, opts.flavor, opts.weight]
+        .map((part) => normalizeCompact(String(part || '')))
+        .filter(Boolean);
+
+    for (const token of mustContain) {
+        if (!haystack.includes(token)) return false;
+    }
+
+    const termTokens = normalizeCompact(opts.term).match(/[a-z0-9]{3,}/g) || [];
+    if (termTokens.length === 0) return true;
+    let hits = 0;
+    for (const t of termTokens) {
+        if (haystack.includes(t)) hits++;
+    }
+    return hits >= Math.max(1, Math.ceil(termTokens.length * 0.5));
+};
 
 // ========================================
 // HANDLER PRINCIPAL
@@ -43,6 +82,9 @@ export default defineEventHandler(async (event) => {
         const brand = String(body?.brand || '').trim() || undefined;
         const flavor = String(body?.flavor || '').trim() || undefined;
         const weight = String(body?.weight || '').trim() || undefined;
+        const productCode = String(body?.productCode || '').trim() || undefined;
+        const strictMode = body?.strictMode === undefined ? true : !!body?.strictMode;
+        const allowExternal = body?.allowExternal === undefined ? true : !!body?.allowExternal;
         const rawBgPolicy = String(body?.bgPolicy || '').trim().toLowerCase();
         const bgPolicy: BgPolicy =
             rawBgPolicy === 'always' || rawBgPolicy === 'never' || rawBgPolicy === 'auto'
@@ -58,7 +100,7 @@ export default defineEventHandler(async (event) => {
         if (searchHints.some((hint) => hint.length > 180)) {
             throw createError({ statusCode: 400, statusMessage: "searchHints item too long (max 180 chars each)" });
         }
-        if ((brand && brand.length > 120) || (flavor && flavor.length > 120) || (weight && weight.length > 60)) {
+        if ((brand && brand.length > 120) || (flavor && flavor.length > 120) || (weight && weight.length > 60) || (productCode && productCode.length > 64)) {
             throw createError({ statusCode: 400, statusMessage: "Invalid metadata length" });
         }
 
@@ -106,8 +148,23 @@ export default defineEventHandler(async (event) => {
             url: null,
             source: 'external',
             reason,
+            reviewPending: strictMode,
             ...(details || {})
         });
+        const identityKey = buildProductIdentityKey({
+            productCode,
+            normalizedTerm,
+            brand,
+            flavor,
+            weight
+        });
+        const safeUpsertRegistry = async (args: Parameters<typeof upsertProductImageRegistry>[0]) => {
+            try {
+                await upsertProductImageRegistry(args);
+            } catch (registryErr: any) {
+                console.warn('⚠️ [Registry] Falha ao persistir registro:', registryErr?.message || String(registryErr));
+            }
+        };
 
         if (!String(bucketName || '').trim()) {
             console.warn('⚠️ [process-product-image] wasabiBucket ausente no runtime config.');
@@ -118,6 +175,23 @@ export default defineEventHandler(async (event) => {
         if (candidateNormalizedTerms.length > 1) {
             console.log(`🧭 [Search Variants] ${candidateNormalizedTerms.length} variantes:`, candidateNormalizedTerms.slice(0, 8));
         }
+
+    // ========================================
+    // -1. REGISTRY DETERMÍNISTICO (productCode/meta identity)
+    // ========================================
+    try {
+        const registryHit = await findRegistryApprovedImage(identityKey);
+        const registryKey = String(registryHit?.s3_key || '').trim();
+        if (registryKey) {
+            const exists = await s3KeyExists(s3, bucketName, registryKey);
+            if (exists) {
+                console.log(`✅ [Registry] Match aprovado por identityKey: "${identityKey}"`);
+                return { source: 'registry', url: proxyUrl(registryKey) };
+            }
+        }
+    } catch (err: any) {
+        console.warn('⚠️ [Registry] Falha ao buscar match aprovado:', err?.message || String(err));
+    }
 
     // ========================================
     // 0. GUARD: S3 key determinístico já existe?
@@ -137,6 +211,19 @@ export default defineEventHandler(async (event) => {
             s3Key: candidateKey,
             source: 'internal'
         });
+        await safeUpsertRegistry({
+            productCode,
+            identityKey,
+            canonicalName: term,
+            brand,
+            flavor,
+            weight,
+            s3Key: candidateKey,
+            source: 'internal',
+            validationLevel: 'deterministic-s3',
+            validatedBy: user.id,
+            status: 'approved'
+        });
 
         return { source: 'cache-s3', url: proxyUrl(candidateKey) };
     }
@@ -149,7 +236,8 @@ export default defineEventHandler(async (event) => {
             s3,
             bucketName,
             prefixes: ['uploads/', 'imagens/'],
-            normalizedCandidates: candidateNormalizedTerms
+            normalizedCandidates: candidateNormalizedTerms,
+            strictOnly: strictMode
         });
 
         if (found) {
@@ -161,6 +249,19 @@ export default defineEventHandler(async (event) => {
                     normalizedTerm, term, brand, flavor, weight
                 });
                 if (processed) {
+                    await safeUpsertRegistry({
+                        productCode,
+                        identityKey,
+                        canonicalName: term,
+                        brand,
+                        flavor,
+                        weight,
+                        s3Key: processed.key,
+                        source: processed.processed ? 'internal-processed' : 'internal',
+                        validationLevel: 'bucket-strict',
+                        validatedBy: user.id,
+                        status: 'approved'
+                    });
                     return { source: processed.processed ? 'internal-processed' : 'internal', url: proxyUrl(processed.key) };
                 }
             }
@@ -172,6 +273,19 @@ export default defineEventHandler(async (event) => {
                 imageUrl: getPublicUrl(found),
                 s3Key: found,
                 source: bgPolicy === 'always' ? 'internal-fallback' : 'internal'
+            });
+            await safeUpsertRegistry({
+                productCode,
+                identityKey,
+                canonicalName: term,
+                brand,
+                flavor,
+                weight,
+                s3Key: found,
+                source: 'internal',
+                validationLevel: 'bucket-strict',
+                validatedBy: user.id,
+                status: 'approved'
             });
 
             return { source: 'internal', url: proxyUrl(found) };
@@ -207,22 +321,40 @@ export default defineEventHandler(async (event) => {
                         normalizedTerm, term, brand, flavor, weight
                     });
                     if (processed) {
+                        await safeUpsertRegistry({
+                            productCode,
+                            identityKey,
+                            canonicalName: term,
+                            brand,
+                            flavor,
+                            weight,
+                            s3Key: processed.key,
+                            source: 'cache-processed',
+                            validationLevel: 'cache-s3-verified',
+                            validatedBy: user.id,
+                            status: 'approved'
+                        });
                         return { source: 'cache-processed', url: proxyUrl(processed.key) };
                     }
                 }
+                await safeUpsertRegistry({
+                    productCode,
+                    identityKey,
+                    canonicalName: term,
+                    brand,
+                    flavor,
+                    weight,
+                    s3Key: cacheResolvedKey,
+                    source: 'cache',
+                    validationLevel: 'cache-s3-verified',
+                    validatedBy: user.id,
+                    status: 'approved'
+                });
                 return { source: 'cache', url: proxyUrl(cacheResolvedKey) };
             }
         }
     } catch (err) {
         console.warn("⚠️ [Cache DB] Falha na consulta:", (err as any)?.message);
-    }
-
-    // ========================================
-    // 2. EXTERNAL SEARCH (Serper.dev) + VALIDAÇÃO IA
-    // ========================================
-    if (!config.serperApiKey) {
-        console.warn('⚠️ [process-product-image] serperApiKey ausente no runtime config; pulando busca externa.');
-        return noImageResponse('serper_api_key_missing', { missingConfig: ['serperApiKey'] });
     }
 
     // Construir query otimizada (mais específica = menos false positives).
@@ -235,83 +367,229 @@ export default defineEventHandler(async (event) => {
     }
     const searchQuery = searchQueryParts.filter(Boolean).join(' ').trim();
 
-    const serperResult = await searchSerperImageCandidates({
-        apiKey: config.serperApiKey,
-        query: `${searchQuery} produto embalagem`,
-        gl: 'br',
-        hl: 'pt-br',
-        num: 10,
-        maxCandidates: 5,
-        timeoutMs: 12_000
-    });
-    if (serperResult.error) {
-        if (serperResult.error.kind === 'http') {
-            console.warn(`⚠️ [Serper] HTTP ${serperResult.error.status} ${serperResult.error.statusText || ''} for query="${searchQuery}"`);
-            return noImageResponse('external_search_failed', {
-                provider: 'serper',
-                status: serperResult.error.status,
-                statusText: serperResult.error.statusText,
-                body: serperResult.error.body
-            });
-        }
-        if (serperResult.error.kind === 'invalid_response') {
-            return noImageResponse('external_search_invalid_response', { provider: 'serper' });
-        }
-        console.error("Serper API error:", serperResult.error.message);
-        return noImageResponse('external_search_failed', {
-            provider: 'serper',
-            message: serperResult.error.message || 'Unknown Serper error'
+    const hasGoogleCse = !!(config.googleCseApiKey && config.googleCseCx);
+    const hasSerper = !!config.serperApiKey;
+    if (!allowExternal) {
+        await safeUpsertRegistry({
+            productCode,
+            identityKey,
+            canonicalName: term,
+            brand,
+            flavor,
+            weight,
+            source: 'external-disabled',
+            validationLevel: 'none',
+            validatedBy: user.id,
+            status: 'review_pending',
+            reason: 'external_disabled'
+        });
+        return noImageResponse('external_search_disabled', { reviewPending: true });
+    }
+
+    if (!hasGoogleCse && !hasSerper) {
+        console.warn('⚠️ [process-product-image] Nenhum provider de busca externa configurado (Google CSE/Serper).');
+        await safeUpsertRegistry({
+            productCode,
+            identityKey,
+            canonicalName: term,
+            brand,
+            flavor,
+            weight,
+            source: 'external',
+            validationLevel: 'none',
+            validatedBy: user.id,
+            status: 'review_pending',
+            reason: 'external_provider_missing'
+        });
+        return noImageResponse('external_search_config_missing', {
+            missingConfig: ['googleCseApiKey+googleCseCx OR serperApiKey']
         });
     }
-    const candidates = serperResult.candidates;
+
+    let candidates: { url: string; title?: string; source?: string }[] = [];
+    let providerUsed: 'google-cse' | 'serper' | null = null;
+    let lastProviderError: Record<string, any> | null = null;
+
+    if (hasGoogleCse) {
+        const googleCseResult = await searchGoogleCseImageCandidates({
+            apiKey: config.googleCseApiKey,
+            cx: config.googleCseCx,
+            query: `${searchQuery} produto embalagem`,
+            gl: 'br',
+            hl: 'pt-br',
+            num: 10,
+            maxCandidates: 5,
+            timeoutMs: 12_000
+        });
+        if (googleCseResult.error) {
+            lastProviderError = { provider: 'google-cse', ...googleCseResult.error };
+            console.warn(`⚠️ [Google CSE] erro (${googleCseResult.error.kind}) para query="${searchQuery}", tentando fallback.`);
+        } else if (googleCseResult.candidates.length > 0) {
+            candidates = googleCseResult.candidates;
+            providerUsed = 'google-cse';
+        } else {
+            console.warn(`⚠️ [Google CSE] 0 candidatas para query="${searchQuery}", tentando fallback.`);
+        }
+    }
+
+    if (candidates.length === 0 && hasSerper) {
+        const serperResult = await searchSerperImageCandidates({
+            apiKey: config.serperApiKey,
+            query: `${searchQuery} produto embalagem`,
+            gl: 'br',
+            hl: 'pt-br',
+            num: 10,
+            maxCandidates: 5,
+            timeoutMs: 12_000
+        });
+        if (serperResult.error) {
+            lastProviderError = { provider: 'serper', ...serperResult.error };
+            console.warn(`⚠️ [Serper] erro (${serperResult.error.kind}) para query="${searchQuery}".`);
+        } else if (serperResult.candidates.length > 0) {
+            candidates = serperResult.candidates;
+            providerUsed = 'serper';
+        }
+    }
 
     if (candidates.length === 0) {
-        return noImageResponse(`No image found for "${term}"`);
+        await safeUpsertRegistry({
+            productCode,
+            identityKey,
+            canonicalName: term,
+            brand,
+            flavor,
+            weight,
+            source: providerUsed || 'external',
+            validationLevel: 'search-no-candidates',
+            validatedBy: user.id,
+            status: 'review_pending',
+            reason: 'no_candidates'
+        });
+        return noImageResponse(`No image found for "${term}"`, {
+            provider: providerUsed || lastProviderError?.provider || 'none',
+            externalError: lastProviderError || undefined
+        });
+    }
+
+    const gatedCandidates = candidates.filter((entry) => passesMetadataHardGate({
+        title: entry.title,
+        source: entry.source,
+        term,
+        brand,
+        flavor,
+        weight
+    }));
+    if (gatedCandidates.length > 0) {
+        candidates = gatedCandidates;
+    }
+    if (candidates.length === 0) {
+        await safeUpsertRegistry({
+            productCode,
+            identityKey,
+            canonicalName: term,
+            brand,
+            flavor,
+            weight,
+            source: providerUsed || 'external',
+            validationLevel: 'hard-gate-rejected',
+            validatedBy: user.id,
+            status: 'review_pending',
+            reason: 'metadata_gate_rejected'
+        });
+        return noImageResponse(`No reliable image found for "${term}"`, {
+            provider: providerUsed || 'none',
+            reason: 'metadata_gate_rejected'
+        });
     }
 
     // ========================================
     // 2.5 VALIDAÇÃO IA: GPT-4o Vision escolhe a melhor imagem
     // ========================================
-    let selectedImageUrl = candidates[0]!.url; // fallback
+    let selectedImageUrl = '';
+    if (!config.openaiApiKey) {
+        await safeUpsertRegistry({
+            productCode,
+            identityKey,
+            canonicalName: term,
+            brand,
+            flavor,
+            weight,
+            source: providerUsed || 'external',
+            validationLevel: 'none',
+            validatedBy: user.id,
+            status: 'review_pending',
+            reason: 'openai_validation_missing'
+        });
+        return noImageResponse(`No reliable image found for "${term}"`, {
+            reason: 'openai_validation_missing'
+        });
+    }
 
-    if (config.openaiApiKey && candidates.length > 1) {
-        try {
-            const validation = await validateProductImageCandidatesWithAI(candidates, {
-                name: term,
-                brand: brand || undefined,
-                flavor: flavor || undefined,
-                weight: weight || undefined,
-                normalizedQuery: normalizedTerm
+    try {
+        const validation = await validateProductImageCandidatesWithAI(candidates, {
+            name: term,
+            brand: brand || undefined,
+            flavor: flavor || undefined,
+            weight: weight || undefined,
+            productCode: productCode || undefined,
+            normalizedQuery: normalizedTerm
+        });
+
+        const confidenceThreshold = strictMode ? 0.9 : 0.75;
+        const bestIndexValid = validation.bestIndex >= 0 && validation.bestIndex < candidates.length;
+        if (!bestIndexValid || !validation.isExactMatch || validation.confidence < confidenceThreshold) {
+            await safeUpsertRegistry({
+                productCode,
+                identityKey,
+                canonicalName: term,
+                brand,
+                flavor,
+                weight,
+                source: providerUsed || 'external',
+                validationLevel: 'ai-strict',
+                validatedBy: user.id,
+                status: 'review_pending',
+                reason: [
+                    `confidence=${validation.confidence.toFixed(2)}`,
+                    `isExact=${validation.isExactMatch}`,
+                    ...validation.mismatchReasons
+                ].join('; ')
             });
-
-            if (validation.bestIndex >= 0 && validation.bestIndex < candidates.length) {
-                if (validation.confidence >= 0.55) {
-                    selectedImageUrl = candidates[validation.bestIndex]!.url;
-                    console.log(`🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidates.length} com ${(validation.confidence * 100).toFixed(0)}% confiança`);
-                } else {
-                    return noImageResponse(`No reliable image found for "${term}" (AI confidence ${(validation.confidence * 100).toFixed(0)}%)`, {
-                        aiConfidence: validation.confidence,
-                        aiBestIndex: validation.bestIndex
-                    });
-                }
-            } else if (validation.bestIndex === -1) {
-                return noImageResponse(`No matching image found for "${term}" (AI rejected candidates)`, {
-                    aiConfidence: validation.confidence,
-                    aiBestIndex: validation.bestIndex
-                });
-            }
-        } catch (err) {
-            console.warn('⚠️ [AI] Validação falhou, usando primeira imagem:', (err as any)?.message);
+            return noImageResponse(`No reliable image found for "${term}"`, {
+                aiConfidence: validation.confidence,
+                aiBestIndex: validation.bestIndex,
+                aiExactMatch: validation.isExactMatch,
+                aiMismatchReasons: validation.mismatchReasons
+            });
         }
-    } else if (candidates.length === 1) {
-        console.log('📷 [Serper] Apenas 1 candidata, pulando validação IA');
+
+        selectedImageUrl = candidates[validation.bestIndex]!.url;
+        console.log(`🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidates.length} com ${(validation.confidence * 100).toFixed(0)}% confiança`);
+    } catch (err) {
+        console.warn('⚠️ [AI] Validação estrita falhou:', (err as any)?.message);
+        await safeUpsertRegistry({
+            productCode,
+            identityKey,
+            canonicalName: term,
+            brand,
+            flavor,
+            weight,
+            source: providerUsed || 'external',
+            validationLevel: 'ai-strict',
+            validatedBy: user.id,
+            status: 'review_pending',
+            reason: 'ai_validation_failed'
+        });
+        return noImageResponse(`No reliable image found for "${term}"`, {
+            reason: 'ai_validation_failed'
+        });
     }
 
     // ========================================
     // 3. PROCESS + UPLOAD PIPELINE (S3 key determinístico)
     // ========================================
         try {
-            return await runExternalPipelineOnce({
+            const pipelineResult = await runExternalPipelineOnce({
                 s3,
                 bucketName,
                 deterministicKey,
@@ -323,10 +601,42 @@ export default defineEventHandler(async (event) => {
                 selectedImageUrl,
                 bgPolicy
             });
+            const resolvedKey = String(
+                (pipelineResult?.url && pipelineResult.url.includes('/api/storage/p?key='))
+                    ? decodeURIComponent((pipelineResult.url.split('key=')[1] || '').split('&')[0] || '')
+                    : deterministicKey
+            ).trim() || deterministicKey;
+            await safeUpsertRegistry({
+                productCode,
+                identityKey,
+                canonicalName: term,
+                brand,
+                flavor,
+                weight,
+                s3Key: resolvedKey,
+                source: providerUsed || 'external',
+                validationLevel: 'ocr+ai-strict',
+                validatedBy: user.id,
+                status: 'approved'
+            });
+            return pipelineResult;
         } catch (err: any) {
             // Never fail the whole UI with a 500 for image pipeline errors.
             // The caller treats missing `url` as "no image" and continues processing other products.
             console.error("Processing pipeline failed:", err);
+            await safeUpsertRegistry({
+                productCode,
+                identityKey,
+                canonicalName: term,
+                brand,
+                flavor,
+                weight,
+                source: providerUsed || 'external',
+                validationLevel: 'ocr+ai-strict',
+                validatedBy: user.id,
+                status: 'review_pending',
+                reason: 'processing_failed'
+            });
             return noImageResponse('processing_failed', {
                 message: String(err?.message || err || 'unknown'),
                 code: err?.code,

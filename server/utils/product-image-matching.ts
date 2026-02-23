@@ -416,6 +416,7 @@ export const findBestS3Match = async (opts: {
   bucketName: string
   prefixes: string[]
   normalizedCandidates: string[]
+  strictOnly?: boolean
 }): Promise<string | null> => {
   const bestMatchCacheKey = buildBestS3MatchCacheKey(opts)
   const now = Date.now()
@@ -501,7 +502,7 @@ export const findBestS3Match = async (opts: {
     }
   }
 
-  const best = bestStrict || bestRelaxed
+  const best = opts.strictOnly ? bestStrict : (bestStrict || bestRelaxed)
   if (best) {
     if (verboseFuzzy && fuzzyRejectStats.total > 0) {
       console.log(`INFO [Fuzzy] Summary: total=${fuzzyRejectStats.total}, variant=${fuzzyRejectStats.variant}, weight_mismatch=${fuzzyRejectStats.weight_mismatch}, weight_missing=${fuzzyRejectStats.weight_missing}`)

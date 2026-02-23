@@ -906,6 +906,7 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
                 if (product.brand) fd.append('brand', product.brand)
                 if (product.flavor) fd.append('flavor', product.flavor)
                 if (product.weight) fd.append('weight', product.weight)
+                if (product.productCode) fd.append('productCode', product.productCode)
             }
             return fd
         }
@@ -1022,6 +1023,7 @@ const getStatusColor = (status: string) => {
     switch(status) {
         case 'done': return 'text-green-500';
         case 'processing': return 'text-blue-500';
+        case 'review_pending': return 'text-amber-500';
         case 'error': return 'text-red-500';
         default: return 'text-zinc-500';
     }
@@ -1340,6 +1342,7 @@ const getAssetDisplayName = (asset: any): string => {
                                     <div class="w-26 h-26 rounded-lg bg-zinc-800/80 flex items-center justify-center overflow-hidden border border-zinc-700 relative">
                                         <img v-if="product.imageUrl" :src="resolveProductImageUrl(product.imageUrl)" class="w-full h-full object-contain" />
                                         <Loader2 v-else-if="product.status === 'processing'" class="w-4 h-4 text-blue-500 animate-spin" />
+                                        <AlertCircle v-else-if="product.status === 'review_pending'" class="w-4 h-4 text-amber-500" />
                                         <AlertCircle v-else-if="product.status === 'error'" class="w-4 h-4 text-red-500" />
                                         <div v-else class="text-zinc-600 font-xs">?</div>
                                         <input
@@ -1392,6 +1395,14 @@ const getAssetDisplayName = (asset: any): string => {
                                         class="w-full bg-transparent border-none text-zinc-500 focus:ring-0 p-0 text-xs mt-1"
                                         placeholder="Marca (opcional)"
                                     />
+                                    <input
+                                        v-model="product.productCode"
+                                        class="w-full bg-transparent border-none text-zinc-500 focus:ring-0 p-0 text-xs mt-1"
+                                        placeholder="EAN/Código (opcional)"
+                                    />
+                                    <div v-if="product.status === 'review_pending'" class="text-[10px] text-amber-400 mt-1">
+                                        Revisão pendente: {{ product.imageDecisionReason || product.error || 'Baixa confiança no match automático.' }}
+                                    </div>
                                 </td>
 
                                 <!-- Price Input -->

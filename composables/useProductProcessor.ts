@@ -3,6 +3,7 @@ import { toWasabiProxyUrl } from '~/utils/storageProxy';
 export interface SmartProduct {
     id: string;
     name: string;
+    productCode?: string | null;
     brand: string | null;
     weight: string | null;
     // ===== PREÇOS SIMPLES (legado - mantido para compatibilidade) =====
@@ -32,8 +33,9 @@ export interface SmartProduct {
     limit: string | null;
     flavor: string | null;
     imageUrl: string | null;
-    status: 'pending' | 'processing' | 'done' | 'error';
+    status: 'pending' | 'processing' | 'done' | 'error' | 'review_pending';
     error?: string;
+    imageDecisionReason?: string;
     // Original extracted data
     raw?: any;
 }
@@ -182,6 +184,7 @@ const buildSearchTerm = (product: SmartProduct, effectiveWeight?: string | null)
 const buildDedupSignature = (product: SmartProduct): string => {
     const effectiveWeight = extractWeightFromName(product.name) || (product.weight ? normalizeWeightToken(product.weight) : '') || '';
     const signatureParts = [
+        product.productCode || '',
         product.name || '',
         product.brand || '',
         product.flavor || '',
@@ -202,6 +205,7 @@ export const useProductProcessor = () => {
             id: Math.random().toString(36).substr(2, 9),
             name: p.name || 'Produto sem nome',
             brand: p.brand || '',
+            productCode: p.productCode || null,
             weight: p.weight || '',
             // Preço principal (legado - mantido para compatibilidade)
             price: p.price || '',
@@ -226,6 +230,7 @@ export const useProductProcessor = () => {
             flavor: p.flavor || '',
             imageUrl: null, // Start without image
             status: 'pending',
+            imageDecisionReason: '',
             raw: p
         })) as SmartProduct[];
     };
@@ -354,6 +359,7 @@ export const useProductProcessor = () => {
             const result = await $fetch<{
                 url?: string;
                 found?: boolean;
+                reviewPending?: boolean;
                 reason?: string;
                 statusMessage?: string;
                 message?: string;
@@ -363,21 +369,27 @@ export const useProductProcessor = () => {
                 body: {
                     term: searchTerm,
                     searchHints,
+                    productCode: product.productCode || undefined,
                     brand: product.brand || undefined,
                     flavor: product.flavor || undefined,
                     weight: effectiveWeight,
-                    bgPolicy: options.bgPolicy || 'auto'
+                    bgPolicy: options.bgPolicy || 'auto',
+                    strictMode: true
                 }
             });
 
             if (result && result.url) {
                 product.imageUrl = toWasabiProxyUrl(String(result.url || '').trim()) || result.url;
                 product.status = 'done';
+                product.imageDecisionReason = '';
                 console.log('[ProductProcessor] Image found:', product.name, result.url.substring(0, 80) + '...');
                 return { ok: true };
             } else {
-                product.status = 'error';
-                product.error = String(result?.reason || result?.statusMessage || result?.message || 'Imagem não encontrada');
+                const reason = String(result?.reason || result?.statusMessage || result?.message || 'Imagem não encontrada');
+                const isReviewPending = !!result?.reviewPending;
+                product.status = isReviewPending ? 'review_pending' : 'error';
+                product.error = reason;
+                product.imageDecisionReason = reason;
                 console.log('[ProductProcessor] No image found for:', product.name, '-', product.error);
                 return { ok: false };
             }
@@ -392,6 +404,7 @@ export const useProductProcessor = () => {
                 const noImageMessage = extractErrorMessage(err, 'Imagem não encontrada');
                 product.status = 'error';
                 product.error = noImageMessage;
+                product.imageDecisionReason = noImageMessage;
                 console.warn('[ProductProcessor] Imagem não encontrada:', product.name, '-', noImageMessage);
                 return { ok: false };
             }
@@ -399,6 +412,7 @@ export const useProductProcessor = () => {
             console.error('[ProductProcessor] Falha ao processar imagem:', product.name, err);
             product.status = 'error';
             product.error = extractErrorMessage(err, 'Falha no processamento');
+            product.imageDecisionReason = product.error;
             return { ok: false };
         }
     }
@@ -465,15 +479,16 @@ export const useProductProcessor = () => {
                     dupProduct.status = 'done';
                     console.log(`[ProductProcessor] Replicado imagem para duplicata: ${dupProduct.name}`);
                 }
-            } else if (indices.length > 1 && primaryProduct.status === 'error') {
+            } else if (indices.length > 1 && (primaryProduct.status === 'error' || primaryProduct.status === 'review_pending')) {
                 // Se falhou, marcar duplicatas como erro também
                 for (let i = 1; i < indices.length; i++) {
                     const duplicateIndex = indices[i];
                     if (duplicateIndex === undefined) continue;
                     const dupProduct = products.value[duplicateIndex];
                     if (!dupProduct) continue;
-                    dupProduct.status = 'error';
+                    dupProduct.status = primaryProduct.status;
                     dupProduct.error = primaryProduct.error;
+                    dupProduct.imageDecisionReason = primaryProduct.imageDecisionReason;
                 }
             }
         }
