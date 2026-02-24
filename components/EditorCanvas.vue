@@ -14839,6 +14839,37 @@ const setupReactivity = () => {
         return unique;
     };
 
+    // Shift+multi-select should prefer whole product cards over inner deep-selected children.
+    const resolveShiftSelectionRootObject = (obj: any) => {
+        if (!obj || isTransientCanvasObject(obj)) return null;
+        if (isLikelyProductCard(obj)) return obj;
+        const parentCard = findProductCardParentGroup(obj);
+        if (parentCard) return parentCard;
+        return resolveSelectionRootObject(obj, { keepCardImages: true });
+    };
+
+    const collectShiftSelectionMembers = (activeObj: any) => {
+        if (!activeObj) return [] as any[];
+        const rawMembers = isActiveSelectionObject(activeObj) && typeof activeObj.getObjects === 'function'
+            ? (activeObj.getObjects() || [])
+            : [activeObj];
+        const unique: any[] = [];
+        rawMembers.forEach((member: any) => {
+            const root = resolveShiftSelectionRootObject(member);
+            if (!root) return;
+            if (!unique.includes(root)) unique.push(root);
+        });
+        return unique;
+    };
+
+    let shiftSelectionBaselineMembers: any[] = [];
+    const refreshShiftSelectionBaseline = (activeOverride?: any) => {
+        const source = typeof activeOverride !== 'undefined'
+            ? activeOverride
+            : canvas.value?.getActiveObject?.();
+        shiftSelectionBaselineMembers = collectShiftSelectionMembers(source);
+    };
+
     const pickShiftSelectionTarget = (evtPayload: any) => {
         const primary = evtPayload?.target || null;
         const subTargets = Array.isArray(evtPayload?.subTargets) ? evtPayload.subTargets.filter(Boolean) : [];
@@ -15374,6 +15405,14 @@ const setupReactivity = () => {
     let zoneChildrenCache: any[] = [];
     let lastZoneState = { left: 0, top: 0 };
 
+    canvas.value.on('mouse:down:before', (e: any) => {
+        if (e?.e?.shiftKey) {
+            refreshShiftSelectionBaseline(canvas.value.getActiveObject?.());
+            return;
+        }
+        shiftSelectionBaselineMembers = [];
+    });
+
     canvas.value.on('mouse:down', (e: any) => {
          const evt: MouseEvent | undefined = e?.e;
          const isContextClick = !!evt && (evt.button === 2 || (evt.button === 0 && (evt as any).ctrlKey && !(evt as any).metaKey));
@@ -15408,9 +15447,11 @@ const setupReactivity = () => {
         // keep existing selection and append target in all editor contexts.
         if (evt?.shiftKey && !isNormalizingShiftSelection) {
             const shiftTarget = pickShiftSelectionTarget(e) || target;
-            const normalizedTarget = resolveSelectionRootObject(shiftTarget, { keepCardImages: true });
+            const normalizedTarget = resolveShiftSelectionRootObject(shiftTarget);
             if (normalizedTarget) {
-                const currentMembersRaw = collectNormalizedSelectionMembers(canvas.value.getActiveObject());
+                const currentMembersRaw = shiftSelectionBaselineMembers.length
+                    ? shiftSelectionBaselineMembers
+                    : collectShiftSelectionMembers(canvas.value.getActiveObject());
                 const currentMembers = currentMembersRaw.slice();
                 const isAlreadySelected = currentMembers.includes(normalizedTarget);
                 if (!isAlreadySelected) {
@@ -15425,6 +15466,7 @@ const setupReactivity = () => {
                     updateSelection();
                     canvas.value.requestRenderAll();
                 }
+                refreshShiftSelectionBaseline(canvas.value.getActiveObject?.());
                 // Intercept Shift behavior in this mode to avoid Fabric default toggle/deselect.
                 return;
             }
@@ -15847,19 +15889,24 @@ const setupReactivity = () => {
     // 'selection:created', 'selection:updated', 'selection:cleared'
     canvas.value.on('selection:created', () => {
         if (normalizeActiveSelectionForProductCards()) {
+            refreshShiftSelectionBaseline();
             updateSelection();
             return;
         }
+        refreshShiftSelectionBaseline();
         updateSelection();
     });
     canvas.value.on('selection:updated', () => {
         if (normalizeActiveSelectionForProductCards()) {
+            refreshShiftSelectionBaseline();
             updateSelection();
             return;
         }
+        refreshShiftSelectionBaseline();
         updateSelection();
     });
     canvas.value.on('selection:cleared', (e: any) => {
+        shiftSelectionBaselineMembers = [];
         updateSelection();
         // Exit Deep Select Mode on clear
         resetDeepSelection();

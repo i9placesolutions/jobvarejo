@@ -729,6 +729,17 @@ const showProjectContextMenu = (projectId: string, event: MouseEvent) => {
   showProjectMenu.value = projectId
 }
 
+const isInteractiveProjectCardTarget = (target: EventTarget | null): boolean => {
+  const el = target as HTMLElement | null
+  if (!el || typeof el.closest !== 'function') return false
+  return !!el.closest('button, input, textarea, select, a, [contenteditable="true"], .project-context-menu, .folder-context-menu')
+}
+
+const handleProjectCardClick = (projectId: string, event: MouseEvent) => {
+  if (isInteractiveProjectCardTarget(event.target)) return
+  void openProject(projectId)
+}
+
 // Handle confirm dialog
 const handleConfirm = () => {
   if (confirmDialogData.value.action) {
@@ -1301,7 +1312,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               @mousedown="handleProjectPointerDown(project.id, $event)"
               @dragstart="handleDragStart(project.id, $event)"
               @dragend="handleDragEnd"
-              @click="openProject(project.id)"
+              @click="handleProjectCardClick(project.id, $event)"
             >
               <!-- Thumbnail (Rounded Top) -->
                 <div
@@ -1339,6 +1350,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
                 <!-- Actions Button (top right - Rounded) -->
                 <button
+                  @pointerdown.stop
+                  @mousedown.stop
+                  @touchstart.stop
                   @click.stop="showProjectContextMenu(project.id, $event)"
                   class="absolute top-2 right-2 p-2 bg-black/75 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-black/90 shadow-lg"
                   title="Ações"
@@ -1348,6 +1362,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
                 <!-- Star Button (top left - Rounded) -->
                 <button
+                  @pointerdown.stop
+                  @mousedown.stop
+                  @touchstart.stop
                   @click.stop="toggleStarred(project.id)"
                   :class="['absolute top-2 left-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/75 text-white hover:bg-black/90']"
                   title="Favoritar"
