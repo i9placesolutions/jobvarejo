@@ -389,11 +389,21 @@ type BestS3MatchCacheEntry = {
 }
 
 const bestS3MatchMemo = new Map<string, BestS3MatchCacheEntry>()
-const buildBestS3MatchCacheKey = (opts: { bucketName: string; prefixes: string[]; normalizedCandidates: string[] }) => {
+const buildBestS3MatchCacheKey = (opts: {
+  bucketName: string
+  prefixes: string[]
+  normalizedCandidates: string[]
+  brand?: string
+  flavor?: string
+  weight?: string
+}) => {
   const bucket = String(opts.bucketName || '').trim()
   const prefixes = [...new Set((opts.prefixes || []).map((p) => String(p || '').trim()).filter(Boolean))].sort()
   const candidates = [...new Set((opts.normalizedCandidates || []).map((p) => String(p || '').trim()).filter(Boolean))].sort()
-  return `${bucket}::${prefixes.join('|')}::${candidates.join('|')}`
+  const metaBrand = normalizeSearchTerm(String(opts.brand || ''))
+  const metaFlavor = normalizeSearchTerm(String(opts.flavor || ''))
+  const metaWeight = normalizeSearchTerm(String(opts.weight || ''))
+  return `${bucket}::${prefixes.join('|')}::${candidates.join('|')}::${metaBrand}::${metaFlavor}::${metaWeight}`
 }
 
 const getQueryTokens = (normalized: string): string[] =>
@@ -417,11 +427,30 @@ const scoreKeyMatch = (queryTokens: string[], keyTokenSet: Set<string>) => {
   return { ratio: overlap / queryTokens.length, overlap }
 }
 
+const FLAVOR_NOISE_TOKENS = new Set([
+  'sabor', 'sabores', 'sortido', 'sortidos', 'variado', 'variados', 'diverso', 'diversos'
+])
+
+const buildMetadataTokens = (value: string, minLen = 2): string[] =>
+  normalizeSearchTerm(value)
+    .split(' ')
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .filter((token) => token.length >= minLen)
+
+const hasAnyToken = (tokens: string[], tokenSet: Set<string>): boolean => {
+  for (const token of tokens) if (tokenSet.has(token)) return true
+  return false
+}
+
 export const findBestS3Match = async (opts: {
   s3: any
   bucketName: string
   prefixes: string[]
   normalizedCandidates: string[]
+  brand?: string
+  flavor?: string
+  weight?: string
   strictOnly?: boolean
 }): Promise<string | null> => {
   const bestMatchCacheKey = buildBestS3MatchCacheKey(opts)
@@ -445,8 +474,13 @@ export const findBestS3Match = async (opts: {
     return null
   }
 
-  let bestStrict: { key: string; ratio: number; overlap: number } | null = null
-  let bestRelaxed: { key: string; ratio: number; overlap: number } | null = null
+  const requiredBrandTokens = buildMetadataTokens(String(opts.brand || ''), 2)
+  const requiredFlavorTokens = buildMetadataTokens(String(opts.flavor || ''))
+    .filter((token) => !FLAVOR_NOISE_TOKENS.has(token))
+  const requiredWeightTokens = extractWeightTokens(tokenSet(normalizeSearchTerm(String(opts.weight || ''))))
+
+  let bestStrict: { key: string; ratio: number; overlap: number; score: number } | null = null
+  let bestRelaxed: { key: string; ratio: number; overlap: number; score: number } | null = null
   const fuzzyRejectStats = {
     total: 0,
     variant: 0,
@@ -480,6 +514,23 @@ export const findBestS3Match = async (opts: {
     const normalizedKey = getNormalizedS3KeyForMatch(key)
     if (!normalizedKey) continue
     const keyTokens = tokenSet(normalizedKey)
+    if (keyTokens.size < 2) continue
+
+    if (requiredBrandTokens.length > 0 && !hasAnyToken(requiredBrandTokens, keyTokens)) {
+      continue
+    }
+    if (requiredFlavorTokens.length > 0 && !hasAnyToken(requiredFlavorTokens, keyTokens)) {
+      const hasVariantSignalInKey = Array.from(VARIANT_KEYWORDS).some((token) => keyTokens.has(token))
+      if (hasVariantSignalInKey) continue
+    }
+
+    const keyWeightTokens = extractWeightTokens(keyTokens)
+    if (requiredWeightTokens.length > 0 && keyWeightTokens.length > 0) {
+      const keyWeightSet = new Set(keyWeightTokens)
+      if (!requiredWeightTokens.some((token) => keyWeightSet.has(token))) {
+        continue
+      }
+    }
 
     for (let idx = 0; idx < queryVariants.length; idx++) {
       const queryNormalized = queryVariants[idx]!.normalized
@@ -496,23 +547,33 @@ export const findBestS3Match = async (opts: {
       const { ratio, overlap } = scoreKeyMatch(queryTokens, keyTokens)
       const requiresWeightStrict = hasWeightInNormalized(queryNormalized)
       const minRatio = requiresWeightStrict
-        ? (queryTokens.length <= 3 ? 1 : 0.85)
-        : (queryTokens.length <= 3 ? 0.95 : 0.75)
-      const minOverlap = Math.min(3, queryTokens.length)
+        ? (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.9 : 0.86)
+        : (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.86 : 0.8)
+      const minOverlap = queryTokens.length >= 6 ? 4 : Math.min(3, queryTokens.length)
 
       if (ratio >= minRatio && overlap >= minOverlap) {
-        if (!bestStrict || ratio > bestStrict.ratio || (ratio === bestStrict.ratio && overlap > bestStrict.overlap)) {
-          bestStrict = { key, ratio, overlap }
+        const strictScore = ratio + (overlap * 0.02) + (Math.min(queryTokens.length, 8) * 0.03)
+        if (
+          !bestStrict ||
+          strictScore > bestStrict.score ||
+          (strictScore === bestStrict.score && overlap > bestStrict.overlap)
+        ) {
+          bestStrict = { key, ratio, overlap, score: strictScore }
         }
         continue
       }
 
-      if (queryTokens.length >= 4) {
-        const relaxedMinRatio = requiresWeightStrict ? 0.62 : 0.58
-        const relaxedMinOverlap = Math.min(3, queryTokens.length)
+      if (queryTokens.length >= 5) {
+        const relaxedMinRatio = requiresWeightStrict ? 0.72 : 0.68
+        const relaxedMinOverlap = queryTokens.length >= 7 ? 4 : 3
         if (ratio >= relaxedMinRatio && overlap >= relaxedMinOverlap) {
-          if (!bestRelaxed || ratio > bestRelaxed.ratio || (ratio === bestRelaxed.ratio && overlap > bestRelaxed.overlap)) {
-            bestRelaxed = { key, ratio, overlap }
+          const relaxedScore = ratio + (overlap * 0.015) + (Math.min(queryTokens.length, 8) * 0.02)
+          if (
+            !bestRelaxed ||
+            relaxedScore > bestRelaxed.score ||
+            (relaxedScore === bestRelaxed.score && overlap > bestRelaxed.overlap)
+          ) {
+            bestRelaxed = { key, ratio, overlap, score: relaxedScore }
           }
         }
       }
@@ -529,7 +590,7 @@ export const findBestS3Match = async (opts: {
     }
 
     const mode = bestStrict ? 'strict' : 'relaxed'
-    console.log(`OK [S3 Match:${mode}] Reuse: "${best.key}" (ratio=${best.ratio.toFixed(2)} overlap=${best.overlap})`)
+    console.log(`OK [S3 Match:${mode}] Reuse: "${best.key}" (ratio=${best.ratio.toFixed(2)} overlap=${best.overlap} score=${best.score.toFixed(3)})`)
     bestS3MatchMemo.set(bestMatchCacheKey, { expiresAt: Date.now() + 45_000, result: best.key })
     if (bestS3MatchMemo.size > 5000) {
       bestS3MatchMemo.clear()

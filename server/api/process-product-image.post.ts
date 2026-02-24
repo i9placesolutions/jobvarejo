@@ -30,38 +30,96 @@ import {
 /** Build a same-origin proxy URL for a given S3 key (avoids CORS + no expiration) */
 const proxyUrl = (key: string) => `/api/storage/p?key=${encodeURIComponent(key)}`;
 
-const normalizeCompact = (value: string): string =>
-    String(value || '')
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]/g, '');
+type ExternalCandidate = {
+    url: string;
+    title?: string;
+    source?: string;
+    domain?: string;
+    imageWidth?: number;
+    imageHeight?: number;
+    score?: number;
+}
+
+const tokenizeNormalized = (value: string, minLen = 3): string[] =>
+    normalizeSearchTerm(value)
+        .split(' ')
+        .map((token) => token.trim())
+        .filter(Boolean)
+        .filter((token) => token.length >= minLen);
+
+const WEIGHT_TOKEN_RE = /^\d+(?:\.\d+)?(?:kg|g|mg|ml|l|un|pct|cx|fd)$/i;
+const MULTIPACK_WEIGHT_TOKEN_RE = /^\d+x\d+(?:\.\d+)?(?:kg|g|mg|ml|l|un|pct|cx|fd)$/i;
+const GENERIC_FLAVOR_TOKENS = new Set([
+    'sabor', 'sabores', 'sortido', 'sortidos', 'variado', 'variados', 'diverso', 'diversos'
+]);
+const VARIANT_CONFLICT_TOKENS = new Set([
+    'zero', 'diet', 'light', 'original', 'tradicional', 'classico',
+    'limao', 'laranja', 'uva', 'morango', 'manga', 'abacaxi', 'guarana',
+    'coco', 'chocolate', 'baunilha', 'cafe', 'caramelo', 'menta'
+]);
+
+const extractWeightTokens = (value: string): string[] =>
+    tokenizeNormalized(value, 1)
+        .filter((token) => WEIGHT_TOKEN_RE.test(token) || MULTIPACK_WEIGHT_TOKEN_RE.test(token))
+        .filter((token, idx, arr) => arr.indexOf(token) === idx);
+
+const hasTokenIntersection = (a: string[], bSet: Set<string>): boolean => {
+    for (const token of a) {
+        if (bSet.has(token)) return true;
+    }
+    return false;
+};
+
+const BAD_HINT_REGEX = /(logo|vetor|vector|icone|icon|clipart|mockup|banner|wallpaper|papel parede|sticker|figura|figurinha|svg|eps|psd)/i;
 
 const passesMetadataHardGate = (opts: {
     title?: string;
     source?: string;
+    domain?: string;
     url?: string;
     term: string;
     brand?: string;
     flavor?: string;
     weight?: string;
 }): boolean => {
-    const haystack = normalizeCompact([opts.title, opts.source, opts.url].filter(Boolean).join(' '));
-    const brandToken = normalizeCompact(String(opts.brand || ''));
-    const flavorToken = normalizeCompact(String(opts.flavor || ''));
-    const weightToken = normalizeCompact(String(opts.weight || ''));
-    if (brandToken && !haystack.includes(brandToken)) return false;
-    const hasFlavor = !!(flavorToken && haystack.includes(flavorToken));
-    const hasWeight = !!(weightToken && haystack.includes(weightToken));
-    if ((flavorToken || weightToken) && !hasFlavor && !hasWeight) return false;
+    const haystackRaw = [opts.title, opts.source, opts.domain, opts.url].filter(Boolean).join(' ');
+    const haystackNormalized = normalizeSearchTerm(haystackRaw);
+    const haystackTokenSet = new Set(haystackNormalized.split(' ').filter(Boolean));
+    if (haystackTokenSet.size === 0) return false;
 
-    const termTokens = normalizeCompact(opts.term).match(/[a-z0-9]{3,}/g) || [];
+    const brandTokens = tokenizeNormalized(String(opts.brand || ''), 2);
+    if (brandTokens.length > 0 && !hasTokenIntersection(brandTokens, haystackTokenSet)) return false;
+
+    const flavorTokens = tokenizeNormalized(String(opts.flavor || ''))
+        .filter((token) => !GENERIC_FLAVOR_TOKENS.has(token));
+    if (flavorTokens.length > 0 && !hasTokenIntersection(flavorTokens, haystackTokenSet)) {
+        const hasConflictingVariantHint = Array.from(haystackTokenSet).some(
+            (token) => VARIANT_CONFLICT_TOKENS.has(token)
+        );
+        if (hasConflictingVariantHint) return false;
+    }
+
+    const expectedWeightTokens = extractWeightTokens(String(opts.weight || ''));
+    if (expectedWeightTokens.length > 0) {
+        const candidateWeightTokens = new Set(extractWeightTokens(haystackRaw));
+        if (candidateWeightTokens.size > 0 && !expectedWeightTokens.some((token) => candidateWeightTokens.has(token))) {
+            return false;
+        }
+    }
+
+    const termTokens = tokenizeNormalized(opts.term).filter((token) => token.length >= 3);
     if (termTokens.length === 0) return true;
     let hits = 0;
     for (const t of termTokens) {
-        if (haystack.includes(t)) hits++;
+        if (haystackTokenSet.has(t)) hits++;
     }
-    return hits >= Math.max(1, Math.ceil(termTokens.length * 0.35));
+    const requiredHits = termTokens.length >= 5
+        ? Math.ceil(termTokens.length * 0.5)
+        : Math.max(1, Math.ceil(termTokens.length * 0.45));
+    if (hits < requiredHits) return false;
+
+    if (BAD_HINT_REGEX.test(haystackRaw) && hits < Math.max(2, requiredHits)) return false;
+    return true;
 };
 
 const buildExternalQueryVariants = (opts: {
@@ -106,6 +164,7 @@ const buildSerperQueryVariants = (opts: {
     term: string;
     brand?: string;
     weight?: string;
+    productCode?: string;
 }): string[] => {
     const queries = new Set<string>();
     const push = (value: string) => {
@@ -113,49 +172,73 @@ const buildSerperQueryVariants = (opts: {
         if (!text) return;
         queries.add(text);
     };
+    const negatives = '-logo -vetor -vector -icone -icon -clipart -mockup -banner -wallpaper';
 
     for (const base of opts.baseVariants.slice(0, 5)) {
-        push(`"${base}" embalagem produto`);
-        push(`${base} embalagem frente`);
-        push(`${base} foto produto supermercado`);
-        if (opts.weight) push(`"${base}" ${opts.weight} embalagem`);
+        push(`"${base}" embalagem produto ${negatives}`);
+        push(`"${base}" embalagem frente ${negatives}`);
+        push(`"${base}" foto produto supermercado ${negatives}`);
+        if (opts.weight) push(`"${base}" ${opts.weight} embalagem ${negatives}`);
     }
 
-    push(`${opts.term} embalagem original`);
-    push([opts.brand, opts.term, 'embalagem'].filter(Boolean).join(' '));
+    push(`${opts.term} embalagem original ${negatives}`);
+    push([opts.brand, opts.term, 'embalagem', negatives].filter(Boolean).join(' '));
+    if (opts.productCode && /^\d{8,14}$/.test(opts.productCode)) {
+        push(`"${opts.productCode}" ${opts.term} embalagem ${negatives}`);
+    }
 
     return Array.from(queries).slice(0, 10);
 };
 
 const rankExternalCandidatesByMetadata = (
-    list: { url: string; title?: string; source?: string }[],
+    list: ExternalCandidate[],
     opts: { term: string; brand?: string; flavor?: string; weight?: string }
-): { url: string; title?: string; source?: string }[] => {
-    const tokenizedTerm = normalizeCompact(opts.term).match(/[a-z0-9]{3,}/g) || [];
+): ExternalCandidate[] => {
+    const tokenizedTerm = tokenizeNormalized(opts.term).filter((token) => token.length >= 3);
     const termTokenSet = [...new Set(tokenizedTerm)];
-    const brandToken = normalizeCompact(String(opts.brand || ''));
-    const flavorToken = normalizeCompact(String(opts.flavor || ''));
-    const weightToken = normalizeCompact(String(opts.weight || ''));
-    const badHintRegex = /(logo|vetor|vector|icone|icon|clipart|mockup|banner|wallpaper|papel parede)/i;
+    const brandTokens = tokenizeNormalized(String(opts.brand || ''), 2);
+    const flavorTokens = tokenizeNormalized(String(opts.flavor || ''))
+        .filter((token) => !GENERIC_FLAVOR_TOKENS.has(token));
+    const weightTokens = extractWeightTokens(String(opts.weight || ''));
+    const badDomainRegex = /(pinterest|pinimg|freepik|wikimedia|wikipedia|shutterstock|depositphotos|istockphoto|vectorstock)/i;
 
     return [...list]
         .map((entry) => {
-            const haystackRaw = [entry.title, entry.source, entry.url].filter(Boolean).join(' ');
-            const haystack = normalizeCompact(haystackRaw);
-            let score = 0;
+            const haystackRaw = [entry.title, entry.source, entry.domain, entry.url].filter(Boolean).join(' ');
+            const haystackNormalized = normalizeSearchTerm(haystackRaw);
+            const haystackTokenSet = new Set(haystackNormalized.split(' ').filter(Boolean));
+            const haystackWeightSet = new Set(extractWeightTokens(haystackRaw));
+            let score = Number(entry.score || 0);
 
             for (const token of termTokenSet) {
-                if (haystack.includes(token)) score += 1.8;
+                if (haystackTokenSet.has(token)) score += 2.1;
             }
-            if (brandToken) score += haystack.includes(brandToken) ? 10 : -8;
-            if (flavorToken) score += haystack.includes(flavorToken) ? 4 : -2;
-            if (weightToken) score += haystack.includes(weightToken) ? 6 : -2;
-            if (badHintRegex.test(haystackRaw.toLowerCase())) score -= 8;
+            if (brandTokens.length > 0) {
+                score += hasTokenIntersection(brandTokens, haystackTokenSet) ? 14 : -12;
+            }
+            if (flavorTokens.length > 0) {
+                score += hasTokenIntersection(flavorTokens, haystackTokenSet) ? 6 : -3.5;
+            }
+            if (weightTokens.length > 0) {
+                if (haystackWeightSet.size === 0) score -= 1.5;
+                else score += weightTokens.some((token) => haystackWeightSet.has(token)) ? 9 : -12;
+            }
+            if (BAD_HINT_REGEX.test(haystackRaw)) score -= 9;
+            if (badDomainRegex.test(String(entry.domain || entry.source || ''))) score -= 4;
+
+            const width = Number(entry.imageWidth || 0);
+            const height = Number(entry.imageHeight || 0);
+            if (width > 0 && height > 0) {
+                const minSide = Math.min(width, height);
+                if (minSide >= 280) score += 2;
+                else if (minSide < 120) score -= 4;
+            }
 
             return { entry, score };
         })
+        .filter((item) => item.score > -12)
         .sort((a, b) => b.score - a.score)
-        .map((item) => item.entry);
+        .map((item) => ({ ...item.entry, score: Number(item.score.toFixed(3)) }));
 };
 
 // ========================================
@@ -331,6 +414,9 @@ export default defineEventHandler(async (event) => {
             bucketName,
             prefixes: ['uploads/', 'imagens/'],
             normalizedCandidates: candidateNormalizedTerms,
+            brand,
+            flavor,
+            weight,
             strictOnly: strictMode
         });
 
@@ -499,7 +585,7 @@ export default defineEventHandler(async (event) => {
         });
     }
 
-    let candidates: { url: string; title?: string; source?: string }[] = [];
+    let candidates: ExternalCandidate[] = [];
     let providerUsed: 'serper' | null = null;
     let lastProviderError: Record<string, any> | null = null;
     const externalQueryVariants = buildExternalQueryVariants({
@@ -514,11 +600,12 @@ export default defineEventHandler(async (event) => {
         baseVariants: externalQueryVariants,
         term,
         brand,
-        weight
+        weight,
+        productCode
     });
 
     if (candidates.length === 0 && hasSerper) {
-        const collected = new Map<string, { url: string; title?: string; source?: string }>();
+        const collected = new Map<string, ExternalCandidate>();
         let successfulQueries = 0;
         for (const q of serperQueryVariants) {
             const serperResult = await searchSerperImageCandidates({
@@ -540,8 +627,20 @@ export default defineEventHandler(async (event) => {
                 successfulQueries += 1;
                 for (const candidate of serperResult.candidates) {
                     const key = String(candidate?.url || '').trim();
-                    if (!key || collected.has(key)) continue;
-                    collected.set(key, candidate);
+                    if (!key) continue;
+                    const existing = collected.get(key);
+                    if (!existing) {
+                        collected.set(key, candidate);
+                        continue;
+                    }
+                    const existingScore = Number(existing.score || 0);
+                    const nextScore = Number(candidate.score || 0);
+                    if (nextScore > existingScore) {
+                        collected.set(key, candidate);
+                    } else {
+                        existing.score = Number((existingScore + 0.6).toFixed(3));
+                        collected.set(key, existing);
+                    }
                 }
                 console.log(`✅ [Serper] ${serperResult.candidates.length} candidatas em query="${q}" (acumulado=${collected.size})`);
                 if (collected.size >= 8 || (collected.size >= 5 && successfulQueries >= 2)) break;
@@ -577,6 +676,7 @@ export default defineEventHandler(async (event) => {
     const gatedCandidates = candidates.filter((entry) => passesMetadataHardGate({
         title: entry.title,
         source: entry.source,
+        domain: entry.domain,
         url: entry.url,
         term,
         brand,

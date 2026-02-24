@@ -19,6 +19,22 @@ const getOpenAI = async () => {
   return openaiInstance
 }
 
+const parseJsonObjectSafe = (raw: string): Record<string, any> => {
+  const text = String(raw || '').trim()
+  if (!text) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/)
+    if (!match) return {}
+    try {
+      return JSON.parse(match[0] || '{}')
+    } catch {
+      return {}
+    }
+  }
+}
+
 export async function validateProductImageCandidatesWithAI(
   candidates: CandidateImage[],
   productInfo: ProductInfo
@@ -40,7 +56,7 @@ export async function validateProductImageCandidatesWithAI(
           type: 'text' as const,
           text: `--- Imagem ${i + 1} ---\nTítulo: ${String(entry.title || 'N/A').slice(0, 180)}\nFonte: ${String(entry.source || 'N/A').slice(0, 220)}`
         },
-        { type: 'image_url' as const, image_url: { url: entry.url, detail: 'low' as const } }
+        { type: 'image_url' as const, image_url: { url: entry.url, detail: 'high' as const } }
       ])
       .flat()
 
@@ -62,6 +78,7 @@ CRITÉRIOS DE AVALIAÇÃO (em ordem de importância):
 4. O SABOR/VARIANTE corresponde (se aplicável)
 5. A imagem tem boa qualidade e mostra o produto claramente
 6. Tolere pequenos erros de digitação no texto de entrada (OCR/typos), desde que embalagem/marca/gramatura visuais indiquem o mesmo produto.
+7. Rejeite logo solto, ícone, vetor, mockup, render publicitário, poster/banner ou arte não-fotográfica do produto.
 
 Responda EXCLUSIVAMENTE em JSON:
 {
@@ -93,11 +110,12 @@ Responda EXCLUSIVAMENTE em JSON:
       }
     }
 
-    const parsed = JSON.parse(content)
+    const parsed = parseJsonObjectSafe(content)
     const bestIndex = typeof parsed.bestIndex === 'number'
       ? (parsed.bestIndex === -1 ? -1 : parsed.bestIndex - 1)
-      : 0
-    const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0.5
+      : -1
+    const confidenceRaw = typeof parsed.confidence === 'number' ? parsed.confidence : 0.5
+    const confidence = Math.max(0, Math.min(1, confidenceRaw))
     const isExactMatch = !!parsed.isExactMatch
     const mismatchReasons = Array.isArray(parsed.mismatchReasons)
       ? parsed.mismatchReasons.map((item: any) => String(item || '').trim()).filter(Boolean).slice(0, 6)
