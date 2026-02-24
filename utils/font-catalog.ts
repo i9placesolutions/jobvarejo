@@ -183,10 +183,12 @@ export const normalizeFontWeightForFamily = (fontFamily: string | null | undefin
   const supported = getSupportedFontWeights(fontFamily)
   if (!supported.length) return normalizedWeight
   if (supported.includes(normalizedWeight)) return normalizedWeight
+  const first = supported[0]
+  if (first === undefined) return normalizedWeight
 
   return supported.reduce((closest, current) => {
     return Math.abs(current - normalizedWeight) < Math.abs(closest - normalizedWeight) ? current : closest
-  }, supported[0])
+  }, first)
 }
 
 export const getFontWeightOptionsForFamily = (

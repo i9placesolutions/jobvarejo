@@ -84,7 +84,13 @@ Responda EXCLUSIVAMENTE em JSON:
 
     const content = response.choices?.[0]?.message?.content
     if (!content) {
-      return { bestIndex: 0, confidence: 0.3, reason: 'Sem resposta da IA' }
+      return {
+        bestIndex: 0,
+        confidence: 0.3,
+        reason: 'Sem resposta da IA',
+        isExactMatch: false,
+        mismatchReasons: ['empty_ai_response']
+      }
     }
 
     const parsed = JSON.parse(content)

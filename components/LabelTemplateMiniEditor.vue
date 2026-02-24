@@ -2989,7 +2989,12 @@ const save = async () => {
         settled = true
         resolve(result)
       }
-      emit('save', props.template.id, { group: groupJson, previewDataUrl, name }, finalize)
+      const templateId = String(props.template?.id || '').trim()
+      if (!templateId) {
+        finalize({ ok: false, message: 'Template inválido para salvar.' })
+        return
+      }
+      emit('save', templateId, { group: groupJson, previewDataUrl, name }, finalize)
       setTimeout(() => {
         finalize({ ok: false, message: 'Tempo esgotado ao salvar a etiqueta. Tente novamente.' })
       }, 20000)

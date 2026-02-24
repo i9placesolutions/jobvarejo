@@ -17427,7 +17427,7 @@ const resolveActiveTextObjectForInspectorAction = (active: any) => {
 
 const buildLinearGradientFill = (
     target: any,
-    colorStops: Array<{ offset: number; color: string }>,
+    colorStops: ReadonlyArray<{ offset: number; color: string }>,
     angleDeg: number = 90
 ) => {
     const width = Math.max(1, Number(target?.width || target?.getScaledWidth?.() || 1));

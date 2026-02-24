@@ -16,7 +16,9 @@ const hasPrivateIpv4Host = (host: string): boolean => {
     return false
   }
 
-  const [a, b] = parts
+  const a = parts[0]
+  const b = parts[1]
+  if (a === undefined || b === undefined) return false
   if (a === 10 || a === 127 || a === 0) return true
   if (a === 169 && b === 254) return true
   if (a === 172 && b >= 16 && b <= 31) return true

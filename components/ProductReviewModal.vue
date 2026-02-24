@@ -37,6 +37,7 @@ const emit = defineEmits<{
 }>()
 
 const { getApiAuthHeaders } = useApiAuth()
+const fetchUntyped = $fetch as unknown as (url: string, options?: any) => Promise<any>
 
 const textInput = ref('')
 const step = ref<'input' | 'review'>('input')
@@ -341,12 +342,12 @@ const uploadManualViaPresigned = async (
     const headers = await getApiAuthHeaders()
 
     const presigned = await withRequestTimeout(20000, (signal) =>
-        $fetch('/api/storage/presigned', {
+        fetchUntyped('/api/storage/presigned', {
             method: 'POST',
             headers,
             body: { key, contentType, operation: 'put' },
             signal: signal as any
-        }) as Promise<any>
+        })
     )
 
     if (!presigned?.url) {
@@ -914,12 +915,12 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
         let result: any = null
         try {
             result = await withRequestTimeout(MANUAL_UPLOAD_API_TIMEOUT_MS, (signal) =>
-                $fetch('/api/upload-product-image', {
+                fetchUntyped('/api/upload-product-image', {
                     method: 'POST',
                     headers,
                     body: createUploadForm(true),
                     signal: signal as any
-                }) as Promise<any>
+                })
             )
         } catch (primaryErr) {
             disableManualUploadRemoteTemporarily(primaryErr)
@@ -931,12 +932,12 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
             console.warn('[Upload Manual] Endpoint inteligente indisponível, tentando upload direto...', primaryErr)
             try {
                 result = await withRequestTimeout(MANUAL_UPLOAD_API_TIMEOUT_MS, (signal) =>
-                    $fetch('/api/upload', {
+                    fetchUntyped('/api/upload', {
                         method: 'POST',
                         headers,
                         body: createUploadForm(false),
                         signal: signal as any
-                    }) as Promise<any>
+                    })
                 )
             } catch (fallbackErr) {
                 disableManualUploadRemoteTemporarily(fallbackErr)

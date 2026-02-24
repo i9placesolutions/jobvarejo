@@ -365,6 +365,7 @@ const removeLightEdgeBackgroundFallback = async (rawBuffer: Buffer, outputFormat
 
         while (head < tail) {
             const idx = queue[head++];
+            if (idx === undefined) continue;
             const x = idx % w;
             const y = Math.floor(idx / w);
             if (x > 0) push(idx - 1);
@@ -378,7 +379,9 @@ const removeLightEdgeBackgroundFallback = async (rawBuffer: Buffer, outputFormat
         }
 
         for (let i = 0; i < tail; i++) {
-            const px = queue[i] * 4 + 3;
+            const q = queue[i];
+            if (q === undefined) continue;
+            const px = q * 4 + 3;
             data[px] = 0;
         }
 
