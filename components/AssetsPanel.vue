@@ -330,7 +330,7 @@ watch(() => aiStudio.refreshTick.value, async () => {
 })
 
 onMounted(async () => {
-    await loadFolders()
+    await loadFolders({ scope: 'asset' })
     await loadAssetFolders()
     await loadAssetNames()
     await fetchAssets()
@@ -660,7 +660,7 @@ const handleDialogConfirm = async () => {
         
         // Criar pasta no banco de dados
         try {
-            const newFolder = await createFolder(inputValue || 'Nova Pasta', parentId)
+            const newFolder = await createFolder(inputValue || 'Nova Pasta', parentId, { scope: 'asset' })
             // A pasta já foi adicionada ao dbFolders no createFolder
             // Aguardar próximo tick para garantir que a reatividade foi processada
             await nextTick()

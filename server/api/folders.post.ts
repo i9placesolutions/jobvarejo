@@ -22,6 +22,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Folder name too long (max 120 chars)' })
   }
 
+  const iconRaw = body?.icon == null ? '' : String(body.icon).trim()
+  if (iconRaw.length > 60) {
+    throw createError({ statusCode: 400, statusMessage: 'Folder icon too long (max 60 chars)' })
+  }
+  const icon = iconRaw || 'folder'
+
   const parentIdRaw = body?.parent_id
   const parentId = parentIdRaw == null || parentIdRaw === '' ? null : String(parentIdRaw).trim()
   if (parentId && !isUuid(parentId)) {
@@ -65,11 +71,11 @@ export default defineEventHandler(async (event) => {
 
     const { rows } = await pgQuery<any>(
       `insert into public.folders
-         (name, parent_id, user_id, order_index)
+         (name, parent_id, user_id, icon, order_index)
        values
-         ($1, $2::uuid, $3, $4)
+         ($1, $2::uuid, $3, $4, $5)
        returning *`,
-      [name, parentId, user.id, orderIndex]
+      [name, parentId, user.id, icon, orderIndex]
     )
 
     return { success: true, folder: rows[0] || null }

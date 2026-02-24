@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown } from 'lucide-vue-next'
+import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Check } from 'lucide-vue-next'
 	import FolderTreeItem from '~/components/FolderTreeItem.vue'
 	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
 	import { toWasabiProxyUrl } from '~/utils/storageProxy'
@@ -25,6 +25,7 @@ const activeView = ref<'recent' | 'all' | 'shared' | 'starred'>('recent')
 const filterOrganization = ref('all')
 const filterType = ref('all')
 const filterTime = ref('all')
+const filterFolderId = ref('all')
 const showCreateProject = ref(false)
 const showCreateFolder = ref(false)
 const showFolderMenu = ref<string | null>(null)
@@ -129,7 +130,7 @@ const loadData = async () => {
     if (profile) user.value = profile
 
     // Load folders
-    await loadFolders()
+    await loadFolders({ scope: 'project' })
 
     const projectsData = await $fetch('/api/projects', {
       headers
@@ -291,6 +292,11 @@ watch(activeView, (view) => {
   }
 })
 
+watch(activeFolderId, (folderId) => {
+  if (activeView.value !== 'all') return
+  filterFolderId.value = folderId ? String(folderId) : 'all'
+})
+
 // Computed: Folder tree with expansion state
 type FolderTreeNode = FolderModel & {
   children: FolderTreeNode[]
@@ -377,7 +383,7 @@ const filteredProjects = computed(() => {
     result = viewProjects.value.filter(p =>
       p.name?.toLowerCase().includes(searchQuery.value.toLowerCase())
     )
-  } else if (activeFolderId.value && activeView.value === 'all') {
+  } else if (activeFolderId.value && activeView.value === 'all' && String(filterFolderId.value || 'all') === 'all') {
     // Filter by folder
     const folderIds = [activeFolderId.value]
     const getFolderTreeIds = (folderId: string): string[] => {
@@ -399,6 +405,22 @@ const filteredProjects = computed(() => {
     result = result.filter(p => !p.is_shared)
   } else if (filterOrganization.value === 'team') {
     result = result.filter(p => p.is_shared === true)
+  }
+
+  const selectedFolderFilter = String(filterFolderId.value || 'all')
+  if (selectedFolderFilter === 'root') {
+    result = result.filter((p) => !p.folder_id)
+  } else if (selectedFolderFilter !== 'all') {
+    const getFolderTreeIds = (folderId: string): string[] => {
+      const ids = [folderId]
+      const children = getChildren(folderId)
+      children.forEach((child) => {
+        ids.push(...getFolderTreeIds(child.id))
+      })
+      return ids
+    }
+    const scopedIds = getFolderTreeIds(selectedFolderFilter)
+    result = result.filter((p) => p.folder_id && scopedIds.includes(String(p.folder_id)))
   }
 
   if (filterType.value === 'design') {
@@ -450,7 +472,43 @@ const filteredProjects = computed(() => {
 
 type FolderOption = {
   id: string
-  label: string
+  name: string
+  depth: number
+  pathLabel: string
+}
+
+const normalizeFolderId = (value: unknown): string => String(value || '').trim()
+
+const folderById = computed(() => {
+  const map = new Map<string, FolderModel>()
+  const list = Array.isArray(safeFolders.value) ? safeFolders.value : []
+  list.forEach((folder) => {
+    map.set(String(folder.id), folder)
+  })
+  return map
+})
+
+const getFolderPathSegments = (folderId: string): string[] => {
+  const id = normalizeFolderId(folderId)
+  if (!id) return []
+  const segments: string[] = []
+  const visited = new Set<string>()
+  let cursor = id
+  while (cursor && !visited.has(cursor)) {
+    visited.add(cursor)
+    const folder = folderById.value.get(cursor)
+    if (!folder) break
+    const name = String(folder.name || '').trim() || 'Pasta sem nome'
+    segments.unshift(name)
+    cursor = normalizeFolderId(folder.parent_id)
+  }
+  return segments
+}
+
+const formatFolderPathLabel = (folderId: string): string => {
+  const parts = getFolderPathSegments(folderId)
+  if (!parts.length) return 'Sem pasta (raiz)'
+  return parts.join(' / ')
 }
 
 const moveProjectFolderOptions = computed<FolderOption[]>(() => {
@@ -470,14 +528,18 @@ const moveProjectFolderOptions = computed<FolderOption[]>(() => {
   })
 
   const options: FolderOption[] = []
-  const walk = (parentId: string | null = null, depth = 0) => {
+  const walk = (parentId: string | null = null, depth = 0, parentPath: string[] = []) => {
     const children = byParent.get(parentId) || []
     for (const folder of children) {
+      const name = String(folder.name || '').trim() || 'Pasta sem nome'
+      const path = [...parentPath, name]
       options.push({
         id: folder.id,
-        label: `${'  '.repeat(depth)}${folder.name}`
+        name,
+        depth,
+        pathLabel: path.join(' / ')
       })
-      walk(folder.id, depth + 1)
+      walk(folder.id, depth + 1, path)
     }
   }
 
@@ -489,6 +551,61 @@ const projectToMoveName = computed(() => {
   const id = String(projectToMoveId.value || '').trim()
   if (!id) return ''
   return String(projects.value.find((p) => p.id === id)?.name || 'Projeto')
+})
+
+const folderFilterOptions = computed(() => moveProjectFolderOptions.value)
+
+const canOpenFolderFromTopFilter = computed(() => {
+  const id = normalizeFolderId(filterFolderId.value)
+  return !!id && id !== 'all' && id !== 'root'
+})
+
+const openFolderFromTopFilter = () => {
+  const selected = normalizeFolderId(filterFolderId.value)
+  if (!selected || selected === 'all') {
+    setActiveFolder(null)
+    activeView.value = 'all'
+    return
+  }
+  if (selected === 'root') {
+    setActiveFolder(null)
+    activeView.value = 'all'
+    return
+  }
+
+  const visited = new Set<string>()
+  let cursor = selected
+  while (cursor && !visited.has(cursor)) {
+    visited.add(cursor)
+    const folder = folderById.value.get(cursor)
+    if (!folder) break
+    const parentId = normalizeFolderId(folder.parent_id)
+    if (parentId) expandedFolders.value.add(parentId)
+    cursor = parentId
+  }
+
+  setActiveFolder(selected)
+  activeView.value = 'all'
+}
+
+const currentMoveProject = computed(() => {
+  const id = normalizeFolderId(projectToMoveId.value)
+  if (!id) return null
+  return projects.value.find((p) => p.id === id) || null
+})
+
+const projectToMoveCurrentFolderId = computed(() => normalizeFolderId(currentMoveProject.value?.folder_id))
+
+const projectToMoveCurrentFolderLabel = computed(() => {
+  return formatFolderPathLabel(projectToMoveCurrentFolderId.value)
+})
+
+const moveProjectDestinationFolderLabel = computed(() => {
+  return formatFolderPathLabel(moveProjectFolderId.value)
+})
+
+const isMoveDestinationUnchanged = computed(() => {
+  return normalizeFolderId(moveProjectFolderId.value) === projectToMoveCurrentFolderId.value
 })
 
 // Get project count for a folder
@@ -673,6 +790,7 @@ const closeMoveProjectModal = () => {
 const confirmMoveProjectModal = async () => {
   const projectId = String(projectToMoveId.value || '').trim()
   if (!projectId) return
+  if (isMoveDestinationUnchanged.value) return
   isMovingProject.value = true
   try {
     const folderId = String(moveProjectFolderId.value || '').trim()
@@ -764,7 +882,7 @@ const handleCreateFolder = async () => {
   if (!isValidFolderName.value) return
 
   try {
-    await createFolder(newFolderName.value, activeFolderId.value)
+    await createFolder(newFolderName.value, activeFolderId.value, { scope: 'project' })
     newFolderName.value = ''
     showCreateFolder.value = false
   } catch (error) {
@@ -1261,6 +1379,35 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
             </div>
 
+            <div class="relative">
+              <select
+                v-model="filterFolderId"
+                class="h-8 min-w-[220px] max-w-[320px] px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
+              >
+                <option value="all">Todas as pastas</option>
+                <option value="root">Sem pasta (raiz)</option>
+                <option
+                  v-for="folderOption in folderFilterOptions"
+                  :key="`top-folder-filter-${folderOption.id}`"
+                  :value="folderOption.id"
+                >
+                  {{ folderOption.pathLabel }}
+                </option>
+              </select>
+              <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
+            </div>
+
+            <button
+              type="button"
+              class="h-8 px-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white transition-all inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="!canOpenFolderFromTopFilter"
+              @click="openFolderFromTopFilter"
+              title="Abrir pasta selecionada na árvore de pastas"
+            >
+              <FolderOpen class="w-3.5 h-3.5" />
+              <span>Abrir pasta</span>
+            </button>
+
             <!-- View Mode Toggle -->
             <div class="flex items-center bg-white/5 rounded-lg p-1 border border-white/10">
               <button
@@ -1575,26 +1722,60 @@ const handleDropOnRoot = async (event: DragEvent) => {
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
       @click.self="closeMoveProjectModal"
     >
-      <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
+      <div class="w-full max-w-xl bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
         <h3 class="text-base font-semibold text-white mb-1">Mover projeto</h3>
-        <p class="text-xs text-zinc-500 mb-4">
-          Projeto: <span class="text-zinc-300 font-medium">{{ projectToMoveName }}</span>
-        </p>
+        <p class="text-xs text-zinc-500 mb-4">Escolha a pasta de destino com caminho completo.</p>
 
-        <label class="block text-[11px] text-zinc-400 mb-1">Pasta destino</label>
-        <select
-          v-model="moveProjectFolderId"
-          class="w-full h-10 px-3 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 mb-4 transition-all"
-        >
-          <option value="">Sem pasta (raiz)</option>
-          <option
+        <div class="rounded-xl border border-white/10 bg-[#121212] p-3 mb-3">
+          <p class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Projeto selecionado</p>
+          <p class="text-sm text-zinc-100 font-medium truncate">{{ projectToMoveName }}</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+          <div class="rounded-lg border border-white/10 bg-[#151515] p-2.5">
+            <p class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Pasta atual</p>
+            <p class="text-xs text-zinc-200 break-words">{{ projectToMoveCurrentFolderLabel }}</p>
+          </div>
+          <div class="rounded-lg border border-violet-500/30 bg-violet-500/5 p-2.5">
+            <p class="text-[10px] uppercase tracking-wider text-violet-300/80 mb-1">Destino selecionado</p>
+            <p class="text-xs text-violet-100 break-words">{{ moveProjectDestinationFolderLabel }}</p>
+          </div>
+        </div>
+
+        <label class="block text-[11px] text-zinc-400 mb-2">Pastas de destino</label>
+        <div class="mb-4 max-h-60 overflow-y-auto rounded-xl border border-white/10 bg-[#131313] p-1.5">
+          <button
+            type="button"
+            class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all"
+            :class="normalizeFolderId(moveProjectFolderId) === '' ? 'bg-violet-500/20 border border-violet-500/30' : 'hover:bg-white/5 border border-transparent'"
+            @click="moveProjectFolderId = ''"
+          >
+            <Check v-if="normalizeFolderId(moveProjectFolderId) === ''" class="w-4 h-4 text-violet-300 shrink-0 mt-0.5" />
+            <span v-else class="w-4 shrink-0"></span>
+            <span class="min-w-0">
+              <span class="block text-xs text-zinc-100">Sem pasta (raiz)</span>
+              <span class="block text-[10px] text-zinc-500">Projetos fora de qualquer pasta.</span>
+            </span>
+          </button>
+
+          <button
             v-for="folderOption in moveProjectFolderOptions"
             :key="folderOption.id"
-            :value="folderOption.id"
+            type="button"
+            class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all border"
+            :class="normalizeFolderId(moveProjectFolderId) === folderOption.id ? 'bg-violet-500/20 border-violet-500/30' : 'hover:bg-white/5 border-transparent'"
+            @click="moveProjectFolderId = folderOption.id"
           >
-            {{ folderOption.label }}
-          </option>
-        </select>
+            <Check v-if="normalizeFolderId(moveProjectFolderId) === folderOption.id" class="w-4 h-4 text-violet-300 shrink-0 mt-0.5" />
+            <span v-else class="w-4 shrink-0"></span>
+            <span class="min-w-0">
+              <span class="block text-xs text-zinc-100 truncate" :style="{ paddingLeft: `${folderOption.depth * 10}px` }">
+                {{ folderOption.name }}
+              </span>
+              <span class="block text-[10px] text-zinc-500 truncate">{{ folderOption.pathLabel }}</span>
+            </span>
+          </button>
+        </div>
 
         <div class="flex gap-2">
           <button
@@ -1605,10 +1786,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </button>
           <button
             @click="confirmMoveProjectModal"
-            :disabled="isMovingProject"
+            :disabled="isMovingProject || isMoveDestinationUnchanged"
             class="flex-1 h-10 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
           >
-            {{ isMovingProject ? 'Movendo...' : 'Mover' }}
+            {{ isMovingProject ? 'Movendo...' : (isMoveDestinationUnchanged ? 'Destino atual' : 'Mover') }}
           </button>
         </div>
       </div>

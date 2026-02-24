@@ -1,6 +1,18 @@
 import { ref, computed } from 'vue'
 import type { Folder } from '~/types/folder'
 
+type FolderScope = 'all' | 'project' | 'asset'
+type FolderContextScope = Exclude<FolderScope, 'all'>
+
+type LoadFoldersOptions = {
+  scope?: FolderScope
+}
+
+type CreateFolderOptions = {
+  scope?: FolderContextScope
+  icon?: string
+}
+
 export interface FolderTreeItem extends Folder {
   children: FolderTreeItem[]
   depth: number
@@ -14,6 +26,11 @@ const folders = ref<Folder[]>([])
 const isLoading = ref(false)
 const activeFolderId = ref<string | null>(null)
 const expandedFolders = ref<Set<string>>(new Set())
+
+const SCOPE_ICON_MAP: Record<FolderContextScope, string> = {
+  project: 'project-folder',
+  asset: 'asset-folder',
+}
 
 export const useFolder = () => {
   const { getApiAuthHeaders } = useApiAuth()
@@ -55,7 +72,7 @@ export const useFolder = () => {
   }
 
   // Load all folders for current user
-  const loadFolders = async () => {
+  const loadFolders = async (opts: LoadFoldersOptions = {}) => {
     isLoading.value = true
     try {
       const headers = await getApiAuthHeaders().catch(() => null)
@@ -63,7 +80,9 @@ export const useFolder = () => {
         folders.value = []
         return
       }
-      const data = await $fetch('/api/folders', { headers })
+      const scope = opts.scope || 'all'
+      const query = scope === 'all' ? undefined : { scope }
+      const data = await $fetch('/api/folders', { headers, query })
       folders.value = Array.isArray(data) ? data : []
     } catch (error) {
       console.error('Error loading folders:', error)
@@ -73,11 +92,14 @@ export const useFolder = () => {
   }
 
   // Create a new folder
-  const createFolder = async (name: string, parentId: string | null = null) => {
+  const createFolder = async (name: string, parentId: string | null = null, opts: CreateFolderOptions = {}) => {
     try {
       // Get max order_index for siblings
       const siblings = folders.value.filter(f => f.parent_id === parentId)
       const maxOrder = siblings.length > 0 ? Math.max(...siblings.map(s => s.order_index)) : -1
+
+      const iconFromScope = opts.scope ? SCOPE_ICON_MAP[opts.scope] : undefined
+      const icon = String(opts.icon || iconFromScope || '').trim() || undefined
 
       const headers = await requireHeaders()
       const response = await $fetch<any>('/api/folders', {
@@ -87,6 +109,7 @@ export const useFolder = () => {
           name,
           parent_id: parentId,
           order_index: maxOrder + 1,
+          icon,
         }
       })
       const data = response?.folder || null

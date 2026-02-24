@@ -1572,6 +1572,15 @@ const maybeReparentToFrameOnDrop = (obj: any) => {
     if (!canvas.value || !obj || (obj as any).excludeFromExport) return;
     // Product cards inherit frame binding from their zone (avoid direct reparent here).
     if ((obj as any).isSmartObject || (obj as any).isProductCard) return;
+
+    const currentParentFrameId = String((obj as any).parentFrameId || '').trim();
+    const currentFrame = currentParentFrameId ? getFrameById(currentParentFrameId) : null;
+    // Keep the current frame binding while there is any visual overlap.
+    // Only detach when the object is fully outside.
+    if (currentFrame && isObjectIntersectingFrame(obj, currentFrame)) {
+        return;
+    }
+
     const frame = findFrameUnderObject(obj);
     // If dropped outside of any frame, clear parenting so clipPath is removed.
     if (!frame || !frame._customId) {
@@ -1646,6 +1655,36 @@ const isObjectVisuallyInsideFrame = (obj: any, frame: any) => {
     const objArea = Math.max(1, objBounds.width * objBounds.height);
 
     return overlapArea / objArea >= 0.2;
+};
+
+const isObjectIntersectingFrame = (obj: any, frame: any) => {
+    if (!obj || !frame) return false;
+
+    if (isObjectCenterInsideFrame(obj, frame)) return true;
+
+    try {
+        if (typeof frame.intersectsWithObject === 'function' && frame.intersectsWithObject(obj)) return true;
+    } catch {
+        // ignore intersection API failures and fallback to bounds
+    }
+
+    if (typeof obj.getBoundingRect !== 'function' || typeof frame.getBoundingRect !== 'function') {
+        return false;
+    }
+
+    const objBounds = obj.getBoundingRect(true);
+    const frameBounds = frame.getBoundingRect(true);
+    if (!objBounds || !frameBounds) return false;
+
+    const left = Math.max(objBounds.left, frameBounds.left);
+    const top = Math.max(objBounds.top, frameBounds.top);
+    const right = Math.min(objBounds.left + objBounds.width, frameBounds.left + frameBounds.width);
+    const bottom = Math.min(objBounds.top + objBounds.height, frameBounds.top + frameBounds.height);
+    const overlapW = Math.max(0, right - left);
+    const overlapH = Math.max(0, bottom - top);
+    const overlapArea = overlapW * overlapH;
+
+    return overlapArea > 0;
 };
 
 const collectFrameVisibilityTargets = (rootFrame: any) => {
@@ -30394,29 +30433,17 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
                 return;
             }
             
-            // Check if object center is inside frame bounds
-            // CRITICAL: Use getBoundingRect() to correctly calculate bounds regardless of originX/originY
-            const center = typeof o.getCenterPoint === 'function' ? o.getCenterPoint() : null;
-            if (center) {
-                const frameBounds = typeof frame.getBoundingRect === 'function'
-                    ? frame.getBoundingRect()
-                    : { left: frame.left, top: frame.top, width: frame.width * (frame.scaleX || 1), height: frame.height * (frame.scaleY || 1) };
-
-                const isInsideFrame = center.x >= frameBounds.left &&
-                                      center.x <= frameBounds.left + frameBounds.width &&
-                                      center.y >= frameBounds.top &&
-                                      center.y <= frameBounds.top + frameBounds.height;
-                
-                if (!isInsideFrame) {
-                    console.log(`🔓 Removendo parentFrameId de objeto fora do frame:`, {
-                        object: o.name || o._customId,
-                        frame: frame.name || frame._customId
-                    });
-                    o.parentFrameId = undefined;
-                    if (o._frameClipOwner) {
-                        o.clipPath = null;
-                        delete o._frameClipOwner;
-                    }
+            // Keep frame binding while object still overlaps the frame bounds.
+            // Only remove binding when the object is fully outside.
+            if (!isObjectIntersectingFrame(o, frame)) {
+                console.log(`🔓 Removendo parentFrameId de objeto totalmente fora do frame:`, {
+                    object: o.name || o._customId,
+                    frame: frame.name || frame._customId
+                });
+                o.parentFrameId = undefined;
+                if (o._frameClipOwner) {
+                    o.clipPath = null;
+                    delete o._frameClipOwner;
                 }
             }
         });

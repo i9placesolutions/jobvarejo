@@ -137,11 +137,21 @@ const buildLayerTree = computed(() => {
   const validObjects = getValidObjects()
   const items: LayerItem[] = []
 
-  // First pass: collect frames and their children
-  const frames = validObjects.filter(o => o.isFrame)
+  // Fabric stack order is back->front. Layers panel should show front->back.
+  const stackIndex = new Map<string, number>()
+  validObjects.forEach((obj, idx) => {
+    if (obj?._customId) stackIndex.set(String(obj._customId), idx)
+  })
+  const byTopMostFirst = (a: any, b: any) => {
+    const aIdx = stackIndex.get(String(a?._customId || '')) ?? -1
+    const bIdx = stackIndex.get(String(b?._customId || '')) ?? -1
+    return bIdx - aIdx
+  }
+
+  const frameIds = new Set(validObjects.filter(o => o?.isFrame).map(o => String(o._customId || '')).filter(Boolean))
   const frameChildrenMap = new Map<string, any[]>()
 
-  // Group children by frame
+  // Group children by parent frame id
   validObjects.forEach(o => {
     if (o.parentFrameId) {
       if (!frameChildrenMap.has(o.parentFrameId)) {
@@ -151,27 +161,43 @@ const buildLayerTree = computed(() => {
     }
   })
 
-  // Build tree: non-frame objects first (without parentFrameId), then frames with their children
-  const nonFrameObjects = validObjects.filter(o => !o.isFrame && !o.parentFrameId)
+  const appendFrameChildren = (frameId: string, depth: number) => {
+    const children = (frameChildrenMap.get(frameId) || []).slice().sort(byTopMostFirst)
+    children.forEach((child) => {
+      const childIsFrame = !!child?.isFrame
+      const childItem = createLayerItem(child, depth, childIsFrame)
+      if (childIsFrame) {
+        const nestedChildren = frameChildrenMap.get(child._customId) || []
+        childItem.childCount = nestedChildren.length
+      }
+      items.push(childItem)
 
-  // Add non-frame objects (top level)
-  nonFrameObjects.forEach(obj => {
-    items.push(createLayerItem(obj, 0, false))
-  })
+      if (childIsFrame && isFrameExpanded(child._customId)) {
+        appendFrameChildren(String(child._customId), depth + 1)
+      }
+    })
+  }
 
-  // Add frames with their children
-  frames.forEach(frame => {
-    const frameItem = createLayerItem(frame, 0, true)
-    const children = frameChildrenMap.get(frame._customId) || []
-    frameItem.childCount = children.length
+  // Top-level objects: objects with no valid parent frame (or orphaned parent id).
+  const topLevelObjects = validObjects
+    .filter((o) => {
+      const parentId = String(o?.parentFrameId || '')
+      return !parentId || !frameIds.has(parentId)
+    })
+    .slice()
+    .sort(byTopMostFirst)
 
-    items.push(frameItem)
+  topLevelObjects.forEach((obj) => {
+    const isFrame = !!obj?.isFrame
+    const item = createLayerItem(obj, 0, isFrame)
+    if (isFrame) {
+      const children = frameChildrenMap.get(obj._customId) || []
+      item.childCount = children.length
+    }
+    items.push(item)
 
-    // Add children if frame is expanded
-    if (isFrameExpanded(frame._customId)) {
-      children.forEach(child => {
-        items.push(createLayerItem(child, 1, false))
-      })
+    if (isFrame && isFrameExpanded(obj._customId)) {
+      appendFrameChildren(String(obj._customId), 1)
     }
   })
 
