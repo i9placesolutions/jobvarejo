@@ -2,7 +2,6 @@ import { getS3Client, getPublicUrl } from "../utils/s3";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { validateProductImageCandidatesWithAI } from "../utils/product-image-ai";
-import { searchGoogleCseImageCandidates } from "../utils/product-image-google-cse";
 import { searchSerperImageCandidates } from "../utils/product-image-serper";
 import {
     findProductImageCacheHitByTerms,
@@ -41,19 +40,20 @@ const normalizeCompact = (value: string): string =>
 const passesMetadataHardGate = (opts: {
     title?: string;
     source?: string;
+    url?: string;
     term: string;
     brand?: string;
     flavor?: string;
     weight?: string;
 }): boolean => {
-    const haystack = normalizeCompact([opts.title, opts.source].filter(Boolean).join(' '));
-    const mustContain = [opts.brand, opts.flavor, opts.weight]
-        .map((part) => normalizeCompact(String(part || '')))
-        .filter(Boolean);
-
-    for (const token of mustContain) {
-        if (!haystack.includes(token)) return false;
-    }
+    const haystack = normalizeCompact([opts.title, opts.source, opts.url].filter(Boolean).join(' '));
+    const brandToken = normalizeCompact(String(opts.brand || ''));
+    const flavorToken = normalizeCompact(String(opts.flavor || ''));
+    const weightToken = normalizeCompact(String(opts.weight || ''));
+    if (brandToken && !haystack.includes(brandToken)) return false;
+    const hasFlavor = !!(flavorToken && haystack.includes(flavorToken));
+    const hasWeight = !!(weightToken && haystack.includes(weightToken));
+    if ((flavorToken || weightToken) && !hasFlavor && !hasWeight) return false;
 
     const termTokens = normalizeCompact(opts.term).match(/[a-z0-9]{3,}/g) || [];
     if (termTokens.length === 0) return true;
@@ -61,7 +61,7 @@ const passesMetadataHardGate = (opts: {
     for (const t of termTokens) {
         if (haystack.includes(t)) hits++;
     }
-    return hits >= Math.max(1, Math.ceil(termTokens.length * 0.5));
+    return hits >= Math.max(1, Math.ceil(termTokens.length * 0.35));
 };
 
 const buildExternalQueryVariants = (opts: {
@@ -99,6 +99,63 @@ const buildExternalQueryVariants = (opts: {
     }
 
     return Array.from(unique).slice(0, 6);
+};
+
+const buildSerperQueryVariants = (opts: {
+    baseVariants: string[];
+    term: string;
+    brand?: string;
+    weight?: string;
+}): string[] => {
+    const queries = new Set<string>();
+    const push = (value: string) => {
+        const text = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        queries.add(text);
+    };
+
+    for (const base of opts.baseVariants.slice(0, 5)) {
+        push(`"${base}" embalagem produto`);
+        push(`${base} embalagem frente`);
+        push(`${base} foto produto supermercado`);
+        if (opts.weight) push(`"${base}" ${opts.weight} embalagem`);
+    }
+
+    push(`${opts.term} embalagem original`);
+    push([opts.brand, opts.term, 'embalagem'].filter(Boolean).join(' '));
+
+    return Array.from(queries).slice(0, 10);
+};
+
+const rankExternalCandidatesByMetadata = (
+    list: { url: string; title?: string; source?: string }[],
+    opts: { term: string; brand?: string; flavor?: string; weight?: string }
+): { url: string; title?: string; source?: string }[] => {
+    const tokenizedTerm = normalizeCompact(opts.term).match(/[a-z0-9]{3,}/g) || [];
+    const termTokenSet = [...new Set(tokenizedTerm)];
+    const brandToken = normalizeCompact(String(opts.brand || ''));
+    const flavorToken = normalizeCompact(String(opts.flavor || ''));
+    const weightToken = normalizeCompact(String(opts.weight || ''));
+    const badHintRegex = /(logo|vetor|vector|icone|icon|clipart|mockup|banner|wallpaper|papel parede)/i;
+
+    return [...list]
+        .map((entry) => {
+            const haystackRaw = [entry.title, entry.source, entry.url].filter(Boolean).join(' ');
+            const haystack = normalizeCompact(haystackRaw);
+            let score = 0;
+
+            for (const token of termTokenSet) {
+                if (haystack.includes(token)) score += 1.8;
+            }
+            if (brandToken) score += haystack.includes(brandToken) ? 10 : -8;
+            if (flavorToken) score += haystack.includes(flavorToken) ? 4 : -2;
+            if (weightToken) score += haystack.includes(weightToken) ? 6 : -2;
+            if (badHintRegex.test(haystackRaw.toLowerCase())) score -= 8;
+
+            return { entry, score };
+        })
+        .sort((a, b) => b.score - a.score)
+        .map((item) => item.entry);
 };
 
 // ========================================
@@ -404,7 +461,6 @@ export default defineEventHandler(async (event) => {
     }
     const searchQuery = searchQueryParts.filter(Boolean).join(' ').trim();
 
-    const hasGoogleCse = !!(config.googleCseApiKey && config.googleCseCx);
     const hasSerper = !!config.serperApiKey;
     if (!allowExternal) {
         await safeUpsertRegistry({
@@ -423,8 +479,8 @@ export default defineEventHandler(async (event) => {
         return noImageResponse('external_search_disabled', { reviewPending: true });
     }
 
-    if (!hasGoogleCse && !hasSerper) {
-        console.warn('⚠️ [process-product-image] Nenhum provider de busca externa configurado (Google CSE/Serper).');
+    if (!hasSerper) {
+        console.warn('⚠️ [process-product-image] Provider Serper não configurado.');
         await safeUpsertRegistry({
             productCode,
             identityKey,
@@ -439,12 +495,12 @@ export default defineEventHandler(async (event) => {
             reason: 'external_provider_missing'
         });
         return noImageResponse('external_search_config_missing', {
-            missingConfig: ['googleCseApiKey+googleCseCx OR serperApiKey']
+            missingConfig: ['serperApiKey']
         });
     }
 
     let candidates: { url: string; title?: string; source?: string }[] = [];
-    let providerUsed: 'google-cse' | 'serper' | null = null;
+    let providerUsed: 'serper' | null = null;
     let lastProviderError: Record<string, any> | null = null;
     const externalQueryVariants = buildExternalQueryVariants({
         primarySearchInput,
@@ -454,43 +510,25 @@ export default defineEventHandler(async (event) => {
         weight,
         flavor
     });
-
-    if (hasGoogleCse) {
-        for (const q of externalQueryVariants) {
-            const googleCseResult = await searchGoogleCseImageCandidates({
-                apiKey: config.googleCseApiKey,
-                cx: config.googleCseCx,
-                query: `${q} produto embalagem`,
-                gl: 'br',
-                hl: 'pt-br',
-                num: 10,
-                maxCandidates: 6,
-                timeoutMs: 12_000
-            });
-            if (googleCseResult.error) {
-                lastProviderError = { provider: 'google-cse', query: q, ...googleCseResult.error };
-                console.warn(`⚠️ [Google CSE] erro (${googleCseResult.error.kind}) para query="${q}", tentando próxima variação.`);
-                continue;
-            }
-            if (googleCseResult.candidates.length > 0) {
-                candidates = googleCseResult.candidates;
-                providerUsed = 'google-cse';
-                console.log(`✅ [Google CSE] candidatas encontradas com query="${q}"`);
-                break;
-            }
-        }
-    }
+    const serperQueryVariants = buildSerperQueryVariants({
+        baseVariants: externalQueryVariants,
+        term,
+        brand,
+        weight
+    });
 
     if (candidates.length === 0 && hasSerper) {
-        for (const q of externalQueryVariants) {
+        const collected = new Map<string, { url: string; title?: string; source?: string }>();
+        let successfulQueries = 0;
+        for (const q of serperQueryVariants) {
             const serperResult = await searchSerperImageCandidates({
                 apiKey: config.serperApiKey,
-                query: `${q} produto embalagem`,
+                query: q,
                 gl: 'br',
                 hl: 'pt-br',
-                num: 10,
-                maxCandidates: 6,
-                timeoutMs: 12_000
+                num: 15,
+                maxCandidates: 8,
+                timeoutMs: 10_000
             });
             if (serperResult.error) {
                 lastProviderError = { provider: 'serper', query: q, ...serperResult.error };
@@ -498,12 +536,22 @@ export default defineEventHandler(async (event) => {
                 continue;
             }
             if (serperResult.candidates.length > 0) {
-                candidates = serperResult.candidates;
                 providerUsed = 'serper';
-                console.log(`✅ [Serper] candidatas encontradas com query="${q}"`);
-                break;
+                successfulQueries += 1;
+                for (const candidate of serperResult.candidates) {
+                    const key = String(candidate?.url || '').trim();
+                    if (!key || collected.has(key)) continue;
+                    collected.set(key, candidate);
+                }
+                console.log(`✅ [Serper] ${serperResult.candidates.length} candidatas em query="${q}" (acumulado=${collected.size})`);
+                if (collected.size >= 8 || (collected.size >= 5 && successfulQueries >= 2)) break;
             }
         }
+        candidates = Array.from(collected.values());
+    }
+
+    if (candidates.length > 1) {
+        candidates = rankExternalCandidatesByMetadata(candidates, { term, brand, flavor, weight }).slice(0, 8);
     }
 
     if (candidates.length === 0) {
@@ -529,6 +577,7 @@ export default defineEventHandler(async (event) => {
     const gatedCandidates = candidates.filter((entry) => passesMetadataHardGate({
         title: entry.title,
         source: entry.source,
+        url: entry.url,
         term,
         brand,
         flavor,
@@ -561,39 +610,9 @@ export default defineEventHandler(async (event) => {
     // 2.5 VALIDAÇÃO IA: GPT-4o Vision escolhe a melhor imagem
     // ========================================
     let selectedImageUrl = '';
+    let validationLevelForRegistry = 'ocr+ai-strict';
     if (!config.openaiApiKey) {
-        await safeUpsertRegistry({
-            productCode,
-            identityKey,
-            canonicalName: term,
-            brand,
-            flavor,
-            weight,
-            source: providerUsed || 'external',
-            validationLevel: 'none',
-            validatedBy: user.id,
-            status: 'review_pending',
-            reason: 'openai_validation_missing'
-        });
-        return noImageResponse(`No reliable image found for "${term}"`, {
-            reason: 'openai_validation_missing'
-        });
-    }
-
-    try {
-        const validation = await validateProductImageCandidatesWithAI(candidates, {
-            name: term,
-            brand: brand || undefined,
-            flavor: flavor || undefined,
-            weight: weight || undefined,
-            productCode: productCode || undefined,
-            normalizedQuery: normalizedTerm
-        });
-
-        const confidenceThreshold = strictMode ? 0.9 : 0.75;
-        const requiresExactMatch = strictMode;
-        const bestIndexValid = validation.bestIndex >= 0 && validation.bestIndex < candidates.length;
-        if (!bestIndexValid || validation.confidence < confidenceThreshold || (requiresExactMatch && !validation.isExactMatch)) {
+        if (strictMode) {
             await safeUpsertRegistry({
                 productCode,
                 identityKey,
@@ -602,47 +621,99 @@ export default defineEventHandler(async (event) => {
                 flavor,
                 weight,
                 source: providerUsed || 'external',
-                validationLevel: 'ai-strict',
+                validationLevel: 'none',
                 validatedBy: user.id,
                 status: 'review_pending',
-                reason: [
-                    `confidence=${validation.confidence.toFixed(2)}`,
-                    `isExact=${validation.isExactMatch}`,
-                    `strictMode=${strictMode}`,
-                    ...validation.mismatchReasons
-                ].join('; ')
+                reason: 'openai_validation_missing'
             });
             return noImageResponse(`No reliable image found for "${term}"`, {
-                aiConfidence: validation.confidence,
-                aiBestIndex: validation.bestIndex,
-                aiExactMatch: validation.isExactMatch,
-                aiMismatchReasons: validation.mismatchReasons
+                reason: 'openai_validation_missing'
             });
         }
 
-        selectedImageUrl = candidates[validation.bestIndex]!.url;
-        console.log(
-            `🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidates.length} com ${(validation.confidence * 100).toFixed(0)}% confiança` +
-            ` (isExact=${validation.isExactMatch}, strictMode=${strictMode})`
-        );
-    } catch (err) {
-        console.warn('⚠️ [AI] Validação estrita falhou:', (err as any)?.message);
-        await safeUpsertRegistry({
-            productCode,
-            identityKey,
-            canonicalName: term,
-            brand,
-            flavor,
-            weight,
-            source: providerUsed || 'external',
-            validationLevel: 'ai-strict',
-            validatedBy: user.id,
-            status: 'review_pending',
-            reason: 'ai_validation_failed'
-        });
-        return noImageResponse(`No reliable image found for "${term}"`, {
-            reason: 'ai_validation_failed'
-        });
+        selectedImageUrl = String(candidates[0]?.url || '').trim();
+        validationLevelForRegistry = 'ocr+fallback-no-openai';
+        console.warn('⚠️ [AI] OpenAI ausente e strictMode=false, usando fallback da 1a candidata externa.');
+    } else {
+        try {
+            const validation = await validateProductImageCandidatesWithAI(candidates, {
+                name: term,
+                brand: brand || undefined,
+                flavor: flavor || undefined,
+                weight: weight || undefined,
+                productCode: productCode || undefined,
+                normalizedQuery: normalizedTerm
+            });
+
+            const confidenceThreshold = strictMode ? 0.9 : 0.75;
+            const requiresExactMatch = strictMode;
+            const bestIndexValid = validation.bestIndex >= 0 && validation.bestIndex < candidates.length;
+            if (!bestIndexValid || validation.confidence < confidenceThreshold || (requiresExactMatch && !validation.isExactMatch)) {
+                if (strictMode) {
+                    await safeUpsertRegistry({
+                        productCode,
+                        identityKey,
+                        canonicalName: term,
+                        brand,
+                        flavor,
+                        weight,
+                        source: providerUsed || 'external',
+                        validationLevel: 'ai-strict',
+                        validatedBy: user.id,
+                        status: 'review_pending',
+                        reason: [
+                            `confidence=${validation.confidence.toFixed(2)}`,
+                            `isExact=${validation.isExactMatch}`,
+                            `strictMode=${strictMode}`,
+                            ...validation.mismatchReasons
+                        ].join('; ')
+                    });
+                    return noImageResponse(`No reliable image found for "${term}"`, {
+                        aiConfidence: validation.confidence,
+                        aiBestIndex: validation.bestIndex,
+                        aiExactMatch: validation.isExactMatch,
+                        aiMismatchReasons: validation.mismatchReasons
+                    });
+                }
+
+                const fallbackIndex = bestIndexValid ? validation.bestIndex : 0;
+                selectedImageUrl = String(candidates[fallbackIndex]?.url || candidates[0]?.url || '').trim();
+                validationLevelForRegistry = 'ocr+fallback-ai-low-confidence';
+                console.warn(
+                    `⚠️ [AI] Validação inconclusiva (confidence=${validation.confidence.toFixed(2)}, exact=${validation.isExactMatch})` +
+                    ' com strictMode=false, usando fallback externo.'
+                );
+            } else {
+                selectedImageUrl = candidates[validation.bestIndex]!.url;
+                console.log(
+                    `🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidates.length} com ${(validation.confidence * 100).toFixed(0)}% confiança` +
+                    ` (isExact=${validation.isExactMatch}, strictMode=${strictMode})`
+                );
+            }
+        } catch (err) {
+            console.warn('⚠️ [AI] Validação estrita falhou:', (err as any)?.message);
+            if (strictMode) {
+                await safeUpsertRegistry({
+                    productCode,
+                    identityKey,
+                    canonicalName: term,
+                    brand,
+                    flavor,
+                    weight,
+                    source: providerUsed || 'external',
+                    validationLevel: 'ai-strict',
+                    validatedBy: user.id,
+                    status: 'review_pending',
+                    reason: 'ai_validation_failed'
+                });
+                return noImageResponse(`No reliable image found for "${term}"`, {
+                    reason: 'ai_validation_failed'
+                });
+            }
+
+            selectedImageUrl = String(candidates[0]?.url || '').trim();
+            validationLevelForRegistry = 'ocr+fallback-ai-error';
+        }
     }
 
     // ========================================
@@ -685,7 +756,7 @@ export default defineEventHandler(async (event) => {
                     weight,
                     s3Key: resolvedKey,
                     source: providerUsed || 'external',
-                    validationLevel: 'ocr+ai-strict',
+                    validationLevel: validationLevelForRegistry,
                     validatedBy: user.id,
                     status: 'approved'
                 });
@@ -707,7 +778,7 @@ export default defineEventHandler(async (event) => {
             flavor,
             weight,
             source: providerUsed || 'external',
-            validationLevel: 'ocr+ai-strict',
+            validationLevel: validationLevelForRegistry,
             validatedBy: user.id,
             status: 'review_pending',
             reason: 'processing_failed_all_candidates'

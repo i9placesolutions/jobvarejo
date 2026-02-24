@@ -408,7 +408,7 @@ export const useProductProcessor = () => {
                     flavor: product.flavor || undefined,
                     weight: effectiveWeight,
                     bgPolicy: options.bgPolicy || 'auto',
-                    strictMode: true
+                    strictMode: false
                 }
             });
 

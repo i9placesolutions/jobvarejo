@@ -248,7 +248,7 @@ export const runExternalPipelineOnce = async (opts: {
       weight: opts.weight,
       imageUrl: getPublicUrl(targetUploadKey),
       s3Key: targetUploadKey,
-      source: `google-cse-${opts.bgPolicy}`
+      source: `serper-${opts.bgPolicy}`
     })
 
     return {

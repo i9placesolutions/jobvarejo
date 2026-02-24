@@ -20101,7 +20101,7 @@ const fetchRecoveryImageUrlForCard = async (card: any): Promise<RecoveryLookupRe
             method: 'POST',
             headers,
             // For product cards we want the API to return the cached bg-removed variant when possible.
-            body: { ...payload, bgPolicy: 'always' }
+            body: { ...payload, bgPolicy: 'always', strictMode: false }
         });
         const url = String(result?.url || '').trim();
         if (url) return { status: 'ok', url };
