@@ -111,9 +111,9 @@ export default defineEventHandler(async (event) => {
 
         const body = await readBody(event);
         const term = String(body?.term || '').trim();
-        const rawSearchHints = Array.isArray(body?.searchHints) ? body.searchHints : [];
+        const rawSearchHints: unknown[] = Array.isArray(body?.searchHints) ? body.searchHints : [];
         const searchHints = rawSearchHints
-            .map((entry: any) => String(entry || '').trim())
+            .map((entry: unknown) => String(entry || '').trim())
             .filter(Boolean)
             .slice(0, 8);
         const brand = String(body?.brand || '').trim() || undefined;
@@ -346,9 +346,9 @@ export default defineEventHandler(async (event) => {
             if (!exists) {
                 console.warn(`⚠️ [Cache DB] s3_key inexistente, ignorando cache: ${cacheResolvedKey}`);
             } else {
-                console.log(`✅ [Cache DB] Hit exato para "${term}" (source: ${cacheHit.source})`);
+                console.log(`✅ [Cache DB] Hit exato para "${term}" (source: ${cacheHit?.source || 'unknown'})`);
                 // Incrementar usage_count (fire-and-forget — OK para counter)
-                void incrementProductImageCacheUsage(cacheHit.id);
+                void incrementProductImageCacheUsage(cacheHit?.id);
 
                 if (bgPolicy === 'always') {
                     const processed = await ensureBgRemoved({
@@ -591,8 +591,9 @@ export default defineEventHandler(async (event) => {
         });
 
         const confidenceThreshold = strictMode ? 0.9 : 0.75;
+        const requiresExactMatch = strictMode;
         const bestIndexValid = validation.bestIndex >= 0 && validation.bestIndex < candidates.length;
-        if (!bestIndexValid || !validation.isExactMatch || validation.confidence < confidenceThreshold) {
+        if (!bestIndexValid || validation.confidence < confidenceThreshold || (requiresExactMatch && !validation.isExactMatch)) {
             await safeUpsertRegistry({
                 productCode,
                 identityKey,
@@ -607,6 +608,7 @@ export default defineEventHandler(async (event) => {
                 reason: [
                     `confidence=${validation.confidence.toFixed(2)}`,
                     `isExact=${validation.isExactMatch}`,
+                    `strictMode=${strictMode}`,
                     ...validation.mismatchReasons
                 ].join('; ')
             });
@@ -619,7 +621,10 @@ export default defineEventHandler(async (event) => {
         }
 
         selectedImageUrl = candidates[validation.bestIndex]!.url;
-        console.log(`🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidates.length} com ${(validation.confidence * 100).toFixed(0)}% confiança`);
+        console.log(
+            `🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidates.length} com ${(validation.confidence * 100).toFixed(0)}% confiança` +
+            ` (isExact=${validation.isExactMatch}, strictMode=${strictMode})`
+        );
     } catch (err) {
         console.warn('⚠️ [AI] Validação estrita falhou:', (err as any)?.message);
         await safeUpsertRegistry({
