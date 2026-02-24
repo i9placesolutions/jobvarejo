@@ -15,7 +15,8 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
 
   const openaiApiKey = String(config.openaiApiKey || '')
-  const serperApiKey = String(config.serperApiKey || '')
+  const googleCseApiKey = String((config as any).googleCseApiKey || '')
+  const googleCseCx = String((config as any).googleCseCx || '')
   const authJwtSecret = String((config as any).authJwtSecret || '')
   const postgresUrl = String((config as any).postgresDatabaseUrl || '')
 
@@ -25,8 +26,10 @@ export default defineEventHandler(async (event) => {
     runtimeConfig: {
       openaiApiKeyPresent: openaiApiKey.length > 0,
       openaiApiKeyLength: openaiApiKey.length,
-      serperApiKeyPresent: serperApiKey.length > 0,
-      serperApiKeyLength: serperApiKey.length,
+      googleCseApiKeyPresent: googleCseApiKey.length > 0,
+      googleCseApiKeyLength: googleCseApiKey.length,
+      googleCseCxPresent: googleCseCx.length > 0,
+      googleCseCxLength: googleCseCx.length,
       authJwtSecretPresent: authJwtSecret.length > 0,
       authJwtSecretLength: authJwtSecret.length,
       postgresDatabaseUrlPresent: postgresUrl.length > 0,
@@ -35,6 +38,10 @@ export default defineEventHandler(async (event) => {
     envPresence: {
       NUXT_OPENAI_API_KEY: Boolean(process.env.NUXT_OPENAI_API_KEY),
       OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY),
+      NUXT_GOOGLE_CSE_API_KEY: Boolean(process.env.NUXT_GOOGLE_CSE_API_KEY),
+      GOOGLE_CSE_API_KEY: Boolean(process.env.GOOGLE_CSE_API_KEY),
+      NUXT_GOOGLE_CSE_CX: Boolean(process.env.NUXT_GOOGLE_CSE_CX),
+      GOOGLE_CSE_CX: Boolean(process.env.GOOGLE_CSE_CX),
       NUXT_SERPER_API_KEY: Boolean(process.env.NUXT_SERPER_API_KEY),
       AUTH_JWT_SECRET: Boolean(process.env.AUTH_JWT_SECRET),
       POSTGRES_DATABASE_URL: Boolean(process.env.POSTGRES_DATABASE_URL),

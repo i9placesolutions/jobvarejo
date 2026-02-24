@@ -150,6 +150,7 @@ export const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>
   if (obj.lockMovementY != null) snap.lockMovementY = obj.lockMovementY
   if (obj.lockScalingX != null) snap.lockScalingX = obj.lockScalingX
   if (obj.lockScalingY != null) snap.lockScalingY = obj.lockScalingY
+  if (obj.objectMaskEnabled != null) snap.objectMaskEnabled = obj.objectMaskEnabled
 
   if (obj._objects != null) snap._objects = obj._objects
   if (typeof obj.getObjects === 'function') snap.getObjects = () => obj.getObjects()

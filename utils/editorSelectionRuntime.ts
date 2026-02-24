@@ -74,12 +74,28 @@ type DeriveSelectionUiStateOptions = {
 
 export const deriveSelectionUiState = (opts: DeriveSelectionUiStateOptions): {
   selectedObjectId: string | null
+  selectedObjectIds: string[]
   selectedObjectSnapshot: any
   showPenContextualToolbar: boolean
 } => {
   const active = opts.active
+  let selectedObjectIds: string[] = []
+
+  if (active) {
+    const activeType = String(active?.type || '').toLowerCase()
+    if (activeType === 'activeselection' && typeof active.getObjects === 'function') {
+      selectedObjectIds = (active.getObjects() || [])
+        .map((o: any) => String(o?._customId || '').trim())
+        .filter((id: string) => !!id)
+    } else {
+      const id = String(active?._customId || '').trim()
+      if (id) selectedObjectIds = [id]
+    }
+  }
+
   return {
-    selectedObjectId: active ? (active._customId ?? null) : null,
+    selectedObjectId: selectedObjectIds[0] ?? null,
+    selectedObjectIds,
     selectedObjectSnapshot: active ? opts.snapshotForPropertiesPanel(active) : null,
     showPenContextualToolbar: shouldShowPenContextualToolbar(
       active,
@@ -149,6 +165,7 @@ export const buildSelectionSyncPayload = (opts: BuildSelectionSyncPayloadOptions
   active: any
   selectionUiState: {
     selectedObjectId: string | null
+    selectedObjectIds: string[]
     selectedObjectSnapshot: any
     showPenContextualToolbar: boolean
   }

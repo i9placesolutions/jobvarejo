@@ -956,11 +956,19 @@ const canvasContextMenu = ref({
     y: 0
 });
 
+const layersContextMenu = ref({
+    show: false,
+    x: 0,
+    y: 0
+});
+
 const canvasContextMenuItems = computed(() => ([
     { label: 'Trazer para frente', action: 'arrange-bring-to-front', icon: ChevronsUp },
     { label: 'Avancar (uma camada)', action: 'arrange-bring-forward', icon: ArrowUp },
     { label: 'Recuar (uma camada)', action: 'arrange-send-backward', icon: ArrowDown },
     { label: 'Enviar para tras', action: 'arrange-send-to-back', icon: ChevronsDown },
+    { divider: true },
+    { label: 'Mascarar', action: 'mask-selection', icon: Frame },
     { divider: true },
     { label: 'Agrupar (Ctrl+G)', action: 'group-selection', icon: Group },
     { label: 'Desagrupar (Ctrl+Shift+G)', action: 'ungroup-selection', icon: Ungroup }
@@ -971,6 +979,20 @@ const handleCanvasContextMenuSelect = (action: string) => {
     if (action === 'arrange-bring-forward') arrangeActiveObjects('bring-forward');
     if (action === 'arrange-send-backward') arrangeActiveObjects('send-backward');
     if (action === 'arrange-send-to-back') arrangeActiveObjects('send-to-back');
+    if (action === 'mask-selection') void handleAction('toggle-mask');
+    if (action === 'group-selection') groupSelection();
+    if (action === 'ungroup-selection') ungroupSelection();
+};
+
+const layersContextMenuItems = computed(() => ([
+    { label: 'Mascarar', action: 'mask-selection', icon: Frame },
+    { divider: true },
+    { label: 'Agrupar (Ctrl+G)', action: 'group-selection', icon: Group },
+    { label: 'Desagrupar (Ctrl+Shift+G)', action: 'ungroup-selection', icon: Ungroup }
+]));
+
+const handleLayersContextMenuSelect = (action: string) => {
+    if (action === 'mask-selection') void handleAction('toggle-mask');
     if (action === 'group-selection') groupSelection();
     if (action === 'ungroup-selection') ungroupSelection();
 };
@@ -1373,84 +1395,15 @@ const syncObjectFrameClip = (obj: any) => {
 
     const frameId = (obj as any).parentFrameId as (string | undefined);
     const frame = frameId ? getFrameById(frameId) : null;
+    const hasObjectMask = !!(obj as any).objectMaskEnabled && !!obj.clipPath;
 
-    // Se não tem frame pai ou clipContent desativado, remove clipPath
-    if (!frame || !frame.clipContent) {
-        if (obj.clipPath) {
-            obj.set('clipPath', null);
-            delete (obj as any)._frameClipOwner;
-            obj.set('dirty', true);
-            obj.setCoords();
-        }
-        return;
-    }
-
-    // ESTRATÉGIA: absolutePositioned: false (relativo ao objeto)
-    // No Fabric.js v7, o cache do objeto tem tamanho limitado.
-    // Com absolutePositioned: true, o clipPath layer canvas pode ser pequeno demais
-    // para conter o clip em coordenadas globais, fazendo o clip falhar.
-    // Com absolutePositioned: false, o clipPath fica relativo ao centro do objeto,
-    // garantindo que esteja sempre dentro dos limites do layer canvas.
-
-    const frameCenter = frame.getCenterPoint ? frame.getCenterPoint() : { x: frame.left, y: frame.top };
-    const objCenter = obj.getCenterPoint ? obj.getCenterPoint() : { x: obj.left, y: obj.top };
-
-    // Converter offset mundo → coordenadas locais do objeto (desrotacionar e desescalar)
-    const dxWorld = frameCenter.x - objCenter.x;
-    const dyWorld = frameCenter.y - objCenter.y;
-    const objAngle = obj.angle || 0;
-    const angleRad = -objAngle * Math.PI / 180;
-    const cos = Math.cos(angleRad);
-    const sin = Math.sin(angleRad);
-    const dxLocal = (dxWorld * cos - dyWorld * sin) / (obj.scaleX || 1);
-    const dyLocal = (dxWorld * sin + dyWorld * cos) / (obj.scaleY || 1);
-
-    // Escala do clip: frame visual size / object scale
-    const clipScaleX = (frame.scaleX || 1) / (obj.scaleX || 1);
-    const clipScaleY = (frame.scaleY || 1) / (obj.scaleY || 1);
-    const clipAngle = (frame.angle || 0) - objAngle;
-
-    const hasCornerRadii = !!(frame.cornerRadii && typeof frame.cornerRadii === 'object');
+    const hasCornerRadii = !!(frame?.cornerRadii && typeof frame.cornerRadii === 'object');
     const wantPathClip = hasCornerRadii;
-
-    // FIX FLICKERING: Reutilizar o clipPath existente quando possível em vez de criar um novo.
-    // Criar um novo clipPath a cada chamada causa um "flash" porque o Fabric descarta o antigo
-    // e o objeto fica momentaneamente sem clipping durante o re-render.
-    const existingClip = obj.clipPath;
-    const existingOwner = (obj as any)._frameClipOwner;
-    const canReuseClip = existingClip && existingOwner === frame._customId &&
-        ((wantPathClip && existingClip.type === 'path') || (!wantPathClip && existingClip.type === 'rect'));
-
-    if (canReuseClip) {
-        // Apenas atualizar posição/escala/ângulo do clipPath existente (sem recriar)
-        const clipProps: any = {
-            left: dxLocal,
-            top: dyLocal,
-            scaleX: clipScaleX,
-            scaleY: clipScaleY,
-            angle: clipAngle,
-        };
-        if (!wantPathClip) {
-            clipProps.width = frame.width;
-            clipProps.height = frame.height;
-            clipProps.rx = frame.rx ?? 0;
-            clipProps.ry = frame.ry ?? 0;
-        }
-        existingClip.set(clipProps);
-        if (typeof existingClip.setCoords === 'function') existingClip.setCoords();
-        existingClip.dirty = true;
-        obj.set('dirty', true);
-        obj.setCoords();
-        return;
-    }
-
-    // Criar novo clipPath apenas quando necessário (primeiro clip ou troca de frame/tipo)
     const kRectLocal = 1 - 0.5522847498;
     const clampR = (n: any, w: number, h: number) => {
         const v = Math.max(0, Number(n || 0));
         return Math.min(v, w / 2, h / 2);
     };
-
     const buildCornerPath = (w: number, h: number, radii: any) => {
         const x = -w / 2;
         const y = -h / 2;
@@ -1458,7 +1411,6 @@ const syncObjectFrameClip = (obj: any) => {
         const tr = clampR(radii?.tr, w, h);
         const br = clampR(radii?.br, w, h);
         const bl = clampR(radii?.bl, w, h);
-
         const parts = [
             `M ${x + tl} ${y}`,
             `L ${x + w - tr} ${y}`,
@@ -1473,44 +1425,159 @@ const syncObjectFrameClip = (obj: any) => {
         ].filter(Boolean);
         return parts.join(' ');
     };
-
-    const clip = wantPathClip
-        ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
+    const upsertFrameClip = (
+        existingClip: any,
+        transform: { left: number; top: number; scaleX: number; scaleY: number; angle: number; skewX?: number; skewY?: number },
+        markAsFrameClip = false
+    ) => {
+        const canReuseClip = existingClip &&
+            ((wantPathClip && existingClip.type === 'path') || (!wantPathClip && existingClip.type === 'rect'));
+        const clipProps: any = {
             originX: 'center',
             originY: 'center',
-            left: dxLocal,
-            top: dyLocal,
-            scaleX: clipScaleX,
-            scaleY: clipScaleY,
-            angle: clipAngle,
+            left: transform.left,
+            top: transform.top,
+            scaleX: transform.scaleX,
+            scaleY: transform.scaleY,
+            angle: transform.angle,
+            skewX: Number.isFinite(Number(transform.skewX)) ? Number(transform.skewX) : 0,
+            skewY: Number.isFinite(Number(transform.skewY)) ? Number(transform.skewY) : 0,
             absolutePositioned: false,
             selectable: false,
             evented: false,
             objectCaching: false
-        })
-        : new fabric.Rect({
-            originX: 'center',
-            originY: 'center',
-            left: dxLocal,
-            top: dyLocal,
-            width: frame.width,
-            height: frame.height,
-            rx: frame.rx ?? 0,
-            ry: frame.ry ?? 0,
-            scaleX: clipScaleX,
-            scaleY: clipScaleY,
-            angle: clipAngle,
-            absolutePositioned: false,
-            selectable: false,
-            evented: false,
-            objectCaching: false
-        });
+        };
+        let clip = existingClip;
+        if (canReuseClip) {
+            if (!wantPathClip) {
+                clipProps.width = frame.width;
+                clipProps.height = frame.height;
+                clipProps.rx = frame.rx ?? 0;
+                clipProps.ry = frame.ry ?? 0;
+            }
+            clip.set(clipProps);
+        } else {
+            clip = wantPathClip
+                ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), clipProps)
+                : new fabric.Rect({
+                    ...clipProps,
+                    width: frame.width,
+                    height: frame.height,
+                    rx: frame.rx ?? 0,
+                    ry: frame.ry ?? 0
+                });
+        }
+        if (markAsFrameClip) (clip as any).__isFrameClip = true;
+        (clip as any)._objects = Array.isArray((clip as any)._objects) ? (clip as any)._objects : [];
+        if (typeof clip.setCoords === 'function') clip.setCoords();
+        clip.dirty = true;
+        return clip;
+    };
 
-    clip._objects = [];
+    // Se não tem frame pai ou clipContent desativado, remove clipPath
+    if (!frame || !frame.clipContent) {
+        if (hasObjectMask) {
+            const maskClip: any = obj.clipPath;
+            const nested = maskClip?.clipPath;
+            if (nested && ((nested as any).__isFrameClip || !!(obj as any)._frameClipOwner)) {
+                try { maskClip.set('clipPath', null); } catch { maskClip.clipPath = null; }
+            }
+            delete (obj as any)._frameClipOwner;
+            obj.set('dirty', true);
+            obj.setCoords();
+            return;
+        }
+        if (obj.clipPath) {
+            obj.set('clipPath', null);
+            delete (obj as any)._frameClipOwner;
+            obj.set('dirty', true);
+            obj.setCoords();
+        }
+        return;
+    }
+
+    if (hasObjectMask) {
+        const maskClip: any = obj.clipPath;
+        const util = fabric?.util as any;
+        const canUseMatrixMath = !!(
+            util &&
+            typeof util.invertTransform === 'function' &&
+            typeof util.multiplyTransformMatrices === 'function' &&
+            typeof util.qrDecompose === 'function' &&
+            typeof obj?.calcTransformMatrix === 'function' &&
+            typeof maskClip?.calcTransformMatrix === 'function' &&
+            typeof frame?.calcTransformMatrix === 'function'
+        );
+        if (!canUseMatrixMath) {
+            delete (obj as any)._frameClipOwner;
+            obj.set('dirty', true);
+            obj.setCoords();
+            return;
+        }
+
+        const objWorldMatrix = obj.calcTransformMatrix();
+        const maskLocalMatrix = maskClip.calcTransformMatrix();
+        const frameWorldMatrix = frame.calcTransformMatrix();
+        const maskWorldMatrix = util.multiplyTransformMatrices(objWorldMatrix, maskLocalMatrix);
+        const invMaskWorldMatrix = util.invertTransform(maskWorldMatrix);
+        const relativeFrameToMaskMatrix = util.multiplyTransformMatrices(invMaskWorldMatrix, frameWorldMatrix);
+        const decomp = util.qrDecompose(relativeFrameToMaskMatrix);
+
+        const nestedExisting = maskClip?.clipPath && (maskClip.clipPath as any).__isFrameClip
+            ? maskClip.clipPath
+            : null;
+        const nestedFrameClip = upsertFrameClip(
+            nestedExisting,
+            {
+                left: Number(decomp?.translateX) || 0,
+                top: Number(decomp?.translateY) || 0,
+                scaleX: Number.isFinite(Number(decomp?.scaleX)) ? Number(decomp.scaleX) : 1,
+                scaleY: Number.isFinite(Number(decomp?.scaleY)) ? Number(decomp.scaleY) : 1,
+                angle: Number(decomp?.angle) || 0,
+                skewX: Number(decomp?.skewX) || 0,
+                skewY: Number(decomp?.skewY) || 0
+            },
+            true
+        );
+        try { maskClip.set('clipPath', nestedFrameClip); } catch { maskClip.clipPath = nestedFrameClip; }
+        maskClip.dirty = true;
+        if (typeof maskClip.setCoords === 'function') maskClip.setCoords();
+
+        (obj as any)._frameClipOwner = frame._customId;
+        obj.set('dirty', true);
+        obj.setCoords();
+        return;
+    }
+
+    // ESTRATÉGIA: absolutePositioned: false (relativo ao objeto)
+    // No Fabric.js v7, o cache do objeto tem tamanho limitado.
+    // Com absolutePositioned: true, o clipPath layer canvas pode ser pequeno demais
+    // para conter o clip em coordenadas globais, fazendo o clip falhar.
+    // Com absolutePositioned: false, o clipPath fica relativo ao centro do objeto,
+    // garantindo que esteja sempre dentro dos limites do layer canvas.
+    const frameCenter = frame.getCenterPoint ? frame.getCenterPoint() : { x: frame.left, y: frame.top };
+    const objCenter = obj.getCenterPoint ? obj.getCenterPoint() : { x: obj.left, y: obj.top };
+
+    // Converter offset mundo → coordenadas locais do objeto (desrotacionar e desescalar)
+    const dxWorld = frameCenter.x - objCenter.x;
+    const dyWorld = frameCenter.y - objCenter.y;
+    const objAngle = obj.angle || 0;
+    const angleRad = -objAngle * Math.PI / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    const dxLocal = (dxWorld * cos - dyWorld * sin) / (obj.scaleX || 1);
+    const dyLocal = (dxWorld * sin + dyWorld * cos) / (obj.scaleY || 1);
+    // Escala do clip: frame visual size / object scale
+    const clipScaleX = (frame.scaleX || 1) / (obj.scaleX || 1);
+    const clipScaleY = (frame.scaleY || 1) / (obj.scaleY || 1);
+    const clipAngle = (frame.angle || 0) - objAngle;
+    const existingClip = obj.clipPath;
+    const existingOwner = (obj as any)._frameClipOwner;
+    const clip = upsertFrameClip(
+        existingClip && existingOwner === frame._customId ? existingClip : null,
+        { left: dxLocal, top: dyLocal, scaleX: clipScaleX, scaleY: clipScaleY, angle: clipAngle }
+    );
     (frame as any).__clipRect = clip;
-
-    if (typeof clip.setCoords === 'function') clip.setCoords();
-    clip.dirty = true;
 
     // Aplicar clipPath
     obj.set('clipPath', clip);
@@ -3859,6 +3926,7 @@ const setupAltDragDuplicate = () => {
         // Clone via Fabric's native clone
         const CLONE_PROPS = [
             '_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId',
+            'objectMaskEnabled',
             'isSmartObject', 'isProductCard', 'name', 'smartGridId', 'unitLabel',
             'price', 'pricePack', 'priceUnit', 'priceSpecial', 'priceSpecialUnit', 'specialCondition',
             'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel',
@@ -6123,6 +6191,7 @@ const refreshCanvasObjects = (opts: { immediate?: boolean; source?: any[] } = {}
     }, Math.max(0, CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS - elapsed))
 }
 const selectedObjectId = ref<string | null>(null)
+const selectedObjectIds = ref<string[]>([])
 const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
 
 /** Refresh selectedObjectRef with a fresh snapshot so Vue detects changes in PropertiesPanel props */
@@ -7538,10 +7607,12 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 }
             });
             
-            // CRITICAL: Clear all deserialized clipPaths before rehydrate
+            // CRITICAL: Clear deserialized frame clipPaths before rehydrate.
+            // Keep object masks (`objectMaskEnabled`) intact.
             const objsBeforeRehydrateNew = canvas.value.getObjects();
             objsBeforeRehydrateNew.forEach((obj: any) => {
-                if (obj.clipPath && !obj.isFrame) {
+                const hasObjectMask = !!obj?.objectMaskEnabled;
+                if (obj.clipPath && !obj.isFrame && !hasObjectMask) {
                     obj.clipPath = null;
                     delete obj._frameClipOwner;
                 }
@@ -9027,13 +9098,13 @@ onMounted(async () => {
                       // This was causing frames to be removed and re-added at the end, changing layer order.
                       // The rehydrateCanvasZones function below will properly restore isFrame flags.
                       
-                      // CRITICAL: Clear all deserialized clipPaths before rehydrate
-                      // This prevents stale/incorrect clips from persisting
+                      // CRITICAL: Clear deserialized frame clipPaths before rehydrate.
+                      // Keep object masks (`objectMaskEnabled`) intact.
                       const objsBeforeRehydrate = canvas.value.getObjects();
                       objsBeforeRehydrate.forEach((obj: any) => {
-                          // Clear any clipPath that was deserialized from JSON
-                          // rehydrateCanvasZones will recreate them correctly based on parentFrameId
-                          if (obj.clipPath && !obj.isFrame) {
+                          // Rehydrate will recreate frame clips from parentFrameId.
+                          const hasObjectMask = !!obj?.objectMaskEnabled;
+                          if (obj.clipPath && !obj.isFrame && !hasObjectMask) {
                               obj.clipPath = null;
                               delete obj._frameClipOwner;
                           }
@@ -9471,6 +9542,8 @@ const CANVAS_CUSTOM_PROPS = [
     'clipContent',
     'parentFrameId',
     '_frameClipOwner',
+    'objectMaskEnabled',
+    'objectMaskSourceId',
 
     // Grid cells (Canva-style grids = multiple frames linked by gridGroupId)
     'isGridCell',
@@ -10782,6 +10855,7 @@ const applyHistoryNavigation = async (
 
 const undo = async () => {
     if (historyIndex.value <= 0 || isHistoryProcessing.value) return;
+    if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
     const previousIndex = historyIndex.value;
     isHistoryProcessing.value = true;
     try {
@@ -10797,6 +10871,7 @@ const undo = async () => {
 
 const redo = async () => {
     if (historyIndex.value >= historyStack.value.length - 1 || isHistoryProcessing.value) return;
+    if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
     const previousIndex = historyIndex.value;
     isHistoryProcessing.value = true;
     try {
@@ -10997,9 +11072,12 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             selectable: true,
         });
 
-        // Avoid stale clip refs; we'll rebuild them from the new frame IDs.
-        try { cloned.clipPath = null; } catch {}
-        try { delete (cloned as any)._frameClipOwner; } catch {}
+        // Avoid stale frame clip refs; keep object masks.
+        const isObjectMaskClone = !!(cloned as any)?.objectMaskEnabled;
+        if (!isObjectMaskClone) {
+            try { cloned.clipPath = null; } catch {}
+            try { delete (cloned as any)._frameClipOwner; } catch {}
+        }
         try { delete (cloned as any).__clipRect; } catch {}
 
         // Keep the frame flag even if Fabric drops it in clone.
@@ -11062,6 +11140,13 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         }
         const mappedParent = oldToNewId.get(oldParent);
         clone.parentFrameId = mappedParent || undefined;
+
+        const oldMaskSource = String((original as any).objectMaskSourceId || '').trim();
+        if (!oldMaskSource) {
+            delete clone.objectMaskSourceId;
+        } else {
+            clone.objectMaskSourceId = oldToNewId.get(oldMaskSource) || oldMaskSource;
+        }
     });
 
     // Rebuild clipping for the new frame tree.
@@ -11482,6 +11567,11 @@ const remapOrClearBindingsRecursive = (root: any, idMap: Map<string, string>, ex
         if (next) obj.parentZoneId = next;
         else delete obj.parentZoneId;
     }
+    if (obj.objectMaskSourceId) {
+        const next = remapId(obj.objectMaskSourceId);
+        if (next) obj.objectMaskSourceId = next;
+        else delete obj.objectMaskSourceId;
+    }
 
     if (typeof obj.getObjects === 'function') {
         try {
@@ -11795,6 +11885,13 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                 ? (e.altKey ? 'bring-to-front' : 'bring-forward')
                 : (e.altKey ? 'send-to-back' : 'send-backward');
         arrangeActiveObjects(mode);
+        return;
+    }
+
+    // Object mask (Ctrl/Cmd+Shift+M)
+    if (isCtrl && e.shiftKey && String(e.key || '').toLowerCase() === 'm') {
+        e.preventDefault();
+        await handleAction('toggle-mask');
         return;
     }
 
@@ -14686,6 +14783,9 @@ const updateSelection = () => {
     const { active, selectionUiState, floatingPos } = payload;
     // Ensure selectedId is never undefined - always null if no active object
     selectedObjectId.value = selectionUiState.selectedObjectId;
+    selectedObjectIds.value = Array.isArray(selectionUiState.selectedObjectIds)
+        ? [...selectionUiState.selectedObjectIds]
+        : [];
     // Always use a stable snapshot so the PropertiesPanel never "loses" sections (e.g. `type` can be non-enumerable on Fabric objects).
     selectedObjectRef.value = selectionUiState.selectedObjectSnapshot;
     selectedObjectPos.value = floatingPos;
@@ -15458,6 +15558,7 @@ const setupReactivity = () => {
          if (isContextClick) {
              evt?.preventDefault?.();
              evt?.stopPropagation?.();
+             if (layersContextMenu.value.show) layersContextMenu.value.show = false;
 
              // Figma-like: right-click selects the target under cursor (if any).
              const current = canvas.value.getActiveObject?.();
@@ -15480,6 +15581,7 @@ const setupReactivity = () => {
          }
 
         if (canvasContextMenu.value.show) canvasContextMenu.value.show = false;
+        if (layersContextMenu.value.show) layersContextMenu.value.show = false;
         const target = e.target;
 
         // Global Shift+click additive multi-selection:
@@ -17448,6 +17550,227 @@ const clearText3DEffect = (textObj: any) => {
     textObj.dirty = true;
 };
 
+const OBJECT_MASK_MIN_SELECTION = 2;
+
+const isObjectMaskCandidate = (obj: any): boolean => {
+    if (!obj || typeof obj !== 'object') return false;
+    if (obj.id === 'artboard-bg') return false;
+    if (isTransientCanvasObject(obj)) return false;
+    if (obj.isFrame || isFrameLikeObject(obj)) return false;
+    if (isLikelyProductZone(obj)) return false;
+    if (isProductCardContainer(obj)) return false;
+    const parentGroup = (obj as any).group;
+    if (parentGroup && String(parentGroup?.type || '').toLowerCase() !== 'activeselection') return false;
+    return true;
+};
+
+const hasObjectMaskApplied = (obj: any): boolean => {
+    if (!obj || typeof obj !== 'object') return false;
+    if (!obj.clipPath) return false;
+    if (obj._frameClipOwner) return false;
+    return !!obj.objectMaskEnabled;
+};
+
+const stripPersistentIdsRecursive = (node: any) => {
+    if (!node || typeof node !== 'object') return;
+    try { delete node._customId; } catch {}
+    try { delete node.id; } catch {}
+
+    const children = typeof node.getObjects === 'function'
+        ? (node.getObjects() || [])
+        : (Array.isArray(node._objects) ? node._objects : []);
+    children.forEach((child: any) => stripPersistentIdsRecursive(child));
+
+    const nestedClip = (node as any).clipPath;
+    if (nestedClip && typeof nestedClip === 'object') {
+        stripPersistentIdsRecursive(nestedClip);
+    }
+};
+
+const createObjectMaskClipForTarget = async (maskSource: any, target: any): Promise<any | null> => {
+    if (!fabric?.util || !canvas.value) return null;
+    if (!maskSource || !target) return null;
+
+    let clipClone: any = null;
+    try {
+        clipClone = await maskSource.clone(DUPLICATE_CLONE_PROPS);
+    } catch (err) {
+        console.warn('[mask] Falha ao clonar máscara', err);
+        return null;
+    }
+    if (!clipClone) return null;
+
+    // Clip object must not carry persistent IDs to avoid collisions.
+    stripPersistentIdsRecursive(clipClone);
+    try { clipClone.set?.('clipPath', null); } catch { clipClone.clipPath = null; }
+    try { delete (clipClone as any)._frameClipOwner; } catch {}
+    try { delete (clipClone as any).parentFrameId; } catch {}
+    try { delete (clipClone as any).parentZoneId; } catch {}
+    try { delete (clipClone as any).objectMaskEnabled; } catch {}
+    try { delete (clipClone as any).objectMaskSourceId; } catch {}
+
+    const util = fabric.util as any;
+    if (
+        typeof util?.invertTransform !== 'function' ||
+        typeof util?.multiplyTransformMatrices !== 'function' ||
+        typeof util?.qrDecompose !== 'function' ||
+        typeof maskSource?.calcTransformMatrix !== 'function' ||
+        typeof target?.calcTransformMatrix !== 'function'
+    ) {
+        return null;
+    }
+
+    const sourceMatrix = maskSource.calcTransformMatrix();
+    const targetMatrix = target.calcTransformMatrix();
+    const invTarget = util.invertTransform(targetMatrix);
+    const relative = util.multiplyTransformMatrices(invTarget, sourceMatrix);
+    const decomp = util.qrDecompose(relative);
+
+    clipClone.set({
+        originX: 'center',
+        originY: 'center',
+        left: Number(decomp?.translateX) || 0,
+        top: Number(decomp?.translateY) || 0,
+        angle: Number(decomp?.angle) || 0,
+        scaleX: Number.isFinite(Number(decomp?.scaleX)) ? Number(decomp.scaleX) : 1,
+        scaleY: Number.isFinite(Number(decomp?.scaleY)) ? Number(decomp.scaleY) : 1,
+        skewX: Number.isFinite(Number(decomp?.skewX)) ? Number(decomp.skewX) : 0,
+        skewY: Number.isFinite(Number(decomp?.skewY)) ? Number(decomp.skewY) : 0,
+        absolutePositioned: false,
+        selectable: false,
+        evented: false
+    });
+
+    clipClone.setCoords?.();
+    clipClone.dirty = true;
+    return clipClone;
+};
+
+const clearObjectMaskFromObject = (obj: any): boolean => {
+    if (!hasObjectMaskApplied(obj)) return false;
+    try { obj.set?.('clipPath', null); } catch { obj.clipPath = null; }
+    try { delete (obj as any).objectMaskEnabled; } catch { obj.objectMaskEnabled = false; }
+    try { delete (obj as any).objectMaskSourceId; } catch { obj.objectMaskSourceId = undefined; }
+    try { delete (obj as any)._frameClipOwner; } catch {}
+    if (obj?.parentFrameId) {
+        syncObjectFrameClip(obj);
+    }
+    obj.setCoords?.();
+    obj.dirty = true;
+    return true;
+};
+
+const applyObjectMaskFromSelection = async (selection: any): Promise<number> => {
+    if (!canvas.value || !selection || String(selection.type || '').toLowerCase() !== 'activeselection') return 0;
+
+    const members = (typeof selection.getObjects === 'function' ? selection.getObjects() : [])
+        .filter((o: any) => isObjectMaskCandidate(o));
+    if (members.length < OBJECT_MASK_MIN_SELECTION) return 0;
+
+    const frameMembership = new Set(
+        members.map((o: any) => String(o?.parentFrameId || '').trim())
+    );
+    if (frameMembership.size > 1) return 0;
+
+    const stack = canvas.value.getObjects();
+    const stackIndex = (obj: any) => stack.indexOf(obj);
+    const sorted = members
+        .slice()
+        .sort((a: any, b: any) => stackIndex(a) - stackIndex(b));
+
+    // Requested behavior:
+    // the bottom object is the mask shape, clipping objects above it.
+    const maskSource = sorted[0];
+    const targets = sorted.slice(1);
+    if (!maskSource || !targets.length) return 0;
+    const maskSourceId = String((maskSource as any)?._customId || '').trim();
+
+    canvas.value.discardActiveObject();
+
+    const appliedTargets: any[] = [];
+    for (const target of targets) {
+        const clip = await createObjectMaskClipForTarget(maskSource, target);
+        if (!clip) continue;
+        target.set?.('clipPath', clip);
+        target.objectMaskEnabled = true;
+        if (maskSourceId) target.objectMaskSourceId = maskSourceId;
+        else delete (target as any).objectMaskSourceId;
+        delete (target as any)._frameClipOwner;
+        if (target?.parentFrameId) {
+            syncObjectFrameClip(target);
+        }
+        target.setCoords?.();
+        target.dirty = true;
+        appliedTargets.push(target);
+    }
+
+    if (!appliedTargets.length) return 0;
+
+    const nextMembers = [maskSource, ...appliedTargets].filter(Boolean);
+    if (nextMembers.length === 1) {
+        canvas.value.setActiveObject(nextMembers[0]);
+    } else if (fabric?.ActiveSelection) {
+        const nextSelection = new fabric.ActiveSelection(nextMembers, { canvas: canvas.value });
+        canvas.value.setActiveObject(nextSelection);
+    }
+
+    return appliedTargets.length;
+};
+
+const findNearestMaskSourceBelowTarget = (target: any): any | null => {
+    if (!canvas.value || !target) return null;
+    const objects = canvas.value.getObjects();
+    const targetIndex = objects.indexOf(target);
+    if (targetIndex <= 0) return null;
+
+    const targetFrameId = String((target as any)?.parentFrameId || '').trim();
+
+    for (let i = targetIndex - 1; i >= 0; i--) {
+        const candidate = objects[i];
+        if (!candidate || candidate === target) continue;
+
+        const candidateFrameId = String((candidate as any)?.parentFrameId || '').trim();
+        if (candidateFrameId !== targetFrameId) continue;
+        if (!isObjectMaskCandidate(candidate)) continue;
+        return candidate;
+    }
+
+    return null;
+};
+
+const applyObjectMaskFromSingleTarget = async (target: any): Promise<boolean> => {
+    if (!canvas.value || !target) return false;
+    if (!isObjectMaskCandidate(target)) return false;
+
+    const maskSource = findNearestMaskSourceBelowTarget(target);
+    if (!maskSource) return false;
+    const maskSourceId = String((maskSource as any)?._customId || '').trim();
+
+    const clip = await createObjectMaskClipForTarget(maskSource, target);
+    if (!clip) return false;
+
+    canvas.value.discardActiveObject();
+
+    target.set?.('clipPath', clip);
+    target.objectMaskEnabled = true;
+    if (maskSourceId) target.objectMaskSourceId = maskSourceId;
+    else delete (target as any).objectMaskSourceId;
+    delete (target as any)._frameClipOwner;
+    if (target?.parentFrameId) {
+        syncObjectFrameClip(target);
+    }
+    target.setCoords?.();
+    target.dirty = true;
+
+    if (fabric?.ActiveSelection) {
+        const nextSelection = new fabric.ActiveSelection([maskSource, target], { canvas: canvas.value });
+        canvas.value.setActiveObject(nextSelection);
+    } else {
+        canvas.value.setActiveObject(target);
+    }
+    return true;
+};
+
 const handleAction = async (action: string) => {
     if (!canvas.value) return;
     const active = canvas.value.getActiveObject();
@@ -17830,26 +18153,67 @@ const handleAction = async (action: string) => {
         return;
     }
 
-    // Masking (Toggle)
+    // Masking (Framer/Figma-like)
     if (action === 'toggle-mask') {
         if (!active) return;
-        active.isMask = !active.isMask;
-        
-        // In Fabric, we can use an object as a mask for the whole canvas 
-        // or for other objects via clipPath. 
-        // If it's a mask, we'll use it to clip the NEXT object added or all objects above it.
-        if (active.isMask) {
-            active.opacity = 0.3; // Visual feedback
-            active.stroke = '#3b82f6';
-            active.strokeDashArray = [4, 4];
-        } else {
-            active.opacity = 1;
-            active.stroke = null;
-            active.strokeDashArray = null;
+        const checkpointMaskUndo = async () => {
+            if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
+            await Promise.resolve(saveCurrentState({ reason: 'mask-checkpoint', skipCoalesce: true }));
+        };
+
+        if (String(active.type || '').toLowerCase() === 'activeselection') {
+            const members = typeof active.getObjects === 'function' ? (active.getObjects() || []) : [];
+            const clearable = members.filter((obj: any) => hasObjectMaskApplied(obj));
+
+            if (clearable.length > 0 && clearable.length === members.length) {
+                await checkpointMaskUndo();
+                clearable.forEach((obj: any) => clearObjectMaskFromObject(obj));
+                canvas.value.requestRenderAll();
+                refreshCanvasObjects();
+                updateSelection();
+                if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
+                await Promise.resolve(saveCurrentState({ reason: 'remove-object-mask-selection', skipCoalesce: true }));
+                return;
+            }
+
+            await checkpointMaskUndo();
+            const appliedCount = await applyObjectMaskFromSelection(active);
+            if (appliedCount <= 0) {
+                notifyEditorInfo('Selecione ao menos 2 objetos no mesmo frame (ou fora). O de baixo vira a máscara.');
+                return;
+            }
+
+            canvas.value.requestRenderAll();
+            refreshCanvasObjects();
+            updateSelection();
+            if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
+            await Promise.resolve(saveCurrentState({ reason: 'apply-object-mask', skipCoalesce: true }));
+            return;
         }
-        
-        canvas.value.requestRenderAll();
-        saveCurrentState();
+
+        if (hasObjectMaskApplied(active)) {
+            await checkpointMaskUndo();
+            clearObjectMaskFromObject(active);
+            canvas.value.requestRenderAll();
+            refreshCanvasObjects();
+            updateSelection();
+            if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
+            await Promise.resolve(saveCurrentState({ reason: 'remove-object-mask', skipCoalesce: true }));
+            return;
+        }
+
+        await checkpointMaskUndo();
+        const appliedSingle = await applyObjectMaskFromSingleTarget(active);
+        if (appliedSingle) {
+            canvas.value.requestRenderAll();
+            refreshCanvasObjects();
+            updateSelection();
+            if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
+            await Promise.resolve(saveCurrentState({ reason: 'apply-object-mask-single', skipCoalesce: true }));
+            return;
+        }
+
+        notifyEditorInfo('Selecione um objeto com outro logo abaixo na pilha para usar como máscara.');
         return;
     }
 
@@ -18263,13 +18627,136 @@ const handleAction = async (action: string) => {
 
 
 // Layers Panel Actions
-const selectObject = (id: string) => {
-    if (!canvas.value) return; 
+type LayerSelectPayload = string | { id: string; additive?: boolean; toggle?: boolean; range?: boolean };
+type LayerReorderPayload = { sourceId: string; targetId: string; place: 'before' | 'after' };
+type LayerContextMenuPayload = { id: string; x: number; y: number };
+
+const selectObject = (payload: LayerSelectPayload) => {
+    if (!canvas.value) return;
+
+    const id = typeof payload === 'string' ? payload : String(payload?.id || '');
+    if (!id) return;
+    const additive = typeof payload === 'object' ? !!payload.additive : false;
+    const toggle = typeof payload === 'object' ? !!payload.toggle : false;
+    const range = typeof payload === 'object' ? !!payload.range : false;
+
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
-    if (obj) {
+    if (!obj) return;
+
+    if (!additive && !range) {
         canvas.value.setActiveObject(obj);
         canvas.value.requestRenderAll();
+        updateSelection();
+        return;
     }
+
+    const active = canvas.value.getActiveObject?.();
+    const current = typeof canvas.value.getActiveObjects === 'function'
+        ? (canvas.value.getActiveObjects() || [])
+        : (active ? [active] : []);
+    const existing = current.filter((o: any) => !!o);
+
+    let nextSelection = existing.slice();
+    const idx = nextSelection.findIndex((o: any) => o === obj || String(o?._customId || '') === id);
+
+    if (idx >= 0 && toggle) {
+        nextSelection.splice(idx, 1);
+    } else if (idx < 0) {
+        nextSelection.push(obj);
+    }
+
+    if (nextSelection.length <= 0) {
+        canvas.value.discardActiveObject();
+    } else if (nextSelection.length === 1) {
+        canvas.value.setActiveObject(nextSelection[0]);
+    } else if (fabric?.ActiveSelection) {
+        const selection = new fabric.ActiveSelection(nextSelection, { canvas: canvas.value });
+        canvas.value.setActiveObject(selection);
+    } else {
+        canvas.value.setActiveObject(nextSelection[nextSelection.length - 1]);
+    }
+
+    canvas.value.requestRenderAll();
+    updateSelection();
+}
+
+const isLayerIdInSelection = (id: string) => {
+    const normalized = String(id || '').trim();
+    if (!normalized) return false;
+    if (String(selectedObjectId.value || '').trim() === normalized) return true;
+    return Array.isArray(selectedObjectIds.value)
+        ? selectedObjectIds.value.some((entry) => String(entry || '').trim() === normalized)
+        : false;
+};
+
+const handleLayersContextMenu = (payload: LayerContextMenuPayload) => {
+    if (!canvas.value) return;
+    const id = String(payload?.id || '').trim();
+    if (!id) return;
+
+    if (!isLayerIdInSelection(id)) {
+        selectObject(id);
+    }
+
+    canvasContextMenu.value.show = false;
+    layersContextMenu.value = {
+        show: true,
+        x: Number(payload?.x || 0),
+        y: Number(payload?.y || 0)
+    };
+};
+
+const reorderLayerByDrag = (payload: LayerReorderPayload) => {
+    if (!canvas.value || !payload) return;
+    const sourceId = String(payload.sourceId || '').trim();
+    const targetId = String(payload.targetId || '').trim();
+    const place = payload.place === 'before' ? 'before' : 'after';
+    if (!sourceId || !targetId || sourceId === targetId) return;
+
+    const objects = canvas.value.getObjects();
+    const sourceObj = objects.find((o: any) => String(o?._customId || '').trim() === sourceId);
+    const targetObj = objects.find((o: any) => String(o?._customId || '').trim() === targetId);
+    if (!sourceObj || !targetObj) return;
+
+    const sourceParentFrame = String((sourceObj as any)?.parentFrameId || '').trim();
+    const targetParentFrame = String((targetObj as any)?.parentFrameId || '').trim();
+    if (sourceParentFrame !== targetParentFrame) {
+        notifyEditorInfo('Arraste camadas apenas dentro do mesmo nível/frame.');
+        return;
+    }
+
+    const sourceIndex = objects.indexOf(sourceObj);
+    const targetIndex = objects.indexOf(targetObj);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const ids = objects.map((o: any) => String(o?._customId || '').trim());
+    const compact = ids.filter((id: string) => !!id && id !== sourceId);
+    const targetIndexAfterRemoval = compact.indexOf(targetId);
+    if (targetIndexAfterRemoval < 0) return;
+
+    const insertIndexAfterRemoval = place === 'before'
+        ? targetIndexAfterRemoval + 1
+        : targetIndexAfterRemoval;
+    const finalIndex = Math.max(0, Math.min(insertIndexAfterRemoval, compact.length));
+
+    const canvasApi: any = canvas.value as any;
+    if (typeof canvasApi.moveTo === 'function') {
+        canvasApi.moveTo(sourceObj, finalIndex);
+    } else {
+        // Fallback antigo
+        canvas.value.remove(sourceObj);
+        if (typeof canvas.value.insertAt === 'function') {
+            canvas.value.insertAt(finalIndex, sourceObj);
+        } else {
+            canvas.value.add(sourceObj);
+        }
+    }
+
+    canvas.value.requestRenderAll();
+    refreshCanvasObjects();
+    updateSelection();
+    if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
+    saveCurrentState({ reason: 'layers-drag-reorder', skipCoalesce: true });
 }
 
 const toggleVisible = (id: string) => {
@@ -20139,6 +20626,7 @@ const clearCanvas = () => {
     // Reset Data
     canvasObjects.value = [];
     selectedObjectId.value = null;
+    selectedObjectIds.value = [];
     selectedObjectRef.value = null;
     
     // Restore Environment
@@ -20648,6 +21136,50 @@ const handleImportProductList = () => {
     showPasteListModal.value = true;
 }
 
+const normalizeImageSearchText = (value: any): string =>
+    String(value || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+const normalizeImageSearchKey = (value: string): string =>
+    normalizeImageSearchText(value)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+const dedupeImageSearchTokens = (value: any): string => {
+    const tokens = normalizeImageSearchText(value).split(' ').filter(Boolean);
+    const seen = new Set<string>();
+    const out: string[] = [];
+
+    for (const token of tokens) {
+        const key = normalizeImageSearchKey(token);
+        if (!key) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(token);
+    }
+
+    return out.join(' ').trim();
+};
+
+const uniqueImageSearchHints = (variants: string[]): string[] => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const entry of variants) {
+        const compact = dedupeImageSearchTokens(entry);
+        if (!compact) continue;
+        const key = normalizeImageSearchKey(compact);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(compact);
+    }
+    return out;
+};
+
 // Paste List Handlers
 const handlePasteList = async () => {
     showPasteListModal.value = false;
@@ -20674,12 +21206,15 @@ const handlePasteList = async () => {
         data.map(async (product, index) => {
             try {
                 // Build search term
-                const searchTerm = `${product.name || ''} ${product.brand || ''} ${product.weight || ''}`.trim();
-                const searchHints = Array.from(new Set([
-                    `${product.name || ''} ${product.brand || ''} ${product.flavor || ''} ${product.weight || ''}`.trim(),
-                    `${product.name || ''} ${product.brand || ''} ${product.weight || ''}`.trim(),
+                const searchTerm = dedupeImageSearchTokens(
+                    `${product.name || ''} ${product.brand || ''} ${product.weight || ''}`
+                );
+                const searchHints = uniqueImageSearchHints([
+                    `${product.name || ''} ${product.brand || ''} ${product.flavor || ''} ${product.weight || ''}`,
+                    `${product.name || ''} ${product.brand || ''} ${product.weight || ''}`,
+                    `${product.name || ''} ${product.brand || ''}`,
                     String(product?.name || '').trim()
-                ].filter(Boolean)));
+                ]);
                 const headers = await getApiAuthHeaders();
                 
                 const result = await $fetch<{ url?: string }>('/api/process-product-image', {
@@ -20692,7 +21227,8 @@ const handlePasteList = async () => {
                         ...(product?.brand ? { brand: String(product.brand).trim() } : {}),
                         ...(product?.flavor ? { flavor: String(product.flavor).trim() } : {}),
                         ...(product?.weight ? { weight: String(product.weight).trim() } : {}),
-                        bgPolicy: 'always'
+                        bgPolicy: 'always',
+                        strictMode: false
                     }
                 });
                 
@@ -30932,6 +31468,7 @@ const handleRecalculateLayout = () => {
                       class="flex-1"
                       :objects="canvasObjects" 
                       :selectedId="selectedObjectId"
+                      :selectedIds="selectedObjectIds"
                       @select="selectObject"
                       @toggle-visible="toggleVisible"
                       @toggle-lock="toggleLock"
@@ -30939,6 +31476,8 @@ const handleRecalculateLayout = () => {
                       @move-up="id => moveLayer(id, 'up')"
                       @move-down="id => moveLayer(id, 'down')"
                       @rename="renameLayer"
+                      @reorder="reorderLayerByDrag"
+                      @context-menu="handleLayersContextMenu"
                   />
               </template>
           </SidebarLeft>
@@ -31016,6 +31555,14 @@ const handleRecalculateLayout = () => {
                     :y="canvasContextMenu.y"
                     :items="canvasContextMenuItems"
                     @select="handleCanvasContextMenuSelect"
+                  />
+
+                  <ContextMenu
+                    v-model="layersContextMenu.show"
+                    :x="layersContextMenu.x"
+                    :y="layersContextMenu.y"
+                    :items="layersContextMenuItems"
+                    @select="handleLayersContextMenuSelect"
                   />
                   
                   <!-- Virtual Scrollbars (Figma Style) -->

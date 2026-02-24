@@ -1,22 +1,113 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import Button from './ui/Button.vue'
-import { Eye, EyeOff, Lock, Unlock, Trash2, ArrowUp, ArrowDown, Box, Type, Image as ImageIcon, Square, Circle, Triangle, ChevronRight, ChevronDown, Layers } from 'lucide-vue-next'
+import { Eye, EyeOff, Lock, Unlock, Trash2, ArrowUp, ArrowDown, Box, Type, Image as ImageIcon, Square, Circle, Triangle, ChevronRight, ChevronDown, Layers, Scan, Link2 } from 'lucide-vue-next'
 
 const props = defineProps<{
   objects: any[]
   selectedId: string | null
+  selectedIds?: string[]
 }>()
 
 const emit = defineEmits<{
-  (e: 'select', id: string): void
+  (e: 'select', payload: string | { id: string; additive?: boolean; toggle?: boolean; range?: boolean }): void
   (e: 'toggle-visible', id: string): void
   (e: 'toggle-lock', id: string): void
   (e: 'delete', id: string): void
   (e: 'move-up', id: string): void
   (e: 'move-down', id: string): void
   (e: 'rename', id: string, name: string): void
+  (e: 'reorder', payload: { sourceId: string; targetId: string; place: 'before' | 'after' }): void
+  (e: 'context-menu', payload: { id: string; x: number; y: number }): void
 }>()
+
+const handleLayerRowClick = (id: string, evt?: MouseEvent) => {
+  const additive = !!(evt?.shiftKey || evt?.ctrlKey || evt?.metaKey)
+  const toggle = !!(evt?.ctrlKey || evt?.metaKey)
+  const range = !!evt?.shiftKey
+  emit('select', { id, additive, toggle, range })
+}
+
+const handleLayerContextMenu = (id: string, evt: MouseEvent) => {
+  emit('context-menu', {
+    id,
+    x: Number(evt.clientX || 0),
+    y: Number(evt.clientY || 0)
+  })
+}
+
+const selectedIdSet = computed(() => {
+  const ids = new Set<string>()
+  const list = Array.isArray(props.selectedIds) ? props.selectedIds : []
+  list.forEach((id) => {
+    const value = String(id || '').trim()
+    if (value) ids.add(value)
+  })
+  const single = String(props.selectedId || '').trim()
+  if (single) ids.add(single)
+  return ids
+})
+
+const isLayerSelected = (id: string) => selectedIdSet.value.has(String(id || '').trim())
+const dragSourceId = ref<string | null>(null)
+const dragOverId = ref<string | null>(null)
+const dragOverPlacement = ref<'before' | 'after' | null>(null)
+
+const getDropPlacement = (evt: DragEvent): 'before' | 'after' => {
+  const target = evt.currentTarget as HTMLElement | null
+  if (!target) return 'after'
+  const rect = target.getBoundingClientRect()
+  const offsetY = evt.clientY - rect.top
+  return offsetY < rect.height / 2 ? 'before' : 'after'
+}
+
+const handleDragStart = (id: string, evt: DragEvent) => {
+  dragSourceId.value = id
+  dragOverId.value = null
+  dragOverPlacement.value = null
+  if (evt.dataTransfer) {
+    evt.dataTransfer.effectAllowed = 'move'
+    evt.dataTransfer.setData('text/plain', id)
+  }
+}
+
+const handleDragOver = (id: string, evt: DragEvent) => {
+  if (!dragSourceId.value || dragSourceId.value === id) return
+  evt.preventDefault()
+  if (evt.dataTransfer) evt.dataTransfer.dropEffect = 'move'
+  dragOverId.value = id
+  dragOverPlacement.value = getDropPlacement(evt)
+}
+
+const handleDragLeave = (id: string) => {
+  if (dragOverId.value === id) {
+    dragOverId.value = null
+    dragOverPlacement.value = null
+  }
+}
+
+const handleDrop = (id: string, evt: DragEvent) => {
+  evt.preventDefault()
+  const sourceId = String(dragSourceId.value || '').trim()
+  const targetId = String(id || '').trim()
+  const place = dragOverPlacement.value || getDropPlacement(evt)
+  if (!sourceId || !targetId || sourceId === targetId) {
+    dragSourceId.value = null
+    dragOverId.value = null
+    dragOverPlacement.value = null
+    return
+  }
+  emit('reorder', { sourceId, targetId, place })
+  dragSourceId.value = null
+  dragOverId.value = null
+  dragOverPlacement.value = null
+}
+
+const handleDragEnd = () => {
+  dragSourceId.value = null
+  dragOverId.value = null
+  dragOverPlacement.value = null
+}
 
 const editingId = ref<string | null>(null)
 const editingName = ref('')
@@ -130,6 +221,9 @@ interface LayerItem {
   isExpanded: boolean
   visible: boolean
   locked: boolean
+  masked?: boolean
+  maskSourceName?: string
+  masksTargetNames?: string[]
   childCount?: number
 }
 
@@ -148,6 +242,65 @@ const buildLayerTree = computed(() => {
     return bIdx - aIdx
   }
 
+  const objectById = new Map<string, any>()
+  validObjects.forEach((obj) => {
+    const id = String(obj?._customId || '').trim()
+    if (id) objectById.set(id, obj)
+  })
+
+  const layerNameById = new Map<string, string>()
+  validObjects.forEach((obj, idx) => {
+    const id = String(obj?._customId || '').trim()
+    if (!id) return
+    layerNameById.set(id, getLayerName(obj, idx))
+  })
+
+  const isMaskCandidateForPanel = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return false
+    if (obj?.isFrame) return false
+    if (String(obj?.id || '') === 'artboard-bg') return false
+    const parentGroup = (obj as any)?.group
+    if (parentGroup && String(parentGroup?.type || '').toLowerCase() !== 'activeselection') return false
+    return true
+  }
+
+  const inferMaskSourceId = (target: any) => {
+    const explicit = String((target as any)?.objectMaskSourceId || '').trim()
+    if (explicit && objectById.has(explicit)) return explicit
+
+    if (!target?.objectMaskEnabled) return ''
+    const targetId = String(target?._customId || '').trim()
+    if (!targetId) return ''
+    const targetIndex = stackIndex.get(targetId) ?? -1
+    if (targetIndex <= 0) return ''
+
+    const targetFrameId = String((target as any)?.parentFrameId || '').trim()
+    for (let i = targetIndex - 1; i >= 0; i -= 1) {
+      const candidate = validObjects[i]
+      if (!candidate || candidate === target) continue
+      const candidateId = String(candidate?._customId || '').trim()
+      if (!candidateId) continue
+      if (String((candidate as any)?.parentFrameId || '').trim() !== targetFrameId) continue
+      if (!isMaskCandidateForPanel(candidate)) continue
+      return candidateId
+    }
+
+    return ''
+  }
+
+  const maskSourceByTarget = new Map<string, string>()
+  const maskTargetsBySource = new Map<string, string[]>()
+  validObjects.forEach((obj) => {
+    const targetId = String(obj?._customId || '').trim()
+    if (!targetId || !obj?.objectMaskEnabled) return
+    const sourceId = inferMaskSourceId(obj)
+    if (!sourceId || sourceId === targetId) return
+    maskSourceByTarget.set(targetId, sourceId)
+    const currentTargets = maskTargetsBySource.get(sourceId) || []
+    currentTargets.push(targetId)
+    maskTargetsBySource.set(sourceId, currentTargets)
+  })
+
   const frameIds = new Set(validObjects.filter(o => o?.isFrame).map(o => String(o._customId || '')).filter(Boolean))
   const frameChildrenMap = new Map<string, any[]>()
 
@@ -165,7 +318,7 @@ const buildLayerTree = computed(() => {
     const children = (frameChildrenMap.get(frameId) || []).slice().sort(byTopMostFirst)
     children.forEach((child) => {
       const childIsFrame = !!child?.isFrame
-      const childItem = createLayerItem(child, depth, childIsFrame)
+      const childItem = createLayerItem(child, depth, childIsFrame, maskSourceByTarget, maskTargetsBySource, layerNameById)
       if (childIsFrame) {
         const nestedChildren = frameChildrenMap.get(child._customId) || []
         childItem.childCount = nestedChildren.length
@@ -189,7 +342,7 @@ const buildLayerTree = computed(() => {
 
   topLevelObjects.forEach((obj) => {
     const isFrame = !!obj?.isFrame
-    const item = createLayerItem(obj, 0, isFrame)
+    const item = createLayerItem(obj, 0, isFrame, maskSourceByTarget, maskTargetsBySource, layerNameById)
     if (isFrame) {
       const children = frameChildrenMap.get(obj._customId) || []
       item.childCount = children.length
@@ -204,7 +357,22 @@ const buildLayerTree = computed(() => {
   return items
 })
 
-const createLayerItem = (obj: any, depth: number, isFrame: boolean): LayerItem => {
+const createLayerItem = (
+  obj: any,
+  depth: number,
+  isFrame: boolean,
+  maskSourceByTarget: Map<string, string>,
+  maskTargetsBySource: Map<string, string[]>,
+  layerNameById: Map<string, string>
+): LayerItem => {
+  const id = String(obj?._customId || '').trim()
+  const sourceId = (maskSourceByTarget.get(id) || '').trim()
+  const sourceName = sourceId ? String(layerNameById.get(sourceId) || '').trim() : ''
+  const targetIds = (maskTargetsBySource.get(id) || []).filter(Boolean)
+  const targetNames = targetIds
+    .map((targetId) => String(layerNameById.get(targetId) || '').trim())
+    .filter(Boolean)
+
   return {
     obj,
     id: obj._customId,
@@ -214,7 +382,10 @@ const createLayerItem = (obj: any, depth: number, isFrame: boolean): LayerItem =
     isFrame,
     isExpanded: isFrameExpanded(obj._customId),
     visible: obj.visible !== false,
-    locked: obj.lockMovementX || obj.lockMovementY
+    locked: obj.lockMovementX || obj.lockMovementY,
+    masked: !!obj?.objectMaskEnabled,
+    maskSourceName: sourceName || undefined,
+    masksTargetNames: targetNames.length ? targetNames : undefined
   }
 }
 
@@ -237,13 +408,23 @@ defineExpose({
         v-for="item in buildLayerTree"
         :key="item.id"
         :class="[
-          'flex items-center gap-2 py-1.5 rounded-xs transition-all duration-150 group cursor-default select-none border border-transparent',
-          item.id === selectedId
+          'flex items-center gap-2 py-1.5 rounded-xs transition-all duration-150 group cursor-grab active:cursor-grabbing select-none border border-transparent',
+          isLayerSelected(item.id)
             ? 'bg-violet-500 text-white font-medium'
-            : 'hover:bg-white/5 text-zinc-400 hover:text-white'
+            : 'hover:bg-white/5 text-zinc-400 hover:text-white',
+          dragOverId === item.id && dragOverPlacement === 'before' ? 'border-t-violet-400' : '',
+          dragOverId === item.id && dragOverPlacement === 'after' ? 'border-b-violet-400' : '',
+          dragSourceId === item.id ? 'opacity-60' : ''
         ]"
         :style="{ paddingLeft: `${item.depth * 12 + 6}px` }"
-        @click="emit('select', item.id)"
+        draggable="true"
+        @click="handleLayerRowClick(item.id, $event)"
+        @contextmenu.prevent.stop="handleLayerContextMenu(item.id, $event)"
+        @dragstart="handleDragStart(item.id, $event)"
+        @dragover="handleDragOver(item.id, $event)"
+        @dragleave="handleDragLeave(item.id)"
+        @drop="handleDrop(item.id, $event)"
+        @dragend="handleDragEnd"
       >
         <!-- Expand/Collapse chevron for frames -->
         <button
@@ -279,8 +460,22 @@ defineExpose({
             autoFocus
           />
           <template v-else>
-            <span :class="['text-[10px] font-bold uppercase tracking-wider truncate block transition-all', item.id === selectedId ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300']">
+            <span :class="['text-[10px] font-bold uppercase tracking-wider truncate block transition-all', isLayerSelected(item.id) ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300']">
               {{ item.name }}
+            </span>
+            <span v-if="item.masked" class="inline-flex items-center gap-1 text-[8px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-200 border border-violet-300/30 shrink-0">
+              <Scan class="w-2.5 h-2.5" />
+              MASCARA
+            </span>
+            <span v-if="item.maskSourceName" class="inline-flex items-center gap-1 text-[8px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-200 border border-sky-300/25 shrink-0 max-w-[120px]">
+              <Link2 class="w-2.5 h-2.5 shrink-0" />
+              <span class="truncate">COM {{ item.maskSourceName }}</span>
+            </span>
+            <span v-if="item.masksTargetNames && item.masksTargetNames.length" class="inline-flex items-center gap-1 text-[8px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200 border border-amber-300/25 shrink-0 max-w-[130px]">
+              <Link2 class="w-2.5 h-2.5 shrink-0" />
+              <span class="truncate">
+                {{ item.masksTargetNames.length === 1 ? `LIGA ${item.masksTargetNames[0]}` : `${item.masksTargetNames.length} LIGACOES` }}
+              </span>
             </span>
             <!-- Child count badge for frames -->
             <span v-if="item.isFrame && item.childCount !== undefined" class="text-[8px] px-1 rounded bg-white/10 text-zinc-400 shrink-0">
@@ -290,7 +485,7 @@ defineExpose({
         </div>
 
         <!-- Actions -->
-        <div :class="['flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity', item.id === selectedId ? 'opacity-100' : '']">
+        <div :class="['flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity', isLayerSelected(item.id) ? 'opacity-100' : '']">
           <button @click.stop="emit('toggle-visible', item.id)" class="p-1.5 hover:text-white transition-colors text-zinc-600">
             <Eye v-if="item.visible" class="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />
             <EyeOff v-else class="w-3.5 h-3.5 text-red-500" />

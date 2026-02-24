@@ -103,7 +103,28 @@ const canRemoveImageBg = computed(() => !!findImageTarget.value)
 const isSmartGroup = computed(() => props.selectedObject?.type === 'group' && props.selectedObject.isSmartObject)
 const isGroup = computed(() => props.selectedObject?.type === 'group' || props.selectedObject?.type === 'activeSelection')
 const isMultiSelect = computed(() => props.selectedObject?.type === 'activeSelection')
-const canMask = computed(() => props.selectedObject && !isMultiSelect.value)
+const selectedMaskObjects = computed(() => {
+  if (!isMultiSelect.value) return []
+  return getSelectionObjects(props.selectedObject)
+})
+const allSelectedMasked = computed(() => {
+  const list = selectedMaskObjects.value
+  return list.length > 0 && list.every((obj: any) => !!obj?.objectMaskEnabled)
+})
+const isMaskedObject = computed(() => !!props.selectedObject?.objectMaskEnabled)
+const canMask = computed(() => {
+  if (!props.selectedObject) return false
+  if (isMultiSelect.value) return selectedMaskObjects.value.length >= 2
+  return true
+})
+const maskButtonTitle = computed(() => {
+  if (isMultiSelect.value) {
+    return allSelectedMasked.value
+      ? 'Remover máscara da seleção'
+      : 'Criar máscara (objeto de baixo recorta os de cima)'
+  }
+  return isMaskedObject.value ? 'Remover máscara' : 'Usar objeto de baixo como máscara'
+})
 const canCrop = computed(() => props.selectedObject && !isMultiSelect.value)
 const isComponent = computed(() => props.selectedObject?.isComponent)
 
@@ -789,7 +810,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <!-- Máscara -->
           <div v-if="canMask" class="w-px h-3 bg-white/10 my-auto"></div>
           <div v-if="canMask" class="flex gap-0.5">
-             <button @click="$emit('action', 'toggle-mask')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" :class="selectedObject.isMask ? 'text-violet-400 bg-violet-500/10' : ''" title="Usar como máscara"><Scan class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'toggle-mask')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" :class="(isMaskedObject || allSelectedMasked) ? 'text-violet-400 bg-violet-500/10' : ''" :title="maskButtonTitle"><Scan class="w-3 h-3" /></button>
           </div>
 
           <!-- Recortar -->

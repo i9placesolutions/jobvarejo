@@ -50,8 +50,15 @@ export default defineNuxtConfig({
     wasabiSecretKey: process.env.WASABI_SECRET_KEY || process.env.NUXT_WASABI_SECRET_KEY || '',
 
     openaiApiKey: process.env.NUXT_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
-    // Support both env naming conventions (Vercel often uses SERPER_API_KEY).
     serperApiKey: process.env.NUXT_SERPER_API_KEY || process.env.SERPER_API_KEY || '',
+    googleCseApiKey:
+      process.env.NUXT_GOOGLE_CSE_API_KEY ||
+      process.env.GOOGLE_CSE_API_KEY ||
+      '',
+    googleCseCx:
+      process.env.NUXT_GOOGLE_CSE_CX ||
+      process.env.GOOGLE_CSE_CX ||
+      '',
     authJwtSecret: process.env.AUTH_JWT_SECRET || '',
     authTokenTtlSeconds: process.env.AUTH_TOKEN_TTL_SECONDS || '604800',
     authResetTokenTtlMinutes: process.env.AUTH_RESET_TOKEN_TTL_MINUTES || '60',

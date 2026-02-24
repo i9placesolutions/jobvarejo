@@ -2,6 +2,8 @@
 interface NuxtRuntimeConfig {
   openaiApiKey?: string
   serperApiKey?: string
+  googleCseApiKey?: string
+  googleCseCx?: string
   postgresDatabaseUrl?: string
   authJwtSecret?: string
   authTokenTtlSeconds?: string | number

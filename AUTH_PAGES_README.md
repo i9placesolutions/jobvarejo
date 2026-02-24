@@ -117,9 +117,10 @@ WASABI_BUCKET=jobvarejo
 WASABI_ACCESS_KEY=
 WASABI_SECRET_KEY=
 
-# OpenAI / Serper (server only)
+# OpenAI / Google CSE (server only)
 NUXT_OPENAI_API_KEY=
-NUXT_SERPER_API_KEY=
+NUXT_GOOGLE_CSE_API_KEY=
+NUXT_GOOGLE_CSE_CX=
 ```
 
 ### Composables usados
