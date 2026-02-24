@@ -37,11 +37,18 @@ const isLoading = ref(false)
 const isLoadingProjects = ref(true)
 const draggedProjectId = ref<string | null>(null)
 const isMounted = ref(false)
+const dragPointerMeta = ref<{ projectId: string | null; x: number; y: number; at: number }>({
+  projectId: null,
+  x: 0,
+  y: 0,
+  at: 0
+})
 const transparentDragImage = import.meta.client
   ? (() => {
-      const img = new Image()
-      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
-      return img
+      const canvas = document.createElement('canvas')
+      canvas.width = 1
+      canvas.height = 1
+      return canvas
     })()
   : null
 
@@ -910,7 +917,35 @@ const handleSignOut = async () => {
 }
 
 // Drag and drop handlers
+const handleProjectPointerDown = (projectId: string, event: MouseEvent) => {
+  if (event.button !== 0) return
+  dragPointerMeta.value = {
+    projectId,
+    x: Number(event.clientX || 0),
+    y: Number(event.clientY || 0),
+    at: Date.now()
+  }
+}
+
 const handleDragStart = (projectId: string, event: DragEvent) => {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('button, input, textarea, select, [contenteditable="true"], a')) {
+    event.preventDefault()
+    return
+  }
+
+  const meta = dragPointerMeta.value
+  const dx = Number(event.clientX || 0) - Number(meta.x || 0)
+  const dy = Number(event.clientY || 0) - Number(meta.y || 0)
+  const dist = Math.hypot(dx, dy)
+  const sameCard = meta.projectId === projectId
+  const minDragDistance = 6
+  // Ignore accidental click jitter that triggers native drag snapshot.
+  if (!sameCard || dist < minDragDistance) {
+    event.preventDefault()
+    return
+  }
+
   draggedProjectId.value = projectId
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
@@ -924,6 +959,7 @@ const handleDragStart = (projectId: string, event: DragEvent) => {
 
 const handleDragEnd = () => {
   draggedProjectId.value = null
+  dragPointerMeta.value = { projectId: null, x: 0, y: 0, at: 0 }
 }
 
 const handleDragOver = (event: DragEvent) => {
@@ -1262,6 +1298,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               :key="project.id"
               class="group relative bg-[#1a1a1a] border border-white/10 hover:border-white/20 overflow-hidden transition-all duration-200 cursor-pointer rounded-xl hover:shadow-lg hover:shadow-black/20"
               draggable="true"
+              @mousedown="handleProjectPointerDown(project.id, $event)"
               @dragstart="handleDragStart(project.id, $event)"
               @dragend="handleDragEnd"
               @click="openProject(project.id)"
@@ -1275,8 +1312,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     :src="project.preview_url"
                     class="max-w-full max-h-full object-contain rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-[1.01]"
                     :alt="project.name"
+                    draggable="false"
                     loading="lazy"
                     decoding="async"
+                    @dragstart.prevent
                     @load="handleProjectThumbLoad(project, $event)"
                     @error="project._thumbError = true"
                   />
