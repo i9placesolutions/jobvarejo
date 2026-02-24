@@ -727,12 +727,23 @@ const duplicateProject = async (projectId: string) => {
     if (!original) return
 
     const headers = await getApiAuthHeaders()
+    const fullProject = await $fetch<any>('/api/projects', {
+      headers,
+      query: { id: projectId }
+    })
+    const canvasData = Array.isArray(fullProject?.canvas_data)
+      ? fullProject.canvas_data
+      : (Array.isArray((original as any)?.canvas_data) ? (original as any).canvas_data : null)
+    if (!Array.isArray(canvasData) || canvasData.length === 0) {
+      throw new Error('Projeto sem dados de canvas para duplicação')
+    }
+
     const response = await $fetch<any>('/api/projects', {
       method: 'POST',
       headers,
       body: {
         name: `${original.name} (cópia)`,
-        canvas_data: original.canvas_data,
+        canvas_data: canvasData,
         folder_id: original.folder_id,
         last_viewed: new Date().toISOString(),
       }

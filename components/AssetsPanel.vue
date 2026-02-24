@@ -139,6 +139,53 @@ let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 const uploadsCursor = ref<string | null>(null)
 const uploadsHasMore = ref(true)
 const uploadsLoadingMore = ref(false)
+const fetchUntyped = $fetch as unknown as (url: string, options?: any) => Promise<any>
+
+const getHttpStatus = (err: any): number => {
+    const status = Number(
+        err?.statusCode ??
+        err?.status ??
+        err?.response?.status ??
+        err?.data?.statusCode
+    )
+    return Number.isFinite(status) ? status : 0
+}
+
+const isTransientFetchError = (err: any): boolean => {
+    const status = getHttpStatus(err)
+    if (status === 502 || status === 503 || status === 504) return true
+    if (status !== 0) return false
+    const msg = String(
+        err?.message ||
+        err?.statusMessage ||
+        err?.data?.message ||
+        err?.cause?.message ||
+        ''
+    ).toLowerCase()
+    return (
+        msg.includes('failed to fetch') ||
+        msg.includes('network changed') ||
+        msg.includes('networkerror') ||
+        msg.includes('<no response>') ||
+        msg.includes('load failed')
+    )
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const fetchWithRetry = async (url: string, options: any, attempts = 3): Promise<any> => {
+    let lastErr: any = null
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        try {
+            return await fetchUntyped(url, options)
+        } catch (err: any) {
+            lastErr = err
+            if (!isTransientFetchError(err) || attempt === attempts - 1) break
+            await sleep(300 * (attempt + 1))
+        }
+    }
+    throw lastErr
+}
 const assetsScrollRef = ref<HTMLElement | null>(null)
 
 const normalizeUploadAsset = (item: any) => {
@@ -192,7 +239,7 @@ const fetchUploadsPage = async (opts?: { reset?: boolean; fresh?: boolean }) => 
         if (!reset && uploadsCursor.value) query.cursor = uploadsCursor.value
         if (fresh) query.fresh = 1
 
-        const response = await $fetch<any>('/api/assets', { headers, query: query as any }) as {
+        const response = await fetchWithRetry('/api/assets', { headers, query: query as any }) as {
             items?: any[]
             nextCursor?: string | null
             hasMore?: boolean
@@ -223,7 +270,11 @@ const fetchUploadsPage = async (opts?: { reset?: boolean; fresh?: boolean }) => 
             uploadsHasMore.value = Boolean(response?.hasMore && response?.nextCursor)
         }
     } catch (e) {
-        console.error('Failed to fetch assets:', e)
+        if (isTransientFetchError(e)) {
+            console.warn('Falha transitória ao buscar assets. Tente novamente em instantes.')
+        } else {
+            console.error('Failed to fetch assets:', e)
+        }
     } finally {
         uploadsLoadingMore.value = false
         if (reset) isLoadingAssets.value = false
@@ -268,7 +319,7 @@ const fetchRecents = async () => {
         const headers = await getApiAuthHeaders()
         // Fetch both uploads and brands
         const [uploadsData, brandsData] = await Promise.all([
-            $fetch('/api/assets', { headers, query: { limit: 50 } }).catch(() => []),
+            fetchWithRetry('/api/assets', { headers, query: { limit: 50 } }).catch(() => []),
             $fetch('/api/brands', { headers }).catch(() => [])
         ])
         

@@ -68,6 +68,11 @@ export const shareFileFromDataUrl = async (
     const blob = await response.blob()
     const file = new File([blob], fileName, { type: blob.type })
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      const hasUserGesture = (navigator as any)?.userActivation?.isActive === true
+      if (!hasUserGesture) {
+        console.warn('[Share] Ação bloqueada: é necessário clicar novamente para compartilhar (gesto do usuário).')
+        return false
+      }
       try {
         await navigator.share({
           title,
@@ -75,7 +80,13 @@ export const shareFileFromDataUrl = async (
         })
         return true
       } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
+        const errName = String((err as Error)?.name || '')
+        if (errName === 'AbortError') return false
+        if (errName === 'NotAllowedError') {
+          console.warn('[Share] Compartilhamento bloqueado pelo navegador. Tente novamente pelo botão de compartilhar.')
+          return false
+        }
+        if (errName !== 'AbortError') {
           console.error('[Share] Error sharing:', err)
         }
         return false

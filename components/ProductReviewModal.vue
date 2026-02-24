@@ -264,6 +264,24 @@ const disableManualUploadRemoteTemporarily = (err: any) => {
     manualUploadRemoteDisabledUntil = Date.now() + MANUAL_UPLOAD_REMOTE_COOLDOWN_MS
 }
 
+const getHttpStatus = (err: any): number => {
+    const status = Number(
+        err?.statusCode ??
+        err?.status ??
+        err?.response?.status ??
+        err?.data?.statusCode
+    )
+    return Number.isFinite(status) ? status : 0
+}
+
+const isTransientAssetFetchError = (err: any): boolean => {
+    const status = getHttpStatus(err)
+    if (status === 0 && isLikelyConnectivityError(err)) return true
+    return status === 502 || status === 503 || status === 504
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 const sanitizeFilenameBase = (value: string): string => {
     const normalized = String(value || '')
         .toLowerCase()
@@ -755,24 +773,41 @@ const fetchAssets = async () => {
     try {
         const headers = await getApiAuthHeaders()
         const product = selectedProductForAssetPicker.value
-        const data = await $fetch('/api/assets', {
-            headers,
-            query: {
-                q: query,
-                limit: 120,
-                productName: String(product?.name || ''),
-                brand: String(product?.brand || ''),
-                flavor: String(product?.flavor || ''),
-                weight: String(product?.weight || '')
+        const fetchQuery = {
+            q: query,
+            limit: 120,
+            productName: String(product?.name || ''),
+            brand: String(product?.brand || ''),
+            flavor: String(product?.flavor || ''),
+            weight: String(product?.weight || '')
+        }
+
+        let data: any = null
+        let lastErr: any = null
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                data = await fetchUntyped('/api/assets', { headers, query: fetchQuery })
+                lastErr = null
+                break
+            } catch (err: any) {
+                lastErr = err
+                if (!isTransientAssetFetchError(err) || attempt === 2) break
+                await sleep(350 * (attempt + 1))
             }
-        })
+        }
+        if (lastErr) throw lastErr
+
         if (data && Array.isArray(data)) {
             assets.value = data
         } else {
             assets.value = []
         }
     } catch (error) {
-        console.error('Falha ao buscar assets:', error)
+        if (isTransientAssetFetchError(error)) {
+            console.warn('Falha transitória ao buscar assets. Tente novamente em instantes.')
+        } else {
+            console.error('Falha ao buscar assets:', error)
+        }
         assets.value = []
     } finally {
         isLoadingAssets.value = false

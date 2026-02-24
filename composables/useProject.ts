@@ -42,6 +42,7 @@ const hasUnsavedChanges = ref(false)
 const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi carregado do banco
 const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
+let lastSaveChangedDuringRunLogAt = 0
 
 // -----------------------------------------------------------------------------
 // Local draft persistence (offline-safe)
@@ -501,8 +502,11 @@ export const useProject = () => {
 
 	        // Prevent concurrent saves from racing and tripping optimistic concurrency on ourselves.
 	        if (isSaving.value) {
+	            const wasAlreadyQueued = queuedSaveAfterCurrent.value
 	            queuedSaveAfterCurrent.value = true
-	            console.warn('[saveProjectDB] Save já em andamento; enfileirando novo save após conclusão.')
+	            if (!wasAlreadyQueued) {
+	                console.info('[saveProjectDB] Save já em andamento; novo sync será executado ao concluir o atual.')
+	            }
 	            return
 	        }
 
@@ -685,7 +689,11 @@ export const useProject = () => {
 	            } else {
 	                hasUnsavedChanges.value = true
 	                saveStatus.value = 'idle'
-	                console.warn('[saveProjectDB] Mudanças detectadas durante o save; mantendo estado pendente para novo sync.')
+	                const now = Date.now()
+	                if (now - lastSaveChangedDuringRunLogAt > 2500) {
+	                    lastSaveChangedDuringRunLogAt = now
+	                    console.info('[saveProjectDB] Mudanças detectadas durante o save; mantendo estado pendente para novo sync.')
+	                }
 	            }
 
 		            console.log('Project Saved (Storage):', project.id)
