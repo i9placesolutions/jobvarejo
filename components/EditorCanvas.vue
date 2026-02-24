@@ -14855,6 +14855,40 @@ const setupReactivity = () => {
         });
         if (cardSubTarget) return cardSubTarget;
 
+        // Fallback for product zones: when Fabric reports only zone/null on Shift+click,
+        // find the top card under pointer and use it as additive selection target.
+        const nativeEvt = evtPayload?.e;
+        if (canvas.value && nativeEvt) {
+            try {
+                const canvasAny = canvas.value as any;
+                const scenePoint = canvasAny.getScenePoint?.(nativeEvt) || canvasAny.getPointer?.(nativeEvt, true);
+                if (scenePoint && Number.isFinite(scenePoint.x) && Number.isFinite(scenePoint.y)) {
+                    const all = canvas.value.getObjects().slice().reverse();
+                    for (const obj of all) {
+                        if (!obj || !isLikelyProductCard(obj)) continue;
+                        if (obj.visible === false || obj.selectable === false) continue;
+                        try {
+                            if (typeof obj.containsPoint === 'function' && obj.containsPoint(scenePoint, undefined, true)) {
+                                return obj;
+                            }
+                        } catch {
+                            // ignore containsPoint errors for corrupted objects
+                        }
+                        try {
+                            const br = obj.getBoundingRect?.(true);
+                            if (br && scenePoint.x >= br.left && scenePoint.x <= (br.left + br.width) && scenePoint.y >= br.top && scenePoint.y <= (br.top + br.height)) {
+                                return obj;
+                            }
+                        } catch {
+                            // ignore bounding rect errors
+                        }
+                    }
+                }
+            } catch {
+                // ignore fallback errors
+            }
+        }
+
         return primary;
     };
 
@@ -15372,7 +15406,7 @@ const setupReactivity = () => {
 
         // Global Shift+click additive multi-selection:
         // keep existing selection and append target in all editor contexts.
-        if (evt?.shiftKey && target && !isNormalizingShiftSelection) {
+        if (evt?.shiftKey && !isNormalizingShiftSelection) {
             const shiftTarget = pickShiftSelectionTarget(e) || target;
             const normalizedTarget = resolveSelectionRootObject(shiftTarget, { keepCardImages: true });
             if (normalizedTarget) {
