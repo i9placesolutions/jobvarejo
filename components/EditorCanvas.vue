@@ -15370,19 +15370,14 @@ const setupReactivity = () => {
         if (canvasContextMenu.value.show) canvasContextMenu.value.show = false;
         const target = e.target;
 
-        // Stabilize Shift+click multi-selection for product cards and product images:
-        // - card mode: keeps selecting card groups (safe behavior)
-        // - image mode: allows selecting multiple product images for batch scale
+        // Global Shift+click additive multi-selection:
+        // keep existing selection and append target in all editor contexts.
         if (evt?.shiftKey && target && !isNormalizingShiftSelection) {
             const shiftTarget = pickShiftSelectionTarget(e) || target;
             const normalizedTarget = resolveSelectionRootObject(shiftTarget, { keepCardImages: true });
-            const isCardTarget = !!(normalizedTarget && isLikelyProductCard(normalizedTarget));
-            const isCardImageTarget = !!(normalizedTarget && isProductCardImageSelectionCandidate(normalizedTarget));
-            if (normalizedTarget && (isCardTarget || isCardImageTarget)) {
+            if (normalizedTarget) {
                 const currentMembersRaw = collectNormalizedSelectionMembers(canvas.value.getActiveObject());
-                const currentMembers = isCardImageTarget
-                    ? currentMembersRaw.filter((member: any) => isProductCardImageSelectionCandidate(member))
-                    : currentMembersRaw.filter((member: any) => isLikelyProductCard(member));
+                const currentMembers = currentMembersRaw.slice();
                 const isAlreadySelected = currentMembers.includes(normalizedTarget);
                 if (!isAlreadySelected) {
                     const nextMembers = [...currentMembers, normalizedTarget];
