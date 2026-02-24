@@ -38,6 +38,8 @@ const isLoading = ref(false)
 const isLoadingProjects = ref(true)
 const draggedProjectId = ref<string | null>(null)
 const isMounted = ref(false)
+const isDashboardBootstrapping = ref(false)
+const lastBootstrappedUserId = ref<string | null>(null)
 const dragPointerMeta = ref<{ projectId: string | null; x: number; y: number; at: number }>({
   projectId: null,
   x: 0,
@@ -275,13 +277,23 @@ onUnmounted(() => {
 })
 
 // Watch for auth user changes (by id) to avoid duplicate bootstrap calls
-watch(() => auth.user.value?.id || null, (userId) => {
+watch(() => auth.user.value?.id || null, async (userId) => {
   if (userId) {
-    loadData()
-    loadNotifications()
+    if (isDashboardBootstrapping.value) return
+    // Guard against duplicate bootstrap runs for the same user id.
+    if (lastBootstrappedUserId.value === userId && projects.value.length > 0) return
+    isDashboardBootstrapping.value = true
+    try {
+      await Promise.all([loadData(), loadNotifications()])
+      lastBootstrappedUserId.value = userId
+    } finally {
+      isDashboardBootstrapping.value = false
+    }
   } else {
+    if (auth.isLoading.value) return
     projects.value = []
     notifications.value = []
+    lastBootstrappedUserId.value = null
   }
 }, { immediate: true })
 
@@ -1130,7 +1142,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 </script>
 
 <template>
-  <div class="h-screen bg-[#0f0f0f] text-white flex flex-col">
+  <div class="dashboard-root h-screen bg-[#0f0f0f] text-white flex flex-col">
     <!-- Modern Header (Figma Style) -->
     <header class="h-14 border-b border-white/5 bg-[#1a1a1a] flex items-center justify-between px-6 shrink-0">
       <!-- Logo and App Name -->
@@ -1465,7 +1477,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <div
               v-for="project in filteredProjects"
               :key="project.id"
-              class="group relative bg-[#1a1a1a] border border-white/10 hover:border-white/20 overflow-hidden transition-all duration-200 cursor-pointer rounded-xl hover:shadow-lg hover:shadow-black/20"
+              class="project-card-shell group relative bg-[#1a1a1a] border border-white/10 hover:border-white/20 overflow-hidden transition-[border-color,box-shadow] duration-200 cursor-pointer rounded-xl hover:shadow-lg hover:shadow-black/20 motion-reduce:transition-none"
               draggable="true"
               @mousedown="handleProjectPointerDown(project.id, $event)"
               @dragstart="handleDragStart(project.id, $event)"
@@ -1479,7 +1491,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <div v-if="hasUsableProjectPreview(project) && !project._thumbError" class="absolute inset-0 p-2 flex items-center justify-center">
                   <img
                     :src="project.preview_url"
-                    class="max-w-full max-h-full object-contain rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-[1.01]"
+                    class="project-thumb-media max-w-full max-h-full object-contain rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
                     :alt="project.name"
                     draggable="false"
                     loading="lazy"
@@ -1512,7 +1524,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   @mousedown.stop
                   @touchstart.stop
                   @click.stop="showProjectContextMenu(project.id, $event)"
-                  class="absolute top-2 right-2 p-2 bg-black/75 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-black/90 shadow-lg"
+                  class="absolute top-2 right-2 p-2 bg-black/75 rounded-lg opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-150 hover:bg-black/90 shadow-lg motion-reduce:transition-none"
                   title="Ações"
                 >
                   <MoreVertical class="w-4 h-4 text-white" />
@@ -1524,7 +1536,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   @mousedown.stop
                   @touchstart.stop
                   @click.stop="toggleStarred(project.id)"
-                  :class="['absolute top-2 left-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/75 text-white hover:bg-black/90']"
+                  :class="['absolute top-2 left-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-150 shadow-lg motion-reduce:transition-none', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/75 text-white hover:bg-black/90']"
                   title="Favoritar"
                 >
                   <Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" />
@@ -1930,6 +1942,16 @@ const handleDropOnRoot = async (event: DragEvent) => {
 <style scoped>
 .folder-tree {
   user-select: none;
+}
+
+.project-card-shell,
+.project-thumb-media {
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+.project-card-shell {
+  will-change: border-color, box-shadow;
 }
 
 /* Custom scrollbar for dark theme */

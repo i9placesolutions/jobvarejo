@@ -5490,8 +5490,9 @@ const updateScrollbars = () => {
         scrollH.value.left = scrollProgress * (width - scrollbarWidth);
     }
 
-    // Large documents: keep offscreen objects out of render/hit-test path.
-    scheduleViewportCulling('scrollbars');
+    // Do not trigger viewport culling from scrollbar recalculation; this path runs
+    // very often and may cause render oscillation ("tremor") on some browsers.
+    // Culling still runs on wheel/pan/object-move paths.
 }
 
 const VIEWPORT_CULL_MIN_OBJECTS = 1200
@@ -7900,6 +7901,7 @@ const resizeCanvas = () => {
     const newW = wrapperEl.value.clientWidth || oldW;
     const newH = wrapperEl.value.clientHeight || oldH;
     if (!newW || !newH) return;
+    if (Math.abs(newW - oldW) < 1 && Math.abs(newH - oldH) < 1) return;
 
     // Preserve the scene point currently at the center of the viewport.
     // This avoids drifting to corners when panels expand/collapse.
@@ -12455,6 +12457,8 @@ const handleKeyDown = async (e: KeyboardEvent) => {
 
 const setupZoomPan = () => {
     if (!canvas.value) return; 
+    if ((canvas.value as any).__zoomPanSetupDone) return;
+    (canvas.value as any).__zoomPanSetupDone = true;
 
     // Helper to get pointer position from event (local to setupZoomPan)
     // Uses the same logic as Fabric.js internally - corrected calculation
