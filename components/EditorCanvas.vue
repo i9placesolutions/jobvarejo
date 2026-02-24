@@ -14839,6 +14839,25 @@ const setupReactivity = () => {
         return unique;
     };
 
+    const pickShiftSelectionTarget = (evtPayload: any) => {
+        const primary = evtPayload?.target || null;
+        const subTargets = Array.isArray(evtPayload?.subTargets) ? evtPayload.subTargets.filter(Boolean) : [];
+
+        // Prefer deep-selected card images when available.
+        const imageSubTarget = subTargets.find((item: any) => isProductCardImageSelectionCandidate(item));
+        if (imageSubTarget) return imageSubTarget;
+        if (primary && isProductCardImageSelectionCandidate(primary)) return primary;
+
+        // Otherwise prefer a card-like target (sub-target or primary).
+        const cardSubTarget = subTargets.find((item: any) => {
+            const root = resolveSelectionRootObject(item);
+            return !!(root && isLikelyProductCard(root));
+        });
+        if (cardSubTarget) return cardSubTarget;
+
+        return primary;
+    };
+
     let isNormalizingShiftSelection = false;
     const normalizeActiveSelectionForProductCards = () => {
         if (!canvas.value || isNormalizingShiftSelection) return false;
@@ -15355,7 +15374,8 @@ const setupReactivity = () => {
         // - card mode: keeps selecting card groups (safe behavior)
         // - image mode: allows selecting multiple product images for batch scale
         if (evt?.shiftKey && target && !isNormalizingShiftSelection) {
-            const normalizedTarget = resolveSelectionRootObject(target);
+            const shiftTarget = pickShiftSelectionTarget(e) || target;
+            const normalizedTarget = resolveSelectionRootObject(shiftTarget, { keepCardImages: true });
             const isCardTarget = !!(normalizedTarget && isLikelyProductCard(normalizedTarget));
             const isCardImageTarget = !!(normalizedTarget && isProductCardImageSelectionCandidate(normalizedTarget));
             if (normalizedTarget && (isCardTarget || isCardImageTarget)) {
@@ -15375,8 +15395,9 @@ const setupReactivity = () => {
                     }
                     updateSelection();
                     canvas.value.requestRenderAll();
-                    return;
                 }
+                // Intercept Shift behavior in this mode to avoid Fabric default toggle/deselect.
+                return;
             }
         }
 
