@@ -6698,13 +6698,50 @@ const resolveImportTargetZone = (): any | null => {
     return null;
 }
 
+const clearZoneCardsForFreshImport = (zone: any): number => {
+    if (!canvas.value || !zone || !isLikelyProductZone(zone)) return 0;
+
+    const cards = (() => {
+        try {
+            return getZoneChildren(zone);
+        } catch {
+            return [];
+        }
+    })();
+
+    if (!Array.isArray(cards) || cards.length === 0) return 0;
+
+    cards.forEach((card: any) => {
+        try {
+            canvas.value?.remove(card);
+        } catch {
+            // Ignore detached card removal errors.
+        }
+    });
+
+    try {
+        recalculateZoneLayout(zone, [], { save: false });
+    } catch {
+        // Keep flow resilient even when relayout is unavailable.
+    }
+
+    refreshCanvasObjects();
+    invalidateScrollbarBounds();
+    updateScrollbars();
+    canvas.value.requestRenderAll();
+    saveCurrentState({ allowEmptyOverwrite: true, reason: 'product-zone-clear-before-import' });
+    flushPersistenceNow('product-zone-clear-before-import');
+
+    return cards.length;
+}
+
 const openProductReviewForZone = (zone: any): boolean => {
     if (!zone || !isLikelyProductZone(zone)) return false;
 
     targetGridZone.value = zone;
-    const zoneProducts = extractProductsFromZoneForReview(zone);
-    reviewProducts.value = zoneProducts;
-    productImportExistingCount.value = zoneProducts.length;
+    clearZoneCardsForFreshImport(zone);
+    reviewProducts.value = [];
+    productImportExistingCount.value = 0;
     showProductReviewModal.value = true;
     return true;
 }
@@ -22002,6 +22039,15 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
     }
 }
 
+const handleProductReviewModalVisibility = (value: boolean) => {
+    showProductReviewModal.value = value
+    if (value || isConfirmingProductImport.value) return
+
+    reviewProducts.value = []
+    targetGridZone.value = null
+    productImportExistingCount.value = 0
+}
+
 const handleFileUpload = async (e: any) => {
     const input = e?.target as HTMLInputElement | null;
     const files = Array.from(input?.files || []).filter(Boolean) as File[];
@@ -32260,7 +32306,7 @@ const handleRecalculateLayout = () => {
         @submit-paste-list="handlePasteList"
         @update:show-delete-page-modal="showDeletePageModal = $event"
         @confirm-delete-page="confirmDeletePage"
-        @update:show-product-review-modal="showProductReviewModal = $event"
+        @update:show-product-review-modal="handleProductReviewModalVisibility"
         @import-products="confirmProductImport"
         @update:show-export-modal="showExportModal = $event"
         @export="performExport"
