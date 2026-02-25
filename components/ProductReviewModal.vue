@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import Dialog from './ui/Dialog.vue'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
-import { Sparkles, X, Check, AlertCircle, Loader2, Search, Upload, FolderOpen } from 'lucide-vue-next'
+import { Sparkles, X, Check, AlertCircle, Loader2, Search, Upload, FolderOpen, Plus } from 'lucide-vue-next'
 import { useProductProcessor, type SmartProduct } from '../composables/useProductProcessor'
 import type { LabelTemplate } from '~/types/label-template'
 
@@ -49,6 +49,7 @@ const frameAssignmentsMap = ref<Record<string, string | null>>({})
 // Importacao inteligente: por padrao, queremos remover o fundo das imagens encontradas.
 const imageBgPolicy = ref<ImageBgPolicy>('always')
 const isSubmittingImport = ref(false)
+const appendBaseProducts = ref<SmartProduct[] | null>(null)
 
 const LIST_FILE_ACCEPT = 'image/*,.csv,.tsv,.xlsx,.xls,.pdf,text/plain'
 
@@ -74,6 +75,7 @@ const resolveProductIndex = (p: any) => {
 watch(() => props.modelValue, (newVal) => {
     if (!newVal) {
         isSubmittingImport.value = false
+        appendBaseProducts.value = null
         return
     }
 
@@ -90,18 +92,31 @@ watch(() => props.modelValue, (newVal) => {
             imageUrl: resolveProductImageUrl(p?.imageUrl || '')
         }))
         step.value = 'review'
-    } else if (products.value.length === 0) {
+    } else {
+        products.value = []
         step.value = 'input'
         textInput.value = ''
     }
 })
 
+const cloneProducts = (list: SmartProduct[]) =>
+    JSON.parse(JSON.stringify(Array.isArray(list) ? list : [])) as SmartProduct[]
+
+const mergeParsedProductsWithAppendBase = () => {
+    if (!appendBaseProducts.value) return
+    const base = cloneProducts(appendBaseProducts.value)
+    const parsed = cloneProducts(products.value)
+    products.value = [...base, ...parsed]
+    appendBaseProducts.value = null
+}
+
 const handleParse = async () => {
     if (!textInput.value.trim()) return;
-    
+    const shouldAppend = !!appendBaseProducts.value
     await parseText(textInput.value);
     
     if (products.value.length > 0) {
+        if (shouldAppend) mergeParsedProductsWithAppendBase()
         step.value = 'review';
         // Process all images automatically
         await processAllImages({ bgPolicy: imageBgPolicy.value });
@@ -118,9 +133,11 @@ const handleFileSelected = async (event: Event) => {
     input.value = ''
     if (!file) return
 
+    const shouldAppend = !!appendBaseProducts.value
     await parseFile(file)
 
     if (products.value.length > 0) {
+        if (shouldAppend) mergeParsedProductsWithAppendBase()
         step.value = 'review'
         await processAllImages({ bgPolicy: imageBgPolicy.value })
     }
@@ -129,11 +146,59 @@ const handleFileSelected = async (event: Event) => {
 const handleDropFile = async (event: DragEvent) => {
     const file = event.dataTransfer?.files?.[0]
     if (!file) return
+    const shouldAppend = !!appendBaseProducts.value
     await parseFile(file)
     if (products.value.length > 0) {
+        if (shouldAppend) mergeParsedProductsWithAppendBase()
         step.value = 'review'
         await processAllImages({ bgPolicy: imageBgPolicy.value })
     }
+}
+
+const createEmptyProduct = (): SmartProduct => ({
+    id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name: '',
+    brand: '',
+    productCode: '',
+    weight: '',
+    price: '',
+    pricePack: '',
+    priceUnit: '',
+    priceSpecial: '',
+    priceSpecialUnit: '',
+    specialCondition: '',
+    priceWholesale: '',
+    wholesaleTrigger: null,
+    wholesaleTriggerUnit: '',
+    packQuantity: null,
+    packUnit: '',
+    packageLabel: '',
+    price_mode: 'retail',
+    limit: '',
+    flavor: '',
+    imageUrl: null,
+    status: 'pending',
+    imageDecisionReason: '',
+    raw: {}
+})
+
+const addManualProduct = () => {
+    products.value.unshift(createEmptyProduct())
+    reviewSearch.value = ''
+}
+
+const startAppendFromReview = () => {
+    appendBaseProducts.value = cloneProducts(products.value)
+    textInput.value = ''
+    step.value = 'input'
+}
+
+const backToReviewWithoutAppending = () => {
+    if (appendBaseProducts.value) {
+        products.value = cloneProducts(appendBaseProducts.value)
+        appendBaseProducts.value = null
+    }
+    step.value = 'review'
 }
 
 const handleImport = () => {
@@ -396,7 +461,8 @@ watch(
     () => props.modelValue,
     (open) => {
         if (!open) return
-        selectedLabelTemplateId.value = String(props.initialLabelTemplateId || '')
+        // Keep "usar padrão da zona" as default to avoid forcing stale template ids.
+        selectedLabelTemplateId.value = ''
         reviewSearch.value = ''
     }
 )
@@ -1106,6 +1172,18 @@ const getAssetDisplayName = (asset: any): string => {
             
             <!-- STEP 1: INPUT -->
             <div v-if="step === 'input'" class="flex flex-col gap-4 flex-1">
+                <div
+                    v-if="appendBaseProducts"
+                    class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 flex items-center justify-between gap-3 text-emerald-200 text-xs"
+                >
+                    <p>
+                        Adicionando itens na revisão atual ({{ appendBaseProducts.length }} existentes).
+                    </p>
+                    <Button variant="ghost" size="sm" @click="backToReviewWithoutAppending">
+                        Voltar para revisão
+                    </Button>
+                </div>
+
                 <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 flex gap-3 text-blue-200 text-xs">
                     <Sparkles class="w-5 h-5 shrink-0" />
                     <p>Cole sua lista de produtos ou envie um arquivo (CSV/Excel/PDF/imagem). A IA identifica preços unitário/atacado e busca imagens automaticamente.</p>
@@ -1596,10 +1674,14 @@ const getAssetDisplayName = (asset: any): string => {
                 </div>
 
                 <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pt-2 border-t border-white/5">
-                    <button @click="step = 'input'" class="text-xs text-zinc-500 hover:text-white flex items-center gap-1">
-                         <X class="w-3 h-3" /> Voltar
+                    <button @click="startAppendFromReview" class="text-xs text-zinc-500 hover:text-white flex items-center gap-1">
+                         <Plus class="w-3 h-3" /> Adicionar via lista/arquivo
                     </button>
                     <div class="flex flex-wrap gap-2">
+                        <Button variant="ghost" size="sm" @click="addManualProduct">
+                            <Plus class="w-3.5 h-3.5 mr-2" />
+                            Adicionar item
+                        </Button>
                         <Button variant="ghost" size="sm" @click="processAllImages({ bgPolicy: imageBgPolicy })">
                             <Search class="w-3.5 h-3.5 mr-2" />
                             Reprocessar Imagens

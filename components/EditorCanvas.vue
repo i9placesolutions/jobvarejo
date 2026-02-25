@@ -6698,50 +6698,16 @@ const resolveImportTargetZone = (): any | null => {
     return null;
 }
 
-const clearZoneCardsForFreshImport = (zone: any): number => {
-    if (!canvas.value || !zone || !isLikelyProductZone(zone)) return 0;
-
-    const cards = (() => {
-        try {
-            return getZoneChildren(zone);
-        } catch {
-            return [];
-        }
-    })();
-
-    if (!Array.isArray(cards) || cards.length === 0) return 0;
-
-    cards.forEach((card: any) => {
-        try {
-            canvas.value?.remove(card);
-        } catch {
-            // Ignore detached card removal errors.
-        }
-    });
-
-    try {
-        recalculateZoneLayout(zone, [], { save: false });
-    } catch {
-        // Keep flow resilient even when relayout is unavailable.
-    }
-
-    refreshCanvasObjects();
-    invalidateScrollbarBounds();
-    updateScrollbars();
-    canvas.value.requestRenderAll();
-    saveCurrentState({ allowEmptyOverwrite: true, reason: 'product-zone-clear-before-import' });
-    flushPersistenceNow('product-zone-clear-before-import');
-
-    return cards.length;
-}
-
 const openProductReviewForZone = (zone: any): boolean => {
     if (!zone || !isLikelyProductZone(zone)) return false;
 
     targetGridZone.value = zone;
-    clearZoneCardsForFreshImport(zone);
+    try {
+        productImportExistingCount.value = getZoneChildren(zone).length;
+    } catch {
+        productImportExistingCount.value = 0;
+    }
     reviewProducts.value = [];
-    productImportExistingCount.value = 0;
     showProductReviewModal.value = true;
     return true;
 }
@@ -22498,8 +22464,9 @@ const simulateSmartGrid = async (
             return null;
         };
 
-        if (targetZone && mode === 'replace' && !requestedTplId && existingZoneCardsAtStart.length > 0) {
-            // Replace should preserve the CURRENT zone visual label, even when persisted template id/snapshot is stale.
+        if (targetZone && !requestedTplId && existingZoneCardsAtStart.length > 0) {
+            // Preserve the CURRENT zone visual label for both replace and append
+            // when user did not explicitly pick a template in the modal.
             const donorTpl = getDonorTemplateFromExistingCards();
             if (donorTpl) effectiveZoneTpl = donorTpl;
         } else if (!effectiveZoneTpl && targetZone) {
