@@ -7299,18 +7299,18 @@ const renderProducts = (products: any[]) => {
                 top: product.height/2 - 15
             });
 
-            pObj = new fabric.Group([bg, text, imgPlaceholder, price], {
-                left: product.x,
-                top: product.y,
-                width: product.width,
-                height: product.height,
-                selectable: true,
-                id: product.id,
-                isProduct: true,
-                // Default behavior: move/select the whole group.
-                subTargetCheck: false,
-                interactive: false
-            });
+	            pObj = new fabric.Group([bg, text, imgPlaceholder, price], {
+	                left: product.x,
+	                top: product.y,
+	                width: product.width,
+	                height: product.height,
+	                selectable: true,
+	                id: product.id,
+	                isProduct: true,
+	                // Keep parity with product-card behavior: allow inner target selection.
+	                subTargetCheck: true,
+	                interactive: true
+	            });
 
             pObj.on('moving', (e: any) => {
                  // Update product position in state
@@ -8545,6 +8545,8 @@ onMounted(async () => {
 	          preserveObjectStacking: true, 
 	          renderOnAddRemove: true,
 	          selection: true,
+              // Disable Fabric default Shift multiselect so we can fully control additive selection logic.
+              selectionKey: null,
 	          // Required for deep-select (sub-target selection inside Fabric groups).
 	          subTargetCheck: true,
 	          // CRITICAL: Enable renderOnAddRemove and skipTargetFind to prevent trails
@@ -11279,16 +11281,33 @@ const findProductCardParentGroup = (obj: any) => {
     if (!obj || !canvas.value) return null;
     const direct = (obj as any).group;
     if (isProductCardContainer(direct)) return direct;
+    const directParent = (obj as any).parent;
+    if (isProductCardContainer(directParent)) return directParent;
 
     const targetId = String((obj as any)?._customId || '').trim();
     const all = canvas.value.getObjects();
+
+    const containsObjectDeep = (node: any): boolean => {
+        if (!node) return false;
+        if (node === obj) return true;
+        if (targetId && String((node as any)?._customId || '').trim() === targetId) return true;
+        if (typeof (node as any)?.getObjects === 'function') {
+            const children = (node as any).getObjects() || [];
+            for (const child of children) {
+                if (containsObjectDeep(child)) return true;
+            }
+        }
+        return false;
+    };
+
     for (const candidate of all) {
         if (!isProductCardContainer(candidate) || typeof candidate.getObjects !== 'function') continue;
-        const children = candidate.getObjects() || [];
-        const contains = children.some((child: any) => (
-            child === obj ||
-            (targetId && String(child?._customId || '').trim() === targetId)
-        ));
+        const activeChildren = Array.isArray((candidate as any)?._activeObjects)
+            ? (candidate as any)._activeObjects
+            : [];
+        const contains =
+            containsObjectDeep(candidate) ||
+            activeChildren.some((child: any) => containsObjectDeep(child));
         if (contains) return candidate;
     }
     return null;
@@ -14895,11 +14914,20 @@ const setupReactivity = () => {
 
     const isLikelyProductCard = (obj: any) => {
         if (!obj) return false;
-        if (obj.type !== 'group') return false;
-        if (!obj.isSmartObject && !obj.isProductCard) return false;
-        if (typeof obj.getObjects !== 'function') return false;
+        if (obj.excludeFromExport) return false;
+        if (obj.isFrame) return false;
+        if (isLikelyProductZone(obj)) return false;
+        if (obj.type !== 'group' || typeof obj.getObjects !== 'function') return false;
+        if (obj.isSmartObject || obj.isProductCard) return true;
+        if (String(obj.name || '').startsWith('product-card')) return true;
+        if (String((obj as any).parentZoneId || '').trim()) return true;
         const objs = obj.getObjects() || [];
-        return objs.some((o: any) => o?.name === 'offerBackground');
+        if (objs.some((o: any) => o?.name === 'offerBackground')) return true;
+        const hasImage = objs.some((o: any) => String(o?.type || '').toLowerCase() === 'image');
+        const hasPriceGroup = objs.some((o: any) => (
+            String(o?.type || '').toLowerCase() === 'group' && String(o?.name || '') === 'priceGroup'
+        ));
+        return hasImage && hasPriceGroup;
     };
 
     const getStylesForCard = (card: any): Partial<GlobalStyles> => {
@@ -14914,14 +14942,17 @@ const setupReactivity = () => {
 
     const isProductCardImage = (img: any) => {
         if (!img || String(img.type || '').toLowerCase() !== 'image') return false;
-        const parent = img.group;
-        if (!parent) return false;
+        const owner =
+            (isProductCardContainer((img as any).group) ? (img as any).group : null) ||
+            (isProductCardContainer((img as any).parent) ? (img as any).parent : null) ||
+            findProductCardParentGroup(img);
+        if (!owner) return false;
         return !!(
-            parent.isSmartObject ||
-            parent.isProductCard ||
-            hasParentZoneBinding(parent) ||
-            String(parent.name || '').startsWith('product-card') ||
-            isLikelyProductCard(parent)
+            owner.isSmartObject ||
+            owner.isProductCard ||
+            hasParentZoneBinding(owner) ||
+            String(owner.name || '').startsWith('product-card') ||
+            isLikelyProductCard(owner)
         );
     };
 
@@ -14998,12 +15029,85 @@ const setupReactivity = () => {
         return true;
     };
 
+    const getCardImageCandidatesDeep = (card: any) => {
+        if (!card || !isLikelyProductCard(card)) return [] as any[];
+        const out: any[] = [];
+        const walk = (node: any) => {
+            if (!node) return;
+            if (isProductCardImageSelectionCandidate(node) && node?.visible !== false) {
+                out.push(node);
+            }
+            if (typeof node?.getObjects === 'function') {
+                const children = node.getObjects() || [];
+                children.forEach((child: any) => walk(child));
+            }
+        };
+        walk(card);
+        return out;
+    };
+
+    const pickPreferredProductImageFromCard = (card: any) => {
+        if (!card || !isLikelyProductCard(card) || typeof card.getObjects !== 'function') return null;
+        try {
+            card.set?.({
+                subTargetCheck: true,
+                interactive: true,
+                selectable: true,
+                evented: true
+            });
+            card.setCoords?.();
+        } catch {
+            // ignore
+        }
+        const children = getCardImageCandidatesDeep(card);
+        if (!children.length) return null;
+
+        const primary = children.find((child: any) => {
+            const smartType = String((child as any)?.data?.smartType || '').toLowerCase();
+            const name = String((child as any)?.name || '').toLowerCase();
+            return smartType === 'product-image' || name === 'smart_image' || name === 'product_image' || name === 'productimage';
+        });
+        const preferred = primary || children[children.length - 1] || null;
+        if (!preferred) return null;
+        try {
+            preferred.set?.({
+                selectable: true,
+                evented: true,
+                hasControls: true,
+                hasBorders: true
+            });
+            preferred.setCoords?.();
+        } catch {
+            // ignore
+        }
+        return preferred;
+    };
+
+    const getDeepSelectedProductImageFromCard = (card: any) => {
+        if (!card || !isLikelyProductCard(card)) return null;
+        const deepActive = (card as any)?._activeObject;
+        if (isProductCardImageSelectionCandidate(deepActive)) return deepActive;
+        return null;
+    };
+
     const resolveSelectionRootObject = (obj: any, opts: { keepCardImages?: boolean } = {}) => {
         if (!obj || isTransientCanvasObject(obj)) return null;
         const keepCardImages = opts.keepCardImages !== false;
         if (keepCardImages && isProductCardImageSelectionCandidate(obj)) return obj;
+        if (keepCardImages && isLikelyProductCard(obj)) {
+            const deepSelected = getDeepSelectedProductImageFromCard(obj);
+            if (deepSelected) return deepSelected;
+        }
+        if (keepCardImages && isLikelyProductCard(obj)) {
+            const preferred = pickPreferredProductImageFromCard(obj);
+            if (preferred) return preferred;
+        }
         if (isLikelyProductCard(obj)) return obj;
         const parentCard = findProductCardParentGroup(obj);
+        if (keepCardImages && parentCard) {
+            const preferred = pickPreferredProductImageFromCard(parentCard);
+            if (preferred) return preferred;
+        }
         if (parentCard) return parentCard;
         return obj;
     };
@@ -15023,11 +15127,24 @@ const setupReactivity = () => {
         return unique;
     };
 
-    // Shift+multi-select should prefer whole product cards over inner deep-selected children.
+    // Shift+multi-select:
+    // - keep deep-selected product images as independent targets (allows multi-select of images in a card)
+    // - still prefer whole product cards for non-image inner elements.
     const resolveShiftSelectionRootObject = (obj: any) => {
         if (!obj || isTransientCanvasObject(obj)) return null;
+        if (isProductCardImageSelectionCandidate(obj)) return obj;
+        if (isLikelyProductCard(obj)) {
+            const deepSelected = getDeepSelectedProductImageFromCard(obj);
+            if (deepSelected) return deepSelected;
+            const preferred = pickPreferredProductImageFromCard(obj);
+            if (preferred) return preferred;
+        }
         if (isLikelyProductCard(obj)) return obj;
         const parentCard = findProductCardParentGroup(obj);
+        if (parentCard) {
+            const preferred = pickPreferredProductImageFromCard(parentCard);
+            if (preferred) return preferred;
+        }
         if (parentCard) return parentCard;
 
         return resolveSelectionRootObject(obj, { keepCardImages: true });
@@ -15055,10 +15172,201 @@ const setupReactivity = () => {
         shiftSelectionBaselineMembers = collectShiftSelectionMembers(source);
     };
 
+    const getScenePointFromNativeEvent = (nativeEvt: any) => {
+        if (!canvas.value || !nativeEvt) return null;
+        try {
+            const canvasAny = canvas.value as any;
+            const scenePoint = canvasAny.getScenePoint?.(nativeEvt) || canvasAny.getPointer?.(nativeEvt, true);
+            if (scenePoint && Number.isFinite(scenePoint.x) && Number.isFinite(scenePoint.y)) return scenePoint;
+        } catch {
+            // ignore
+        }
+        return null;
+    };
+
+    const getFabricHitInfoAtPointer = (nativeEvt: any): { target: any; subTargets: any[] } => {
+        if (!canvas.value || !nativeEvt) return { target: null, subTargets: [] };
+        try {
+            const canvasAny = canvas.value as any;
+            const scenePoint = getScenePointFromNativeEvent(nativeEvt);
+            if (!scenePoint) return { target: null, subTargets: [] };
+            const rootObjects = (typeof canvasAny.getObjects === 'function' ? canvasAny.getObjects() : canvasAny._objects) || [];
+            if (typeof canvasAny.searchPossibleTargets === 'function') {
+                const info = canvasAny.searchPossibleTargets(rootObjects, scenePoint);
+                const target = info?.target || null;
+                const subTargets = Array.isArray(info?.subTargets) ? info.subTargets.filter(Boolean) : [];
+                if (target || subTargets.length) return { target, subTargets };
+            }
+            if (typeof canvasAny.findTarget === 'function') {
+                const info = canvasAny.findTarget(nativeEvt);
+                const target = info?.target ?? info ?? null;
+                const subTargets = Array.isArray(info?.subTargets) ? info.subTargets.filter(Boolean) : [];
+                if (target || subTargets.length) return { target, subTargets };
+            }
+        } catch {
+            // ignore
+        }
+        return { target: null, subTargets: [] };
+    };
+
+    const findProductImagesAtPointer = (nativeEvt: any) => {
+        if (!canvas.value || !nativeEvt) return [] as any[];
+        const scenePoint = getScenePointFromNativeEvent(nativeEvt);
+        if (!scenePoint) return [] as any[];
+
+        const hits: Array<{
+            obj: any;
+            precise: boolean;
+            distance: number;
+            area: number;
+            zRank: number;
+        }> = [];
+        const seen = new Set<any>();
+        let zRank = 0;
+        const cards = (canvas.value.getObjects() || []).slice().reverse().filter((obj: any) => isLikelyProductCard(obj));
+        for (const card of cards) {
+            if (card?.visible === false || typeof card?.getObjects !== 'function') continue;
+            const children = getCardImageCandidatesDeep(card).slice().reverse();
+
+            for (const child of children) {
+                zRank += 1;
+                if (!child || seen.has(child)) continue;
+                let isHit = false;
+                let isPreciseHit = false;
+                let hitArea = Number.POSITIVE_INFINITY;
+                try {
+                    if (typeof child?.containsPoint === 'function' && child.containsPoint(scenePoint, undefined, true)) {
+                        isHit = true;
+                        isPreciseHit = true;
+                    }
+                } catch {
+                    // ignore and fallback to bounds
+                }
+                try {
+                    const br = child?.getBoundingRect?.(true, true) || child?.getBoundingRect?.(true);
+                    if (br) {
+                        hitArea = Math.max(1, Math.abs(Number(br.width || 0) * Number(br.height || 0)));
+                        if (!isHit && scenePoint.x >= br.left && scenePoint.x <= (br.left + br.width) && scenePoint.y >= br.top && scenePoint.y <= (br.top + br.height)) {
+                            isHit = true;
+                        }
+                    }
+                } catch {
+                    // ignore
+                }
+                if (!isHit) continue;
+                const center = typeof child?.getCenterPoint === 'function'
+                    ? child.getCenterPoint()
+                    : { x: Number(child?.left || 0), y: Number(child?.top || 0) };
+                const dx = Number(scenePoint.x || 0) - Number(center?.x || 0);
+                const dy = Number(scenePoint.y || 0) - Number(center?.y || 0);
+                const distance = Math.hypot(dx, dy);
+                try {
+                    child.set?.({
+                        selectable: true,
+                        evented: true,
+                        hasControls: true,
+                        hasBorders: true
+                    });
+                    child.setCoords?.();
+                } catch {
+                    // ignore
+                }
+                hits.push({
+                    obj: child,
+                    precise: isPreciseHit,
+                    distance,
+                    area: hitArea,
+                    zRank
+                });
+                seen.add(child);
+            }
+        }
+        hits.sort((a, b) => {
+            // 1) precise geometry hit beats bounds-only hit
+            if (a.precise !== b.precise) return a.precise ? -1 : 1;
+            // 2) nearest center to pointer first
+            if (Math.abs(a.distance - b.distance) > 0.01) return a.distance - b.distance;
+            // 3) smaller footprint first (avoids giant stale bbox stealing clicks)
+            if (Math.abs(a.area - b.area) > 0.01) return a.area - b.area;
+            // 4) fallback: top-most by z traversal
+            return b.zRank - a.zRank;
+        });
+        return hits.map((entry) => entry.obj);
+    };
+
+    const findTopProductImageAtPointer = (nativeEvt: any, opts: { exclude?: any[] } = {}) => {
+        const hits = findProductImagesAtPointer(nativeEvt);
+        if (!Array.isArray(hits) || hits.length === 0) return null;
+        const excluded = new Set((opts.exclude || []).filter(Boolean));
+        const firstAvailable = hits.find((img: any) => !excluded.has(img));
+        return firstAvailable || hits[0] || null;
+    };
+
+    const findTopProductCardAtPointer = (nativeEvt: any) => {
+        if (!canvas.value || !nativeEvt) return null;
+        const scenePoint = getScenePointFromNativeEvent(nativeEvt);
+        if (!scenePoint) return null;
+        const cards = (canvas.value.getObjects() || []).slice().reverse().filter((obj: any) => isLikelyProductCard(obj));
+        for (const card of cards) {
+            if (card?.visible === false || card?.selectable === false) continue;
+            try {
+                if (typeof card?.containsPoint === 'function' && card.containsPoint(scenePoint, undefined, true)) return card;
+            } catch {
+                // ignore and fallback
+            }
+            try {
+                const br = card?.getBoundingRect?.(true, true) || card?.getBoundingRect?.(true);
+                if (!br) continue;
+                if (scenePoint.x >= br.left && scenePoint.x <= (br.left + br.width) && scenePoint.y >= br.top && scenePoint.y <= (br.top + br.height)) {
+                    return card;
+                }
+            } catch {
+                // ignore
+            }
+        }
+        return null;
+    };
+
     const pickShiftSelectionTarget = (evtPayload: any) => {
         const primary = evtPayload?.target || null;
         const subTargets = Array.isArray(evtPayload?.subTargets) ? evtPayload.subTargets.filter(Boolean) : [];
-
+        const preferCardImages = shiftSelectionBaselineMembers.some((member: any) => isProductCardImageSelectionCandidate(member));
+        // IMPORTANT: Prefer geometric pointer hit first.
+        // Fabric can occasionally report a stale active child as target when clicking inside interactive groups.
+        const pointerImageFirst = findTopProductImageAtPointer(evtPayload?.e, {
+            exclude: shiftSelectionBaselineMembers
+        });
+        if (pointerImageFirst) return pointerImageFirst;
+        const pointerCardFirst = findTopProductCardAtPointer(evtPayload?.e);
+        if (pointerCardFirst) {
+            const preferred = pickPreferredProductImageFromCard(pointerCardFirst);
+            if (preferred) return preferred;
+            const deepSelected = getDeepSelectedProductImageFromCard(pointerCardFirst);
+            if (deepSelected) return deepSelected;
+            return pointerCardFirst;
+        }
+        const fabricHitInfo = getFabricHitInfoAtPointer(evtPayload?.e);
+        const fabricPointerTarget = fabricHitInfo.target;
+        const fabricSubTargets = Array.isArray(fabricHitInfo.subTargets) ? fabricHitInfo.subTargets : [];
+        const fabricImageSubTarget = fabricSubTargets.find((item: any) => isProductCardImageSelectionCandidate(item));
+        if (fabricImageSubTarget) return fabricImageSubTarget;
+        if (fabricPointerTarget) {
+            if (isProductCardImageSelectionCandidate(fabricPointerTarget)) return fabricPointerTarget;
+            const pointerCard = isProductCardContainer(fabricPointerTarget)
+                ? fabricPointerTarget
+                : findProductCardParentGroup(fabricPointerTarget);
+            if (pointerCard) {
+                const pointerImage = findTopProductImageAtPointer(evtPayload?.e, {
+                    exclude: shiftSelectionBaselineMembers
+                });
+                if (pointerImage) return pointerImage;
+                const preferred = pickPreferredProductImageFromCard(pointerCard);
+                if (preferred) return preferred;
+                const deepSelected = getDeepSelectedProductImageFromCard(pointerCard);
+                if (deepSelected) return deepSelected;
+                return pointerCard;
+            }
+        }
         // Prefer deep-selected card images when available.
         const imageSubTarget = subTargets.find((item: any) => isProductCardImageSelectionCandidate(item));
         if (imageSubTarget) return imageSubTarget;
@@ -15069,7 +15377,22 @@ const setupReactivity = () => {
             const root = resolveSelectionRootObject(item);
             return !!(root && isLikelyProductCard(root));
         });
-        if (cardSubTarget) return cardSubTarget;
+        if (cardSubTarget) {
+            const cardRoot = resolveSelectionRootObject(cardSubTarget);
+            if (preferCardImages && cardRoot && isLikelyProductCard(cardRoot)) {
+                const preferredImage = pickPreferredProductImageFromCard(cardRoot);
+                if (preferredImage) return preferredImage;
+            }
+            return cardSubTarget;
+        }
+
+        if (preferCardImages) {
+            const primaryRoot = resolveSelectionRootObject(primary);
+            if (primaryRoot && isLikelyProductCard(primaryRoot)) {
+                const preferredImage = pickPreferredProductImageFromCard(primaryRoot);
+                if (preferredImage) return preferredImage;
+            }
+        }
 
         // Fallback for product zones: when Fabric reports only zone/null on Shift+click,
         // find the top card under pointer and use it as additive selection target.
@@ -15085,6 +15408,10 @@ const setupReactivity = () => {
                         if (obj.visible === false || obj.selectable === false) continue;
                         try {
                             if (typeof obj.containsPoint === 'function' && obj.containsPoint(scenePoint, undefined, true)) {
+                                if (preferCardImages) {
+                                    const preferredImage = pickPreferredProductImageFromCard(obj);
+                                    if (preferredImage) return preferredImage;
+                                }
                                 return obj;
                             }
                         } catch {
@@ -15093,6 +15420,10 @@ const setupReactivity = () => {
                         try {
                             const br = obj.getBoundingRect?.(true);
                             if (br && scenePoint.x >= br.left && scenePoint.x <= (br.left + br.width) && scenePoint.y >= br.top && scenePoint.y <= (br.top + br.height)) {
+                                if (preferCardImages) {
+                                    const preferredImage = pickPreferredProductImageFromCard(obj);
+                                    if (preferredImage) return preferredImage;
+                                }
                                 return obj;
                             }
                         } catch {
@@ -15633,22 +15964,115 @@ const setupReactivity = () => {
         // Global Shift+click additive multi-selection:
         // keep existing selection and append target in all editor contexts.
         if (evt?.shiftKey && !isNormalizingShiftSelection) {
+            evt.preventDefault?.();
+            evt.stopPropagation?.();
             const shiftTarget = pickShiftSelectionTarget(e) || target;
             const normalizedTarget = resolveShiftSelectionRootObject(shiftTarget);
+            if (import.meta.dev) {
+                console.log('[shift-product-multi] resolve', {
+                    rawTargetType: String(target?.type || ''),
+                    rawTargetName: String(target?.name || ''),
+                    rawTargetId: String((target as any)?._customId || ''),
+                    shiftTargetType: String((shiftTarget as any)?.type || ''),
+                    shiftTargetName: String((shiftTarget as any)?.name || ''),
+                    shiftTargetId: String((shiftTarget as any)?._customId || ''),
+                    normalizedType: String((normalizedTarget as any)?.type || ''),
+                    normalizedName: String((normalizedTarget as any)?.name || ''),
+                    normalizedId: String((normalizedTarget as any)?._customId || ''),
+                    normalizedIsImage: String((normalizedTarget as any)?.type || '').toLowerCase() === 'image',
+                    normalizedParentCard: !!findProductCardParentGroup(normalizedTarget),
+                });
+            }
             if (normalizedTarget) {
                 const currentMembersRaw = shiftSelectionBaselineMembers.length
                     ? shiftSelectionBaselineMembers
                     : collectShiftSelectionMembers(canvas.value.getActiveObject());
-                const currentMembers = currentMembersRaw.slice();
-                const isAlreadySelected = currentMembers.includes(normalizedTarget);
+                const currentMembers = currentMembersRaw
+                    .map((member: any) => resolveShiftSelectionRootObject(member))
+                    .filter((member: any) => !!member)
+                    .filter((member: any, idx: number, arr: any[]) => arr.indexOf(member) === idx);
+                let finalTarget = normalizedTarget;
+                let isAlreadySelected = currentMembers.includes(finalTarget);
+                if (isAlreadySelected) {
+                    const pointerImage = findTopProductImageAtPointer(e?.e, {
+                        exclude: currentMembers
+                    });
+                    if (pointerImage && !currentMembers.includes(pointerImage)) {
+                        finalTarget = pointerImage;
+                        isAlreadySelected = false;
+                    } else {
+                        const pointerCard = findTopProductCardAtPointer(e?.e);
+                        if (pointerCard) {
+                            const pointerPreferred =
+                                pickPreferredProductImageFromCard(pointerCard) ||
+                                getDeepSelectedProductImageFromCard(pointerCard) ||
+                                pointerCard;
+                            if (pointerPreferred && !currentMembers.includes(pointerPreferred)) {
+                                finalTarget = pointerPreferred;
+                                isAlreadySelected = false;
+                            }
+                        }
+                    }
+                }
+                if (import.meta.dev) {
+                    console.log('[shift-product-multi] baseline', {
+                        baselineCount: currentMembers.length,
+                        isAlreadySelected,
+                        currentMemberIds: currentMembers.map((member: any) => String((member as any)?._customId || '')),
+                        finalTargetId: String((finalTarget as any)?._customId || ''),
+                        finalTargetType: String((finalTarget as any)?.type || ''),
+                        finalTargetName: String((finalTarget as any)?.name || '')
+                    });
+                }
                 if (!isAlreadySelected) {
-                    const nextMembers = [...currentMembers, normalizedTarget];
+                    const nextMembers = [...currentMembers, finalTarget];
+                    if (import.meta.dev) {
+                        console.log('[shift-product-multi] nextMembers', nextMembers.map((member: any) => ({
+                            type: String(member?.type || ''),
+                            name: String(member?.name || ''),
+                            isImage: String(member?.type || '').toLowerCase() === 'image',
+                            hasCardParent: !!findProductCardParentGroup(member),
+                            selectable: member?.selectable,
+                            evented: member?.evented
+                        })));
+                    }
+                    nextMembers.forEach((member: any) => {
+                        if (!member || String(member?.type || '').toLowerCase() !== 'image') return;
+                        try {
+                            member.set?.({
+                                selectable: true,
+                                evented: true,
+                                hasControls: true,
+                                hasBorders: true
+                            });
+                            member.setCoords?.();
+                        } catch {
+                            // ignore
+                        }
+                    });
                     canvas.value.discardActiveObject();
                     if (nextMembers.length === 1) {
                         canvas.value.setActiveObject(nextMembers[0]);
                     } else if (fabric?.ActiveSelection) {
                         const nextSelection = new fabric.ActiveSelection(nextMembers, { canvas: canvas.value });
                         canvas.value.setActiveObject(nextSelection);
+                    }
+                    if (import.meta.dev) {
+                        const activeAfter = canvas.value.getActiveObject?.();
+                        const activeType = String(activeAfter?.type || '').toLowerCase();
+                        const activeMembers = activeType === 'activeselection' && typeof activeAfter?.getObjects === 'function'
+                            ? (activeAfter.getObjects() || []).map((member: any) => ({
+                                type: String(member?.type || ''),
+                                name: String(member?.name || ''),
+                                isImage: String(member?.type || '').toLowerCase() === 'image',
+                                hasCardParent: !!findProductCardParentGroup(member)
+                            }))
+                            : [];
+                        console.log('[shift-product-multi] activeAfter', {
+                            activeType,
+                            activeName: String(activeAfter?.name || ''),
+                            activeMembers
+                        });
                     }
                     updateSelection();
                     canvas.value.requestRenderAll();
@@ -22108,35 +22532,51 @@ const simulateSmartGrid = async (
                   
                   fixNestedNames(cloned, templateObject);
 
-                  cloned.set({
-                     left: finalX,
-                     top: finalY,
-                     smartGridId: batchGridId,
-                     opacity: 1,
-                     visible: true,
-                     originX: 'center',
-                     originY: 'center',
-                     // Default behavior (Canva-like): select/move the whole card.
-                     // Deep select is enabled only on double click.
-                     subTargetCheck: false,
-                     interactive: false
-                  });
+	                  cloned.set({
+	                     left: finalX,
+	                     top: finalY,
+	                     smartGridId: batchGridId,
+	                     opacity: 1,
+	                     visible: true,
+	                     originX: 'center',
+	                     originY: 'center',
+	                     // Product cards must support inner-element targeting (image/text) consistently.
+	                     subTargetCheck: true,
+	                     interactive: true
+	                  });
                   const clonedName = String((cloned as any)?.name || '').trim();
                   if (!clonedName || clonedName === 'priceGroup') {
                       cloned.set('name', 'product-card');
                   }
 
-                  // Ensure internal elements are selectable
-                  const objects = cloned.getObjects ? cloned.getObjects() : [];
-                  objects.forEach((obj: any) => {
-                      const isBackground = obj.name === 'offerBackground' || obj.name === 'price_bg';
-                      obj.set({
-                          selectable: !isBackground,
-                          evented: !isBackground,
-                          hasControls: !isBackground,
-                          hasBorders: !isBackground
-                      });
-                  });
+	                  // Ensure internal elements are selectable (recursive for nested groups in templates).
+	                  const applyInteractivityRecursively = (node: any) => {
+	                      if (!node) return;
+	                      const t = String(node?.type || '').toLowerCase();
+	                      const n = String(node?.name || '');
+	                      const isBackground =
+	                          n === 'offerBackground' ||
+	                          n === 'price_bg' ||
+	                          n === 'price_bg_image' ||
+	                          n === 'splash_image';
+	                      if (t === 'group' && typeof node.getObjects === 'function') {
+	                          node.set({
+	                              subTargetCheck: true,
+	                              interactive: true,
+	                              selectable: true,
+	                              evented: true
+	                          });
+	                          (node.getObjects() || []).forEach((child: any) => applyInteractivityRecursively(child));
+	                          return;
+	                      }
+	                      node.set({
+	                          selectable: !isBackground,
+	                          evented: !isBackground,
+	                          hasControls: !isBackground,
+	                          hasBorders: !isBackground
+	                      });
+	                  };
+	                  applyInteractivityRecursively(cloned);
 
                  // Data Injection Logic
                   let titleFound = false;
@@ -30170,19 +30610,23 @@ const getZoneChildren = (zone: any) => {
     })();
     
     const normalizeLegacyCard = (o: any, explicitCard: boolean) => {
-        if (explicitCard) return;
-        // Upgrade legacy card objects (old saves) so the rest of the engine can rely on flags.
-        o.isProductCard = true;
-        o.isSmartObject = true;
-        // Single-click deep select: user can click directly on inner elements.
+        if (!explicitCard) {
+            // Upgrade legacy card objects (old saves) so the rest of the engine can rely on flags.
+            o.isProductCard = true;
+            o.isSmartObject = true;
+        }
+
+        // Always normalize interactivity for cards (legacy and explicit cards alike).
         o.subTargetCheck = true;
         o.interactive = true;
         o.selectable = true;
         o.evented = true;
+
         // Ensure inner elements are selectable with controls
         if (typeof o.getObjects === 'function') {
             o.getObjects().forEach((child: any) => {
-                const isBackground = child.name === 'offerBackground' || child.name === 'price_bg';
+                const n = String(child?.name || '');
+                const isBackground = n === 'offerBackground' || n === 'price_bg' || n === 'price_bg_image' || n === 'splash_image';
                 child.selectable = !isBackground;
                 child.evented = !isBackground;
                 child.hasControls = !isBackground;
