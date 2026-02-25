@@ -1,0 +1,154 @@
+---
+name: ux-atelier-frontdesign
+description: "UI/UX de alto nível para front: desenha ou redesenha telas/fluxos/componentes com direção visual distinta (anti-genérica), microcopy, estados completos (loading/empty/error), acessibilidade e implementação no stack do repo (React/TS/Tailwind etc.). Use quando o pedido for sobre experiência do usuário, layout, componentização, design system, microinterações, IA/fluxo. Não use para backend-only, infra, CI, ou bugs sem impacto em UI/UX."
+---
+
+# UX Atelier — Front Design (não-genérico, centrado em experiência)
+
+## Objetivo
+Criar UI **com assinatura própria** (sem “cara de template de IA”), mas **guiada por experiência do usuário**:
+- Fluxo principal + fluxos alternativos
+- Microcopy que reduz fricção
+- Estados completos (loading / empty / error / offline / permission)
+- A11y e teclado/foco
+- Microinterações com propósito
+- Implementação consistente com o repo (componentes, tokens, padrões, testes)
+
+Use os templates:
+- [assets/ui-brief-template.md](assets/ui-brief-template.md)
+- [assets/ui-spec-template.md](assets/ui-spec-template.md)
+E checklists:
+- [references/ux-quality-gates.md](references/ux-quality-gates.md)
+- [references/microcopy-voice.md](references/microcopy-voice.md)
+
+---
+
+## Quando usar (gatilhos)
+Use esta skill quando o usuário pedir algo como:
+- “Desenhe uma nova tela X / fluxo Y”
+- “Refaça o dashboard / onboarding / checkout”
+- “Melhore a UX de…”
+- “Crie componentes e estados para…”
+- “Preciso de uma UI premium/diferente, com foco em experiência”
+
+## Quando NÃO usar
+Não use quando o pedido for:
+- APIs/DB/infra/CI sem UI
+- bugfix puramente lógico sem impacto em UX
+- “só ajusta um padding” (a menos que o usuário peça explicitamente upgrade de UX)
+
+---
+
+## Regras anti-design genérico (obrigatórias)
+1) **Proibir “default AI UI”**: não entregar solução com “cards arredondados + gradiente genérico + layout bento padrão” sem justificativa.
+2) **Escolher 3 ‘assinaturas’** (abaixo) e aplicá-las de forma consistente.
+3) **Conteúdo antes de decoração**: tipografia, hierarquia, IA e microcopy vêm antes do “visual bonito”.
+4) **Estados completos**: nenhum componente/tela sai sem loading/empty/error e casos-limite.
+5) **Acessibilidade não é opcional**: foco visível, navegação por teclado, contraste minimamente decente.
+
+### Assinaturas de design (escolha 3 e declare no “Manifesto”)
+- **Tipografia editorial**: hierarquia forte, ritmo vertical, títulos com presença, line-length controlado.
+- **Grid assimétrico controlado**: composição com “tensão” (não bagunça), espaço negativo intencional.
+- **Navegação espacial**: split view, inspector panel, side-rail contextual, foco no “objeto em edição”.
+- **Interações com feedback**: microanimações curtas para orientar (não enfeitar), estados “tátil/preciso”.
+- **Densidade inteligente**: UI densa onde precisa (tabela/lista), respirada onde importa (decisão/ação).
+- **Copy como UX**: botões e mensagens que guiam, não culpam; erros acionáveis.
+- **A11y-first**: padrões de foco, atalhos, ARIA quando necessário, sem “armadilhas” de modal.
+
+---
+
+## Workflow (faça nessa ordem)
+
+### Fase 0 — Leitura do contexto do repo (sempre)
+1) Identificar stack e padrões:
+   - framework (Next/Vite/CRA/etc), router, state mgmt
+   - lib de componentes (shadcn, MUI, Radix, HeadlessUI, etc.)
+   - Tailwind? tokens? CSS vars? design system existente?
+2) Ler rapidamente:
+   - `package.json`, `tailwind.config.*`, `src/components/**`, `styles/**`
+3) Extrair “regras do terreno”: naming, estrutura de pastas, padrões de UI existentes.
+
+> Se existir design system: **evoluir** (não reescrever). Se não existir: criar tokens mínimos e consistentes.
+
+---
+
+### Fase 1 — Brief UX (se faltar info, pergunte só o essencial)
+Se o pedido não tiver contexto suficiente, faça no máximo 5 perguntas curtas:
+- Quem é o usuário e qual tarefa ele quer concluir?
+- Qual é a ação principal (primary action) e o “momento de sucesso”?
+- Quais dados entram/saem? (ex.: lista, detalhe, formulário, upload)
+- Qual restrição (brand, acessos, device, performance)?
+- Existe referência de estilo (apenas como inspiração, sem copiar)?
+
+Se o usuário não responder, prossiga com **assunções explícitas** e liste-as.
+
+---
+
+### Fase 2 — Desenhar a experiência (não o layout)
+Entregar um **Manifesto de Experiência**:
+- JTBD + meta (o que “bom” significa)
+- 3 maiores fricções atuais (ou prováveis)
+- Princípios (3–5) que guiam decisões
+- Fluxo principal (happy path) + 2 fluxos alternativos
+- Estados: loading/empty/error/offline/permission
+- Métrica(s) de UX para validar melhoria (ex.: tempo até completar, drop-off, erro)
+
+Use [assets/ui-brief-template.md](assets/ui-brief-template.md).
+
+---
+
+### Fase 3 — Direção visual (diferente + justificável)
+Propor **3 direções visuais** com:
+- Nome curto (ex.: “Editorial Precision”, “Tool-first Spatial”, “Quiet Luxury Dense Data”)
+- 5 bullets do que muda (tipografia, grid, densidade, motion, cromia)
+- Quando usar / quando evitar
+Escolher 1 direção com base no brief (ou pedir escolha do usuário se ele quiser decidir).
+
+---
+
+### Fase 4 — Especificação de UI (wire + componentes + tokens + copy)
+Criar spec com:
+- Wireframe textual (desktop + mobile) com hierarquia clara
+- Inventário de componentes (com estados e props)
+- Tokens mínimos (spacing, radius, type scale, cores, shadow, motion)
+- Microcopy: labels, empty states, erros e confirmações
+- A11y: foco, teclado, ARIA onde precisa, role de modais, etc.
+
+Use [assets/ui-spec-template.md](assets/ui-spec-template.md) e [references/microcopy-voice.md](references/microcopy-voice.md).
+
+---
+
+### Fase 5 — Implementação no repo (com qualidade)
+1) Planejar mudanças em arquivos (lista exata).
+2) Implementar componentes com:
+   - estrutura limpa, composição, estados e variantes
+   - responsividade (sem “quebrar”)
+   - skeleton/placeholder realista
+3) Se existir Storybook/tests, adicionar pelo menos:
+   - 1 story por componente principal OU
+   - 1 teste de fluxo (Playwright/Cypress) se o repo já usa
+
+**Não** introduzir dependências grandes sem pedir aprovação.
+
+---
+
+### Fase 6 — Quality Gate (obrigatório antes de finalizar)
+Rodar o checklist de [references/ux-quality-gates.md](references/ux-quality-gates.md) e reportar:
+- o que passou
+- o que ficou como tradeoff
+- próximos passos (1–3)
+
+---
+
+## Saída obrigatória (formato)
+Sempre entregar nesta ordem:
+
+1) **Manifesto de Experiência** (1 tela)
+2) **Direção visual escolhida** + “assinaturas” (3 escolhidas)
+3) **Mapa de estados e edge cases**
+4) **Spec de componentes + tokens**
+5) **Plano de implementação (arquivos)**
+6) **Implementação (diffs/código)**
+7) **Checklist final (quality gate)**
+
+Fim.
