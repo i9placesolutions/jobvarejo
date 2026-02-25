@@ -95,6 +95,12 @@ const user = ref<any>(null)
 const safeProjects = computed(() => projects.value || [])
 const safeFolders = computed(() => folders.value || [])
 
+const closeFloatingOverlays = () => {
+  showFolderMenu.value = null
+  showProjectMenu.value = null
+  showNotifications.value = false
+}
+
 // Close menus when clicking outside - only on client
 const folderMenuRef = ref<HTMLElement | null>(null)
 const handleContextMenusOutsideClick = (e: Event) => {
@@ -212,6 +218,10 @@ const loadNotifications = async () => {
 
 // Toggle notifications modal
 const toggleNotifications = async () => {
+  if (!showNotifications.value) {
+    showFolderMenu.value = null
+    showProjectMenu.value = null
+  }
   showNotifications.value = !showNotifications.value
   if (showNotifications.value) {
     await loadNotifications()
@@ -308,6 +318,12 @@ watch(activeView, (view) => {
 watch(activeFolderId, (folderId) => {
   if (activeView.value !== 'all') return
   filterFolderId.value = folderId ? String(folderId) : 'all'
+})
+
+watch([showCreateProject, showCreateFolder, showMoveProjectModal], ([projectOpen, folderOpen, moveOpen]) => {
+  if (projectOpen || folderOpen || moveOpen) {
+    closeFloatingOverlays()
+  }
 })
 
 // Computed: Folder tree with expansion state
@@ -986,8 +1002,11 @@ const cancelRenameProject = () => {
 
 // Show project context menu
 const showProjectContextMenu = (projectId: string, event: MouseEvent) => {
+  if (showCreateProject.value || showCreateFolder.value || showMoveProjectModal.value) return
   event.preventDefault()
   event.stopPropagation()
+  showFolderMenu.value = null
+  showNotifications.value = false
   projectMenuPosition.value = { x: event.clientX, y: event.clientY }
   showProjectMenu.value = projectId
 }
@@ -1095,8 +1114,11 @@ const handleDeleteFolder = async (folderId: string) => {
 
 // Show folder context menu
 const showFolderContextMenu = (folderId: string, event: MouseEvent) => {
+  if (showCreateProject.value || showCreateFolder.value || showMoveProjectModal.value) return
   event.preventDefault()
   event.stopPropagation()
+  showProjectMenu.value = null
+  showNotifications.value = false
   folderMenuPosition.value = { x: event.clientX, y: event.clientY }
   showFolderMenu.value = folderId
 }
@@ -1266,7 +1288,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 <template>
   <div class="dashboard-root h-screen overflow-hidden bg-[#09090d] text-white flex flex-col">
     <!-- Modern Header (Spatial) -->
-    <header class="dashboard-header h-14 px-6 border-b border-white/12 bg-[#15141d]/95 flex items-center justify-between shrink-0 backdrop-blur-sm sticky top-0 z-30">
+    <header class="dashboard-header h-14 px-6 border-b border-white/12 bg-[#15141d]/95 flex items-center justify-between shrink-0">
       <!-- Logo and App Name -->
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-violet-400/35 bg-linear-to-br from-violet-500/35 to-fuchsia-500/20 shadow-[0_10px_20px_-10px_rgba(168,85,247,0.45)]">
@@ -1283,9 +1305,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </div>
     </header>
 
-    <div class="relative z-10 flex-1 flex overflow-hidden min-h-0">
+    <div class="dashboard-layout relative flex-1 flex overflow-hidden min-h-0">
       <!-- Sidebar (Spatial Rail) -->
-      <aside class="w-64 h-full min-h-0 border-r border-white/12 bg-[#13131d]/95 flex flex-col shrink-0 backdrop-blur overflow-hidden">
+      <aside class="dashboard-sidebar w-64 h-full min-h-0 border-r border-white/12 bg-[#13131d]/95 flex flex-col shrink-0 overflow-hidden">
         <!-- Top Header (Figma Style) -->
         <div class="h-12 px-3 border-b border-white/12 flex items-center justify-between shrink-0">
           <!-- User/Workspace Selector -->
@@ -1458,7 +1480,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </aside>
 
       <!-- Main Content -->
-      <main class="flex-1 flex flex-col overflow-hidden bg-[#09090d]">
+      <main class="dashboard-main flex-1 flex flex-col overflow-hidden bg-[#09090d]">
         <!-- Section Title -->
         <div class="relative px-6 pt-6 pb-4">
           <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium mb-2">Workspace</p>
@@ -1619,7 +1641,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   :key="folder.id"
                   type="button"
                   class="group text-left rounded-xl border border-white/12 bg-[#181824] px-3 py-3 transition-all hover:border-violet-300/55 hover:bg-[#1d1d2e] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/50"
-                  :class="{ 'border-violet-400/80 bg-violet-500/12 shadow-[0_10px_30px_-18px_rgba(167,139,250,0.8)]': activeFolderId === folder.id }"
+                  :class="{ 'border-violet-400/80 bg-violet-500/12': activeFolderId === folder.id }"
                   @click="openFolderFromSidebar(folder.id)"
                   @contextmenu="(e: MouseEvent) => showFolderContextMenu(folder.id, e)"
                 >
@@ -1648,7 +1670,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <div
                 v-for="project in filteredProjects"
                 :key="project.id"
-                class="project-card-shell group relative bg-[#171727] border border-white/12 hover:border-white/20 overflow-hidden transition-[border-color,box-shadow,transform] duration-200 cursor-pointer rounded-xl hover:shadow-[0_18px_42px_-28px_rgba(255,255,255,0.4)] hover:-translate-y-[1px] motion-reduce:transition-none"
+                class="project-card-shell group relative bg-[#171727] border border-white/12 hover:border-white/20 overflow-hidden transition-[border-color] duration-200 cursor-pointer rounded-xl motion-reduce:transition-none"
                 draggable="true"
                 @mousedown="handleProjectPointerDown(project.id, $event)"
                 @dragstart="handleDragStart(project.id, $event)"
@@ -1662,7 +1684,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   <div v-if="hasUsableProjectPreview(project) && !project._thumbError" class="absolute inset-0 p-2 flex items-center justify-center">
                     <img
                       :src="project.preview_url"
-                      class="project-thumb-media max-w-full max-h-full object-contain rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                      class="project-thumb-media max-w-full max-h-full object-contain rounded-lg"
                       :alt="project.name"
                       draggable="false"
                       loading="lazy"
@@ -1695,7 +1717,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     @mousedown.stop
                     @touchstart.stop
                     @click.stop="showProjectContextMenu(project.id, $event)"
-                    class="absolute top-2 right-2 p-2 bg-black/75 rounded-lg opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-150 hover:bg-black/90 shadow-lg motion-reduce:transition-none"
+                    class="absolute top-2 right-2 p-2 bg-black/75 rounded-lg hover:bg-black/90"
                     title="Ações"
                   >
                     <MoreVertical class="w-4 h-4 text-white" />
@@ -1707,7 +1729,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     @mousedown.stop
                     @touchstart.stop
                     @click.stop="toggleStarred(project.id)"
-                    :class="['absolute top-2 left-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-150 shadow-lg motion-reduce:transition-none', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/75 text-white hover:bg-black/90']"
+                    :class="['absolute top-2 left-2 p-2 rounded-lg', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/75 text-white hover:bg-black/90']"
                     title="Favoritar"
                   >
                     <Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" />
@@ -1770,7 +1792,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <!-- Create Project Modal (Figma Style) -->
     <div
       v-if="showCreateProject"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/80"
       @click.self="showCreateProject = false"
     >
       <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
@@ -1807,7 +1829,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <!-- Create Folder Modal (Figma Style) -->
     <div
       v-if="showCreateFolder"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/80"
       @click.self="showCreateFolder = false"
     >
       <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
@@ -1845,7 +1867,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showFolderMenu"
-        class="folder-context-menu fixed z-100 bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-40 shadow-xl"
+        class="folder-context-menu fixed z-[100] bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-40 shadow-xl"
         :style="{ left: `${folderMenuPosition.x}px`, top: `${folderMenuPosition.y}px` }"
       >
         <button
@@ -1869,7 +1891,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showProjectMenu"
-        class="project-context-menu fixed z-100 bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-40 shadow-xl"
+        class="project-context-menu fixed z-[100] bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-40 shadow-xl"
         :style="{ left: `${projectMenuPosition.x}px`, top: `${projectMenuPosition.y}px` }"
       >
         <button
@@ -1914,7 +1936,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <!-- Move Project Modal -->
     <div
       v-if="showMoveProjectModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/80"
       @click.self="closeMoveProjectModal"
     >
       <div class="w-full max-w-xl bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
@@ -2015,7 +2037,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
       >
         <div
           v-if="showNotifications"
-          class="fixed inset-0 z-199 bg-black/20"
+          class="fixed inset-0 z-[199] bg-black/20"
           @click="showNotifications = false"
         ></div>
       </Transition>
@@ -2031,7 +2053,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
       >
         <div
           v-if="showNotifications && notificationButtonRef"
-          class="notifications-modal fixed z-200"
+          class="notifications-modal fixed z-[200]"
           :style="{
             top: `${notificationButtonRef.getBoundingClientRect().bottom + 8}px`,
             left: `${notificationButtonRef.getBoundingClientRect().right + 8}px`
@@ -2113,30 +2135,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 <style scoped>
 .dashboard-root {
-  background:
-    radial-gradient(circle at 16% 8%, rgba(168, 85, 247, 0.09), transparent 38%),
-    radial-gradient(circle at 82% 14%, rgba(129, 140, 248, 0.06), transparent 36%),
-    #09090d;
-}
-
-.dashboard-root::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(130deg, rgba(255, 255, 255, 0.03) 0.5px, transparent 0.5px) 0 0 / 48px 48px,
-    linear-gradient(240deg, rgba(255, 255, 255, 0.02) 0.5px, transparent 0.5px) 0 0 / 96px 96px;
-  opacity: 0.35;
-}
-
-.dashboard-root::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0;
+  background: #09090d;
 }
 
 .folder-tree {
@@ -2149,14 +2148,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
   position: relative;
 }
 
-.project-card-shell,
-.project-thumb-media {
-  backface-visibility: hidden;
-  transform: translateZ(0);
-}
-
-.project-card-shell {
-  will-change: border-color, box-shadow;
+/* Chromium-safe mode: avoid hover repaints/composition glitches */
+.dashboard-root *,
+.dashboard-root *::before,
+.dashboard-root *::after {
+  animation: none !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  will-change: auto !important;
 }
 
 .project-card-shell:focus-within,
