@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Check } from 'lucide-vue-next'
+import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Check, User } from 'lucide-vue-next'
 	import FolderTreeItem from '~/components/FolderTreeItem.vue'
 	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
 	import { toWasabiProxyUrl } from '~/utils/storageProxy'
@@ -19,6 +19,7 @@ const { folders, loadFolders, createFolder, updateFolder, deleteFolder, toggleFo
 
 // State
 const searchQuery = ref('')
+const normalizedSearchQuery = computed(() => String(searchQuery.value || '').trim().toLowerCase())
 const viewMode = ref<'grid' | 'list'>('grid')
 const sortBy = ref<'recent' | 'name' | 'date'>('recent')
 const activeView = ref<'recent' | 'all' | 'shared' | 'starred'>('recent')
@@ -314,25 +315,69 @@ type FolderTreeNode = FolderModel & {
   children: FolderTreeNode[]
   depth: number
   isExpanded: boolean
+  projectCount: number
 }
 
 const folderTree = computed<FolderTreeNode[]>(() => {
   // During SSR, return empty array to avoid issues
   if (process.server || !folders.value) return []
 
+  const searchTerm = normalizedSearchQuery.value
+
+  const matchesSearch = (name: string): boolean => {
+    const normalizedName = String(name || '').trim().toLowerCase()
+    return !searchTerm || normalizedName.includes(searchTerm)
+  }
+
   const buildTree = (parentId: string | null = null, depth = 0): FolderTreeNode[] => {
     return folders.value
       .filter(f => f.parent_id === parentId)
       .sort((a, b) => a.order_index - b.order_index)
-      .map(folder => ({
-        ...folder,
-        children: buildTree(folder.id, depth + 1),
-        depth,
-        isExpanded: expandedFolders.value.has(folder.id),
-      }))
+      .map(folder => {
+        const children = buildTree(folder.id, depth + 1)
+        const isSelfMatch = matchesSearch(folder.name)
+        if (!isSelfMatch && children.length === 0) return null
+
+        return {
+          ...folder,
+          children,
+          depth,
+          isExpanded: expandedFolders.value.has(folder.id) || (!!searchTerm && (isSelfMatch || children.length > 0)),
+          projectCount: getFolderProjectCount(folder.id),
+        }
+      })
+      .filter((node): node is FolderTreeNode => node !== null)
   }
   return buildTree()
 })
+
+const getFolderProjectCount = (folderId: string): number => {
+  const startId = String(folderId || '').trim()
+  if (!startId) return 0
+
+  const visited = new Set<string>()
+  const walk = (currentId: string): number => {
+    const id = String(currentId || '').trim()
+    if (!id || visited.has(id)) return 0
+    visited.add(id)
+
+    let count = 0
+    for (const project of safeProjects.value) {
+      if (String(project.folder_id || '') === id) {
+        count += 1
+      }
+    }
+
+    const children = getChildren(id)
+    for (const child of children) {
+      count += walk(child.id)
+    }
+
+    return count
+  }
+
+  return walk(startId)
+}
 
 // Computed: Projects in active folder (or all if no folder selected)
 const activeFolderProjects = computed(() => {
@@ -349,6 +394,63 @@ const activeFolderProjects = computed(() => {
 
   const folderIds = getFolderTreeIds(activeFolderId.value)
   return safeProjects.value.filter(p => p.folder_id && folderIds.includes(p.folder_id))
+})
+
+const visibleFoldersOnDashboard = computed(() => {
+  if (activeView.value !== 'all') return []
+  const searchTerm = normalizedSearchQuery.value
+
+  const selectedParent = activeFolderId.value ? String(activeFolderId.value) : null
+  return safeFolders.value
+    .filter((folder) => (
+      selectedParent
+        ? String(folder.parent_id || '') === selectedParent
+        : !folder.parent_id
+    ))
+    .filter((folder) => (
+      !searchTerm || String(folder.name || '').trim().toLowerCase().includes(searchTerm)
+    ))
+  .sort((a, b) => a.order_index - b.order_index)
+})
+
+const activeFolderName = computed(() => safeFolders.value.find(f => f.id === activeFolderId.value)?.name || 'Pasta sem nome')
+
+const dashboardTitle = computed(() => {
+  if (searchQuery.value) {
+    return 'Resultados da busca'
+  }
+  if (activeFolderId.value) {
+    return activeFolderName.value
+  }
+  if (activeView.value === 'recent') {
+    return 'Vistos recentemente'
+  }
+  if (activeView.value === 'shared') {
+    return 'Compartilhados'
+  }
+  if (activeView.value === 'starred') {
+    return 'Favoritos'
+  }
+  return 'Todos os Projetos'
+})
+
+const dashboardContextHint = computed(() => {
+  if (searchQuery.value) {
+    return 'Filtrando por palavra-chave.'
+  }
+  if (activeView.value === 'all' && activeFolderId.value) {
+    return 'Mostrando só esta pasta e conteúdos aninhados.'
+  }
+  if (activeView.value === 'recent') {
+    return 'Acesse seus arquivos mais recentes.'
+  }
+  if (activeView.value === 'shared') {
+    return 'Arquivos compartilhados com você.'
+  }
+  if (activeView.value === 'starred') {
+    return 'Itens marcados como favoritos.'
+  }
+  return 'Visão completa do seu workspace.'
 })
 
 // Computed: Projects without folder (root level)
@@ -389,13 +491,10 @@ const viewProjects = computed(() => {
 // Computed: Filtered and sorted projects
 const filteredProjects = computed(() => {
   let result: any[] = []
+  const searchTerm = normalizedSearchQuery.value
 
   // Start with view-based filtering
-  if (searchQuery.value) {
-    result = viewProjects.value.filter(p =>
-      p.name?.toLowerCase().includes(searchQuery.value.toLowerCase())
-    )
-  } else if (activeFolderId.value && activeView.value === 'all' && String(filterFolderId.value || 'all') === 'all') {
+  if (activeFolderId.value && activeView.value === 'all' && String(filterFolderId.value || 'all') === 'all') {
     // Filter by folder
     const folderIds = [activeFolderId.value]
     const getFolderTreeIds = (folderId: string): string[] => {
@@ -410,6 +509,10 @@ const filteredProjects = computed(() => {
     result = viewProjects.value.filter(p => p.folder_id && allFolderIds.includes(p.folder_id))
   } else {
     result = viewProjects.value
+  }
+
+  if (searchTerm) {
+    result = result.filter(p => String(p.name || '').trim().toLowerCase().includes(searchTerm))
   }
 
   // Apply additional filters
@@ -523,6 +626,14 @@ const formatFolderPathLabel = (folderId: string): string => {
   return parts.join(' / ')
 }
 
+const pluralize = (value: number, singular: string, plural: string): string => {
+  return `${value} ${value === 1 ? singular : plural}`
+}
+
+const getFolderSubfolderCount = (folderId: string): number => {
+  return getChildren(folderId).length
+}
+
 const moveProjectFolderOptions = computed<FolderOption[]>(() => {
   const list = Array.isArray(safeFolders.value) ? safeFolders.value : []
   if (!list.length) return []
@@ -572,16 +683,28 @@ const canOpenFolderFromTopFilter = computed(() => {
   return !!id && id !== 'all' && id !== 'root'
 })
 
+const openFolderFromSidebar = (folderId: string | null) => {
+  const normalized = normalizeFolderId(folderId)
+  activeView.value = 'all'
+
+  if (!normalized) {
+    setActiveFolder(null)
+    filterFolderId.value = 'all'
+    return
+  }
+
+  setActiveFolder(normalized)
+  filterFolderId.value = normalized
+}
+
 const openFolderFromTopFilter = () => {
   const selected = normalizeFolderId(filterFolderId.value)
   if (!selected || selected === 'all') {
-    setActiveFolder(null)
-    activeView.value = 'all'
+    openFolderFromSidebar(null)
     return
   }
   if (selected === 'root') {
-    setActiveFolder(null)
-    activeView.value = 'all'
+    openFolderFromSidebar(null)
     return
   }
 
@@ -596,8 +719,7 @@ const openFolderFromTopFilter = () => {
     cursor = parentId
   }
 
-  setActiveFolder(selected)
-  activeView.value = 'all'
+  openFolderFromSidebar(selected)
 }
 
 const currentMoveProject = computed(() => {
@@ -1142,15 +1264,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
 </script>
 
 <template>
-  <div class="dashboard-root h-screen bg-[#0f0f0f] text-white flex flex-col">
-    <!-- Modern Header (Figma Style) -->
-    <header class="h-14 border-b border-white/5 bg-[#1a1a1a] flex items-center justify-between px-6 shrink-0">
+  <div class="dashboard-root h-screen overflow-hidden bg-[#09090d] text-white flex flex-col">
+    <!-- Modern Header (Spatial) -->
+    <header class="dashboard-header h-14 px-6 border-b border-white/12 bg-[#15141d]/95 flex items-center justify-between shrink-0 backdrop-blur-sm sticky top-0 z-30">
       <!-- Logo and App Name -->
       <div class="flex items-center gap-3">
-        <div class="w-8 h-8 bg-linear-to-br from-violet-500/20 to-purple-500/20 rounded-lg flex items-center justify-center border border-violet-500/30">
-          <Sparkles class="w-4 h-4 text-violet-400" />
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-violet-400/35 bg-linear-to-br from-violet-500/35 to-fuchsia-500/20 shadow-[0_10px_20px_-10px_rgba(168,85,247,0.45)]">
+          <Sparkles class="w-4 h-4 text-violet-200" />
         </div>
-        <span class="text-sm font-semibold text-white">Studio PRO</span>
+        <span class="text-sm font-semibold tracking-wide text-white">Studio PRO</span>
       </div>
 
       <!-- User Avatar -->
@@ -1161,15 +1283,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </div>
     </header>
 
-    <div class="flex-1 flex overflow-hidden">
-      <!-- Sidebar (Figma Style) -->
-      <aside class="w-60 border-r border-white/5 bg-[#1a1a1a] flex flex-col shrink-0">
+    <div class="relative z-10 flex-1 flex overflow-hidden min-h-0">
+      <!-- Sidebar (Spatial Rail) -->
+      <aside class="w-64 h-full min-h-0 border-r border-white/12 bg-[#13131d]/95 flex flex-col shrink-0 backdrop-blur overflow-hidden">
         <!-- Top Header (Figma Style) -->
-        <div class="h-12 px-3 border-b border-white/5 flex items-center justify-between shrink-0">
+        <div class="h-12 px-3 border-b border-white/12 flex items-center justify-between shrink-0">
           <!-- User/Workspace Selector -->
           <div class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer group hover:bg-white/5 rounded-lg px-2 py-1.5 transition-all">
             <!-- Avatar -->
-            <div v-if="user" class="w-7 h-7 bg-linear-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0">
+            <div v-if="user" class="w-7 h-7 bg-linear-to-br from-violet-500 to-fuchsia-500 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0">
               <img 
                 v-if="user.avatar_url" 
                 :src="user.avatar_url" 
@@ -1181,7 +1303,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <!-- Workspace Name -->
             <div class="flex items-center gap-1.5 flex-1 min-w-0">
               <span class="text-xs font-medium text-white truncate">{{ formatUserName(user?.name) }}</span>
-              <ChevronDown class="w-3.5 h-3.5 text-zinc-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ChevronDown class="w-3.5 h-3.5 text-zinc-300 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           </div>
           
@@ -1201,51 +1323,63 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </div>
 
         <!-- Search (Rounded) -->
-        <div class="p-3 border-b border-white/5">
+        <div class="p-3 border-b border-white/12">
           <div class="relative">
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input
               v-model="searchQuery"
               type="text"
               placeholder="Buscar"
-              class="w-full h-9 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white pl-9 pr-3 focus:outline-none focus:border-violet-500/50 placeholder:text-zinc-500 transition-all"
+              class="w-full h-9 bg-[#1e1f2a] border border-white/12 rounded-lg text-xs text-white pl-9 pr-3 focus:outline-none focus:border-violet-400/55 focus:ring-1 focus:ring-violet-400/20 placeholder:text-zinc-500 transition-all"
             />
           </div>
         </div>
 
         <!-- Navigation Links (Figma Style) -->
-        <div class="p-2 border-b border-white/5">
+        <div class="p-2 border-b border-white/12">
           <button 
             @click="activeView = 'recent'"
-            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mb-1', activeView === 'recent' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
+            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mb-1 border border-transparent', activeView === 'recent' ? 'text-white bg-white/10 border-white/20 hover:bg-white/15' : 'text-zinc-300 hover:text-white hover:bg-white/5']"
+            aria-label="Visualizar projetos recentes"
           >
             <Clock class="w-4 h-4" />
             Recentes
           </button>
           <button 
             @click="activeView = 'all'"
-            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5', activeView === 'all' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
+            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 border border-transparent', activeView === 'all' ? 'text-white bg-white/10 border-white/20 hover:bg-white/15' : 'text-zinc-300 hover:text-white hover:bg-white/5']"
+            aria-label="Visualizar todos os projetos"
           >
             <FolderOpen class="w-4 h-4" />
             Todos os Projetos
           </button>
           <button 
             @click="activeView = 'shared'"
-            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mt-1', activeView === 'shared' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
+            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mt-1 border border-transparent', activeView === 'shared' ? 'text-white bg-white/10 border-white/20 hover:bg-white/15' : 'text-zinc-300 hover:text-white hover:bg-white/5']"
+            aria-label="Visualizar projetos compartilhados"
           >
             <Users class="w-4 h-4" />
             Compartilhados
           </button>
+          <button
+            @click="navigateTo('/profile')"
+            class="w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mt-1 border border-transparent text-zinc-300 hover:text-white hover:bg-white/5"
+            aria-label="Abrir perfil do usuário"
+          >
+            <User class="w-4 h-4" />
+            Meu Perfil
+          </button>
         </div>
 
         <!-- Folders Section (Figma Style) -->
-        <div class="flex-1 overflow-y-auto">
+        <div class="flex-1 min-h-0 overflow-y-auto">
           <div class="px-3 py-2">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-[10px] font-semibold uppercase text-zinc-500">Pastas</span>
+              <span class="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Pastas</span>
               <button
                 @click="showCreateFolder = true"
-                class="p-1 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-all"
+                class="p-1 hover:bg-white/10 rounded-lg text-zinc-300 hover:text-white transition-all"
+                aria-label="Criar nova pasta"
                 title="Nova pasta"
               >
                 <FolderPlus class="w-3.5 h-3.5" />
@@ -1255,10 +1389,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <!-- All Projects (root) - Rounded -->
             <div
               :class="[
-                'flex items-center gap-2.5 h-9 px-3 rounded-lg cursor-pointer transition-all',
-                !activeFolderId ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-zinc-400'
+                'flex items-center gap-2.5 h-9 px-3 rounded-lg cursor-pointer transition-all border border-transparent',
+                !activeFolderId ? 'bg-white/10 text-white border-white/20' : 'hover:bg-white/5 text-zinc-300'
               ]"
-              @click="setActiveFolder(null)"
+              @click="openFolderFromSidebar(null)"
               @dragover="handleDragOver"
               @drop="handleDropOnRoot"
             >
@@ -1278,13 +1412,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 :level="0"
                 :is-active="activeFolderId === folder.id"
                 :is-expanded="folder.isExpanded"
-                :project-count="getProjectCount(folder.id)"
+                :project-count="folder.projectCount"
                 :is-editing="editingFolderId === folder.id"
                 :editing-name="editingFolderName"
                 :active-folder-id="activeFolderId"
                 :editing-folder-id="editingFolderId"
                 :expanded-folders="expandedFolders"
-                @select="(id: string) => setActiveFolder(id)"
+                @select="(id: string) => openFolderFromSidebar(id)"
                 @toggle="(id: string) => toggleFolder(id)"
                 @context-menu="(e: MouseEvent, id: string) => { e.stopPropagation(); showFolderContextMenu(id, e) }"
                 @update-name="(name: string) => editingFolderName = name"
@@ -1297,7 +1431,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </div>
 
         <!-- Starred Section (Figma Style) -->
-        <div class="px-3 py-2 border-t border-white/5">
+        <div class="px-3 py-2 border-t border-white/5 shrink-0">
           <button
             @click="activeView = 'starred'"
             :class="['w-full flex items-center gap-2.5 h-9 px-3 rounded-lg transition-all cursor-pointer', activeView === 'starred' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
@@ -1311,7 +1445,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </div>
 
         <!-- Sign Out Button -->
-        <div class="p-3 border-t border-white/5">
+        <div class="p-3 border-t border-white/5 shrink-0 mt-auto">
           <button
             @click="handleSignOut"
             class="w-full h-9 px-3 bg-red-600/10 hover:bg-red-600/20 text-red-400 hover:text-red-300 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-all"
@@ -1324,18 +1458,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </aside>
 
       <!-- Main Content -->
-      <main class="flex-1 flex flex-col overflow-hidden bg-[#0f0f0f]">
+      <main class="flex-1 flex flex-col overflow-hidden bg-[#09090d]">
         <!-- Section Title -->
-        <div class="px-6 pt-6 pb-4">
-          <h1 class="text-xl font-semibold text-white mb-1">
-            <span v-if="activeFolderId">{{ folders.find(f => f.id === activeFolderId)?.name || 'Pasta' }}</span>
-            <span v-else-if="searchQuery">Resultados da Busca</span>
-            <span v-else-if="activeView === 'recent'">Vistos Recentemente</span>
-            <span v-else-if="activeView === 'shared'">Compartilhados</span>
-            <span v-else-if="activeView === 'starred'">Favoritos</span>
-            <span v-else>Todos os Projetos</span>
+        <div class="relative px-6 pt-6 pb-4">
+          <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium mb-2">Workspace</p>
+          <h1 class="text-[1.95rem] leading-tight font-medium text-white mb-1 tracking-tight">
+            {{ dashboardTitle }}
           </h1>
-          <p class="text-xs text-zinc-500">{{ filteredProjects.length }} projeto{{ filteredProjects.length !== 1 ? 's' : '' }}</p>
+          <p class="text-xs text-zinc-400 leading-relaxed">{{ dashboardContextHint }}</p>
+          <p class="text-xs text-zinc-500 mt-2">{{ filteredProjects.length }} {{ filteredProjects.length === 1 ? 'projeto' : 'projetos' }}</p>
         </div>
 
         <!-- Filters and Controls (Figma Style) -->
@@ -1467,128 +1598,169 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <div v-if="isLoadingProjects" class="flex items-center justify-center h-full">
             <div class="animate-spin w-8 h-8 border-3 border-violet-500 border-t-transparent rounded-full"></div>
           </div>
-
-          <!-- Projects Grid (Figma Style - Rounded Cards) -->
-          <div
-            v-else-if="filteredProjects.length > 0"
-            class="grid gap-4"
-            :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-1'"
-          >
-            <div
-              v-for="project in filteredProjects"
-              :key="project.id"
-              class="project-card-shell group relative bg-[#1a1a1a] border border-white/10 hover:border-white/20 overflow-hidden transition-[border-color,box-shadow] duration-200 cursor-pointer rounded-xl hover:shadow-lg hover:shadow-black/20 motion-reduce:transition-none"
-              draggable="true"
-              @mousedown="handleProjectPointerDown(project.id, $event)"
-              @dragstart="handleDragStart(project.id, $event)"
-              @dragend="handleDragEnd"
-              @click="handleProjectCardClick(project.id, $event)"
+          <div v-else>
+            <!-- Folders in current scope -->
+            <section
+              v-if="activeView === 'all' && !searchQuery && visibleFoldersOnDashboard.length > 0"
+              class="mb-5"
             >
-              <!-- Thumbnail (Rounded Top) -->
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="text-xs font-semibold text-zinc-200 uppercase tracking-[0.16em]">
+                  <span v-if="activeFolderId">Pastas em: {{ folders.find(f => f.id === activeFolderId)?.name || 'Pasta' }}</span>
+                  <span v-else>Pastas na raiz</span>
+                </h2>
+                <span class="text-[10px] text-zinc-500">
+                  {{ visibleFoldersOnDashboard.length }} {{ visibleFoldersOnDashboard.length === 1 ? 'pasta' : 'pastas' }}
+                </span>
+              </div>
+              <div class="grid gap-2.5 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                <button
+                  v-for="folder in visibleFoldersOnDashboard"
+                  :key="folder.id"
+                  type="button"
+                  class="group text-left rounded-xl border border-white/12 bg-[#181824] px-3 py-3 transition-all hover:border-violet-300/55 hover:bg-[#1d1d2e] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/50"
+                  :class="{ 'border-violet-400/80 bg-violet-500/12 shadow-[0_10px_30px_-18px_rgba(167,139,250,0.8)]': activeFolderId === folder.id }"
+                  @click="openFolderFromSidebar(folder.id)"
+                  @contextmenu="(e: MouseEvent) => showFolderContextMenu(folder.id, e)"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <Folder class="w-4 h-4 text-violet-400 shrink-0" />
+                    <span class="text-[10px] text-zinc-300 bg-white/5 px-1.5 py-0.5 rounded">
+                      {{ pluralize(getFolderProjectCount(folder.id), 'projeto', 'projetos') }}
+                    </span>
+                  </div>
+                  <p class="mt-2 text-sm font-semibold text-zinc-100 truncate leading-snug">
+                    {{ folder.name || 'Pasta sem nome' }}
+                  </p>
+                  <p class="mt-1 text-[10px] text-zinc-500">
+                    {{ pluralize(getFolderSubfolderCount(folder.id), 'subpasta', 'subpastas') }}
+                  </p>
+                </button>
+              </div>
+            </section>
+
+            <!-- Projects Grid (Figma Style - Rounded Cards) -->
+            <div
+              v-if="filteredProjects.length > 0"
+              class="grid gap-4"
+              :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-1'"
+            >
+              <div
+                v-for="project in filteredProjects"
+                :key="project.id"
+                class="project-card-shell group relative bg-[#171727] border border-white/12 hover:border-white/20 overflow-hidden transition-[border-color,box-shadow,transform] duration-200 cursor-pointer rounded-xl hover:shadow-[0_18px_42px_-28px_rgba(255,255,255,0.4)] hover:-translate-y-[1px] motion-reduce:transition-none"
+                draggable="true"
+                @mousedown="handleProjectPointerDown(project.id, $event)"
+                @dragstart="handleDragStart(project.id, $event)"
+                @dragend="handleDragEnd"
+                @click="handleProjectCardClick(project.id, $event)"
+              >
+                <!-- Thumbnail (Rounded Top) -->
                 <div
                   class="aspect-video bg-linear-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
                 >
-                <div v-if="hasUsableProjectPreview(project) && !project._thumbError" class="absolute inset-0 p-2 flex items-center justify-center">
-                  <img
-                    :src="project.preview_url"
-                    class="project-thumb-media max-w-full max-h-full object-contain rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
-                    :alt="project.name"
-                    draggable="false"
-                    loading="lazy"
-                    decoding="async"
-                    @dragstart.prevent
-                    @load="handleProjectThumbLoad(project, $event)"
-                    @error="project._thumbError = true"
-                  />
-                </div>
-                <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="w-full h-full p-2">
-                  <div
-                    class="w-full h-full rounded-lg border border-white/20 relative overflow-hidden flex flex-col justify-between p-3"
-                    :style="getProjectThumbStyle(project)"
-                  >
-                    <div class="absolute inset-0 opacity-20 pointer-events-none" style="background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35) 0%, transparent 38%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.22) 0%, transparent 42%);"></div>
-                    <div class="relative z-[1] text-[10px] font-medium uppercase tracking-[0.14em] text-white/75">Sem preview</div>
-                    <div class="relative z-[1] text-white font-bold text-2xl leading-none">{{ getProjectInitials(project) }}</div>
-                    <div class="relative z-[1] text-[10px] text-white/85 truncate">{{ project.name || 'Projeto sem nome' }}</div>
+                  <div v-if="hasUsableProjectPreview(project) && !project._thumbError" class="absolute inset-0 p-2 flex items-center justify-center">
+                    <img
+                      :src="project.preview_url"
+                      class="project-thumb-media max-w-full max-h-full object-contain rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                      :alt="project.name"
+                      draggable="false"
+                      loading="lazy"
+                      decoding="async"
+                      @dragstart.prevent
+                      @load="handleProjectThumbLoad(project, $event)"
+                      @error="project._thumbError = true"
+                    />
                   </div>
-                </div>
-                <div
-                  class="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/65 text-white text-[10px] font-semibold tracking-wide pointer-events-none"
-                >
-                  {{ getProjectInitials(project) }}
+                  <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="w-full h-full p-2">
+                    <div
+                      class="w-full h-full rounded-lg border border-white/20 relative overflow-hidden flex flex-col justify-between p-3"
+                      :style="getProjectThumbStyle(project)"
+                    >
+                      <div class="absolute inset-0 opacity-20 pointer-events-none" style="background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35) 0%, transparent 38%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.22) 0%, transparent 42%);"></div>
+                      <div class="relative z-[1] text-[10px] font-medium uppercase tracking-[0.14em] text-white/75">Sem preview</div>
+                      <div class="relative z-[1] text-white font-bold text-2xl leading-none">{{ getProjectInitials(project) }}</div>
+                      <div class="relative z-[1] text-[10px] text-white/85 truncate">{{ project.name || 'Projeto sem nome' }}</div>
+                    </div>
+                  </div>
+                  <div
+                    class="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/65 text-white text-[10px] font-semibold tracking-wide pointer-events-none"
+                  >
+                    {{ getProjectInitials(project) }}
+                  </div>
+
+                  <!-- Actions Button (top right - Rounded) -->
+                  <button
+                    @pointerdown.stop
+                    @mousedown.stop
+                    @touchstart.stop
+                    @click.stop="showProjectContextMenu(project.id, $event)"
+                    class="absolute top-2 right-2 p-2 bg-black/75 rounded-lg opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-150 hover:bg-black/90 shadow-lg motion-reduce:transition-none"
+                    title="Ações"
+                  >
+                    <MoreVertical class="w-4 h-4 text-white" />
+                  </button>
+
+                  <!-- Star Button (top left - Rounded) -->
+                  <button
+                    @pointerdown.stop
+                    @mousedown.stop
+                    @touchstart.stop
+                    @click.stop="toggleStarred(project.id)"
+                    :class="['absolute top-2 left-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-150 shadow-lg motion-reduce:transition-none', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/75 text-white hover:bg-black/90']"
+                    title="Favoritar"
+                  >
+                    <Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" />
+                  </button>
                 </div>
 
-                <!-- Actions Button (top right - Rounded) -->
-                <button
-                  @pointerdown.stop
-                  @mousedown.stop
-                  @touchstart.stop
-                  @click.stop="showProjectContextMenu(project.id, $event)"
-                  class="absolute top-2 right-2 p-2 bg-black/75 rounded-lg opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-150 hover:bg-black/90 shadow-lg motion-reduce:transition-none"
-                  title="Ações"
-                >
-                  <MoreVertical class="w-4 h-4 text-white" />
-                </button>
-
-                <!-- Star Button (top left - Rounded) -->
-                <button
-                  @pointerdown.stop
-                  @mousedown.stop
-                  @touchstart.stop
-                  @click.stop="toggleStarred(project.id)"
-                  :class="['absolute top-2 left-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-150 shadow-lg motion-reduce:transition-none', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/75 text-white hover:bg-black/90']"
-                  title="Favoritar"
-                >
-                  <Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" />
-                </button>
-              </div>
-
-              <!-- Content (Rounded Bottom) -->
-              <div class="p-3 rounded-b-xl">
-                <!-- Renaming mode -->
-                <div v-if="renamingProjectId === project.id" @click.stop class="mb-1">
-                  <input
-                    v-model="editingProjectName"
-                    type="text"
-                    class="w-full px-2 py-1.5 text-xs bg-[#2a2a2a] border border-violet-500 rounded-lg focus:outline-none text-white"
-                    @keyup.enter="saveProjectName(project.id)"
-                    @keyup.esc="cancelRenameProject"
-                    @blur="saveProjectName(project.id)"
-                    ref="renameInput"
-                  />
+                <!-- Content (Rounded Bottom) -->
+                <div class="p-3 rounded-b-xl">
+                  <!-- Renaming mode -->
+                  <div v-if="renamingProjectId === project.id" @click.stop class="mb-1">
+                    <input
+                      v-model="editingProjectName"
+                      type="text"
+                      class="w-full px-2 py-1.5 text-xs bg-[#2a2a2a] border border-violet-500 rounded-lg focus:outline-none text-white"
+                      @keyup.enter="saveProjectName(project.id)"
+                      @keyup.esc="cancelRenameProject"
+                      @blur="saveProjectName(project.id)"
+                      ref="renameInput"
+                    />
+                  </div>
+                  <!-- Normal mode -->
+                  <h3 v-else class="font-medium text-xs text-white mb-1 truncate">
+                    {{ project.name || 'Sem título' }}
+                  </h3>
+                  <p class="text-[10px] text-zinc-500">{{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}</p>
                 </div>
-                <!-- Normal mode -->
-                <h3 v-else class="font-medium text-xs text-white mb-1 truncate">
-                  {{ project.name || 'Sem título' }}
-                </h3>
-                <p class="text-[10px] text-zinc-500">{{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}</p>
               </div>
             </div>
-          </div>
 
-          <!-- Empty State (Figma Style) -->
-          <div v-else class="flex items-center justify-center h-full">
-            <div class="text-center">
-              <div class="w-16 h-16 bg-[#1a1a1a] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                <FolderOpen class="w-8 h-8 text-zinc-500" />
+            <!-- Empty State (Figma Style) -->
+            <div v-if="filteredProjects.length === 0" class="flex items-center justify-center">
+              <div class="text-center">
+                <div class="w-16 h-16 bg-[#1a1a1a] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
+                  <FolderOpen class="w-8 h-8 text-zinc-500" />
+                </div>
+                <h3 class="text-base font-semibold text-white mb-2">
+                  <span v-if="searchQuery">Nenhum resultado encontrado</span>
+                  <span v-else-if="activeFolderId">Pasta vazia</span>
+                  <span v-else>Nenhum projeto ainda</span>
+                </h3>
+                <p class="text-xs text-zinc-500 mb-6">
+                  <span v-if="searchQuery">Tente outra busca</span>
+                  <span v-else>Crie seu primeiro projeto para começar</span>
+                </p>
+                <button
+                  v-if="!searchQuery"
+                  @click="showCreateProject = true"
+                  class="h-10 px-6 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium inline-flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
+                >
+                  <Plus class="w-4 h-4" />
+                  Criar Projeto
+                </button>
               </div>
-              <h3 class="text-base font-semibold text-white mb-2">
-                <span v-if="searchQuery">Nenhum resultado encontrado</span>
-                <span v-else-if="activeFolderId">Pasta vazia</span>
-                <span v-else>Nenhum projeto ainda</span>
-              </h3>
-              <p class="text-xs text-zinc-500 mb-6">
-                <span v-if="searchQuery">Tente outra busca</span>
-                <span v-else>Crie seu primeiro projeto para começar</span>
-              </p>
-              <button
-                v-if="!searchQuery"
-                @click="showCreateProject = true"
-                class="h-10 px-6 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium inline-flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
-              >
-                <Plus class="w-4 h-4" />
-                Criar Projeto
-              </button>
             </div>
           </div>
         </div>
@@ -1940,8 +2112,41 @@ const handleDropOnRoot = async (event: DragEvent) => {
 </template>
 
 <style scoped>
+.dashboard-root {
+  background:
+    radial-gradient(circle at 16% 8%, rgba(168, 85, 247, 0.09), transparent 38%),
+    radial-gradient(circle at 82% 14%, rgba(129, 140, 248, 0.06), transparent 36%),
+    #09090d;
+}
+
+.dashboard-root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(130deg, rgba(255, 255, 255, 0.03) 0.5px, transparent 0.5px) 0 0 / 48px 48px,
+    linear-gradient(240deg, rgba(255, 255, 255, 0.02) 0.5px, transparent 0.5px) 0 0 / 96px 96px;
+  opacity: 0.35;
+}
+
+.dashboard-root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+}
+
 .folder-tree {
   user-select: none;
+}
+
+.dashboard-header,
+.project-card-shell,
+.folder-tree-item {
+  position: relative;
 }
 
 .project-card-shell,
@@ -1952,6 +2157,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 .project-card-shell {
   will-change: border-color, box-shadow;
+}
+
+.project-card-shell:focus-within,
+button:focus-visible,
+input:focus-visible {
+  outline: 1px solid rgba(167, 139, 250, 0.7);
+  outline-offset: 2px;
 }
 
 /* Custom scrollbar for dark theme */

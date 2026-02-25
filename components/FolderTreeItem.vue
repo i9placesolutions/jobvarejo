@@ -55,8 +55,8 @@ const isChildEditing = (childId: string): boolean => {
   <div class="folder-item">
     <div
       :class="[
-        'flex items-center gap-2 h-9 px-3 cursor-pointer transition-all group relative rounded-lg',
-        isActive ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-zinc-400'
+        'flex items-center gap-2 h-9 px-3 cursor-pointer transition-all group relative rounded-lg border border-transparent',
+        isActive ? 'bg-white/12 text-white border-white/20' : 'hover:bg-white/6 text-zinc-400'
       ]"
       :style="{ paddingLeft: `${level * 16 + 12}px` }"
       @click="emit('select', folder.id)"
@@ -99,7 +99,7 @@ const isChildEditing = (childId: string): boolean => {
 
       <!-- More options button -->
       <button
-        class="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-white/10 rounded-lg transition-all"
+        class="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-white/12 rounded-lg transition-all"
         @click.stop="(e: MouseEvent) => emit('contextMenu', e, folder.id)"
       >
         <MoreVertical class="w-3.5 h-3.5 text-zinc-500" />
@@ -115,7 +115,7 @@ const isChildEditing = (childId: string): boolean => {
         :level="level + 1"
         :is-active="isChildActive(child.id)"
         :is-expanded="isChildExpanded(child.id)"
-        :project-count="0"
+        :project-count="child.projectCount || 0"
         :is-editing="isChildEditing(child.id)"
         :editing-name="editingName"
         :active-folder-id="activeFolderId"
