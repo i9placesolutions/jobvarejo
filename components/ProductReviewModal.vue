@@ -80,11 +80,6 @@ watch(() => props.modelValue, (newVal) => {
     }
 
     isSubmittingImport.value = false
-    importMode.value = 'replace'
-    targetMode.value = 'zone'
-    selectedFrameIds.value = []
-    frameAssignmentsMap.value = {}
-    imageBgPolicy.value = 'always'
     if (props.initialProducts && props.initialProducts.length > 0) {
         // Load external products directly into review mode
         products.value = props.initialProducts.map((p: any) => ({
@@ -96,6 +91,13 @@ watch(() => props.modelValue, (newVal) => {
         products.value = []
         step.value = 'input'
         textInput.value = ''
+    }
+
+    if (targetMode.value === 'multi-frame') {
+        if (selectedFrameIds.value.length === 0 && orderedFrameIds.value.length > 0) {
+            setSelectedFrameIdsOrdered(orderedFrameIds.value)
+        }
+        reconcileFrameAssignments({ autofill: true })
     }
 })
 
@@ -231,6 +233,7 @@ const assets = ref<any[]>([])
 const assetSearch = ref('')
 const selectedProductIndex = ref<number | null>(null)
 const selectedAssetKeys = ref<string[]>([])
+const lastAssetSelectionAnchorKey = ref<string | null>(null)
 const isApplyingSelectedAssets = ref(false)
 const showLabelPreview = ref(false)
 const MIN_ASSET_SEARCH_CHARS = 1
@@ -461,8 +464,6 @@ watch(
     () => props.modelValue,
     (open) => {
         if (!open) return
-        // Keep "usar padrão da zona" as default to avoid forcing stale template ids.
-        selectedLabelTemplateId.value = ''
         reviewSearch.value = ''
     }
 )
@@ -814,18 +815,37 @@ const isAssetSelected = (asset: any): boolean => {
     return selectedAssetKeys.value.includes(key)
 }
 
-const toggleAssetSelection = (asset: any) => {
+const toggleAssetSelection = (asset: any, event?: MouseEvent) => {
     const key = getAssetSelectionKey(asset)
     if (!key) return
+
+    if (event?.shiftKey && lastAssetSelectionAnchorKey.value) {
+        const orderedKeys = filteredAssets.value.map((entry) => getAssetSelectionKey(entry)).filter(Boolean)
+        const start = orderedKeys.indexOf(lastAssetSelectionAnchorKey.value)
+        const end = orderedKeys.indexOf(key)
+        if (start !== -1 && end !== -1) {
+            const [from, to] = start <= end ? [start, end] : [end, start]
+            const range = orderedKeys.slice(from, to + 1)
+            selectedAssetKeys.value = Array.from(new Set([...selectedAssetKeys.value, ...range]))
+            lastAssetSelectionAnchorKey.value = key
+            return
+        }
+    }
+
     if (selectedAssetKeys.value.includes(key)) {
         selectedAssetKeys.value = selectedAssetKeys.value.filter((k) => k !== key)
+        if (lastAssetSelectionAnchorKey.value === key) {
+            lastAssetSelectionAnchorKey.value = null
+        }
         return
     }
     selectedAssetKeys.value = [...selectedAssetKeys.value, key]
+    lastAssetSelectionAnchorKey.value = key
 }
 
 const clearAssetSelection = () => {
     selectedAssetKeys.value = []
+    lastAssetSelectionAnchorKey.value = null
 }
 
 const fetchAssets = async () => {
@@ -885,6 +905,7 @@ const openAssetPicker = (index: number) => {
     selectedProductIndex.value = index
     assets.value = []
     selectedAssetKeys.value = []
+    lastAssetSelectionAnchorKey.value = null
     const product = products.value[index]
     assetSearch.value = buildCacheSearchTerm(product)
     showAssetPicker.value = true
@@ -896,6 +917,7 @@ watch(showAssetPicker, (open) => {
     assets.value = []
     assetSearch.value = ''
     selectedAssetKeys.value = []
+    lastAssetSelectionAnchorKey.value = null
     isApplyingSelectedAssets.value = false
 })
 
@@ -1435,6 +1457,19 @@ const getAssetDisplayName = (asset: any): string => {
                         <div class="text-[11px] text-zinc-400">
                             Serão importadas <span class="text-zinc-200 font-semibold">{{ multiFrameImportCount }}</span> ofertas (regra: mínimo entre ofertas e frames selecionados).
                         </div>
+
+                        <div class="flex justify-end pt-1">
+                            <Button
+                                size="sm"
+                                @click="handleImport"
+                                class="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                :disabled="importButtonDisabled"
+                            >
+                                <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="w-3.5 h-3.5 mr-2 animate-spin" />
+                                <Check v-else class="w-3.5 h-3.5 mr-2" />
+                                Importar {{ multiFrameImportCount }} Produtos
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
@@ -1686,7 +1721,8 @@ const getAssetDisplayName = (asset: any): string => {
                             <Search class="w-3.5 h-3.5 mr-2" />
                             Reprocessar Imagens
                         </Button>
-                        <Button 
+                        <Button
+                            v-if="targetMode !== 'multi-frame'"
                             size="sm" 
                             @click="handleImport" 
                             class="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1767,7 +1803,7 @@ const getAssetDisplayName = (asset: any): string => {
                                 ? 'bg-zinc-800 border-emerald-500 ring-1 ring-emerald-400/50'
                                 : 'bg-zinc-800 border-zinc-700 hover:border-zinc-500'
                         ]"
-                        @click="toggleAssetSelection(asset)"
+                        @click="toggleAssetSelection(asset, $event)"
                     >
                         <div
                             v-if="isAssetSelected(asset)"
