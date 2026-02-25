@@ -6657,6 +6657,47 @@ const resolveZoneForProductImport = (target: any): any | null => {
     return null;
 }
 
+const resolveImportTargetZone = (): any | null => {
+    if (!canvas.value) return null;
+
+    const zones = canvas.value.getObjects().filter((obj: any) => isLikelyProductZone(obj));
+    const byId = new Map<string, any>();
+    zones.forEach((zone: any) => {
+        const id = String((zone as any)?._customId || '').trim();
+        if (id) byId.set(id, zone);
+    });
+
+    const resolveById = (rawId: any): any | null => {
+        const id = String(rawId || '').trim();
+        if (!id) return null;
+        return byId.get(id) || null;
+    };
+
+    const explicit = targetGridZone.value;
+    if (explicit && isLikelyProductZone(explicit)) {
+        const refreshed = resolveById((explicit as any)?._customId);
+        return refreshed || explicit;
+    }
+    if (explicit) {
+        const byExplicitId = resolveById((explicit as any)?._customId) || resolveById((explicit as any)?.id);
+        if (byExplicitId) return byExplicitId;
+    }
+
+    const active = canvas.value.getActiveObject?.();
+    const fromActive = resolveZoneForProductImport(active);
+    if (fromActive) return fromActive;
+
+    const snap: any = selectedObjectRef.value;
+    const fromSnapshot =
+        resolveById(snap?._customId) ||
+        resolveById(snap?.parentZoneId) ||
+        resolveById(snap?._zoneSlot?.zoneId);
+    if (fromSnapshot) return fromSnapshot;
+
+    if (zones.length === 1) return zones[0];
+    return null;
+}
+
 const openProductReviewForZone = (zone: any): boolean => {
     if (!zone || !isLikelyProductZone(zone)) return false;
 
@@ -14967,6 +15008,59 @@ const setupReactivity = () => {
         return obj;
     };
 
+    const objectContainsPoint = (obj: any, point: { x: number; y: number }) => {
+        if (!obj || !point) return false;
+        try {
+            if (typeof obj.containsPoint === 'function' && obj.containsPoint(point, undefined, true)) return true;
+        } catch {
+            // ignore
+        }
+        try {
+            const br = obj.getBoundingRect?.(true);
+            if (br) {
+                return (
+                    point.x >= br.left &&
+                    point.x <= br.left + br.width &&
+                    point.y >= br.top &&
+                    point.y <= br.top + br.height
+                );
+            }
+        } catch {
+            // ignore
+        }
+        return false;
+    };
+
+    const getScenePointFromObject = (obj: any) => {
+        if (!obj || !canvas.value) return null;
+        try {
+            if (typeof obj.getCenterPoint === 'function') {
+                const p = obj.getCenterPoint();
+                if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) {
+                    return { x: Number(p.x), y: Number(p.y) };
+                }
+            }
+        } catch {
+            // ignore
+        }
+        const left = Number(obj.left ?? 0);
+        const top = Number(obj.top ?? 0);
+        if (Number.isFinite(left) && Number.isFinite(top)) {
+            return { x: left, y: top };
+        }
+        return null;
+    };
+
+    const findCardUnderPoint = (point: { x: number; y: number } | null) => {
+        if (!canvas.value || !point) return null;
+        const list = (canvas.value.getObjects?.() || []).slice().reverse();
+        for (const obj of list) {
+            if (!isLikelyProductCard(obj)) continue;
+            if (objectContainsPoint(obj, point)) return obj;
+        }
+        return null;
+    };
+
     const collectNormalizedSelectionMembers = (activeObj: any) => {
         if (!activeObj) return [] as any[];
         const rawMembers = isActiveSelectionObject(activeObj) && typeof activeObj.getObjects === 'function'
@@ -14988,6 +15082,10 @@ const setupReactivity = () => {
         if (isLikelyProductCard(obj)) return obj;
         const parentCard = findProductCardParentGroup(obj);
         if (parentCard) return parentCard;
+
+        const fallbackFromObjectPoint = findCardUnderPoint(getScenePointFromObject(obj));
+        if (fallbackFromObjectPoint) return fallbackFromObjectPoint;
+
         return resolveSelectionRootObject(obj, { keepCardImages: true });
     };
 
@@ -21508,8 +21606,14 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
         if (targetMode === 'multi-frame') {
             await importProductsToMultipleFrames(products, opts)
         } else {
-            // Get the saved zone reference and pass it to simulateSmartGrid
-            const zone = targetGridZone.value
+            // Recover the real zone object from canvas state (prevents "solto" cards on stale refs).
+            const zone = resolveImportTargetZone()
+            if (!zone) {
+                console.warn('[confirmProductImport] Could not resolve target product zone. Import aborted to avoid detached cards.')
+                notifyEditorError('Nao foi possivel localizar a zona de produtos para substituir os cards.')
+                return
+            }
+            targetGridZone.value = zone
 
             // Add to canvas using the products received from the modal (with edits applied)
             const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace'
@@ -21801,9 +21905,8 @@ const simulateSmartGrid = async (
     }
 
     if (targetZone) {
-        // Use getBoundingRect with absolute=true for world coordinates
-        // This gives coordinates in the canvas logical space, not viewport
-        let boundingRect = targetZone.getBoundingRect(true);
+        // Prefer persisted zone metrics to avoid drift after reload/scaling.
+        let boundingRect = getZoneMetrics(targetZone) ?? targetZone.getBoundingRect(true);
         const zoneCenterX = boundingRect.left + (boundingRect.width / 2);
         const zoneCenterY = boundingRect.top + (boundingRect.height / 2);
 
@@ -21815,7 +21918,7 @@ const simulateSmartGrid = async (
                 top: zoneCenterY
             });
             targetZone.setCoords();
-            boundingRect = targetZone.getBoundingRect(true);
+            boundingRect = getZoneMetrics(targetZone) ?? targetZone.getBoundingRect(true);
         }
         
         bounds = { 
@@ -21835,14 +21938,20 @@ const simulateSmartGrid = async (
         return;
     }
 
+    const existingZoneCardsAtStart = targetZone
+        ? (() => {
+            try {
+                return getZoneChildren(targetZone);
+            } catch {
+                return [] as any[];
+            }
+        })()
+        : [];
+
     // When appending into a zone, compute the existing count to place new items after it.
     let existingCount = 0;
     if (targetZone && mode === 'append') {
-        try {
-            existingCount = getZoneChildren(targetZone).length;
-        } catch {
-            existingCount = 0;
-        }
+        existingCount = existingZoneCardsAtStart.length;
     }
     const countForLayout = targetZone ? (existingCount + count) : count;
 
@@ -21953,16 +22062,13 @@ const simulateSmartGrid = async (
                 } as any as LabelTemplate)
                 : undefined);
         let effectiveZoneTpl = zoneTpl;
-        if (!effectiveZoneTpl && targetZone) {
-            // Last-resort source of truth: if the zone already has cards, inherit the exact template
-            // from the first card priceGroup so new cards are guaranteed to match visual layout.
-            const existingCards = getZoneChildren(targetZone);
-            const donorCard = existingCards.find((c: any) => !!getPriceGroupFromAny(c));
+        const getDonorTemplateFromExistingCards = () => {
+            const donorCard = existingZoneCardsAtStart.find((c: any) => !!getPriceGroupFromAny(c));
             const donorPg = donorCard ? getPriceGroupFromAny(donorCard) : null;
             if (donorPg) {
                 const donorGroupJson = serializePriceGroupForTemplate(donorPg);
                 if (donorGroupJson) {
-                    effectiveZoneTpl = {
+                    const donorTpl = {
                         id: 'zone-card-snapshot',
                         name: 'Zone Card Snapshot',
                         kind: 'priceGroup-v1',
@@ -21972,8 +22078,20 @@ const simulateSmartGrid = async (
                     const zoneSnapshotId = zoneTplId || snapshotIdNormalized || String((targetZone as any)._zoneGlobalStyles?.splashTemplateId || '').trim() || 'zone-card-snapshot';
                     (targetZone as any)._zoneTemplateSnapshotId = zoneSnapshotId;
                     (targetZone as any)._zoneTemplateSnapshot = cloneTemplateGroupJson(donorGroupJson) || donorGroupJson;
+                    return donorTpl;
                 }
             }
+            return null;
+        };
+
+        if (targetZone && mode === 'replace' && !requestedTplId && existingZoneCardsAtStart.length > 0) {
+            // Replace should preserve the CURRENT zone visual label, even when persisted template id/snapshot is stale.
+            const donorTpl = getDonorTemplateFromExistingCards();
+            if (donorTpl) effectiveZoneTpl = donorTpl;
+        } else if (!effectiveZoneTpl && targetZone) {
+            // Last-resort source of truth when zone metadata doesn't define a usable template.
+            const donorTpl = getDonorTemplateFromExistingCards();
+            if (donorTpl) effectiveZoneTpl = donorTpl;
         }
 
         // Persist override on the zone so future imports use the same template.
@@ -22174,7 +22292,7 @@ const simulateSmartGrid = async (
                 }
             })();
 
-            const zoneBounds = targetZone.getBoundingRect(true);
+            const zoneBounds = getZoneMetrics(targetZone) ?? targetZone.getBoundingRect(true);
             const zoneRect = existingZoneObjects.find((obj: any) => obj.type === 'rect' && obj.strokeDashArray);
 
             // Remove previous cards from the zone only when replacing.
@@ -22184,8 +22302,8 @@ const simulateSmartGrid = async (
 
             // IMPORTANT: For Fabric.js groups, internal object positions are relative to the GROUP CENTER
             // The zone has originX: 'center', originY: 'center', so we need to offset by half the zone dimensions
-            const zoneWidth = zoneRect?.width || zoneBounds.width || 400;
-            const zoneHeight = zoneRect?.height || zoneBounds.height || 600;
+            const zoneWidth = Number((zoneBounds as any)?.width || zoneRect?.width || 400) || 400;
+            const zoneHeight = Number((zoneBounds as any)?.height || zoneRect?.height || 600) || 600;
 
             // CRITICAL: Clear any clipPath from the zone to prevent rendering errors
             // Product zones should not have clipPath as cards are added separately to canvas
@@ -22203,17 +22321,21 @@ const simulateSmartGrid = async (
                 });
                 if (maxOrder < 0) maxOrder = existingCards.length - 1;
             }
-            smartObjects.forEach((obj: any) => {
+            smartObjects.forEach((obj: any, idx: number) => {
                 obj.isProductCard = true;
                 obj.parentZoneId = targetZone._customId;
                 obj.parentFrameId = zoneFrameId;
                 obj.excludeFromExport = false;
                 obj.clipPath = null;
                 delete obj._frameClipOwner;
+                // Fresh cards must not keep stale slot metadata from previous zones/operations.
+                (obj as any)._zoneSlot = undefined;
                 // Preserve stable ordering when adding to an existing zone.
                 if (mode === 'append') {
                     (obj as any)._zoneOrder = maxOrder + 1;
                     maxOrder += 1;
+                } else {
+                    (obj as any)._zoneOrder = idx;
                 }
                 // Avoid rare black-flash rendering glitches on some browsers by disabling caching on cards.
                 obj.set?.({ objectCaching: false, statefullCache: false, dirty: true });
