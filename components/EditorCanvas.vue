@@ -15008,59 +15008,6 @@ const setupReactivity = () => {
         return obj;
     };
 
-    const objectContainsPoint = (obj: any, point: { x: number; y: number }) => {
-        if (!obj || !point) return false;
-        try {
-            if (typeof obj.containsPoint === 'function' && obj.containsPoint(point, undefined, true)) return true;
-        } catch {
-            // ignore
-        }
-        try {
-            const br = obj.getBoundingRect?.(true);
-            if (br) {
-                return (
-                    point.x >= br.left &&
-                    point.x <= br.left + br.width &&
-                    point.y >= br.top &&
-                    point.y <= br.top + br.height
-                );
-            }
-        } catch {
-            // ignore
-        }
-        return false;
-    };
-
-    const getScenePointFromObject = (obj: any) => {
-        if (!obj || !canvas.value) return null;
-        try {
-            if (typeof obj.getCenterPoint === 'function') {
-                const p = obj.getCenterPoint();
-                if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) {
-                    return { x: Number(p.x), y: Number(p.y) };
-                }
-            }
-        } catch {
-            // ignore
-        }
-        const left = Number(obj.left ?? 0);
-        const top = Number(obj.top ?? 0);
-        if (Number.isFinite(left) && Number.isFinite(top)) {
-            return { x: left, y: top };
-        }
-        return null;
-    };
-
-    const findCardUnderPoint = (point: { x: number; y: number } | null) => {
-        if (!canvas.value || !point) return null;
-        const list = (canvas.value.getObjects?.() || []).slice().reverse();
-        for (const obj of list) {
-            if (!isLikelyProductCard(obj)) continue;
-            if (objectContainsPoint(obj, point)) return obj;
-        }
-        return null;
-    };
-
     const collectNormalizedSelectionMembers = (activeObj: any) => {
         if (!activeObj) return [] as any[];
         const rawMembers = isActiveSelectionObject(activeObj) && typeof activeObj.getObjects === 'function'
@@ -15082,9 +15029,6 @@ const setupReactivity = () => {
         if (isLikelyProductCard(obj)) return obj;
         const parentCard = findProductCardParentGroup(obj);
         if (parentCard) return parentCard;
-
-        const fallbackFromObjectPoint = findCardUnderPoint(getScenePointFromObject(obj));
-        if (fallbackFromObjectPoint) return fallbackFromObjectPoint;
 
         return resolveSelectionRootObject(obj, { keepCardImages: true });
     };
