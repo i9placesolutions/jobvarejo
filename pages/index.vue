@@ -2,6 +2,7 @@
 import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Check, User } from 'lucide-vue-next'
 	import FolderTreeItem from '~/components/FolderTreeItem.vue'
 	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
+	import FilterDropdown from '~/components/ui/FilterDropdown.vue'
 	import { toWasabiProxyUrl } from '~/utils/storageProxy'
 import type { Folder as FolderModel } from '~/types/folder'
 
@@ -693,10 +694,106 @@ const projectToMoveName = computed(() => {
 })
 
 const folderFilterOptions = computed(() => moveProjectFolderOptions.value)
+type DashboardFilterOption = {
+  value: string
+  label: string
+  description: string
+  group?: string
+}
 
-const canOpenFolderFromTopFilter = computed(() => {
-  const id = normalizeFolderId(filterFolderId.value)
-  return !!id && id !== 'all' && id !== 'root'
+const organizationFilterOptions: DashboardFilterOption[] = [
+  {
+    value: 'all',
+    label: 'Todas as equipes',
+    description: 'Exibe projetos pessoais e compartilhados.',
+    group: 'Escopo',
+  },
+  {
+    value: 'personal',
+    label: 'Pessoal',
+    description: 'Mostra apenas seus projetos não compartilhados.',
+    group: 'Escopo',
+  },
+  {
+    value: 'team',
+    label: 'Equipe',
+    description: 'Mostra apenas projetos compartilhados com equipe.',
+    group: 'Escopo',
+  },
+]
+
+const typeFilterOptions: DashboardFilterOption[] = [
+  {
+    value: 'all',
+    label: 'Todos os arquivos',
+    description: 'Inclui todos os tipos de projeto.',
+    group: 'Tipo',
+  },
+  {
+    value: 'design',
+    label: 'Design',
+    description: 'Foco em artes e layouts.',
+    group: 'Tipo',
+  },
+  {
+    value: 'template',
+    label: 'Modelo',
+    description: 'Foco em projetos base para reutilizar.',
+    group: 'Tipo',
+  },
+]
+
+const timeFilterOptions: DashboardFilterOption[] = [
+  {
+    value: 'all',
+    label: 'Último acesso',
+    description: 'Sem recorte de período.',
+    group: 'Período',
+  },
+  {
+    value: 'today',
+    label: 'Hoje',
+    description: 'Somente itens acessados hoje.',
+    group: 'Período',
+  },
+  {
+    value: 'week',
+    label: 'Esta semana',
+    description: 'Itens acessados nos últimos 7 dias.',
+    group: 'Período',
+  },
+  {
+    value: 'month',
+    label: 'Este mês',
+    description: 'Itens acessados nos últimos 30 dias.',
+    group: 'Período',
+  },
+]
+
+const folderFilterDropdownOptions = computed<DashboardFilterOption[]>(() => {
+  const base: DashboardFilterOption[] = [
+    {
+      value: 'all',
+      label: 'Todas as pastas',
+      description: 'Mostra projetos de qualquer pasta.',
+      group: 'Visão geral',
+    },
+    {
+      value: 'root',
+      label: 'Sem pasta (raiz)',
+      description: 'Somente projetos fora de pastas.',
+      group: 'Visão geral',
+    },
+  ]
+
+  const nested = folderFilterOptions.value.map((folderOption) => ({
+    value: folderOption.id,
+    label: folderOption.pathLabel,
+    description: 'Inclui esta pasta e todas as subpastas.',
+    group: folderOption.depth === 0 ? 'Pastas na raiz' : 'Subpastas',
+  }))
+
+  return [...base, ...nested]
 })
 
 const openFolderFromSidebar = (folderId: string | null) => {
@@ -711,31 +808,6 @@ const openFolderFromSidebar = (folderId: string | null) => {
 
   setActiveFolder(normalized)
   filterFolderId.value = normalized
-}
-
-const openFolderFromTopFilter = () => {
-  const selected = normalizeFolderId(filterFolderId.value)
-  if (!selected || selected === 'all') {
-    openFolderFromSidebar(null)
-    return
-  }
-  if (selected === 'root') {
-    openFolderFromSidebar(null)
-    return
-  }
-
-  const visited = new Set<string>()
-  let cursor = selected
-  while (cursor && !visited.has(cursor)) {
-    visited.add(cursor)
-    const folder = folderById.value.get(cursor)
-    if (!folder) break
-    const parentId = normalizeFolderId(folder.parent_id)
-    if (parentId) expandedFolders.value.add(parentId)
-    cursor = parentId
-  }
-
-  openFolderFromSidebar(selected)
 }
 
 const currentMoveProject = computed(() => {
@@ -1516,76 +1588,38 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
 
           <!-- Filters Row -->
-          <div class="flex items-center gap-2 flex-1 justify-end">
+          <div class="flex items-end gap-2 flex-1 justify-end flex-wrap">
             <!-- Filter Dropdowns -->
-            <div class="relative">
-              <select
-                v-model="filterOrganization"
-                class="h-8 px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
-              >
-                <option value="all">Todas as equipes</option>
-                <option value="personal">Pessoal</option>
-                <option value="team">Equipe</option>
-              </select>
-              <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
-            </div>
+            <FilterDropdown
+              v-model="filterOrganization"
+              label="Equipe"
+              :options="organizationFilterOptions"
+              min-width-class="min-w-[180px]"
+            />
 
-            <div class="relative">
-              <select
-                v-model="filterType"
-                class="h-8 px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
-              >
-                <option value="all">Todos os arquivos</option>
-                <option value="design">Design</option>
-                <option value="template">Modelo</option>
-              </select>
-              <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
-            </div>
+            <FilterDropdown
+              v-model="filterType"
+              label="Tipo de arquivo"
+              :options="typeFilterOptions"
+              min-width-class="min-w-[190px]"
+            />
 
-            <div class="relative">
-              <select
-                v-model="filterTime"
-                class="h-8 px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
-              >
-                <option value="all">Último acesso</option>
-                <option value="today">Hoje</option>
-                <option value="week">Esta semana</option>
-                <option value="month">Este mês</option>
-              </select>
-              <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
-            </div>
+            <FilterDropdown
+              v-model="filterTime"
+              label="Recorte de tempo"
+              :options="timeFilterOptions"
+              min-width-class="min-w-[190px]"
+            />
 
-            <div class="relative">
-              <select
-                v-model="filterFolderId"
-                class="h-8 min-w-[220px] max-w-[320px] px-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer transition-all"
-              >
-                <option value="all">Todas as pastas</option>
-                <option value="root">Sem pasta (raiz)</option>
-                <option
-                  v-for="folderOption in folderFilterOptions"
-                  :key="`top-folder-filter-${folderOption.id}`"
-                  :value="folderOption.id"
-                >
-                  {{ folderOption.pathLabel }}
-                </option>
-              </select>
-              <ChevronDown class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
-            </div>
-
-            <button
-              type="button"
-              class="h-8 px-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white transition-all inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-              :disabled="!canOpenFolderFromTopFilter"
-              @click="openFolderFromTopFilter"
-              title="Abrir pasta selecionada na árvore de pastas"
-            >
-              <FolderOpen class="w-3.5 h-3.5" />
-              <span>Abrir pasta</span>
-            </button>
+            <FilterDropdown
+              v-model="filterFolderId"
+              label="Pasta"
+              :options="folderFilterDropdownOptions"
+              min-width-class="min-w-[260px]"
+            />
 
             <!-- View Mode Toggle -->
-            <div class="flex items-center bg-white/5 rounded-lg p-1 border border-white/10">
+            <div class="self-end h-9 flex items-center bg-white/5 rounded-lg p-1 border border-white/10">
               <button
                 @click="viewMode = 'grid'"
                 :class="['p-1.5 rounded-md transition-all', viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
@@ -1605,7 +1639,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <!-- New Project Button -->
             <button
               @click="showCreateProject = true"
-              class="h-8 px-4 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
+              class="self-end h-9 px-4 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
             >
               <Plus class="w-4 h-4" />
               <span>Novo Projeto</span>
@@ -1754,7 +1788,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   <h3 v-else class="font-medium text-xs text-white mb-1 truncate">
                     {{ project.name || 'Sem título' }}
                   </h3>
-                  <p class="text-[10px] text-zinc-500">{{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}</p>
+                  <div class="mt-0.5 flex items-center justify-between gap-2">
+                    <p class="text-[10px] text-zinc-500 truncate">{{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}</p>
+                    <span
+                      v-if="!String(project.folder_id || '').trim()"
+                      class="inline-flex items-center rounded-full border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200"
+                    >
+                      Sem pasta
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
