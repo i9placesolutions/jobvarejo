@@ -103,7 +103,7 @@ const isSpacingSynced = () => {
 
 const syncGaps = ref(isSpacingSynced());
 
-type HighlightPos = 'first' | 'last' | 'random';
+type HighlightPos = 'first' | 'last' | 'random' | 'center' | 'top' | 'bottom';
 type PreviewTone = 'base' | 'highlight';
 type NormalizedZonePresetState = {
   columns: number;
@@ -133,7 +133,13 @@ const toSafeNumber = (value: unknown, fallback: number) => {
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const normalizeHighlightPos = (value: unknown): HighlightPos => {
-  if (value === 'last' || value === 'random') return value;
+  if (
+    value === 'last' ||
+    value === 'random' ||
+    value === 'center' ||
+    value === 'top' ||
+    value === 'bottom'
+  ) return value;
   return 'first';
 };
 
@@ -239,16 +245,28 @@ const createPreviewCells = (preset: LayoutPreset): PresetPreviewCell[] => {
     });
   };
 
-  if (preset.previewKind === 'hero') {
+  const previewKind = preset.previewKind ?? 'grid';
+
+  if (
+    previewKind === 'hero' ||
+    previewKind === 'hero-top' ||
+    previewKind === 'hero-bottom' ||
+    previewKind === 'hero-center'
+  ) {
     const heroWidth = cols >= 4 ? 2 : 1;
     const heroHeight = rows >= 3 ? 2 : 1;
-    const heroCol = isRightBiasedPreset(preset)
+    const defaultHeroCol = isRightBiasedPreset(preset)
       ? Math.max(1, cols - heroWidth + 1)
       : 1;
-    addCell('hero', heroCol, 1, heroWidth, heroHeight, 'highlight');
+    const centeredHeroCol = Math.max(1, Math.floor((cols - heroWidth) / 2) + 1);
+    const heroCol = previewKind === 'hero-center' ? centeredHeroCol : defaultHeroCol;
+    const heroRow = previewKind === 'hero-bottom'
+      ? Math.max(1, rows - heroHeight + 1)
+      : 1;
+    addCell('hero', heroCol, heroRow, heroWidth, heroHeight, 'highlight');
   }
 
-  if (preset.previewKind === 'sidebar') {
+  if (previewKind === 'sidebar') {
     const sideCol = isRightBiasedPreset(preset) ? cols : 1;
     const highlights = clamp(
       Math.round(toSafeNumber(preset.highlightCount, Math.min(rows, 3))),
@@ -638,6 +656,9 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
           >
             <option value="first">Primeiros</option>
             <option value="last">Últimos</option>
+            <option value="center">Centro</option>
+            <option value="top">Cima</option>
+            <option value="bottom">Baixo</option>
             <option value="random">Aleatório</option>
           </select>
         </div>

@@ -161,7 +161,7 @@ export interface ProductZone {
   verticalAlign?: 'top' | 'center' | 'bottom' | 'stretch';
   // Highlights (destaque de produtos)
   highlightCount?: number;
-  highlightPos?: 'first' | 'last' | 'random';
+  highlightPos?: 'first' | 'last' | 'random' | 'center' | 'top' | 'bottom';
   highlightHeight?: number; // multiplicador (1.5 = 50% mais alto)
   highlightStyle?: 'larger' | 'featured' | 'banner';
   // Lock
@@ -249,10 +249,10 @@ export interface LayoutPreset {
   description?: string;
   // Highlight settings for special presets
   highlightCount?: number;
-  highlightPos?: 'first' | 'last' | 'random';
+  highlightPos?: 'first' | 'last' | 'random' | 'center' | 'top' | 'bottom';
   highlightHeight?: number;
   // UI preview metadata (mini thumbnail in ProductZoneSettings)
-  previewKind?: 'grid' | 'hero' | 'sidebar';
+  previewKind?: 'grid' | 'hero' | 'sidebar' | 'hero-top' | 'hero-bottom' | 'hero-center';
   previewCols?: number;
   previewRows?: number;
   previewCount?: number;
@@ -588,6 +588,69 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     previewCols: 4,
     previewRows: 4,
     description: 'Primeiro produto maior (1.5x)'
+  },
+  {
+    id: 'featured-center',
+    name: 'Destaque Centro',
+    icon: 'star',
+    category: 'special',
+    columns: 0,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 13,
+    gapHorizontal: 11,
+    gapVertical: 11,
+    highlightCount: 1,
+    highlightPos: 'center',
+    highlightHeight: 1.9,
+    previewKind: 'hero-center',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Destaque principal centralizado'
+  },
+  {
+    id: 'featured-top',
+    name: 'Destaque Cima',
+    icon: 'star',
+    category: 'special',
+    columns: 0,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 13,
+    gapHorizontal: 11,
+    gapVertical: 11,
+    highlightCount: 1,
+    highlightPos: 'top',
+    highlightHeight: 1.9,
+    previewKind: 'hero-top',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Destaque principal na parte superior'
+  },
+  {
+    id: 'featured-bottom',
+    name: 'Destaque Baixo',
+    icon: 'star',
+    category: 'special',
+    columns: 0,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 13,
+    gapHorizontal: 11,
+    gapVertical: 11,
+    highlightCount: 1,
+    highlightPos: 'bottom',
+    highlightHeight: 1.9,
+    previewKind: 'hero-bottom',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Destaque principal na parte inferior'
   },
   {
     id: 'featured-2',

@@ -12905,6 +12905,27 @@ const setupZoomPan = () => {
     let panDxPending = 0;
     let panDyPending = 0;
     let panRafPending = false;
+    let panPrevSelection: boolean | null = null;
+    let panPrevSkipTargetFind: boolean | null = null;
+    const restorePanInteractionFlags = () => {
+        if (!canvas.value) {
+            panPrevSelection = null;
+            panPrevSkipTargetFind = null;
+            return;
+        }
+        if (panPrevSelection !== null) {
+            canvas.value.selection = panPrevSelection;
+        } else {
+            canvas.value.selection = true;
+        }
+        if (panPrevSkipTargetFind !== null) {
+            canvas.value.skipTargetFind = panPrevSkipTargetFind;
+        } else {
+            canvas.value.skipTargetFind = false;
+        }
+        panPrevSelection = null;
+        panPrevSkipTargetFind = null;
+    };
     const flushPan = () => {
         if (!canvas.value || !canvas.value.viewportTransform) return;
         if (panDxPending !== 0 || panDyPending !== 0) {
@@ -12939,7 +12960,10 @@ const setupZoomPan = () => {
             isDragging = true;
             lastPosX = evt.clientX;
             lastPosY = evt.clientY;
+            if (panPrevSelection === null) panPrevSelection = !!canvas.value.selection;
+            if (panPrevSkipTargetFind === null) panPrevSkipTargetFind = !!canvas.value.skipTargetFind;
             canvas.value.selection = false;
+            canvas.value.skipTargetFind = true;
             canvas.value.defaultCursor = 'grabbing';
             evt.preventDefault();
             evt.stopPropagation();
@@ -13064,7 +13088,7 @@ const setupZoomPan = () => {
             if (!evt) return;
             if (evt.buttons === 0) {
                 isDragging = false;
-                canvas.value.selection = true;
+                restorePanInteractionFlags();
                 canvas.value.defaultCursor = isSpacePanPressed ? 'grab' : 'default';
                 flushPan();
                 return;
@@ -13258,7 +13282,7 @@ const setupZoomPan = () => {
 	    canvas.value.on('mouse:up', (opt: any) => {
         if (isDragging) {
             isDragging = false;
-            canvas.value.selection = true;
+            restorePanInteractionFlags();
             canvas.value.defaultCursor = isSpacePanPressed ? 'grab' : 'default';
             flushPan();
             return;
@@ -14006,6 +14030,7 @@ const rulerGuides = computed(() => (viewShowGuides.value ? userGuidesIndex.value
 const GUIDE_COLOR = '#ff2fb3';
 const GUIDE_STROKE_WIDTH = 2;
 const SNAP_RANGE_PX = 12;
+const SNAP_HYSTERESIS_HOLD_FACTOR = 1.6;
 
 const setupSnapping = () => {
     if (!canvas.value) return;
@@ -14300,6 +14325,29 @@ const setupSnapping = () => {
     let lastPointer = { x: 0, y: 0 };
     let constrainAxis: 'x' | 'y' | null = null;
     let constrainRef = { left: 0, top: 0 };
+    let stickySnapOwner: any = null;
+    let stickyVerticalSnap: { x: number; type: 'left' | 'right' | 'center' } | null = null;
+    let stickyHorizontalSnap: { y: number; type: 'top' | 'bottom' | 'center' } | null = null;
+    const clearStickySnaps = () => {
+        stickyVerticalSnap = null;
+        stickyHorizontalSnap = null;
+    };
+    const getVerticalSnapDistance = (
+        bounds: SnapBounds,
+        snap: { x: number; type: 'left' | 'right' | 'center' }
+    ) => {
+        if (snap.type === 'left') return Math.abs(bounds.left - snap.x);
+        if (snap.type === 'right') return Math.abs(bounds.right - snap.x);
+        return Math.abs(bounds.centerX - snap.x);
+    };
+    const getHorizontalSnapDistance = (
+        bounds: SnapBounds,
+        snap: { y: number; type: 'top' | 'bottom' | 'center' }
+    ) => {
+        if (snap.type === 'top') return Math.abs(bounds.top - snap.y);
+        if (snap.type === 'bottom') return Math.abs(bounds.bottom - snap.y);
+        return Math.abs(bounds.centerY - snap.y);
+    };
     const hideGuides = () => {
         if (verticalGuide.visible) verticalGuide.set({ visible: false });
         if (horizontalGuide.visible) horizontalGuide.set({ visible: false });
@@ -14370,6 +14418,10 @@ const setupSnapping = () => {
             !!currentTransform &&
             (transformAction.includes('scale') || transformAction.includes('rotate') || transformAction.includes('skew'));
         const allowPositionSnap = !(isTransforming && currentTransform?.target === obj);
+        if (stickySnapOwner !== obj) {
+            stickySnapOwner = obj;
+            clearStickySnaps();
+        }
 
         // Multi-selection: enforce containment/bindings per member.
         if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
@@ -14390,6 +14442,7 @@ const setupSnapping = () => {
                 }
             });
             hideGuides();
+            clearStickySnaps();
             return;
         }
 
@@ -14402,6 +14455,7 @@ const setupSnapping = () => {
         // SmartObject containment
         if (obj.group && (obj.group as any).isSmartObject) {
             hideGuides();
+            clearStickySnaps();
             const parentGroup = obj.group;
             const cardW = (parentGroup as any)._cardWidth || parentGroup.width;
             const cardH = (parentGroup as any)._cardHeight || parentGroup.height;
@@ -14533,6 +14587,7 @@ const setupSnapping = () => {
         // apply zone containment only and skip expensive/global snapping.
         if (handledCardZoneDrag) {
             hideGuides();
+            clearStickySnaps();
             syncMovingFrameClip(obj);
             return;
         }
@@ -14540,6 +14595,7 @@ const setupSnapping = () => {
         // ProductZone containment
         if (obj.group && (obj.group as any).isProductZone) {
             hideGuides();
+            clearStickySnaps();
             const zone = obj.group;
             const zoneW = (zone as any)._zoneWidth || zone.width;
             const zoneH = (zone as any)._zoneHeight || zone.height;
@@ -14557,6 +14613,7 @@ const setupSnapping = () => {
         // SHIFT: constrain to axis
         if (evt?.shiftKey) {
             hideGuides();
+            clearStickySnaps();
             const ptr = getPointer(evt);
             const dx = Math.abs(ptr.x - lastPointer.x);
             const dy = Math.abs(ptr.y - lastPointer.y);
@@ -14576,6 +14633,7 @@ const setupSnapping = () => {
         // Alt/Option: temporarily disable snapping (but keep containment constraints above).
         if (evt?.altKey) {
             hideGuides();
+            clearStickySnaps();
             syncMovingFrameClip(obj);
             return;
         }
@@ -14585,6 +14643,7 @@ const setupSnapping = () => {
         // Keep drag smooth by skipping snap in this case.
         if (obj.group && String(obj.group.type || '').toLowerCase() !== 'activeselection') {
             hideGuides();
+            clearStickySnaps();
             syncMovingFrameClip(obj);
             return;
         }
@@ -14592,6 +14651,7 @@ const setupSnapping = () => {
         const anySnapEnabled = !!(snapToObjects.value || (snapToGuides.value && viewShowGuides.value) || snapToGrid.value);
         if (!anySnapEnabled) {
             hideGuides();
+            clearStickySnaps();
             syncMovingFrameClip(obj);
             return;
         }
@@ -14708,23 +14768,54 @@ const setupSnapping = () => {
             }
         }
 
-        // Apply snap ONLY if within range
-        if (bestVDist <= snapRange) {
-            if (allowPositionSnap) {
-                if (snapVType === 'left') setObjLeft(obj, vX);
-                else if (snapVType === 'right') setObjRight(obj, vX);
-                else setObjCenterX(obj, vX);
-            }
-            vVisible = true;
+        // Snap hysteresis:
+        // after snapping, keep it "locked" for a slightly wider range to avoid
+        // micro-jumps when cursor oscillates near the threshold.
+        const snapReleaseRange = snapRange * SNAP_HYSTERESIS_HOLD_FACTOR;
+
+        if (!allowPositionSnap) {
+            clearStickySnaps();
         }
 
-        if (bestHDist <= snapRange) {
-            if (allowPositionSnap) {
-                if (snapHType === 'top') setObjTop(obj, hY);
-                else if (snapHType === 'bottom') setObjBottom(obj, hY);
-                else setObjCenterY(obj, hY);
+        const verticalStickyDist = stickyVerticalSnap ? getVerticalSnapDistance(b, stickyVerticalSnap) : Number.POSITIVE_INFINITY;
+        if (allowPositionSnap && stickyVerticalSnap && verticalStickyDist <= snapReleaseRange) {
+            vVisible = true;
+            vX = stickyVerticalSnap.x;
+            snapVType = stickyVerticalSnap.type;
+        } else {
+            if (stickyVerticalSnap && verticalStickyDist > snapReleaseRange) {
+                stickyVerticalSnap = null;
             }
+            if (bestVDist <= snapRange) {
+                vVisible = true;
+                stickyVerticalSnap = { x: vX, type: snapVType };
+            }
+        }
+
+        const horizontalStickyDist = stickyHorizontalSnap ? getHorizontalSnapDistance(b, stickyHorizontalSnap) : Number.POSITIVE_INFINITY;
+        if (allowPositionSnap && stickyHorizontalSnap && horizontalStickyDist <= snapReleaseRange) {
             hVisible = true;
+            hY = stickyHorizontalSnap.y;
+            snapHType = stickyHorizontalSnap.type;
+        } else {
+            if (stickyHorizontalSnap && horizontalStickyDist > snapReleaseRange) {
+                stickyHorizontalSnap = null;
+            }
+            if (bestHDist <= snapRange) {
+                hVisible = true;
+                stickyHorizontalSnap = { y: hY, type: snapHType };
+            }
+        }
+
+        if (allowPositionSnap && vVisible) {
+            if (snapVType === 'left') setObjLeft(obj, vX);
+            else if (snapVType === 'right') setObjRight(obj, vX);
+            else setObjCenterX(obj, vX);
+        }
+        if (allowPositionSnap && hVisible) {
+            if (snapHType === 'top') setObjTop(obj, hY);
+            else if (snapHType === 'bottom') setObjBottom(obj, hY);
+            else setObjCenterY(obj, hY);
         }
 
         // Grid snap as fallback (only if no other snap won)
@@ -14782,6 +14873,8 @@ const setupSnapping = () => {
     const mouseUpHandler = () => {
         hideGuides();
         constrainAxis = null;
+        clearStickySnaps();
+        stickySnapOwner = null;
         invalidateSnapCache();
         flushZoneRelayoutOnDrop();
         safeRequestRenderAll(canvasInstance);
@@ -14811,6 +14904,8 @@ const setupSnapping = () => {
         } catch {
             // ignore teardown errors
         }
+        clearStickySnaps();
+        stickySnapOwner = null;
         hideGuides();
         try {
             if (verticalGuide.canvas === canvasInstance) canvasInstance.remove(verticalGuide);
@@ -16122,6 +16217,12 @@ const setupReactivity = () => {
     // Realtime updates during interaction
     // Throttled floating UI update (avoid expensive getBoundingRect on every move frame)
     let floatingUIRafPending = false;
+    let pendingObjectMoveViewportCull = false;
+    const flushObjectMoveViewportCull = () => {
+        if (!pendingObjectMoveViewportCull) return;
+        pendingObjectMoveViewportCull = false;
+        scheduleViewportCulling('object-move-end');
+    };
     canvas.value.on('object:moving', (e: any) => {
         lastTransformMutationAt = Date.now();
         const target = e.target;
@@ -16131,7 +16232,7 @@ const setupReactivity = () => {
             isProductCardImage(target)
         );
         if (!isCardImageTarget) {
-            scheduleViewportCulling('object-moving');
+            pendingObjectMoveViewportCull = true;
         }
 
         const activeObj = canvas.value.getActiveObject?.();
@@ -16278,12 +16379,8 @@ const setupReactivity = () => {
 	            }
 	        }
 	        
-	        // 🔒 CONTAINMENT CONSTRAINTS: Keep objects inside their parents.
-	        // Product images inside cards are already constrained by the dedicated
-	        // smart-object drag handler (setupSnapping). Re-applying here causes jitter.
-	        if (!isCardImageTarget && shouldApplyContainmentConstraints(target)) {
-	            applyContainmentConstraints(target);
-	        }
+	        // Containment during drag is handled in setupSnapping/object:moving and
+	        // finalized in object:modified. Re-running here causes jitter.
     });
 
     // Smart Scaling for Textbox Reflow & Product Zone AutoLayout
@@ -16435,7 +16532,9 @@ const setupReactivity = () => {
                 canvas.value.requestRenderAll();
             }
         }
+        flushObjectMoveViewportCull();
     });
+    canvas.value.on('mouse:up', flushObjectMoveViewportCull);
 
     const syncTextSelectionSnapshot = (e: any) => {
         if (!canvas.value) return;
@@ -30923,7 +31022,17 @@ const getZoneHighlightPredicate = (zone: any, cards: any[]) => {
         };
     }
 
-    if (pos === 'last') {
+    if (pos === 'center') {
+        const start = Math.max(0, Math.floor((count - want) / 2));
+        const end = Math.min(count, start + want);
+        return {
+            count: want,
+            mult,
+            isHighlighted: (_card: any, index: number) => index >= start && index < end
+        };
+    }
+
+    if (pos === 'last' || pos === 'bottom') {
         return {
             count: want,
             mult,
@@ -30931,7 +31040,7 @@ const getZoneHighlightPredicate = (zone: any, cards: any[]) => {
         };
     }
 
-    // Default = first
+    // Default = first/top
     return {
         count: want,
         mult,
@@ -31100,7 +31209,101 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
 
         // Edge case: all cards highlighted → fall through to standard grid
         if (normCards.length > 0) {
-            const hlOnLeft = (zone.highlightPos ?? 'first') !== 'last';
+            const rawHighlightPos = String((zone as any)?.highlightPos ?? 'first').toLowerCase();
+            const useHorizontalFeatured =
+                rawHighlightPos === 'top' ||
+                rawHighlightPos === 'bottom' ||
+                rawHighlightPos === 'center';
+
+            if (useHorizontalFeatured) {
+                const normalCols = Math.max(1, (zone.columns && zone.columns > 0)
+                    ? cols
+                    : Math.max(1, Math.round(Math.sqrt(normCards.length * (usableW / Math.max(1, usableH)))))
+                );
+
+                const normRowCount = Math.max(1, Math.ceil(normCards.length / normalCols));
+                const totalGapsY = normRowCount * gapY; // normal rows + separator between sections
+                const totalUnitsY = normRowCount + hl.mult;
+                const unitH = (usableH - totalGapsY) / Math.max(1, totalUnitsY);
+
+                if (Number.isFinite(unitH) && unitH > 2) {
+                    const hlSectionH = unitH * hl.mult;
+                    const normSectionH = usableH - hlSectionH - gapY;
+                    const normCardH = (normSectionH - (Math.max(0, normRowCount - 1) * gapY)) / Math.max(1, normRowCount);
+                    const baseNormCellW = (usableW - ((normalCols - 1) * gapX)) / Math.max(1, normalCols);
+
+                    const highlightCols = Math.max(1, Math.min(cols, hlCards.length));
+                    const highlightRows = Math.max(1, Math.ceil(hlCards.length / highlightCols));
+                    const highlightCellW = (usableW - ((highlightCols - 1) * gapX)) / Math.max(1, highlightCols);
+                    const highlightCellH = (hlSectionH - (Math.max(0, highlightRows - 1) * gapY)) / Math.max(1, highlightRows);
+
+                    const canApplyHorizontalFeatured =
+                        normSectionH > 2 &&
+                        normCardH > 2 &&
+                        baseNormCellW > 2 &&
+                        highlightCellW > 2 &&
+                        highlightCellH > 2;
+
+                    if (canApplyHorizontalFeatured) {
+                        const placeAtBottom = rawHighlightPos === 'bottom';
+                        const centerHighlightRows = rawHighlightPos === 'center';
+
+                        const hlSectionY = placeAtBottom
+                            ? (startY + usableH - hlSectionH)
+                            : startY;
+                        const normSectionY = placeAtBottom
+                            ? startY
+                            : (hlSectionY + hlSectionH + gapY);
+
+                        hlCards.forEach((card: any, i: number) => {
+                            const row = Math.floor(i / highlightCols);
+                            const col = i % highlightCols;
+                            const isLastRow = row === highlightRows - 1;
+                            const itemsInRow = isLastRow ? (hlCards.length % highlightCols || highlightCols) : highlightCols;
+                            const rowW = (itemsInRow * highlightCellW) + ((itemsInRow - 1) * gapX);
+                            const rowStartX = centerHighlightRows
+                                ? (startX + (usableW - rowW) / 2)
+                                : startX;
+                            const x = rowStartX + (col * (highlightCellW + gapX));
+                            const y = hlSectionY + (row * (highlightCellH + gapY));
+                            placeCard(card, x, y, highlightCellW, highlightCellH, cards.indexOf(card));
+                        });
+
+                        normCards.forEach((card: any, i: number) => {
+                            const col = i % normalCols;
+                            const row = Math.floor(i / normalCols);
+                            const isLastRow = row === normRowCount - 1;
+                            const itemsInRow = isLastRow ? (normCards.length % normalCols || normalCols) : normalCols;
+
+                            let cellW = baseNormCellW;
+                            let rowGapX = gapX;
+                            let rowStartX = startX;
+
+                            if (isLastRow && itemsInRow < normalCols) {
+                                if ((lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow >= 1) {
+                                    cellW = (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow);
+                                    rowGapX = gapX;
+                                    rowStartX = startX;
+                                } else {
+                                    const rowW = (itemsInRow * cellW) + ((itemsInRow - 1) * rowGapX);
+                                    if (lastRowBehavior === 'center') rowStartX = startX + (usableW - rowW) / 2;
+                                    else if (lastRowBehavior === 'left') rowStartX = startX;
+                                }
+                            }
+
+                            const x = rowStartX + (col * (cellW + rowGapX));
+                            const y = normSectionY + (row * (normCardH + gapY));
+                            placeCard(card, x, y, cellW, normCardH, cards.indexOf(card));
+                        });
+
+                        canvas.value.requestRenderAll();
+                        if (shouldSave) saveCurrentState();
+                        return;
+                    }
+                }
+            }
+
+            const hlOnLeft = rawHighlightPos !== 'last';
 
             // Column distribution for normal section
             const normalCols = Math.max(1, (zone.columns && zone.columns > 0)
