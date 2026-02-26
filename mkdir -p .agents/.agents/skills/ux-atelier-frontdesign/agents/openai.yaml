@@ -1,0 +1,8 @@
+interface:
+  display_name: "UX Atelier — Front Design"
+  short_description: "UI/UX não-genérica: fluxo, microcopy, estados, a11y e implementação"
+  brand_color: "#2B2D42"
+  default_prompt: "Use esta skill para desenhar e implementar uma UI diferente (não-genérica) com foco em UX para: <descreva a tela/fluxo>"
+
+policy:
+  allow_implicit_invocation: false
