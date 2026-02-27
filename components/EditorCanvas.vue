@@ -117,6 +117,7 @@ let wrapperResizeObserver: ResizeObserver | null = null
 let isSpacePanPressed = false
 let keyboardNudgeDirty = false
 let globalStylesSaveTimer: ReturnType<typeof setTimeout> | null = null
+let viewportStateSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 // Flag to track if canvas is destroyed (prevents errors after unmount)
 const isCanvasDestroyed = ref(false)
@@ -5971,11 +5972,13 @@ const handleVerticalScrollbarDrag = (e: MouseEvent) => {
         
         safeRequestRenderAll();
         throttledUpdateScrollbars();
+        scheduleViewportStateSave('scrollbar-vertical');
     };
     
     const onMouseUp = () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        flushViewportStateSave('scrollbar-vertical-end');
     };
     
     document.addEventListener('mousemove', onMouseMove);
@@ -6024,11 +6027,13 @@ const handleHorizontalScrollbarDrag = (e: MouseEvent) => {
         
         safeRequestRenderAll();
         throttledUpdateScrollbars();
+        scheduleViewportStateSave('scrollbar-horizontal');
     };
     
     const onMouseUp = () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        flushViewportStateSave('scrollbar-horizontal-end');
     };
     
     document.addEventListener('mousemove', onMouseMove);
@@ -6048,6 +6053,50 @@ const updateZoomState = (opts?: { immediate?: boolean }) => {
         throttledUpdateScrollbars();
     }
 }
+
+const persistViewportStateNow = (reason: string = 'change') => {
+    if (!canvas.value || isCanvasDestroyed.value) return;
+    try {
+        saveCurrentState({
+            reason: `viewport:${String(reason || 'change')}`,
+            skipIfUnchanged: true
+        });
+    } catch (err) {
+        console.warn('[viewport] Falha ao persistir estado de viewport:', err);
+    }
+};
+
+const scheduleViewportStateSave = (
+    reason: string = 'change',
+    opts: { delayMs?: number; immediate?: boolean } = {}
+) => {
+    if (isCanvasDestroyed.value) return;
+    if (opts.immediate) {
+        if (viewportStateSaveTimer) {
+            clearTimeout(viewportStateSaveTimer);
+            viewportStateSaveTimer = null;
+        }
+        persistViewportStateNow(reason);
+        return;
+    }
+    const delayMs = Math.max(0, Number(opts.delayMs ?? 240) || 240);
+    if (viewportStateSaveTimer) {
+        clearTimeout(viewportStateSaveTimer);
+        viewportStateSaveTimer = null;
+    }
+    viewportStateSaveTimer = setTimeout(() => {
+        viewportStateSaveTimer = null;
+        persistViewportStateNow(reason);
+    }, delayMs);
+};
+
+const flushViewportStateSave = (reason: string = 'flush') => {
+    if (viewportStateSaveTimer) {
+        clearTimeout(viewportStateSaveTimer);
+        viewportStateSaveTimer = null;
+    }
+    persistViewportStateNow(reason);
+};
 
 // Close zoom menu when clicking outside
 let zoomMenuOutsideClickHandler: ((e: MouseEvent) => void) | null = null
@@ -6088,6 +6137,7 @@ const handleZoomIn = () => {
 
     canvas.value.zoomToPoint(point, zoom);
     updateZoomState();
+    scheduleViewportStateSave('zoom-in');
 }
 
 const handleZoomOut = () => {
@@ -6110,6 +6160,7 @@ const handleZoomOut = () => {
 
     canvas.value.zoomToPoint(point, zoom);
     updateZoomState();
+    scheduleViewportStateSave('zoom-out');
 }
 
 const handleZoom100 = () => {
@@ -6127,6 +6178,7 @@ const handleZoom100 = () => {
 
     canvas.value.requestRenderAll();
     updateZoomState();
+    scheduleViewportStateSave('zoom-100');
 }
 
 const handleZoom50 = () => {
@@ -6134,6 +6186,7 @@ const handleZoom50 = () => {
     canvas.value.setZoom(0.5);
     canvas.value.requestRenderAll();
     updateZoomState();
+    scheduleViewportStateSave('zoom-50');
 }
 
 const handleZoom200 = () => {
@@ -6141,6 +6194,7 @@ const handleZoom200 = () => {
     canvas.value.setZoom(2);
     canvas.value.requestRenderAll();
     updateZoomState();
+    scheduleViewportStateSave('zoom-200');
 }
 
 const handleZoom400 = () => {
@@ -6148,6 +6202,7 @@ const handleZoom400 = () => {
     canvas.value.setZoom(4);
     canvas.value.requestRenderAll();
     updateZoomState();
+    scheduleViewportStateSave('zoom-400');
 }
 
 const handleZoomToSelection = () => {
@@ -6166,6 +6221,7 @@ const handleZoomToSelection = () => {
     canvas.value.setZoom(zoom);
     canvas.value.requestRenderAll();
     updateZoomState();
+    scheduleViewportStateSave('zoom-selection');
 }
 
 const canvasObjects = shallowRef<any[]>([]) // Reactive list (shallow for performance)
@@ -6295,9 +6351,10 @@ const finalizeActiveTextEditingForPersist = () => {
     }
 };
 
-const flushPersistenceNow = (reason: string) => {
+const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => {
     const now = Date.now();
-    if (now - lastLifecycleFlushAt < 250) return;
+    const force = !!opts.force;
+    if (!force && now - lastLifecycleFlushAt < 250) return;
     lastLifecycleFlushAt = now;
     if (isLifecycleFlushInProgress) return;
     isLifecycleFlushInProgress = true;
@@ -6306,6 +6363,18 @@ const flushPersistenceNow = (reason: string) => {
         if (propertySaveTimer) {
             clearTimeout(propertySaveTimer);
             propertySaveTimer = null;
+        }
+        if (textEditSaveTimer) {
+            clearTimeout(textEditSaveTimer);
+            textEditSaveTimer = null;
+        }
+        if (globalStylesSaveTimer) {
+            clearTimeout(globalStylesSaveTimer);
+            globalStylesSaveTimer = null;
+        }
+        if (viewportStateSaveTimer) {
+            clearTimeout(viewportStateSaveTimer);
+            viewportStateSaveTimer = null;
         }
 
         finalizeActiveTextEditingForPersist();
@@ -6316,7 +6385,8 @@ const flushPersistenceNow = (reason: string) => {
                 allowEmptyOverwrite: true,
                 reason: `lifecycle:${reason}`,
                 source: 'system',
-                skipIfUnchanged: true
+                skipIfUnchanged: true,
+                skipCoalesce: true
             });
         } catch (err) {
             console.warn('[persist] Falha ao salvar estado em flush de lifecycle:', err);
@@ -7893,7 +7963,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     }
 }, { deep: false, immediate: true }); // Watch the object reference change
 
-const zoomToFit = () => {
+const zoomToFit = (opts: { persist?: boolean } = {}) => {
     if (!canvas.value || !wrapperEl.value) return;
 
     // Refresh Canvas Size
@@ -7911,6 +7981,7 @@ const zoomToFit = () => {
         // Empty Canvas? Center at (0,0) with zoom 1 or default zoom
         canvas.value.setViewportTransform([1, 0, 0, 1, vWidth / 2, vHeight / 2]);
         updateZoomState();
+        if (opts.persist) scheduleViewportStateSave('zoom-fit');
         showZoomMenu.value = false
         return;
     }
@@ -7937,6 +8008,7 @@ const zoomToFit = () => {
     if (contentWidth <= 0 || contentHeight <= 0) {
          canvas.value.setViewportTransform([1, 0, 0, 1, vWidth / 2, vHeight / 2]);
          updateZoomState();
+         if (opts.persist) scheduleViewportStateSave('zoom-fit');
          showZoomMenu.value = false
          return;
     }
@@ -7957,6 +8029,7 @@ const zoomToFit = () => {
 
     canvas.value.setViewportTransform([scale, 0, 0, scale, viewportX, viewportY]);
     updateZoomState();
+    if (opts.persist) scheduleViewportStateSave('zoom-fit');
     showZoomMenu.value = false
 
     // Infinite Canvas Mode: No Artboard update needed
@@ -9451,7 +9524,6 @@ onMounted(async () => {
   }
 })
 onUnmounted(() => {
-  isCanvasDestroyed.value = true;
   isCanvasJsonLoadInProgress = false;
   isDesignLoading.value = false
   if (imageProgressRafId !== null && typeof window !== 'undefined') {
@@ -9481,10 +9553,6 @@ onUnmounted(() => {
     clearTimeout(frameLabelUpdateTimer);
     frameLabelUpdateTimer = null;
   }
-  if (globalStylesSaveTimer) {
-    clearTimeout(globalStylesSaveTimer);
-    globalStylesSaveTimer = null;
-  }
   if (missingProductImageRecoveryTimer) {
     clearTimeout(missingProductImageRecoveryTimer)
     missingProductImageRecoveryTimer = null
@@ -9497,8 +9565,17 @@ onUnmounted(() => {
     teardownHistoryListeners()
     teardownHistoryListeners = null
   }
-  flushPersistenceNow('unmount');
+  flushPersistenceNow('unmount', { force: true });
+  if (globalStylesSaveTimer) {
+    clearTimeout(globalStylesSaveTimer);
+    globalStylesSaveTimer = null;
+  }
+  if (viewportStateSaveTimer) {
+    clearTimeout(viewportStateSaveTimer);
+    viewportStateSaveTimer = null;
+  }
   cancelAutoSave();
+  isCanvasDestroyed.value = true;
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
   window.removeEventListener('resize', resizeCanvas);
   window.removeEventListener('keydown', handleKeyDown);
@@ -10419,7 +10496,34 @@ const removeImageObjectsDeep = (node: any): any => {
                 // ignore cleanup failures
             }
 
-            json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
+            try {
+                json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
+            } catch (retryErr: any) {
+                const retryMsg = String(retryErr?.message || retryErr || '').toLowerCase()
+                const isRetryRecoverable = retryMsg.includes('toobject is not a function')
+                if (!isRetryRecoverable) throw retryErr
+
+                console.warn(`[saveState] Segunda tentativa de serialização falhou (${saveReason}). Aplicando limpeza forte...`, retryErr)
+                const removedSecondPass = sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}:serialize-retry-2`)
+                try {
+                    const topLevelObjects = canvasInstance?.getObjects?.() || []
+                    topLevelObjects.forEach((obj: any) => {
+                        if (!isValidFabricCanvasObject(obj)) {
+                            try { canvasInstance.remove(obj) } catch { /* ignore */ }
+                        }
+                    })
+                } catch {
+                    // ignore hard cleanup failures
+                }
+
+                try {
+                    json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
+                    console.warn(`[saveState] Serialização recuperada após limpeza forte (${removed + removedSecondPass} item(ns) saneados).`)
+                } catch (finalErr: any) {
+                    console.error(`[saveState] Não foi possível serializar estado após recuperação (${saveReason}). Mantendo último estado válido.`, finalErr)
+                    return
+                }
+            }
             if (removed > 0) {
                 console.warn(`[saveState] Serialização recuperada após remover ${removed} item(ns) inválido(s).`)
             }
@@ -11993,13 +12097,13 @@ const handleKeyDown = async (e: KeyboardEvent) => {
     // Use `code` because on many layouts Shift+1 yields `!` (not `1`).
     if (e.shiftKey && (e.code === 'Digit1' || e.key === '1' || e.key === '!')) {
         e.preventDefault();
-        zoomToFit();
+        zoomToFit({ persist: true });
         return;
     }
     // Extra shortcut: `F` (when not using Ctrl/Cmd) for quick fit-to-screen.
     if (!isCtrl && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault();
-        zoomToFit();
+        zoomToFit({ persist: true });
         return;
     }
 
@@ -12111,6 +12215,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
             if (e.key === 'ArrowRight') vpt[4] -= step;
             canvas.value.requestRenderAll();
             throttledUpdateScrollbars();
+            scheduleViewportStateSave('keyboard-pan');
             keyboardNudgeDirty = true;
         }
     }
@@ -12637,6 +12742,7 @@ const setupZoomPan = () => {
             safeRequestRenderAll();
             updateFloatingUI();
             scheduleViewportCulling('wheel-zoom');
+            scheduleViewportStateSave('wheel-zoom');
         } else if (wheelMode === 'pan') {
             const vpt = canvas.value.viewportTransform;
             if (vpt) {
@@ -12646,6 +12752,7 @@ const setupZoomPan = () => {
                 updateFloatingUI();
                 throttledUpdateScrollbars();
                 scheduleViewportCulling('wheel-pan');
+                scheduleViewportStateSave('wheel-pan');
             }
         }
 
@@ -12853,6 +12960,7 @@ const setupZoomPan = () => {
             updateFloatingUI();
             throttledUpdateScrollbars();
             scheduleViewportCulling('touch-gesture');
+            scheduleViewportStateSave('touch-gesture');
         };
 
         const scheduleTouchFlush = () => {
@@ -12909,6 +13017,7 @@ const setupZoomPan = () => {
         domCanvasTouchEndHandler = (evt: TouchEvent) => {
             if (evt.touches.length < 2) {
                 endTouchGesture();
+                flushViewportStateSave('touch-gesture-end');
             }
 
             // Tablet fallback: convert double-tap into Fabric `mouse:dblclick`.
@@ -12998,6 +13107,7 @@ const setupZoomPan = () => {
         safeRequestRenderAll();
         throttledUpdateScrollbars();
         scheduleViewportCulling('pan-drag');
+        scheduleViewportStateSave('pan-drag');
     };
     const schedulePanFlush = () => {
         if (panRafPending) return;
@@ -13152,6 +13262,7 @@ const setupZoomPan = () => {
                 restorePanInteractionFlags();
                 canvas.value.defaultCursor = isSpacePanPressed ? 'grab' : 'default';
                 flushPan();
+                flushViewportStateSave('pan-drag-end');
                 return;
             }
             panDxPending += evt.clientX - lastPosX;
@@ -13346,6 +13457,7 @@ const setupZoomPan = () => {
             restorePanInteractionFlags();
             canvas.value.defaultCursor = isSpacePanPressed ? 'grab' : 'default';
             flushPan();
+            flushViewportStateSave('pan-drag-end');
             return;
         }
         
@@ -15547,6 +15659,12 @@ const setupReactivity = () => {
         const primary = evtPayload?.target || null;
         const subTargets = Array.isArray(evtPayload?.subTargets) ? evtPayload.subTargets.filter(Boolean) : [];
         const preferCardImages = shiftSelectionBaselineMembers.some((member: any) => isProductCardImageSelectionCandidate(member));
+        if (!preferCardImages) {
+            const pointerGenericFirst = pickGenericShiftTargetAtPointer(evtPayload?.e, {
+                exclude: shiftSelectionBaselineMembers
+            });
+            if (pointerGenericFirst) return pointerGenericFirst;
+        }
         // IMPORTANT: Prefer geometric pointer hit first.
         // Fabric can occasionally report a stale active child as target when clicking inside interactive groups.
         const pointerImageFirst = findTopProductImageAtPointer(evtPayload?.e, {
@@ -15650,6 +15768,13 @@ const setupReactivity = () => {
             } catch {
                 // ignore fallback errors
             }
+        }
+
+        if (isActiveSelectionObject(primary)) {
+            const pointerGeneric = pickGenericShiftTargetAtPointer(evtPayload?.e, {
+                exclude: shiftSelectionBaselineMembers
+            });
+            if (pointerGeneric) return pointerGeneric;
         }
 
         return primary;
@@ -16183,7 +16308,15 @@ const setupReactivity = () => {
             evt.preventDefault?.();
             evt.stopPropagation?.();
             const shiftTarget = pickShiftSelectionTarget(e) || target;
-            const normalizedTarget = resolveShiftSelectionRootObject(shiftTarget);
+            let normalizedTarget = resolveShiftSelectionRootObject(shiftTarget);
+            if (!normalizedTarget || isActiveSelectionObject(normalizedTarget)) {
+                const pointerGeneric = pickGenericShiftTargetAtPointer(e?.e, {
+                    exclude: shiftSelectionBaselineMembers
+                });
+                if (pointerGeneric) {
+                    normalizedTarget = pointerGeneric;
+                }
+            }
             if (import.meta.dev) {
                 console.log('[shift-product-multi] resolve', {
                     rawTargetType: String(target?.type || ''),
@@ -19590,6 +19723,7 @@ const moveLayer = (id: string, dir: 'up' | 'down') => {
         canvas.value.requestRenderAll();
         // Update list order
         refreshCanvasObjects();
+        saveCurrentState({ reason: dir === 'up' ? 'layers-move-up' : 'layers-move-down' });
     }
 }
 
@@ -22882,6 +23016,16 @@ const simulateSmartGrid = async (
                      if (typeof (limitObj as any).initDimensions === 'function') (limitObj as any).initDimensions();
                      safeAddWithUpdate(cloned, limitObj);
                  }
+
+                 // Keep template-cloned cards aligned with current zone styles.
+                 // Without this pass, replacing products can resurrect stale template colors/borders.
+                 if (targetZone) {
+                     try {
+                         resizeSmartObject(cloned, itemWidth, itemHeight, zoneStylesForNewCards);
+                     } catch (styleErr) {
+                         console.warn('[replace-products] Falha ao aplicar estilos da zona no card clonado:', styleErr);
+                     }
+                 }
                 
                  cloned._customId = makeCanvasObjectId();
                  cloned.excludeFromExport = false;
@@ -23150,20 +23294,9 @@ function getZoneGlobalStyles(zone?: any): GlobalStyles {
     return normalizeGlobalStyles(productZoneState.globalStyles.value);
 }
 
-const HIGH_FREQUENCY_GLOBAL_STYLE_PROPS = new Set<string>([
-    'cardColor',
-    'isProdBgTransparent',
-    'cardBorderColor',
+const DEBOUNCED_GLOBAL_STYLE_PROPS = new Set<string>([
     'cardBorderRadius',
     'cardBorderWidth',
-    'prodNameColor',
-    'limitColor',
-    'splashColor',
-    'accentColor',
-    'splashTextColor',
-    'priceTextColor',
-    'priceCurrencyColor',
-    'splashFill',
     'splashScale',
     'splashTextScale',
     'splashRoundness',
@@ -23172,24 +23305,24 @@ const HIGH_FREQUENCY_GLOBAL_STYLE_PROPS = new Set<string>([
     'prodNameLineHeight'
 ]);
 
-const isHighFrequencyGlobalStyleProp = (prop: string) => HIGH_FREQUENCY_GLOBAL_STYLE_PROPS.has(String(prop || ''));
+const isDebouncedGlobalStyleProp = (prop: string) => DEBOUNCED_GLOBAL_STYLE_PROPS.has(String(prop || ''));
 
 const scheduleGlobalStylesStateSave = (prop: string) => {
-    const immediate = !isHighFrequencyGlobalStyleProp(prop);
+    const immediate = !isDebouncedGlobalStyleProp(prop);
     if (globalStylesSaveTimer) {
         clearTimeout(globalStylesSaveTimer);
         globalStylesSaveTimer = null;
     }
 
     if (immediate) {
-        saveCurrentState({ reason: `global-style:${prop}` });
+        saveCurrentState({ reason: `global-style:${prop}`, skipIfUnchanged: true });
         return;
     }
 
     globalStylesSaveTimer = setTimeout(() => {
         globalStylesSaveTimer = null;
-        saveCurrentState({ reason: 'global-style:debounced' });
-    }, 220);
+        saveCurrentState({ reason: 'global-style:debounced', skipIfUnchanged: true });
+    }, 180);
 };
 
 const getCurrentZoneObject = () => {
@@ -24124,7 +24257,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     // may cache stale renders. Clearing renderCache on all affected cards ensures
     // the new styles are visually applied.
     canvas.value.requestRenderAll();
-    if (!isHighFrequencyGlobalStyleProp(prop)) {
+    if (!isDebouncedGlobalStyleProp(prop)) {
         nextTick(() => {
             if (canvas.value) {
                 // Force dirty on entire canvas to guarantee re-render
