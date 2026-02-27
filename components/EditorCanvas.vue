@@ -4328,32 +4328,72 @@ const isValidFabricCanvasObject = (o: any): boolean => {
 const sanitizeCanvasObjectStack = (canvasInstance: any, reason: string = 'unknown'): number => {
     if (!canvasInstance) return 0;
     const visited = new Set<any>();
+    const visitedClipPaths = new Set<any>();
+    const clearOwnerClipPath = (owner: any) => {
+        if (!owner) return;
+        try {
+            if (typeof owner.set === 'function') owner.set('clipPath', null);
+            else owner.clipPath = null;
+        } catch {
+            owner.clipPath = null;
+        }
+        if (owner?._frameClipOwner) {
+            try { delete owner._frameClipOwner; } catch { /* ignore */ }
+        }
+    };
+
     const sanitizeContainer = (container: any, tag: string): number => {
         if (!container || visited.has(container)) return 0;
         visited.add(container);
 
+        let removedTotal = 0;
         const internal = (container as any)._objects;
-        if (!Array.isArray(internal)) return 0;
-
-        const before = internal.length;
-        const valid = internal.filter((o: any) => isValidFabricCanvasObject(o));
-        const removedHere = before - valid.length;
-        if (removedHere > 0) {
-            internal.length = 0;
-            valid.forEach((o: any) => internal.push(o));
-            if (typeof (container as any)._onStackOrderChanged === 'function') {
-                try { (container as any)._onStackOrderChanged(); } catch { /* ignore */ }
+        if (Array.isArray(internal)) {
+            const before = internal.length;
+            const valid = internal.filter((o: any) => isValidFabricCanvasObject(o));
+            const removedHere = before - valid.length;
+            if (removedHere > 0) {
+                internal.length = 0;
+                valid.forEach((o: any) => internal.push(o));
+                if (typeof (container as any)._onStackOrderChanged === 'function') {
+                    try { (container as any)._onStackOrderChanged(); } catch { /* ignore */ }
+                }
+                console.debug(`⚠️ [sanitizeCanvasObjectStack] Removidos ${removedHere} item(ns) inválido(s) em ${tag} (${reason})`);
             }
-            console.debug(`⚠️ [sanitizeCanvasObjectStack] Removidos ${removedHere} item(ns) inválido(s) em ${tag} (${reason})`);
+
+            removedTotal += removedHere;
+            valid.forEach((child: any, idx: number) => {
+                removedTotal += sanitizeContainer(child, `${tag}.group[${idx}]`);
+            });
         }
 
-        let nestedRemoved = 0;
-        valid.forEach((child: any, idx: number) => {
-            if (Array.isArray((child as any)?._objects)) {
-                nestedRemoved += sanitizeContainer(child, `${tag}.group[${idx}]`);
-            }
-        });
-        return removedHere + nestedRemoved;
+        removedTotal += sanitizeClipPath(container, tag);
+        return removedTotal;
+    };
+
+    const sanitizeClipPath = (owner: any, tag: string): number => {
+        const clip = owner?.clipPath;
+        if (!clip) return 0;
+        if (visitedClipPaths.has(clip)) return 0;
+        visitedClipPaths.add(clip);
+
+        if (!isValidFabricCanvasObject(clip)) {
+            clearOwnerClipPath(owner);
+            console.debug(`⚠️ [sanitizeCanvasObjectStack] clipPath inválido removido em ${tag} (${reason})`);
+            return 1;
+        }
+
+        const internal = (clip as any)._objects;
+        if (internal !== undefined && !Array.isArray(internal)) {
+            (clip as any)._objects = [];
+            console.debug(`⚠️ [sanitizeCanvasObjectStack] clipPath._objects corrigido em ${tag} (${reason})`);
+        }
+
+        let removed = sanitizeContainer(clip, `${tag}.clipPath`);
+        if (clip?.clipPath) {
+            removed += sanitizeClipPath(clip, `${tag}.clipPath`);
+        }
+        return removed;
     };
 
     return sanitizeContainer(canvasInstance, 'canvas');
@@ -10362,7 +10402,28 @@ const removeImageObjectsDeep = (node: any): any => {
         safeRequestRenderAll();
         
         // Serialize with custom props
-        const json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
+        let json: any
+        try {
+            json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
+        } catch (serializeErr: any) {
+            const serializeMsg = String(serializeErr?.message || serializeErr || '').toLowerCase()
+            const isRecoverableSerializationError = serializeMsg.includes('toobject is not a function')
+            if (!isRecoverableSerializationError) throw serializeErr
+
+            console.warn(`[saveState] Falha na serialização (${saveReason}). Tentando recuperação...`, serializeErr)
+            const removed = sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}:serialize-retry`)
+            try {
+                const liveObjects = canvasInstance?.getObjects?.() || []
+                liveObjects.forEach((obj: any) => clearInvalidClipPath(obj, true))
+            } catch {
+                // ignore cleanup failures
+            }
+
+            json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
+            if (removed > 0) {
+                console.warn(`[saveState] Serialização recuperada após remover ${removed} item(ns) inválido(s).`)
+            }
+        }
         finalizeSerializedCanvasJson({
             json,
             canvasInstance,
@@ -22690,24 +22751,26 @@ const simulateSmartGrid = async (
 	                  };
 	                  applyInteractivityRecursively(cloned);
 
-                 // Data Injection Logic
-                  let titleFound = false;
-                  let priceFound = false;
-                  const { cleanedName, extractedLimit } = extractLimitFromName(product?.name);
-                  const limitTextValue = normalizeLimitText(product?.limit ?? extractedLimit);
-                  let limitFound = false;
+	                 // Data Injection Logic
+	                  let titleFound = false;
+	                  let priceFound = false;
+	                  const { cleanedName, extractedLimit } = extractLimitFromName(product?.name);
+	                  const limitTextValue = normalizeLimitText(product?.limit ?? extractedLimit);
+	                  let limitFound = false;
+	                  const objects = typeof cloned.getObjects === 'function' ? (cloned.getObjects() || []) : [];
+	                  const isTextNode = (node: any) => String(node?.type || '').toLowerCase().includes('text');
 
-                  // Determinar preço principal (dinâmico - usa os preços disponíveis)
-                  const availablePrices = getAvailablePrices(product);
-                  const displayPrice = availablePrices.mainPrice;
+	                  // Determinar preço principal (dinâmico - usa os preços disponíveis)
+	                  const availablePrices = getAvailablePrices(product);
+	                  const displayPrice = availablePrices.mainPrice;
 
-                 objects.forEach((obj: any) => {
-                    if (obj.type.includes('text')) {
-                        if (obj.name === 'smart_title') {
-                            obj.set('text', cleanedName);
-                            titleFound = true;
-                        } else if (obj.name === 'smart_price') {
-                            obj.set('text', displayPrice);
+	                 objects.forEach((obj: any) => {
+	                    if (isTextNode(obj)) {
+	                        if (obj.name === 'smart_title') {
+	                            obj.set('text', cleanedName);
+	                            titleFound = true;
+	                        } else if (obj.name === 'smart_price') {
+	                            obj.set('text', displayPrice);
                             priceFound = true;
                         } else if (
                             obj?.name === 'smart_limit' ||
@@ -22722,12 +22785,12 @@ const simulateSmartGrid = async (
                     }
                  });
 
-                 // Fallback
-                 if (!titleFound || !priceFound) {
-                     const texts = objects.filter((o: any) => o.type.includes('text'));
-                     if (texts.length >= 1 && !titleFound) texts[0].set('text', cleanedName);
-                     if (texts.length >= 2 && !priceFound) texts[1].set('text', displayPrice);
-                 }
+	                 // Fallback
+	                 if (!titleFound || !priceFound) {
+	                     const texts = objects.filter((o: any) => isTextNode(o));
+	                     if (texts.length >= 1 && !titleFound) texts[0].set('text', cleanedName);
+	                     if (texts.length >= 2 && !priceFound) texts[1].set('text', displayPrice);
+	                 }
 
                  // If template doesn't include a limit object but product has a limit, create one.
                  if (!limitFound && limitTextValue) {
@@ -27571,6 +27634,14 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     if (!pg || typeof pg.getObjects !== 'function') return;
     const parts = collectObjectsDeep(pg);
     const preserveTemplateVisual = shouldPreserveManualTemplateVisual(pg);
+    const isVisibleNode = (obj: any): boolean => {
+        if (!obj) return false;
+        if (obj.visible === false) return false;
+        const sx = Number(obj.scaleX ?? 1);
+        const sy = Number(obj.scaleY ?? 1);
+        if (!Number.isFinite(sx) || !Number.isFinite(sy)) return true;
+        return sx !== 0 && sy !== 0;
+    };
 
     const currency = parts.find((o: any) => o?.name === 'price_currency_text');
     if (currency && (!currency.text || String(currency.text).trim().length === 0)) currency.set?.('text', 'R$');
@@ -27583,8 +27654,17 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     const priceParts = splitPriceParts(rawPrice);
     const integer = priceParts.integer;
     const decimalText = `,${priceParts.dec}`;
+    const hasSplitPair = !!(intTxt && decTxt);
+    const hasLegacy = !!legacy;
+    const splitLooksLikeMainPrice = !!(
+        hasSplitPair && (
+            isVisibleNode(currency) ||
+            !hasLegacy ||
+            !isVisibleNode(legacy)
+        )
+    );
 
-    if (intTxt && decTxt) {
+    if (hasSplitPair && splitLooksLikeMainPrice) {
         // Capture authored Mini Editor anchors BEFORE changing text,
         // so dynamic values keep the exact original spacing.
         if (preserveTemplateVisual && !(pg as any).__manualSingleAnchors) {
@@ -27613,6 +27693,21 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     if (legacy) {
         legacy.set?.('text', `${integer}${decimalText}`);
         if (typeof legacy.initDimensions === 'function') legacy.initDimensions();
+    } else if (hasSplitPair) {
+        // Fallback: if no legacy field exists, still update split fields.
+        if (preserveTemplateVisual && !(pg as any).__manualSingleAnchors) {
+            readSingleManualPriceAnchors(pg, { force: true });
+        }
+        intTxt.set?.('text', integer);
+        decTxt.set?.('text', decimalText);
+        if (typeof intTxt.initDimensions === 'function') intTxt.initDimensions();
+        if (typeof decTxt.initDimensions === 'function') decTxt.initDimensions();
+        if (unitTxt) {
+            const raw = (typeof unitText === 'string' && unitText.trim().length) ? unitText : String(unitTxt.text || '').trim();
+            const u = raw ? normalizeUnitForLabel(raw) : '';
+            unitTxt.set?.('text', u);
+            if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
+        }
     }
     // Keep Mini Editor templates visually identical and only fit dynamic values.
     if (preserveTemplateVisual) {
@@ -28118,7 +28213,24 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
     const oldDec = oldParts.find((o: any) => o.name === 'price_decimal_text');
     const oldUnit = oldParts.find((o: any) => o.name === 'price_unit_text');
     const oldCurrency = oldParts.find((o: any) => o.name === 'price_currency_text');
-    const oldPriceText = (oldInt && oldDec) ? `${oldInt.text || '0'}${oldDec.text || ',00'}` : oldPrice?.text;
+    const isVisibleNode = (obj: any): boolean => {
+        if (!obj) return false;
+        if (obj.visible === false) return false;
+        const sx = Number(obj.scaleX ?? 1);
+        const sy = Number(obj.scaleY ?? 1);
+        if (!Number.isFinite(sx) || !Number.isFinite(sy)) return true;
+        return sx !== 0 && sy !== 0;
+    };
+    const shouldReadSplitPrice = !!(
+        oldInt && oldDec && (
+            isVisibleNode(oldCurrency) ||
+            !oldPrice ||
+            !isVisibleNode(oldPrice)
+        )
+    );
+    const oldPriceText = shouldReadSplitPrice
+        ? `${oldInt.text || '0'}${oldDec.text || ',00'}`
+        : oldPrice?.text;
     const oldCurrencyText = oldCurrency?.text;
     const oldUnitText = oldUnit?.text;
     const inferredUnit = (typeof oldUnitText === 'string' && oldUnitText.trim().length)
