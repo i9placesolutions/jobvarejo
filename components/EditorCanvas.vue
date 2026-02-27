@@ -14204,6 +14204,10 @@ const GUIDE_COLOR = '#ff2fb3';
 const GUIDE_STROKE_WIDTH = 2;
 const SNAP_RANGE_PX = 12;
 const SNAP_HYSTERESIS_HOLD_FACTOR = 1.6;
+const SNAP_HYSTERESIS_HOLD_FACTOR_RECT_IMAGE = 1.08;
+const SNAP_MOVE_EPSILON_PX = 1.8;
+const SNAP_MOVE_EPSILON_PX_RECT_IMAGE = 9;
+const SNAP_RANGE_FACTOR_RECT_IMAGE = 0.28;
 
 const setupSnapping = () => {
     if (!canvas.value) return;
@@ -14501,9 +14505,20 @@ const setupSnapping = () => {
     let stickySnapOwner: any = null;
     let stickyVerticalSnap: { x: number; type: 'left' | 'right' | 'center' } | null = null;
     let stickyHorizontalSnap: { y: number; type: 'top' | 'bottom' | 'center' } | null = null;
+    let lastMoveEvalPoint = { x: 0, y: 0 };
+    let hasLastMoveEvalPoint = false;
+    let moveActivationPoint = { x: 0, y: 0 };
+    let hasMoveActivationPoint = false;
+    let isMoveArmedForSnap = false;
     const clearStickySnaps = () => {
         stickyVerticalSnap = null;
         stickyHorizontalSnap = null;
+    };
+    let lastGuideRender = {
+        vVisible: false,
+        hVisible: false,
+        vX: 0,
+        hY: 0
     };
     const getVerticalSnapDistance = (
         bounds: SnapBounds,
@@ -14524,6 +14539,8 @@ const setupSnapping = () => {
     const hideGuides = () => {
         if (verticalGuide.visible) verticalGuide.set({ visible: false });
         if (horizontalGuide.visible) horizontalGuide.set({ visible: false });
+        lastGuideRender.vVisible = false;
+        lastGuideRender.hVisible = false;
     };
 
     // Canvas-space bounds of what is currently visible in the viewport.
@@ -14578,11 +14595,56 @@ const setupSnapping = () => {
         const isScaleTransform = !!currentTransform && transformAction.includes('scale');
         const zoom = Math.max(0.01, Number(canvasInstance.getZoom?.() || 1));
         const snapRange = SNAP_RANGE_PX / zoom;
+        const isRectOrImage = String(obj.type || '').toLowerCase() === 'rect' || String(obj.type || '').toLowerCase() === 'image';
+        const activeSnapRange = snapRange * (isRectOrImage ? SNAP_RANGE_FACTOR_RECT_IMAGE : 1);
+        const snapReleaseFactor = isRectOrImage ? SNAP_HYSTERESIS_HOLD_FACTOR_RECT_IMAGE : SNAP_HYSTERESIS_HOLD_FACTOR;
 
         // Skip for controls (nodes/handles/etc). Frames can snap too.
         if (!obj || isControl(obj)) {
             hideGuides();
             return;
+        }
+
+        if (!evt?.shiftKey && !evt?.altKey && !isScaleTransform) {
+            const currentMoveX = Number(obj.left || 0);
+            const currentMoveY = Number(obj.top || 0);
+            const moveGatePx = isRectOrImage ? SNAP_MOVE_EPSILON_PX_RECT_IMAGE : SNAP_MOVE_EPSILON_PX;
+
+            if (!hasMoveActivationPoint) {
+                moveActivationPoint = { x: currentMoveX, y: currentMoveY };
+                hasMoveActivationPoint = true;
+                isMoveArmedForSnap = false;
+            }
+
+            if (!isMoveArmedForSnap) {
+                const moveFromActivation = Math.hypot(currentMoveX - moveActivationPoint.x, currentMoveY - moveActivationPoint.y);
+                if (moveFromActivation < moveGatePx) {
+                    hasLastMoveEvalPoint = true;
+                    lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY };
+                    hideGuides();
+                    syncMovingFrameClip(obj);
+                    return;
+                }
+                isMoveArmedForSnap = true;
+            }
+
+            const perFrameMoveGatePx = isRectOrImage ? moveGatePx : SNAP_MOVE_EPSILON_PX;
+            if (hasLastMoveEvalPoint) {
+                const moveDelta = Math.hypot(currentMoveX - lastMoveEvalPoint.x, currentMoveY - lastMoveEvalPoint.y);
+                if (moveDelta < perFrameMoveGatePx) {
+                    lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY };
+                    hideGuides();
+                    syncMovingFrameClip(obj);
+                    return;
+                }
+            } else {
+                hasLastMoveEvalPoint = true;
+            }
+            lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY };
+        } else {
+            hasMoveActivationPoint = false;
+            hasLastMoveEvalPoint = false;
+            isMoveArmedForSnap = false;
         }
 
         // While transforming (scale/rotate/skew), we keep showing guides but do NOT reposition the object here
@@ -14594,6 +14656,9 @@ const setupSnapping = () => {
         if (stickySnapOwner !== obj) {
             stickySnapOwner = obj;
             clearStickySnaps();
+            hasMoveActivationPoint = false;
+            isMoveArmedForSnap = false;
+            hasLastMoveEvalPoint = false;
         }
 
         // Multi-selection: enforce containment/bindings per member.
@@ -14656,7 +14721,7 @@ const setupSnapping = () => {
         }
 
         // Card-in-zone containment (cards are NOT children of the zone group; they are bound via parentZoneId)
-        // Include legacy cards detected by heuristic. If parentZoneId is missing/invalid, try to rebind to the zone under it.
+        // Legacy cards detected by heuristic use parentZoneId or _zoneSlot as a fast hint.
         const isCardLike = !!(
             obj.isSmartObject ||
             obj.isProductCard ||
@@ -14677,52 +14742,23 @@ const setupSnapping = () => {
             if (zoneId) {
                 zone = getCachedZoneById(zoneId);
             }
-
-            // If zone is missing, try to find one by intersection/nearest.
             if (!zone) {
-                const zones = getCachedZones();
-                const center = typeof obj.getCenterPoint === 'function'
-                    ? obj.getCenterPoint()
-                    : { x: Number(obj.left || 0), y: Number(obj.top || 0) };
-
-                let bestZone: any = null;
-                let bestD2 = Infinity;
-                for (const z of zones) {
-                    try {
-                        if (typeof z.intersectsWithObject === 'function' && z.intersectsWithObject(obj)) {
-                            bestZone = z;
-                            bestD2 = 0;
-                            break;
-                        }
-                    } catch {
-                        // ignore
-                    }
-                    const zm = getCachedZoneMetrics(z) ?? z.getBoundingRect(true);
-                    const zx = (zm.centerX ?? (zm.left + zm.width / 2));
-                    const zy = (zm.centerY ?? (zm.top + zm.height / 2));
-                    const dx = center.x - zx;
-                    const dy = center.y - zy;
-                    const d2 = (dx * dx) + (dy * dy);
-                    if (d2 < bestD2) {
-                        bestD2 = d2;
-                        bestZone = z;
-                    }
-                }
-
-                if (bestZone) {
-                    // Only bind if reasonably close; avoids snapping random groups into a zone.
-                    const zm = getCachedZoneMetrics(bestZone) ?? bestZone.getBoundingRect(true);
-                    const maxDim = Math.max(zm.width || 0, zm.height || 0);
-                    const maxD = Math.max(120, maxDim * 1.75);
-                    if (bestD2 <= (maxD * maxD)) {
-                        (obj as any).parentZoneId = bestZone._customId;
-                        zone = bestZone;
-                    }
+                const slotZoneId = String((obj as any)?._zoneSlot?.zoneId || '').trim();
+                if (slotZoneId) {
+                    zone = getCachedZoneById(slotZoneId);
                 }
             }
 
+            // Keep card drag lightweight when no zone is attached yet.
+            if (!zone) {
+                hideGuides();
+                clearStickySnaps();
+                syncMovingFrameClip(obj);
+                return;
+            }
+
             if (zone) {
-                const boundZone = ensureCardZoneBinding(obj, { allowNearest: true }) || zone;
+                const boundZone = zone;
                 const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
                 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
                 const objW = obj.getScaledWidth?.() ?? 0;
@@ -14885,9 +14921,21 @@ const setupSnapping = () => {
             if (dmc < bestHDist) { bestHDist = dmc; hY = container.centerY; snapHType = 'center'; }
         }
 
-        // Check snap against other objects
+        const snapWindow = Math.max(240, snapRange * 20);
+        // Check snap against other objects.
         for (const t of targets) {
+            if (!t) continue;
             const tb = getCachedBounds(t);
+            // Fast-path skip for distant objects. This avoids expensive per-object
+            // snap math when no snap can possibly happen this frame.
+            if (
+                tb.right < b.left - snapWindow ||
+                tb.left > b.right + snapWindow ||
+                tb.bottom < b.top - snapWindow ||
+                tb.top > b.bottom + snapWindow
+            ) {
+                continue;
+            }
 
             // Vertical snaps (left-left, right-right, left-right, right-left, center-center)
             const dl = Math.abs(b.left - tb.left);
@@ -14944,7 +14992,7 @@ const setupSnapping = () => {
         // Snap hysteresis:
         // after snapping, keep it "locked" for a slightly wider range to avoid
         // micro-jumps when cursor oscillates near the threshold.
-        const snapReleaseRange = snapRange * SNAP_HYSTERESIS_HOLD_FACTOR;
+        const snapReleaseRange = activeSnapRange * snapReleaseFactor;
 
         if (!allowPositionSnap) {
             clearStickySnaps();
@@ -14959,7 +15007,7 @@ const setupSnapping = () => {
             if (stickyVerticalSnap && verticalStickyDist > snapReleaseRange) {
                 stickyVerticalSnap = null;
             }
-            if (bestVDist <= snapRange) {
+            if (bestVDist <= activeSnapRange) {
                 vVisible = true;
                 stickyVerticalSnap = { x: vX, type: snapVType };
             }
@@ -14974,7 +15022,7 @@ const setupSnapping = () => {
             if (stickyHorizontalSnap && horizontalStickyDist > snapReleaseRange) {
                 stickyHorizontalSnap = null;
             }
-            if (bestHDist <= snapRange) {
+            if (bestHDist <= activeSnapRange) {
                 hVisible = true;
                 stickyHorizontalSnap = { y: hY, type: snapHType };
             }
@@ -14992,19 +15040,19 @@ const setupSnapping = () => {
         }
 
         // Grid snap as fallback (only if no other snap won)
-        if (allowPositionSnap && snapToGrid.value && !vVisible && !hVisible) {
+        if (allowPositionSnap && snapToGrid.value && !isRectOrImage && !vVisible && !hVisible) {
             const gs = Math.max(4, Math.round(Number(gridSize.value) || 20));
             const snappedLeft = Math.round(b.left / gs) * gs;
             const snappedTop = Math.round(b.top / gs) * gs;
             const dl = Math.abs(b.left - snappedLeft);
             const dt = Math.abs(b.top - snappedTop);
-            if (dl <= snapRange) {
+            if (dl <= activeSnapRange) {
                 setObjLeft(obj, snappedLeft);
                 vVisible = true;
                 vX = snappedLeft;
                 snapVType = 'left';
             }
-            if (dt <= snapRange) {
+            if (dt <= activeSnapRange) {
                 setObjTop(obj, snappedTop);
                 hVisible = true;
                 hY = snappedTop;
@@ -15018,24 +15066,54 @@ const setupSnapping = () => {
         }
 
         // Draw guides across the visible viewport in canvas coordinates (works even when panned far).
-        const vb = getViewportBounds();
-        const viewW = Math.max(1, vb.maxX - vb.minX);
-        const viewH = Math.max(1, vb.maxY - vb.minY);
-        const pad = Math.max(400, Math.max(viewW, viewH) * 0.5);
-
-        if (vVisible) verticalGuide.set({ x1: vX, y1: vb.minY - pad, x2: vX, y2: vb.maxY + pad, visible: true });
-        else if (verticalGuide.visible) verticalGuide.set({ visible: false });
-        if (hVisible) horizontalGuide.set({ x1: vb.minX - pad, y1: hY, x2: vb.maxX + pad, y2: hY, visible: true });
-        else if (horizontalGuide.visible) horizontalGuide.set({ visible: false });
-        // Keep them on top even after object loads / stacking changes.
+        // Avoid viewport math/sets when nothing is being snapped.
         if (vVisible || hVisible) {
-            try {
-                if (typeof canvasInstance.bringObjectToFront === 'function') {
-                    canvasInstance.bringObjectToFront(verticalGuide);
-                    canvasInstance.bringObjectToFront(horizontalGuide);
+            const vb = getViewportBounds();
+            const viewW = Math.max(1, vb.maxX - vb.minX);
+            const viewH = Math.max(1, vb.maxY - vb.minY);
+            const pad = Math.max(400, Math.max(viewW, viewH) * 0.5);
+
+            if (vVisible) {
+                if (!lastGuideRender.vVisible || lastGuideRender.vX !== vX) {
+                    verticalGuide.set({ x1: vX, y1: vb.minY - pad, x2: vX, y2: vb.maxY + pad, visible: true });
+                    lastGuideRender.vX = vX;
                 }
-            } catch {
-                // ignore
+                lastGuideRender.vVisible = true;
+            } else if (lastGuideRender.vVisible) {
+                verticalGuide.set({ visible: false });
+                lastGuideRender.vVisible = false;
+            }
+
+            if (hVisible) {
+                if (!lastGuideRender.hVisible || lastGuideRender.hY !== hY) {
+                    horizontalGuide.set({ x1: vb.minX - pad, y1: hY, x2: vb.maxX + pad, y2: hY, visible: true });
+                    lastGuideRender.hY = hY;
+                }
+                lastGuideRender.hVisible = true;
+            } else if (lastGuideRender.hVisible) {
+                horizontalGuide.set({ visible: false });
+                lastGuideRender.hVisible = false;
+            }
+
+            // Keep them on top even after object loads / stacking changes.
+            if (lastGuideRender.vVisible || lastGuideRender.hVisible) {
+                try {
+                    if (typeof canvasInstance.bringObjectToFront === 'function') {
+                        canvasInstance.bringObjectToFront(verticalGuide);
+                        canvasInstance.bringObjectToFront(horizontalGuide);
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        } else {
+            if (lastGuideRender.vVisible) {
+                verticalGuide.set({ visible: false });
+                lastGuideRender.vVisible = false;
+            }
+            if (lastGuideRender.hVisible) {
+                horizontalGuide.set({ visible: false });
+                lastGuideRender.hVisible = false;
             }
         }
 
@@ -15076,6 +15154,9 @@ const setupSnapping = () => {
         constrainAxis = null;
         clearStickySnaps();
         stickySnapOwner = null;
+        hasLastMoveEvalPoint = false;
+        hasMoveActivationPoint = false;
+        isMoveArmedForSnap = false;
         invalidateSnapCache();
         flushZoneRelayoutOnDrop();
         safeRequestRenderAll(canvasInstance);
@@ -16552,128 +16633,105 @@ const setupReactivity = () => {
 
         // Frame moves its descendants (Figma-like parenting)
         if (target && target.isFrame) {
-             // Mark dirty to ensure fresh render (keep caching for performance)
-             target.set('dirty', true);
-             
-             const dx = target.left - lastFrameState.left;
-             const dy = target.top - lastFrameState.top;
+            // Mark dirty to ensure fresh render (keep caching for performance)
+            target.set('dirty', true);
 
-             if (frameChildrenCache.length === 0) {
-                 frameChildrenCache = getFrameDescendants(target);
-             }
-             moveFrameDescendants(target, dx, dy, frameChildrenCache);
-             lastFrameState.left = target.left;
-             lastFrameState.top = target.top;
-             getOrCreateFrameClipRect(target);
+            const dx = target.left - lastFrameState.left;
+            const dy = target.top - lastFrameState.top;
 
-             // ─── Grid group: move sibling cells together ────────────────
-             if (target.gridGroupId && target.isGridCell && (dx || dy)) {
-                 const gridId = String(target.gridGroupId);
-                 let siblings = (gridGroupSiblingCacheId === gridId) ? gridGroupSiblingCache : [];
-                 if (siblings.length === 0) {
-                     siblings = canvas.value.getObjects().filter(
-                         (o: any) => o !== target && o.gridGroupId === target.gridGroupId && o.isGridCell
-                     );
-                     gridGroupSiblingCache = siblings;
-                     gridGroupSiblingCacheId = gridId;
-                 }
-                 siblings.forEach((sib: any) => {
-                     sib.set({ left: (sib.left ?? 0) + dx, top: (sib.top ?? 0) + dy });
-                     sib.setCoords?.();
-                     // Also move the sibling's frame descendants
-                     const sibDescendants = getFrameDescendants(sib);
-                     moveFrameDescendants(sib, dx, dy, sibDescendants);
-                     if (sib.clipContent) {
-                         getOrCreateFrameClipRect(sib);
-                         sibDescendants.forEach((child: any) => {
-                             syncObjectFrameClip(child);
-                         });
-                     }
-                 });
-             }
-
-             // Update clipPath para todos os filhos (absolutePositioned: false
-             // = relativo ao objeto, mas como o frame moveu e os filhos também,
-             // precisamos recalcular o offset relativo)
-             if (target.clipContent) {
-                 const fc = target.getCenterPoint ? target.getCenterPoint() : { x: target.left, y: target.top };
-                 const DEG2RAD = Math.PI / 180;
-                 frameChildrenCache.forEach((child: any) => {
-                     if (child.clipPath && (child as any)._frameClipOwner === target._customId) {
-                         const childCenter = child.getCenterPoint ? child.getCenterPoint() : { x: child.left, y: child.top };
-                         const dxW = fc.x - childCenter.x;
-                         const dyW = fc.y - childCenter.y;
-                         const childAngle = child.angle || 0;
-                         const aRad = -childAngle * DEG2RAD;
-                         const cosA = Math.cos(aRad);
-                         const sinA = Math.sin(aRad);
-                         child.clipPath.set({
-                             left: (dxW * cosA - dyW * sinA) / (child.scaleX || 1),
-                             top: (dxW * sinA + dyW * cosA) / (child.scaleY || 1),
-                             scaleX: (target.scaleX || 1) / (child.scaleX || 1),
-                             scaleY: (target.scaleY || 1) / (child.scaleY || 1),
-                             angle: (target.angle || 0) - childAngle,
-                         });
-                         child.clipPath.setCoords();
-                         child.clipPath.dirty = true;
-                         child.set('dirty', true);
-                     }
-                 });
-             }
-             
-             // Fabric renders after object:moving — no explicit requestRenderAll needed
-             return;
-        }
-
-        // Frame clipping during drag:
-        // keep current clip in sync, but DO NOT reparent here (reparent happens on drop).
-        if (target && !target.isFrame && !target.excludeFromExport && !isCardImageTarget) {
-            const frameId = (target as any).parentFrameId as (string | undefined);
-            if (frameId) {
-                syncObjectFrameClip(target);
+            if (frameChildrenCache.length === 0) {
+                frameChildrenCache = getFrameDescendants(target);
             }
+            moveFrameDescendants(target, dx, dy, frameChildrenCache);
+            lastFrameState.left = target.left;
+            lastFrameState.top = target.top;
+            getOrCreateFrameClipRect(target);
+
+            // ─── Grid group: move sibling cells together ────────────────
+            if (target.gridGroupId && target.isGridCell && (dx || dy)) {
+                const gridId = String(target.gridGroupId);
+                let siblings = (gridGroupSiblingCacheId === gridId) ? gridGroupSiblingCache : [];
+                if (siblings.length === 0) {
+                    siblings = canvas.value.getObjects().filter(
+                        (o: any) => o !== target && o.gridGroupId === target.gridGroupId && o.isGridCell
+                    );
+                    gridGroupSiblingCache = siblings;
+                    gridGroupSiblingCacheId = gridId;
+                }
+                siblings.forEach((sib: any) => {
+                    sib.set({ left: (sib.left ?? 0) + dx, top: (sib.top ?? 0) + dy });
+                    sib.setCoords?.();
+                    // Also move the sibling's frame descendants
+                    const sibDescendants = getFrameDescendants(sib);
+                    moveFrameDescendants(sib, dx, dy, sibDescendants);
+                    if (sib.clipContent) {
+                        getOrCreateFrameClipRect(sib);
+                        sibDescendants.forEach((child: any) => {
+                            syncObjectFrameClip(child);
+                        });
+                    }
+                });
+            }
+
+            // Update clipPath para todos os filhos (absolutePositioned: false
+            // = relativo ao objeto, mas como o frame moveu e os filhos também,
+            // precisamos recalcular o offset relativo)
+            if (target.clipContent) {
+                const fc = target.getCenterPoint ? target.getCenterPoint() : { x: target.left, y: target.top };
+                const DEG2RAD = Math.PI / 180;
+                frameChildrenCache.forEach((child: any) => {
+                    if (child.clipPath && (child as any)._frameClipOwner === target._customId) {
+                        const childCenter = child.getCenterPoint ? child.getCenterPoint() : { x: child.left, y: child.top };
+                        const dxW = fc.x - childCenter.x;
+                        const dyW = fc.y - childCenter.y;
+                        const childAngle = child.angle || 0;
+                        const aRad = -childAngle * DEG2RAD;
+                        const cosA = Math.cos(aRad);
+                        const sinA = Math.sin(aRad);
+                        child.clipPath.set({
+                            left: (dxW * cosA - dyW * sinA) / (child.scaleX || 1),
+                            top: (dxW * sinA + dyW * cosA) / (child.scaleY || 1),
+                            scaleX: (target.scaleX || 1) / (child.scaleX || 1),
+                            scaleY: (target.scaleY || 1) / (child.scaleY || 1),
+                            angle: (target.angle || 0) - childAngle,
+                        });
+                        child.clipPath.setCoords();
+                        child.clipPath.dirty = true;
+                        child.set('dirty', true);
+                    }
+                });
+            }
+
+            // Fabric renders after object:moving — no explicit requestRenderAll needed
+            return;
         }
+
         // Optimized Zone Move
         if (target && isLikelyProductZone(target)) {
-             ensureZoneSanity(target);
-             if (zoneChildrenCache.length === 0) {
-                 zoneChildrenCache = getZoneChildren(target);
-             }
+            ensureZoneSanity(target);
+            if (zoneChildrenCache.length === 0) {
+                zoneChildrenCache = getZoneChildren(target);
+            }
 
-             const dx = target.left - lastZoneState.left;
-             const dy = target.top - lastZoneState.top;
-             
-             // Move all cached children by delta
-             zoneChildrenCache.forEach((child: any) => {
-                 child.set({
-                     left: child.left + dx,
-                     top: child.top + dy
-                 });
-                 child.setCoords();
-             });
-             
-             // Update last state
-	             lastZoneState.left = target.left;
-	             lastZoneState.top = target.top;
-	        }
-	        
-	        // Product card zone-lock during drag:
-	        // keep binding stable so cards never disconnect from their zone/grid.
-	        if (target && !isLikelyProductZone(target) && !target.isFrame) {
-	            const isCardLike = !!(
-	                target.isSmartObject ||
-	                target.isProductCard ||
-	                String(target.name || '').startsWith('product-card') ||
-	                isLikelyProductCard(target) ||
-	                String((target as any).parentZoneId || '').trim().length
-	            );
-	            if (isCardLike) {
-	                ensureCardZoneBinding(target, { allowNearest: true });
-	            }
-	        }
-	        
-	        // Containment during drag is handled in setupSnapping/object:moving and
-	        // finalized in object:modified. Re-running here causes jitter.
+            const dx = target.left - lastZoneState.left;
+            const dy = target.top - lastZoneState.top;
+
+            // Move all cached children by delta
+            zoneChildrenCache.forEach((child: any) => {
+                child.set({
+                    left: child.left + dx,
+                    top: child.top + dy
+                });
+                child.setCoords();
+            });
+
+            // Update last state
+            lastZoneState.left = target.left;
+            lastZoneState.top = target.top;
+        }
+
+        // Containment during drag is handled in setupSnapping/object:moving and
+        // finalized in object:modified. Re-running here causes jitter.
     });
 
     // Smart Scaling for Textbox Reflow & Product Zone AutoLayout
@@ -16814,6 +16872,20 @@ const setupReactivity = () => {
     canvas.value.on('object:modified', (e: any) => {
         const obj = e.target;
         if (obj) {
+            // Product card zone-lock should be finalized here to avoid per-frame work.
+            if (!isLikelyProductZone(obj) && !obj.isFrame) {
+                const isCardLike = !!(
+                    obj.isSmartObject ||
+                    obj.isProductCard ||
+                    String(obj.name || '').startsWith('product-card') ||
+                    isLikelyProductCard(obj) ||
+                    String((obj as any).parentZoneId || '').trim().length
+                );
+                if (isCardLike) {
+                    ensureCardZoneBinding(obj, { allowNearest: true });
+                }
+            }
+
             if (shouldApplyContainmentConstraints(obj)) {
                 applyContainmentConstraints(obj);
             }
