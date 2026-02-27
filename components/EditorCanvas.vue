@@ -15043,7 +15043,35 @@ const setupSnapping = () => {
         syncMovingFrameClip(obj);
     };
 
+    // Smooth drag path: coalesce bursty Fabric move/scale/rotate events to 1 update per frame.
+    let objectMoveRafId: number | null = null;
+    let pendingObjectMoveEvent: { target: any; e?: MouseEvent } | null = null;
+
+    const flushPendingObjectMove = () => {
+        if (!pendingObjectMoveEvent) return;
+        const nextEvent = pendingObjectMoveEvent;
+        pendingObjectMoveEvent = null;
+        objectMovingHandler(nextEvent as any);
+    };
+
+    const queueObjectMove = (e: any) => {
+        pendingObjectMoveEvent = {
+            target: e?.target,
+            e: e?.e
+        };
+        if (objectMoveRafId !== null) return;
+        objectMoveRafId = requestAnimationFrame(() => {
+            objectMoveRafId = null;
+            flushPendingObjectMove();
+        });
+    };
+
     const mouseUpHandler = () => {
+        if (objectMoveRafId !== null) {
+            cancelAnimationFrame(objectMoveRafId);
+            objectMoveRafId = null;
+        }
+        flushPendingObjectMove();
         hideGuides();
         constrainAxis = null;
         clearStickySnaps();
@@ -15056,10 +15084,10 @@ const setupSnapping = () => {
         refreshSelectedRef();
     };
 
-    canvasInstance.on('object:moving', objectMovingHandler);
+    canvasInstance.on('object:moving', queueObjectMove);
     // Show guides while resizing/rotating too (without snapping position).
-    canvasInstance.on('object:scaling', objectMovingHandler);
-    canvasInstance.on('object:rotating', objectMovingHandler);
+    canvasInstance.on('object:scaling', queueObjectMove);
+    canvasInstance.on('object:rotating', queueObjectMove);
     canvasInstance.on('mouse:up', mouseUpHandler);
     canvasInstance.on('object:added', invalidateSnapCache);
     canvasInstance.on('object:removed', invalidateSnapCache);
@@ -15067,9 +15095,9 @@ const setupSnapping = () => {
 
     teardownSnapping = () => {
         try {
-            canvasInstance.off('object:moving', objectMovingHandler);
-            canvasInstance.off('object:scaling', objectMovingHandler);
-            canvasInstance.off('object:rotating', objectMovingHandler);
+            canvasInstance.off('object:moving', queueObjectMove);
+            canvasInstance.off('object:scaling', queueObjectMove);
+            canvasInstance.off('object:rotating', queueObjectMove);
             canvasInstance.off('mouse:up', mouseUpHandler);
             canvasInstance.off('object:added', invalidateSnapCache);
             canvasInstance.off('object:removed', invalidateSnapCache);
@@ -15077,6 +15105,11 @@ const setupSnapping = () => {
         } catch {
             // ignore teardown errors
         }
+        if (objectMoveRafId !== null) {
+            cancelAnimationFrame(objectMoveRafId);
+            objectMoveRafId = null;
+        }
+        pendingObjectMoveEvent = null;
         clearStickySnaps();
         stickySnapOwner = null;
         hideGuides();
