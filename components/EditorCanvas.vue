@@ -15486,6 +15486,63 @@ const setupReactivity = () => {
         return null;
     };
 
+    const isShiftSelectableTarget = (obj: any) => {
+        if (!obj) return false;
+        if (isTransientCanvasObject(obj) || isControlLikeObject(obj)) return false;
+        if (obj.selectable === false) return false;
+        return true;
+    };
+
+    const pickGenericShiftTargetAtPointer = (nativeEvt: any, opts: { exclude?: any[] } = {}) => {
+        if (!canvas.value || !nativeEvt) return null;
+        const excludedRoots = new Set(
+            (opts.exclude || [])
+                .map((entry: any) => resolveShiftSelectionRootObject(entry))
+                .filter(Boolean)
+        );
+        const pickRoot = (candidate: any) => {
+            if (!isShiftSelectableTarget(candidate)) return null;
+            const root = resolveShiftSelectionRootObject(candidate);
+            if (!root || !isShiftSelectableTarget(root)) return null;
+            if (excludedRoots.has(root)) return null;
+            return root;
+        };
+
+        const hitInfo = getFabricHitInfoAtPointer(nativeEvt);
+        const hitCandidates = [
+            ...(Array.isArray(hitInfo.subTargets) ? hitInfo.subTargets : []),
+            hitInfo.target
+        ];
+        for (const candidate of hitCandidates) {
+            const picked = pickRoot(candidate);
+            if (picked) return picked;
+        }
+
+        const scenePoint = getScenePointFromNativeEvent(nativeEvt);
+        if (!scenePoint) return null;
+        const stack = (canvas.value.getObjects() || []).slice().reverse();
+        for (const obj of stack) {
+            const picked = pickRoot(obj);
+            if (!picked) continue;
+            try {
+                if (typeof picked.containsPoint === 'function' && picked.containsPoint(scenePoint, undefined, true)) {
+                    return picked;
+                }
+            } catch {
+                // ignore
+            }
+            try {
+                const br = picked.getBoundingRect?.(true, true) || picked.getBoundingRect?.(true);
+                if (br && scenePoint.x >= br.left && scenePoint.x <= (br.left + br.width) && scenePoint.y >= br.top && scenePoint.y <= (br.top + br.height)) {
+                    return picked;
+                }
+            } catch {
+                // ignore
+            }
+        }
+        return null;
+    };
+
     const pickShiftSelectionTarget = (evtPayload: any) => {
         const primary = evtPayload?.target || null;
         const subTargets = Array.isArray(evtPayload?.subTargets) ? evtPayload.subTargets.filter(Boolean) : [];
@@ -16170,6 +16227,15 @@ const setupReactivity = () => {
                                 finalTarget = pointerPreferred;
                                 isAlreadySelected = false;
                             }
+                        }
+                    }
+                    if (isAlreadySelected) {
+                        const pointerGeneric = pickGenericShiftTargetAtPointer(e?.e, {
+                            exclude: currentMembers
+                        });
+                        if (pointerGeneric && !currentMembers.includes(pointerGeneric)) {
+                            finalTarget = pointerGeneric;
+                            isAlreadySelected = false;
                         }
                     }
                 }
