@@ -778,6 +778,15 @@ const buildCacheSearchTerm = (product: any) => {
     return parts.filter(Boolean).join(' ').trim()
 }
 
+const shouldPersistImageCache = (searchTerm: string, imageUrl: string): boolean => {
+    const term = String(searchTerm || '').trim()
+    const url = String(imageUrl || '').trim()
+    if (!term || !url) return false
+    if (term.length > 160 || url.length > 2048) return false
+    if (url.startsWith('blob:') || url.startsWith('data:')) return false
+    return true
+}
+
 const filteredAssets = computed(() => {
     return assets.value
 })
@@ -931,6 +940,8 @@ const applyAssetToProduct = async (asset: any, productIndex: number) => {
     // Salvar no cache do banco para próximas buscas
     try {
         const searchTerm = buildCacheSearchTerm(product)
+        const imageUrl = resolveProductImageUrl(asset.url)
+        if (!shouldPersistImageCache(searchTerm, imageUrl)) return
         const headers = await getApiAuthHeaders()
         await $fetch('/api/cache-product-image', {
             method: 'POST',
@@ -941,7 +952,7 @@ const applyAssetToProduct = async (asset: any, productIndex: number) => {
                 brand: product.brand || null,
                 flavor: product.flavor || null,
                 weight: product.weight || null,
-                imageUrl: resolveProductImageUrl(asset.url),
+                imageUrl,
                 s3Key: asset.key || asset.id || null,
                 source: 'storage'
             }
@@ -1086,20 +1097,23 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
             if (!result?.source || result?.source === 'manual' || result?.source === 'manual-fallback') {
                 try {
                     const searchTerm = buildCacheSearchTerm(product)
-                    await $fetch('/api/cache-product-image', {
-                        method: 'POST',
-                        headers,
-                        body: {
-                            searchTerm,
-                            productName: product.name || 'Produto',
-                            brand: product.brand || null,
-                            flavor: product.flavor || null,
-                            weight: product.weight || null,
-                            imageUrl: result.publicUrl || result.url,
-                            s3Key: result.key || null,
-                            source: result?.source || 'manual-fallback'
-                        }
-                    })
+                    const imageUrl = String(result.publicUrl || result.url || '').trim()
+                    if (shouldPersistImageCache(searchTerm, imageUrl)) {
+                        await $fetch('/api/cache-product-image', {
+                            method: 'POST',
+                            headers,
+                            body: {
+                                searchTerm,
+                                productName: product.name || 'Produto',
+                                brand: product.brand || null,
+                                flavor: product.flavor || null,
+                                weight: product.weight || null,
+                                imageUrl,
+                                s3Key: result.key || null,
+                                source: result?.source || 'manual-fallback'
+                            }
+                        })
+                    }
                 } catch (cacheErr) {
                     console.warn('[Upload Manual] Falha ao salvar fallback no cache:', cacheErr)
                 }

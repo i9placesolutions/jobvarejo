@@ -67,6 +67,8 @@ const hashString = (input: string): string => {
 }
 
 const makePageId = (): string => Math.random().toString(36).substr(2, 9)
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const isUuid = (value: unknown): boolean => UUID_RE.test(String(value || '').trim())
 
 const ensureUniquePageId = (wanted: unknown, used: Set<string>): string => {
     const raw = String(wanted || '').trim()
@@ -527,6 +529,11 @@ export const useProject = () => {
 
 	        try {
 	            normalizeProjectPageIds(project.pages as any[], 'saveProjectDB:preflight')
+            if (!Array.isArray(project.pages) || project.pages.length === 0) {
+                saveStatus.value = 'idle'
+                console.warn('[saveProjectDB] Save pulado: projeto sem páginas (estado transitório).')
+                return
+            }
 	            if (abortIfStaleSaveContext()) return
 	                const isUnsafeEmptyOverwrite = (page: Page): boolean => {
                     const currentCount = getCanvasObjectCount(page?.canvasData)
@@ -633,11 +640,18 @@ export const useProject = () => {
                 canvas_data: pageMetadata,
 	                preview_url: thumbnailUrls[0] || project.pages[0]?.thumbnailUrl
 	            }
+	            if (!Array.isArray(payload.canvas_data) || payload.canvas_data.length === 0) {
+                    saveStatus.value = 'idle'
+                    console.warn('[saveProjectDB] Save pulado: payload sem páginas válidas.')
+                    return
+                }
 	            if (abortIfStaleSaveContext()) return
 
 		            const headers = await getApiAuthHeaders()
 		            // 3. Salvar no banco
-	            if (project.id.startsWith('proj_')) {
+                const normalizedProjectId = String(project.id || '').trim()
+                const shouldCreateProject = normalizedProjectId.startsWith('proj_') || !isUuid(normalizedProjectId)
+	            if (shouldCreateProject) {
                 const response = await $fetch<any>('/api/projects', {
                     method: 'POST',
                     headers,
@@ -654,7 +668,7 @@ export const useProject = () => {
 	                    method: 'POST',
 	                    headers,
 	                    body: {
-                          id: project.id,
+                          id: normalizedProjectId,
                           ...payload
                         }
 	                })
