@@ -988,32 +988,32 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
           <div class="grid grid-cols-2 gap-2">
             <div class="space-y-1.5">
               <label class="text-[10px] text-zinc-500">Escala (tamanho)</label>
-              <div class="flex items-center gap-2">
+              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                 <input
                   type="range"
                   :value="Math.round(((globalStyles?.prodNameScale ?? 1) * 100))"
                   @input="updateGlobal('prodNameScale', Number(($event.target as HTMLInputElement).value) / 100)"
                   min="60"
                   max="170"
-                  class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+                  class="w-full min-w-0 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
                 />
-                <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
+                <span class="w-12 shrink-0 text-center text-[10px] font-mono text-zinc-400">
                   {{ Math.round((globalStyles?.prodNameScale ?? 1) * 100) }}%
                 </span>
               </div>
             </div>
             <div class="space-y-1.5">
               <label class="text-[10px] text-zinc-500">Altura da linha</label>
-              <div class="flex items-center gap-2">
+              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                 <input
                   type="range"
                   :value="Math.round(((globalStyles?.prodNameLineHeight ?? 1.05) * 100))"
                   @input="updateGlobal('prodNameLineHeight', Number(($event.target as HTMLInputElement).value) / 100)"
                   min="80"
                   max="180"
-                  class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+                  class="w-full min-w-0 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
                 />
-                <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
+                <span class="w-12 shrink-0 text-center text-[10px] font-mono text-zinc-400">
                   {{ (globalStyles?.prodNameLineHeight ?? 1.05).toFixed(2) }}
                 </span>
               </div>
