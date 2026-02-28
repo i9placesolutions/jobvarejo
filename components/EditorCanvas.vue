@@ -24267,7 +24267,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     // Gather ALL zones in canvas first (for fallback).
     const allZones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
 
-    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false });
+    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: true });
     const primaryZone = targets[0];
 
     // If no zone found but a card is selected, try to find its parent zone
@@ -24318,40 +24318,38 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
         });
     }
 
-    // Special case: label template selection.
-    // Apply to existing cards immediately so the preview/canvas always matches the chosen template.
-    if (prop === 'splashTemplateId' && effectiveTargets.length > 0) {
-        for (const z of effectiveTargets) {
-            // Keep UI and canvas consistent: when the user picks a template,
-            // apply it to existing cards in the zone as well.
-            await applyLabelTemplateToZone(z, value, true);
-        }
-        refreshSelectedRef();
-        return;
-    }
+    const isTemplateChange = prop === 'splashTemplateId';
 
     if (effectiveTargets.length > 0) {
-        let totalCardsTouched = 0;
-        let totalFastApplied = 0;
-        let totalFullRelayout = 0;
-        effectiveTargets.forEach((z: any) => {
-            const zStyles = getZoneGlobalStyles(z);
-            const stats = applyGlobalStylesToCards(zStyles, z, { prop });
-            totalCardsTouched += Number(stats?.cardsTouched || 0);
-            totalFastApplied += Number(stats?.fastApplied || 0);
-            totalFullRelayout += Number(stats?.fullRelayout || 0);
-        });
-        if (import.meta.dev) {
-            const perfEnd = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
-            const elapsedMs = Math.max(0, perfEnd - perfStart);
-            console.log('[perf:global-styles]', {
-                prop,
-                zones: effectiveTargets.length,
-                cardsTouched: totalCardsTouched,
-                fastApplied: totalFastApplied,
-                fullRelayout: totalFullRelayout,
-                elapsedMs: Number(elapsedMs.toFixed(2))
+        if (isTemplateChange) {
+            for (const z of effectiveTargets) {
+                // Keep UI and canvas consistent: when the user picks a template,
+                // apply it to existing cards in the zone as well.
+                await applyLabelTemplateToZone(z, value, true);
+            }
+        } else {
+            let totalCardsTouched = 0;
+            let totalFastApplied = 0;
+            let totalFullRelayout = 0;
+            effectiveTargets.forEach((z: any) => {
+                const zStyles = getZoneGlobalStyles(z);
+                const stats = applyGlobalStylesToCards(zStyles, z, { prop });
+                totalCardsTouched += Number(stats?.cardsTouched || 0);
+                totalFastApplied += Number(stats?.fastApplied || 0);
+                totalFullRelayout += Number(stats?.fullRelayout || 0);
             });
+            if (import.meta.dev) {
+                const perfEnd = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
+                const elapsedMs = Math.max(0, perfEnd - perfStart);
+                console.log('[perf:global-styles]', {
+                    prop,
+                    zones: effectiveTargets.length,
+                    cardsTouched: totalCardsTouched,
+                    fastApplied: totalFastApplied,
+                    fullRelayout: totalFullRelayout,
+                    elapsedMs: Number(elapsedMs.toFixed(2))
+                });
+            }
         }
     } else {
         console.warn('⚠️ [handleUpdateGlobalStyles] No target zone resolved; skipping apply to avoid cross-zone pollution');
@@ -24361,8 +24359,11 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     // CRITICAL: Force aggressive re-render. After loadFromJSON, Fabric v7 groups
     // may cache stale renders. Clearing renderCache on all affected cards ensures
     // the new styles are visually applied.
-    canvas.value.requestRenderAll();
-    if (!isDebouncedGlobalStyleProp(prop)) {
+    // Template updates already request render internally via applyLabelTemplateToZone.
+    if (!isTemplateChange) {
+        canvas.value.requestRenderAll();
+    }
+    if (!isTemplateChange && !isDebouncedGlobalStyleProp(prop)) {
         nextTick(() => {
             if (canvas.value) {
                 // Force dirty on entire canvas to guarantee re-render
