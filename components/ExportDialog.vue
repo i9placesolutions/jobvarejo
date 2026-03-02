@@ -3,7 +3,9 @@ import { computed } from 'vue'
 import Button from './ui/Button.vue'
 
 type ExportScope = 'selected-object' | 'selected-frame' | 'all-frames'
-type ExportFormat = 'png' | 'jpeg'
+type ExportFormat = 'png' | 'jpeg' | 'pdf'
+type ExportQualityPreset = 'print-300' | 'ultra-600'
+type MultiFileMode = 'zip' | 'separate'
 
 const props = defineProps<{
   modelValue: boolean
@@ -11,6 +13,8 @@ const props = defineProps<{
     format: ExportFormat | string
     scale: number
     quality: number
+    qualityPreset: ExportQualityPreset | string
+    multiFileMode: MultiFileMode | string
     exportScope: ExportScope | string
     selectedFrameId: string
   }
@@ -98,19 +102,32 @@ const open = computed({
 
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Formato</label>
-          <div class="flex gap-2">
-            <button @click="exportSettings.format = 'png'" :class="exportSettings.format === 'png' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">PNG</button>
-            <button @click="exportSettings.format = 'jpeg'" :class="exportSettings.format === 'jpeg' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">JPG</button>
+          <div class="grid grid-cols-3 gap-2">
+            <button @click="exportSettings.format = 'png'" :class="exportSettings.format === 'png' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="py-2 text-xs font-bold rounded border transition-colors">PNG</button>
+            <button @click="exportSettings.format = 'jpeg'" :class="exportSettings.format === 'jpeg' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="py-2 text-xs font-bold rounded border transition-colors">JPG</button>
+            <button @click="exportSettings.format = 'pdf'" :class="exportSettings.format === 'pdf' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="py-2 text-xs font-bold rounded border transition-colors">PDF</button>
           </div>
-          <p v-if="exportSettings.exportScope === 'all-frames'" class="text-[10px] text-zinc-500">
-            A exportação de múltiplos frames suporta apenas PNG/JPG
+          <p v-if="exportSettings.format === 'pdf'" class="text-[10px] text-zinc-500">
+            PDF para impressão com páginas proporcionais ao tamanho real dos frames.
           </p>
         </div>
 
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Qualidade</label>
+          <div class="flex gap-2">
+            <button @click="exportSettings.qualityPreset = 'print-300'" :class="exportSettings.qualityPreset === 'print-300' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">300 DPI</button>
+            <button @click="exportSettings.qualityPreset = 'ultra-600'" :class="exportSettings.qualityPreset === 'ultra-600' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">600 DPI</button>
+          </div>
           <div class="rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-100">
-            Escala automática (até 6x). Em formatos grandes (ex.: A4 2480×3508), exporta em escala segura para evitar PNG inválido.
+            600 DPI é padrão. Se o navegador atingir limite técnico, o editor reduz automaticamente para escala segura.
+          </div>
+        </div>
+
+        <div v-if="exportSettings.exportScope === 'all-frames' && exportSettings.format !== 'pdf'" class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Saída de Múltiplos Arquivos</label>
+          <div class="flex gap-2">
+            <button @click="exportSettings.multiFileMode = 'zip'" :class="exportSettings.multiFileMode === 'zip' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">ZIP Único</button>
+            <button @click="exportSettings.multiFileMode = 'separate'" :class="exportSettings.multiFileMode === 'separate' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">Separado</button>
           </div>
         </div>
 
@@ -118,8 +135,14 @@ const open = computed({
           <svg class="w-4 h-4 text-blue-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p class="text-[10px] text-blue-200">
-            Cada frame será exportado como um arquivo separado. {{ availableFramesForExport.length }} frames serão exportados.
+          <p v-if="exportSettings.format === 'pdf'" class="text-[10px] text-blue-200">
+            Um único PDF será gerado com {{ availableFramesForExport.length }} páginas.
+          </p>
+          <p v-else-if="exportSettings.multiFileMode === 'zip'" class="text-[10px] text-blue-200">
+            Os {{ availableFramesForExport.length }} frames serão compactados em um único arquivo ZIP.
+          </p>
+          <p v-else class="text-[10px] text-blue-200">
+            Cada frame será exportado como arquivo separado. {{ availableFramesForExport.length }} downloads serão gerados.
           </p>
         </div>
       </div>
@@ -127,7 +150,15 @@ const open = computed({
     <template #footer>
       <div class="flex justify-between items-center w-full">
         <span class="text-[10px] text-muted-foreground">
-          {{ exportSettings.exportScope === 'all-frames' ? `${availableFramesForExport.length} arquivos` : '1 arquivo' }}
+          {{
+            exportSettings.exportScope === 'all-frames'
+              ? exportSettings.format === 'pdf'
+                ? '1 arquivo PDF'
+                : exportSettings.multiFileMode === 'zip'
+                  ? '1 arquivo ZIP'
+                  : `${availableFramesForExport.length} arquivos`
+              : '1 arquivo'
+          }}
         </span>
         <div class="flex gap-2">
           <Button variant="ghost" @click="open = false">Cancelar</Button>

@@ -21,9 +21,22 @@ import { persistSerializedPageState } from '~/utils/editorPagePersistence'
 import { generateThumbnailFromCanvasJson } from '~/utils/editorThumbnail'
 import {
     downloadFile,
+    downloadBlob,
     downloadMultipleFiles,
     shareFileFromDataUrl
 } from '~/utils/editorFileTransfer'
+import {
+    buildPdfBlob,
+    buildZipBlob,
+    exportFrameAsBlob,
+    exportObjectAsBlob,
+    formatExportTimestampToken,
+    getRequestedMultiplier,
+    getSafeMultiplier,
+    sanitizeExportFileToken,
+    type ExportImageFormat,
+    type ExportQualityPreset
+} from '~/utils/editorExportPipeline'
 import {
     fastHashString,
     getSavedViewportTransform,
@@ -6995,41 +7008,24 @@ const HIGH_RES_EXPORT_QUALITY = 1
 const EXPORT_COLOR_SATURATION = 1.12
 const EXPORT_COLOR_CONTRAST = 1.08
 const EXPORT_COLOR_BRIGHTNESS = 1.02
-const EXPORT_MAX_CANVAS_DIMENSION = 16384
-const EXPORT_MAX_CANVAS_AREA = 160_000_000
-
-const shouldUseNativeScaleForPrint = (width: number, height: number): boolean => {
-    const major = Math.max(width, height)
-    const minor = Math.min(width, height)
-    return major >= 3400 && minor >= 2400
-}
-
-const getSafeExportMultiplier = (requestedScale: number, width: number, height: number): number => {
-    const safeWidth = Math.max(1, Number(width) || 1)
-    const safeHeight = Math.max(1, Number(height) || 1)
-    const sourceArea = safeWidth * safeHeight
-    const requested = Math.max(1, Number(requestedScale) || 1)
-    const baseRequested = shouldUseNativeScaleForPrint(safeWidth, safeHeight) ? 1 : requested
-
-    const maxByDimension = Math.min(
-        EXPORT_MAX_CANVAS_DIMENSION / safeWidth,
-        EXPORT_MAX_CANVAS_DIMENSION / safeHeight
-    )
-    const maxByArea = Math.sqrt(EXPORT_MAX_CANVAS_AREA / Math.max(1, sourceArea))
-    const hardLimit = Math.max(1, Math.min(maxByDimension, maxByArea))
-    const applied = Math.max(1, Math.min(baseRequested, hardLimit))
-
-    if (!Number.isFinite(applied)) return 1
-    return Number(applied.toFixed(3))
-}
+const DEFAULT_EXPORT_QUALITY_PRESET: ExportQualityPreset = 'ultra-600'
+const DEFAULT_MULTI_FILE_MODE = 'zip' as const
 
 const exportSettings = ref({
     format: 'png',
     scale: HIGH_RES_EXPORT_SCALE,
     quality: HIGH_RES_EXPORT_QUALITY,
+    qualityPreset: DEFAULT_EXPORT_QUALITY_PRESET as ExportQualityPreset,
+    multiFileMode: DEFAULT_MULTI_FILE_MODE as 'zip' | 'separate',
     exportScope: 'selected-frame', // 'selected-object' | 'selected-frame' | 'all-frames'
     selectedFrameId: '' // ID of the frame to export
 })
+
+const makeExportBatchBaseName = () => {
+    const pageName = String(activePage.value?.name || 'design')
+    const safePage = sanitizeExportFileToken(pageName, 'design')
+    return `export-${safePage}-${formatExportTimestampToken()}`
+}
 
 const getFrameDisplayNameForExport = (frame: any, index: number) => {
     const layerName = String(frame?.layerName || '').trim();
@@ -19876,11 +19872,15 @@ const renameLayer = (id: string, newName: string) => {
 
 // --- Export Feature ---
 const exportDesign = () => {
-    if (exportSettings.value.format !== 'png' && exportSettings.value.format !== 'jpeg') {
+    if (exportSettings.value.format !== 'png' && exportSettings.value.format !== 'jpeg' && exportSettings.value.format !== 'pdf') {
         exportSettings.value.format = 'png';
     }
-    exportSettings.value.scale = HIGH_RES_EXPORT_SCALE;
-    exportSettings.value.quality = HIGH_RES_EXPORT_QUALITY;
+    if (exportSettings.value.qualityPreset !== 'print-300' && exportSettings.value.qualityPreset !== 'ultra-600') {
+        exportSettings.value.qualityPreset = DEFAULT_EXPORT_QUALITY_PRESET
+    }
+    if (exportSettings.value.multiFileMode !== 'zip' && exportSettings.value.multiFileMode !== 'separate') {
+        exportSettings.value.multiFileMode = DEFAULT_MULTI_FILE_MODE
+    }
     if (hasExportableSelectedObject.value) {
         exportSettings.value.exportScope = 'selected-object';
     } else if (availableFramesForExport.value.length > 0) {
@@ -19977,7 +19977,7 @@ const exportSelectedObject = async (
         : null
     const activeWidth = Math.max(1, Number(activeBounds?.width || active?.width || 1))
     const activeHeight = Math.max(1, Number(activeBounds?.height || active?.height || 1))
-    const exportMultiplier = getSafeExportMultiplier(HIGH_RES_EXPORT_SCALE, activeWidth, activeHeight)
+    const exportMultiplier = getSafeMultiplier(activeWidth, activeHeight, HIGH_RES_EXPORT_SCALE)
 
     let dataURL = '';
     try {
@@ -20152,7 +20152,7 @@ const exportSingleFrame = async (frame: any, format: 'png' | 'jpg' = 'png', scal
 
     const bounds = getFrameBounds(frame);
     if (!bounds) return null;
-    const frameMultiplier = getSafeExportMultiplier(scale, Number(bounds.width || 1), Number(bounds.height || 1))
+    const frameMultiplier = getSafeMultiplier(Number(bounds.width || 1), Number(bounds.height || 1), Math.max(1, Number(scale) || 1))
 
     // Create a data URL for the frame area
     let dataURL = '';
@@ -20221,62 +20221,287 @@ const exportAllFrames = async (format: 'png' | 'jpg' = 'png', scale: number = 1,
     return exports;
 }
 
-// Updated performExport with frame selection and sharing
+const normalizeExportImageFormat = (format: string): ExportImageFormat => (
+    format === 'jpeg' || format === 'jpg' ? 'jpg' : 'png'
+)
+
+const normalizeExportQualityPreset = (value: string): ExportQualityPreset => (
+    value === 'print-300' ? 'print-300' : 'ultra-600'
+)
+
+type ScopedBlobExport = {
+    blob: Blob
+    fileName: string
+    format: ExportImageFormat
+    baseWidth: number
+    baseHeight: number
+    reducedFromRequested: boolean
+}
+
+const exportSelectedObjectBlob = async (
+    format: ExportImageFormat,
+    qualityPreset: ExportQualityPreset,
+    targetObject?: any
+): Promise<ScopedBlobExport | null> => {
+    if (!canvas.value) return null
+    const active = resolveExportableSelectedObject(targetObject)
+    if (!active) return null
+
+    if (active.clipPath && !isValidClipPath(active.clipPath)) {
+        active.set('clipPath', null)
+    }
+
+    const activeBounds = typeof active.getBoundingRect === 'function'
+        ? active.getBoundingRect(true, true)
+        : null
+    const baseWidth = Math.max(1, Number(activeBounds?.width || active?.width || 1))
+    const baseHeight = Math.max(1, Number(activeBounds?.height || active?.height || 1))
+    const fileName = `objeto-${getSelectedObjectExportFileBaseName(active)}-${Date.now()}`
+
+    const result = await exportObjectAsBlob({
+        width: baseWidth,
+        height: baseHeight,
+        qualityPreset,
+        format,
+        renderDataUrlAtMultiplier: async (multiplier: number) => {
+            try {
+                return await runWithNeutralViewport(async () => (
+                    active.toDataURL({
+                        format,
+                        quality: HIGH_RES_EXPORT_QUALITY,
+                        multiplier
+                    })
+                ))
+            } catch {
+                active.set('clipPath', null)
+                return await runWithNeutralViewport(async () => (
+                    active.toDataURL({
+                        format,
+                        quality: HIGH_RES_EXPORT_QUALITY,
+                        multiplier
+                    })
+                ))
+            }
+        },
+        postProcessDataUrl: async (dataUrl) => await makeExportColorsVivid(dataUrl, format, HIGH_RES_EXPORT_QUALITY)
+    })
+
+    return {
+        blob: result.blob,
+        fileName,
+        format,
+        baseWidth,
+        baseHeight,
+        reducedFromRequested: result.reducedFromRequested
+    }
+}
+
+const exportSingleFrameBlob = async (
+    frame: any,
+    format: ExportImageFormat,
+    qualityPreset: ExportQualityPreset,
+    index = 0
+): Promise<ScopedBlobExport | null> => {
+    if (!canvas.value || !frame) return null
+
+    const bounds = getFrameBounds(frame)
+    if (!bounds) return null
+
+    const baseWidth = Math.max(1, Number(bounds.width || 1))
+    const baseHeight = Math.max(1, Number(bounds.height || 1))
+    const frameName = getFrameDisplayNameForExport(frame, index).replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'frame'
+    const fileName = `frame-${frameName}-${index + 1}-${Date.now()}`
+
+    const result = await exportFrameAsBlob({
+        width: baseWidth,
+        height: baseHeight,
+        qualityPreset,
+        format,
+        renderDataUrlAtMultiplier: async (multiplier: number) => {
+            try {
+                return await withProductZonesHiddenForOutput(async () => (
+                    await runWithNeutralViewport(async () => {
+                        sanitizeAllClipPaths()
+                        return canvas.value.toDataURL({
+                            format,
+                            quality: HIGH_RES_EXPORT_QUALITY,
+                            multiplier,
+                            left: bounds.left,
+                            top: bounds.top,
+                            width: baseWidth,
+                            height: baseHeight,
+                            ...(format === 'jpg' ? { backgroundColor: '#ffffff' } : {})
+                        })
+                    })
+                ))
+            } catch {
+                return await withProductZonesHiddenForOutput(async () => (
+                    await runWithNeutralViewport(async () => (
+                        canvas.value.toDataURL({
+                            format,
+                            quality: HIGH_RES_EXPORT_QUALITY,
+                            multiplier,
+                            left: bounds.left,
+                            top: bounds.top,
+                            width: baseWidth,
+                            height: baseHeight,
+                            ...(format === 'jpg' ? { backgroundColor: '#ffffff' } : {})
+                        })
+                    ))
+                ))
+            }
+        },
+        postProcessDataUrl: async (dataUrl) => await makeExportColorsVivid(dataUrl, format, HIGH_RES_EXPORT_QUALITY)
+    })
+
+    return {
+        blob: result.blob,
+        fileName,
+        format,
+        baseWidth,
+        baseHeight,
+        reducedFromRequested: result.reducedFromRequested
+    }
+}
+
+const maybeWarnLargeBatchExport = (frames: any[], qualityPreset: ExportQualityPreset) => {
+    const estimatedBytes = (frames || []).reduce((sum: number, frame: any) => {
+        const bounds = getFrameBounds(frame)
+        if (!bounds) return sum
+        const width = Math.max(1, Number(bounds.width || 1))
+        const height = Math.max(1, Number(bounds.height || 1))
+        const requested = getRequestedMultiplier(qualityPreset, width, height)
+        const safeMultiplier = getSafeMultiplier(width, height, requested)
+        const rawBytes = width * height * safeMultiplier * safeMultiplier * 4
+        return sum + (rawBytes * 0.55)
+    }, 0)
+
+    const estimatedMb = estimatedBytes / (1024 * 1024)
+    if (estimatedMb >= 250) {
+        notifyEditorInfo(`Exportação pesada (~${Math.round(estimatedMb)}MB). Pode levar mais tempo.`)
+    }
+}
+
 const performExport = async () => {
-    if (!canvas.value) return;
-    const feedbackToken = startExportDownloadFeedback('Baixando arquivo...')
-    showExportModal.value = false;
+    if (!canvas.value) return
+    const feedbackToken = startExportDownloadFeedback('Preparando exportação...')
+    showExportModal.value = false
+
+    let reducedBySafety = false
 
     try {
-        const activeBeforeExport = canvas.value.getActiveObject?.();
-        // Deselect for clean export
-        canvas.value.discardActiveObject();
-        canvas.value.requestRenderAll();
+        const activeBeforeExport = canvas.value.getActiveObject?.()
+        canvas.value.discardActiveObject()
+        canvas.value.requestRenderAll()
 
-        const { format, exportScope, selectedFrameId } = exportSettings.value;
-        const scale = HIGH_RES_EXPORT_SCALE;
-        const quality = HIGH_RES_EXPORT_QUALITY;
-        const imgFormat: 'png' | 'jpg' = (format === 'jpeg' || format === 'jpg') ? 'jpg' : 'png';
-        const frameFormat: 'png' | 'jpg' = imgFormat === 'jpg' ? 'jpg' : 'png';
+        const { format, exportScope, selectedFrameId } = exportSettings.value
+        const qualityPreset = normalizeExportQualityPreset(String(exportSettings.value.qualityPreset || DEFAULT_EXPORT_QUALITY_PRESET))
+        const multiFileMode = exportSettings.value.multiFileMode === 'separate' ? 'separate' : 'zip'
+        const isPdf = format === 'pdf'
+        const imageFormat: ExportImageFormat = normalizeExportImageFormat(String(format || 'png'))
 
         if (exportScope === 'selected-object') {
-            const objectResult = await exportSelectedObject(frameFormat, activeBeforeExport, { download: true });
-            if (!objectResult) {
-                notifyEditorInfo('Selecione um objeto válido para exportar.');
+            const objectExport = await exportSelectedObjectBlob(isPdf ? 'png' : imageFormat, qualityPreset, activeBeforeExport)
+            if (!objectExport) {
+                notifyEditorInfo('Selecione um objeto válido para exportar.')
+                return
             }
-        }
-        else if (exportScope === 'selected-frame') {
-            if (!selectedFrameId) {
-                notifyEditorInfo('Selecione um frame para exportar.');
-                return;
-            }
-            const frame = getFrameById(selectedFrameId);
-            if (!frame) {
-                notifyEditorInfo('Frame selecionado não encontrado no canvas.');
-                return;
-            }
-            const result = await exportSingleFrame(frame, frameFormat, scale, quality);
-            if (result) {
-                downloadFile(result.dataURL, `${result.fileName}.${frameFormat}`);
-            }
-        }
-        else if (exportScope === 'all-frames') {
-            const frames = getAllFrames();
-            if (frames.length > 0) {
-                const frameExports = await exportAllFrames(frameFormat, scale, quality);
-                const filesToDownload = frameExports.map(e => ({
-                    dataURL: e.dataURL,
-                    fileName: e.fileName,
-                    format: frameFormat
-                }));
-                await downloadMultipleFiles(filesToDownload);
+            reducedBySafety = reducedBySafety || objectExport.reducedFromRequested
+
+            if (isPdf) {
+                const pdfBlob = await buildPdfBlob([{
+                    imageBlob: objectExport.blob,
+                    pageWidthPx: objectExport.baseWidth,
+                    pageHeightPx: objectExport.baseHeight
+                }])
+                downloadBlob(pdfBlob, `${objectExport.fileName}.pdf`)
             } else {
-                notifyEditorInfo('Nenhum frame encontrado no canvas.');
+                downloadBlob(objectExport.blob, `${objectExport.fileName}.${imageFormat}`)
             }
+        } else if (exportScope === 'selected-frame') {
+            if (!selectedFrameId) {
+                notifyEditorInfo('Selecione um frame para exportar.')
+                return
+            }
+            const frame = getFrameById(selectedFrameId)
+            if (!frame) {
+                notifyEditorInfo('Frame selecionado não encontrado no canvas.')
+                return
+            }
+
+            const frameExport = await exportSingleFrameBlob(frame, isPdf ? 'png' : imageFormat, qualityPreset)
+            if (!frameExport) {
+                notifyEditorError('Falha ao exportar o frame selecionado.')
+                return
+            }
+            reducedBySafety = reducedBySafety || frameExport.reducedFromRequested
+
+            if (isPdf) {
+                const pdfBlob = await buildPdfBlob([{
+                    imageBlob: frameExport.blob,
+                    pageWidthPx: frameExport.baseWidth,
+                    pageHeightPx: frameExport.baseHeight
+                }])
+                downloadBlob(pdfBlob, `${frameExport.fileName}.pdf`)
+            } else {
+                downloadBlob(frameExport.blob, `${frameExport.fileName}.${imageFormat}`)
+            }
+        } else if (exportScope === 'all-frames') {
+            const frames = getAllFrames()
+            if (!frames.length) {
+                notifyEditorInfo('Nenhum frame encontrado no canvas.')
+                return
+            }
+
+            maybeWarnLargeBatchExport(frames, qualityPreset)
+            const results: ScopedBlobExport[] = []
+            for (let i = 0; i < frames.length; i++) {
+                const frame = frames[i]
+                const result = await exportSingleFrameBlob(frame, isPdf ? 'png' : imageFormat, qualityPreset, i)
+                if (result) {
+                    reducedBySafety = reducedBySafety || result.reducedFromRequested
+                    results.push(result)
+                }
+            }
+
+            if (!results.length) {
+                notifyEditorError('Nenhum frame foi exportado com sucesso.')
+                return
+            }
+
+            if (isPdf) {
+                const pages = results.map((result) => ({
+                    imageBlob: result.blob,
+                    pageWidthPx: result.baseWidth,
+                    pageHeightPx: result.baseHeight
+                }))
+                const pdfBlob = await buildPdfBlob(pages)
+                downloadBlob(pdfBlob, `${makeExportBatchBaseName()}.pdf`)
+            } else if (multiFileMode === 'zip') {
+                const zipEntries = results.map((result) => ({
+                    fileName: `${result.fileName}.${imageFormat}`,
+                    blob: result.blob
+                }))
+                const zipBlob = await buildZipBlob(zipEntries)
+                downloadBlob(zipBlob, `${makeExportBatchBaseName()}.zip`)
+            } else {
+                await downloadMultipleFiles(results.map((result) => ({
+                    blob: result.blob,
+                    fileName: result.fileName,
+                    format: imageFormat
+                })))
+            }
+        } else {
+            notifyEditorInfo('Selecione: objeto, frame ou todos os frames para exportar.')
+            return
         }
-        else {
-            notifyEditorInfo('Selecione: objeto, frame ou todos os frames para exportar.');
+
+        if (reducedBySafety) {
+            notifyEditorInfo('Parte do export foi ajustada para escala segura por limite do navegador.')
         }
+    } catch (err) {
+        console.error('[Export] Falha ao exportar:', err)
+        notifyEditorError('Falha ao exportar. Tente novamente ou reduza a qualidade.')
     } finally {
         await stopExportDownloadFeedback(feedbackToken)
     }

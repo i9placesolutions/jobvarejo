@@ -4,14 +4,16 @@ export type DownloadFileOptions = {
 }
 
 export type DownloadPayload = {
-  dataURL: string
+  dataURL?: string
+  blob?: Blob
   fileName: string
-  format: string
+  format?: string
 }
 
 export type DownloadMultipleOptions = {
   delayMs?: number
   downloadFileFn?: (url: string, name: string) => void
+  downloadBlobFn?: (blob: Blob, name: string) => void
 }
 
 export const downloadFile = (url: string, name: string, opts: DownloadFileOptions = {}) => {
@@ -36,17 +38,37 @@ export const downloadFile = (url: string, name: string, opts: DownloadFileOption
   }
 }
 
+export const downloadBlob = (blob: Blob, name: string, opts: DownloadFileOptions = {}) => {
+  if (typeof window === 'undefined' || !blob) return
+  const url = URL.createObjectURL(blob)
+  downloadFile(url, name, opts)
+}
+
 export const downloadMultipleFiles = async (
   files: DownloadPayload[],
   opts: DownloadMultipleOptions = {}
 ) => {
   const delayMs = Math.max(0, Number(opts.delayMs ?? 300))
   const runDownload = opts.downloadFileFn || ((url: string, name: string) => downloadFile(url, name))
+  const runBlobDownload = opts.downloadBlobFn || ((blob: Blob, name: string) => downloadBlob(blob, name))
+
+  const buildName = (file: DownloadPayload) => {
+    const baseName = String(file.fileName || 'arquivo')
+    const fmt = String(file.format || '').trim().toLowerCase()
+    if (!fmt) return baseName
+    if (baseName.toLowerCase().endsWith(`.${fmt}`)) return baseName
+    return `${baseName}.${fmt}`
+  }
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
     if (!file) continue
-    runDownload(file.dataURL, `${file.fileName}.${file.format}`)
+    const targetName = buildName(file)
+    if (file.blob) {
+      runBlobDownload(file.blob, targetName)
+    } else if (file.dataURL) {
+      runDownload(file.dataURL, targetName)
+    }
     if (i < files.length - 1 && delayMs > 0) {
       await new Promise(resolve => setTimeout(resolve, delayMs))
     }
