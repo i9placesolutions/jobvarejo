@@ -20,6 +20,7 @@ export interface ProjectRow {
   id: string
   name: string
   canvas_data: ProjectCanvasPageMeta[]
+  builder_config?: Record<string, any> | null
   preview_url: string | null
   created_at: string
   folder_id: string | null
@@ -38,4 +39,3 @@ export interface ProjectListRow {
   updated_at: string | null
   preview_url: string | null
 }
-

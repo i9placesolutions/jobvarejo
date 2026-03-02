@@ -62,6 +62,7 @@ export default defineNuxtConfig({
     authJwtSecret: process.env.AUTH_JWT_SECRET || '',
     authTokenTtlSeconds: process.env.AUTH_TOKEN_TTL_SECONDS || '604800',
     authResetTokenTtlMinutes: process.env.AUTH_RESET_TOKEN_TTL_MINUTES || '60',
+    builderV2Enabled: process.env.BUILDER_V2_ENABLED || 'true',
     appBaseUrl: process.env.APP_BASE_URL || '',
     smtpHost: process.env.SMTP_HOST || '',
     smtpPort: process.env.SMTP_PORT || '587',

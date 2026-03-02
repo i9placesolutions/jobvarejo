@@ -2,7 +2,8 @@
 // Keep a client-side safety check for direct URL access.
 onMounted(async () => {
   if (!process.client) return
-  if (window.location.pathname.startsWith('/auth')) return
+  const publicPaths = ['/auth', '/builder-v2', '/privacy', '/terms']
+  if (publicPaths.some((prefix) => window.location.pathname.startsWith(prefix))) return
 
   const auth = useAuth()
   await auth.getSession()
