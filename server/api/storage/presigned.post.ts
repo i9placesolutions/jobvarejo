@@ -152,6 +152,10 @@ export default defineEventHandler(async (event) => {
     }
 
   } catch (error: any) {
+    if (error?.statusCode) {
+      throw error
+    }
+
     console.error('❌ Erro ao gerar presigned URL da Wasabi:', error)
     console.error('   Detalhes:', {
       message: error?.message,

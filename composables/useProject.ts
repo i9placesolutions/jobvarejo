@@ -127,6 +127,32 @@ const getCanvasObjectCount = (canvasData: any): number => {
     return Number.isFinite(n) ? n : 0
 }
 
+const MAX_PROJECT_DB_PAYLOAD_BYTES = 900_000
+const MAX_PAGE_DB_CANVAS_BACKUP_BYTES = 240_000
+
+const estimateJsonBytes = (value: unknown): number => {
+    try {
+        const json = JSON.stringify(value)
+        if (typeof json !== 'string') return Number.MAX_SAFE_INTEGER
+        if (typeof TextEncoder !== 'undefined') {
+            return new TextEncoder().encode(json).length
+        }
+        return json.length
+    } catch {
+        return Number.MAX_SAFE_INTEGER
+    }
+}
+
+const stripCanvasBackupsFromPageMetadata = (pages: any[]): any[] => {
+    if (!Array.isArray(pages)) return []
+    return pages.map((page) => {
+        if (!page || typeof page !== 'object') return page
+        const next = { ...(page as Record<string, any>) }
+        delete next.canvasData
+        return next
+    })
+}
+
 const pickBestRemoteCanvasData = (storageCanvasData: any, dbCanvasData: any) => {
     if (!storageCanvasData && !dbCanvasData) return { data: null, source: 'none' as const }
     if (storageCanvasData && !dbCanvasData) return { data: storageCanvasData, source: 'storage' as const }
@@ -616,25 +642,27 @@ export const useProject = () => {
                     thumbnailUrl: thumbnailUrls[index] || page.thumbnailUrl // URL do thumbnail
                 }
 
-                // CRITICAL: SEMPRE incluir canvasData no banco como backup
-                // Mesmo quando temos storagePath, mantemos canvasData para garantir
-                // que os dados nunca sejam perdidos se o Storage falhar
-	                if (page.canvasData) {
-	                    const currentCount = getCanvasObjectCount(page.canvasData)
-	                    const persistedCount = Number(page?.lastPersistedObjectCount || 0)
-	                    const shouldBlockEmptyBackup = isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite
-	                    if (shouldBlockEmptyBackup) {
-	                        console.warn(`🛡️ Bloqueando backup vazio no DB para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
-	                    } else {
-                        metadata.canvasData = page.canvasData
-                        console.log(`💾 Incluindo canvasData no banco para página ${page.id} (${currentCount} objetos)`)
+		                if (page.canvasData) {
+		                    const currentCount = getCanvasObjectCount(page.canvasData)
+		                    const persistedCount = Number(page?.lastPersistedObjectCount || 0)
+		                    const shouldBlockEmptyBackup = isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite
+		                    if (shouldBlockEmptyBackup) {
+		                        console.warn(`🛡️ Bloqueando backup vazio no DB para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
+		                    } else {
+                        const backupBytes = estimateJsonBytes(page.canvasData)
+                        if (backupBytes > MAX_PAGE_DB_CANVAS_BACKUP_BYTES) {
+                            console.warn(`[saveProjectDB] Backup canvasData omitido no DB para página ${page.id}: ${backupBytes} bytes`)
+                        } else {
+                            metadata.canvasData = page.canvasData
+                            console.log(`💾 Incluindo canvasData no banco para página ${page.id} (${currentCount} objetos)`)
+                        }
                     }
                 }
 
                 return metadata
             })
 
-	            const payload = {
+	            let payload = {
 	                name: project.name,
                 // Armazenar apenas metadados, não o canvas completo
                 canvas_data: pageMetadata,
@@ -645,43 +673,75 @@ export const useProject = () => {
                     console.warn('[saveProjectDB] Save pulado: payload sem páginas válidas.')
                     return
                 }
+                const payloadBytes = estimateJsonBytes(payload)
+                if (payloadBytes > MAX_PROJECT_DB_PAYLOAD_BYTES) {
+                    const payloadWithoutBackup = {
+                        ...payload,
+                        canvas_data: stripCanvasBackupsFromPageMetadata(pageMetadata)
+                    }
+                    const reducedBytes = estimateJsonBytes(payloadWithoutBackup)
+                    console.warn(`[saveProjectDB] Payload /api/projects muito grande (${payloadBytes} bytes); removendo backup canvasData (${reducedBytes} bytes).`)
+                    payload = payloadWithoutBackup
+                }
 	            if (abortIfStaleSaveContext()) return
 
 		            const headers = await getApiAuthHeaders()
 		            // 3. Salvar no banco
                 const normalizedProjectId = String(project.id || '').trim()
                 const shouldCreateProject = normalizedProjectId.startsWith('proj_') || !isUuid(normalizedProjectId)
-	            if (shouldCreateProject) {
-                const response = await $fetch<any>('/api/projects', {
-                    method: 'POST',
-                    headers,
-                    body: payload
-                })
-                if (abortIfStaleSaveContext()) return
+                const persistProject = async (bodyPayload: any) => {
+                    if (shouldCreateProject) {
+                        const response = await $fetch<any>('/api/projects', {
+                            method: 'POST',
+                            headers,
+                            body: bodyPayload
+                        })
 
-                const created = response?.project || null
-                if (!created) throw new Error('Falha ao criar projeto no servidor')
-                if (created?.id) project.id = created.id
-                if (created?.updated_at) projectServerUpdatedAt.value = created.updated_at
-	            } else {
-	                const response = await $fetch<any>('/api/projects', {
-	                    method: 'POST',
-	                    headers,
-	                    body: {
-                          id: normalizedProjectId,
-                          ...payload
+                        const created = response?.project || null
+                        if (!created) throw new Error('Falha ao criar projeto no servidor')
+                        if (created?.id) project.id = created.id
+                        if (created?.updated_at) projectServerUpdatedAt.value = created.updated_at
+                        return
+                    }
+
+                    const response = await $fetch<any>('/api/projects', {
+                        method: 'POST',
+                        headers,
+                        body: {
+                            id: normalizedProjectId,
+                            ...bodyPayload
                         }
-	                })
-	                if (abortIfStaleSaveContext()) return
-	                const updatedProject = response?.project || null
-	                if (!updatedProject) {
-	                    saveStatus.value = 'error'
-	                    throw new Error('Falha ao atualizar projeto no servidor.')
-	                }
-		                projectServerUpdatedAt.value = String(updatedProject.updated_at || '')
-		            }
+                    })
+                    const updatedProject = response?.project || null
+                    if (!updatedProject) {
+                        saveStatus.value = 'error'
+                        throw new Error('Falha ao atualizar projeto no servidor.')
+                    }
+                    projectServerUpdatedAt.value = String(updatedProject.updated_at || '')
+                }
 
-		            if (abortIfStaleSaveContext()) return
+                try {
+                    await persistProject(payload)
+                } catch (persistError: any) {
+                    const statusCode = Number(persistError?.statusCode ?? persistError?.response?.status ?? 0)
+                    const hasBackupInPayload = Array.isArray(payload.canvas_data)
+                        && payload.canvas_data.some((page: any) => page && typeof page === 'object' && 'canvasData' in page)
+
+                    if (statusCode !== 413 || !hasBackupInPayload) {
+                        throw persistError
+                    }
+
+                    const payloadWithoutBackup = {
+                        ...payload,
+                        canvas_data: stripCanvasBackupsFromPageMetadata(payload.canvas_data)
+                    }
+                    const reducedBytes = estimateJsonBytes(payloadWithoutBackup)
+                    console.warn(`[saveProjectDB] /api/projects retornou 413; retry sem canvasData backup (${reducedBytes} bytes).`)
+                    payload = payloadWithoutBackup
+                    await persistProject(payload)
+                }
+
+                if (abortIfStaleSaveContext()) return
 		            changedDuringSave = unsavedRevision.value !== saveRevisionAtStart
 		            lastSavedAt.value = new Date()
 	            if (!changedDuringSave) {
