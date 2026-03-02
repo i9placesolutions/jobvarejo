@@ -1091,11 +1091,13 @@ const getFrameSpawnPosition = (referenceFrame: any, nextFrameWidth: number, next
     };
 };
 
-const addFrame = () => {
+const addFrame = (opts: { width?: number; height?: number } = {}) => {
     if (!canvas.value) return;
 
-    const frameWidth = 1080;
-    const frameHeight = 1350;
+    const defaultFrameWidth = Math.max(64, Math.round(Number(activePage.value?.width || 1080)));
+    const defaultFrameHeight = Math.max(64, Math.round(Number(activePage.value?.height || 1350)));
+    const frameWidth = Math.max(64, Math.round(Number(opts?.width ?? defaultFrameWidth) || defaultFrameWidth));
+    const frameHeight = Math.max(64, Math.round(Number(opts?.height ?? defaultFrameHeight) || defaultFrameHeight));
 
     const getNextFrameName = () => {
         if (!canvas.value) return 'Frame 1';
@@ -6993,6 +6995,33 @@ const HIGH_RES_EXPORT_QUALITY = 1
 const EXPORT_COLOR_SATURATION = 1.12
 const EXPORT_COLOR_CONTRAST = 1.08
 const EXPORT_COLOR_BRIGHTNESS = 1.02
+const EXPORT_MAX_CANVAS_DIMENSION = 16384
+const EXPORT_MAX_CANVAS_AREA = 160_000_000
+
+const shouldUseNativeScaleForPrint = (width: number, height: number): boolean => {
+    const major = Math.max(width, height)
+    const minor = Math.min(width, height)
+    return major >= 3400 && minor >= 2400
+}
+
+const getSafeExportMultiplier = (requestedScale: number, width: number, height: number): number => {
+    const safeWidth = Math.max(1, Number(width) || 1)
+    const safeHeight = Math.max(1, Number(height) || 1)
+    const sourceArea = safeWidth * safeHeight
+    const requested = Math.max(1, Number(requestedScale) || 1)
+    const baseRequested = shouldUseNativeScaleForPrint(safeWidth, safeHeight) ? 1 : requested
+
+    const maxByDimension = Math.min(
+        EXPORT_MAX_CANVAS_DIMENSION / safeWidth,
+        EXPORT_MAX_CANVAS_DIMENSION / safeHeight
+    )
+    const maxByArea = Math.sqrt(EXPORT_MAX_CANVAS_AREA / Math.max(1, sourceArea))
+    const hardLimit = Math.max(1, Math.min(maxByDimension, maxByArea))
+    const applied = Math.max(1, Math.min(baseRequested, hardLimit))
+
+    if (!Number.isFinite(applied)) return 1
+    return Number(applied.toFixed(3))
+}
 
 const exportSettings = ref({
     format: 'png',
@@ -19943,13 +19972,20 @@ const exportSelectedObject = async (
         active.set('clipPath', null);
     }
 
+    const activeBounds = typeof active.getBoundingRect === 'function'
+        ? active.getBoundingRect(true, true)
+        : null
+    const activeWidth = Math.max(1, Number(activeBounds?.width || active?.width || 1))
+    const activeHeight = Math.max(1, Number(activeBounds?.height || active?.height || 1))
+    const exportMultiplier = getSafeExportMultiplier(HIGH_RES_EXPORT_SCALE, activeWidth, activeHeight)
+
     let dataURL = '';
     try {
         dataURL = await runWithNeutralViewport(async () => (
             active.toDataURL({
                 format,
                 quality: 1,
-                multiplier: HIGH_RES_EXPORT_SCALE
+                multiplier: exportMultiplier
             })
         ));
     } catch (exportErr) {
@@ -19960,7 +19996,7 @@ const exportSelectedObject = async (
                 active.toDataURL({
                     format,
                     quality: 1,
-                    multiplier: HIGH_RES_EXPORT_SCALE
+                    multiplier: exportMultiplier
                 })
             ));
         } catch (fallbackErr) {
@@ -20116,6 +20152,7 @@ const exportSingleFrame = async (frame: any, format: 'png' | 'jpg' = 'png', scal
 
     const bounds = getFrameBounds(frame);
     if (!bounds) return null;
+    const frameMultiplier = getSafeExportMultiplier(scale, Number(bounds.width || 1), Number(bounds.height || 1))
 
     // Create a data URL for the frame area
     let dataURL = '';
@@ -20126,7 +20163,7 @@ const exportSingleFrame = async (frame: any, format: 'png' | 'jpg' = 'png', scal
                 const options: any = {
                     format: format,
                     quality: quality,
-                    multiplier: Math.max(1, Number(scale) || 1),
+                    multiplier: frameMultiplier,
                     left: bounds.left,
                     top: bounds.top,
                     width: Math.max(1, bounds.width),
@@ -20144,7 +20181,7 @@ const exportSingleFrame = async (frame: any, format: 'png' | 'jpg' = 'png', scal
                     return canvas.value.toDataURL({
                         format: format,
                         quality: quality,
-                        multiplier: Math.max(1, Number(scale) || 1),
+                        multiplier: frameMultiplier,
                         left: bounds.left,
                         top: bounds.top,
                         width: Math.max(1, bounds.width),
@@ -20749,7 +20786,10 @@ const insertElementToCanvas = (element: { type: string; data: any }) => {
         }
     } else if (type === 'frame') {
         // Cria frame com dimensões customizadas
-        addFrame();
+        addFrame({
+            width: Number(data?.width),
+            height: Number(data?.height)
+        });
     } else if (type === 'grid') {
         // Cria grade de frames estilo Canva (cada célula é um Frame com clipPath)
         const cols = data.columns || 2;

@@ -110,7 +110,7 @@ const open = computed({
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Qualidade</label>
           <div class="rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-100">
-            Ultra nítido fixo: 6x (600 DPI) com cores mais vivas.
+            Escala automática (até 6x). Em formatos grandes (ex.: A4 2480×3508), exporta em escala segura para evitar PNG inválido.
           </div>
         </div>
 
