@@ -610,6 +610,32 @@ type FolderOption = {
 }
 
 const normalizeFolderId = (value: unknown): string => String(value || '').trim()
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const PROJECT_NAME_MAX_LENGTH = 120
+const DUPLICATE_PROJECT_SUFFIX = ' (cópia)'
+
+const normalizeProjectName = (value: unknown, fallback = 'Untitled Project'): string => {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) return fallback
+  if (trimmed.length <= PROJECT_NAME_MAX_LENGTH) return trimmed
+  return trimmed.slice(0, PROJECT_NAME_MAX_LENGTH).trimEnd() || fallback
+}
+
+const buildDuplicateProjectName = (value: unknown): string => {
+  const baseName = normalizeProjectName(value, 'Projeto')
+  const maxBaseLength = Math.max(1, PROJECT_NAME_MAX_LENGTH - DUPLICATE_PROJECT_SUFFIX.length)
+  const clippedBase = baseName.length > maxBaseLength
+    ? baseName.slice(0, maxBaseLength).trimEnd()
+    : baseName
+  return `${clippedBase || 'Projeto'}${DUPLICATE_PROJECT_SUFFIX}`
+}
+
+const normalizeFolderIdForProjectPayload = (value: unknown): string | null | undefined => {
+  const id = normalizeFolderId(value)
+  if (!id) return null
+  if (UUID_RE.test(id)) return id
+  return undefined
+}
 
 const folderById = computed(() => {
   const map = new Map<string, FolderModel>()
@@ -837,7 +863,8 @@ const getProjectCount = (folderId: string): number => {
 
 // Helper: valid project name
 const isValidProjectName = computed(() => {
-  return newProjectName.value && newProjectName.value.trim().length > 0
+  const len = String(newProjectName.value || '').trim().length
+  return len > 0 && len <= PROJECT_NAME_MAX_LENGTH
 })
 
 // Helper: valid folder name
@@ -847,7 +874,10 @@ const isValidFolderName = computed(() => {
 
 // Create project
 const createProject = async () => {
-  if (!isValidProjectName.value) return
+  if (!isValidProjectName.value) {
+    alert('Nome do projeto inválido. Use entre 1 e 120 caracteres.')
+    return
+  }
 
   isLoading.value = true
   try {
@@ -865,15 +895,20 @@ const createProject = async () => {
     }
 
     const headers = await getApiAuthHeaders()
+    const folderId = normalizeFolderIdForProjectPayload(activeFolderId.value)
+    const body: Record<string, any> = {
+      name: normalizeProjectName(newProjectName.value),
+      canvas_data: [initialPage],
+      last_viewed: new Date().toISOString(),
+    }
+    if (folderId !== undefined) {
+      body.folder_id = folderId
+    }
+
     const response = await $fetch<any>('/api/projects', {
       method: 'POST',
       headers,
-      body: {
-        name: newProjectName.value,
-        canvas_data: [initialPage],
-        folder_id: activeFolderId.value,
-        last_viewed: new Date().toISOString(),
-      }
+      body
     })
     const data = response?.project || null
 
@@ -960,15 +995,20 @@ const duplicateProject = async (projectId: string) => {
       throw new Error('Projeto sem dados de canvas para duplicação')
     }
 
+    const duplicateBody: Record<string, any> = {
+      name: buildDuplicateProjectName(original.name),
+      canvas_data: canvasData,
+      last_viewed: new Date().toISOString(),
+    }
+    const duplicateFolderId = normalizeFolderIdForProjectPayload(original.folder_id)
+    if (duplicateFolderId !== undefined) {
+      duplicateBody.folder_id = duplicateFolderId
+    }
+
     const response = await $fetch<any>('/api/projects', {
       method: 'POST',
       headers,
-      body: {
-        name: `${original.name} (cópia)`,
-        canvas_data: canvasData,
-        folder_id: original.folder_id,
-        last_viewed: new Date().toISOString(),
-      }
+      body: duplicateBody
     })
     const data = response?.project || null
 
@@ -976,8 +1016,13 @@ const duplicateProject = async (projectId: string) => {
       projects.value.unshift(data)
     }
     showProjectMenu.value = null
-  } catch (error) {
-    console.error('Error duplicating project:', error)
+  } catch (error: any) {
+    console.error('Error duplicating project:', {
+      statusCode: error?.statusCode ?? error?.response?.status ?? null,
+      statusMessage: error?.statusMessage ?? error?.data?.statusMessage ?? null,
+      message: error?.message ?? null,
+      data: error?.data ?? null
+    })
     alert('Erro ao duplicar projeto.')
   }
 }
