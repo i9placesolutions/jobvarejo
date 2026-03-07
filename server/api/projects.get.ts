@@ -1,6 +1,9 @@
-import { toWasabiProxyUrl } from '~/utils/storageProxy'
 import { requireAuthenticatedUser } from '../utils/auth'
 import { enforceRateLimit } from '../utils/rate-limit'
+import {
+  resolveProjectCanvasDataReadUrls,
+  resolveStorageReadUrl
+} from '../utils/project-storage-refs'
 import { pgOneOrNull, pgQuery } from '../utils/postgres'
 
 const isUuid = (value: string): boolean =>
@@ -34,7 +37,11 @@ export default defineEventHandler(async (event) => {
         [id, user.id]
       )
       if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
-      return row
+      return {
+        ...row,
+        preview_url: await resolveStorageReadUrl(row?.preview_url, user.id),
+        canvas_data: await resolveProjectCanvasDataReadUrls(row?.canvas_data, user.id)
+      }
     } catch (error: any) {
       if (error?.statusCode) throw error
       throw createError({ statusCode: 500, statusMessage: error?.message || 'Failed to fetch project' })
@@ -54,10 +61,12 @@ export default defineEventHandler(async (event) => {
 
     const { rows } = await pgQuery<any>(sql, params)
 
-    return (rows || []).map((p: any) => ({
-      ...p,
-      preview_url: toWasabiProxyUrl(p?.preview_url)
-    }))
+    return await Promise.all(
+      (rows || []).map(async (p: any) => ({
+        ...p,
+        preview_url: await resolveStorageReadUrl(p?.preview_url, user.id)
+      }))
+    )
   } catch (error: any) {
     throw createError({ statusCode: 500, statusMessage: error?.message || 'Failed to list projects' })
   }

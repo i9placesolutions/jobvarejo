@@ -1,3 +1,5 @@
+import { blobFromDataLikeUrl } from './browserBlob'
+
 export type DownloadFileOptions = {
   revokeBlobUrl?: boolean
   revokeDelayMs?: number
@@ -82,12 +84,7 @@ export const shareFileFromDataUrl = async (
 ): Promise<boolean> => {
   if (typeof window === 'undefined') return false
   try {
-    const response = await fetch(dataURL)
-    if (!response.ok) {
-      throw new Error(`Falha ao preparar arquivo para compartilhamento (status ${response.status})`)
-    }
-
-    const blob = await response.blob()
+    const blob = await blobFromDataLikeUrl(dataURL)
     const file = new File([blob], fileName, { type: blob.type })
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       const hasUserGesture = (navigator as any)?.userActivation?.isActive === true

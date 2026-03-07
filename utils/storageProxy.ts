@@ -1,6 +1,36 @@
+import { extractStorageKeyFromRef } from './storageRef'
+
 type ProxyUrlOptions = {
   version?: string | number | Date | null
   bucket?: string | null
+}
+
+const WASABI_PROXY_CACHE_LIMIT = 2048
+const wasabiProxyUrlCache = new Map<string, string | null>()
+
+const getWasabiProxyCacheKey = (input: string, options?: ProxyUrlOptions): string => {
+  const version = options?.version instanceof Date
+    ? String(options.version.getTime())
+    : String(options?.version ?? '')
+  const bucket = String(options?.bucket ?? '')
+  return `${bucket}\u0000${version}\u0000${input}`
+}
+
+const readWasabiProxyUrlCache = (key: string): string | null | undefined => {
+  const cached = wasabiProxyUrlCache.get(key)
+  if (cached === undefined) return undefined
+  wasabiProxyUrlCache.delete(key)
+  wasabiProxyUrlCache.set(key, cached)
+  return cached
+}
+
+const writeWasabiProxyUrlCache = (key: string, value: string | null): string | null => {
+  wasabiProxyUrlCache.set(key, value)
+  if (wasabiProxyUrlCache.size > WASABI_PROXY_CACHE_LIMIT) {
+    const oldestKey = wasabiProxyUrlCache.keys().next().value
+    if (oldestKey) wasabiProxyUrlCache.delete(oldestKey)
+  }
+  return value
 }
 
 const normalizeVersion = (value?: string | number | Date | null): string | null => {
@@ -102,13 +132,16 @@ const toRelativeStorageProxyUrl = (
 
 export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOptions): string | null => {
   if (!input) return input ?? null
+  const cacheKey = getWasabiProxyCacheKey(input, options)
+  const cached = readWasabiProxyUrlCache(cacheKey)
+  if (cached !== undefined) return cached
 
   // If caller already has a raw storage key, proxy it directly.
   // Common keys in this project: `projects/...`, `imagens/...`, `logo/...`.
   const trimmed = input.trim()
   const version = normalizeVersion(options?.version) || extractVersionFromUrl(trimmed)
   const proxiedFromLegacy = toRelativeStorageProxyUrl(trimmed, options, version)
-  if (proxiedFromLegacy) return proxiedFromLegacy
+  if (proxiedFromLegacy) return writeWasabiProxyUrlCache(cacheKey, proxiedFromLegacy)
 
   const keyLike = trimmed.replace(/^\/+/, '')
   if (
@@ -117,10 +150,10 @@ export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOption
     keyLike.startsWith('uploads/') ||
     keyLike.startsWith('logo/')
   ) {
-    return buildProxyUrl(keyLike, version, options?.bucket)
+    return writeWasabiProxyUrlCache(cacheKey, buildProxyUrl(keyLike, version, options?.bucket))
   }
   if (/^[^/]+\.(png|jpe?g|webp|gif|svg|avif)$/i.test(keyLike)) {
-    return buildProxyUrl(keyLike, version, options?.bucket)
+    return writeWasabiProxyUrlCache(cacheKey, buildProxyUrl(keyLike, version, options?.bucket))
   }
 
   const cfg = useRuntimeConfig?.()?.public?.wasabi || {}
@@ -130,7 +163,7 @@ export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOption
   const isMaybeWasabi =
     trimmed.includes('wasabisys.com') ||
     (endpoint && trimmed.includes(endpoint))
-  if (!isMaybeWasabi) return input
+  if (!isMaybeWasabi) return writeWasabiProxyUrlCache(cacheKey, input)
 
   try {
     const u = new URL(trimmed)
@@ -142,9 +175,80 @@ export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOption
     const hostHasBucket = bucket && host.includes(`${bucket.toLowerCase()}.`)
     const keyParts = (!hostHasBucket && parts[0] === bucket) ? parts.slice(1) : parts
     const key = keyParts.join('/')
-    if (!key) return input
-    return buildProxyUrl(key, version, options?.bucket)
+    if (!key) return writeWasabiProxyUrlCache(cacheKey, input)
+    return writeWasabiProxyUrlCache(cacheKey, buildProxyUrl(key, version, options?.bucket))
   } catch {
-    return input
+    return writeWasabiProxyUrlCache(cacheKey, input)
   }
+}
+
+export const toWasabiDirectUrl = (
+  input?: string | null,
+  options?: { bucket?: string | null; endpoint?: string | null }
+): string | null => {
+  if (!input) return input ?? null
+  const trimmed = String(input || '').trim()
+  if (!trimmed) return null
+
+  if (
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('about:') ||
+    trimmed.startsWith('javascript:')
+  ) {
+    return trimmed
+  }
+
+  const cfg = useRuntimeConfig?.()?.public?.wasabi || {}
+  const endpoint = String(options?.endpoint || cfg.endpoint || 's3.wasabisys.com').trim()
+  const bucket = String(options?.bucket || cfg.bucket || 'jobvarejo').trim()
+  if (!endpoint || !bucket) return trimmed
+
+  const fallbackProxyUrl = toWasabiProxyUrl(trimmed, { bucket })
+
+  if (
+    trimmed.includes('X-Amz-Algorithm=') ||
+    trimmed.includes('X-Amz-Signature=') ||
+    trimmed.includes('X-Amz-Credential=')
+  ) {
+    return trimmed
+  }
+
+  const key = extractStorageKeyFromRef(trimmed, { bucket, endpoint })
+  if (!key) return fallbackProxyUrl || trimmed
+
+  const isPublicScopedKey =
+    key.startsWith('imagens/') ||
+    key.startsWith('uploads/') ||
+    key.startsWith('logo/')
+
+  if (!isPublicScopedKey) return trimmed
+
+  const proxied = fallbackProxyUrl
+  if (proxied && proxied !== trimmed) return proxied
+
+  if (
+    key === trimmed.replace(/^\/+/, '') ||
+    trimmed.startsWith('/api/storage/p?') ||
+    trimmed.startsWith('/api/storage/proxy?')
+  ) {
+    return buildProxyUrl(key, null, bucket)
+  }
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const parsed = new URL(trimmed)
+      const host = String(parsed.hostname || '').toLowerCase()
+      const hostLooksLikeWasabi =
+        host.includes('wasabisys.com') ||
+        (endpoint ? host.includes(endpoint.toLowerCase()) : false)
+      if (hostLooksLikeWasabi) {
+        return buildProxyUrl(key, null, bucket)
+      }
+    } catch {
+      return buildProxyUrl(key, null, bucket)
+    }
+  }
+
+  return buildProxyUrl(key, null, bucket)
 }

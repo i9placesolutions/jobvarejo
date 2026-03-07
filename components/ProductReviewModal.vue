@@ -5,6 +5,7 @@ import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
 import { Sparkles, X, Check, AlertCircle, Loader2, Search, Upload, FolderOpen, Plus } from 'lucide-vue-next'
 import { useProductProcessor, type SmartProduct } from '../composables/useProductProcessor'
+import { toWasabiDirectUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
 
 type ImportTargetMode = 'zone' | 'multi-frame'
@@ -240,53 +241,14 @@ const MIN_ASSET_SEARCH_CHARS = 1
 
 const reviewSearch = ref('')
 const selectedLabelTemplateId = ref<string>('')
-const runtimeConfig = useRuntimeConfig()
-
 const resolveProductImageUrl = (rawUrl: any): string => {
     const value = String(rawUrl || '').trim()
     if (!value) return ''
     if (value.startsWith('blob:') || value.startsWith('data:')) return value
-    if (value.startsWith('/api/storage/proxy?') || value.startsWith('/api/storage/p?')) return value
-
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-        try {
-            const urlObj = new URL(value)
-            if (
-                urlObj.pathname.endsWith('/api/storage/proxy') ||
-                urlObj.pathname.endsWith('/api/storage/p') ||
-                urlObj.pathname.endsWith('/proxy') ||
-                urlObj.pathname.endsWith('/p')
-            ) {
-                const key = urlObj.searchParams.get('key')
-                if (key) {
-                    const params = new URLSearchParams()
-                    params.set('key', key)
-                    const bucket = urlObj.searchParams.get('bucket')
-                    if (bucket) params.set('bucket', bucket)
-                    const version = urlObj.searchParams.get('v')
-                    if (version) params.set('v', version)
-                    return `/api/storage/p?${params.toString()}`
-                }
-            }
-            const endpoint = String(runtimeConfig.public?.wasabiEndpoint || runtimeConfig.wasabiEndpoint || '').trim().toLowerCase()
-            const bucket = String(runtimeConfig.public?.wasabiBucket || runtimeConfig.wasabiBucket || '').trim()
-            const pathParts = decodeURIComponent(urlObj.pathname || '').split('/').filter(Boolean)
-            if (endpoint && urlObj.host.toLowerCase().includes(endpoint) && bucket) {
-                if (pathParts[0] === bucket && pathParts.length > 1) {
-                    return `/api/storage/p?key=${encodeURIComponent(pathParts.slice(1).join('/'))}`
-                }
-                if (urlObj.host.startsWith(`${bucket}.`) && pathParts.length > 0) {
-                    return `/api/storage/p?key=${encodeURIComponent(pathParts.join('/'))}`
-                }
-            }
-        } catch {
-            // keep original URL
-        }
-        return value
-    }
-
+    const directUrl = toWasabiDirectUrl(value)
+    if (directUrl) return directUrl
     if (value.startsWith('/')) return value
-    return `/api/storage/p?key=${encodeURIComponent(value)}`
+    return value
 }
 
 const withRequestTimeout = async <T>(
@@ -452,9 +414,18 @@ const uploadManualViaPresigned = async (
         throw new Error(`Upload direto falhou (${putResponse.status})`)
     }
 
+    const signedGet = await withRequestTimeout(20000, (signal) =>
+        fetchUntyped('/api/storage/presigned', {
+            method: 'POST',
+            headers,
+            body: { key, operation: 'get' },
+            signal: signal as any
+        })
+    )
+
     return {
-        url: `/api/storage/p?key=${encodeURIComponent(key)}`,
-        publicUrl: '',
+        url: String(signedGet?.url || '').trim() || key,
+        publicUrl: String(signedGet?.url || '').trim() || '',
         key,
         source: 'manual-presigned'
     }
@@ -1744,7 +1715,7 @@ const getAssetDisplayName = (asset: any): string => {
                         >
                             <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="w-3.5 h-3.5 mr-2 animate-spin" />
                             <Check v-else class="w-3.5 h-3.5 mr-2" />
-                            Importar {{ targetMode === 'multi-frame' ? multiFrameImportCount : products.length }} Produtos
+                            Importar {{ products.length }} Produtos
                         </Button>
                     </div>
                 </div>
@@ -1826,7 +1797,7 @@ const getAssetDisplayName = (asset: any): string => {
                             <Check class="w-3 h-3" />
                         </div>
                         <div class="aspect-square">
-                            <img :src="asset.url" crossorigin="anonymous" class="w-full h-full object-cover" />
+                            <img :src="asset.url" class="w-full h-full object-cover" />
                         </div>
                         <div class="px-2 py-1.5 border-t border-zinc-700/80 bg-zinc-900/60">
                             <p class="text-[10px] text-zinc-200 leading-tight line-clamp-2">

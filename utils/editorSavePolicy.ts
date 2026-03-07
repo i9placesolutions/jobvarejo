@@ -40,6 +40,7 @@ export const shouldSkipAutoSave = (source: SaveSource, reason: string): boolean 
     || reason === 'initial-history-capture'
     || reason === 'post-load-cleanup'
     || reason.startsWith('lifecycle:')
+    || reason.startsWith('viewport:')
 }
 
 export const shouldSkipThumbnailForReason = (source: SaveSource, reason: string): boolean => {
@@ -47,6 +48,7 @@ export const shouldSkipThumbnailForReason = (source: SaveSource, reason: string)
     || reason === 'initial-history-capture'
     || reason === 'post-load-cleanup'
     || reason.startsWith('lifecycle:')
+    || reason.startsWith('viewport:')
 }
 
 export const getThumbnailMinIntervalMs = (reason: string): number => {

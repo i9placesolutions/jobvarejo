@@ -2,6 +2,8 @@ import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s
 import { createHash } from "crypto";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
+import { getPublicUrl } from "../utils/s3";
+import { resolveStorageReadUrl } from "../utils/project-storage-refs";
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15MB
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
@@ -139,8 +141,12 @@ export default defineEventHandler(async (event) => {
     // Se já existe, evita duplicar.
     try {
       await s3Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
+      const canonicalUrl = getPublicUrl(key)
+      const readUrl = await resolveStorageReadUrl(key, user.id)
       return {
-        url: `/api/storage/p?key=${encodeURIComponent(key)}`,
+        url: readUrl || canonicalUrl,
+        publicUrl: readUrl || canonicalUrl,
+        canonicalUrl,
         key,
         success: true,
         dedup: true,
@@ -163,9 +169,13 @@ export default defineEventHandler(async (event) => {
     else await s3Client.send(command)
 
     console.log('✅ File uploaded to Wasabi:', key);
+    const canonicalUrl = getPublicUrl(key)
+    const readUrl = await resolveStorageReadUrl(key, user.id)
 
     return {
-      url: `/api/storage/p?key=${encodeURIComponent(key)}`,
+      url: readUrl || canonicalUrl,
+      publicUrl: readUrl || canonicalUrl,
+      canonicalUrl,
       key: key,
       success: true,
       dedup: false,

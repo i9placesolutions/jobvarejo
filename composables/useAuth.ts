@@ -44,11 +44,17 @@ const readTokenFromCookie = (): string | null => {
 
 const toUser = (user: any): UserWithProfile | null => {
   if (!user?.id) return null
+  const metadataName = user?.user_metadata?.name ?? user?.name ?? null
+  const metadataAvatarUrl = user?.user_metadata?.avatar_url ?? user?.avatar_url ?? null
   return {
     id: String(user.id),
     email: String(user.email || ''),
-    name: user.name == null ? null : String(user.name),
-    avatar_url: user.avatar_url == null ? null : String(user.avatar_url),
+    name: metadataName == null ? null : String(metadataName),
+    avatar_url: metadataAvatarUrl == null ? null : String(metadataAvatarUrl),
+    user_metadata: {
+      name: metadataName == null ? null : String(metadataName),
+      avatar_url: metadataAvatarUrl == null ? null : String(metadataAvatarUrl)
+    },
     role: (String(user.role || 'user') as UserWithProfile['role'])
   }
 }

@@ -5,6 +5,7 @@ import { downloadImage } from '~/server/utils/image-processor'
 import { requireAuthenticatedUser } from '~/server/utils/auth'
 import { enforceRateLimit } from '~/server/utils/rate-limit'
 import { assertSafeExternalHttpUrl } from '~/server/utils/url-safety'
+import { resolveStorageReadUrl } from '~/server/utils/project-storage-refs'
 
 const ALLOWED_SIZES = new Set(['1024x1024', '1024x1536', '1536x1024'])
 const ALLOWED_BACKGROUNDS = new Set(['white'])
@@ -213,7 +214,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     success: true,
-    url: up.url,
+    url: await resolveStorageReadUrl(up.key, user.id),
     canonicalUrl: up.canonicalUrl,
     key: up.key
   }

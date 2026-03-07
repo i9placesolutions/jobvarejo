@@ -1,4 +1,5 @@
 import { requireAuthenticatedUser } from '../utils/auth'
+import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull } from '../utils/postgres'
 
@@ -8,6 +9,7 @@ const isUuid = (value: string): boolean =>
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   enforceRateLimit(event, `projects-delete:${user.id}`, 90, 60_000)
+  const actorClientId = String(getHeader(event, 'x-client-id') || '').trim() || null
 
   const query = getQuery(event)
   const queryId = String(query.id || '').trim()
@@ -36,6 +38,18 @@ export default defineEventHandler(async (event) => {
     )
     if (!row?.id) {
       throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+    }
+
+    try {
+      await publishProjectChange({
+        projectId: String(row.id),
+        userId: user.id,
+        action: 'deleted',
+        updatedAt: new Date().toISOString(),
+        actorClientId
+      })
+    } catch (notifyErr) {
+      console.warn('[api/projects:delete] Failed to publish realtime notification:', notifyErr)
     }
 
     return { success: true }

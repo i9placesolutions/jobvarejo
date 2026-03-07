@@ -1,6 +1,8 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { requireAuthenticatedUser } from "../../utils/auth";
 import { enforceRateLimit } from "../../utils/rate-limit";
+import { getPublicUrl } from "../../utils/s3";
+import { resolveStorageReadUrl } from "../../utils/project-storage-refs";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10MB
 
@@ -89,9 +91,13 @@ export default defineEventHandler(async (event) => {
         await s3Client.send(command);
 
         console.log('✅ Brand logo uploaded to Wasabi:', key);
+        const canonicalUrl = getPublicUrl(key)
+        const readUrl = await resolveStorageReadUrl(key, user.id)
 
         return {
-            url: `/api/storage/p?key=${encodeURIComponent(key)}`,
+            url: readUrl || canonicalUrl,
+            publicUrl: readUrl || canonicalUrl,
+            canonicalUrl,
             key: key,
             success: true
         };

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onUnmounted, computed, defineAsyncComponent, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, defineAsyncComponent, watch } from 'vue'
 import { useProject } from '~/composables/useProject'
 
 const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanvas.vue'))
@@ -16,7 +16,103 @@ definePageMeta({
 })
 
 // Use project composable
-const { project, activePage, loadProjectDB, saveStatus, lastSavedAt, hasUnsavedChanges, triggerAutoSave, cancelAutoSave } = useProject()
+const {
+  project,
+  activePage,
+  loadProjectDB,
+  saveStatus,
+  lastSavedAt,
+  hasUnsavedChanges,
+  triggerAutoSave,
+  cancelAutoSave,
+  realtimeClientId
+} = useProject()
+
+const realtimeStatus = ref<'idle' | 'connecting' | 'connected' | 'error'>('idle')
+const remoteUpdatePending = ref(false)
+let realtimeEventSource: EventSource | null = null
+let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let visibilityHandler: (() => void) | null = null
+
+const closeProjectRealtime = () => {
+  if (realtimeRefreshTimer) {
+    clearTimeout(realtimeRefreshTimer)
+    realtimeRefreshTimer = null
+  }
+  if (realtimeEventSource) {
+    realtimeEventSource.close()
+    realtimeEventSource = null
+  }
+  realtimeStatus.value = 'idle'
+}
+
+const scheduleRemoteReload = (id: string) => {
+  if (realtimeRefreshTimer) clearTimeout(realtimeRefreshTimer)
+  realtimeRefreshTimer = setTimeout(async () => {
+    realtimeRefreshTimer = null
+    const loaded = await loadProjectDB(id)
+    if (loaded) remoteUpdatePending.value = false
+  }, 450)
+}
+
+const handleRealtimeProjectChange = (rawPayload: string) => {
+  try {
+    const payload = JSON.parse(String(rawPayload || '{}')) as Record<string, any>
+    const changedProjectId = String(payload?.projectId || payload?.project_id || '').trim()
+    const activeRouteProjectId = String(route.params.id || '').trim()
+    if (!changedProjectId || !activeRouteProjectId || changedProjectId !== activeRouteProjectId) return
+
+    if (hasUnsavedChanges.value) {
+      remoteUpdatePending.value = true
+      return
+    }
+
+    scheduleRemoteReload(changedProjectId)
+  } catch {
+    // ignore malformed payloads
+  }
+}
+
+const openProjectRealtime = (id: string) => {
+  if (typeof window === 'undefined') return
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+  const projectId = String(id || '').trim()
+  if (!projectId) return
+
+  closeProjectRealtime()
+  realtimeStatus.value = 'connecting'
+
+  const params = new URLSearchParams({
+    id: projectId,
+    client_id: String(realtimeClientId.value || '')
+  })
+  const es = new EventSource(`/api/projects/realtime?${params.toString()}`)
+
+  es.onopen = () => {
+    realtimeStatus.value = 'connected'
+  }
+  es.onerror = () => {
+    realtimeStatus.value = 'error'
+  }
+  es.addEventListener('connected', () => {
+    realtimeStatus.value = 'connected'
+  })
+  es.addEventListener('project-change', (evt) => {
+    const data = (evt as MessageEvent).data
+    handleRealtimeProjectChange(typeof data === 'string' ? data : '')
+  })
+
+  realtimeEventSource = es
+}
+
+const applyRemoteUpdate = async () => {
+  const id = String(route.params.id || '').trim()
+  if (!id) return
+  const loaded = await loadProjectDB(id)
+  if (loaded) {
+    remoteUpdatePending.value = false
+  }
+}
 
 let pageLoadToken = 0
 watch(
@@ -28,16 +124,37 @@ watch(
     const loaded = await loadProjectDB(id)
     if (token !== pageLoadToken) return
     if (!loaded) {
+      closeProjectRealtime()
       console.error('Failed to load project')
       await navigateTo('/')
+      return
     }
+    openProjectRealtime(id)
   },
   { immediate: true }
 )
 
 // Cancel auto-save on unmount
 onUnmounted(() => {
+  if (visibilityHandler && typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', visibilityHandler)
+    visibilityHandler = null
+  }
+  closeProjectRealtime()
   cancelAutoSave()
+})
+
+onMounted(() => {
+  visibilityHandler = () => {
+    const id = String(route.params.id || '').trim()
+    if (!id) return
+    if (document.visibilityState === 'hidden') {
+      closeProjectRealtime()
+      return
+    }
+    openProjectRealtime(id)
+  }
+  document.addEventListener('visibilitychange', visibilityHandler)
 })
 
 const savedClock = computed(() => {
@@ -91,6 +208,15 @@ const saveColor = computed(() => {
   }
 })
 
+const realtimeBadgeColor = computed(() => {
+  switch (realtimeStatus.value) {
+    case 'connected': return 'text-emerald-400 border-emerald-500/30'
+    case 'connecting': return 'text-yellow-300 border-yellow-500/30'
+    case 'error': return 'text-red-300 border-red-500/30'
+    default: return 'text-zinc-500 border-white/10'
+  }
+})
+
 const openPageHistory = () => {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('editor:open-page-history'))
@@ -121,6 +247,17 @@ const openPageHistory = () => {
           <span>{{ saveText }}</span>
           <span v-if="saveSubtext" class="text-zinc-400">{{ saveSubtext }}</span>
         </div>
+        <span :class="['text-[10px] px-2 py-0.5 rounded-md border', realtimeBadgeColor]">
+          {{ realtimeStatus === 'connected' ? 'Realtime ON' : realtimeStatus === 'connecting' ? 'Realtime...' : realtimeStatus === 'error' ? 'Realtime OFF' : 'Realtime' }}
+        </span>
+        <button
+          v-if="remoteUpdatePending"
+          type="button"
+          class="text-[10px] px-2 py-0.5 rounded-md border border-amber-500/30 text-amber-300 hover:text-amber-200 hover:border-amber-400/40 hover:bg-amber-500/10 transition-colors"
+          @click="applyRemoteUpdate"
+        >
+          Atualização remota
+        </button>
         <button
           type="button"
           class="text-[10px] px-2 py-0.5 rounded-md border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 hover:bg-white/5 transition-colors"

@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import Button from './ui/Button.vue'
 import ConfirmDialog from './ui/ConfirmDialog.vue'
 import { Trash2, FolderOpen, Clock, X, Search, FileEdit } from 'lucide-vue-next'
-import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 const props = defineProps<{
   isOpen: boolean
@@ -18,6 +17,7 @@ const emit = defineEmits<{
 const projects = ref<any[]>([])
 const isLoading = ref(false)
 const searchQuery = ref('')
+const projectListViewportEl = ref<HTMLElement | null>(null)
 const showConfirmDialog = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const { getApiAuthHeaders } = useApiAuth()
@@ -29,7 +29,6 @@ const fetchProjects = async () => {
       const data = await $fetch('/api/projects', { headers });
       if (data) {
         projects.value = (Array.isArray(data) ? data : []).map((p: any) => {
-          if (p?.preview_url) p.preview_url = toWasabiProxyUrl(p.preview_url)
           if (p && typeof p === 'object') p._thumbError = false
           return p
         })
@@ -88,6 +87,35 @@ const hasUsableProjectPreview = (project: any): boolean => {
   return isUsableThumbnailUrl(project?.preview_url)
 }
 
+const filteredProjects = computed(() => {
+    if (!searchQuery.value) return projects.value
+    return projects.value.filter(p => p.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
+})
+
+const {
+  rootEl: progressiveProjectPreviewRootEl,
+  visibleIds: visibleProjectPreviewIds,
+  shouldShowPreview: shouldShowProjectPreview,
+  getPreviewSrc: getProjectPreviewSrc,
+  promotePreview: promoteProjectPreview,
+  setPreviewHost: setProjectPreviewHost,
+  refreshPreviewObserver: refreshProjectPreviewObserver
+} = useProgressivePreviewLoader<any>({
+  getItems: () => filteredProjects.value,
+  getId: (project: any) => String(project?.id || ''),
+  getSrc: (project: any) => hasUsableProjectPreview(project) ? String(project?.preview_url || '').trim() : '',
+  enabled: () => props.isOpen && !isLoading.value,
+  immediateCount: 6,
+  batchSize: 2,
+  rootMargin: '120px',
+  threshold: 0.1
+})
+
+watch(projectListViewportEl, (value) => {
+  progressiveProjectPreviewRootEl.value = value
+  void refreshProjectPreviewObserver()
+})
+
 const handleProjectThumbLoad = (project: any, event: Event) => {
   const img = event?.target as HTMLImageElement | null
   if (!img) return
@@ -125,11 +153,6 @@ const loadProject = (project: any) => {
   emit('load', project) // Emit full object to handle ID binding
   emit('close')
 }
-
-const filteredProjects = computed(() => {
-    if (!searchQuery.value) return projects.value
-    return projects.value.filter(p => p.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
-})
 
 onMounted(() => {
     fetchProjects()
@@ -177,7 +200,7 @@ onMounted(() => {
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+        <div ref="projectListViewportEl" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
           <div v-if="isLoading" class="flex flex-col items-center justify-center py-20 gap-3">
               <div class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
               <span class="text-sm text-muted-foreground font-medium">Carregando seus projetos...</span>
@@ -192,20 +215,24 @@ onMounted(() => {
           </div>
 
 	          <div 
-	              v-for="project in filteredProjects" 
+	              v-for="(project, projectIndex) in filteredProjects" 
 	              :key="project.id"
+                :ref="(el) => setProjectPreviewHost(project.id, el as Element | null)"
+                :data-preview-id="project.id"
 	              @click="loadProject(project)"
+                @mouseenter="promoteProjectPreview(project, projectIndex)"
 	              class="group flex items-center justify-between p-4 border border-border rounded-xl bg-card hover:bg-accent/5 hover:border-primary/30 transition-all cursor-pointer shadow-sm hover:shadow-md"
 	          >
 	              <div class="flex items-center gap-4">
                   <div class="w-12 h-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center group-hover:bg-primary/5 transition-colors">
                       <img
-                        v-if="hasUsableProjectPreview(project) && !project._thumbError"
-                        :src="project.preview_url"
+                        v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)"
+                        :src="getProjectPreviewSrc(project, projectIndex)"
                         class="w-full h-full object-cover"
                         :alt="project.name"
-                        loading="lazy"
+                        :loading="projectIndex < 6 ? 'eager' : 'lazy'"
                         decoding="async"
+                        :fetchpriority="projectIndex < 3 ? 'high' : (visibleProjectPreviewIds[String(project.id || '')] ? 'auto' : 'low')"
                         @load="handleProjectThumbLoad(project, $event)"
                         @error="project._thumbError = true"
                       />

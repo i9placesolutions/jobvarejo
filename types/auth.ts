@@ -18,6 +18,10 @@ export interface UserWithProfile {
   email: string
   name: string | null
   avatar_url: string | null
+  user_metadata?: {
+    name: string | null
+    avatar_url: string | null
+  }
   role: UserRole
 }
 

@@ -8,6 +8,8 @@ type FinalizeSerializedCanvasJsonOptions = {
   canvasFramesForDebug?: any[]
 }
 
+const SERIALIZED_IMAGE_PLACEHOLDER_PATTERN = /^data:image\//i
+
 const isZoneLikeObject = (obj: any): boolean => {
   return !!(
     obj &&
@@ -110,7 +112,9 @@ const restoreFramePropsAndFilterInvalid = (
 
   const framesInJson = json.objects.filter((o: any) => o?.isFrame)
   if (framesInJson.length > 0) {
-    console.log(`Saving ${framesInJson.length} frame(s)`)
+    if (import.meta.dev) {
+      console.log(`Saving ${framesInJson.length} frame(s)`)
+    }
   } else if (Array.isArray(canvasFramesForDebug) && canvasFramesForDebug.length > 0) {
     console.error(`Critical: ${canvasFramesForDebug.length} frame(s) in canvas but 0 in JSON after fixes`)
     console.error('Frames in canvas:', canvasFramesForDebug.map((f: any) => ({
@@ -124,13 +128,45 @@ const restoreFramePropsAndFilterInvalid = (
   return framesInJson.length
 }
 
+const walkSerializedCanvasObjects = (node: any, visitor: (obj: any) => void) => {
+  if (!node || typeof node !== 'object') return
+
+  const walk = (current: any) => {
+    if (!current || typeof current !== 'object') return
+    visitor(current)
+
+    if (Array.isArray(current.objects)) {
+      current.objects.forEach(walk)
+    }
+
+    const clipPath = current.clipPath
+    if (clipPath && typeof clipPath === 'object') {
+      walk(clipPath)
+    }
+  }
+
+  if (Array.isArray(node?.objects)) {
+    node.objects.forEach(walk)
+  } else {
+    walk(node)
+  }
+}
+
 const normalizePersistedImageUrls = (json: any, convertPresignedToPermanentUrl: (url: string) => string) => {
-  if (!json?.objects || !Array.isArray(json.objects)) return
-  json.objects.forEach((obj: any) => {
+  walkSerializedCanvasObjects(json, (obj) => {
     const objType = String(obj?.type || '').toLowerCase()
-    if (objType !== 'image' || !obj?.src) return
-    const permanentUrl = convertPresignedToPermanentUrl(obj.src)
-    if (permanentUrl !== obj.src) obj.src = permanentUrl
+    if (objType !== 'image') return
+
+    const currentSrc = String(obj?.src || '').trim()
+    const originalSrc = String(obj?.__originalSrc || '').trim()
+    if (currentSrc && originalSrc && SERIALIZED_IMAGE_PLACEHOLDER_PATTERN.test(currentSrc)) {
+      obj.src = originalSrc
+    }
+
+    const nextSrc = String(obj?.src || '').trim()
+    if (!nextSrc) return
+    const permanentUrl = convertPresignedToPermanentUrl(nextSrc)
+    if (permanentUrl !== nextSrc) obj.src = permanentUrl
   })
 }
 

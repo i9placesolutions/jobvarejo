@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useProject } from '~/composables/useProject'
 import Button from './ui/Button.vue'
 import { Plus, Copy, Trash2, Smartphone, Monitor, FileText, Instagram, ChevronUp, ChevronDown } from 'lucide-vue-next'
@@ -7,7 +7,20 @@ import { Plus, Copy, Trash2, Smartphone, Monitor, FileText, Instagram, ChevronUp
 const { project, activePage, switchPage, addPage, duplicatePage, deletePage } = useProject()
 
 const isExpanded = ref(true)
+const stripEl = ref<HTMLElement | null>(null)
 const pageThumbErrors = ref<Record<string, boolean>>({})
+const hydratedThumbIds = ref<Record<string, boolean>>({})
+const visibleThumbIds = ref<Record<string, boolean>>({})
+
+const PAGE_THUMB_IMMEDIATE_RADIUS = 1
+const PAGE_THUMB_HYDRATION_BATCH = 2
+
+const pageThumbHosts = new Map<string, Element>()
+const pendingThumbHydrationIds: string[] = []
+const pendingThumbHydrationSet = new Set<string>()
+let pageThumbObserver: IntersectionObserver | null = null
+let thumbHydrationTimer: ReturnType<typeof setTimeout> | null = null
+let thumbHydrationIdleId: number | null = null
 
 const isUsableThumbnailUrl = (url: unknown): boolean => {
     if (typeof url !== 'string') return false
@@ -20,16 +33,127 @@ const isUsableThumbnailUrl = (url: unknown): boolean => {
     return true
 }
 
-const getPageThumbSrc = (page: any): string => {
+const getRawPageThumbSrc = (page: any): string => {
     const inlineThumb = typeof page?.thumbnail === 'string' ? page.thumbnail.trim() : ''
     const storedThumb = typeof page?.thumbnailUrl === 'string' ? page.thumbnailUrl.trim() : ''
     return inlineThumb || storedThumb
 }
 
-const hasUsablePageThumbnail = (page: any): boolean => {
+const getPageId = (page: any): string => String(page?.id || '').trim()
+
+const canPageUseThumb = (page: any): boolean => {
     const id = String(page?.id || '')
     if (pageThumbErrors.value[id]) return false
-    return isUsableThumbnailUrl(getPageThumbSrc(page))
+    return isUsableThumbnailUrl(getRawPageThumbSrc(page))
+}
+
+const isPageThumbImmediate = (index: number): boolean => {
+    return Math.abs(Number(index) - Number(project.activePageIndex || 0)) <= PAGE_THUMB_IMMEDIATE_RADIUS
+}
+
+const markPageThumbHydrated = (pageId: string) => {
+    const id = String(pageId || '').trim()
+    if (!id) return
+    hydratedThumbIds.value[id] = true
+    pendingThumbHydrationSet.delete(id)
+    const queuedIndex = pendingThumbHydrationIds.indexOf(id)
+    if (queuedIndex >= 0) pendingThumbHydrationIds.splice(queuedIndex, 1)
+}
+
+const clearThumbHydrationSchedule = () => {
+    if (thumbHydrationTimer) {
+        clearTimeout(thumbHydrationTimer)
+        thumbHydrationTimer = null
+    }
+    if (thumbHydrationIdleId !== null && typeof window !== 'undefined') {
+        const cancelIdle = (window as any)?.cancelIdleCallback
+        if (typeof cancelIdle === 'function') {
+            cancelIdle(thumbHydrationIdleId)
+        }
+        thumbHydrationIdleId = null
+    }
+}
+
+const primeImmediatePageThumbs = () => {
+    (project.pages || []).forEach((page: any, index: number) => {
+        if (!isPageThumbImmediate(index)) return
+        if (!canPageUseThumb(page)) return
+        markPageThumbHydrated(getPageId(page))
+    })
+}
+
+const scheduleThumbHydrationPump = (delayMs = 180) => {
+    if (typeof window === 'undefined') return
+    if (!isExpanded.value) return
+    if (thumbHydrationTimer || thumbHydrationIdleId !== null) return
+
+    thumbHydrationTimer = setTimeout(() => {
+        thumbHydrationTimer = null
+
+        const run = () => {
+            thumbHydrationIdleId = null
+            if (!isExpanded.value) return
+
+            primeImmediatePageThumbs()
+
+            let processed = 0
+            while (processed < PAGE_THUMB_HYDRATION_BATCH && pendingThumbHydrationIds.length > 0) {
+                const nextId = pendingThumbHydrationIds.shift()
+                if (!nextId) continue
+                pendingThumbHydrationSet.delete(nextId)
+                if (hydratedThumbIds.value[nextId]) continue
+                hydratedThumbIds.value[nextId] = true
+                processed += 1
+            }
+
+            if (pendingThumbHydrationIds.length > 0) {
+                scheduleThumbHydrationPump(260)
+            }
+        }
+
+        const requestIdle = (window as any)?.requestIdleCallback
+        if (typeof requestIdle === 'function') {
+            thumbHydrationIdleId = requestIdle(() => run(), { timeout: 220 })
+            return
+        }
+        run()
+    }, Math.max(0, Number(delayMs) || 0))
+}
+
+const enqueuePageThumbHydration = (pageId: string, opts: { priority?: boolean } = {}) => {
+    const id = String(pageId || '').trim()
+    if (!id || hydratedThumbIds.value[id]) return
+
+    if (pendingThumbHydrationSet.has(id)) {
+        if (!opts.priority) return
+        const idx = pendingThumbHydrationIds.indexOf(id)
+        if (idx >= 0) pendingThumbHydrationIds.splice(idx, 1)
+        pendingThumbHydrationIds.unshift(id)
+        scheduleThumbHydrationPump(60)
+        return
+    }
+
+    pendingThumbHydrationSet.add(id)
+    if (opts.priority) pendingThumbHydrationIds.unshift(id)
+    else pendingThumbHydrationIds.push(id)
+    scheduleThumbHydrationPump(opts.priority ? 40 : 180)
+}
+
+const shouldShowPageThumb = (page: any, index: number): boolean => {
+    const id = getPageId(page)
+    if (!id) return false
+    if (!canPageUseThumb(page)) return false
+    return isPageThumbImmediate(index) || !!hydratedThumbIds.value[id]
+}
+
+const getPageThumbSrc = (page: any, index: number): string => {
+    return shouldShowPageThumb(page, index) ? getRawPageThumbSrc(page) : ''
+}
+
+const hasUsablePageThumbnail = (page: any, index: number): boolean => {
+    const id = getPageId(page)
+    if (pageThumbErrors.value[id]) return false
+    return isUsableThumbnailUrl(getPageThumbSrc(page, index))
 }
 
 const markPageThumbError = (page: any) => {
@@ -45,6 +169,121 @@ const getPageInitials = (page: any): string => {
     const initials = words.map((w: string) => (w[0] || '').toUpperCase()).join('')
     return initials || 'PG'
 }
+
+const setPageThumbHost = (pageId: string, el: Element | null) => {
+    const id = String(pageId || '').trim()
+    if (!id) return
+    if (el) {
+        pageThumbHosts.set(id, el)
+        if (pageThumbObserver && isExpanded.value) {
+            pageThumbObserver.observe(el)
+        }
+        return
+    }
+
+    const prev = pageThumbHosts.get(id)
+    if (prev && pageThumbObserver) {
+        pageThumbObserver.unobserve(prev)
+    }
+    pageThumbHosts.delete(id)
+}
+
+const promotePageThumb = (page: any, index: number) => {
+    const id = getPageId(page)
+    if (!id || !canPageUseThumb(page)) return
+    if (isPageThumbImmediate(index)) {
+        markPageThumbHydrated(id)
+        return
+    }
+    enqueuePageThumbHydration(id, { priority: true })
+}
+
+const refreshPageThumbObserver = async () => {
+    if (typeof window === 'undefined') return
+    if (pageThumbObserver) {
+        pageThumbObserver.disconnect()
+        pageThumbObserver = null
+    }
+    if (!isExpanded.value || !stripEl.value) return
+
+    await nextTick()
+    pageThumbObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            const el = entry.target as HTMLElement
+            const id = String(el?.dataset?.pageId || '').trim()
+            if (!id) return
+            visibleThumbIds.value[id] = entry.isIntersecting
+            if (entry.isIntersecting) {
+                enqueuePageThumbHydration(id)
+            }
+        })
+    }, {
+        root: stripEl.value,
+        rootMargin: '96px',
+        threshold: 0.35
+    })
+
+    pageThumbHosts.forEach((el) => {
+        pageThumbObserver?.observe(el)
+    })
+}
+
+const prunePageThumbState = () => {
+    const validIds = new Set((project.pages || []).map((page: any) => getPageId(page)).filter(Boolean))
+    for (const id of Object.keys(hydratedThumbIds.value)) {
+        if (!validIds.has(id)) delete hydratedThumbIds.value[id]
+    }
+    for (const id of Object.keys(visibleThumbIds.value)) {
+        if (!validIds.has(id)) delete visibleThumbIds.value[id]
+    }
+    for (const id of Object.keys(pageThumbErrors.value)) {
+        if (!validIds.has(id)) delete pageThumbErrors.value[id]
+    }
+    for (let i = pendingThumbHydrationIds.length - 1; i >= 0; i--) {
+        if (!validIds.has(pendingThumbHydrationIds[i] || '')) {
+            pendingThumbHydrationSet.delete(String(pendingThumbHydrationIds[i] || ''))
+            pendingThumbHydrationIds.splice(i, 1)
+        }
+    }
+}
+
+watch(
+    () => [project.activePageIndex, project.pages.length, isExpanded.value],
+    async () => {
+        prunePageThumbState()
+        primeImmediatePageThumbs()
+        await refreshPageThumbObserver()
+        scheduleThumbHydrationPump(220)
+    },
+    { immediate: true }
+)
+
+watch(
+    () => project.pages.map((page: any) => {
+        const inlineLen = typeof page?.thumbnail === 'string' ? page.thumbnail.length : 0
+        const storedLen = typeof page?.thumbnailUrl === 'string' ? page.thumbnailUrl.length : 0
+        return `${getPageId(page)}:${inlineLen}:${storedLen}`
+    }).join('|'),
+    () => {
+        prunePageThumbState()
+        primeImmediatePageThumbs()
+        scheduleThumbHydrationPump(160)
+    }
+)
+
+onMounted(() => {
+    primeImmediatePageThumbs()
+    void refreshPageThumbObserver()
+    scheduleThumbHydrationPump(200)
+})
+
+onBeforeUnmount(() => {
+    clearThumbHydrationSchedule()
+    if (pageThumbObserver) {
+        pageThumbObserver.disconnect()
+        pageThumbObserver = null
+    }
+})
 
 const createPage = (preset: string) => {
     switch(preset) {
@@ -85,12 +324,15 @@ const createPage = (preset: string) => {
       </div>
 
       <!-- Thumbnails Strip -->
-      <div v-show="isExpanded" class="flex-1 overflow-x-auto p-4 flex items-end gap-5 custom-scrollbar bg-white/5">
+      <div ref="stripEl" v-show="isExpanded" class="flex-1 overflow-x-auto p-4 flex items-end gap-5 custom-scrollbar bg-white/5">
           <div 
             v-for="(page, index) in project.pages" 
             :key="page.id"
             class="relative group pb-1"
+            :ref="(el) => setPageThumbHost(page.id, el as Element | null)"
+            :data-page-id="page.id"
             @click="switchPage(index)"
+            @mouseenter="promotePageThumb(page, index)"
           >
               <!-- Thumbnail Container -->
               <div 
@@ -106,9 +348,12 @@ const createPage = (preset: string) => {
               >
                   <!-- Image Preview -->
                   <img
-                    v-if="hasUsablePageThumbnail(page)"
-                    :src="getPageThumbSrc(page)"
+                    v-if="hasUsablePageThumbnail(page, index)"
+                    :src="getPageThumbSrc(page, index)"
                     class="w-full h-full object-contain"
+                    :loading="index === project.activePageIndex ? 'eager' : 'lazy'"
+                    decoding="async"
+                    :fetchpriority="index === project.activePageIndex ? 'high' : (visibleThumbIds[String(page.id || '')] ? 'auto' : 'low')"
                     @error="markPageThumbError(page)"
                   />
                   <div v-else class="w-full h-full flex flex-col items-center justify-center gap-1 bg-zinc-900">

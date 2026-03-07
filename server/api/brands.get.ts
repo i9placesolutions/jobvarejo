@@ -2,6 +2,7 @@ import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getS3Client } from "../utils/s3";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
+import { resolveStorageReadUrl } from "../utils/project-storage-refs";
 
 /**
  * API Route para listar marcas/logos da Wasabi Storage
@@ -15,7 +16,6 @@ export default defineEventHandler(async (event) => {
     enforceRateLimit(event, `brands-list:${user.id}`, 120, 60_000)
     const config = useRuntimeConfig();
     const bucketName = config.wasabiBucket;
-    const toProxyUrl = (key: string) => `/api/storage/p?key=${encodeURIComponent(key)}`;
 
     if (!bucketName) {
         throw createError({
@@ -37,18 +37,18 @@ export default defineEventHandler(async (event) => {
         const contents = response.Contents || [];
 
         // Map S3 objects to our asset format with proxy URLs
-        const brands = contents
+        const brands = await Promise.all(contents
             .filter(item => item.Key && !item.Key.endsWith('/')) // Filter out folders
-            .map((item, index) => {
+            .map(async (item, index) => {
                 const fileName = item.Key!.replace(/^logo\//, '');
 
                 return {
                     id: item.ETag || `brand-${index}`,
-                    url: toProxyUrl(item.Key!),
+                    url: await resolveStorageReadUrl(item.Key!, user.id),
                     name: fileName,
                     lastModified: item.LastModified
                 };
-            });
+            }));
 
         // Sort by name alphabetically
         brands.sort((a, b) => a.name.localeCompare(b.name));

@@ -6,6 +6,7 @@ import { enforceRateLimit } from "../utils/rate-limit";
 import { saveProductImageCache } from "../utils/product-image-cache";
 import { buildProductIdentityKey, upsertProductImageRegistry } from "../utils/product-image-registry";
 import { normalizeSearchTerm as normalizeSharedSearchTerm } from "../utils/product-image-matching";
+import { resolveStorageReadUrl } from "../utils/project-storage-refs";
 
 const UNIT_MAP: Record<string, string> = {
     mililitros: 'ml', mililitro: 'ml', mls: 'ml',
@@ -141,8 +142,8 @@ export default defineEventHandler(async (event) => {
         if (abortSignal) await s3.send(putCommand, { abortSignal });
         else await s3.send(putCommand);
 
-        const publicUrl = getPublicUrl(key);
-        const proxyUrl = `/api/storage/p?key=${encodeURIComponent(key)}`;
+        const canonicalUrl = getPublicUrl(key);
+        const readUrl = await resolveStorageReadUrl(key, user.id);
 
         // Salvar no cache do banco (fire-and-forget — não bloqueia resposta)
         void saveProductImageCache({
@@ -151,7 +152,7 @@ export default defineEventHandler(async (event) => {
             brand: brand || undefined,
             flavor: flavor || undefined,
             weight: weight || undefined,
-            imageUrl: publicUrl,
+            imageUrl: canonicalUrl,
             s3Key: key,
             source: 'manual',
             userId: user.id
@@ -175,8 +176,9 @@ export default defineEventHandler(async (event) => {
 
         return {
             source: 'manual',
-            url: proxyUrl,
-            publicUrl: publicUrl,
+            url: readUrl || canonicalUrl,
+            publicUrl: readUrl || canonicalUrl,
+            canonicalUrl,
             key: key
         };
 

@@ -1,3 +1,5 @@
+import { blobFromDataLikeUrl } from './browserBlob'
+
 export type ExportImageFormat = 'png' | 'jpg'
 export type ExportQualityPreset = 'print-300' | 'ultra-600'
 
@@ -102,11 +104,7 @@ export const buildMultiplierLadder = (start: number): number[] => {
 }
 
 const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
-  const response = await fetch(dataUrl)
-  if (!response.ok) {
-    throw new Error(`Falha ao converter data URL para blob (status ${response.status})`)
-  }
-  const blob = await response.blob()
+  const blob = await blobFromDataLikeUrl(dataUrl)
   if (!blob || blob.size <= 0) {
     throw new Error('Blob de exportação vazio')
   }

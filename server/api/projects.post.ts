@@ -1,5 +1,10 @@
 import { requireAuthenticatedUser } from '../utils/auth'
 import { parseAndStringifyJsonbParam } from '../utils/jsonb'
+import {
+  normalizeProjectCanvasDataStorageRefs,
+  normalizeStoredStorageRef
+} from '../utils/project-storage-refs'
+import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull, pgQuery } from '../utils/postgres'
 
@@ -35,7 +40,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'canvas_data cannot be empty' })
   }
   ensureCanvasDataNotEmpty(payload.canvas_data)
-  const canvasDataJson = parseAndStringifyJsonbParam(payload.canvas_data, 'canvas_data')
+  const normalizedCanvasData = normalizeProjectCanvasDataStorageRefs(payload.canvas_data)
+  const canvasDataJson = parseAndStringifyJsonbParam(normalizedCanvasData, 'canvas_data')
 
   const projectId = String(payload.id || '').trim()
   if (projectId && !isUuid(projectId)) {
@@ -48,7 +54,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Project name too long (max 120 chars)' })
   }
 
-  const previewUrl = payload.preview_url == null ? null : String(payload.preview_url).trim()
+  const previewUrl = normalizeStoredStorageRef(payload.preview_url)
   if (previewUrl && previewUrl.length > 2048) {
     throw createError({ statusCode: 400, statusMessage: 'preview_url too long' })
   }
@@ -65,7 +71,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const updatedAt = new Date().toISOString()
+  const actorClientId = String(getHeader(event, 'x-client-id') || '').trim() || null
   let result: any = null
+  let didPersistMutation = false
 
   try {
     if (projectId) {
@@ -78,11 +86,29 @@ export default defineEventHandler(async (event) => {
              updated_at = $5
          where id = $6
            and user_id = $7
+           and (
+             name is distinct from $1
+             or canvas_data is distinct from $2::jsonb
+             or preview_url is distinct from $3
+           )
          returning *`,
         [name, canvasDataJson, previewUrl, user.id, updatedAt, projectId, user.id]
       )
 
-      if (!result) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+      if (!result) {
+        const existing = await pgOneOrNull<any>(
+          `select *
+             from public.projects
+            where id = $1
+              and user_id = $2
+            limit 1`,
+          [projectId, user.id]
+        )
+        if (!existing) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+        result = existing
+      } else {
+        didPersistMutation = true
+      }
     } else {
       const { rows } = await pgQuery<any>(
         `insert into public.projects
@@ -93,6 +119,7 @@ export default defineEventHandler(async (event) => {
         [name, canvasDataJson, previewUrl, user.id, updatedAt, folderId, lastViewed]
       )
       result = rows[0] || null
+      didPersistMutation = !!result
     }
   } catch (error: any) {
     if (error?.statusCode) throw error
@@ -105,6 +132,20 @@ export default defineEventHandler(async (event) => {
       constraint: error?.constraint || null
     })
     throw createError({ statusCode: 500, statusMessage: message })
+  }
+
+  if (result?.id && didPersistMutation) {
+    try {
+      await publishProjectChange({
+        projectId: String(result.id),
+        userId: user.id,
+        action: projectId ? 'updated' : 'created',
+        updatedAt: String(result.updated_at || updatedAt),
+        actorClientId
+      })
+    } catch (notifyErr) {
+      console.warn('[api/projects:post] Failed to publish realtime notification:', notifyErr)
+    }
   }
 
   return { success: true, project: result }

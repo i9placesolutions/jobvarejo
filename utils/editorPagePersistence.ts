@@ -11,7 +11,7 @@ type PersistSerializedPageStateOptions = {
   updatePageData: (
     index: number,
     json: any,
-    opts: { source: SaveSource; markUnsaved: boolean; skipIfSameFingerprint: boolean }
+    opts: { source: SaveSource; markUnsaved: boolean; skipIfSameFingerprint: boolean; reason?: string }
   ) => boolean
   shouldSkipAutoSave: (source: SaveSource, reason: string) => boolean
   triggerAutoSave: () => void
@@ -35,7 +35,8 @@ export const persistSerializedPageState = (
   const didUpdate = opts.updatePageData(targetPageIndex, opts.json, {
     source: opts.source,
     markUnsaved: opts.source === 'user',
-    skipIfSameFingerprint: true
+    skipIfSameFingerprint: true,
+    reason: opts.reason
   })
   if (!didUpdate) {
     return { didUpdate: false, targetPageIndex, targetPage: opts.pages[targetPageIndex] || null }

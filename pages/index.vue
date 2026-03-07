@@ -3,7 +3,6 @@ import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, F
 	import FolderTreeItem from '~/components/FolderTreeItem.vue'
 	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
 	import FilterDropdown from '~/components/ui/FilterDropdown.vue'
-	import { toWasabiProxyUrl } from '~/utils/storageProxy'
 import type { Folder as FolderModel } from '~/types/folder'
 
 // Page config - middleware handles auth check
@@ -104,6 +103,7 @@ const closeFloatingOverlays = () => {
 
 // Close menus when clicking outside - only on client
 const folderMenuRef = ref<HTMLElement | null>(null)
+const projectGridViewportEl = ref<HTMLElement | null>(null)
 const handleContextMenusOutsideClick = (e: Event) => {
   const target = e.target as HTMLElement | null
   if (showFolderMenu.value && !target?.closest?.('.folder-context-menu')) {
@@ -146,7 +146,6 @@ const loadData = async () => {
       headers
     })
     projects.value = (Array.isArray(projectsData) ? projectsData : []).map((p: any) => {
-      if (p?.preview_url) p.preview_url = toWasabiProxyUrl(p.preview_url)
       // reset image error state if we previously failed with a non-proxied URL
       if (p && typeof p === 'object') p._thumbError = false
       return p
@@ -1316,6 +1315,36 @@ const hasUsableProjectPreview = (project: any): boolean => {
   return isUsableThumbnailUrl(project?.preview_url)
 }
 
+const {
+  rootEl: progressiveProjectPreviewRootEl,
+  visibleIds: visibleProjectPreviewIds,
+  shouldShowPreview: shouldShowProjectPreview,
+  getPreviewSrc: getProjectPreviewSrc,
+  promotePreview: promoteProjectPreview,
+  setPreviewHost: setProjectPreviewHost,
+  refreshPreviewObserver: refreshProjectPreviewObserver
+} = useProgressivePreviewLoader<any>({
+  getItems: () => filteredProjects.value,
+  getId: (project: any) => String(project?.id || ''),
+  getSrc: (project: any) => hasUsableProjectPreview(project) ? String(project?.preview_url || '').trim() : '',
+  enabled: () => !isLoadingProjects.value,
+  immediateCount: () => viewMode.value === 'list' ? 2 : 4,
+  batchSize: () => viewMode.value === 'list' ? 1 : 2,
+  rootMargin: () => viewMode.value === 'list' ? '32px' : '72px',
+  threshold: () => viewMode.value === 'list' ? 0.4 : 0.28,
+  hydrateVisibleOnly: true,
+  maxVisibleHydrated: () => viewMode.value === 'list' ? 2 : 4
+})
+
+watch(projectGridViewportEl, (value) => {
+  progressiveProjectPreviewRootEl.value = value
+  void refreshProjectPreviewObserver()
+})
+
+const isProjectPreviewDeferred = (project: any, index: number): boolean => {
+  return hasUsableProjectPreview(project) && !project._thumbError && !shouldShowProjectPreview(project, index)
+}
+
 const handleProjectThumbLoad = (project: any, event: Event) => {
   const img = event?.target as HTMLImageElement | null
   if (!img) return
@@ -1694,7 +1723,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </div>
 
         <!-- Projects Grid/List -->
-        <div class="flex-1 overflow-y-auto px-6 pb-6">
+        <div ref="projectGridViewportEl" class="flex-1 overflow-y-auto px-6 pb-6">
           <!-- Loading State -->
           <div v-if="isLoadingProjects" class="flex items-center justify-center h-full">
             <div class="animate-spin w-8 h-8 border-3 border-violet-500 border-t-transparent rounded-full"></div>
@@ -1747,27 +1776,31 @@ const handleDropOnRoot = async (event: DragEvent) => {
               :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-1'"
             >
               <div
-                v-for="project in filteredProjects"
+                v-for="(project, projectIndex) in filteredProjects"
                 :key="project.id"
+                :ref="(el) => setProjectPreviewHost(project.id, el as Element | null)"
+                :data-preview-id="project.id"
                 class="project-card-shell group relative bg-[#171727] border border-white/12 hover:border-white/20 overflow-hidden transition-[border-color] duration-200 cursor-pointer rounded-xl motion-reduce:transition-none"
                 draggable="true"
                 @mousedown="handleProjectPointerDown(project.id, $event)"
                 @dragstart="handleDragStart(project.id, $event)"
                 @dragend="handleDragEnd"
                 @click="handleProjectCardClick(project.id, $event)"
+                @mouseenter="promoteProjectPreview(project, projectIndex)"
               >
                 <!-- Thumbnail (Rounded Top) -->
                 <div
                   class="aspect-video bg-linear-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
                 >
-                  <div v-if="hasUsableProjectPreview(project) && !project._thumbError" class="absolute inset-0 p-2 flex items-center justify-center">
+                  <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 p-2 flex items-center justify-center">
                     <img
-                      :src="project.preview_url"
+                      :src="getProjectPreviewSrc(project, projectIndex)"
                       class="project-thumb-media max-w-full max-h-full object-contain rounded-lg"
                       :alt="project.name"
                       draggable="false"
-                      loading="lazy"
+                      :loading="projectIndex < (viewMode === 'list' ? 2 : 8) ? 'eager' : 'lazy'"
                       decoding="async"
+                      :fetchpriority="projectIndex < (viewMode === 'list' ? 1 : 4) ? 'high' : (visibleProjectPreviewIds[String(project.id || '')] ? 'auto' : 'low')"
                       @dragstart.prevent
                       @load="handleProjectThumbLoad(project, $event)"
                       @error="project._thumbError = true"
@@ -1779,7 +1812,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
                       :style="getProjectThumbStyle(project)"
                     >
                       <div class="absolute inset-0 opacity-20 pointer-events-none" style="background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35) 0%, transparent 38%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.22) 0%, transparent 42%);"></div>
-                      <div class="relative z-[1] text-[10px] font-medium uppercase tracking-[0.14em] text-white/75">Sem preview</div>
+                      <div class="relative z-[1] text-[10px] font-medium uppercase tracking-[0.14em] text-white/75">
+                        {{ isProjectPreviewDeferred(project, projectIndex) ? 'Preview' : 'Sem preview' }}
+                      </div>
                       <div class="relative z-[1] text-white font-bold text-2xl leading-none">{{ getProjectInitials(project) }}</div>
                       <div class="relative z-[1] text-[10px] text-white/85 truncate">{{ project.name || 'Projeto sem nome' }}</div>
                     </div>

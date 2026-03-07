@@ -6,7 +6,7 @@ import CanvasRulers from './ui/CanvasRulers.vue'
 import { useFigmaCrop } from '~/composables/useFigmaCrop'
 import { useProductZone } from '~/composables/useProductZone'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
-import { toWasabiProxyUrl } from '~/utils/storageProxy'
+import { toWasabiDirectUrl, toWasabiProxyUrl } from '~/utils/storageProxy'
 import { finalizeSerializedCanvasJson } from '~/utils/editorCanvasSerialize'
 import { prepareCanvasForSerialization } from '~/utils/editorCanvasPreSerialize'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -38,10 +38,14 @@ import {
     type ExportQualityPreset
 } from '~/utils/editorExportPipeline'
 import {
-    fastHashString,
+    computeCanvasFingerprint,
     getSavedViewportTransform,
     setSavedViewportTransform
 } from '~/utils/editorCanvasState'
+import {
+    CANVAS_IMAGE_PLACEHOLDER_DATA_URL as PLACEHOLDER_IMAGE_DATA_URL,
+    normalizeCanvasAssetUrls
+} from '~/utils/canvasAssetUrls'
 import {
     canGenerateThumbnailNow,
     canAllowEmptyOverwrite,
@@ -1257,19 +1261,95 @@ const normalizeFrameRuntimeProps = (obj: any) => {
     return obj;
 };
 
+let cachedFrameObjects: any[] | null = null;
+let cachedFrameById: Map<string, any> | null = null;
+let cachedFrameDirectChildrenById: Map<string, any[]> | null = null;
+let cachedFrameDescendantsById: Map<string, any[]> | null = null;
+
+const invalidateFrameRuntimeCache = () => {
+    cachedFrameObjects = null;
+    cachedFrameById = null;
+    cachedFrameDirectChildrenById = null;
+    cachedFrameDescendantsById = null;
+};
+
+const ensureFrameRuntimeCache = () => {
+    if (!canvas.value) {
+        cachedFrameObjects = [];
+        cachedFrameById = new Map<string, any>();
+        cachedFrameDirectChildrenById = new Map<string, any[]>();
+        cachedFrameDescendantsById = new Map<string, any[]>();
+        return;
+    }
+    if (cachedFrameObjects && cachedFrameById && cachedFrameDirectChildrenById && cachedFrameDescendantsById) {
+        return;
+    }
+
+    const allObjects = canvas.value.getObjects();
+    const frames: any[] = [];
+    const frameById = new Map<string, any>();
+    const directChildrenById = new Map<string, any[]>();
+
+    allObjects.forEach((obj: any) => {
+        const normalized = normalizeFrameRuntimeProps(obj);
+        if (!normalized) return;
+        const id = String(normalized._customId || normalized.id || '').trim();
+        if (!id) return;
+        frames.push(normalized);
+        frameById.set(id, normalized);
+        directChildrenById.set(id, []);
+    });
+
+    allObjects.forEach((obj: any) => {
+        const parentFrameId = String(obj?.parentFrameId || '').trim();
+        if (!parentFrameId || !frameById.has(parentFrameId)) return;
+        const list = directChildrenById.get(parentFrameId);
+        if (list) list.push(obj);
+    });
+
+    const descendantsById = new Map<string, any[]>();
+    const resolveDescendants = (frameId: string, trail: Set<string>): any[] => {
+        if (descendantsById.has(frameId)) return descendantsById.get(frameId) || [];
+        if (trail.has(frameId)) return [];
+
+        trail.add(frameId);
+        const directChildren = directChildrenById.get(frameId) || [];
+        const descendants: any[] = [...directChildren];
+
+        directChildren.forEach((child: any) => {
+            const childFrameId = String(child?._customId || '').trim();
+            if (!child?.isFrame || !childFrameId) return;
+            const nested = resolveDescendants(childFrameId, trail);
+            if (nested.length) descendants.push(...nested);
+        });
+
+        trail.delete(frameId);
+        descendantsById.set(frameId, descendants);
+        return descendants;
+    };
+
+    frames.forEach((frame: any) => {
+        const id = String(frame?._customId || frame?.id || '').trim();
+        if (!id) return;
+        resolveDescendants(id, new Set<string>());
+    });
+
+    cachedFrameObjects = frames;
+    cachedFrameById = frameById;
+    cachedFrameDirectChildrenById = directChildrenById;
+    cachedFrameDescendantsById = descendantsById;
+};
+
 const getFrameById = (id: string) => {
     if (!canvas.value || !id) return null;
-    return getAllFrames().find((o: any) => String(o?._customId || o?.id || '') === String(id)) || null;
+    ensureFrameRuntimeCache();
+    return cachedFrameById?.get(String(id).trim()) || null;
 };
 
 const getAllFrames = () => {
     if (!canvas.value) return [];
-    const frames: any[] = [];
-    canvas.value.getObjects().forEach((obj: any) => {
-        const normalized = normalizeFrameRuntimeProps(obj);
-        if (normalized) frames.push(normalized);
-    });
-    return frames;
+    ensureFrameRuntimeCache();
+    return cachedFrameObjects || [];
 };
 
 const getOrCreateFrameClipRect = (frame: any) => {
@@ -1602,41 +1682,52 @@ const syncObjectFrameClip = (obj: any) => {
     obj.setCoords();
 };
 
-const syncFrameClips = (frame: any) => {
+const syncFrameClips = (
+    frame: any,
+    opts: { includeSpatialChildren?: boolean; requestRender?: boolean } = {}
+) => {
     if (!canvas.value || !frame?._customId) return;
     getOrCreateFrameClipRect(frame);
 
-    // Get ALL children that are inside the frame bounds, not just those with parentFrameId set
-    const allObjects = canvas.value.getObjects().filter((o: any) => o !== frame && !o.isFrame);
-    const frameBounds = frame.getBoundingRect ? frame.getBoundingRect() : null;
+    const includeSpatialChildren = opts.includeSpatialChildren !== false;
+    const requestRender = opts.requestRender !== false;
+    const frameId = String(frame._customId || '').trim();
+    let didMutateFrameLinks = false;
+    let children: any[] = [];
 
-    const children = allObjects.filter((o: any) => {
-        // First check explicit parentFrameId
-        if (o.parentFrameId === frame._customId) return true;
+    if (!includeSpatialChildren) {
+        ensureFrameRuntimeCache();
+        const directChildren = cachedFrameDirectChildrenById?.get(frameId) || [];
+        children = directChildren.filter((child: any) => child && child !== frame && !child.isFrame);
+    } else {
+        // Full scan path is kept for structural moments (load/drop) where we may need to
+        // auto-bind unparented objects that ended up physically inside the frame.
+        const allObjects = canvas.value.getObjects().filter((o: any) => o !== frame && !o.isFrame);
+        const frameBounds = frame.getBoundingRect ? frame.getBoundingRect() : null;
 
-        // ISOLAMENTO: Se o objeto já pertence a OUTRO frame, NÃO roubar
-        if (o.parentFrameId && o.parentFrameId !== frame._customId) return false;
+        children = allObjects.filter((o: any) => {
+            if (o.parentFrameId === frame._customId) return true;
+            if (o.parentFrameId && o.parentFrameId !== frame._customId) return false;
 
-        // Then check if object is physically inside the frame
-        if (frameBounds && typeof o.getBoundingRect === 'function') {
-            const objBounds = o.getBoundingRect();
-            // Check if object center is within frame bounds
-            const objCenterX = objBounds.left + objBounds.width / 2;
-            const objCenterY = objBounds.top + objBounds.height / 2;
-            const insideX = objCenterX >= frameBounds.left && objCenterX <= frameBounds.left + frameBounds.width;
-            const insideY = objCenterY >= frameBounds.top && objCenterY <= frameBounds.top + frameBounds.height;
+            if (frameBounds && typeof o.getBoundingRect === 'function') {
+                const objBounds = o.getBoundingRect();
+                const objCenterX = objBounds.left + objBounds.width / 2;
+                const objCenterY = objBounds.top + objBounds.height / 2;
+                const insideX = objCenterX >= frameBounds.left && objCenterX <= frameBounds.left + frameBounds.width;
+                const insideY = objCenterY >= frameBounds.top && objCenterY <= frameBounds.top + frameBounds.height;
 
-            if (insideX && insideY) {
-                // Auto-assign parentFrameId if not set
-                if (!o.parentFrameId) {
-                    o.parentFrameId = frame._customId;
+                if (insideX && insideY) {
+                    if (!o.parentFrameId) {
+                        o.parentFrameId = frame._customId;
+                        didMutateFrameLinks = true;
+                    }
+                    return true;
                 }
-                return true;
             }
-        }
 
-        return false;
-    });
+            return false;
+        });
+    }
 
     let hasChanges = false;
     children.forEach((child: any) => {
@@ -1645,8 +1736,11 @@ const syncFrameClips = (frame: any) => {
         if (child.clipPath !== beforeClip) hasChanges = true;
     });
 
-    // CRITICAL: Force re-render after clipPath changes
-    if (hasChanges) {
+    if (didMutateFrameLinks) {
+        invalidateFrameRuntimeCache();
+    }
+
+    if (requestRender && hasChanges) {
         canvas.value.requestRenderAll();
     }
 };
@@ -1669,36 +1763,20 @@ const maybeReparentToFrameOnDrop = (obj: any) => {
     if (!frame || !frame._customId) {
         if ((obj as any).parentFrameId) {
             (obj as any).parentFrameId = undefined;
+            invalidateFrameRuntimeCache();
         }
         return;
     }
     if ((obj as any).parentFrameId !== frame._customId) {
         (obj as any).parentFrameId = frame._customId;
+        invalidateFrameRuntimeCache();
     }
 };
 
 const getFrameDescendants = (frame: any) => {
     if (!canvas.value || !frame?._customId) return [];
-    const frameId = frame._customId;
-    const objs = canvas.value.getObjects();
-
-    const frameById = new Map<string, any>();
-    objs.forEach((o: any) => {
-        if (o?.isFrame && o._customId) frameById.set(o._customId, o);
-    });
-
-    const isDescendant = (obj: any) => {
-        let id = obj?.parentFrameId as (string | undefined);
-        let guard = 0;
-        while (id && guard++ < 20) {
-            if (id === frameId) return true;
-            const parent = frameById.get(id);
-            id = parent?.parentFrameId;
-        }
-        return false;
-    };
-
-    return objs.filter((o: any) => o !== frame && isDescendant(o));
+    ensureFrameRuntimeCache();
+    return cachedFrameDescendantsById?.get(String(frame._customId).trim()) || [];
 };
 
 const isObjectCenterInsideFrame = (obj: any, frame: any) => {
@@ -4507,6 +4585,8 @@ const {
   triggerAutoSave,
   cancelAutoSave,
   flushAutoSave,
+  ensurePageCanvasDataLoaded,
+  scheduleCanvasDataPrefetch,
   isSaving,
   saveStatus,
   lastSavedAt,
@@ -5179,6 +5259,77 @@ const scheduleIdleWork = (work: () => void, timeoutMs = 2200) => {
     window.setTimeout(work, Math.min(1200, timeoutMs));
 }
 
+const getPreparedCanvasDataCacheKey = (page: any): string | null => {
+    const path = String(page?.canvasDataPath || '').trim()
+    if (path) return `path:${path}`
+
+    const pageId = String(page?.id || '').trim()
+    if (!pageId) return null
+
+    const projectId = String(project.id || '').trim()
+    if (projectId) return `project:${projectId}:page:${pageId}`
+    return `page:${pageId}`
+}
+
+let preparedCanvasPrewarmRunId = 0
+
+const schedulePreparedCanvasDataPrewarm = (activePageId?: string | null) => {
+    if (typeof window === 'undefined' || isCanvasDestroyed.value) return
+
+    const runId = ++preparedCanvasPrewarmRunId
+    const normalizedActivePageId = String(activePageId || '').trim()
+    const pagesToPrewarm = (Array.isArray(project.pages) ? project.pages : [])
+        .filter((page: any) => {
+            if (!page?.canvasData || typeof page.canvasData !== 'object') return false
+            const pageId = String(page?.id || '').trim()
+            return !!pageId && pageId !== normalizedActivePageId
+        })
+        .map((page: any) => ({
+            canvasData: page.canvasData,
+            cacheKey: getPreparedCanvasDataCacheKey(page)
+        }))
+
+    if (!pagesToPrewarm.length) return
+
+    let index = 0
+    const pump = () => {
+        if (runId !== preparedCanvasPrewarmRunId || isCanvasDestroyed.value) return
+        const next = pagesToPrewarm[index++]
+        if (!next) return
+
+        try {
+            prepareCanvasDataForLoad(next.canvasData, {
+                cacheKey: next.cacheKey,
+                silent: true
+            })
+        } catch (err) {
+            console.warn('[load-prepare] Falha ao preaquecer cache de página inativa:', err)
+        }
+
+        if (index < pagesToPrewarm.length) {
+            scheduleIdleWork(pump, 1800)
+        }
+    }
+
+    scheduleIdleWork(pump, 1400)
+}
+
+const getLegacyProductCardImageRepairMode = (
+    entry: PreparedCanvasLoadCacheEntry | null | undefined
+): 'auto' | 'force' | 'skip' => {
+    const stats = entry?.legacyProductCardImageRepair
+    if (!stats) return 'auto'
+    return stats.needsPostLoadRepair ? 'force' : 'skip'
+}
+
+const syncPreparedCanvasStateToPage = (page: any, preparedCanvasData: any) => {
+    if (!page || !preparedCanvasData || typeof preparedCanvasData !== 'object') return
+    page.canvasData = preparedCanvasData
+    const fingerprint = computeCanvasFingerprint(preparedCanvasData)
+    page.lastLoadedFingerprint = fingerprint
+    page.lastSavedFingerprint = fingerprint
+};
+
 const pageSettings = ref({
     backgroundColor: '#1e1e1e' // Match default dark workspace
 })
@@ -5190,8 +5341,70 @@ let frameLabelUpdatePending = false;
 let frameLabelUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 let lastFrameLabelUpdateAt = 0;
 let lastKnownFrameLabelCount = 0;
+let frameLabelsDirty = true;
+let lastFrameLabelViewportSignature = '';
+let lastFrameLabelSelectionSignature = '';
+const serializeFrameLabelMetric = (value: any) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '0';
+    return numeric.toFixed(3);
+};
+const markFrameLabelsDirty = () => {
+    frameLabelsDirty = true;
+};
+const captureFrameLabelViewportSignature = () => {
+    if (!canvas.value) return 'canvas:none';
+    const vpt = canvas.value.viewportTransform || [1, 0, 0, 1, 0, 0];
+    const width = Number(canvas.value.getWidth?.() || canvas.value.width || 0);
+    const height = Number(canvas.value.getHeight?.() || canvas.value.height || 0);
+    const zoom = Number(canvas.value.getZoom?.() || 1);
+    return [
+        serializeFrameLabelMetric(vpt[0]),
+        serializeFrameLabelMetric(vpt[1]),
+        serializeFrameLabelMetric(vpt[2]),
+        serializeFrameLabelMetric(vpt[3]),
+        serializeFrameLabelMetric(vpt[4]),
+        serializeFrameLabelMetric(vpt[5]),
+        serializeFrameLabelMetric(zoom),
+        String(width),
+        String(height)
+    ].join('|');
+};
+const captureFrameLabelSelectionSignature = () => {
+    if (!canvas.value || typeof canvas.value.getActiveObject !== 'function') return 'selection:none';
+    const active = canvas.value.getActiveObject();
+    if (!active) return 'selection:none';
+    if (active.type === 'activeSelection' && typeof active.getObjects === 'function') {
+        const ids = (active.getObjects() || [])
+            .map((entry: any) => String(entry?._customId || entry?.id || ''))
+            .filter(Boolean)
+            .sort();
+        return ids.length ? `selection:multi:${ids.join(',')}` : 'selection:multi:none';
+    }
+    const id = String(active?._customId || active?.id || '');
+    return `selection:${String(active?.type || 'unknown')}:${id}:${active?.isFrame ? 'frame' : 'object'}`;
+};
+const shouldScheduleFrameLabelUpdate = () => {
+    if (frameLabelsDirty) return true;
+    return (
+        captureFrameLabelViewportSignature() !== lastFrameLabelViewportSignature ||
+        captureFrameLabelSelectionSignature() !== lastFrameLabelSelectionSignature
+    );
+};
+const commitFrameLabelLayoutState = () => {
+    lastFrameLabelViewportSignature = captureFrameLabelViewportSignature();
+    lastFrameLabelSelectionSignature = captureFrameLabelSelectionSignature();
+    frameLabelsDirty = false;
+};
+const resetFrameLabelLayoutState = () => {
+    frameLabelsDirty = true;
+    lastFrameLabelViewportSignature = '';
+    lastFrameLabelSelectionSignature = '';
+};
 const getFrameLabelUpdateIntervalMs = () => {
     const count = lastKnownFrameLabelCount;
+    if (count > 520) return 420;
+    if (count > 320) return 320;
     if (count > 240) return 280;
     if (count > 120) return 180;
     if (count > 60) return 120;
@@ -5199,6 +5412,7 @@ const getFrameLabelUpdateIntervalMs = () => {
 };
 const throttledUpdateFrameLabels = () => {
     if (frameLabelUpdatePending) return;
+    if (!shouldScheduleFrameLabelUpdate()) return;
 
     const run = () => {
         if (frameLabelUpdatePending) return;
@@ -5228,23 +5442,32 @@ const throttledUpdateFrameLabels = () => {
 const updateFrameLabels = () => {
     if (!canvas.value || !wrapperEl.value || isCanvasDestroyed.value) {
         frameLabels.value = [];
+        resetFrameLabelLayoutState();
         return;
     }
     const frames = getAllFrames();
     lastKnownFrameLabelCount = frames.length;
     if (!frames.length) {
         frameLabels.value = [];
+        commitFrameLabelLayoutState();
         return;
     }
     const zoomVal = Number(canvas.value.getZoom?.() || 1);
     // Performance guard: with many frames and zoomed far out, labels become unreadable and expensive.
     if (frames.length > 180 && zoomVal < 0.35) {
         frameLabels.value = [];
+        commitFrameLabelLayoutState();
         return;
     }
     const vpt = canvas.value.viewportTransform;
-    if (!vpt) { frameLabels.value = []; return; }
+    if (!vpt) {
+        frameLabels.value = [];
+        resetFrameLabelLayoutState();
+        return;
+    }
     const activeObj = canvas.value.getActiveObject();
+    const viewportBounds = getViewportBounds();
+    const worldMargin = Math.max(48, 140 / Math.max(zoomVal, 0.01));
     const fmt = (n: number) => {
         if (!Number.isFinite(n)) return '0';
         const rounded = Math.round(n);
@@ -5258,6 +5481,18 @@ const updateFrameLabels = () => {
             const bounds = typeof frame.getBoundingRect === 'function'
                 ? frame.getBoundingRect(true, true)
                 : frame.getBoundingRect();
+            if (viewportBounds) {
+                const boundsRight = Number(bounds?.left || 0) + Number(bounds?.width || 0);
+                const boundsBottom = Number(bounds?.top || 0) + Number(bounds?.height || 0);
+                if (
+                    boundsRight < viewportBounds.left - worldMargin ||
+                    Number(bounds?.left || 0) > viewportBounds.right + worldMargin ||
+                    boundsBottom < viewportBounds.top - worldMargin ||
+                    Number(bounds?.top || 0) > viewportBounds.bottom + worldMargin
+                ) {
+                    continue;
+                }
+            }
             const p_tl = fabric.util.transformPoint({ x: bounds.left, y: bounds.top }, vpt);
             // Dimensões reais do frame
             const w = frame.width * (frame.scaleX || 1);
@@ -5280,6 +5515,7 @@ const updateFrameLabels = () => {
         } catch { /* skip invalid frame */ }
     }
     frameLabels.value = labels;
+    commitFrameLabelLayoutState();
 };
 
 const handleFrameLabelClick = (label: typeof frameLabels.value[0], e: MouseEvent) => {
@@ -5332,6 +5568,7 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
                     d.setCoords();
                 }
             });
+            markFrameLabelsDirty();
             canvas.value.requestRenderAll();
             throttledUpdateFrameLabels();
         });
@@ -5344,7 +5581,7 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
         if (moved) {
             // Sync clips after move
             if (frame.clipContent) {
-                syncFrameClips(frame);
+                syncFrameClips(frame, { includeSpatialChildren: false, requestRender: false });
             }
             canvas.value.requestRenderAll();
             refreshCanvasObjects();
@@ -6074,6 +6311,7 @@ const persistViewportStateNow = (reason: string = 'change') => {
     try {
         saveCurrentState({
             reason: `viewport:${String(reason || 'change')}`,
+            source: 'system',
             skipIfUnchanged: true
         });
     } catch (err) {
@@ -6245,6 +6483,19 @@ let canvasObjectsRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let canvasObjectsRefreshPendingSource: any[] | null = null
 let lastCanvasObjectsRefreshAt = 0
 const CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS = 42
+const getCanvasObjectsRefreshIntervalMs = () => {
+    const objectCount = Number(
+        canvasObjectsRefreshPendingSource?.length ??
+        canvas.value?.getObjects?.().length ??
+        canvasObjects.value.length ??
+        0
+    );
+    if (objectCount > 1000) return 220;
+    if (objectCount > 650) return 160;
+    if (objectCount > 320) return 96;
+    if (objectCount > 180) return 64;
+    return CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS;
+}
 
 const commitCanvasObjectsRefresh = () => {
     if (isCanvasDestroyed.value) return
@@ -6282,6 +6533,7 @@ const refreshCanvasObjects = (opts: { immediate?: boolean; source?: any[] } = {}
         ? performance.now()
         : Date.now()
     const elapsed = now - lastCanvasObjectsRefreshAt
+    const minIntervalMs = getCanvasObjectsRefreshIntervalMs()
 
     const scheduleRaf = () => {
         if (canvasObjectsRefreshRafId !== null) return
@@ -6291,7 +6543,7 @@ const refreshCanvasObjects = (opts: { immediate?: boolean; source?: any[] } = {}
         })
     }
 
-    if (elapsed >= CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS) {
+    if (elapsed >= minIntervalMs) {
         scheduleRaf()
         return
     }
@@ -6300,7 +6552,7 @@ const refreshCanvasObjects = (opts: { immediate?: boolean; source?: any[] } = {}
     canvasObjectsRefreshTimer = setTimeout(() => {
         canvasObjectsRefreshTimer = null
         scheduleRaf()
-    }, Math.max(0, CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS - elapsed))
+    }, Math.max(0, minIntervalMs - elapsed))
 }
 const selectedObjectId = ref<string | null>(null)
 const selectedObjectIds = ref<string[]>([])
@@ -6325,8 +6577,6 @@ const debouncedSaveCurrentState = () => {
     if (propertySaveTimer) clearTimeout(propertySaveTimer);
     propertySaveTimer = setTimeout(() => {
         saveCurrentState({ reason: 'properties-panel' });
-        // Property changes do not always emit Fabric `object:modified` events, so ensure DB auto-save runs too.
-        triggerAutoSave();
     }, 150); // 150ms debounce for snappy feel but coalesces rapid changes
 };
 
@@ -6336,7 +6586,6 @@ const queueTextEditSave = (reason = 'text-edit') => {
     if (textEditSaveTimer) clearTimeout(textEditSaveTimer);
     textEditSaveTimer = setTimeout(() => {
         saveCurrentState({ reason });
-        triggerAutoSave();
     }, 180);
 };
 const flushTextEditSave = (reason = 'text-edit-exit') => {
@@ -6345,11 +6594,11 @@ const flushTextEditSave = (reason = 'text-edit-exit') => {
         textEditSaveTimer = null;
     }
     saveCurrentState({ reason });
-    triggerAutoSave();
 };
 
 let isLifecycleFlushInProgress = false;
 let lastLifecycleFlushAt = 0;
+let hasPendingCoalescedSave = false;
 
 const finalizeActiveTextEditingForPersist = () => {
     if (!canvas.value) return;
@@ -6366,6 +6615,18 @@ const finalizeActiveTextEditingForPersist = () => {
     }
 };
 
+const hasActiveTextEditingForPersist = () => {
+    if (!canvas.value) return false;
+    try {
+        const active = canvas.value.getActiveObject() as any;
+        if (!active) return false;
+        const t = String(active.type || '').toLowerCase();
+        return (t === 'i-text' || t === 'textbox') && !!active.isEditing;
+    } catch {
+        return false;
+    }
+};
+
 const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => {
     const now = Date.now();
     const force = !!opts.force;
@@ -6375,6 +6636,24 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
     isLifecycleFlushInProgress = true;
 
     try {
+        const hadPendingPropertySave = !!propertySaveTimer;
+        const hadPendingTextEditSave = !!textEditSaveTimer;
+        const hadPendingGlobalStylesSave = !!globalStylesSaveTimer;
+        const hadPendingViewportSave = !!viewportStateSaveTimer;
+        const hadPendingCoalescedSave = hasPendingCoalescedSave;
+        const hadActiveTextEditing = hasActiveTextEditingForPersist();
+        const hasPendingProjectSync = hasUnsavedChanges.value || project.pages.some((page: any) => !!page?.dirty);
+        const shouldPersistLocalState = hadPendingPropertySave
+            || hadPendingTextEditSave
+            || hadPendingGlobalStylesSave
+            || hadPendingViewportSave
+            || hadPendingCoalescedSave
+            || hadActiveTextEditing;
+
+        if (!shouldPersistLocalState && !hasPendingProjectSync) {
+            return;
+        }
+
         if (propertySaveTimer) {
             clearTimeout(propertySaveTimer);
             propertySaveTimer = null;
@@ -6391,27 +6670,36 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
             clearTimeout(viewportStateSaveTimer);
             viewportStateSaveTimer = null;
         }
+        if (cancelPendingCoalescedSave) {
+            cancelPendingCoalescedSave();
+        }
 
-        finalizeActiveTextEditingForPersist();
+        if (hadActiveTextEditing) {
+            finalizeActiveTextEditingForPersist();
+        }
 
-        // Save to in-memory project + local draft immediately (sync path inside saveState/updatePageData).
-        try {
-            saveCurrentState({
-                allowEmptyOverwrite: true,
-                reason: `lifecycle:${reason}`,
-                source: 'system',
-                skipIfUnchanged: true,
-                skipCoalesce: true
-            });
-        } catch (err) {
-            console.warn('[persist] Falha ao salvar estado em flush de lifecycle:', err);
+        if (shouldPersistLocalState) {
+            // Save to in-memory project + local draft immediately (sync path inside saveState/updatePageData).
+            try {
+                saveCurrentState({
+                    allowEmptyOverwrite: true,
+                    reason: `lifecycle:${reason}`,
+                    source: 'system',
+                    skipIfUnchanged: true,
+                    skipCoalesce: true
+                });
+            } catch (err) {
+                console.warn('[persist] Falha ao salvar estado em flush de lifecycle:', err);
+            }
         }
 
         // Also force remote save path whenever possible.
-        if (hasUnsavedChanges.value) triggerAutoSave();
-        void flushAutoSave().catch((err: any) => {
-            console.warn('[persist] Falha no flushAutoSave:', err);
-        });
+        if (hasPendingProjectSync) {
+            if (hasUnsavedChanges.value) triggerAutoSave();
+            void flushAutoSave().catch((err: any) => {
+                console.warn('[persist] Falha no flushAutoSave:', err);
+            });
+        }
     } finally {
         isLifecycleFlushInProgress = false;
     }
@@ -7558,11 +7846,17 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 
     const loadSessionId = ++activePageLoadSessionId;
     const isStaleLoad = () => loadSessionId !== activePageLoadSessionId || isCanvasDestroyed.value;
+    scheduleCanvasDataPrefetch(nextPageId, 0)
+    if (!newPage.canvasData && nextPageId) {
+        await ensurePageCanvasDataLoaded(nextPageId)
+        if (isStaleLoad()) return
+    }
+    const pageToLoad = (project.pages?.[project.activePageIndex] as any) || newPage
 
-    const savedVpt = newPage.canvasData ? getSavedViewportTransform(newPage.canvasData) : null;
+    const savedVpt = pageToLoad.canvasData ? getSavedViewportTransform(pageToLoad.canvasData) : null;
     let loadedOk = false
     isDesignLoading.value = true
-    designLoadExpectedCounts.value = newPage.canvasData ? countCanvasJsonObjectsAndImages(newPage.canvasData) : { objects: 0, images: 0 }
+    designLoadExpectedCounts.value = pageToLoad.canvasData ? countCanvasJsonObjectsAndImages(pageToLoad.canvasData) : { objects: 0, images: 0 }
     designLoadActualCounts.value = null
     let degradedFailedCount: number | null = null
 
@@ -7599,7 +7893,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 
 		        // 3. Load Data
 		        try {
-		            if (newPage.canvasData) {
+		            if (pageToLoad.canvasData) {
 	            // CRITICAL: Ensure canvas is fully initialized before loading
 	            if (!canvas.value || !canvas.value.getContext) {
 	                console.warn('⚠️ Canvas não inicializado, aguardando...');
@@ -7612,10 +7906,27 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	            }
 	            
 	            // Restore label templates stored alongside the Fabric JSON (persisted per page).
-	            hydrateLabelTemplatesFromProjectJson(newPage.canvasData);
+	            hydrateLabelTemplatesFromProjectJson(pageToLoad.canvasData);
 
                     // Normalize image URLs to same-origin proxy (Wasabi/Contabo) before load.
-                    let canvasDataToLoad = prepareCanvasDataForLoad(newPage.canvasData);
+                    const preparedLoadEntry = prepareCanvasDataForLoadEntry(pageToLoad.canvasData, {
+                        cacheKey: getPreparedCanvasDataCacheKey(pageToLoad)
+                    });
+                    const legacyProductCardImageRepairMode = getLegacyProductCardImageRepairMode(preparedLoadEntry);
+                    const canonicalCanvasDataToLoad = preparedLoadEntry?.prepared ?? pageToLoad.canvasData;
+                    const progressiveProductImageLoad = buildProgressiveProductCardImageLoadPayload(
+                        canonicalCanvasDataToLoad,
+                        { clone: true, totalImageCount: designLoadExpectedCounts.value?.images }
+                    );
+                    let canvasDataToLoad = progressiveProductImageLoad.data;
+                    const deferredProductImageCount = progressiveProductImageLoad.deferredCount;
+                    if (import.meta.dev && deferredProductImageCount > 0) {
+                        console.log('[progressive-image-load] Deferred product-card images for fast first paint:', {
+                            pageId: nextPageId,
+                            deferredProductImageCount,
+                            totalImageCount: progressiveProductImageLoad.totalImageCount
+                        });
+                    }
 
 	            // Track whether we loaded successfully and whether we had to degrade (missing images)
 	            let didLoadNewPage = false;
@@ -7641,6 +7952,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 		                    const safeCanvasData = cloneCanvasDataForLoad(canvasDataToLoad);
 		                    if (safeCanvasData?.objects && Array.isArray(safeCanvasData.objects)) {
 		                        const refreshStats = await refreshContaboUrlsInCanvasData(safeCanvasData, { concurrency: 6 });
+		                        canvasDataToLoad = safeCanvasData;
 		                        degradedNewPage = refreshStats.failed > 0;
                                 degradedFailedCount = Number(refreshStats.failed || 0) || null
 		                        // Try loading again with updated URLs (or placeholders for failed entries)
@@ -7799,7 +8111,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             });
             
             // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
-            rehydrateCanvasZones();
+            rehydrateCanvasZones({ legacyImageRepairMode: legacyProductCardImageRepairMode });
             
             // Ensure all frames have layerName set to "FRAMER" if missing (for LayersPanel display)
             const allObjs = canvas.value.getObjects();
@@ -7866,13 +8178,20 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             // Same issue as webfont load: JSON could have been measured with fallback fonts.
             // Re-fit manual label templates so cards match the mini editor geometry.
             refitManualLabelTemplatesAfterFontMetrics(canvas.value);
+            if (!degradedNewPage) {
+                syncPreparedCanvasStateToPage(pageToLoad, canonicalCanvasDataToLoad);
+            }
+
+            if (deferredProductImageCount > 0) {
+                scheduleMissingProductImageRecovery(180, 10, nextPageId);
+            }
 
 	            safeRequestRenderAll();
 	            } else {
 	                // New Blank Page starts with default settings
 	                // canvas.value.backgroundColor = '#ffffff'; // NO! Workspace is dark. Artboard is white.
 	                // Explicitly do nothing here, let updateArtboard() create the white rect.
-                loadedOk = true
+                    loadedOk = true
                 storageDegraded.value = false
                 storageDegradedFailedCount.value = null
                 storageDegradedHint.value = ''
@@ -7893,27 +8212,10 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     // 5. Restore viewport (last pan/zoom) or fallback to zoom-to-fit.
     if (savedVpt) {
         applyViewportTransform(savedVpt);
-        // Persist immediately so a reload doesn't overwrite viewport with defaults.
-        if (oldPage) {
-            saveCurrentState({
-                reason: 'page-switch-viewport',
-                source: 'system',
-                skipIfUnchanged: true,
-                expectedPageId: String(newPage.id || '')
-            });
-        }
     } else {
         setTimeout(() => {
             if (isStaleLoad()) return;
             zoomToFit();
-            if (oldPage) {
-                saveCurrentState({
-                    reason: 'page-switch-viewport',
-                    source: 'system',
-                    skipIfUnchanged: true,
-                    expectedPageId: String(newPage.id || '')
-                });
-            }
         }, 50);
     }
 
@@ -7982,6 +8284,8 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     if (loadedOk) {
         lastLoadedPageKey = nextPageId ? nextPageLoadKey : null
         isInitialDesignLoadDone.value = true
+        scheduleCanvasDataPrefetch(nextPageId)
+        schedulePreparedCanvasDataPrewarm(nextPageId)
     }
     } finally {
         if (!isStaleLoad()) isDesignLoading.value = false
@@ -9132,7 +9436,11 @@ onMounted(async () => {
                       console.log(`📥 Preparando para carregar ${expectedObjects} objeto(s) do canvasData`);
                       
                       // Normalize image URLs to same-origin proxy (Wasabi/Contabo) before load.
-                      let canvasDataToLoad = prepareCanvasDataForLoad(page.canvasData);
+                      const preparedLoadEntry = prepareCanvasDataForLoadEntry(page.canvasData, {
+                          cacheKey: getPreparedCanvasDataCacheKey(page)
+                      });
+                      const legacyProductCardImageRepairMode = getLegacyProductCardImageRepairMode(preparedLoadEntry);
+                      let canvasDataToLoad = preparedLoadEntry?.prepared ?? page.canvasData;
                       
                       console.log(`📦 CanvasData carregado - ${canvasDataToLoad?.objects?.length || 0} objeto(s)`);
                       
@@ -9297,7 +9605,7 @@ onMounted(async () => {
                       });
                       
                        // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
-                      rehydrateCanvasZones();
+                      rehydrateCanvasZones({ legacyImageRepairMode: legacyProductCardImageRepairMode });
                       
                       // CRITICAL FIX: Restore lost object names in product cards after JSON load
                       // When canvas is loaded from JSON, nested object names inside groups are lost
@@ -9473,6 +9781,9 @@ onMounted(async () => {
                       // IMPORTANT: Get objects in exact order they were loaded (Fabric preserves order in _objects array)
                       const loadedObjs = canvas.value.getObjects();
                       refreshCanvasObjects({ source: loadedObjs, immediate: true });
+                      if (!degradedPage) {
+                          syncPreparedCanvasStateToPage(page, canvasDataToLoad);
+                      }
                       
                       // Ensure objects have IDs restored if missing - BUT exclude frames
                       const objs = canvas.value.getObjects();
@@ -9551,6 +9862,11 @@ onMounted(async () => {
 onUnmounted(() => {
   isCanvasJsonLoadInProgress = false;
   isDesignLoading.value = false
+  preparedCanvasPrewarmRunId += 1
+  reactivityBoundCanvas = null;
+  invalidateFrameRuntimeCache();
+  resetFrameLabelLayoutState();
+  frameLabelUpdatePending = false;
   if (imageProgressRafId !== null && typeof window !== 'undefined') {
     cancelAnimationFrame(imageProgressRafId)
     imageProgressRafId = null
@@ -9582,15 +9898,15 @@ onUnmounted(() => {
     clearTimeout(missingProductImageRecoveryTimer)
     missingProductImageRecoveryTimer = null
   }
-  if (cancelPendingCoalescedSave) {
-    cancelPendingCoalescedSave()
-    cancelPendingCoalescedSave = null
-  }
   if (teardownHistoryListeners) {
     teardownHistoryListeners()
     teardownHistoryListeners = null
   }
   flushPersistenceNow('unmount', { force: true });
+  if (cancelPendingCoalescedSave) {
+    cancelPendingCoalescedSave()
+    cancelPendingCoalescedSave = null
+  }
   if (globalStylesSaveTimer) {
     clearTimeout(globalStylesSaveTimer);
     globalStylesSaveTimer = null;
@@ -9850,16 +10166,20 @@ const CANVAS_CUSTOM_PROPS = [
 
 	// Images: ensure CORS behavior survives reload (needed for pixel-based effects like Sticker Outline)
 	'crossOrigin',
-    '__originalSrc',
+	'objectCaching',
+	'statefullCache',
+	    '__originalSrc',
 
-    // Locks (persist cadeado state across reload)
-    'lockMovementX',
-    'lockMovementY',
-    'lockScalingX',
-    'lockScalingY',
-    'lockRotation',
-    'lockScalingFlip'
-] as const;
+	    // Locks (persist cadeado state across reload)
+	    'lockMovementX',
+	    'lockMovementY',
+	    'lockScalingX',
+	    'lockScalingY',
+	    'lockRotation',
+	    'lockScalingFlip',
+	    'lockSkewingX',
+	    'lockSkewingY'
+	] as const;
 
 // Helper function to extract key/path from Wasabi URL (presigned or permanent)
 const extractWasabiKey = (url: string): string | null => {
@@ -10002,9 +10322,6 @@ const generatePresignedUrl = async (urlOrKey: string): Promise<string | null> =>
     }
 };
 
-// 1x1 transparent PNG data URL - usado quando imagem falha para permitir carregar o resto do canvas
-const PLACEHOLDER_IMAGE_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-
 /**
  * Decodifica URLs da Contabo que têm %3A (colon codificado) no bucket name.
  * A Contabo retorna erro 500 quando o bucket name tem %3A em vez de :.
@@ -10138,10 +10455,125 @@ const extractWasabiBucketAndKey = (url: string): { bucket: string | null; key: s
  */
 const cloneCanvasDataForLoad = (canvasData: any): any => {
     try {
+        if (typeof structuredClone === 'function') {
+            return structuredClone(canvasData);
+        }
         return JSON.parse(JSON.stringify(canvasData));
     } catch {
         return canvasData;
     }
+};
+
+type PreparedCanvasLoadCacheEntry = {
+    token: string;
+    prepared: any;
+    legacyProductCardImageRepair: {
+        cardsScanned: number;
+        imagesScanned: number;
+        imagesRepaired: number;
+        needsPostLoadRepair: boolean;
+    };
+};
+
+type PrepareCanvasDataForLoadOptions = {
+    cacheKey?: string | null;
+    silent?: boolean;
+};
+
+const preparedCanvasDataLoadCache = new WeakMap<object, PreparedCanvasLoadCacheEntry>();
+const preparedCanvasDataLoadCacheByKey = new Map<string, PreparedCanvasLoadCacheEntry>();
+const PREPARED_CANVAS_LOAD_CACHE_LIMIT = 24;
+
+const normalizePreparedCanvasLoadCacheKey = (value?: string | null): string => String(value || '').trim();
+
+const rememberPreparedCanvasLoadCacheByKey = (cacheKey: string, entry: PreparedCanvasLoadCacheEntry) => {
+    const normalizedKey = normalizePreparedCanvasLoadCacheKey(cacheKey);
+    if (!normalizedKey) return;
+    preparedCanvasDataLoadCacheByKey.delete(normalizedKey);
+    preparedCanvasDataLoadCacheByKey.set(normalizedKey, entry);
+    while (preparedCanvasDataLoadCacheByKey.size > PREPARED_CANVAS_LOAD_CACHE_LIMIT) {
+        const oldestKey = preparedCanvasDataLoadCacheByKey.keys().next().value;
+        if (!oldestKey) break;
+        preparedCanvasDataLoadCacheByKey.delete(oldestKey);
+    }
+};
+
+const readPreparedCanvasLoadCacheByKey = (
+    cacheKey: string,
+    token: string
+): PreparedCanvasLoadCacheEntry | null => {
+    const normalizedKey = normalizePreparedCanvasLoadCacheKey(cacheKey);
+    if (!normalizedKey) return null;
+    const cached = preparedCanvasDataLoadCacheByKey.get(normalizedKey);
+    if (!cached) return null;
+    if (cached.token !== token) {
+        preparedCanvasDataLoadCacheByKey.delete(normalizedKey);
+        return null;
+    }
+    preparedCanvasDataLoadCacheByKey.delete(normalizedKey);
+    preparedCanvasDataLoadCacheByKey.set(normalizedKey, cached);
+    return cached;
+};
+
+const prepareCanvasDataForLoadEntry = (
+    raw: any,
+    opts: PrepareCanvasDataForLoadOptions = {}
+): PreparedCanvasLoadCacheEntry | null => {
+    try {
+        if (!raw || typeof raw !== 'object') return null;
+
+        const cacheKey = raw as object;
+        const cacheToken = getCanvasLoadCacheToken(raw);
+        const normalizedCacheKey = normalizePreparedCanvasLoadCacheKey(opts.cacheKey);
+        const cached = preparedCanvasDataLoadCache.get(cacheKey);
+        if (cached && cached.token === cacheToken) {
+            if (normalizedCacheKey) rememberPreparedCanvasLoadCacheByKey(normalizedCacheKey, cached);
+            return cached;
+        }
+        if (normalizedCacheKey) {
+            const cachedByKey = readPreparedCanvasLoadCacheByKey(normalizedCacheKey, cacheToken);
+            if (cachedByKey) {
+                preparedCanvasDataLoadCache.set(cacheKey, cachedByKey);
+                return cachedByKey;
+            }
+        }
+
+        const prepared = convertContaboToProxyUrls(raw, {
+            clone: true,
+            silent: !!opts.silent
+        });
+        const legacyProductCardImageRepair = normalizeLegacyProductCardImageTransformsInCanvasData(prepared);
+        const entry: PreparedCanvasLoadCacheEntry = {
+            token: cacheToken,
+            prepared,
+            legacyProductCardImageRepair
+        };
+        preparedCanvasDataLoadCache.set(cacheKey, entry);
+        if (normalizedCacheKey) {
+            rememberPreparedCanvasLoadCacheByKey(normalizedCacheKey, entry);
+        }
+        return entry;
+    } catch {
+        return null;
+    }
+};
+
+const getCanvasLoadCacheToken = (canvasData: any): string => {
+    if (!canvasData || typeof canvasData !== 'object') return 'empty';
+
+    const root = canvasData as Record<string, any>;
+    const directSavedAt = [
+        root.__savedAt,
+        root._savedAt,
+        root.savedAt,
+        root.updatedAt
+    ].map((value) => Number(value)).find((value) => Number.isFinite(value) && value > 0) || 0;
+    const metaSavedAt = Number(root?.meta?.savedAt);
+    const savedAt = directSavedAt || (Number.isFinite(metaSavedAt) && metaSavedAt > 0 ? metaSavedAt : 0);
+    const objectCount = Array.isArray(root.objects) ? root.objects.length : 0;
+    const version = String(root.version || '');
+
+    return `${savedAt}:${objectCount}:${version}`;
 };
 
 const walkCanvasObjects = (root: any, visitor: (obj: any) => void): void => {
@@ -10157,6 +10589,366 @@ const walkCanvasObjects = (root: any, visitor: (obj: any) => void): void => {
             }
         }
     }
+};
+
+const getJsonGroupChildren = (obj: any): any[] => (
+    Array.isArray(obj?.objects) ? obj.objects.filter((child: any) => !!child && typeof child === 'object') : []
+);
+
+const isStandalonePriceGroupJson = (obj: any) => {
+    if (!obj) return false;
+    if (obj.type !== 'group') return false;
+    if (String(obj.name || '') !== 'priceGroup') return false;
+    if (obj.isSmartObject || obj.isProductCard) return false;
+    if (String((obj as any).parentZoneId || '').trim()) return false;
+    if (String((obj as any).smartGridId || '').trim()) return false;
+
+    const children = getJsonGroupChildren(obj);
+    const hasOfferBg = children.some((child: any) => String(child?.name || '') === 'offerBackground');
+    const hasSmartImage = children.some((child: any) => {
+        const childType = String(child?.type || '').toLowerCase();
+        const childName = String(child?.name || '');
+        return childType === 'image' || ['smart_image', 'product_image', 'productImage'].includes(childName);
+    });
+
+    return !hasOfferBg && !hasSmartImage;
+};
+
+const isLikelyProductCardJson = (obj: any) => {
+    if (!obj) return false;
+    if (obj.excludeFromExport || obj.isFrame) return false;
+    if (obj.type !== 'group') return false;
+    if (isStandalonePriceGroupJson(obj)) return false;
+
+    const parentZoneId = String((obj as any).parentZoneId || '').trim();
+    if (parentZoneId) return true;
+
+    const cardWidth = Number((obj as any)._cardWidth);
+    const cardHeight = Number((obj as any)._cardHeight);
+    if (Number.isFinite(cardWidth) && cardWidth > 0 && Number.isFinite(cardHeight) && cardHeight > 0) return true;
+    if (String((obj as any).smartGridId || '').trim()) return true;
+    if (String((obj as any).priceMode || '').trim()) return true;
+    if (obj.isSmartObject || obj.isProductCard) return true;
+
+    const children = getJsonGroupChildren(obj);
+    if (!children.length) return false;
+
+    const isTextLike = (child: any) => String(child?.type || '').toLowerCase().includes('text');
+    const hasOfferBg = children.some((child: any) => String(child?.name || '') === 'offerBackground');
+    const hasBg = hasOfferBg || children.some((child: any) => (
+        String(child?.type || '').toLowerCase() === 'rect' && /(offerBackground|background|bg)/i.test(String(child?.name || ''))
+    ));
+    const hasPriceGroup = children.some((child: any) => (
+        String(child?.type || '').toLowerCase() === 'group' && String(child?.name || '') === 'priceGroup'
+    ));
+    const hasAnyPriceText = children.some((child: any) => /price_(integer|decimal|value|currency|unit)_text/i.test(String(child?.name || '')));
+    const hasImage = children.some((child: any) => {
+        const childType = String(child?.type || '').toLowerCase();
+        const childName = String(child?.name || '');
+        return childType === 'image' || ['smart_image', 'product_image', 'productImage'].includes(childName);
+    });
+    const hasTitle = children.some((child: any) => isTextLike(child) && /(^smart_title$|^title$|title)/i.test(String(child?.name || '')));
+    const textCount = children.filter((child: any) => isTextLike(child)).length;
+    const nonTextCount = children.length - textCount;
+
+    if (hasOfferBg) return true;
+    if (hasPriceGroup && (hasImage || hasTitle || textCount >= 1)) return true;
+    if (textCount >= 1 && nonTextCount >= 1 && (hasImage || hasBg || hasAnyPriceText)) return true;
+
+    const signals = [hasPriceGroup, hasImage, hasTitle, hasBg, hasAnyPriceText].filter(Boolean).length;
+    if (hasAnyPriceText && hasImage && textCount >= 1) return true;
+    return signals >= 3 || (hasAnyPriceText && textCount >= 2);
+};
+
+const getCardBaseSizeForContainmentJson = (card: any): { w: number; h: number } | null => {
+    if (!card) return null;
+    const storedW = Number((card as any)._cardWidth);
+    const storedH = Number((card as any)._cardHeight);
+    if (Number.isFinite(storedW) && storedW > 0 && Number.isFinite(storedH) && storedH > 0) {
+        return { w: storedW, h: storedH };
+    }
+
+    const bg = getJsonGroupChildren(card).find((child: any) => child?.name === 'offerBackground' && String(child?.type || '').toLowerCase() === 'rect');
+    const bgW = Number(bg?.width);
+    const bgH = Number(bg?.height);
+    if (Number.isFinite(bgW) && bgW > 0 && Number.isFinite(bgH) && bgH > 0) {
+        return { w: bgW, h: bgH };
+    }
+
+    const cardW = Number(card?.width);
+    const cardH = Number(card?.height);
+    if (Number.isFinite(cardW) && cardW > 0 && Number.isFinite(cardH) && cardH > 0) {
+        return { w: cardW, h: cardH };
+    }
+
+    return null;
+};
+
+const getJsonObjectSize = (
+    obj: any,
+    opts: { scaleX?: number; scaleY?: number } = {}
+): { width: number; height: number } | null => {
+    const rawWidth = Number(obj?.width ?? 0);
+    const rawHeight = Number(obj?.height ?? 0);
+    const scaleX = Math.abs(Number(opts.scaleX ?? obj?.scaleX ?? 1)) || 1;
+    const scaleY = Math.abs(Number(opts.scaleY ?? obj?.scaleY ?? 1)) || 1;
+    const width = Math.abs(rawWidth * scaleX);
+    const height = Math.abs(rawHeight * scaleY);
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+        return null;
+    }
+    return { width, height };
+};
+
+const getJsonObjectCenterInParentPlane = (
+    obj: any,
+    opts: { scaleX?: number; scaleY?: number } = {}
+): { x: number; y: number } | null => {
+    const size = getJsonObjectSize(obj, opts);
+    if (!size) return null;
+
+    const left = Number(obj?.left ?? 0);
+    const top = Number(obj?.top ?? 0);
+    const originX = String(obj?.originX || 'left');
+    const originY = String(obj?.originY || 'top');
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+
+    const centerX = originX === 'center'
+        ? left
+        : originX === 'right'
+            ? left - (size.width / 2)
+            : left + (size.width / 2);
+    const centerY = originY === 'center'
+        ? top
+        : originY === 'bottom'
+            ? top - (size.height / 2)
+            : top + (size.height / 2);
+
+    if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return null;
+    return { x: centerX, y: centerY };
+};
+
+const setJsonObjectCenterInParentPlane = (
+    obj: any,
+    centerX: number,
+    centerY: number,
+    opts: { scaleX?: number; scaleY?: number } = {}
+) => {
+    const size = getJsonObjectSize(obj, opts);
+    if (!size) return false;
+
+    const originX = String(obj?.originX || 'left');
+    const originY = String(obj?.originY || 'top');
+    const nextLeft = originX === 'center'
+        ? centerX
+        : originX === 'right'
+            ? centerX + (size.width / 2)
+            : centerX - (size.width / 2);
+    const nextTop = originY === 'center'
+        ? centerY
+        : originY === 'bottom'
+            ? centerY + (size.height / 2)
+            : centerY - (size.height / 2);
+
+    if (!Number.isFinite(nextLeft) || !Number.isFinite(nextTop)) return false;
+    obj.left = nextLeft;
+    obj.top = nextTop;
+    return true;
+};
+
+const collectJsonDescendantsWithParent = (group: any): Array<{ node: any; parent: any }> => {
+    const out: Array<{ node: any; parent: any }> = [];
+    const stack = getJsonGroupChildren(group).map((child: any) => ({ node: child, parent: group }));
+    while (stack.length > 0) {
+        const current = stack.pop();
+        if (!current?.node || typeof current.node !== 'object') continue;
+        out.push(current);
+        const children = getJsonGroupChildren(current.node);
+        for (let i = children.length - 1; i >= 0; i--) {
+            stack.push({ node: children[i], parent: current.node });
+        }
+    }
+    return out;
+};
+
+const DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD = 24;
+const DEFERRED_PRODUCT_IMAGE_LOAD_MAX = 72;
+
+const isDeferredProductImageCandidateSrc = (src: string): boolean => {
+    const value = String(src || '').trim();
+    if (!value) return false;
+    if (value === PLACEHOLDER_IMAGE_DATA_URL) return false;
+    if (value.startsWith('data:')) return false;
+    if (value.startsWith('blob:')) return false;
+    return true;
+};
+
+const isProductCardImageSelectionCandidateJson = (obj: any) => {
+    if (!obj || String(obj?.type || '').toLowerCase() !== 'image') return false;
+    const smartType = String((obj as any)?.data?.smartType || '').toLowerCase();
+    const name = String((obj as any)?.name || '').toLowerCase();
+    if (name === 'price_bg_image' || name === 'splash_image') return false;
+    if (smartType === 'product-image') return true;
+    if (name === 'smart_image' || name === 'product_image' || name === 'productimage') return true;
+    if (name.startsWith('extra_image_')) return true;
+    return true;
+};
+
+const getPreferredProductImageFromCardJson = (card: any): any | null => {
+    const children = getJsonGroupChildren(card).filter((child: any) => isProductCardImageSelectionCandidateJson(child));
+    if (!children.length) return null;
+
+    const primary = children.find((child: any) => {
+        const smartType = String((child as any)?.data?.smartType || '').toLowerCase();
+        const name = String((child as any)?.name || '').toLowerCase();
+        return smartType === 'product-image' || name === 'smart_image' || name === 'product_image' || name === 'productimage';
+    });
+
+    return primary || children[0] || null;
+};
+
+const buildProgressiveProductCardImageLoadPayload = (
+    canvasData: any,
+    opts: { clone?: boolean; totalImageCount?: number | null } = {}
+): { data: any; deferredCount: number; totalImageCount: number } => {
+    const rootObjects = Array.isArray(canvasData?.objects) ? canvasData.objects : [];
+    if (!rootObjects.length) {
+        return { data: canvasData, deferredCount: 0, totalImageCount: 0 };
+    }
+
+    const providedTotalImageCount = Number(opts.totalImageCount);
+    const totalImageCount = Number.isFinite(providedTotalImageCount) && providedTotalImageCount > 0
+        ? providedTotalImageCount
+        : countCanvasJsonObjectsAndImages(canvasData).images;
+
+    if (!Number.isFinite(totalImageCount) || totalImageCount < DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD) {
+        return { data: canvasData, deferredCount: 0, totalImageCount: Number.isFinite(totalImageCount) ? totalImageCount : 0 };
+    }
+
+    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData);
+    const clonedRootObjects = Array.isArray(cloned?.objects) ? cloned.objects : [];
+    if (!clonedRootObjects.length) {
+        return { data: cloned, deferredCount: 0, totalImageCount };
+    }
+
+    let deferredCount = 0;
+    clonedRootObjects.forEach((card: any) => {
+        if (deferredCount >= DEFERRED_PRODUCT_IMAGE_LOAD_MAX) return;
+        if (!isLikelyProductCardJson(card)) return;
+
+        const imageNode = getPreferredProductImageFromCardJson(card);
+        if (!imageNode) return;
+
+        const currentSrc = String((imageNode as any)?.src || '').trim();
+        const originalSrc = String((imageNode as any)?.__originalSrc || '').trim();
+        const sourceToKeep = originalSrc || currentSrc;
+        if (!isDeferredProductImageCandidateSrc(sourceToKeep)) return;
+        if (currentSrc === PLACEHOLDER_IMAGE_DATA_URL) return;
+
+        if (!originalSrc) {
+            (imageNode as any).__originalSrc = currentSrc;
+        }
+        imageNode.src = PLACEHOLDER_IMAGE_DATA_URL;
+        imageNode.crossOrigin = 'anonymous';
+        deferredCount += 1;
+    });
+
+    return { data: cloned, deferredCount, totalImageCount };
+};
+
+const normalizeLegacyProductCardImageTransformsInCanvasData = (
+    canvasData: any
+): { cardsScanned: number; imagesScanned: number; imagesRepaired: number; needsPostLoadRepair: boolean } => {
+    const rootObjects = Array.isArray(canvasData?.objects) ? canvasData.objects : [];
+    if (!rootObjects.length) {
+        return { cardsScanned: 0, imagesScanned: 0, imagesRepaired: 0, needsPostLoadRepair: false };
+    }
+
+    let cardsScanned = 0;
+    let imagesScanned = 0;
+    let imagesRepaired = 0;
+    let needsPostLoadRepair = false;
+
+    rootObjects.forEach((card: any) => {
+        if (!isLikelyProductCardJson(card)) return;
+
+        cardsScanned += 1;
+        const cardBase = getCardBaseSizeForContainmentJson(card);
+        const descendants = collectJsonDescendantsWithParent(card);
+
+        descendants.forEach(({ node, parent }) => {
+            if (String(node?.type || '').toLowerCase() !== 'image') return;
+
+            imagesScanned += 1;
+            let changed = false;
+
+            let nextScaleX = Number(node.scaleX ?? 1);
+            let nextScaleY = Number(node.scaleY ?? 1);
+            if (!Number.isFinite(nextScaleX) || nextScaleX === 0) {
+                nextScaleX = 1;
+                changed = true;
+            }
+            if (!Number.isFinite(nextScaleY) || nextScaleY === 0) {
+                nextScaleY = 1;
+                changed = true;
+            }
+            if (nextScaleX < 0 || nextScaleY < 0) {
+                nextScaleX = Math.abs(nextScaleX) || 1;
+                nextScaleY = Math.abs(nextScaleY) || 1;
+                changed = true;
+            }
+
+            if (node.flipX || node.flipY) changed = true;
+            if (node.lockScalingFlip !== true) changed = true;
+            if (node.lockSkewingX !== true || node.lockSkewingY !== true) changed = true;
+
+            const rawWidth = Number(node.width ?? 0);
+            const rawHeight = Number(node.height ?? 0);
+            const hasValidIntrinsicSize = Number.isFinite(rawWidth) && rawWidth > 0 && Number.isFinite(rawHeight) && rawHeight > 0;
+            if (!hasValidIntrinsicSize) {
+                needsPostLoadRepair = true;
+            }
+
+            if (parent === card && cardBase && hasValidIntrinsicSize) {
+                const imageSize = getJsonObjectSize(node, { scaleX: nextScaleX, scaleY: nextScaleY });
+                const center = getJsonObjectCenterInParentPlane(node, { scaleX: nextScaleX, scaleY: nextScaleY });
+                if (imageSize && center) {
+                    const cardLeft = -(cardBase.w / 2);
+                    const cardTop = -(cardBase.h / 2);
+                    const cardRight = cardBase.w / 2;
+                    const cardBottom = cardBase.h / 2;
+                    const minCx = Math.min(cardLeft + (imageSize.width / 2), cardRight - (imageSize.width / 2));
+                    const maxCx = Math.max(cardLeft + (imageSize.width / 2), cardRight - (imageSize.width / 2));
+                    const minCy = Math.min(cardTop + (imageSize.height / 2), cardBottom - (imageSize.height / 2));
+                    const maxCy = Math.max(cardTop + (imageSize.height / 2), cardBottom - (imageSize.height / 2));
+                    const constrainedCx = Math.min(maxCx, Math.max(minCx, center.x));
+                    const constrainedCy = Math.min(maxCy, Math.max(minCy, center.y));
+                    if (Math.abs(constrainedCx - center.x) > 0.001 || Math.abs(constrainedCy - center.y) > 0.001) {
+                        if (setJsonObjectCenterInParentPlane(node, constrainedCx, constrainedCy, { scaleX: nextScaleX, scaleY: nextScaleY })) {
+                            changed = true;
+                        } else {
+                            needsPostLoadRepair = true;
+                        }
+                    }
+                } else {
+                    needsPostLoadRepair = true;
+                }
+            }
+
+            if (changed) {
+                node.scaleX = nextScaleX;
+                node.scaleY = nextScaleY;
+                node.flipX = false;
+                node.flipY = false;
+                node.lockScalingFlip = true;
+                node.lockSkewingX = true;
+                node.lockSkewingY = true;
+                imagesRepaired += 1;
+            }
+        });
+    });
+
+    return { cardsScanned, imagesScanned, imagesRepaired, needsPostLoadRepair };
 };
 
 const mapLimit = async <T>(
@@ -10241,74 +11033,20 @@ const refreshContaboUrlsInCanvasData = async (
     return { total: images.length, refreshed, failed };
 };
 
-const convertContaboToProxyUrls = (canvasData: any, opts: { clone?: boolean } = {}): any => {
-    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData);
-    if (!cloned || typeof cloned !== 'object') return cloned;
-
-    let contaboCount = 0;
-    let wasabiCount = 0;
-    walkCanvasObjects(cloned, (node) => {
-        const objType = String(node.type || '').toLowerCase();
-        if (objType === 'image' && !node.crossOrigin) {
-            // Keep consistent CORS mode for Fabric image processing.
-            node.crossOrigin = 'anonymous';
-        }
-
-        if (typeof node.src === 'string' && node.src.trim()) {
-            const src = node.src;
-            if (!node.__originalSrc) {
-                node.__originalSrc = src;
-            }
-            const wasabiProxy = toWasabiProxyUrl(src);
-
-            if (wasabiProxy && wasabiProxy !== src) {
-                node.src = wasabiProxy;
-                wasabiCount++;
-            } else if (src.includes('contabostorage.com')) {
-                const { bucket, key } = extractContaboBucketAndKey(src);
-                if (key) {
-                    if (bucket) node.src = `/api/storage/p?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
-                    else node.src = `/api/storage/p?key=${encodeURIComponent(key)}`;
-                    contaboCount++;
-                }
-            }
-        }
-    });
-    if (contaboCount > 0) console.log(`🔄 Convertido ${contaboCount} URL(s) da Contabo para proxy local`);
-    if (wasabiCount > 0) console.log(`🔄 Convertido ${wasabiCount} URL(s) do Wasabi para proxy local`);
-    return cloned;
+const convertContaboToProxyUrls = (
+    canvasData: any,
+    opts: { clone?: boolean; silent?: boolean } = {}
+): any => {
+    return normalizeCanvasAssetUrls(canvasData, {
+        clone: opts.clone,
+        silent: opts.silent,
+        placeholderDataUrl: PLACEHOLDER_IMAGE_DATA_URL
+    }).data;
 };
 
-const prepareCanvasDataForLoad = (raw: any): any => {
-    try {
-        let out = cloneCanvasDataForLoad(raw);
-        out = replaceBlobImagesWithPlaceholder(out, { clone: false });
-        out = convertContaboToProxyUrls(out, { clone: false });
-        return out;
-    } catch {
-        return raw;
-    }
+const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOptions = {}): any => {
+    return prepareCanvasDataForLoadEntry(raw, opts)?.prepared ?? raw;
 }
-
-/**
- * Substitui src de imagens blob: (sessão/local) por placeholder.
- * Blob URLs não sobrevivem ao reload, então quebram o loadFromJSON.
- */
-const replaceBlobImagesWithPlaceholder = (canvasData: any, opts: { clone?: boolean } = {}): any => {
-    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData);
-    if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned;
-
-    let count = 0;
-    walkCanvasObjects(cloned, (obj) => {
-        const objType = (obj.type || '').toLowerCase();
-        if (objType === 'image' && typeof obj.src === 'string' && obj.src.startsWith('blob:')) {
-            obj.src = PLACEHOLDER_IMAGE_DATA_URL;
-            count++;
-        }
-    });
-    if (count > 0) console.warn(`⚠️ Substituindo ${count} imagem(ns) blob por placeholder (URL temporária)`);
-    return cloned;
-};
 
 const isPotentiallyBrokenRemoteImageSrc = (src: string): boolean => {
     const value = String(src || '').trim().toLowerCase();
@@ -10386,6 +11124,7 @@ const removeImageObjectsDeep = (node: any): any => {
             clearTimeout(pendingCoalescedSaveTimer)
             pendingCoalescedSaveTimer = null
         }
+        hasPendingCoalescedSave = false
         pendingCoalescedSaveOpts = null
         pendingCoalescedSavePageId = ''
     }
@@ -10429,11 +11168,13 @@ const removeImageObjectsDeep = (node: any): any => {
             ? 0
             : getAdaptiveCoalesceDelayMs(saveReason, liveObjectCount)
         if (coalesceDelayMs > 0) {
+            hasPendingCoalescedSave = true
             pendingCoalescedSaveOpts = { ...opts }
             pendingCoalescedSavePageId = getActiveProjectPageId()
             if (!pendingCoalescedSaveTimer) {
                 pendingCoalescedSaveTimer = setTimeout(() => {
                     pendingCoalescedSaveTimer = null
+                    hasPendingCoalescedSave = false
                     const nextOpts = pendingCoalescedSaveOpts
                         ? { ...pendingCoalescedSaveOpts, skipCoalesce: true }
                         : { reason: saveReason, source: opts.source, skipCoalesce: true }
@@ -10562,6 +11303,26 @@ const removeImageObjectsDeep = (node: any): any => {
             convertPresignedToPermanentUrl,
             canvasFramesForDebug: canvasFrames
         });
+
+        const currentPageAfterSerialize = targetPageIndexStart >= 0 ? project.pages?.[targetPageIndexStart] : null;
+        const serializedObjectCount = Number(json?.objects?.length || 0);
+        const existingPersistedObjectCount = Number(currentPageAfterSerialize?.canvasData?.objects?.length || 0);
+        const allowEmptyOverwriteAfterSerialize = canAllowEmptyOverwrite({
+            forceEmptyOverwrite: opts.forceEmptyOverwrite,
+            allowEmptyOverwrite: opts.allowEmptyOverwrite,
+            source: opts.source
+        });
+        if (
+            serializedObjectCount === 0 &&
+            existingPersistedObjectCount > 0 &&
+            !allowEmptyOverwriteAfterSerialize
+        ) {
+            console.warn(
+                `⚠️ Pulando salvamento de JSON vazio após serialização: página já tinha ${existingPersistedObjectCount} objetos persistidos`,
+                { pageIndex: targetPageIndexStart, reason: opts.reason || 'unspecified', pageId: targetPageId }
+            );
+            return;
+        }
         
         // Persist app-level metadata alongside Fabric JSON.
         (json as any)[LABEL_TEMPLATES_JSON_KEY] = serializeLabelTemplatesForProject();
@@ -10573,7 +11334,7 @@ const removeImageObjectsDeep = (node: any): any => {
             canvasInstance?.getZoom?.() || (Array.isArray(vpt) ? vpt[0] : 1)
         )
         const jsonStr = JSON.stringify(json);
-        const currentFingerprint = fastHashString(jsonStr);
+        const currentFingerprint = computeCanvasFingerprint(json);
         const source = opts.source || 'user';
         const currentPage = targetPageIndexStart >= 0 ? project.pages?.[targetPageIndexStart] : null;
         if (shouldSkipByFingerprint({
@@ -10594,6 +11355,10 @@ const removeImageObjectsDeep = (node: any): any => {
         }
         historyStack.value = historyAppend.historyStack
         historyIndex.value = historyAppend.historyIndex
+
+        if (saveReason === 'initial-history-capture') {
+            return
+        }
 
         const reason = String(opts.reason || '')
         const persistence = persistSerializedPageState({
@@ -11079,7 +11844,9 @@ const applyHistoryNavigation = async (
         getFallbackPageState: () => {
             const currentPage = project.pages[project.activePageIndex];
             if (!currentPage?.canvasData?.objects?.length) return null;
-            return prepareCanvasDataForLoad(currentPage.canvasData);
+            return prepareCanvasDataForLoad(currentPage.canvasData, {
+                cacheKey: getPreparedCanvasDataCacheKey(currentPage)
+            });
         },
         updateZoomState,
         updateScrollbars,
@@ -14233,6 +15000,8 @@ const SNAP_HYSTERESIS_HOLD_FACTOR_RECT_IMAGE = 1.08;
 const SNAP_MOVE_EPSILON_PX = 1.8;
 const SNAP_MOVE_EPSILON_PX_RECT_IMAGE = 9;
 const SNAP_RANGE_FACTOR_RECT_IMAGE = 0.28;
+const SNAP_FAST_MOVE_SUPPRESSION_PX = 7;
+const SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE = 9;
 
 const setupSnapping = () => {
     if (!canvas.value) return;
@@ -14631,9 +15400,15 @@ const setupSnapping = () => {
         }
 
         if (!evt?.shiftKey && !evt?.altKey && !isScaleTransform) {
-            const currentMoveX = Number(obj.left || 0);
-            const currentMoveY = Number(obj.top || 0);
+            const pointerScreen = evt
+                ? { x: Number(evt.clientX || 0), y: Number(evt.clientY || 0) }
+                : null;
+            const currentMoveX = pointerScreen?.x ?? Number(obj.left || 0);
+            const currentMoveY = pointerScreen?.y ?? Number(obj.top || 0);
             const moveGatePx = isRectOrImage ? SNAP_MOVE_EPSILON_PX_RECT_IMAGE : SNAP_MOVE_EPSILON_PX;
+            const fastMoveSuppressionPx = isRectOrImage
+                ? SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE
+                : SNAP_FAST_MOVE_SUPPRESSION_PX;
 
             if (!hasMoveActivationPoint) {
                 moveActivationPoint = { x: currentMoveX, y: currentMoveY };
@@ -14659,6 +15434,13 @@ const setupSnapping = () => {
                 if (moveDelta < perFrameMoveGatePx) {
                     lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY };
                     hideGuides();
+                    syncMovingFrameClip(obj);
+                    return;
+                }
+                if (moveDelta >= fastMoveSuppressionPx) {
+                    lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY };
+                    hideGuides();
+                    clearStickySnaps();
                     syncMovingFrameClip(obj);
                     return;
                 }
@@ -15263,6 +16045,7 @@ const updateSelection = () => {
     // Always use a stable snapshot so the PropertiesPanel never "loses" sections (e.g. `type` can be non-enumerable on Fabric objects).
     selectedObjectRef.value = selectionUiState.selectedObjectSnapshot;
     selectedObjectPos.value = floatingPos;
+    markFrameLabelsDirty();
 
     // Show contextual toolbar for selected vector paths and node-edit sessions.
     showPenContextualToolbar.value = selectionUiState.showPenContextualToolbar;
@@ -15319,8 +16102,25 @@ const cleanupOrphanedObjects = () => {
 }
 
 // --- Reactivity & Layers Sync ---
+let reactivityBoundCanvas: any = null;
+
 const setupReactivity = () => {
-    if (!canvas.value) return; 
+    if (!canvas.value) return;
+    if (reactivityBoundCanvas === canvas.value) return;
+    reactivityBoundCanvas = canvas.value;
+
+    canvas.value.on('object:added', invalidateFrameRuntimeCache);
+    canvas.value.on('object:removed', invalidateFrameRuntimeCache);
+    canvas.value.on('object:modified', invalidateFrameRuntimeCache);
+    canvas.value.on('object:added', (e: any) => {
+        if (e?.target?.isFrame) markFrameLabelsDirty();
+    });
+    canvas.value.on('object:removed', (e: any) => {
+        if (e?.target?.isFrame) markFrameLabelsDirty();
+    });
+    canvas.value.on('object:modified', (e: any) => {
+        if (e?.target?.isFrame) markFrameLabelsDirty();
+    });
 
     const isLikelyProductCard = (obj: any) => {
         if (!obj) return false;
@@ -16337,6 +17137,7 @@ const setupReactivity = () => {
         syncObjectFrameClip(obj);
 
         if (obj.isFrame) {
+            markFrameLabelsDirty();
             getOrCreateFrameClipRect(obj);
             syncFrameClips(obj);
         }
@@ -16594,6 +17395,7 @@ const setupReactivity = () => {
                 gridGroupSiblingCacheId = null;
             }
             // Renderizar canvas para mostrar o label do frame
+            markFrameLabelsDirty();
             canvas.value.requestRenderAll();
         } else {
             if (!e.e?.shiftKey) frameChildrenCache = [];
@@ -16660,6 +17462,7 @@ const setupReactivity = () => {
         if (target && target.isFrame) {
             // Mark dirty to ensure fresh render (keep caching for performance)
             target.set('dirty', true);
+            markFrameLabelsDirty();
 
             const dx = target.left - lastFrameState.left;
             const dy = target.top - lastFrameState.top;
@@ -16779,10 +17582,11 @@ const setupReactivity = () => {
 
         // Frames: keep clip rect synced while resizing + update children clips
         if (obj && obj.isFrame) {
+            markFrameLabelsDirty();
             getOrCreateFrameClipRect(obj);
             // Atualizar clips dos filhos em tempo real durante redimensionamento do frame
             if (obj.clipContent) {
-                syncFrameClips(obj);
+                syncFrameClips(obj, { includeSpatialChildren: false, requestRender: false });
             }
         }
 
@@ -16817,6 +17621,7 @@ const setupReactivity = () => {
                 if (Number.isFinite(cardH) && cardH > 0) {
                     (obj as any).__manualTransformCardH = cardH;
                 }
+                syncCardProductDataTitleWidthFromTarget(obj);
             }
         }
 
@@ -16918,6 +17723,7 @@ const setupReactivity = () => {
             // Re-center textboxes inside product cards after resize
             if (obj.type === 'textbox' && obj.originX === 'center' && obj.group && (obj.group.isSmartObject || obj.group.isProductCard || isLikelyProductCard(obj.group))) {
                 obj.set({ left: 0 });
+                syncCardProductDataTitleWidthFromTarget(obj);
                 obj.setCoords();
                 canvas.value.requestRenderAll();
             }
@@ -16970,7 +17776,8 @@ const setupReactivity = () => {
         syncTextSelectionSnapshot(e);
         const target = e?.target;
         const didSyncCardName = syncCardProductDataNameFromTitleTarget(target);
-        if (didSyncCardName || isTextTargetObject(target)) {
+        const didSyncCardTitleWidth = syncCardProductDataTitleWidthFromTarget(target);
+        if (didSyncCardName || didSyncCardTitleWidth || isTextTargetObject(target)) {
             queueTextEditSave('text-edit');
         }
     };
@@ -16979,7 +17786,8 @@ const setupReactivity = () => {
         syncTextSelectionSnapshot(e);
         const target = e?.target;
         const didSyncCardName = syncCardProductDataNameFromTitleTarget(target);
-        if (didSyncCardName || isTextTargetObject(target)) {
+        const didSyncCardTitleWidth = syncCardProductDataTitleWidthFromTarget(target);
+        if (didSyncCardName || didSyncCardTitleWidth || isTextTargetObject(target)) {
             flushTextEditSave('text-edit-exit');
         }
     };
@@ -18062,7 +18870,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 active.initDimensions();
                 active.dirty = true;
              }
-             if (
+            if (
                 prop === 'width' &&
                 String(active.type || '').toLowerCase() === 'textbox' &&
                 active.group &&
@@ -18083,6 +18891,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 if (Number.isFinite(cardH) && cardH > 0) {
                     (active as any).__manualTransformCardH = cardH;
                 }
+                syncCardProductDataTitleWidthFromTarget(active);
              }
              if (
                 String(active.type || '').toLowerCase() === 'image' &&
@@ -19864,7 +20673,11 @@ const renameLayer = (id: string, newName: string) => {
         obj.layerName = newName; // Custom property for our UI
         // Also update fabric name if standard
         // obj.name = newName; 
-        
+
+        if (obj.isFrame) {
+            markFrameLabelsDirty();
+            throttledUpdateFrameLabels();
+        }
         refreshCanvasObjects(); // Trigger reactivity
         saveCurrentState();
     }
@@ -21282,6 +22095,36 @@ type RecoveryLookupResult = {
     url: string | null;
 };
 
+type MissingProductImageRecoveryViewportRect = {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    centerX: number;
+    centerY: number;
+};
+
+type MissingProductImageRecoveryPriority = {
+    selected: boolean;
+    inView: boolean;
+    coverage: number;
+    distanceSq: number;
+    culled: boolean;
+};
+
+type MissingProductImageRecoveryCandidate = {
+    card: any;
+    imageObj: any;
+    hasImageObject: boolean;
+    triedMap: Record<string, true>;
+    normalizedCandidates: string[];
+    needsRemoteLookup: boolean;
+    priority: MissingProductImageRecoveryPriority;
+};
+
+const MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH = 8;
+const MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH = 16;
+
 const isAuthLookupError = (err: any): boolean => {
     const code = Number(err?.statusCode || err?.status || err?.response?.status || 0);
     if (code === 401 || code === 403) return true;
@@ -21339,19 +22182,133 @@ const fetchRecoveryImageUrlFromAssets = async (term: string): Promise<RecoveryLo
     }
 };
 
-const recoverMissingProductCardImages = async (): Promise<{ recoveredCount: number; pendingCount: number }> => {
-    if (!canvas.value || isCanvasDestroyed.value || isRecoveringMissingProductImages) {
+const getMissingProductImageRecoveryViewportRect = (): MissingProductImageRecoveryViewportRect | null => {
+    const c = canvas.value;
+    if (!c) return null;
+    const vpt = c.viewportTransform || [1, 0, 0, 1, 0, 0];
+    const zoom = Math.max(0.0001, Number(c.getZoom?.() || 1) || 1);
+    const width = Number(c.getWidth?.() || 0) / zoom;
+    const height = Number(c.getHeight?.() || 0) / zoom;
+    const left = -Number(vpt[4] || 0) / zoom;
+    const top = -Number(vpt[5] || 0) / zoom;
+    const right = left + width;
+    const bottom = top + height;
+    return {
+        left,
+        top,
+        right,
+        bottom,
+        centerX: left + (width / 2),
+        centerY: top + (height / 2)
+    };
+};
+
+const getMissingProductImageRecoveryActiveCard = (): any | null => {
+    const active = canvas.value?.getActiveObject?.();
+    if (!active) return null;
+    const ctx = resolveSelectedProductCardContext(active);
+    if (ctx?.card) return ctx.card;
+    if (isLikelyProductCard(active) || isProductCardContainer(active)) return active;
+    return findProductCardParentGroup(active);
+};
+
+const measureMissingProductImageRecoveryPriority = (
+    card: any,
+    viewportRect: MissingProductImageRecoveryViewportRect | null,
+    activeCard: any | null
+): MissingProductImageRecoveryPriority => {
+    const selected = !!(activeCard && activeCard === card);
+    const culled = card?.visible === false || !!(card as any)?.__viewportCulled;
+    if (!viewportRect || typeof card?.getBoundingRect !== 'function') {
+        return {
+            selected,
+            inView: selected,
+            coverage: 0,
+            distanceSq: selected ? 0 : Number.MAX_SAFE_INTEGER,
+            culled
+        };
+    }
+
+    try {
+        const bounds = card.getBoundingRect(true, true);
+        const left = Number(bounds?.left || 0);
+        const top = Number(bounds?.top || 0);
+        const width = Math.max(0, Number(bounds?.width || 0));
+        const height = Math.max(0, Number(bounds?.height || 0));
+        const right = left + width;
+        const bottom = top + height;
+        const intersectWidth = Math.max(0, Math.min(right, viewportRect.right) - Math.max(left, viewportRect.left));
+        const intersectHeight = Math.max(0, Math.min(bottom, viewportRect.bottom) - Math.max(top, viewportRect.top));
+        const visibleArea = intersectWidth * intersectHeight;
+        const area = Math.max(1, width * height);
+        const coverage = visibleArea > 0 ? visibleArea / area : 0;
+        const centerX = left + (width / 2);
+        const centerY = top + (height / 2);
+        const dx = centerX - viewportRect.centerX;
+        const dy = centerY - viewportRect.centerY;
+        return {
+            selected,
+            inView: visibleArea > 0 && !culled,
+            coverage,
+            distanceSq: (dx * dx) + (dy * dy),
+            culled
+        };
+    } catch {
+        return {
+            selected,
+            inView: selected,
+            coverage: 0,
+            distanceSq: selected ? 0 : Number.MAX_SAFE_INTEGER,
+            culled
+        };
+    }
+};
+
+const compareMissingProductImageRecoveryCandidates = (
+    a: MissingProductImageRecoveryCandidate,
+    b: MissingProductImageRecoveryCandidate
+): number => {
+    if (a.priority.selected !== b.priority.selected) return a.priority.selected ? -1 : 1;
+    if (a.priority.inView !== b.priority.inView) return a.priority.inView ? -1 : 1;
+    if (a.priority.culled !== b.priority.culled) return a.priority.culled ? 1 : -1;
+    if (Math.abs(a.priority.coverage - b.priority.coverage) > 0.0001) return b.priority.coverage - a.priority.coverage;
+    if (a.priority.distanceSq !== b.priority.distanceSq) return a.priority.distanceSq - b.priority.distanceSq;
+    return 0;
+};
+
+const getMissingProductImageRecoveryBatchLimit = (candidates: MissingProductImageRecoveryCandidate[]): number => {
+    if (!Array.isArray(candidates) || candidates.length <= MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH) {
+        return Array.isArray(candidates) ? candidates.length : 0;
+    }
+    const visibleCount = candidates.filter((candidate) => candidate.priority.selected || candidate.priority.inView).length;
+    const target = visibleCount > 0 ? visibleCount + 4 : MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH;
+    return Math.max(
+        MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH,
+        Math.min(MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH, target, candidates.length)
+    );
+};
+
+const recoverMissingProductCardImages = async (
+    opts: { expectedPageId?: string | null } = {}
+): Promise<{ recoveredCount: number; pendingCount: number }> => {
+    const expectedPageId = String(opts.expectedPageId || getActiveProjectPageId()).trim();
+    const isExpectedPageStillActive = () => !expectedPageId || getActiveProjectPageId() === expectedPageId;
+    if (!canvas.value || isCanvasDestroyed.value || isRecoveringMissingProductImages || !isExpectedPageStillActive()) {
         return { recoveredCount: 0, pendingCount: 0 };
     }
     isRecoveringMissingProductImages = true;
     try {
+        if (!isExpectedPageStillActive()) {
+            return { recoveredCount: 0, pendingCount: 0 };
+        }
+        const viewportRect = getMissingProductImageRecoveryViewportRect();
+        const activeCard = getMissingProductImageRecoveryActiveCard();
         const cards = collectObjectsDeep(canvas.value)
             .filter((obj: any) => !!(obj?.type === 'group' && (obj?.isSmartObject || obj?.isProductCard || isLikelyProductCard(obj))));
 
-        let recoveredCount = 0;
-        let pendingCount = 0;
-        let remoteLookupsLeft = 30;
+        const candidates: MissingProductImageRecoveryCandidate[] = [];
         for (const card of cards) {
+            if (!isExpectedPageStillActive() || isCanvasDestroyed.value) break;
             const imageObj = getPreferredProductImageFromGroup(card);
             const hasImageObject = !!imageObj;
 
@@ -21367,7 +22324,6 @@ const recoverMissingProductCardImages = async (): Promise<{ recoveredCount: numb
                 needsRecovery = hasBrokenSource || hasInvalidGeometry || hasLikelyBrokenElement;
             }
             if (!needsRecovery) continue;
-            pendingCount += 1;
 
             const triedMap = (((card as any).__missingImageRecoveryTried && typeof (card as any).__missingImageRecoveryTried === 'object')
                 ? (card as any).__missingImageRecoveryTried
@@ -21387,6 +22343,40 @@ const recoverMissingProductCardImages = async (): Promise<{ recoveredCount: numb
             const normalizedCandidates = Array.from(new Set(rawCandidates))
                 .map((src) => normalizeRecoveryImageUrl(src))
                 .filter((src) => !!src && !isLikelyPlaceholderImageSrc(src));
+
+            candidates.push({
+                card,
+                imageObj,
+                hasImageObject,
+                triedMap,
+                normalizedCandidates,
+                needsRemoteLookup: !(card as any).__missingImageRemoteLookupDone,
+                priority: measureMissingProductImageRecoveryPriority(card, viewportRect, activeCard)
+            });
+        }
+
+        if (!candidates.length) {
+            return { recoveredCount: 0, pendingCount: 0 };
+        }
+
+        candidates.sort(compareMissingProductImageRecoveryCandidates);
+        const batchLimit = getMissingProductImageRecoveryBatchLimit(candidates);
+        const candidatesToProcess = candidates.slice(0, batchLimit);
+
+        if (import.meta.dev && candidates.length > candidatesToProcess.length) {
+            console.log('[recover-missing-product-images] Processing prioritized batch:', {
+                totalCandidates: candidates.length,
+                batchLimit,
+                visibleFirst: candidatesToProcess.filter((candidate) => candidate.priority.selected || candidate.priority.inView).length
+            });
+        }
+
+        let recoveredCount = 0;
+        let pendingCount = candidates.length;
+        let remoteLookupsLeft = 30;
+        for (const candidate of candidatesToProcess) {
+            if (!isExpectedPageStillActive() || isCanvasDestroyed.value) break;
+            const { card, imageObj, hasImageObject, triedMap, normalizedCandidates, needsRemoteLookup } = candidate;
 
             const tryApplyImageUrl = async (url: string): Promise<boolean> => {
                 if (!url) return false;
@@ -21414,7 +22404,7 @@ const recoverMissingProductCardImages = async (): Promise<{ recoveredCount: numb
                 if (restored) break;
             }
 
-            if (!restored && remoteLookupsLeft > 0 && !(card as any).__missingImageRemoteLookupDone) {
+            if (!restored && remoteLookupsLeft > 0 && needsRemoteLookup) {
                 remoteLookupsLeft -= 1;
                 const fetchedResult = await fetchRecoveryImageUrlForCard(card);
                 if (fetchedResult.url) {
@@ -21451,7 +22441,7 @@ const recoverMissingProductCardImages = async (): Promise<{ recoveredCount: numb
             }
         }
 
-        if (recoveredCount > 0 && canvas.value) {
+        if (recoveredCount > 0 && canvas.value && isExpectedPageStillActive()) {
             refreshCanvasObjects();
             safeRequestRenderAll();
             saveCurrentState({
@@ -21466,20 +22456,24 @@ const recoverMissingProductCardImages = async (): Promise<{ recoveredCount: numb
     }
 };
 
-const scheduleMissingProductImageRecovery = (delayMs = 140, retries = 6) => {
+const scheduleMissingProductImageRecovery = (delayMs = 140, retries = 6, expectedPageId = getActiveProjectPageId()) => {
     if (isHistoryProcessing.value || isDesignLoading.value || isCanvasDestroyed.value) return;
     if (missingProductImageRecoveryTimer) {
         clearTimeout(missingProductImageRecoveryTimer);
     }
     missingProductImageRecoveryTimer = setTimeout(async () => {
+        if (expectedPageId && getActiveProjectPageId() !== expectedPageId) {
+            missingProductImageRecoveryTimer = null;
+            return;
+        }
         if (isHistoryProcessing.value || isDesignLoading.value || isCanvasDestroyed.value) {
             missingProductImageRecoveryTimer = null;
             return;
         }
         missingProductImageRecoveryTimer = null;
-        const result = await recoverMissingProductCardImages();
+        const result = await recoverMissingProductCardImages({ expectedPageId });
         if (result && result.pendingCount > 0 && retries > 0) {
-            scheduleMissingProductImageRecovery(900, retries - 1);
+            scheduleMissingProductImageRecovery(900, retries - 1, expectedPageId);
         }
     }, Math.max(0, Number(delayMs) || 0));
 };
@@ -22011,6 +23005,15 @@ const createSmartObject = async (
         : undefined;
     const { cleanedName, extractedLimit } = extractLimitFromName(product?.name);
     const limitTextValue = normalizeLimitText(product?.limit ?? extractedLimit);
+    const persistedTitleWidth = Number((product as any)?.titleTextWidth);
+    const persistedTitleWidthRatio = Number((product as any)?.titleTextWidthRatio);
+    let initialTitleWidth = width - 20;
+    if (Number.isFinite(persistedTitleWidthRatio) && persistedTitleWidthRatio > 0) {
+        initialTitleWidth = width * persistedTitleWidthRatio;
+    } else if (Number.isFinite(persistedTitleWidth) && persistedTitleWidth > 0) {
+        initialTitleWidth = persistedTitleWidth;
+    }
+    initialTitleWidth = Math.min(Math.max(20, width), Math.max(20, initialTitleWidth));
     
     // All coordinates are RELATIVE to group center (0,0 = center of card)
     
@@ -22042,13 +23045,27 @@ const createSmartObject = async (
         originY: 'top',
         left: 0, // Centered horizontally
         top: titleY,
-        width: width - 20,
+        width: initialTitleWidth,
         name: 'smart_title',
         shadow: new fabric.Shadow({ color: 'rgba(255,255,255,0.8)', blur: 2, offsetX: 1, offsetY: 1 }),
         // UX: Prevent font stretching/blurring, enforce reflow
         lockScalingY: true, 
         splitByGrapheme: false
     });
+    if (
+        (Number.isFinite(persistedTitleWidthRatio) && persistedTitleWidthRatio > 0) ||
+        (Number.isFinite(persistedTitleWidth) && persistedTitleWidth > 0)
+    ) {
+        (title as any).__manualTransform = true;
+        (title as any).__manualTextWidth = initialTitleWidth;
+        if (width > 0) {
+            (title as any).__manualTextWidthRatio = Math.min(1, Math.max(0.1, initialTitleWidth / width));
+            (title as any).__manualTransformCardW = width;
+        }
+        if (cardHeight > 0) {
+            (title as any).__manualTransformCardH = cardHeight;
+        }
+    }
     if (typeof (title as any).initDimensions === 'function') (title as any).initDimensions();
 
     // 2.1 Limit (Below title)
@@ -24040,6 +25057,47 @@ const getCardLimitText = (card: any) => {
         String(o?.data?.smartType || '') === 'product-limit'
     ) || null;
 };
+
+function syncCardProductDataTitleWidthFromTarget(target: any): boolean {
+    if (!target) return false;
+
+    const targetType = String(target?.type || '').toLowerCase();
+    if (targetType !== 'text' && targetType !== 'i-text' && targetType !== 'textbox') return false;
+
+    const card = findProductCardParentGroup(target);
+    if (!card || !isProductCardContainer(card)) return false;
+
+    const titleObj = getCardTitleText(card);
+    if (!titleObj || titleObj !== target) return false;
+    if (!(titleObj as any).__manualTransform) return false;
+
+    const nextWidth = Number((titleObj as any).__manualTextWidth ?? titleObj.width ?? 0);
+    if (!Number.isFinite(nextWidth) || nextWidth <= 0) return false;
+
+    const cardW = Number((card as any)?._cardWidth ?? card?.width ?? card?.getScaledWidth?.() ?? 0);
+    const rawRatio = Number((titleObj as any).__manualTextWidthRatio);
+    const nextRatio = Number.isFinite(rawRatio) && rawRatio > 0
+        ? Math.min(1, Math.max(0.1, rawRatio))
+        : (Number.isFinite(cardW) && cardW > 0
+            ? Math.min(1, Math.max(0.1, nextWidth / cardW))
+            : null);
+
+    const baseProductData = ((card as any)?._productData && typeof (card as any)._productData === 'object')
+        ? (card as any)._productData
+        : {};
+    const currentWidth = Number(baseProductData.titleTextWidth);
+    const currentRatio = Number(baseProductData.titleTextWidthRatio);
+    const widthChanged = !Number.isFinite(currentWidth) || Math.abs(currentWidth - nextWidth) > 0.5;
+    const ratioChanged = nextRatio !== null && (!Number.isFinite(currentRatio) || Math.abs(currentRatio - nextRatio) > 0.001);
+    if (!widthChanged && !ratioChanged) return false;
+
+    (card as any)._productData = {
+        ...baseProductData,
+        titleTextWidth: nextWidth,
+        titleTextWidthRatio: nextRatio ?? baseProductData.titleTextWidthRatio
+    };
+    return true;
+}
 
 const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalStyles): boolean => {
     if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') return false;
@@ -30438,6 +31496,25 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     // 2. Title (Top)
     let titleH = 0;
     if (title) {
+        const persistedTitleWidth = Number((group as any)?._productData?.titleTextWidth);
+        const persistedTitleWidthRatio = Number((group as any)?._productData?.titleTextWidthRatio);
+        if (
+            !(title as any).__manualTransform &&
+            (
+                (Number.isFinite(persistedTitleWidthRatio) && persistedTitleWidthRatio > 0) ||
+                (Number.isFinite(persistedTitleWidth) && persistedTitleWidth > 0)
+            )
+        ) {
+            (title as any).__manualTransform = true;
+            if (Number.isFinite(persistedTitleWidth) && persistedTitleWidth > 0) {
+                (title as any).__manualTextWidth = persistedTitleWidth;
+            }
+            if (Number.isFinite(persistedTitleWidthRatio) && persistedTitleWidthRatio > 0) {
+                (title as any).__manualTextWidthRatio = Math.min(1, Math.max(0.1, persistedTitleWidthRatio));
+            }
+            if (w > 0) (title as any).__manualTransformCardW = w;
+            if (h > 0) (title as any).__manualTransformCardH = h;
+        }
         // Margin Top: 5% of height
         const marginTop = h * 0.05;
         if (!isManual(title)) {
@@ -31316,6 +32393,7 @@ const getResolvedZoneFrameId = (zone: any): string | undefined => {
 
     if ((zone as any).parentFrameId !== frameId) {
         (zone as any).parentFrameId = frameId;
+        invalidateFrameRuntimeCache();
     }
 
     return frameId;
@@ -31329,6 +32407,7 @@ const applyCardFrameBinding = (card: any, frameId?: string) => {
     const nextFrameId = String(frameId || '').trim() || undefined;
     if ((card as any).parentFrameId !== nextFrameId) {
         (card as any).parentFrameId = nextFrameId;
+        invalidateFrameRuntimeCache();
     }
 
     // Product cards are never clipped by frame clipPath.
@@ -32177,10 +33256,17 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
     if (shouldSave) saveCurrentState();
 }
 
-const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: boolean } = {}) => {
+const rehydrateCanvasZones = (
+    opts: {
+        relayout?: boolean;
+        applyZoneStyles?: boolean;
+        legacyImageRepairMode?: 'auto' | 'force' | 'skip';
+    } = {}
+) => {
     if (!canvas.value) return;
     const relayout = opts.relayout !== false;
     const applyZoneStyles = opts.applyZoneStyles !== false;
+    const legacyImageRepairMode = opts.legacyImageRepairMode || 'auto';
 
     const prevHistory = isHistoryProcessing.value;
     isHistoryProcessing.value = true;
@@ -32357,6 +33443,11 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
         });
 
         const frameIds = new Set<string>(frames.map((f: any) => f._customId).filter(Boolean));
+        const framesById = new Map<string, any>(
+            frames
+                .filter((f: any) => !!f?._customId)
+                .map((f: any) => [String(f._customId), f])
+        );
         objs.forEach((o: any) => {
             if (o?.parentFrameId && !frameIds.has(o.parentFrameId)) {
                 o.parentFrameId = undefined;
@@ -32371,7 +33462,7 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
         // This prevents clipping issues when objects are moved outside frames
         objs.forEach((o: any) => {
             if (!o?.parentFrameId || o?.isFrame) return;
-            const frame = frames.find((f: any) => f._customId === o.parentFrameId);
+            const frame = framesById.get(String(o.parentFrameId || ''));
             if (!frame) {
                 o.parentFrameId = undefined;
                 if (o._frameClipOwner) {
@@ -32614,7 +33705,10 @@ const rehydrateCanvasZones = (opts: { relayout?: boolean; applyZoneStyles?: bool
 
         // Auto-repair legacy/corrupted image transforms inside product cards
         // (negative scales, flips, invalid dimensions) before reflowing zone layout.
-        const repairStats = repairLegacyProductCardImageTransforms(cards, { verbose: import.meta.dev });
+        const shouldRunLegacyImageRepair = legacyImageRepairMode !== 'skip';
+        const repairStats = shouldRunLegacyImageRepair
+            ? repairLegacyProductCardImageTransforms(cards, { verbose: import.meta.dev })
+            : { cardsScanned: 0, imagesScanned: 0, imagesRepaired: 0 };
         if (import.meta.dev && repairStats.imagesRepaired > 0) {
             console.log('[rehydrateCanvasZones] Legacy image repair applied:', repairStats);
         }
@@ -32860,7 +33954,7 @@ const handleRecalculateLayout = () => {
                 @click="applyProductImageFromUploadPicker(asset)"
               >
                 <div class="aspect-square">
-                  <img :src="toWasabiProxyUrl(asset.url) || asset.url" class="w-full h-full object-cover" />
+                  <img :src="toWasabiDirectUrl(asset.url) || asset.url" class="w-full h-full object-cover" />
                 </div>
                 <div class="px-2 py-1.5 border-t border-white/10">
                   <p class="text-[10px] text-zinc-200 truncate">{{ asset.name || 'Sem nome' }}</p>

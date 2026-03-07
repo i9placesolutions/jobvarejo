@@ -1,5 +1,10 @@
 import { requireAuthenticatedUser } from '../utils/auth'
 import { parseAndStringifyJsonbParam } from '../utils/jsonb'
+import {
+  normalizeProjectCanvasDataStorageRefs,
+  normalizeStoredStorageRef
+} from '../utils/project-storage-refs'
+import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull } from '../utils/postgres'
 
@@ -38,6 +43,7 @@ const ensureCanvasDataNotEmpty = (value: unknown) => {
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   enforceRateLimit(event, `projects-patch:${user.id}`, 180, 60_000)
+  const actorClientId = String(getHeader(event, 'x-client-id') || '').trim() || null
 
   const body = await readBody<Record<string, any>>(event)
   const projectId = String(body?.id || '').trim()
@@ -60,7 +66,7 @@ export default defineEventHandler(async (event) => {
   }
 
   if ('preview_url' in body) {
-    const previewUrl = body?.preview_url == null ? null : String(body.preview_url).trim()
+    const previewUrl = normalizeStoredStorageRef(body?.preview_url)
     if (previewUrl && previewUrl.length > 2048) {
       throw createError({ statusCode: 400, statusMessage: 'preview_url too long' })
     }
@@ -102,7 +108,8 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'canvas_data cannot be empty' })
     }
     ensureCanvasDataNotEmpty(body.canvas_data)
-    const canvasDataJson = parseAndStringifyJsonbParam(body.canvas_data, 'canvas_data')
+    const normalizedCanvasData = normalizeProjectCanvasDataStorageRefs(body.canvas_data)
+    const canvasDataJson = parseAndStringifyJsonbParam(normalizedCanvasData, 'canvas_data')
     updates.push(`canvas_data = ${pushParam(canvasDataJson)}::jsonb`)
   }
 
@@ -125,6 +132,18 @@ export default defineEventHandler(async (event) => {
       params
     )
     if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+
+    try {
+      await publishProjectChange({
+        projectId: String(row.id || projectId),
+        userId: user.id,
+        action: 'updated',
+        updatedAt: String(row.updated_at || new Date().toISOString()),
+        actorClientId
+      })
+    } catch (notifyErr) {
+      console.warn('[api/projects:patch] Failed to publish realtime notification:', notifyErr)
+    }
 
     return { success: true, project: row }
   } catch (error: any) {

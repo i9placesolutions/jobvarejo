@@ -360,10 +360,20 @@ export const useStorage = () => {
 
     try {
       console.log('📥 loadCanvasDataFromPath:', canvasDataPath)
+      const headers = await tryGetApiAuthHeaders()
+      if (!headers) return null
+
+      const presignedUrl = await getPresignedUrl(canvasDataPath, undefined, 'get', 2, headers)
+      if (presignedUrl) {
+        const canvasJson = await fetchJsonWithRetry(presignedUrl, 2)
+        if (canvasJson) {
+          console.log('✅ JSON carregado via presigned URL direta, objetos:', canvasJson?.objects?.length || 0)
+          return canvasJson
+        }
+      }
+
       const proxyUrl = resolveProxyGetUrl(canvasDataPath)
       if (proxyUrl) {
-        const headers = await tryGetApiAuthHeaders()
-        if (!headers) return null
         const canvasJson = await fetchJsonWithRetry(proxyUrl, 3, headers)
         if (canvasJson) {
           console.log('✅ JSON carregado via proxy, objetos:', canvasJson?.objects?.length || 0)
@@ -372,19 +382,10 @@ export const useStorage = () => {
         return null
       }
 
-      // Fallback legado: presigned GET
-      const headers = await tryGetApiAuthHeaders()
-      if (!headers) return null
-      const presignedUrl = await getPresignedUrl(canvasDataPath, undefined, 'get', 2, headers)
       if (!presignedUrl) {
         console.log('⚠️ Presigned URL não retornada')
-        return null
       }
-      const canvasJson = await fetchJsonWithRetry(presignedUrl, 2)
-      if (canvasJson) {
-        console.log('✅ JSON carregado via presigned URL, objetos:', canvasJson?.objects?.length || 0)
-      }
-      return canvasJson
+      return null
     } catch (error: any) {
       console.error('❌ Erro ao carregar da Wasabi:', error)
       return null
@@ -440,19 +441,20 @@ export const useStorage = () => {
 
     try {
       const key = `projects/${userId}/${projectId}/page_${pageId}.json`
-      const proxyUrl = resolveProxyGetUrl(key)
-      if (proxyUrl) {
-        const headers = await tryGetApiAuthHeaders()
-        if (!headers) return null
-        return await fetchJsonWithRetry(proxyUrl, 3, headers)
-      }
-
-      // Fallback legado: presigned GET
       const headers = await tryGetApiAuthHeaders()
       if (!headers) return null
+
       const presignedUrl = await getPresignedUrl(key, undefined, 'get', 2, headers)
-      if (!presignedUrl) return null
-      return await fetchJsonWithRetry(presignedUrl, 2)
+      if (presignedUrl) {
+        const json = await fetchJsonWithRetry(presignedUrl, 2)
+        if (json) return json
+      }
+
+      const proxyUrl = resolveProxyGetUrl(key)
+      if (proxyUrl) {
+        return await fetchJsonWithRetry(proxyUrl, 3, headers)
+      }
+      return null
     } catch (error: any) {
       console.error('Erro ao carregar da Wasabi:', error)
       return null
@@ -505,7 +507,11 @@ export const useStorage = () => {
         throw new Error(`Upload failed: ${uploadResponse.statusText}`)
       }
 
-      // Return a same-origin proxy URL so thumbnails work even when the bucket is private.
+      const readUrl = await getPresignedUrl(key, undefined, 'get', 2, authHeaders)
+      if (readUrl) {
+        return readUrl
+      }
+
       return `/api/storage/p?key=${encodeURIComponent(key)}`
     } catch (error: any) {
       console.error('Erro ao salvar thumbnail:', error)

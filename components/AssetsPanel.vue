@@ -1075,7 +1075,7 @@ const handleFileUpload = async (event: Event) => {
                         @mouseleave="cancelLongPress"
                         @touchend="cancelLongPress"
                     >
-                        <img :src="asset.url" crossorigin="anonymous" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                        <img :src="asset.url" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                         <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2 pointer-events-none">
                             <span class="text-[9px] text-white font-medium truncate w-full">{{ asset.name }}</span>
                         </div>
@@ -1106,7 +1106,7 @@ const handleFileUpload = async (event: Event) => {
                         @touchend="cancelLongPress"
                     >
                         <template v-if="asset.url">
-                            <img :src="asset.url" crossorigin="anonymous" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                            <img :src="asset.url" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                             <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2 pointer-events-none">
                                 <span class="text-[9px] text-white font-medium truncate w-full">{{ asset.name }}</span>
                             </div>

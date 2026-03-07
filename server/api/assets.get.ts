@@ -1,9 +1,10 @@
-import { getS3Client } from "../utils/s3";
+import { getPublicUrl, getS3Client } from "../utils/s3";
 import { getCachedS3Objects } from "../utils/s3-object-cache";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { pgQuery } from "../utils/postgres";
 import { normalizeSearchTerm } from "../utils/product-image-matching";
+import { resolveStorageReadUrl } from "../utils/project-storage-refs";
 
 type AssetItem = {
     id: string;
@@ -49,8 +50,6 @@ const normalizeText = (value: string) =>
         .replace(/[^a-z0-9.\s]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
-
-const toProxyUrl = (key: string) => `/api/storage/p?key=${encodeURIComponent(key)}`;
 
 const resolveWasabiKeyFromUrl = (rawUrl: string, bucketName: string, endpoint: string): string | null => {
     const value = String(rawUrl || "").trim();
@@ -395,7 +394,7 @@ export default defineEventHandler(async (event) => {
                     id: `s3:${item.key}`,
                     key: item.key,
                     name: assetNameByKey.get(item.key) || extractDisplayNameFromKey(item.key),
-                    url: toProxyUrl(item.key),
+                    url: getPublicUrl(item.key),
                     source: "s3" as const,
                     size: item.size,
                     lastModified: item.lastModified || null,
@@ -437,7 +436,7 @@ export default defineEventHandler(async (event) => {
                 String(row.s3_key || "").trim() ||
                 resolveWasabiKeyFromUrl(imageUrlRaw, bucketName, endpoint) ||
                 "";
-            const resolvedUrl = resolvedKey ? toProxyUrl(resolvedKey) : imageUrlRaw;
+            const resolvedUrl = resolvedKey ? getPublicUrl(resolvedKey) : imageUrlRaw;
             if (!resolvedUrl) continue;
             const displayName =
                 String(row.product_name || "").trim() ||
@@ -481,11 +480,11 @@ export default defineEventHandler(async (event) => {
             return db - da;
         });
 
-        const mapToPayload = (item: AssetItem) => ({
+        const mapToPayload = async (item: AssetItem) => ({
             id: item.id,
             key: item.key || null,
             name: item.name,
-            url: item.url,
+            url: await resolveStorageReadUrl(item.key || item.url, user.id),
             source: item.source,
             score: item.score || 0,
             size: item.size,
@@ -497,7 +496,7 @@ export default defineEventHandler(async (event) => {
             const page = merged.slice(startIndex, endIndex);
             const nextCursor = endIndex < merged.length ? String(endIndex) : null;
             return {
-                items: page.map(mapToPayload),
+                items: await Promise.all(page.map(mapToPayload)),
                 nextCursor,
                 hasMore: nextCursor !== null,
                 total: merged.length,
@@ -507,7 +506,7 @@ export default defineEventHandler(async (event) => {
 
         const shouldApplyLimit = searchMode || hasExplicitLimit;
         const finalItems = shouldApplyLimit ? merged.slice(0, resultLimit) : merged;
-        return finalItems.map(mapToPayload);
+        return await Promise.all(finalItems.map(mapToPayload));
     } catch (error: any) {
         console.error("Assets smart search error:", error);
         throw createError({ statusCode: 500, statusMessage: "Failed to list assets: " + (error?.message || String(error)) });

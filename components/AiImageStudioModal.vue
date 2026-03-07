@@ -4,7 +4,7 @@ import Dialog from './ui/Dialog.vue'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
 import { Sparkles, Wand2, Scissors, Paintbrush, Link as LinkIcon, Upload as UploadIcon } from 'lucide-vue-next'
-import { toWasabiProxyUrl } from '~/utils/storageProxy'
+import { toWasabiDirectUrl } from '~/utils/storageProxy'
 
 type Mode = 'generate' | 'similar' | 'edit'
 
@@ -370,14 +370,14 @@ const run = async () => {
     if (mode.value === 'generate') {
       form.append('mode', 'generate')
       const res: any = await $fetch('/api/ai/image/generate', { method: 'POST', headers, body: form })
-      resultUrl.value = toWasabiProxyUrl(res?.url) || res?.url
+      resultUrl.value = toWasabiDirectUrl(res?.url) || res?.url
       emit('created', { id: String(res?.key || ''), name: filenameBase.value || 'AI', url: resultUrl.value })
     } else if (mode.value === 'similar') {
       form.append('mode', 'similar')
       if (modelFile.value) form.append('modelFile', modelFile.value)
       if (modelImageUrl.value) form.append('modelImageUrl', modelImageUrl.value)
       const res: any = await $fetch('/api/ai/image/generate', { method: 'POST', headers, body: form })
-      resultUrl.value = toWasabiProxyUrl(res?.url) || res?.url
+      resultUrl.value = toWasabiDirectUrl(res?.url) || res?.url
       emit('created', { id: String(res?.key || ''), name: filenameBase.value || 'AI', url: resultUrl.value })
     } else {
       // edit
@@ -386,7 +386,7 @@ const run = async () => {
       const mask = await maskToFile()
       if (mask) form.append('maskFile', mask)
       const res: any = await $fetch('/api/ai/image/edit', { method: 'POST', headers, body: form })
-      resultUrl.value = toWasabiProxyUrl(res?.url) || res?.url
+      resultUrl.value = toWasabiDirectUrl(res?.url) || res?.url
       emit('created', { id: String(res?.key || ''), name: filenameBase.value || 'AI', url: resultUrl.value })
     }
 

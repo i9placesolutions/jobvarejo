@@ -1,4 +1,4 @@
-import { toWasabiProxyUrl } from '~/utils/storageProxy';
+import { toWasabiDirectUrl } from '~/utils/storageProxy';
 
 export interface SmartProduct {
     id: string;
@@ -413,7 +413,7 @@ export const useProductProcessor = () => {
             });
 
             if (result && result.url) {
-                product.imageUrl = toWasabiProxyUrl(String(result.url || '').trim()) || result.url;
+                product.imageUrl = toWasabiDirectUrl(String(result.url || '').trim()) || result.url;
                 product.status = 'done';
                 product.imageDecisionReason = '';
                 console.log('[ProductProcessor] Image found:', product.name, result.url.substring(0, 80) + '...');

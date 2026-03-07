@@ -14,14 +14,13 @@ export type BgPolicy = 'auto' | 'never' | 'always'
 export type ProcessProductImageResponse = {
   source: string
   url?: string | null
+  key?: string | null
   processing?: string
   found?: boolean
   reason?: string
   aiConfidence?: number
   aiBestIndex?: number
 }
-
-const proxyUrl = (key: string) => `/api/storage/p?key=${encodeURIComponent(key)}`
 
 export async function s3KeyExists(s3: any, bucket: string, key: string): Promise<boolean> {
   try {
@@ -206,7 +205,7 @@ export const runExternalPipelineOnce = async (opts: {
         s3Key: reusableKey,
         source: 'cache-s3'
       })
-      return { source: 'cache-s3', url: proxyUrl(reusableKey) }
+      return { source: 'cache-s3', url: getPublicUrl(reusableKey), key: reusableKey }
     }
 
     const rawBuffer = await downloadImage(safeSelectedImageUrl, { maxBytes: 12 * 1024 * 1024, timeoutMs: 15_000 })
@@ -254,7 +253,8 @@ export const runExternalPipelineOnce = async (opts: {
     return {
       source: 'external',
       processing: processingMode,
-      url: proxyUrl(targetUploadKey)
+      url: getPublicUrl(targetUploadKey),
+      key: targetUploadKey
     }
   })()
 

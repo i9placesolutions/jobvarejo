@@ -1,5 +1,6 @@
 import { reactive, ref, computed, watch } from 'vue'
-import { toWasabiProxyUrl } from '~/utils/storageProxy'
+import { computeCanvasFingerprint } from '~/utils/editorCanvasState'
+import { normalizeCanvasAssetUrls } from '~/utils/canvasAssetUrls'
 
 export interface Page {
     id: string;
@@ -44,6 +45,18 @@ const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
 let lastSaveChangedDuringRunLogAt = 0
 
+const createRealtimeClientId = (): string => {
+    if (import.meta.server) return 'server'
+    try {
+        const fromCrypto = (globalThis as any)?.crypto?.randomUUID?.()
+        if (fromCrypto) return String(fromCrypto)
+    } catch {
+        // ignore
+    }
+    return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+const realtimeClientId = ref<string>(createRealtimeClientId())
+
 // -----------------------------------------------------------------------------
 // Local draft persistence (offline-safe)
 // When network/storage save fails (ERR_INTERNET_DISCONNECTED), we still want the
@@ -56,15 +69,6 @@ type DraftPayload = { updatedAt: number; canvasData: any }
 const DRAFT_PROJECT_KEY_PREFIX = 'jobvarejo:draft:project:'
 const getProjectDraftKey = (projectId: string) => `${DRAFT_PROJECT_KEY_PREFIX}${projectId}`
 type ProjectDraftPayload = { updatedAt: number; project: { id: string; name: string; pages: Page[]; activePageIndex: number } }
-
-const hashString = (input: string): string => {
-    let hash = 5381
-    for (let i = 0; i < input.length; i++) {
-        hash = ((hash << 5) + hash) + input.charCodeAt(i)
-        hash |= 0
-    }
-    return `h${(hash >>> 0).toString(16)}`
-}
 
 const makePageId = (): string => Math.random().toString(36).substr(2, 9)
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -94,15 +98,6 @@ const normalizeProjectPageIds = (pages: any[], context: string): void => {
             console.warn(`[pages] ID de página ausente/duplicado normalizado (${context}) #${idx}: "${prev || '(vazio)'}" -> "${normalized}"`)
         }
     })
-}
-
-const computeCanvasFingerprint = (canvasData: any): string => {
-    try {
-        if (!canvasData || typeof canvasData !== 'object') return 'empty'
-        return hashString(JSON.stringify(canvasData))
-    } catch {
-        return `fallback:${getCanvasObjectCount(canvasData)}:${getCanvasSavedAt(canvasData)}`
-    }
 }
 
 const getCanvasSavedAt = (canvasData: any): number => {
@@ -298,11 +293,63 @@ const clearProjectDraft = (projectId: string) => {
     }
 }
 
+const projectServerUpdatedAt = ref<string | null>(null)
+const projectLoadSession = ref(0)
+const pageCanvasLoadPromises = new Map<string, Promise<Page | null>>()
+let deferredCanvasPrefetchRunId = 0
+
+type ResolvedPageCanvasState = {
+    canvasData: any
+    canvasDataPath?: string
+    finalObjectCount: number
+    finalFingerprint: string
+    needsRemoteSync: boolean
+    source: string
+}
+
+const scheduleDeferredWork = (work: () => void, timeoutMs = 1800) => {
+    if (typeof window === 'undefined') {
+        work()
+        return
+    }
+
+    const ric = (window as any).requestIdleCallback
+    if (typeof ric === 'function') {
+        ric(() => work(), { timeout: timeoutMs })
+        return
+    }
+
+    window.setTimeout(work, Math.min(1400, timeoutMs))
+}
+
+const getProjectPageIndexById = (pageId: string): number => (
+    project.pages.findIndex((page) => String(page?.id || '').trim() === String(pageId || '').trim())
+)
+
+const getDeferredCanvasPrefetchIds = (activePageId?: string | null, limit = 2): string[] => {
+    const activeId = String(activePageId || '').trim()
+    const activeIndex = activeId ? getProjectPageIndexById(activeId) : -1
+    const pages = Array.isArray(project.pages) ? project.pages : []
+
+    const candidates = pages
+        .map((page, index) => ({ page, index }))
+        .filter(({ page }) => !!page && !page.canvasData && !!String(page.canvasDataPath || '').trim())
+        .filter(({ page }) => String(page?.id || '').trim() !== activeId)
+        .sort((a, b) => {
+            if (activeIndex < 0) return a.index - b.index
+            const distA = Math.abs(a.index - activeIndex)
+            const distB = Math.abs(b.index - activeIndex)
+            if (distA !== distB) return distA - distB
+            return a.index - b.index
+        })
+        .slice(0, Math.max(0, Math.floor(limit)))
+
+    return candidates.map(({ page }) => String(page?.id || '').trim()).filter(Boolean)
+}
+
 export const useProject = () => {
     const { getApiAuthHeaders } = useApiAuth()
     const { saveCanvasData, saveThumbnail, loadCanvasData, loadCanvasDataFromPath, recoverLatestNonEmptyCanvasData, deleteProjectFiles, saveStatus: storageSaveStatus } = useStorage()
-    const projectServerUpdatedAt = ref<string | null>(null)
-    const projectLoadSession = ref(0)
 
     const activePage = computed(() => project.pages[project.activePageIndex])
 
@@ -315,6 +362,199 @@ export const useProject = () => {
         }
     })
 
+    const resolvePageCanvasState = async (opts: {
+        projectId: string
+        pageId: string
+        pageMeta: any
+        draft?: DraftPayload | null
+    }): Promise<ResolvedPageCanvasState> => {
+        let serverCanvasData = null
+        const dbCanvasData = opts.pageMeta?.canvasData || null
+        const preferredPath = String(opts.pageMeta?.canvasDataPath || '').trim()
+
+        if (preferredPath) {
+            console.log('📥 Buscando canvasData do Storage:', preferredPath)
+            serverCanvasData = await loadCanvasDataFromPath(preferredPath)
+            if (serverCanvasData) {
+                const objectCount = getCanvasObjectCount(serverCanvasData)
+                console.log('✅ CanvasData carregado do Storage:', { hasData: true, objectCount })
+            } else {
+                console.warn('⚠️ CanvasData não encontrado no Storage')
+            }
+        }
+
+        const serverCountBeforeRecovery = getCanvasObjectCount(serverCanvasData)
+        const dbCountBeforeRecovery = getCanvasObjectCount(dbCanvasData)
+        let resolvedCanvasPath = preferredPath || undefined
+
+        if (preferredPath && serverCountBeforeRecovery === 0 && dbCountBeforeRecovery === 0) {
+            const recovered = await recoverLatestNonEmptyCanvasData({
+                projectId: opts.projectId,
+                pageId: opts.pageId,
+                preferredKey: preferredPath
+            })
+            if (recovered?.json) {
+                serverCanvasData = recovered.json
+                resolvedCanvasPath = recovered.key
+                console.warn(`🛟 Recovery automático aplicado para página ${opts.pageId}: ${recovered.objectCount} objetos`)
+            }
+        }
+
+        const bestRemote = pickBestRemoteCanvasData(serverCanvasData, dbCanvasData)
+        serverCanvasData = bestRemote.data
+        if (bestRemote.source !== 'none') {
+            const objectCount = getCanvasObjectCount(serverCanvasData)
+            console.log(`📦 CanvasData remoto selecionado: ${bestRemote.source} (${objectCount} objetos)`)
+        }
+
+        const draft = opts.draft ?? readDraft(opts.projectId, opts.pageId)
+        if (draft?.canvasData) {
+            const draftObjectCount = getCanvasObjectCount(draft.canvasData)
+            const draftAge = Date.now() - Number(draft.updatedAt || 0)
+            const draftAgeMin = Math.floor(draftAge / 60000)
+            const remoteObjectCount = getCanvasObjectCount(serverCanvasData)
+            console.log(`📝 Draft encontrado para página ${opts.pageId}: ${draftObjectCount} objetos (idade: ${draftAgeMin}min)`)
+            console.log(`📝 Remoto tem: ${remoteObjectCount} objetos`)
+        }
+
+        const draftDecision = resolveCanvasDataWithDraft({
+            projectId: opts.projectId,
+            pageId: opts.pageId,
+            remoteCanvasData: serverCanvasData,
+            draft
+        })
+        const canvasData = normalizeCanvasAssetUrls(draftDecision.canvasData, {
+            clone: false,
+            silent: true
+        }).data
+
+        console.log(`📦 Fonte final da página ${opts.pageId}: ${draftDecision.source}`)
+        if (canvasData) {
+            const finalObjectCount = getCanvasObjectCount(canvasData)
+            if (finalObjectCount > 0) {
+                console.log(`✅ CanvasData final para página ${opts.pageId}: ${finalObjectCount} objeto(s)`)
+            }
+        }
+
+        const finalObjectCount = getCanvasObjectCount(canvasData)
+        const finalFingerprint = computeCanvasFingerprint(canvasData)
+
+        return {
+            canvasData,
+            canvasDataPath: resolvedCanvasPath,
+            finalObjectCount,
+            finalFingerprint,
+            needsRemoteSync: draftDecision.needsRemoteSync,
+            source: draftDecision.source
+        }
+    }
+
+    const applyResolvedPageCanvasState = (page: Page, resolved: ResolvedPageCanvasState) => {
+        page.canvasData = resolved.canvasData
+        page.canvasDataPath = resolved.canvasDataPath || page.canvasDataPath
+        page.lastLoadedFingerprint = resolved.finalFingerprint
+        page.lastSavedFingerprint = resolved.finalFingerprint
+        page.lastPersistedObjectCount = resolved.finalObjectCount
+        if (resolved.needsRemoteSync) {
+            page.dirty = true
+        }
+    }
+
+    const ensurePageCanvasDataLoaded = async (
+        pageId: string,
+        opts: { triggerSync?: boolean } = {}
+    ): Promise<Page | null> => {
+        const normalizedPageId = String(pageId || '').trim()
+        if (!normalizedPageId) return null
+
+        const pageIndex = getProjectPageIndexById(normalizedPageId)
+        if (pageIndex < 0) return null
+        const page = project.pages[pageIndex]
+        if (!page) return null
+        if (page.canvasData || (!page.canvasDataPath && !readDraft(project.id, normalizedPageId)?.canvasData)) {
+            return page
+        }
+
+        const existing = pageCanvasLoadPromises.get(normalizedPageId)
+        if (existing) return existing
+
+        const sessionAtStart = projectLoadSession.value
+        const draft = readDraft(project.id, normalizedPageId)
+        const loadPromise = (async () => {
+            try {
+                const resolved = await resolvePageCanvasState({
+                    projectId: project.id,
+                    pageId: normalizedPageId,
+                    pageMeta: page,
+                    draft
+                })
+
+                if (sessionAtStart !== projectLoadSession.value) return null
+                const livePageIndex = getProjectPageIndexById(normalizedPageId)
+                if (livePageIndex < 0) return null
+                const livePage = project.pages[livePageIndex]
+                if (!livePage) return null
+
+                applyResolvedPageCanvasState(livePage, resolved)
+                console.log('✅ Página hidratada sob demanda:', {
+                    id: livePage.id,
+                    name: livePage.name,
+                    source: resolved.source,
+                    objectCount: resolved.finalObjectCount
+                })
+
+                if (resolved.needsRemoteSync) {
+                    hasUnsavedChanges.value = true
+                    unsavedRevision.value = Math.max(unsavedRevision.value, 1)
+                    if (opts.triggerSync !== false && project.id && !project.id.startsWith('proj_')) {
+                        triggerAutoSave()
+                    }
+                }
+
+                return livePage
+            } finally {
+                pageCanvasLoadPromises.delete(normalizedPageId)
+            }
+        })()
+
+        pageCanvasLoadPromises.set(normalizedPageId, loadPromise)
+        return loadPromise
+    }
+
+    const scheduleCanvasDataPrefetch = (activePageId?: string | null, limit = 2) => {
+        if (typeof window === 'undefined') return
+
+        const runId = ++deferredCanvasPrefetchRunId
+        const candidates = getDeferredCanvasPrefetchIds(activePageId, limit)
+        if (!candidates.length) return
+
+        let index = 0
+        const pump = () => {
+            if (runId !== deferredCanvasPrefetchRunId) return
+            if (projectLoadSession.value <= 0) return
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+                scheduleDeferredWork(pump, 3200)
+                return
+            }
+            if (isSaving.value) {
+                scheduleDeferredWork(pump, 2800)
+                return
+            }
+
+            const nextPageId = candidates[index++]
+            if (!nextPageId) return
+
+            void ensurePageCanvasDataLoaded(nextPageId).finally(() => {
+                if (runId !== deferredCanvasPrefetchRunId) return
+                if (index < candidates.length) {
+                    scheduleDeferredWork(pump, 2200)
+                }
+            })
+        }
+
+        scheduleDeferredWork(pump, 1600)
+    }
+
     const initProject = () => {
         if (project.pages.length === 0) {
             // Offline-safe: restore last local draft for the default (unsaved) project.
@@ -324,7 +564,13 @@ export const useProject = () => {
                 try {
                     project.id = local.project.id || project.id
                     project.name = local.project.name || project.name
-                    project.pages = local.project.pages || []
+                    project.pages = (local.project.pages || []).map((page: any) => ({
+                        ...page,
+                        canvasData: normalizeCanvasAssetUrls(page?.canvasData, {
+                            clone: false,
+                            silent: true
+                        }).data
+                    }))
                     normalizeProjectPageIds(project.pages as any[], 'initProject:draft')
                     project.activePageIndex = Math.min(
                         Math.max(0, Number(local.project.activePageIndex || 0)),
@@ -371,17 +617,19 @@ export const useProject = () => {
     }
 
     const updatePageThumbnail = (index: number, dataUrl: string) => {
-        if (project.pages[index]) {
-            project.pages[index].thumbnail = dataUrl
-            markAsUnsaved()
-            writeProjectDraft()
-        }
+        const page = project.pages[index]
+        if (!page) return
+        if (page.thumbnail === dataUrl) return
+        page.thumbnail = dataUrl
+        markAsUnsaved()
+        writeProjectDraft()
     }
 
     type UpdatePageDataOptions = {
         markUnsaved?: boolean
         source?: 'user' | 'system'
         skipIfSameFingerprint?: boolean
+        reason?: string
     }
 
     const updatePageData = (index: number, json: any, opts: UpdatePageDataOptions = {}) => {
@@ -394,7 +642,12 @@ export const useProject = () => {
                 return false
             }
             const objectCount = stampedJson?.objects?.length || 0;
-            console.log(`💾 updatePageData: salvando ${objectCount} objeto(s) na página ${index} (${project.pages[index].id})`);
+            if (import.meta.dev) {
+                console.log(`💾 updatePageData: salvando ${objectCount} objeto(s) na página ${index} (${project.pages[index].id})`, {
+                    reason: opts.reason || 'unspecified',
+                    source: opts.source || 'user'
+                });
+            }
             
             project.pages[index].canvasData = stampedJson
             project.pages[index].lastSavedFingerprint = fingerprint
@@ -409,7 +662,7 @@ export const useProject = () => {
             const savedObjectCount = project.pages[index].canvasData?.objects?.length || 0;
             if (savedObjectCount !== objectCount) {
                 console.error(`❌ PROBLEMA: Salvamos ${objectCount} objetos mas página tem ${savedObjectCount}`);
-            } else {
+            } else if (import.meta.dev) {
                 console.log(`✅ updatePageData: ${savedObjectCount} objeto(s) salvos corretamente`);
             }
             
@@ -419,7 +672,9 @@ export const useProject = () => {
             const p = project.pages[index]
             if (p?.id && project.id) {
                 writeDraft(project.id, p.id, stampedJson)
-                console.log(`📝 Draft local salvo para página ${p.id}`);
+                if (import.meta.dev) {
+                    console.log(`📝 Draft local salvo para página ${p.id}`);
+                }
             }
             writeProjectDraft()
             return true
@@ -435,9 +690,13 @@ export const useProject = () => {
     }
 
     // --- A Regra de Ouro: Smart Duplicate ---
-    const duplicatePage = (index: number) => {
+    const duplicatePage = async (index: number) => {
         const sourcePage = project.pages[index]
-        if (!sourcePage || !sourcePage.canvasData) return
+        if (!sourcePage) return
+        if (!sourcePage.canvasData) {
+            await ensurePageCanvasDataLoaded(sourcePage.id)
+        }
+        if (!sourcePage.canvasData) return
 
         // 1. Deep Clone do JSON
         const clonedJson = JSON.parse(JSON.stringify(sourcePage.canvasData))
@@ -519,17 +778,23 @@ export const useProject = () => {
     }
 
     /**
-     * Salva o projeto usando Supabase Storage para os dados pesados
-     * O banco armazena apenas metadados e caminhos para os arquivos
+     * Salva o projeto usando Storage S3-compatível (Wasabi/Contabo) para os dados pesados.
+     * O banco armazena apenas metadados e caminhos para os arquivos.
      */
-	    const saveProjectDB = async (opts: { forceEmptyOverwrite?: boolean } = {}) => {
-	        // Não executar no servidor (SSR)
-	        if (import.meta.server) {
-	            return
-	        }
+		    const saveProjectDB = async (opts: { forceEmptyOverwrite?: boolean } = {}) => {
+		        // Não executar no servidor (SSR)
+		        if (import.meta.server) {
+		            return
+		        }
 
-	        // Prevent concurrent saves from racing and tripping optimistic concurrency on ourselves.
-	        if (isSaving.value) {
+		        const hasDirtyPages = Array.isArray(project.pages) && project.pages.some((page) => !!page?.dirty)
+		        const requiresInitialPersist = !project.id || project.id.startsWith('proj_')
+		        if (!hasUnsavedChanges.value && !hasDirtyPages && !requiresInitialPersist) {
+		            return
+		        }
+
+		        // Prevent concurrent saves from racing and tripping optimistic concurrency on ourselves.
+		        if (isSaving.value) {
 	            const wasAlreadyQueued = queuedSaveAfterCurrent.value
 	            queuedSaveAfterCurrent.value = true
 	            if (!wasAlreadyQueued) {
@@ -590,7 +855,8 @@ export const useProject = () => {
 	                if (abortIfStaleSaveContext()) return
 
 	                // Salvar canvas JSON no Storage (com retry automático)
-		                if (page?.canvasData) {
+		                const shouldUploadCanvas = !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
+		                if (shouldUploadCanvas && page?.canvasData) {
 	                    try {
 	                        const currentCount = getCanvasObjectCount(page.canvasData)
 	                        const persistedCount = Number(page?.lastPersistedObjectCount || 0)
@@ -618,15 +884,22 @@ export const useProject = () => {
                         // Não lançar erro - continuar com outras páginas
                     }
                 }
+                if (!storagePaths[i] && page?.canvasDataPath) {
+                    storagePaths[i] = page.canvasDataPath
+                }
 
                 // Salvar thumbnail no Storage
-	                if (page?.thumbnail) {
+	                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.dirty || !page?.thumbnailUrl)
+	                if (shouldUploadThumbnail && page?.thumbnail) {
 	                    const url = await saveThumbnail(project.id, page.id, page.thumbnail)
 	                    if (abortIfStaleSaveContext()) return
 	                    if (url) {
                         thumbnailUrls[i] = url
                         page.thumbnailUrl = url
                     }
+                }
+                if (!thumbnailUrls[i] && page?.thumbnailUrl) {
+                    thumbnailUrls[i] = page.thumbnailUrl
                 }
             }
 
@@ -642,7 +915,8 @@ export const useProject = () => {
                     thumbnailUrl: thumbnailUrls[index] || page.thumbnailUrl // URL do thumbnail
                 }
 
-		                if (page.canvasData) {
+		                const shouldAttachCanvasBackup = !!page.canvasData && (!!page?.dirty || !page?.canvasDataPath)
+		                if (shouldAttachCanvasBackup) {
 		                    const currentCount = getCanvasObjectCount(page.canvasData)
 		                    const persistedCount = Number(page?.lastPersistedObjectCount || 0)
 		                    const shouldBlockEmptyBackup = isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite
@@ -686,6 +960,10 @@ export const useProject = () => {
 	            if (abortIfStaleSaveContext()) return
 
 		            const headers = await getApiAuthHeaders()
+                    const saveHeaders = {
+                        ...headers,
+                        ...(realtimeClientId.value ? { 'x-client-id': realtimeClientId.value } : {})
+                    }
 		            // 3. Salvar no banco
                 const normalizedProjectId = String(project.id || '').trim()
                 const shouldCreateProject = normalizedProjectId.startsWith('proj_') || !isUuid(normalizedProjectId)
@@ -693,7 +971,7 @@ export const useProject = () => {
                     if (shouldCreateProject) {
                         const response = await $fetch<any>('/api/projects', {
                             method: 'POST',
-                            headers,
+                            headers: saveHeaders,
                             body: bodyPayload
                         })
 
@@ -706,7 +984,7 @@ export const useProject = () => {
 
                     const response = await $fetch<any>('/api/projects', {
                         method: 'POST',
-                        headers,
+                        headers: saveHeaders,
                         body: {
                             id: normalizedProjectId,
                             ...bodyPayload
@@ -803,7 +1081,9 @@ export const useProject = () => {
      * Salva automaticamente após período de inatividade
      */
     let saveTimeout: any = null
-    const AUTO_SAVE_DELAY = 6000 // 6 segundos (menos pressão de I/O durante edição intensa)
+    let scheduledAutoSaveRevision = -1
+    let scheduledAutoSaveProjectId = ''
+    const AUTO_SAVE_DELAY = 15_000 // 15 segundos: reduz I/O sem abrir mão de segurança
 
     const triggerAutoSave = () => {
         if (!project.id || project.id.startsWith('proj_')) {
@@ -814,16 +1094,34 @@ export const useProject = () => {
             return
         }
 
+        const currentRevision = unsavedRevision.value
+        if (
+            saveTimeout &&
+            scheduledAutoSaveProjectId === project.id &&
+            scheduledAutoSaveRevision === currentRevision
+        ) {
+            return
+        }
+
         clearTimeout(saveTimeout)
         hasUnsavedChanges.value = true
+        scheduledAutoSaveProjectId = project.id
+        scheduledAutoSaveRevision = currentRevision
 
         saveTimeout = setTimeout(() => {
+            saveTimeout = null
+            scheduledAutoSaveRevision = -1
+            scheduledAutoSaveProjectId = ''
+            if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) return
             saveProjectDB()
         }, AUTO_SAVE_DELAY)
     }
 
     const cancelAutoSave = () => {
         clearTimeout(saveTimeout)
+        saveTimeout = null
+        scheduledAutoSaveRevision = -1
+        scheduledAutoSaveProjectId = ''
     }
 
     const waitForSaveIdle = async (timeoutMs = 20_000): Promise<boolean> => {
@@ -840,6 +1138,9 @@ export const useProject = () => {
      */
     const flushAutoSave = async () => {
         clearTimeout(saveTimeout)
+        saveTimeout = null
+        scheduledAutoSaveRevision = -1
+        scheduledAutoSaveProjectId = ''
         if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) return
         if (!project.id || project.id.startsWith('proj_')) return
 
@@ -865,12 +1166,14 @@ export const useProject = () => {
      */
 	    const loadProjectDB = async (id: string) => {
 	        // Não executar no servidor (SSR)
-	        if (import.meta.server) {
-	            return false
-	        }
-	        cancelAutoSave()
+        if (import.meta.server) {
+            return false
+        }
+        cancelAutoSave()
+        deferredCanvasPrefetchRunId += 1
+        pageCanvasLoadPromises.clear()
 
-	        const currentSession = ++projectLoadSession.value
+        const currentSession = ++projectLoadSession.value
         isProjectLoaded.value = false
         projectServerUpdatedAt.value = null
         queuedSaveAfterCurrent.value = false
@@ -919,13 +1222,13 @@ export const useProject = () => {
 
             console.log('📄 Páginas armazenadas:', storedPages.length)
 
-            // Carregar cada página
+            // Carregar a página ativa imediatamente e deixar as demais para hidratação sob demanda/idle.
             project.pages = []
             let recoveredFromNewerDraft = false
             const recoveredDraftPages: string[] = []
 
             const loadedPageIds = new Set<string>()
-            for (const pageMeta of storedPages) {
+            for (const [pageIndex, pageMeta] of storedPages.entries()) {
                 if (currentSession !== projectLoadSession.value) {
                     console.warn('⏭️ Carregamento de páginas interrompido por sessão mais nova')
                     return false
@@ -938,94 +1241,40 @@ export const useProject = () => {
                     console.warn(`[pages] ID de página normalizado durante loadProjectDB: "${rawPageId || '(vazio)'}" -> "${pageId}"`)
                 }
 
-                let canvasData = null
-                let serverCanvasData = null
-                const dbCanvasData = (pageMeta as any).canvasData || null
-
-                // Prefer Storage as the source of truth (DB canvasData is a backup and can get stale).
-                if (pageMeta.canvasDataPath) {
-                    console.log('📥 Buscando canvasData do Storage:', pageMeta.canvasDataPath)
-                    serverCanvasData = await loadCanvasDataFromPath(pageMeta.canvasDataPath)
-                    if (serverCanvasData) {
-                        const objectCount = serverCanvasData?.objects?.length || 0
-                        console.log('✅ CanvasData carregado do Storage:', { hasData: !!serverCanvasData, objectCount })
-                    } else {
-                        console.warn('⚠️ CanvasData não encontrado no Storage')
-                    }
-                }
-
-                const serverCountBeforeRecovery = getCanvasObjectCount(serverCanvasData)
-                const dbCountBeforeRecovery = getCanvasObjectCount(dbCanvasData)
-                if (pageMeta.canvasDataPath && serverCountBeforeRecovery === 0 && dbCountBeforeRecovery === 0) {
-                    const recovered = await recoverLatestNonEmptyCanvasData({
-                        projectId: data.id,
-                        pageId,
-                        preferredKey: pageMeta.canvasDataPath
-                    })
-                    if (recovered?.json) {
-                        serverCanvasData = recovered.json
-                        pageMeta.canvasDataPath = recovered.key
-                        console.warn(`🛟 Recovery automático aplicado para página ${pageId}: ${recovered.objectCount} objetos`)
-                    }
-                }
-
-                const bestRemote = pickBestRemoteCanvasData(serverCanvasData, dbCanvasData)
-                serverCanvasData = bestRemote.data
-                if (bestRemote.source !== 'none') {
-                    const objectCount = serverCanvasData?.objects?.length || 0
-                    console.log(`📦 CanvasData remoto selecionado: ${bestRemote.source} (${objectCount} objetos)`)
-                }
-
-                // Offline-safe: comparar rascunho local vs remoto e preservar o mais novo.
                 const draft = readDraft(data.id, pageId)
-                if (draft?.canvasData) {
-                    const draftObjectCount = getCanvasObjectCount(draft.canvasData)
-                    const draftAge = Date.now() - Number(draft.updatedAt || 0)
-                    const draftAgeMin = Math.floor(draftAge / 60000)
-                    const remoteObjectCount = getCanvasObjectCount(serverCanvasData)
-                    console.log(`📝 Draft encontrado para página ${pageId}: ${draftObjectCount} objetos (idade: ${draftAgeMin}min)`)
-                    console.log(`📝 Remoto tem: ${remoteObjectCount} objetos`)
-                }
-
-                const draftDecision = resolveCanvasDataWithDraft({
-                    projectId: data.id,
-                    pageId,
-                    remoteCanvasData: serverCanvasData,
-                    draft
-                })
-                canvasData = draftDecision.canvasData
-
-                if (draftDecision.needsRemoteSync) {
-                    recoveredFromNewerDraft = true
-                    recoveredDraftPages.push(pageId)
-                }
-                console.log(`📦 Fonte final da página ${pageId}: ${draftDecision.source}`)
-
-                // Validação final: garantir que temos dados válidos
-                if (canvasData) {
-                    const finalObjectCount = canvasData?.objects?.length || 0
-                    if (finalObjectCount > 0) {
-                        console.log(`✅ CanvasData final para página ${pageId}: ${finalObjectCount} objeto(s)`)
-                    }
-                }
-                // Nota: Páginas novas podem não ter canvasData ainda, isso é normal
-
-                const finalObjectCount = getCanvasObjectCount(canvasData)
-                const finalFingerprint = computeCanvasFingerprint(canvasData)
-
                 const page: Page = {
-                        id: pageId,
+                    id: pageId,
                     name: pageMeta.name,
                     width: pageMeta.width || 1080,
                     height: pageMeta.height || 1920,
                     type: pageMeta.type || 'RETAIL_OFFER',
-                    canvasData,
+                    canvasData: null,
                     canvasDataPath: pageMeta.canvasDataPath,
-                    thumbnailUrl: toWasabiProxyUrl(pageMeta.thumbnailUrl) || undefined,
-                    lastLoadedFingerprint: finalFingerprint,
-                    lastSavedFingerprint: finalFingerprint,
-                    lastPersistedObjectCount: finalObjectCount,
+                    thumbnailUrl: typeof pageMeta.thumbnailUrl === 'string'
+                        ? (pageMeta.thumbnailUrl.trim() || undefined)
+                        : undefined,
+                    lastLoadedFingerprint: 'deferred',
+                    lastSavedFingerprint: 'deferred',
+                    lastPersistedObjectCount: 0,
                     dirty: false
+                }
+
+                const shouldHydrateNow =
+                    pageIndex === 0 ||
+                    !!draft?.canvasData ||
+                    !String(pageMeta?.canvasDataPath || '').trim()
+                if (shouldHydrateNow) {
+                    const resolved = await resolvePageCanvasState({
+                        projectId: data.id,
+                        pageId,
+                        pageMeta,
+                        draft
+                    })
+                    applyResolvedPageCanvasState(page, resolved)
+                    if (resolved.needsRemoteSync) {
+                        recoveredFromNewerDraft = true
+                        recoveredDraftPages.push(pageId)
+                    }
                 }
 
                 project.pages.push(page)
@@ -1054,6 +1303,8 @@ export const useProject = () => {
                 }, 400)
             }
 
+            scheduleCanvasDataPrefetch(project.pages[project.activePageIndex]?.id || null)
+
             console.log('✅ Projeto carregado com sucesso:', { pagesCount: project.pages.length, activePageHasData: !!project.pages[0]?.canvasData })
             return true
         } catch (e) {
@@ -1069,12 +1320,17 @@ export const useProject = () => {
                 project.id = local.project.id || id
                 project.name = local.project.name || project.name
                 project.pages = (local.project.pages || []).map((page) => {
-                    const fp = computeCanvasFingerprint(page?.canvasData)
+                    const normalizedCanvasData = normalizeCanvasAssetUrls(page?.canvasData, {
+                        clone: false,
+                        silent: true
+                    }).data
+                    const fp = computeCanvasFingerprint(normalizedCanvasData)
                     return {
                         ...page,
+                        canvasData: normalizedCanvasData,
                         lastLoadedFingerprint: fp,
                         lastSavedFingerprint: fp,
-                        lastPersistedObjectCount: getCanvasObjectCount(page?.canvasData),
+                        lastPersistedObjectCount: getCanvasObjectCount(normalizedCanvasData),
                         dirty: true
                     } as Page
                 })
@@ -1101,9 +1357,13 @@ export const useProject = () => {
 
             // Depois deletar do banco
             const headers = await getApiAuthHeaders()
+            const requestHeaders = {
+                ...headers,
+                ...(realtimeClientId.value ? { 'x-client-id': realtimeClientId.value } : {})
+            }
             await $fetch('/api/projects', {
                 method: 'DELETE',
-                headers,
+                headers: requestHeaders,
                 query: { id }
             })
 
@@ -1130,12 +1390,15 @@ export const useProject = () => {
         triggerAutoSave,
         cancelAutoSave,
         flushAutoSave,
+        ensurePageCanvasDataLoaded,
+        scheduleCanvasDataPrefetch,
         loadProjectDB,
         deleteProjectDB,
         isSaving,
         saveStatus,
         lastSavedAt,
         hasUnsavedChanges,
-        isProjectLoaded
+        isProjectLoaded,
+        realtimeClientId
     }
 }

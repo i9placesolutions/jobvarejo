@@ -26,9 +26,7 @@ import {
     findRegistryApprovedImage,
     upsertProductImageRegistry
 } from "../utils/product-image-registry";
-
-/** Build a same-origin proxy URL for a given S3 key (avoids CORS + no expiration) */
-const proxyUrl = (key: string) => `/api/storage/p?key=${encodeURIComponent(key)}`;
+import { resolveStorageReadUrl } from "../utils/project-storage-refs";
 
 type ExternalCandidate = {
     url: string;
@@ -363,7 +361,7 @@ export default defineEventHandler(async (event) => {
             const exists = await s3KeyExists(s3, bucketName, registryKey);
             if (exists) {
                 console.log(`✅ [Registry] Match aprovado por identityKey: "${identityKey}"`);
-                return { source: 'registry', url: proxyUrl(registryKey) };
+                return { source: 'registry', url: await resolveStorageReadUrl(registryKey, user.id), key: registryKey };
             }
         }
     } catch (err: any) {
@@ -402,7 +400,7 @@ export default defineEventHandler(async (event) => {
             status: 'approved'
         });
 
-        return { source: 'cache-s3', url: proxyUrl(candidateKey) };
+        return { source: 'cache-s3', url: await resolveStorageReadUrl(candidateKey, user.id), key: candidateKey };
     }
 
     // ========================================
@@ -442,7 +440,11 @@ export default defineEventHandler(async (event) => {
                         validatedBy: user.id,
                         status: 'approved'
                     });
-                    return { source: processed.processed ? 'internal-processed' : 'internal', url: proxyUrl(processed.key) };
+                    return {
+                        source: processed.processed ? 'internal-processed' : 'internal',
+                        url: await resolveStorageReadUrl(processed.key, user.id),
+                        key: processed.key
+                    };
                 }
             }
 
@@ -468,7 +470,7 @@ export default defineEventHandler(async (event) => {
                 status: 'approved'
             });
 
-            return { source: 'internal', url: proxyUrl(found) };
+            return { source: 'internal', url: await resolveStorageReadUrl(found, user.id), key: found };
         }
     } catch (err) {
         console.warn("Internal search failed:", err);
@@ -514,7 +516,11 @@ export default defineEventHandler(async (event) => {
                             validatedBy: user.id,
                             status: 'approved'
                         });
-                        return { source: 'cache-processed', url: proxyUrl(processed.key) };
+                        return {
+                            source: 'cache-processed',
+                            url: await resolveStorageReadUrl(processed.key, user.id),
+                            key: processed.key
+                        };
                     }
                 }
                 await safeUpsertRegistry({
@@ -530,7 +536,7 @@ export default defineEventHandler(async (event) => {
                     validatedBy: user.id,
                     status: 'approved'
                 });
-                return { source: 'cache', url: proxyUrl(cacheResolvedKey) };
+                return { source: 'cache', url: await resolveStorageReadUrl(cacheResolvedKey, user.id), key: cacheResolvedKey };
             }
         }
     } catch (err) {
@@ -842,11 +848,7 @@ export default defineEventHandler(async (event) => {
                     selectedImageUrl: candidateUrl,
                     bgPolicy
                 });
-                const resolvedKey = String(
-                    (pipelineResult?.url && pipelineResult.url.includes('/api/storage/p?key='))
-                        ? decodeURIComponent((pipelineResult.url.split('key=')[1] || '').split('&')[0] || '')
-                        : deterministicKey
-                ).trim() || deterministicKey;
+                const resolvedKey = String(pipelineResult?.key || deterministicKey).trim() || deterministicKey;
                 await safeUpsertRegistry({
                     productCode,
                     identityKey,
@@ -860,7 +862,10 @@ export default defineEventHandler(async (event) => {
                     validatedBy: user.id,
                     status: 'approved'
                 });
-                return pipelineResult;
+                return {
+                    ...pipelineResult,
+                    url: await resolveStorageReadUrl(pipelineResult?.key || pipelineResult?.url, user.id)
+                };
             } catch (err: any) {
                 pipelineLastErr = err;
                 console.warn(`⚠️ [Pipeline] Falhou para candidata ${candidateUrl.slice(0, 120)}:`, err?.message || String(err));
