@@ -396,6 +396,8 @@ const buildBestS3MatchCacheKey = (opts: {
   brand?: string
   flavor?: string
   weight?: string
+  productCode?: string
+  strictOnly?: boolean
 }) => {
   const bucket = String(opts.bucketName || '').trim()
   const prefixes = [...new Set((opts.prefixes || []).map((p) => String(p || '').trim()).filter(Boolean))].sort()
@@ -403,7 +405,8 @@ const buildBestS3MatchCacheKey = (opts: {
   const metaBrand = normalizeSearchTerm(String(opts.brand || ''))
   const metaFlavor = normalizeSearchTerm(String(opts.flavor || ''))
   const metaWeight = normalizeSearchTerm(String(opts.weight || ''))
-  return `${bucket}::${prefixes.join('|')}::${candidates.join('|')}::${metaBrand}::${metaFlavor}::${metaWeight}`
+  const metaProductCode = normalizeSearchTerm(String(opts.productCode || ''))
+  return `${bucket}::${prefixes.join('|')}::${candidates.join('|')}::${metaBrand}::${metaFlavor}::${metaWeight}::${metaProductCode}::${Boolean(opts.strictOnly) ? 'strict' : 'non-strict'}`
 }
 
 const getQueryTokens = (normalized: string): string[] =>
@@ -443,6 +446,30 @@ const hasAnyToken = (tokens: string[], tokenSet: Set<string>): boolean => {
   return false
 }
 
+const buildStrongSignalTokens = (input: {
+  normalized: string
+  productCode?: string
+}): string[] => {
+  const set = new Set<string>();
+  const productCodeTokens = normalizeSearchTerm(String(input.productCode || ''))
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => /^\d{4,}$/.test(token))
+    .filter((token, idx, arr) => arr.indexOf(token) === idx);
+
+  for (const token of productCodeTokens) {
+    if (token) set.add(token);
+  }
+
+  for (const token of normalizeSearchTerm(input.normalized).split(' ').filter(Boolean)) {
+    if (!token) continue
+    if (VARIANT_KEYWORDS.has(token)) set.add(token)
+    if (/^\d{2,}$/.test(token)) set.add(token)
+  }
+
+  return Array.from(set)
+}
+
 export const findBestS3Match = async (opts: {
   s3: any
   bucketName: string
@@ -451,6 +478,7 @@ export const findBestS3Match = async (opts: {
   brand?: string
   flavor?: string
   weight?: string
+  productCode?: string
   strictOnly?: boolean
 }): Promise<string | null> => {
   const bestMatchCacheKey = buildBestS3MatchCacheKey(opts)
@@ -478,6 +506,12 @@ export const findBestS3Match = async (opts: {
   const requiredFlavorTokens = buildMetadataTokens(String(opts.flavor || ''))
     .filter((token) => !FLAVOR_NOISE_TOKENS.has(token))
   const requiredWeightTokens = extractWeightTokens(tokenSet(normalizeSearchTerm(String(opts.weight || ''))))
+  const requiredWeightSet = new Set(requiredWeightTokens)
+  const requiredProductCodeTokens = normalizeSearchTerm(String(opts.productCode || ''))
+    .split(' ')
+    .filter(Boolean)
+    .filter((token) => /^\d{4,}$/.test(token));
+  const hasStrictSignalContext = requiredWeightTokens.length > 0 || requiredFlavorTokens.length > 0 || requiredProductCodeTokens.length > 0
 
   let bestStrict: { key: string; ratio: number; overlap: number; score: number } | null = null
   let bestRelaxed: { key: string; ratio: number; overlap: number; score: number } | null = null
@@ -516,6 +550,9 @@ export const findBestS3Match = async (opts: {
     const keyTokens = tokenSet(normalizedKey)
     if (keyTokens.size < 2) continue
 
+    const hasQueryVariantSignal = requiredWeightTokens.length > 0 || requiredFlavorTokens.length > 0
+    const hasRequiredProductCodeSignal = requiredProductCodeTokens.length > 0
+
     if (requiredBrandTokens.length > 0 && !hasAnyToken(requiredBrandTokens, keyTokens)) {
       continue
     }
@@ -525,11 +562,18 @@ export const findBestS3Match = async (opts: {
     }
 
     const keyWeightTokens = extractWeightTokens(keyTokens)
-    if (requiredWeightTokens.length > 0 && keyWeightTokens.length > 0) {
-      const keyWeightSet = new Set(keyWeightTokens)
-      if (!requiredWeightTokens.some((token) => keyWeightSet.has(token))) {
+    const keyWeightSet = new Set(keyWeightTokens)
+    if (requiredWeightTokens.length > 0) {
+      if (opts.strictOnly && keyWeightTokens.length === 0) {
         continue
       }
+      if (requiredWeightTokens.length > 0 && !requiredWeightTokens.some((token) => keyWeightSet.has(token))) {
+        continue
+      }
+    }
+
+    if (hasRequiredProductCodeSignal && opts.strictOnly && !requiredProductCodeTokens.some((token) => keyTokens.has(token))) {
+      continue
     }
 
     for (let idx = 0; idx < queryVariants.length; idx++) {
@@ -538,6 +582,15 @@ export const findBestS3Match = async (opts: {
 
       const queryTokens = queryVariants[idx]!.tokens
       const criticalNumericTokens = queryVariants[idx]!.criticalNumericTokens
+      const strictSignals = buildStrongSignalTokens({ normalized: queryNormalized, productCode: opts.productCode })
+      const hasStrongSignalFromQuery = strictSignals.some((token) => keyTokens.has(token))
+      const hasStrongWeightSignal = requiredWeightSet.size > 0 && requiredWeightTokens.some((token) => keyWeightSet.has(token))
+      const hasStrongFlavorSignal = requiredFlavorTokens.length > 0 && hasAnyToken(requiredFlavorTokens, keyTokens)
+      const hasStrongCodeSignal = requiredProductCodeTokens.length > 0 && requiredProductCodeTokens.some((token) => keyTokens.has(token))
+      const hasStrictFallbackSignal = hasStrongSignalFromQuery || hasStrongWeightSignal || hasStrongFlavorSignal || hasStrongCodeSignal
+      if (opts.strictOnly && (hasStrictSignalContext || hasQueryVariantSignal) && !hasStrictFallbackSignal) {
+        continue
+      }
 
       // Guard rail: códigos numéricos curtos (ex: 51, 29) são discriminadores fortes.
       if (criticalNumericTokens.length > 0 && criticalNumericTokens.some((token) => !keyTokens.has(token))) {
@@ -546,10 +599,19 @@ export const findBestS3Match = async (opts: {
 
       const { ratio, overlap } = scoreKeyMatch(queryTokens, keyTokens)
       const requiresWeightStrict = hasWeightInNormalized(queryNormalized)
-      const minRatio = requiresWeightStrict
-        ? (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.9 : 0.86)
-        : (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.86 : 0.8)
-      const minOverlap = queryTokens.length >= 6 ? 4 : Math.min(3, queryTokens.length)
+      const shouldEnforceStrictSignals = opts.strictOnly && (hasStrictSignalContext || hasQueryVariantSignal)
+      const minRatio = shouldEnforceStrictSignals
+        ? (queryTokens.length <= 3
+          ? 1
+          : queryTokens.length <= 5
+            ? 0.92
+            : 0.9)
+        : (requiresWeightStrict
+          ? (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.9 : 0.86)
+          : (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.86 : 0.8))
+      const minOverlap = queryTokens.length >= 6
+        ? (shouldEnforceStrictSignals ? 5 : 4)
+        : Math.min(shouldEnforceStrictSignals ? 4 : 3, queryTokens.length)
 
       if (ratio >= minRatio && overlap >= minOverlap) {
         const strictScore = ratio + (overlap * 0.02) + (Math.min(queryTokens.length, 8) * 0.03)

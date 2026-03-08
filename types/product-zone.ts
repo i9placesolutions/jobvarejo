@@ -27,6 +27,7 @@ export interface ProductImage {
 export interface Product {
   id: string | number;
   name: string;
+  uiPriority?: 'primary' | 'advanced';
   images: ProductImage[];
   emoji?: string;
   // Posição no canvas (calculada pelo grid ou free mode)

@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import Dialog from './ui/Dialog.vue'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
-import { Sparkles, X, Check, AlertCircle, Loader2, Search, Upload, FolderOpen, Plus } from 'lucide-vue-next'
+import { Sparkles, X, Check, AlertCircle, Loader2, Upload, Plus, Play, RefreshCw, ChevronDown, Menu } from 'lucide-vue-next'
 import { useProductProcessor, type SmartProduct } from '../composables/useProductProcessor'
 import { toWasabiDirectUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
 
 type ImportTargetMode = 'zone' | 'multi-frame'
 type ImageBgPolicy = 'auto' | 'never' | 'always'
+type ImageMatchMode = 'precise' | 'fast'
+type ImageQuickAction = 'search' | 'upload' | 'storage' | 'reprocess'
 type FrameCandidate = { id: string; name: string; left?: number; top?: number }
 type FrameAssignment = { productId: string; frameId: string | null }
 type ProductImportOptions = {
@@ -20,6 +22,22 @@ type ProductImportOptions = {
     frameAssignments?: FrameAssignment[]
     countRule?: 'min'
     cardsPerFrame?: 1
+    imageMatchMode?: ImageMatchMode
+    imageConcurrency?: number
+}
+
+type ImageNextAction = {
+    action: 'search' | 'upload' | 'storage' | 'reprocess'
+    label: string
+    helper: string
+}
+
+type ReviewRowWithMeta = {
+    productId: string
+    index: number
+    product: SmartProduct
+    imageStatusMeta: ImageStatusMeta
+    imageNextAction: ImageNextAction | null
 }
 
 const props = defineProps<{
@@ -53,6 +71,9 @@ const isSubmittingImport = ref(false)
 const appendBaseProducts = ref<SmartProduct[] | null>(null)
 
 const LIST_FILE_ACCEPT = 'image/*,.csv,.tsv,.xlsx,.xls,.pdf,text/plain'
+const REVIEW_PAGE_SIZE = 80
+const clampImageConcurrency = (value: number): number => Math.min(8, Math.max(1, Number.isFinite(value) ? Math.floor(value) : 0))
+const clampImageMatchMode = (value: string): ImageMatchMode => String(value) === 'fast' ? 'fast' : 'precise'
 
 // Composable
 const { 
@@ -63,20 +84,318 @@ const {
     parseFile,
     processProductImage, 
     processAllImages, 
+    imageQueueState,
+    pauseImageProcessing,
+    resumeImageProcessing,
+    cancelImageProcessing,
+    resetImageProcessingState,
     removeProduct 
 } = useProductProcessor()
 
-const resolveProductIndex = (p: any) => {
-    const id = p?.id
-    if (id === null || id === undefined) return -1
-    return (products.value || []).findIndex((x: any) => x?.id === id)
+const imageMatchMode = ref<ImageMatchMode>('precise')
+const imageConcurrency = ref<number>(4)
+const reviewPage = ref(1)
+const isQueuePaused = computed(() => imageQueueState.value.paused)
+const isImageQueueRunning = computed(() => imageQueueState.value.running)
+const expandedAdvancedRows = ref<Set<string>>(new Set())
+const reviewContainerRef = ref<HTMLElement | null>(null)
+const activeReviewRowIndex = ref<number | null>(null)
+
+const getImageQueueModeLabel = (mode: ImageMatchMode) => (mode === 'fast' ? 'Busca rápida' : 'Busca precisa')
+const imageSourceFromProvider = (provider?: string): string => {
+    const p = String(provider || '').trim().toLowerCase()
+    if (!p) return 'ia'
+    if (p.startsWith('cache')) return 'cache'
+    if (p.startsWith('internal') || p === 'registry') return 's3'
+    if (p.startsWith('ocr+')) return 'ia'
+    if (p === 'manual' || p === 'manual-fallback' || p === 'manual-presigned') return 'manual'
+    if (p === 'network' || p === 'server') return 'sistema'
+    if (p === 'external-disabled' || p === 'external') return 'ia'
+    if (p === 'serper' || p === 'google') return 'ia'
+    return p
 }
+const imageQueueActionLabel = computed(() => {
+    if (isImageQueueRunning.value) {
+        return isQueuePaused.value ? 'Retomar busca' : 'Pausar busca'
+    }
+    return isQueuePaused.value ? 'Retomar busca' : 'Processar imagens'
+})
+const imageBgPolicyLabel = computed(() => {
+    if (imageBgPolicy.value === 'always') return 'Fundo removido'
+    if (imageBgPolicy.value === 'never') return 'Fundo original'
+    return 'Fundo automatico'
+})
+const reviewOperationLabel = computed(() => imageQueueProgress.value.status || 'Pronta para revisar')
+const canRunImageQueue = computed(() => products.value.length > 0)
+const showImageQueueControls = computed(() => Boolean(products.value?.length))
+
+const imageQueueProgress = computed(() => {
+    const state = imageQueueState.value
+    const total = state.total || 0
+    const done = state.done || 0
+    const retrying = state.retrying || 0
+    const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
+    let status = ''
+    if (total > 0) {
+        if (state.cancelled) status = 'Interrompido'
+        else if (done >= total) status = 'Concluído'
+        else if (isQueuePaused.value) status = 'Pausado'
+        else if (state.running) status = 'Processando'
+    }
+
+    return {
+        done,
+        total,
+        failed: state.failed,
+        retrying,
+        active: state.inFlight,
+        percent,
+        status
+    }
+})
+
+const stopImageQueue = () => {
+    cancelImageProcessing()
+}
+
+const formatConfidence = (value?: number): string => {
+    if (!Number.isFinite(Number(value))) return '—'
+    return Math.max(0, Math.min(1, Number(value))).toFixed(2)
+}
+
+const getImageConfidenceTone = (value?: number) => {
+    if (!Number.isFinite(Number(value))) return 'unknown'
+    const normalized = Math.max(0, Math.min(1, Number(value)))
+    if (normalized >= 0.86) return 'high'
+    if (normalized >= 0.6) return 'medium'
+    if (normalized >= 0.35) return 'low'
+    return 'critical'
+}
+
+const getImageConfidenceToneClass = (tone: ReturnType<typeof getImageConfidenceTone>) => {
+    if (tone === 'high') return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/45'
+    if (tone === 'medium') return 'bg-amber-500/15 text-amber-300 border-amber-500/45'
+    if (tone === 'low') return 'bg-orange-500/15 text-orange-300 border-orange-500/45'
+    if (tone === 'critical') return 'bg-rose-500/15 text-rose-300 border-rose-500/45'
+    return 'bg-zinc-800 text-zinc-300 border-zinc-700'
+}
+
+type ImageStatusMeta = {
+    state: string
+    stateTone: 'high' | 'medium' | 'low' | 'critical' | 'unknown'
+    source: string
+    providerLabel: string
+    confidence: string
+    tone: ReturnType<typeof getImageConfidenceTone>
+    toneClass: string
+    attempts: number | null
+    candidates: number | null
+    attemptsText: string
+    candidatesText: string
+}
+
+const imageStatusMetaCache = new WeakMap<object, { key: string; value: ImageStatusMeta }>()
+const imageStatusMetaFingerprint = (p: SmartProduct): string => {
+    const status = String(p?.status || '')
+    const source = String(p?.imageSource || '')
+    const provider = String(p?.imageProvider || '')
+    const confidence = Number.isFinite(Number(p?.imageConfidence)) ? Number(p.imageConfidence).toFixed(4) : 'na'
+    const candidates = Number.isFinite(Number(p?.imageCandidateCount))
+        ? String(Math.max(0, Math.floor(Number(p.imageCandidateCount))))
+        : 'na'
+    const attempts = Number.isFinite(Number(p?.imageAttemptCount))
+        ? String(Math.max(0, Math.floor(Number(p.imageAttemptCount))))
+        : 'na'
+    const reviewReason = String(p?.imageReviewReason || p?.imageDecisionReason || p?.error || '')
+    return `${status}|${source}|${provider}|${confidence}|${candidates}|${attempts}|${reviewReason}`
+}
+
+const isRetryingImage = (p: SmartProduct): boolean => {
+    const reason = String(p?.error || p?.imageReviewReason || p?.imageDecisionReason || '').toLowerCase()
+    return p?.status === 'pending' && (reason.includes('aguardando') || reason.includes('tentar novamente') || reason.includes('retry'))
+}
+
+const buildImageStatusMeta = (p: SmartProduct): ImageStatusMeta => {
+    const source = normalizeImageSourceLabel(p.imageSource || imageSourceFromProvider(p.imageProvider))
+    const providerLabel = normalizeImageSourceLabel(imageSourceFromProvider(p.imageProvider))
+    const tone = getImageConfidenceTone(p.imageConfidence)
+    const confidence = Number.isFinite(Number(p.imageConfidence)) ? Number(p.imageConfidence) : null
+    const attempts = Number.isFinite(Number(p.imageAttemptCount))
+        ? Math.max(0, Math.floor(Number(p.imageAttemptCount)))
+        : null
+    const candidates = Number.isFinite(Number(p.imageCandidateCount))
+        ? Math.max(0, Math.floor(Number(p.imageCandidateCount)))
+        : null
+    const attemptsText = attempts === null ? 'T: —' : `T: ${attempts}`
+    const candidatesText = candidates === null ? 'C: —' : `C: ${candidates}`
+
+    if (p.status === 'done' && p.imageUrl) {
+        return {
+            state: 'Encontrada',
+            stateTone: 'high',
+            source,
+            providerLabel,
+            confidence: formatConfidence(confidence ?? undefined),
+            tone,
+            toneClass: getImageConfidenceToneClass(tone),
+            attempts,
+            candidates,
+            attemptsText,
+            candidatesText
+        }
+    }
+
+    if (p.status === 'processing') {
+        return {
+            state: 'Processando',
+            stateTone: 'medium',
+            source,
+            providerLabel,
+            confidence: formatConfidence(confidence ?? undefined),
+            tone,
+            toneClass: getImageConfidenceToneClass(tone),
+            attempts,
+            candidates,
+            attemptsText,
+            candidatesText
+        }
+    }
+
+    if (p.status === 'review_pending') {
+        if (isRetryingImage(p)) {
+            return {
+                state: 'Reprocessando',
+                stateTone: 'medium',
+                source,
+                providerLabel,
+                confidence: formatConfidence(confidence ?? undefined),
+                tone: 'medium',
+                toneClass: getImageConfidenceToneClass('medium'),
+                attempts,
+                candidates,
+                attemptsText,
+                candidatesText
+            }
+        }
+        return {
+            state: 'Revisão',
+            stateTone: 'low',
+            source,
+            providerLabel,
+            confidence: formatConfidence(confidence ?? undefined),
+            tone,
+            toneClass: getImageConfidenceToneClass(tone),
+            attempts,
+            candidates,
+            attemptsText,
+            candidatesText
+        }
+    }
+
+    if (isRetryingImage(p)) {
+        return {
+            state: 'Reprocessando',
+            stateTone: 'medium',
+            source,
+            providerLabel,
+            confidence: formatConfidence(confidence ?? undefined),
+            tone: 'medium',
+            toneClass: getImageConfidenceToneClass('medium'),
+            attempts,
+            candidates,
+            attemptsText,
+            candidatesText
+        }
+    }
+
+    if (p.status === 'error') {
+        return {
+            state: 'Erro',
+            stateTone: 'critical',
+            source,
+            providerLabel,
+            confidence: formatConfidence(confidence ?? undefined),
+            tone,
+            toneClass: getImageConfidenceToneClass(tone),
+            attempts,
+            candidates,
+            attemptsText,
+            candidatesText
+        }
+    }
+
+    return {
+        state: 'Pendente',
+        stateTone: 'critical',
+        source,
+        providerLabel,
+        confidence: formatConfidence(confidence ?? undefined),
+        tone,
+        toneClass: getImageConfidenceToneClass(tone),
+        attempts,
+        candidates,
+        attemptsText,
+        candidatesText
+    }
+}
+
+const normalizeImageSourceLabel = (value?: string): string => {
+    const source = String(value || '').toLowerCase()
+    if (!source) return 'IA'
+    if (source === 'cache') return 'Cache'
+    if (source === 's3') return 'S3'
+    if (source === 'manual') return 'Manual'
+    if (source === 'fallback') return 'Fallback'
+    if (source === 'ai') return 'IA'
+    if (source === 'system') return 'Sistema'
+    return source.toUpperCase()
+}
+
+const startImageProcessing = async (force = false) => {
+    await processAllImages({
+        bgPolicy: imageBgPolicy.value,
+        matchMode: clampImageMatchMode(imageMatchMode.value),
+        concurrency: clampImageConcurrency(imageConcurrency.value),
+        force
+    })
+}
+
+const toggleImageQueueProcessing = async () => {
+    if (isImageQueueRunning.value) {
+        if (isQueuePaused.value) {
+            resumeImageProcessing()
+        } else {
+            pauseImageProcessing()
+        }
+        return
+    }
+    await startImageProcessing()
+}
+
+const reprocessProductImage = async (productIndex: number, force = false) => {
+    const index = Number(productIndex)
+    if (!Number.isInteger(index) || index < 0) return
+    await processProductImage(index, {
+        bgPolicy: imageBgPolicy.value,
+        matchMode: clampImageMatchMode(imageMatchMode.value),
+        force
+    })
+}
+
+const imageMatchModeOptions = [
+    { value: 'precise' as const, label: 'Busca precisa' },
+    { value: 'fast' as const, label: 'Busca rápida' }
+]
 
 // Watcher to reset state when opening
 watch(() => props.modelValue, (newVal) => {
     if (!newVal) {
         isSubmittingImport.value = false
         appendBaseProducts.value = null
+        stopImageQueue()
+        resetImageProcessingState()
+        reviewPage.value = 1
+        activeReviewRowIndex.value = null
         return
     }
 
@@ -100,6 +419,15 @@ watch(() => props.modelValue, (newVal) => {
         }
         reconcileFrameAssignments({ autofill: true })
     }
+    reviewPage.value = 1
+
+    if (step.value === 'review') {
+        activeReviewRowIndex.value = null
+        nextTick(() => {
+            reviewContainerRef.value?.focus()
+            syncActiveReviewRowToFiltered()
+        })
+    }
 })
 
 const cloneProducts = (list: SmartProduct[]) =>
@@ -122,7 +450,7 @@ const handleParse = async () => {
         if (shouldAppend) mergeParsedProductsWithAppendBase()
         step.value = 'review';
         // Process all images automatically
-        await processAllImages({ bgPolicy: imageBgPolicy.value });
+        await startImageProcessing()
     }
 }
 
@@ -142,7 +470,7 @@ const handleFileSelected = async (event: Event) => {
     if (products.value.length > 0) {
         if (shouldAppend) mergeParsedProductsWithAppendBase()
         step.value = 'review'
-        await processAllImages({ bgPolicy: imageBgPolicy.value })
+        await startImageProcessing()
     }
 }
 
@@ -154,7 +482,7 @@ const handleDropFile = async (event: DragEvent) => {
     if (products.value.length > 0) {
         if (shouldAppend) mergeParsedProductsWithAppendBase()
         step.value = 'review'
-        await processAllImages({ bgPolicy: imageBgPolicy.value })
+        await startImageProcessing()
     }
 }
 
@@ -211,7 +539,9 @@ const handleImport = () => {
     const opts: ProductImportOptions = {
         mode: importMode.value,
         labelTemplateId: selectedLabelTemplateId.value || undefined,
-        targetMode: targetMode.value
+        targetMode: targetMode.value,
+        imageMatchMode: imageMatchMode.value,
+        imageConcurrency: clampImageConcurrency(imageConcurrency.value)
     }
 
     if (targetMode.value === 'multi-frame') {
@@ -439,6 +769,43 @@ watch(
     }
 )
 
+watch(
+    () => step.value,
+    (nextStep) => {
+        if (nextStep !== 'review') return
+        syncActiveReviewRowToFiltered()
+        nextTick(() => {
+            reviewContainerRef.value?.focus()
+        })
+    }
+)
+
+watch(
+    () => filteredProductRows.value.length,
+    () => {
+        syncActiveReviewRowToFiltered()
+    }
+)
+
+watch(
+    reviewPage,
+    () => {
+        const rows = filteredProductRows.value
+        if (!rows.length) {
+            activeReviewRowIndex.value = null
+            return
+        }
+
+        const pageStart = (Math.max(1, reviewPage.value) - 1) * REVIEW_PAGE_SIZE
+        const pageRows = rows.slice(pageStart, pageStart + REVIEW_PAGE_SIZE)
+        const isActiveInPage = pageRows.some((row) => row.index === activeReviewRowIndex.value)
+        if (!isActiveInPage && pageRows.length > 0) {
+            activeReviewRowIndex.value = pageRows[0]!.index
+        }
+        syncActiveReviewRowToFiltered()
+    }
+)
+
 const labelTemplateList = computed(() => {
     const list = Array.isArray(props.labelTemplates) ? props.labelTemplates : []
     return list
@@ -485,6 +852,388 @@ const productRows = computed(() => {
     }))
 })
 
+const filteredProducts = computed(() => {
+    const list = products.value || []
+    const q = normalizeText(String(reviewSearch.value || '').trim())
+    if (!q) return list
+    return list.filter((p: any) => {
+        const hay = normalizeText(`${p?.name || ''} ${p?.brand || ''} ${p?.price || ''} ${p?.pricePack || ''} ${p?.priceUnit || ''} ${p?.priceSpecial || ''} ${p?.priceSpecialUnit || ''} ${p?.specialCondition || ''} ${p?.priceWholesale || ''}`)
+        return hay.includes(q)
+    })
+})
+
+const filteredProductRows = computed(() => {
+    if (!reviewSearch.value.trim()) return productRows.value
+    const filteredSet = new Set<any>(filteredProducts.value)
+    return productRows.value.filter((row) => filteredSet.has(row.product))
+})
+
+const filteredProductRowsForAll = computed(() => filteredProducts.value.map((product) => product))
+const filteredProductRowsPage = computed(() => {
+    const start = (Math.max(1, reviewPage.value) - 1) * REVIEW_PAGE_SIZE
+    return filteredProductRows.value.slice(start, start + REVIEW_PAGE_SIZE)
+})
+const reviewRowsWithMeta = computed(() =>
+    filteredProductRowsPage.value.map((row) => ({
+        ...row,
+        imageStatusMeta: getImageStatusMeta(row.product),
+        imageNextAction: getImageNextAction(row.product)
+    }))
+)
+const reviewPageCount = computed(() => Math.max(1, Math.ceil(filteredProductRows.value.length / REVIEW_PAGE_SIZE)))
+const gotoReviewPage = (nextPage: number) => {
+    const totalPages = reviewPageCount.value
+    const normalized = Math.min(Math.max(1, Number(nextPage) || 1), totalPages)
+    reviewPage.value = normalized
+}
+
+const imageStatusCounters = computed(() => {
+    const rows = filteredProductRowsForAll.value
+    let done = 0
+    let pending = 0
+    let conflict = 0
+    for (const row of rows) {
+        if (!row) continue
+        if (row.status === 'done') done += 1
+        else if (row.status === 'review_pending' || row.status === 'error') conflict += 1
+        else pending += 1
+    }
+    return { done, pending, conflict, total: rows.length }
+})
+
+const activeReviewRow = computed(() => {
+    const rows = filteredProductRows.value
+    if (!rows.length) {
+        activeReviewRowIndex.value = null
+        return null
+    }
+
+    const persisted = rows.find((row) => row.index === activeReviewRowIndex.value)
+    if (persisted) return persisted
+
+    const fallbackIndex = Math.min(Math.max(0, (reviewPage.value - 1) * REVIEW_PAGE_SIZE), rows.length - 1)
+    const fallbackRow = rows[fallbackIndex] || rows[0]
+    if (fallbackRow) {
+        activeReviewRowIndex.value = fallbackRow.index
+        return fallbackRow
+    }
+    return null
+})
+
+const activeReviewRowVisibleIndex = computed(() => {
+    if (!filteredProductRows.value.length) return -1
+    if (activeReviewRowIndex.value === null) return 0
+    const found = filteredProductRows.value.findIndex((row) => row.index === activeReviewRowIndex.value)
+    return found >= 0 ? found : 0
+})
+
+const moveActiveReviewRow = (delta: number) => {
+    const rows = filteredProductRows.value
+    if (!rows.length) {
+        activeReviewRowIndex.value = null
+        return
+    }
+
+    const current = activeReviewRowVisibleIndex.value
+    const next = Math.min(Math.max(current + delta, 0), rows.length - 1)
+    activeReviewRowIndex.value = rows[next]!.index
+    reviewPage.value = Math.floor(next / REVIEW_PAGE_SIZE) + 1
+}
+
+const reviewRowToneClass = (tone: ReturnType<typeof getImageConfidenceTone>) => {
+    if (tone === 'high') return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/45'
+    if (tone === 'medium') return 'bg-amber-500/15 text-amber-300 border-amber-500/45'
+    if (tone === 'low') return 'bg-orange-500/15 text-orange-300 border-orange-500/45'
+    if (tone === 'critical') return 'bg-rose-500/15 text-rose-300 border-rose-500/45'
+    return 'bg-zinc-800 text-zinc-300 border-zinc-700'
+}
+
+const getImageStatusMeta = (p: SmartProduct): ImageStatusMeta => {
+    const key = imageStatusMetaFingerprint(p)
+    const cached = p ? imageStatusMetaCache.get(p as object) : null
+    if (cached && cached.key === key) return cached.value
+
+    const value = buildImageStatusMeta(p)
+    imageStatusMetaCache.set(p as object, { key, value })
+    return value
+}
+
+const isAdvancedFieldsExpanded = (rowId: string): boolean => expandedAdvancedRows.value.has(String(rowId || ''))
+const toggleAdvancedFields = (rowId: string) => {
+    const key = String(rowId || '')
+    const next = new Set(expandedAdvancedRows.value)
+    if (next.has(key)) {
+        next.delete(key)
+    } else {
+        next.add(key)
+    }
+    expandedAdvancedRows.value = next
+}
+
+const thumbnailUiStateClass = (row: any): string => {
+    const status = String(row?.status || '')
+    if (status === 'done') return 'ring-1 ring-emerald-500/50 border-emerald-700/70'
+    if (status === 'processing') return 'ring-1 ring-blue-500/55 border-blue-700/70'
+    if (status === 'review_pending') return 'ring-1 ring-amber-500/55 border-amber-700/70'
+    if (status === 'error') return 'ring-1 ring-rose-500/55 border-rose-700/70'
+    return 'ring-1 ring-zinc-700/60 border-zinc-700'
+}
+
+const thumbnailStatusText = (row: any): string => {
+    const status = String(row?.status || '')
+    if (status === 'pending' && isRetryingImage(row)) return 'Reprocessando'
+    if (status === 'processing') return 'Processando...'
+    if (status === 'review_pending') return 'Revisão pendente'
+    if (status === 'error') return 'Sem imagem'
+    if (status === 'pending') return 'Aguardando'
+    return 'Sem imagem'
+}
+
+const getImageNextAction = (p: SmartProduct): ImageNextAction | null => {
+    const status = String(p?.status || '')
+    const isRetrying = isRetryingImage(p)
+    if (status !== 'review_pending' && status !== 'error' && !isRetrying) return null
+
+    const reason = String(p.imageReviewReason || p.imageDecisionReason || p.error || '').toLowerCase()
+    if (isRetrying) {
+        return {
+            action: 'reprocess',
+            label: 'Reprocessar',
+            helper: 'Tentativa automática agendada. Clique para disparar novo ciclo agora.'
+        }
+    }
+    if (!reason) {
+        return {
+            action: 'reprocess',
+            label: 'Reprocessar',
+            helper: 'Sem sugestão de fallback: tente novamente para buscar nova candidata.'
+        }
+    }
+
+    if (reason.includes('manual') || reason.includes('enviar') || reason.includes('upload') || reason.includes('aplique')) {
+        return {
+            action: 'upload',
+            label: 'Aplicar imagem manualmente',
+            helper: 'Aplique uma foto para validar sem depender da busca remota.'
+        }
+    }
+
+    if (reason.includes('storage') || reason.includes('galeria') || reason.includes('busca no storage')) {
+        return {
+            action: 'storage',
+            label: 'Buscar no storage',
+            helper: 'Use uma imagem já existente na galeria da campanha.'
+        }
+    }
+
+    if (reason.includes('rerun') || reason.includes('reprocess') || reason.includes('tente novamente') || reason.includes('novo processamento')) {
+        return {
+            action: 'reprocess',
+            label: 'Reprocessar',
+            helper: 'Tente novamente com a configuração atual para buscar outra candidata.'
+        }
+    }
+
+    return {
+        action: 'reprocess',
+        label: 'Reprocessar',
+        helper: 'Ajuste o termo/campo e reexecute o fluxo para melhorar o match.'
+    }
+}
+
+const runImageQuickAction = async (
+    row: ReviewRowWithMeta | { index: number; productId: string; product: SmartProduct },
+    action: ImageQuickAction
+) => {
+    if (!row || row.product?.status === 'processing') return
+
+    if (action === 'storage') {
+        openAssetPicker(row.index)
+        return
+    }
+
+    if (action === 'upload') {
+        const input = document.getElementById(`image-upload-${row.productId}`)
+        if (input instanceof HTMLInputElement) {
+            input.click()
+        }
+        return
+    }
+
+    if (action === 'search' || action === 'reprocess') {
+        await processProductImage(row.index, {
+            bgPolicy: imageBgPolicy.value,
+            matchMode: clampImageMatchMode(imageMatchMode.value),
+            force: true
+        })
+        return
+    }
+}
+
+const runImageNextAction = async (row: ReviewRowWithMeta | { index: number; productId: string; product: SmartProduct; imageNextAction?: ImageNextAction | null }) => {
+    const suggestion = row.imageNextAction || getImageNextAction(row.product)
+    if (!suggestion) return
+    await runImageQuickAction(row, suggestion.action)
+}
+
+const activeReviewRowOrFirst = computed(() => {
+    const candidate = activeReviewRow.value
+    if (candidate) return candidate
+    const fallback = filteredProductRowsPage.value[0]
+    return fallback ? fallback : null
+})
+
+const triggerActiveImageUpload = () => {
+    const row = activeReviewRowOrFirst.value
+    if (!row) return
+    const input = document.getElementById(`image-upload-${row.productId}`)
+    if (input instanceof HTMLInputElement) {
+        input.click()
+    }
+}
+
+const triggerActiveImageStorage = async () => {
+    const row = activeReviewRowOrFirst.value
+    if (!row) return
+    await openAssetPicker(row.index)
+}
+
+const triggerActiveImageAction = async (action: ImageQuickAction) => {
+    const row = activeReviewRowOrFirst.value
+    if (!row) return
+    if (action === 'search' || action === 'reprocess') {
+        await runImageQuickAction(row, action)
+        return
+    }
+    if (action === 'upload') {
+        triggerActiveImageUpload()
+        return
+    }
+    if (action === 'storage') {
+        await triggerActiveImageStorage()
+    }
+}
+
+const isTextLikeTarget = (target: EventTarget | null): boolean => {
+    const el = target as HTMLElement | null
+    if (!el) return false
+    if ((el as HTMLElement).isContentEditable) return true
+    const tag = String(el.tagName || '').toLowerCase()
+    if (['input', 'textarea', 'select'].includes(tag)) return true
+    if (el.closest?.('.no-review-shortcut')) return true
+    const editable = String(el.getAttribute?.('contenteditable') || '').toLowerCase()
+    return editable === 'true' || editable === ''
+}
+
+const syncActiveReviewRowToFiltered = () => {
+    const rows = filteredProductRows.value
+    if (!rows.length) {
+        activeReviewRowIndex.value = null
+        return
+    }
+
+    const current = rows.find((row) => row.index === activeReviewRowIndex.value)
+    if (current) return
+
+    const fallback = rows[Math.min(Math.max(0, (reviewPage.value - 1) * REVIEW_PAGE_SIZE), rows.length - 1)]
+    activeReviewRowIndex.value = fallback ? fallback.index : rows[0]?.index || null
+}
+
+const onReviewKeydown = (event: KeyboardEvent) => {
+    if (step.value !== 'review' || !props.modelValue) return
+    if (event.defaultPrevented) return
+    if (isTextLikeTarget(event.target)) return
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+
+    const row = activeReviewRow.value
+    if (!row && !filteredProductRows.value.length) return
+
+    if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        moveActiveReviewRow(1)
+        return
+    }
+
+    if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        moveActiveReviewRow(-1)
+        return
+    }
+
+    if (event.key === 'PageDown') {
+        event.preventDefault()
+        moveActiveReviewRow(REVIEW_PAGE_SIZE)
+        return
+    }
+
+    if (event.key === 'PageUp') {
+        event.preventDefault()
+        moveActiveReviewRow(-REVIEW_PAGE_SIZE)
+        return
+    }
+
+    if (event.key === 'Home') {
+        event.preventDefault()
+        if (filteredProductRows.value.length > 0) {
+            activeReviewRowIndex.value = filteredProductRows.value[0]!.index
+            reviewPage.value = 1
+        }
+        return
+    }
+
+    if (event.key === 'End') {
+        event.preventDefault()
+        if (filteredProductRows.value.length > 0) {
+            const last = filteredProductRows.value[filteredProductRows.value.length - 1]
+            activeReviewRowIndex.value = last!.index
+            reviewPage.value = reviewPageCount.value
+        }
+        return
+    }
+
+    if (event.key === 'Enter') {
+        event.preventDefault()
+        if (!row) return
+        triggerActiveImageAction('search')
+        return
+    }
+
+    if (event.key.toLowerCase() === 'r') {
+        event.preventDefault()
+        if (!row) return
+        triggerActiveImageAction('reprocess')
+        return
+    }
+
+    if (event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        if (!row) return
+        runImageQuickAction(row, 'search')
+        return
+    }
+
+    if (event.key.toLowerCase() === 'u') {
+        event.preventDefault()
+        triggerActiveImageUpload()
+        return
+    }
+
+    if (event.key.toLowerCase() === 't') {
+        event.preventDefault()
+        triggerActiveImageStorage()
+        return
+    }
+
+    if (event.key === ' ') {
+        event.preventDefault()
+        const active = row
+        if (!active) return
+        const suggestion = getImageNextAction(active.product)
+        if (!suggestion) return
+        void runImageNextAction(active)
+    }
+}
+
 const availableFrames = computed<FrameCandidate[]>(() => {
     const source = Array.isArray(props.availableFramesForImport) ? props.availableFramesForImport : []
     const byId = new Map<string, FrameCandidate>()
@@ -523,6 +1272,7 @@ const selectedFrameSet = computed(() => new Set(selectedFrameIds.value))
 const selectedFrames = computed(() => availableFrames.value.filter(frame => selectedFrameSet.value.has(frame.id)))
 const multiFrameImportCount = computed(() => Math.min(productRows.value.length, selectedFrameIds.value.length))
 const isProcessingProducts = computed(() => products.value.some((p: any) => p.status === 'processing'))
+const isImageQueueLocked = computed(() => isImageQueueRunning.value)
 const canUseMultiFrame = computed(() => availableFrames.value.length > 0)
 
 const setSelectedFrameIdsOrdered = (ids: string[]) => {
@@ -653,6 +1403,7 @@ const hasInvalidMultiFrameAssignments = computed(() => {
 const importButtonDisabled = computed(() => {
     if (isSubmittingImport.value) return true
     if (isProcessingProducts.value) return true
+    if (isImageQueueLocked.value) return true
     if (targetMode.value !== 'multi-frame') return false
     if (!canUseMultiFrame.value) return true
     if (selectedFrameIds.value.length === 0) return true
@@ -891,6 +1642,16 @@ const openAssetPicker = (index: number) => {
     showAssetPicker.value = true
 }
 
+const markManualImageSelection = (product: SmartProduct, reason: string) => {
+    product.imageSource = 'manual'
+    product.imageProvider = 'manual'
+    product.imageCandidateCount = 0
+    product.imageAttemptCount = 0
+    product.imageConfidence = 1
+    product.imageDecisionReason = reason
+    product.imageReviewReason = reason
+}
+
 watch(showAssetPicker, (open) => {
     if (open) return
     selectedProductIndex.value = null
@@ -907,6 +1668,7 @@ const applyAssetToProduct = async (asset: any, productIndex: number) => {
     product.imageUrl = resolveProductImageUrl(asset.url)
     product.status = 'done'
     product.error = undefined
+    markManualImageSelection(product, 'Imagem aplicada manualmente a partir da galeria de assets')
 
     // Salvar no cache do banco para próximas buscas
     try {
@@ -991,6 +1753,7 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
                 product.imageUrl = localPreview
             }
             product.status = 'done'
+            markManualImageSelection(product, 'Imagem aplicada manualmente em modo fallback')
             product.error = undefined
         }
 
@@ -1093,6 +1856,13 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
 
         if (result?.url) {
             product.imageUrl = resolveProductImageUrl(result.url)
+            const source = String((result as any)?.source || '').toLowerCase()
+            markManualImageSelection(
+                product,
+                source === 'manual-fallback'
+                    ? 'Imagem enviada manualmente com fallback local aplicado'
+                    : 'Imagem enviada manualmente'
+            )
             product.status = 'done'
             product.error = undefined
             console.log('[Upload Manual] Imagem salva no Wasabi:', product.name)
@@ -1128,30 +1898,14 @@ const handleImageUpload = async (event: Event, index: number) => {
     }
 }
 
-const getStatusColor = (status: string) => {
-    switch(status) {
-        case 'done': return 'text-green-500';
-        case 'processing': return 'text-blue-500';
-        case 'review_pending': return 'text-amber-500';
-        case 'error': return 'text-red-500';
-        default: return 'text-zinc-500';
-    }
-}
-
-const filteredProducts = computed(() => {
-    const list = products.value || []
-    const q = normalizeText(String(reviewSearch.value || '').trim())
-    if (!q) return list
-    return list.filter((p: any) => {
-        const hay = normalizeText(`${p?.name || ''} ${p?.brand || ''} ${p?.price || ''} ${p?.pricePack || ''} ${p?.priceUnit || ''} ${p?.priceSpecial || ''} ${p?.priceSpecialUnit || ''} ${p?.specialCondition || ''} ${p?.priceWholesale || ''}`)
-        return hay.includes(q)
-    })
-})
-
 const selectedProductForAssetPicker = computed(() => {
     const idx = Number(selectedProductIndex.value)
     if (!Number.isInteger(idx) || idx < 0) return null
     return products.value[idx] || null
+})
+
+watch(() => reviewSearch.value, () => {
+    reviewPage.value = 1
 })
 
 const getAssetDisplayName = (asset: any): string => {
@@ -1244,25 +1998,84 @@ const getAssetDisplayName = (asset: any): string => {
             </div>
 
             <!-- STEP 2: REVIEW -->
-            <div v-else class="flex flex-col gap-4 flex-1 h-full overflow-hidden">
+            <div
+                v-else
+                ref="reviewContainerRef"
+                tabindex="0"
+                class="flex flex-col gap-4 flex-1 h-full overflow-hidden"
+                @keydown="onReviewKeydown"
+            >
                 <!-- Review Header / Controls -->
-                <div class="p-4 rounded-xl border border-white/10 bg-zinc-900/45 space-y-4">
+                <div class="p-4 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,12,0.96))] shadow-[0_16px_44px_rgba(0,0,0,0.28)] space-y-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-200/90">
+                            Revisao operacional
+                        </span>
+                        <span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-300">
+                            {{ getImageQueueModeLabel(imageMatchMode) }}
+                        </span>
+                        <span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-300">
+                            {{ imageBgPolicyLabel }}
+                        </span>
+                        <span class="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-sky-200/90">
+                            {{ reviewOperationLabel }}
+                        </span>
+                    </div>
                     <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
                         <div class="min-w-0">
-                            <div class="text-sm font-semibold text-zinc-100 truncate">Revisão dos produtos</div>
+                            <div class="text-sm font-semibold text-zinc-100 truncate">Revisao dos produtos</div>
                             <div class="text-[11px] text-zinc-500">
-                                Mostrando <span class="text-zinc-300 font-semibold">{{ filteredProducts.length }}</span> de
+                                Mostrando <span class="text-zinc-300 font-semibold">{{ filteredProductRows.length }}</span> de
                                 <span class="text-zinc-300 font-semibold">{{ products.length }}</span>
+                            </div>
+                            <div class="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                                Priorize itens em conflito, ajuste o essencial e importe quando a fila terminar.
+                            </div>
+                            <div v-if="activeReviewRow" class="text-[10px] text-zinc-500 mt-1">
+                                Atalho: linha {{ activeReviewRowVisibleIndex + 1 }} • Selecionada: {{ activeReviewRow.product.name || `Produto ${activeReviewRow.index + 1}` }}
+                            </div>
+                            <div class="text-[10px] text-zinc-500 mt-1">
+                                Atalhos: ↑/↓ navega • Enter busca • Espaço próxima ação • S busca • R reprocessa • U upload • T storage
                             </div>
                         </div>
                         <div class="w-full xl:w-96 shrink-0">
                             <Input v-model="reviewSearch" placeholder="Buscar (nome, marca, preço...)" class="h-10 text-sm" />
                         </div>
+                        <Button
+                            class="xl:w-auto w-full h-10"
+                            variant="ghost"
+                            :disabled="isSubmittingImport || !canRunImageQueue"
+                            @click="toggleImageQueueProcessing"
+                        >
+                            <Loader2 v-if="isImageQueueRunning && !isQueuePaused" class="w-3.5 h-3.5 mr-2 animate-spin" />
+                            <Play v-else-if="isImageQueueRunning && isQueuePaused" class="w-3.5 h-3.5 mr-2" />
+                            <Play v-else class="w-3.5 h-3.5 mr-2" />
+                            <span class="text-[11px] font-bold uppercase tracking-widest">
+                                {{ imageQueueActionLabel }}
+                            </span>
+                        </Button>
+                    </div>
+                    <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
+                        <div class="rounded-xl border border-emerald-500/15 bg-emerald-500/8 p-3 text-[11px]">
+                            <div class="text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-200/75">Prontas</div>
+                            <div class="mt-1 text-lg font-semibold text-white">{{ imageStatusCounters.done }}</div>
+                            <div class="text-[10px] text-emerald-100/65">itens concluidos de {{ imageStatusCounters.total }}</div>
+                        </div>
+                        <div class="rounded-xl border border-sky-500/15 bg-sky-500/8 p-3 text-[11px]">
+                            <div class="text-[9px] font-semibold uppercase tracking-[0.18em] text-sky-200/75">Pendentes</div>
+                            <div class="mt-1 text-lg font-semibold text-white">{{ imageStatusCounters.pending }}</div>
+                            <div class="text-[10px] text-sky-100/65">aguardando busca, pausa ou retry</div>
+                        </div>
+                        <div class="rounded-xl border border-amber-500/15 bg-amber-500/8 p-3 text-[11px]">
+                            <div class="text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-200/75">Conflito</div>
+                            <div class="mt-1 text-lg font-semibold text-white">{{ imageStatusCounters.conflict }}</div>
+                            <div class="text-[10px] text-amber-100/65">pedem decisao manual ou novo processamento</div>
+                        </div>
                     </div>
 
                     <div
                         class="grid gap-3"
-                        :class="props.showImportMode ? 'grid-cols-1 xl:grid-cols-4' : 'grid-cols-1 xl:grid-cols-3'"
+                        :class="props.showImportMode ? 'grid-cols-1 md:grid-cols-2 2xl:grid-cols-5' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'"
                     >
                         <div v-if="props.showImportMode" class="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
                             <div>
@@ -1353,7 +2166,7 @@ const getAssetDisplayName = (asset: any): string => {
                             <select
                                 v-model="imageBgPolicy"
                                 class="h-9 w-full bg-transparent border border-zinc-700 rounded px-2 text-xs text-zinc-200 focus:outline-none"
-                                :disabled="isProcessingProducts"
+                                :disabled="isImageQueueLocked"
                             >
                                 <option value="auto">Auto (recomendado)</option>
                                 <option value="never">Nunca remover fundo</option>
@@ -1362,6 +2175,71 @@ const getAssetDisplayName = (asset: any): string => {
                             <div class="text-[10px] text-zinc-500 leading-relaxed">
                                 Auto preserva qualidade e evita recortes agressivos.
                             </div>
+                        </div>
+                        <div class="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
+                            <div>
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Match de imagem</div>
+                                <div class="text-[11px] text-zinc-500">{{ getImageQueueModeLabel(imageMatchMode) }} em fila</div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-1">
+                                <button
+                                    v-for="option in imageMatchModeOptions"
+                                    :key="option.value"
+                                    type="button"
+                                    class="h-9 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all disabled:opacity-45 disabled:cursor-not-allowed"
+                                    :class="imageMatchMode === option.value ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
+                                    :disabled="isImageQueueLocked"
+                                    @click="imageMatchMode = option.value"
+                                >
+                                    {{ option.label }}
+                                </button>
+                            </div>
+                            <label class="text-[10px] text-zinc-400">
+                                Concorrência
+                                <select
+                                    v-model.number="imageConcurrency"
+                                    class="mt-1 h-8 w-full bg-transparent border border-zinc-700 rounded px-2 text-xs text-zinc-200 focus:outline-none"
+                                    :disabled="isImageQueueLocked"
+                                >
+                                    <option :value="3">3</option>
+                                    <option :value="4">4</option>
+                                    <option :value="5">5</option>
+                                    <option :value="6">6</option>
+                                    <option :value="8">8</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div v-if="showImageQueueControls" class="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Progresso de busca automática</div>
+                            <div class="text-[11px] text-zinc-400">
+                                {{ imageQueueProgress.status || 'Pronta' }} • {{ imageQueueProgress.done }}/{{ imageQueueProgress.total }}
+                                <span v-if="imageQueueProgress.active"> • {{ imageQueueProgress.active }} em andamento</span>
+                                <span v-if="imageQueueProgress.retrying"> • {{ imageQueueProgress.retrying }} retries em espera</span>
+                            </div>
+                        </div>
+                        <div class="h-2 rounded-full bg-zinc-800 overflow-hidden">
+                            <div class="h-full bg-emerald-500 transition-all" :style="{ width: `${imageQueueProgress.percent}%` }"></div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 justify-between">
+                            <div class="text-[10px] text-zinc-500">
+                                Falhas: {{ imageQueueProgress.failed }}
+                            </div>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                class="h-7 px-2.5"
+                                @click="stopImageQueue"
+                                :disabled="!imageQueueState.running"
+                            >
+                                <RefreshCw class="w-3.5 h-3.5 mr-2" />
+                                Interromper
+                            </Button>
+                        </div>
+                        <div v-if="isImageQueueLocked" class="text-[10px] text-zinc-500 leading-relaxed">
+                            Configuracoes de busca ficam travadas enquanto a fila estiver em andamento para evitar resultados inconsistentes no mesmo lote.
                         </div>
                     </div>
 
@@ -1465,90 +2343,178 @@ const getAssetDisplayName = (asset: any): string => {
                                 <th class="p-3 w-32">Img</th>
                                 <th class="p-3">Produto</th>
                                 <th class="p-3 min-w-[430px]">Preços e Regras</th>
-                                <th class="p-3 w-24 text-center">Status</th>
+                                <th class="p-3 w-44 text-center">Status</th>
                                 <th class="p-3 w-12"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-800">
-                            <tr v-for="product in filteredProducts" :key="product.id" class="hover:bg-white/5 group align-top">
+                            <tr
+                                v-for="row in reviewRowsWithMeta"
+                                :key="row.productId"
+                                class="hover:bg-white/5 group align-top transition-colors"
+                                :class="activeReviewRowIndex === row.index ? 'bg-zinc-900/80 ring-1 ring-violet-400/40' : ''"
+                                @click="activeReviewRowIndex = row.index"
+                            >
                                 <!-- Image Column -->
                                 <td class="p-3">
-                                    <div class="w-26 h-26 rounded-lg bg-zinc-800/80 flex items-center justify-center overflow-hidden border border-zinc-700 relative">
-                                        <img v-if="product.imageUrl" :src="resolveProductImageUrl(product.imageUrl)" class="w-full h-full object-contain" />
-                                        <Loader2 v-else-if="product.status === 'processing'" class="w-4 h-4 text-blue-500 animate-spin" />
-                                        <AlertCircle v-else-if="product.status === 'review_pending'" class="w-4 h-4 text-amber-500" />
-                                        <AlertCircle v-else-if="product.status === 'error'" class="w-4 h-4 text-red-500" />
-                                        <div v-else class="text-zinc-600 font-xs">?</div>
+                                    <div :class="[
+                                        'w-26 h-26 rounded-lg bg-zinc-800/80 flex items-center justify-center overflow-hidden border relative',
+                                        thumbnailUiStateClass(row.product)
+                                    ]">
+                                        <template v-if="row.product?.imageUrl">
+                                            <div class="absolute inset-0 bg-zinc-700/60 animate-pulse" />
+                                            <img
+                                                loading="lazy"
+                                                :src="resolveProductImageUrl(row.product.imageUrl)"
+                                                class="relative z-10 w-full h-full object-contain"
+                                                :class="row.product?.status === 'processing' ? 'opacity-30' : ''"
+                                                alt="Pré-visualização do produto"
+                                            />
+                                            <div v-if="row.product?.status === 'processing'" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 bg-black/45">
+                                                <Loader2 class="w-4 h-4 text-blue-300 animate-spin" />
+                                                <span class="text-[9px] text-zinc-200">processando</span>
+                                            </div>
+                                        </template>
+                                        <template v-else-if="row.product?.status === 'processing'">
+                                            <Loader2 class="w-4 h-4 text-blue-500 animate-spin" />
+                                        </template>
+                                        <template v-else>
+                                            <div class="text-[9px] text-zinc-500 text-center px-2">
+                                                <AlertCircle
+                                                    v-if="row.product?.status === 'review_pending' || row.product?.status === 'error'"
+                                                    class="w-4 h-4 mx-auto mb-1"
+                                                    :class="{
+                                                        'text-amber-500': row.product?.status === 'review_pending',
+                                                        'text-red-500': row.product?.status === 'error'
+                                                    }"
+                                                />
+                                                {{ thumbnailStatusText(row.product) }}
+                                            </div>
+                                        </template>
                                         <input
-                                            :id="`image-upload-${product.id}`"
+                                            :id="`image-upload-${row.productId}`"
                                             type="file"
                                             class="hidden"
                                             accept="image/*"
                                             multiple
-                                            @change="handleImageUpload($event, resolveProductIndex(product))"
+                                            @change="handleImageUpload($event, row.index)"
                                         />
 
-                                        <div class="absolute top-1 left-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                        <details class="absolute top-1 left-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-30">
+                                            <summary class="list-none bg-black/60 text-white rounded p-1 cursor-pointer">
+                                                <Menu class="w-3 h-3" />
+                                            </summary>
+                                            <div class="absolute left-0 top-7 bg-zinc-900 border border-zinc-700 rounded shadow-lg whitespace-nowrap p-1 space-y-1 min-w-40">
+                                                <button
+                                                    type="button"
+                                                    class="w-full text-left px-2 py-1 text-[10px] rounded text-zinc-200 hover:bg-zinc-800"
+                                                    @click.stop="processProductImage(row.index, { bgPolicy: imageBgPolicy, matchMode: clampImageMatchMode(imageMatchMode), force: true })"
+                                                >
+                                                    Buscar automática
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="w-full text-left px-2 py-1 text-[10px] rounded text-zinc-200 hover:bg-zinc-800"
+                                                    @click.stop="openAssetPicker(row.index)"
+                                                >
+                                                    Buscar no storage
+                                                </button>
+                                                <label
+                                                    :for="`image-upload-${row.productId}`"
+                                                    class="w-full block text-left px-2 py-1 text-[10px] rounded text-zinc-200 hover:bg-zinc-800 cursor-pointer"
+                                                >
+                                                    Enviar imagem local
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    class="w-full text-left px-2 py-1 text-[10px] rounded text-zinc-200 hover:bg-zinc-800"
+                                                    @click.stop="reprocessProductImage(row.index, true)"
+                                                >
+                                                    Reprocessar com modo {{ imageMatchMode === 'precise' ? 'preciso' : 'rápido' }}
+                                                </button>
+                                            </div>
+                                        </details>
+                                        <div class="mt-1.5 flex flex-wrap gap-1">
                                             <button
-                                                class="bg-black/60 text-white rounded p-1"
-                                                title="Selecionar do Storage"
-                                                @click.stop="openAssetPicker(resolveProductIndex(product))"
+                                                type="button"
+                                                class="h-6 px-2 text-[9px] rounded border border-zinc-700/80 bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700/80 transition-colors"
+                                                :disabled="row.product?.status === 'processing'"
+                                                @click.stop="runImageQuickAction(row, 'search')"
                                             >
-                                                <FolderOpen class="w-3 h-3" />
+                                                Buscar {{ imageMatchMode === 'precise' ? 'preciso' : 'rápido' }}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                v-if="row.imageNextAction"
+                                                class="h-6 px-2 text-[9px] rounded border border-amber-700/70 bg-amber-800/40 text-amber-100 hover:bg-amber-700/60 transition-colors"
+                                                @click.stop="runImageNextAction(row)"
+                                                :disabled="row.product?.status === 'processing'"
+                                            >
+                                                {{ row.imageNextAction?.label || 'Próxima ação' }}
+                                            </button>
+                                            <label
+                                                v-if="row.product?.status === 'review_pending' || row.product?.status === 'error'"
+                                                :for="`image-upload-${row.productId}`"
+                                                class="h-6 inline-flex items-center px-2 text-[9px] rounded border border-zinc-700/80 bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700/80 cursor-pointer transition-colors"
+                                            >
+                                                Upload
+                                            </label>
+                                            <button
+                                                type="button"
+                                                v-if="row.product?.status === 'review_pending' || row.product?.status === 'error'"
+                                                class="h-6 px-2 text-[9px] rounded border border-zinc-700/80 bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700/80 transition-colors"
+                                                @click.stop="runImageQuickAction(row, 'storage')"
+                                            >
+                                                Storage
                                             </button>
                                         </div>
-                                        
-                                        <!-- Hover Action to Retry -->
-                                        <div 
-                                            v-if="!product.imageUrl && product.status !== 'processing'" 
-                                            class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer z-10"
-                                            @click="processProductImage(resolveProductIndex(product), { bgPolicy: imageBgPolicy })"
-                                            title="Buscar Imagem"
-                                        >
-                                            <Search class="w-3 h-3 text-white" />
-                                        </div>
-                                        <label
-                                            :for="`image-upload-${product.id}`"
-                                            class="absolute top-1 right-1 bg-black/60 text-white rounded p-1 opacity-0 group-hover:opacity-100 cursor-pointer z-20"
-                                            title="Enviar Imagem"
-                                        >
-                                            <Upload class="w-3 h-3" />
-                                        </label>
                                     </div>
                                 </td>
-                                
-                                <!-- Name Input -->
+
+                                <!-- Name Inputs -->
                                 <td class="p-3 align-middle">
-                                    <input 
-                                        v-model="product.name" 
+                                    <input
+                                        v-model="row.product.name"
                                         class="w-full bg-transparent border-none text-white focus:ring-0 p-0 text-sm font-semibold placeholder-zinc-600"
                                         placeholder="Nome do Produto"
                                     />
-                                    <input 
-                                        v-model="product.brand" 
+                                    <input
+                                        v-model="row.product.brand"
                                         class="w-full bg-transparent border-none text-zinc-500 focus:ring-0 p-0 text-xs mt-1"
                                         placeholder="Marca (opcional)"
                                     />
                                     <input
-                                        v-model="product.productCode"
+                                        v-model="row.product.productCode"
                                         class="w-full bg-transparent border-none text-zinc-500 focus:ring-0 p-0 text-xs mt-1"
                                         placeholder="EAN/Código (opcional)"
                                     />
-                                    <div v-if="product.status === 'review_pending'" class="text-[10px] text-amber-400 mt-1">
-                                        Revisão pendente: {{ product.imageDecisionReason || product.error || 'Baixa confiança no match automático.' }}
+                                    <input
+                                        v-model="row.product.weight"
+                                        class="w-full bg-transparent border-none text-zinc-500 focus:ring-0 p-0 text-xs mt-1"
+                                        placeholder="Peso (ex: 500G, 1L)"
+                                    />
+                                    <div
+                                        v-if="
+                                            row.product?.status === 'review_pending' &&
+                                            !row.imageNextAction
+                                        "
+                                        class="text-[10px] text-amber-400 mt-1"
+                                    >
+                                        Revisão pendente:
+                                        {{ row.product.imageDecisionReason || row.product.error || 'Baixa confiança no match automático.' }}
                                     </div>
                                 </td>
 
-                                <!-- Price Input -->
+                                <!-- Price Inputs -->
                                 <td class="p-3">
                                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-2">
                                         <div class="rounded-md border border-zinc-800 bg-zinc-950/45 p-2 space-y-1.5">
-                                            <div class="text-[10px] uppercase tracking-widest text-zinc-400 font-semibold">Preço Base</div>
+                                            <div class="text-[10px] uppercase tracking-widest text-zinc-400 font-semibold">Preço base</div>
                                             <div class="grid grid-cols-2 gap-2">
                                                 <label class="text-[10px] text-zinc-500 uppercase">
                                                     Und
                                                     <input
-                                                        v-model="product.priceUnit"
+                                                        v-model="row.product.priceUnit"
                                                         class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500"
                                                         placeholder="0,00"
                                                     />
@@ -1556,7 +2522,7 @@ const getAssetDisplayName = (asset: any): string => {
                                                 <label class="text-[10px] text-zinc-500 uppercase">
                                                     Emb
                                                     <input
-                                                        v-model="product.pricePack"
+                                                        v-model="row.product.pricePack"
                                                         class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500"
                                                         placeholder="0,00"
                                                     />
@@ -1565,12 +2531,12 @@ const getAssetDisplayName = (asset: any): string => {
                                         </div>
 
                                         <div class="rounded-md border border-emerald-900/40 bg-emerald-950/15 p-2 space-y-1.5">
-                                            <div class="text-[10px] uppercase tracking-widest text-emerald-400 font-semibold">Preço Especial</div>
+                                            <div class="text-[10px] uppercase tracking-widest text-emerald-400 font-semibold">Preço especial</div>
                                             <div class="grid grid-cols-2 gap-2">
                                                 <label class="text-[10px] text-emerald-400 uppercase">
                                                     +Esp
                                                     <input
-                                                        v-model="product.priceSpecialUnit"
+                                                        v-model="row.product.priceSpecialUnit"
                                                         class="mt-1 w-full bg-transparent border border-emerald-900/50 rounded px-2 py-1 text-emerald-300 text-xs focus:outline-none focus:border-emerald-500"
                                                         placeholder="0,00"
                                                     />
@@ -1578,7 +2544,7 @@ const getAssetDisplayName = (asset: any): string => {
                                                 <label class="text-[10px] text-emerald-400 uppercase">
                                                     Esp
                                                     <input
-                                                        v-model="product.priceSpecial"
+                                                        v-model="row.product.priceSpecial"
                                                         class="mt-1 w-full bg-transparent border border-emerald-900/50 rounded px-2 py-1 text-emerald-300 text-xs focus:outline-none focus:border-emerald-500"
                                                         placeholder="0,00"
                                                     />
@@ -1591,8 +2557,8 @@ const getAssetDisplayName = (asset: any): string => {
                                         <label class="text-[10px] text-zinc-500 uppercase">
                                             Emb
                                             <input
-                                                :value="product.packageLabel ?? ''"
-                                                @input="e => product.packageLabel = String((e.target as any).value || '').toUpperCase()"
+                                                :value="row.product.packageLabel ?? ''"
+                                                @input="e => row.product.packageLabel = String((e.target as any).value || '').toUpperCase()"
                                                 class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs focus:outline-none"
                                                 placeholder="FD"
                                             />
@@ -1601,8 +2567,8 @@ const getAssetDisplayName = (asset: any): string => {
                                             C/
                                             <input
                                                 type="number"
-                                                :value="product.packQuantity ?? ''"
-                                                @input="e => { const v = Number((e.target as any).value); product.packQuantity = Number.isFinite(v) && v > 0 ? v : null }"
+                                                :value="row.product.packQuantity ?? ''"
+                                                @input="e => { const v = Number((e.target as any).value); row.product.packQuantity = Number.isFinite(v) && v > 0 ? v : null }"
                                                 class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs focus:outline-none"
                                                 placeholder="12"
                                             />
@@ -1610,35 +2576,44 @@ const getAssetDisplayName = (asset: any): string => {
                                         <label class="text-[10px] text-zinc-500 uppercase">
                                             Un
                                             <input
-                                                :value="product.packUnit ?? ''"
-                                                @input="e => product.packUnit = String((e.target as any).value || '').toUpperCase()"
+                                                :value="row.product.packUnit ?? ''"
+                                                @input="e => row.product.packUnit = String((e.target as any).value || '').toUpperCase()"
                                                 class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs focus:outline-none"
                                                 placeholder="UN"
                                             />
                                         </label>
                                     </div>
 
-                                    <div class="mt-2">
-                                        <label class="text-[10px] text-zinc-500 uppercase">
-                                            Condição
-                                            <input
-                                                :value="product.specialCondition ?? ''"
-                                                @input="e => product.specialCondition = String((e.target as any).value || '')"
+                                        <div class="mt-2">
+                                            <label class="text-[10px] text-zinc-500 uppercase">
+                                                Condição
+                                                <input
+                                                    :value="row.product.specialCondition ?? ''"
+                                                    @input="e => row.product.specialCondition = String((e.target as any).value || '')"
                                                 class="mt-1 w-full bg-transparent border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs focus:outline-none"
                                                 placeholder="ACIMA DE 36 UN."
-                                            />
-                                        </label>
+                                                />
+                                            </label>
+                                        </div>
+
+                                    <div class="mt-2 flex justify-end">
+                                        <button
+                                            type="button"
+                                            class="text-[10px] text-zinc-500 hover:text-zinc-300"
+                                            @click="toggleAdvancedFields(row.productId)"
+                                        >
+                                            {{ isAdvancedFieldsExpanded(row.productId) ? 'Ocultar campos avançados' : 'Mostrar campos avançados' }}
+                                        </button>
                                     </div>
 
-                                    <!-- ===== PREÇO LEGADO (opcional, colapsado) ===== -->
-                                    <details class="mt-2">
-                                        <summary class="text-[10px] text-zinc-600 cursor-pointer hover:text-zinc-400">Legado</summary>
+                                    <details class="mt-1" :open="isAdvancedFieldsExpanded(row.productId)">
+                                        <summary class="text-[10px] text-zinc-500 cursor-pointer hover:text-zinc-300">Campos avançados</summary>
                                         <div class="mt-2 grid grid-cols-1 xl:grid-cols-2 gap-2 text-[10px] text-zinc-600">
                                             <label class="uppercase">
                                                 Preço
                                                 <input
-                                                    :value="product.price ?? ''"
-                                                    @input="e => product.price = String((e.target as any).value || '')"
+                                                    :value="row.product.price ?? ''"
+                                                    @input="e => row.product.price = String((e.target as any).value || '')"
                                                     class="mt-1 w-full bg-transparent border border-zinc-800/50 rounded px-2 py-1 text-zinc-500 focus:outline-none"
                                                     placeholder="0,00"
                                                 />
@@ -1646,8 +2621,8 @@ const getAssetDisplayName = (asset: any): string => {
                                             <label class="uppercase">
                                                 R$ Atacado
                                                 <input
-                                                    :value="product.priceWholesale ?? ''"
-                                                    @input="e => product.priceWholesale = String((e.target as any).value || '')"
+                                                    :value="row.product.priceWholesale ?? ''"
+                                                    @input="e => row.product.priceWholesale = String((e.target as any).value || '')"
                                                     class="mt-1 w-full bg-transparent border border-zinc-800/50 rounded px-2 py-1 text-zinc-500 focus:outline-none"
                                                     placeholder="0,00"
                                                 />
@@ -1656,8 +2631,8 @@ const getAssetDisplayName = (asset: any): string => {
                                                 Trigger
                                                 <input
                                                     type="number"
-                                                    :value="product.wholesaleTrigger ?? ''"
-                                                    @input="e => { const v = Number((e.target as any).value); product.wholesaleTrigger = Number.isFinite(v) && v > 0 ? v : null }"
+                                                    :value="row.product.wholesaleTrigger ?? ''"
+                                                    @input="e => { const v = Number((e.target as any).value); row.product.wholesaleTrigger = Number.isFinite(v) && v > 0 ? v : null }"
                                                     class="mt-1 w-full bg-transparent border border-zinc-800/50 rounded px-2 py-1 text-zinc-500 focus:outline-none"
                                                     placeholder="10"
                                                 />
@@ -1665,8 +2640,8 @@ const getAssetDisplayName = (asset: any): string => {
                                             <label class="uppercase">
                                                 Unidade Trigger
                                                 <input
-                                                    :value="product.wholesaleTriggerUnit ?? ''"
-                                                    @input="e => product.wholesaleTriggerUnit = String((e.target as any).value || '').toUpperCase()"
+                                                    :value="row.product.wholesaleTriggerUnit ?? ''"
+                                                    @input="e => row.product.wholesaleTriggerUnit = String((e.target as any).value || '').toUpperCase()"
                                                     class="mt-1 w-full bg-transparent border border-zinc-800/50 rounded px-2 py-1 text-zinc-500 focus:outline-none"
                                                     placeholder="FD"
                                                 />
@@ -1676,17 +2651,55 @@ const getAssetDisplayName = (asset: any): string => {
                                 </td>
                                 
                                 <!-- Status -->
-                                <td class="p-3 text-center align-middle">
-                                    <span :class="['text-[10px] font-medium uppercase', getStatusColor(product.status)]">
-                                        {{ product.status }}
-                                    </span>
+                                        <td class="p-3 text-center align-top">
+                                    <div
+                                        class="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-medium uppercase"
+                                        :class="row.imageStatusMeta.toneClass"
+                                    >
+                                        {{ row.imageStatusMeta.state }}
+                                    </div>
+                                    <div class="mt-1 flex items-center justify-center flex-wrap gap-1 text-[9px]">
+                                        <span :class="['inline-flex items-center rounded-full px-2 py-0.5 border font-medium uppercase tracking-wide', row.imageStatusMeta.toneClass]">
+                                            Conf: {{ row.imageStatusMeta.confidence }}
+                                        </span>
+                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 border border-zinc-700 text-zinc-300 bg-zinc-800">
+                                            {{ row.imageStatusMeta.source }}
+                                        </span>
+                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 border border-zinc-700 text-zinc-400 bg-zinc-900">
+                                            {{ row.imageStatusMeta.providerLabel }}
+                                        </span>
+                                    </div>
+                                    <div v-if="row.imageNextAction" class="mt-2 rounded border border-yellow-500/20 bg-yellow-500/5 px-2 py-1 text-left">
+                                        <div class="text-[9px] uppercase tracking-wider text-yellow-200/80 font-semibold">Próximo passo</div>
+                                        <div class="text-[9px] text-yellow-300/90 leading-snug">
+                                            {{ row.imageNextAction?.helper }}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="mt-1 inline-flex items-center rounded px-2 py-1 text-[9px] font-semibold bg-yellow-500/20 text-yellow-100 hover:bg-yellow-500/30 transition-colors"
+                                            @click="runImageNextAction(row)"
+                                        >
+                                            {{ row.imageNextAction?.label }}
+                                        </button>
+                                    </div>
+                                    <div
+                                        v-if="row.product?.imageReviewReason && !row.imageNextAction"
+                                        class="mt-1 text-[9px] text-zinc-500 leading-snug"
+                                    >
+                                        {{ row.product.imageReviewReason }}
+                                    </div>
                                 </td>
 
                                 <!-- Actions -->
-                                <td class="p-3 text-right align-middle">
-                                    <button @click="removeProduct(resolveProductIndex(product))" class="text-zinc-500 hover:text-red-400 p-1">
+                                <td class="p-3 text-right align-top">
+                                    <button @click="removeProduct(row.index)" class="text-zinc-500 hover:text-red-400 p-1">
                                         <X class="w-3.5 h-3.5" />
                                     </button>
+                                </td>
+                            </tr>
+                            <tr v-if="!filteredProductRowsPage.length" :key="`empty-review-row`" class="text-zinc-500">
+                                <td colspan="5" class="p-6 text-center text-[10px]">
+                                    Nenhum produto encontrado para "{{ reviewSearch }}".
                                 </td>
                             </tr>
                         </tbody>
@@ -1697,19 +2710,35 @@ const getAssetDisplayName = (asset: any): string => {
                     <button @click="startAppendFromReview" class="text-xs text-zinc-500 hover:text-white flex items-center gap-1">
                          <Plus class="w-3 h-3" /> Adicionar via lista/arquivo
                     </button>
+
+                    <div class="flex items-center gap-2 text-[10px] text-zinc-400">
+                        <span>Página {{ reviewPage }} de {{ reviewPageCount }}</span>
+                        <span>•</span>
+                        <span>Exibindo {{ filteredProductRowsPage.length }} de {{ filteredProductRows.length }} itens</span>
+                    </div>
+
                     <div class="flex flex-wrap gap-2">
-                        <Button variant="ghost" size="sm" @click="addManualProduct">
-                            <Plus class="w-3.5 h-3.5 mr-2" />
-                            Adicionar item
+                        <Button variant="ghost" size="sm" @click="gotoReviewPage(reviewPage - 1)" :disabled="reviewPage <= 1">
+                            <ChevronDown class="w-3.5 h-3.5 mr-2 rotate-90" />
+                            Anterior
                         </Button>
-                        <Button variant="ghost" size="sm" @click="processAllImages({ bgPolicy: imageBgPolicy })">
-                            <Search class="w-3.5 h-3.5 mr-2" />
-                            Reprocessar Imagens
+                        <Button variant="ghost" size="sm" @click="gotoReviewPage(reviewPage + 1)" :disabled="reviewPage >= reviewPageCount">
+                            <ChevronDown class="w-3.5 h-3.5 mr-2 -rotate-90" />
+                            Próximo
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            @click="startImageProcessing(true)"
+                            :disabled="isImageQueueRunning || isSubmittingImport"
+                        >
+                            <RefreshCw class="w-3.5 h-3.5 mr-2" />
+                            Forçar reprocessar imagens
                         </Button>
                         <Button
                             v-if="targetMode !== 'multi-frame'"
-                            size="sm" 
-                            @click="handleImport" 
+                            size="sm"
+                            @click="handleImport"
                             class="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                             :disabled="importButtonDisabled"
                         >

@@ -3,6 +3,7 @@ import { defineAsyncComponent } from 'vue'
 import type { LabelTemplate } from '~/types/label-template'
 
 type ImportTargetMode = 'zone' | 'multi-frame'
+type ImageMatchMode = 'precise' | 'fast'
 type FrameAssignment = { productId: string; frameId: string | null }
 type ProductImportOptions = {
   mode?: 'replace' | 'append'
@@ -12,6 +13,8 @@ type ProductImportOptions = {
   frameAssignments?: FrameAssignment[]
   countRule?: 'min'
   cardsPerFrame?: 1
+  imageMatchMode?: ImageMatchMode
+  imageConcurrency?: number
 }
 
 type AiGeneratePayload = {

@@ -258,7 +258,8 @@ export default defineEventHandler(async (event) => {
         const flavor = String(body?.flavor || '').trim() || undefined;
         const weight = String(body?.weight || '').trim() || undefined;
         const productCode = String(body?.productCode || '').trim() || undefined;
-        const strictMode = body?.strictMode === undefined ? true : !!body?.strictMode;
+    const matchMode = String(body?.matchMode || '').toLowerCase() === 'fast' ? 'fast' : 'precise';
+    const strictMode = matchMode === 'precise' ? true : !!body?.strictMode;
         const allowExternal = body?.allowExternal === undefined ? true : !!body?.allowExternal;
         const rawBgPolicy = String(body?.bgPolicy || '').trim().toLowerCase();
         const bgPolicy: BgPolicy =
@@ -318,14 +319,49 @@ export default defineEventHandler(async (event) => {
             candidateNormalizedTerms.unshift(normalizedTerm);
         }
         const candidateKeys = [...new Set(candidateNormalizedTerms.map(buildDeterministicS3Key))];
-        const noImageResponse = (reason: string, details?: Record<string, any>) => ({
-            found: false,
-            url: null,
-            source: 'external',
-            reason,
-            reviewPending: strictMode,
-            ...(details || {})
-        });
+        const noImageResponse = (reason: string, details: Record<string, any> = {}) => {
+            const reasonText = String(reason || '').trim();
+            const fallbackNextAction = (() => {
+                if (!strictMode) return undefined;
+                if (reasonText.includes('external_search_config_missing') || reasonText.includes('external_search_disabled')) {
+                    return 'Ative a busca externa nas configurações e reprocessar, ou aplique imagem manualmente.';
+                }
+                if (reasonText.includes('openai_validation_missing') || reasonText.includes('ai_validation_failed')) {
+                    return 'Adicione EAN/código ou termos de peso/variante e reprocesse em modo preciso.';
+                }
+                if (reasonText.includes('no_candidates') || reasonText.includes('metadata_gate_rejected')) {
+                    return 'Tente ajustar o termo principal (marca + peso) e reprocesse, ou use imagem manual.';
+                }
+                if (reasonText.includes('processing_failed')) {
+                    return 'Reprocessar com política de busca rápida ou fazer upload manual em seguida.';
+                }
+                return 'Revise manualmente e escolha outra fonte de imagem.';
+            })();
+
+            const provider = details?.provider || 'external';
+            const source = String(details?.provider || 'external');
+            const candidateCount = Number(details?.candidateCount || candidateNormalizedTerms.length || 0);
+            const attempts = Number(details?.attempts || 0);
+            const confidence = Number.isFinite(Number(details?.confidence))
+                ? Math.max(0, Math.min(1, Number(details.confidence)))
+                : 0;
+
+            return {
+                found: false,
+                url: null,
+                source,
+                reason: reasonText,
+                provider: source,
+                candidateCount: candidateCount,
+                attempts,
+                confidence,
+                reviewPending: strictMode,
+                reviewReason: String(details?.reviewReason || reasonText || ''),
+                imageReviewReason: String(details?.imageReviewReason || reasonText || ''),
+                nextAction: String(details?.nextAction || fallbackNextAction || ''),
+                ...(details || {})
+            };
+        };
         const identityKey = buildProductIdentityKey({
             productCode,
             normalizedTerm,
@@ -361,7 +397,16 @@ export default defineEventHandler(async (event) => {
             const exists = await s3KeyExists(s3, bucketName, registryKey);
             if (exists) {
                 console.log(`✅ [Registry] Match aprovado por identityKey: "${identityKey}"`);
-                return { source: 'registry', url: await resolveStorageReadUrl(registryKey, user.id), key: registryKey };
+                return {
+                    source: 'registry',
+                    url: await resolveStorageReadUrl(registryKey, user.id),
+                    key: registryKey,
+                    provider: 'registry',
+                    confidence: 1,
+                    candidateCount: 0,
+                    attempts: 0,
+                    reviewPending: false
+                };
             }
         }
     } catch (err: any) {
@@ -400,7 +445,16 @@ export default defineEventHandler(async (event) => {
             status: 'approved'
         });
 
-        return { source: 'cache-s3', url: await resolveStorageReadUrl(candidateKey, user.id), key: candidateKey };
+        return {
+            source: 'cache-s3',
+            url: await resolveStorageReadUrl(candidateKey, user.id),
+            key: candidateKey,
+            provider: 'internal',
+            confidence: 0.99,
+            candidateCount: 0,
+            attempts: 0,
+            reviewPending: false
+        };
     }
 
     // ========================================
@@ -415,6 +469,7 @@ export default defineEventHandler(async (event) => {
             brand,
             flavor,
             weight,
+            productCode,
             strictOnly: strictMode
         });
 
@@ -440,13 +495,18 @@ export default defineEventHandler(async (event) => {
                         validatedBy: user.id,
                         status: 'approved'
                     });
-                    return {
-                        source: processed.processed ? 'internal-processed' : 'internal',
-                        url: await resolveStorageReadUrl(processed.key, user.id),
-                        key: processed.key
-                    };
+                        return {
+                            source: processed.processed ? 'internal-processed' : 'internal',
+                            url: await resolveStorageReadUrl(processed.key, user.id),
+                            key: processed.key,
+                            provider: 'internal',
+                            confidence: 0.99,
+                            candidateCount: 1,
+                            attempts: 1,
+                            reviewPending: false
+                        };
+                    }
                 }
-            }
 
             await saveProductImageCache({
                 searchTerm: normalizedTerm,
@@ -470,7 +530,16 @@ export default defineEventHandler(async (event) => {
                 status: 'approved'
             });
 
-            return { source: 'internal', url: await resolveStorageReadUrl(found, user.id), key: found };
+            return {
+                source: 'internal',
+                url: await resolveStorageReadUrl(found, user.id),
+                key: found,
+                provider: 'internal',
+                confidence: 0.93,
+                candidateCount: 1,
+                attempts: 1,
+                reviewPending: false
+            };
         }
     } catch (err) {
         console.warn("Internal search failed:", err);
@@ -519,7 +588,12 @@ export default defineEventHandler(async (event) => {
                         return {
                             source: 'cache-processed',
                             url: await resolveStorageReadUrl(processed.key, user.id),
-                            key: processed.key
+                            key: processed.key,
+                            provider: 'cache',
+                            confidence: 0.95,
+                            candidateCount: 1,
+                            attempts: 1,
+                            reviewPending: false
                         };
                     }
                 }
@@ -536,7 +610,16 @@ export default defineEventHandler(async (event) => {
                     validatedBy: user.id,
                     status: 'approved'
                 });
-                return { source: 'cache', url: await resolveStorageReadUrl(cacheResolvedKey, user.id), key: cacheResolvedKey };
+                return {
+                    source: 'cache',
+                    url: await resolveStorageReadUrl(cacheResolvedKey, user.id),
+                    key: cacheResolvedKey,
+                    provider: 'cache',
+                    confidence: 0.88,
+                    candidateCount: 1,
+                    attempts: 1,
+                    reviewPending: false
+                };
             }
         }
     } catch (err) {
@@ -568,7 +651,14 @@ export default defineEventHandler(async (event) => {
             status: 'review_pending',
             reason: 'external_disabled'
         });
-        return noImageResponse('external_search_disabled', { reviewPending: true });
+        return noImageResponse('external_search_disabled', {
+            provider: 'external-disabled',
+            candidateCount: candidateNormalizedTerms.length,
+            attempts: 0,
+            confidence: 0,
+            nextAction: 'Ative a busca externa nas configurações e reprocesse em seguida.',
+            reviewPending: true
+        });
     }
 
     if (!hasSerper) {
@@ -587,7 +677,12 @@ export default defineEventHandler(async (event) => {
             reason: 'external_provider_missing'
         });
         return noImageResponse('external_search_config_missing', {
-            missingConfig: ['serperApiKey']
+            provider: 'external',
+            candidateCount: candidateNormalizedTerms.length,
+            attempts: 0,
+            confidence: 0,
+            missingConfig: ['serperApiKey'],
+            nextAction: 'Configure Serper e execute novamente em modo preciso, ou use busca manual.'
         });
     }
 
@@ -675,6 +770,9 @@ export default defineEventHandler(async (event) => {
         });
         return noImageResponse(`No image found for "${term}"`, {
             provider: providerUsed || lastProviderError?.provider || 'none',
+            candidateCount: 0,
+            attempts: 0,
+            confidence: 0,
             externalError: lastProviderError || undefined
         });
     }
@@ -706,9 +804,13 @@ export default defineEventHandler(async (event) => {
             status: 'review_pending',
             reason: 'metadata_gate_rejected'
         });
-        return noImageResponse(`No reliable image found for "${term}"`, {
+            return noImageResponse(`No reliable image found for "${term}"`, {
             provider: providerUsed || 'none',
-            reason: 'metadata_gate_rejected'
+            reason: 'metadata_gate_rejected',
+            candidateCount: 0,
+            attempts: 0,
+            confidence: 0,
+            imageReviewReason: 'Metadata rejeitou as melhores candidatas. Refaça o termo com marca e peso.'
         });
     }
 
@@ -716,6 +818,7 @@ export default defineEventHandler(async (event) => {
     // 2.5 VALIDAÇÃO IA: GPT-4o Vision escolhe a melhor imagem
     // ========================================
     let selectedImageUrl = '';
+    let selectedImageConfidence = 0;
     let validationLevelForRegistry = 'ocr+ai-strict';
     if (!config.openaiApiKey) {
         if (strictMode) {
@@ -733,11 +836,18 @@ export default defineEventHandler(async (event) => {
                 reason: 'openai_validation_missing'
             });
             return noImageResponse(`No reliable image found for "${term}"`, {
-                reason: 'openai_validation_missing'
+                reason: 'openai_validation_missing',
+                provider: providerUsed || 'external',
+                candidateCount: candidates.length,
+                attempts: 0,
+                confidence: 0,
+                imageReviewReason: 'OpenAI não disponível para validação em modo preciso.',
+                nextAction: 'Cadastre a chave OpenAI nas configurações e reprocesse.'
             });
         }
 
         selectedImageUrl = String(candidates[0]?.url || '').trim();
+        selectedImageConfidence = 0.3;
         validationLevelForRegistry = 'ocr+fallback-no-openai';
         console.warn('⚠️ [AI] OpenAI ausente e strictMode=false, usando fallback da 1a candidata externa.');
     } else {
@@ -778,12 +888,21 @@ export default defineEventHandler(async (event) => {
                         aiConfidence: validation.confidence,
                         aiBestIndex: validation.bestIndex,
                         aiExactMatch: validation.isExactMatch,
-                        aiMismatchReasons: validation.mismatchReasons
+                        aiMismatchReasons: validation.mismatchReasons,
+                        provider: providerUsed || 'external',
+                        candidateCount: candidates.length,
+                        attempts: 0,
+                        confidence: Math.max(0, Math.min(1, validation.confidence)),
+                        imageReviewReason: [
+                            `Confiança AI ${(validation.confidence * 100).toFixed(0)}% abaixo do mínimo (${(confidenceThreshold * 100).toFixed(0)}%).`,
+                            ...validation.mismatchReasons
+                        ].filter(Boolean).join(' ')
                     });
                 }
 
                 const fallbackIndex = bestIndexValid ? validation.bestIndex : 0;
                 selectedImageUrl = String(candidates[fallbackIndex]?.url || candidates[0]?.url || '').trim();
+                selectedImageConfidence = Math.max(0.4, validation.confidence);
                 validationLevelForRegistry = 'ocr+fallback-ai-low-confidence';
                 console.warn(
                     `⚠️ [AI] Validação inconclusiva (confidence=${validation.confidence.toFixed(2)}, exact=${validation.isExactMatch})` +
@@ -791,6 +910,7 @@ export default defineEventHandler(async (event) => {
                 );
             } else {
                 selectedImageUrl = candidates[validation.bestIndex]!.url;
+                selectedImageConfidence = validation.confidence;
                 console.log(
                     `🎯 [AI] Selecionada imagem ${validation.bestIndex + 1}/${candidates.length} com ${(validation.confidence * 100).toFixed(0)}% confiança` +
                     ` (isExact=${validation.isExactMatch}, strictMode=${strictMode})`
@@ -813,11 +933,18 @@ export default defineEventHandler(async (event) => {
                     reason: 'ai_validation_failed'
                 });
                 return noImageResponse(`No reliable image found for "${term}"`, {
-                    reason: 'ai_validation_failed'
+                    reason: 'ai_validation_failed',
+                    provider: providerUsed || 'external',
+                    candidateCount: candidates.length,
+                    attempts: 0,
+                    confidence: 0,
+                    imageReviewReason: 'Falha crítica na validação por IA. Refaça com modo rápido ou ajuste o termo.',
+                    nextAction: 'Inclua EAN/código e tente novamente no modo preciso.'
                 });
             }
 
             selectedImageUrl = String(candidates[0]?.url || '').trim();
+            selectedImageConfidence = 0.25;
             validationLevelForRegistry = 'ocr+fallback-ai-error';
         }
     }
@@ -833,9 +960,11 @@ export default defineEventHandler(async (event) => {
             .slice(0, 3);
         const pipelineTryUrls = [selectedImageUrl, ...fallbackUrls].filter(Boolean);
         let pipelineLastErr: any = null;
+        let attempts = 0;
 
         for (const candidateUrl of pipelineTryUrls) {
             try {
+                attempts += 1;
                 const pipelineResult = await runExternalPipelineOnce({
                     s3,
                     bucketName,
@@ -864,6 +993,12 @@ export default defineEventHandler(async (event) => {
                 });
                 return {
                     ...pipelineResult,
+                    confidence: Math.max(0, Math.min(1, selectedImageConfidence)),
+                    provider: providerUsed || 'external',
+                    candidateCount: candidates.length,
+                    attempts,
+                    imageReviewReason: `matched-by:${validationLevelForRegistry}`,
+                    reviewPending: false,
                     url: await resolveStorageReadUrl(pipelineResult?.key || pipelineResult?.url, user.id)
                 };
             } catch (err: any) {
@@ -891,7 +1026,10 @@ export default defineEventHandler(async (event) => {
         return noImageResponse('processing_failed', {
             message: String(pipelineLastErr?.message || pipelineLastErr || 'unknown'),
             code: pipelineLastErr?.code,
-            name: pipelineLastErr?.name
+            name: pipelineLastErr?.name,
+            provider: providerUsed || 'external',
+            candidateCount: candidates.length,
+            attempts
         });
     } catch (err: any) {
         // Preserve expected HTTP errors (auth, validation, rate limit).
@@ -905,6 +1043,13 @@ export default defineEventHandler(async (event) => {
             url: null,
             source: 'error',
             reason: 'internal_error',
+            provider: 'server',
+            candidateCount: 0,
+            attempts: 0,
+            confidence: 0,
+            reviewPending: true,
+            imageReviewReason: 'Falha interna durante o processamento da imagem.',
+            nextAction: 'Reprocessar em modo rápido ou aplicar imagem manualmente.',
             message: String(err?.message || err || 'unknown')
         };
     }

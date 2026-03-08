@@ -213,6 +213,7 @@ const isLikelyProductZone = (obj: any): boolean => {
 }
 
 const isProductZone = computed(() => isLikelyProductZone(props.selectedObject))
+const isProductZoneSectionOpen = ref(false)
 
 // Extract zone data directly from selected object when it's a product zone
 const currentZoneData = computed(() => {
@@ -302,7 +303,13 @@ const applyGlobalStyle = (prop: string) => {
 const activeTab = computed(() => props.activeMode || 'design') // design | prototype
 
 // Collapsible sections state (Figma-inspired)
-const collapsedSections = ref<Set<string>>(new Set(['export', 'prototype-info', 'corner-radius'])) // Start some collapsed
+const collapsedSections = ref<Set<string>>(new Set([
+  'export',
+  'prototype-info',
+  'corner-radius',
+  'transform',
+  'effects'
+])) // Start some complex sections collapsed
 
 const toggleSection = (sectionId: string) => {
   const newSet = new Set(collapsedSections.value)
@@ -1811,13 +1818,46 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- 9. Zona de Produtos -->
-      <div v-show="isProductZone" class="border-b border-white/5">
-          <div class="px-3 py-1.5 flex items-center gap-1.5 border-b border-white/5">
-             <LayoutGrid class="w-3 h-3 text-green-400" />
-             <span class="text-[10px] font-bold text-green-400 uppercase tracking-widest">Zona de Produtos</span>
-          </div>
+      <div v-show="isProductZone" class="border-b border-white/5 bg-emerald-500/[0.03]">
+          <button
+              type="button"
+              class="w-full px-3 py-3 flex items-start justify-between gap-3 border-b border-white/5 hover:bg-white/[0.04] transition-colors text-left"
+              @click="isProductZoneSectionOpen = !isProductZoneSectionOpen"
+          >
+             <div class="flex items-start gap-2.5 min-w-0">
+               <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10">
+                 <LayoutGrid class="w-3.5 h-3.5 text-emerald-300" />
+               </div>
+               <div class="min-w-0">
+                 <div class="flex items-center gap-2">
+                   <span class="text-[10px] font-bold text-emerald-300 uppercase tracking-[0.18em]">Zona de Produtos</span>
+                   <span class="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-100/85">
+                     {{ (currentZoneData?.columns ?? 0) === 0 ? 'Auto' : `${currentZoneData?.columns ?? 0} cols` }}
+                   </span>
+                 </div>
+                 <p class="mt-1 text-[10px] leading-relaxed text-zinc-500">
+                   Controle estrutura, ritmo e visual da grade sem abrir opcoes redundantes.
+                 </p>
+                 <div class="mt-2 flex flex-wrap gap-1">
+                   <span class="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-zinc-400">
+                     Pad {{ currentZoneData?.padding ?? 20 }}
+                   </span>
+                   <span class="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-zinc-400">
+                     Destaques {{ currentZoneData?.highlightCount ?? 0 }}
+                   </span>
+                   <span class="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-zinc-400">
+                     {{ currentGlobalStyles?.splashTemplateId ? 'Template ativo' : 'Splash padrao' }}
+                   </span>
+                 </div>
+               </div>
+             </div>
+             <div class="shrink-0 rounded-full border border-white/10 bg-white/[0.04] p-1.5">
+               <ChevronsDown v-if="isProductZoneSectionOpen" class="w-3 h-3 text-emerald-300" />
+               <ChevronsUp v-else class="w-3 h-3 text-emerald-300" />
+             </div>
+          </button>
           <ProductZoneSettings
-            v-if="isProductZone"
+            v-if="isProductZone && isProductZoneSectionOpen"
             :zone="currentZoneData"
             :global-styles="currentGlobalStyles"
             :label-templates="labelTemplates"

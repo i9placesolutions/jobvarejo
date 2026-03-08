@@ -6934,6 +6934,7 @@ const isConfirmingProductImport = ref(false)
 
 type ImportTargetMode = 'zone' | 'multi-frame'
 type FrameAssignment = { productId: string; frameId: string | null }
+type ImageMatchMode = 'precise' | 'fast'
 type ProductImportOptions = {
     mode?: 'replace' | 'append'
     labelTemplateId?: string
@@ -6942,6 +6943,8 @@ type ProductImportOptions = {
     frameAssignments?: FrameAssignment[]
     countRule?: 'min'
     cardsPerFrame?: 1
+    imageMatchMode?: ImageMatchMode
+    imageConcurrency?: number
 }
 
 type SmartGridRunOptions = {
@@ -22124,6 +22127,10 @@ type MissingProductImageRecoveryCandidate = {
 
 const MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH = 8;
 const MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH = 16;
+const DEFAULT_PASTE_IMAGE_MATCH_MODE: ImageMatchMode = 'precise';
+const resolveImageMatchMode = (value?: string): ImageMatchMode => {
+    return String(value || 'precise').toLowerCase() === 'fast' ? 'fast' : 'precise';
+};
 
 const isAuthLookupError = (err: any): boolean => {
     const code = Number(err?.statusCode || err?.status || err?.response?.status || 0);
@@ -22133,9 +22140,15 @@ const isAuthLookupError = (err: any): boolean => {
     return msg.includes('sessão expirada') || msg.includes('session') || msg.includes('unauthorized') || msg.includes('forbidden');
 };
 
-const fetchRecoveryImageUrlForCard = async (card: any): Promise<RecoveryLookupResult> => {
+const fetchRecoveryImageUrlForCard = async (
+    card: any,
+    options: {
+        matchMode?: ImageMatchMode
+    } = {}
+): Promise<RecoveryLookupResult> => {
     const payload = buildCardRecoverySearchPayload(card);
     if (!payload?.term) return { status: 'empty', url: null };
+    const matchMode = resolveImageMatchMode(options.matchMode);
 
     try {
         const headers = await getApiAuthHeaders();
@@ -22143,7 +22156,12 @@ const fetchRecoveryImageUrlForCard = async (card: any): Promise<RecoveryLookupRe
             method: 'POST',
             headers,
             // For product cards we want the API to return the cached bg-removed variant when possible.
-            body: { ...payload, bgPolicy: 'always', strictMode: false }
+            body: {
+                ...payload,
+                bgPolicy: 'always',
+                matchMode,
+                strictMode: matchMode === 'precise'
+            }
         });
         const url = String(result?.url || '').trim();
         if (url) return { status: 'ok', url };
@@ -22406,7 +22424,7 @@ const recoverMissingProductCardImages = async (
 
             if (!restored && remoteLookupsLeft > 0 && needsRemoteLookup) {
                 remoteLookupsLeft -= 1;
-                const fetchedResult = await fetchRecoveryImageUrlForCard(card);
+                const fetchedResult = await fetchRecoveryImageUrlForCard(card, { matchMode: 'precise' });
                 if (fetchedResult.url) {
                     const normalizedFetched = normalizeRecoveryImageUrl(fetchedResult.url);
                     restored = await tryApplyImageUrl(normalizedFetched);
@@ -23418,12 +23436,62 @@ const handlePasteList = async () => {
         return;
     }
 
+    const matchMode: ImageMatchMode = data.length >= 120 ? 'fast' : DEFAULT_PASTE_IMAGE_MATCH_MODE;
+    const pasteImageConcurrency = data.length >= 180 ? 8 : data.length >= 80 ? 6 : 4;
+    const getPasteHttpStatus = (err: any): number => {
+        const status = Number(
+            err?.statusCode ??
+            err?.status ??
+            err?.response?.status ??
+            err?.data?.statusCode
+        );
+        return Number.isFinite(status) ? status : 0;
+    };
+    const getPasteRetryAfterMs = (err: any): number => {
+        const headers = err?.response?.headers;
+        let raw: any = undefined;
+        try {
+            if (headers && typeof headers.get === 'function') {
+                raw = headers.get('Retry-After') ?? headers.get('retry-after');
+            } else if (headers && typeof headers === 'object') {
+                raw = (headers as any)['retry-after'] ?? (headers as any)['Retry-After'];
+            }
+        } catch {
+            raw = undefined;
+        }
+        const seconds = Number(String(raw ?? '').trim());
+        if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+        return Math.max(500, Math.round(seconds * 1000));
+    };
+    const isRateLimitError = (err: any): boolean => getPasteHttpStatus(err) === 429;
+    const isTransientPasteError = (err: any): boolean => {
+        const status = getPasteHttpStatus(err);
+        if (status === 0) {
+            const msg = String(
+                err?.message ||
+                err?.statusMessage ||
+                err?.data?.message ||
+                err?.cause?.message ||
+                ''
+            ).toLowerCase();
+            return (
+                msg.includes('failed to fetch') ||
+                msg.includes('network changed') ||
+                msg.includes('networkerror') ||
+                msg.includes('<no response>') ||
+                msg.includes('load failed')
+            );
+        }
+        return status === 502 || status === 503 || status === 504;
+    };
+
     // Show processing state
     isProcessing.value = true;
 
-    // Fetch images for each product from Contabo/Serper
-    const productsWithImages = await Promise.all(
-        data.map(async (product, index) => {
+    const fetchProductImageForPaste = async (product: any, index: number) => {
+        let lastErr: any = null;
+
+        for (let attempt = 0; attempt < 4; attempt += 1) {
             try {
                 // Build search term
                 const searchTerm = dedupeImageSearchTokens(
@@ -23436,7 +23504,7 @@ const handlePasteList = async () => {
                     String(product?.name || '').trim()
                 ]);
                 const headers = await getApiAuthHeaders();
-                
+
                 const result = await $fetch<{ url?: string }>('/api/process-product-image', {
                     method: 'POST',
                     headers,
@@ -23447,30 +23515,53 @@ const handlePasteList = async () => {
                         ...(product?.brand ? { brand: String(product.brand).trim() } : {}),
                         ...(product?.flavor ? { flavor: String(product.flavor).trim() } : {}),
                         ...(product?.weight ? { weight: String(product.weight).trim() } : {}),
+                        ...(product?.productCode ? { productCode: String(product.productCode).trim() } : {}),
                         bgPolicy: 'always',
-                        strictMode: false
+                        matchMode,
+                        strictMode: matchMode === 'precise'
                     }
                 });
-                
+
                 return {
                     ...product,
                     id: `prod_${Date.now()}_${index}`,
                     imageUrl: result?.url || null,
                     image: result?.url || null,
                     status: result?.url ? 'done' : 'error'
-                };
+                }
             } catch (err) {
-                console.warn('Failed to fetch image for:', product.name, err);
-                return { 
-                    ...product, 
-                    id: `prod_${Date.now()}_${index}`,
-                    imageUrl: null, 
-                    image: null,
-                    status: 'error'
-                };
+                lastErr = err;
+                if (attempt < 3 && (isRateLimitError(err) || isTransientPasteError(err))) {
+                    const retryAfterMs = isRateLimitError(err) ? getPasteRetryAfterMs(err) : 500;
+                    await new Promise((resolve) => setTimeout(resolve, retryAfterMs || (350 * (attempt + 1))));
+                    continue;
+                }
+                break;
             }
-        })
-    );
+        }
+        console.warn('Failed to fetch image for:', product?.name, lastErr);
+        return {
+            ...product,
+            id: `prod_${Date.now()}_${index}`,
+            imageUrl: null,
+            image: null,
+            status: 'error'
+        };
+    };
+
+    const productsWithImages: any[] = [];
+    let pasteCursor = 0;
+    const totalPasteProducts = data.length;
+    const runPasteWorker = async () => {
+        while (pasteCursor < totalPasteProducts) {
+            const currentIndex = pasteCursor++;
+            const product = data[currentIndex];
+            if (!product) continue;
+            productsWithImages[currentIndex] = await fetchProductImageForPaste(product, currentIndex);
+        }
+    };
+    const pasteWorkers = Array.from({ length: Math.min(pasteImageConcurrency, totalPasteProducts) }, () => runPasteWorker());
+    await Promise.all(pasteWorkers);
 
     isProcessing.value = false;
     

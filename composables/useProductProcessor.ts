@@ -36,11 +36,45 @@ export interface SmartProduct {
     status: 'pending' | 'processing' | 'done' | 'error' | 'review_pending';
     error?: string;
     imageDecisionReason?: string;
+    imageConfidence?: number;
+    imageSource?: 'cache' | 's3' | 'ai' | 'manual' | 'fallback';
+    imageProvider?: string;
+    imageAttemptCount?: number;
+    imageCandidateCount?: number;
+    imageReviewReason?: string;
     // Original extracted data
     raw?: any;
 }
 
 type BgPolicy = 'auto' | 'never' | 'always';
+type ImageMatchMode = 'precise' | 'fast';
+type ImageProcessResult = {
+    ok: boolean;
+    rateLimited?: boolean;
+    retryAfterMs?: number;
+    confidence?: number;
+    source?: string;
+    imageProvider?: string;
+    candidateCount?: number;
+    attempts?: number;
+    nextAction?: string;
+    reviewPending?: boolean;
+};
+type ImageProcessOptions = {
+    bgPolicy?: BgPolicy;
+    force?: boolean;
+    matchMode?: ImageMatchMode;
+};
+type ImageQueueState = {
+    total: number;
+    done: number;
+    failed: number;
+    retrying: number;
+    inFlight: number;
+    running: boolean;
+    paused: boolean;
+    cancelled: boolean;
+};
 
 // Normaliza search term no frontend (espelha lógica do backend)
 const normalizeForDedup = (term: string): string => {
@@ -198,6 +232,51 @@ export const useProductProcessor = () => {
     const products = ref<SmartProduct[]>([]);
     const isParsing = ref(false);
     const parsingError = ref<string | null>(null);
+    const createInitialImageQueueState = (): ImageQueueState => ({
+        total: 0,
+        done: 0,
+        failed: 0,
+        retrying: 0,
+        inFlight: 0,
+        running: false,
+        paused: false,
+        cancelled: false
+    });
+    const imageQueueState = ref<ImageQueueState>(createInitialImageQueueState());
+    const processingRunId = ref(0);
+
+    const normalizeImageSource = (source?: string): SmartProduct['imageSource'] => {
+        const value = String(source || '').toLowerCase();
+        if (!value) return 'fallback';
+        if ([
+            'cache',
+            'cache-s3',
+            'cache-db',
+            'cache-processed',
+            'storage'
+        ].includes(value)) return 'cache';
+        if ([
+            'internal',
+            'internal-processed',
+            'internal-fallback',
+            'registry',
+            's3'
+        ].includes(value)) return 's3';
+        if ([
+            'ai',
+            'ocr+ai-strict',
+            'ocr+fallback-ai-low-confidence',
+            'ocr+fallback-no-openai',
+            'ocr+fallback-ai-error'
+        ].includes(value)) return 'ai';
+        if ([
+            'manual',
+            'manual-fallback',
+            'manual-presigned'
+        ].includes(value)) return 'manual';
+        if (value === 'external') return 'ai';
+        return 'fallback';
+    };
 
     const mapParsedProducts = (data: any) => {
         if (!data || !Array.isArray(data.products)) return [];
@@ -368,18 +447,32 @@ export const useProductProcessor = () => {
 
     const processProductImage = async (
         index: number,
-        options: { bgPolicy?: BgPolicy; force?: boolean } = {}
-    ): Promise<{ ok: boolean; rateLimited?: boolean; retryAfterMs?: number }> => {
+        options: ImageProcessOptions = {}
+    ): Promise<ImageProcessResult> => {
         const product = products.value[index];
         if (!product || product.status === 'processing') return { ok: false };
         if (!options.force && product.imageUrl) {
             product.status = 'done';
             product.error = undefined;
+            product.imageProvider = String(product.imageProvider || product.imageSource || 'fallback').trim() || undefined;
+            product.imageAttemptCount = Number.isFinite(Number(product.imageAttemptCount)) ? Number(product.imageAttemptCount) : 0;
+            product.imageCandidateCount = Number.isFinite(Number(product.imageCandidateCount)) ? Number(product.imageCandidateCount) : 0;
+            product.imageConfidence = Number.isFinite(Number(product.imageConfidence)) ? Number(product.imageConfidence) : (product.imageSource === 'manual' ? 1 : product.imageConfidence);
             return { ok: true };
         }
 
         product.status = 'processing';
         product.error = undefined;
+        product.imageSource = 'fallback';
+        if (options.force) {
+            product.imageUrl = null;
+        }
+        product.imageConfidence = undefined;
+        product.imageReviewReason = '';
+        product.imageDecisionReason = '';
+        product.imageProvider = undefined;
+        product.imageAttemptCount = undefined;
+        product.imageCandidateCount = undefined;
 
         try {
             // Priorizar gramatura encontrada no nome completo (mais confiável que parser isolado).
@@ -389,7 +482,7 @@ export const useProductProcessor = () => {
             const searchTerm = buildSearchTerm(product, effectiveWeight);
             const searchHints = buildSearchHintCandidates(product, effectiveWeight);
             const headers = await getApiAuthHeaders();
-            
+
             const result = await $fetch<{
                 url?: string;
                 found?: boolean;
@@ -397,6 +490,14 @@ export const useProductProcessor = () => {
                 reason?: string;
                 statusMessage?: string;
                 message?: string;
+                source?: string;
+                imageSource?: SmartProduct['imageSource'];
+                confidence?: number;
+                provider?: string;
+                candidateCount?: number;
+                attempts?: number;
+                nextAction?: string;
+                imageReviewReason?: string;
             }>('/api/process-product-image', {
                 method: 'POST',
                 headers,
@@ -408,16 +509,37 @@ export const useProductProcessor = () => {
                     flavor: product.flavor || undefined,
                     weight: effectiveWeight,
                     bgPolicy: options.bgPolicy || 'auto',
-                    strictMode: false
+                    matchMode: options.matchMode || 'precise',
+                    strictMode: (options.matchMode || 'precise') === 'precise'
                 }
             });
 
-            if (result && result.url) {
+                if (result && result.url) {
                 product.imageUrl = toWasabiDirectUrl(String(result.url || '').trim()) || result.url;
                 product.status = 'done';
                 product.imageDecisionReason = '';
+                product.imageReviewReason = '';
+                const resolvedSource = normalizeImageSource(result.imageSource || result.source);
+                product.imageSource = resolvedSource;
+                product.imageProvider = String(result.provider || result.imageSource || result.source || 'ai').trim() || undefined;
+                const confidence = Number(result.confidence);
+                product.imageConfidence = Number.isFinite(confidence)
+                    ? Math.max(0, Math.min(1, confidence))
+                    : undefined;
+                const candidateCount = Number(result.candidateCount);
+                product.imageCandidateCount = Number.isFinite(candidateCount) ? Math.max(0, candidateCount) : undefined;
+                const attemptCount = Number(result.attempts);
+                product.imageAttemptCount = Number.isFinite(attemptCount) ? Math.max(0, attemptCount) : undefined;
                 console.log('[ProductProcessor] Image found:', product.name, result.url.substring(0, 80) + '...');
-                return { ok: true };
+                return {
+                    ok: true,
+                    reviewPending: false,
+                    confidence: product.imageConfidence,
+                    source: String(result.source || ''),
+                    imageProvider: product.imageProvider,
+                    candidateCount: Number(result.candidateCount || 0),
+                    attempts: Number(result.attempts || 0)
+                };
             } else {
                 const rawReason = String(result?.reason || '').trim();
                 const reason = rawReason === 'processing_failed'
@@ -426,56 +548,165 @@ export const useProductProcessor = () => {
                 const isReviewPending = !!result?.reviewPending;
                 product.status = isReviewPending ? 'review_pending' : 'error';
                 product.error = reason;
-                product.imageDecisionReason = reason;
+                const reviewReason = String(result?.imageReviewReason || result?.reason || reason).trim();
+                product.imageDecisionReason = reviewReason;
+                product.imageReviewReason = reviewReason;
+                product.imageSource = normalizeImageSource(result.imageSource || result.source);
+                product.imageProvider = String(result.provider || result.imageSource || result.source || 'ai').trim() || undefined;
+                const confidence = Number(result.confidence);
+                product.imageConfidence = Number.isFinite(confidence)
+                    ? Math.max(0, Math.min(1, confidence))
+                    : 0;
+                const candidateCount = Number(result.candidateCount);
+                product.imageCandidateCount = Number.isFinite(candidateCount) ? Math.max(0, candidateCount) : 0;
+                const attemptCount = Number(result.attempts);
+                product.imageAttemptCount = Number.isFinite(attemptCount) ? Math.max(0, attemptCount) : 0;
+                if (result.nextAction && String(result.nextAction || '').trim()) {
+                    product.imageReviewReason = String(result.nextAction || '').trim();
+                    product.imageDecisionReason = product.imageReviewReason;
+                }
+                product.error = reviewReason || reason;
                 console.log('[ProductProcessor] No image found for:', product.name, '-', product.error);
-                return { ok: false };
+                return {
+                    ok: false,
+                    reviewPending: isReviewPending,
+                    source: String(result?.source || ''),
+                    imageProvider: product.imageProvider,
+                    confidence: product.imageConfidence,
+                    candidateCount: Number(result?.candidateCount || 0),
+                    attempts: Number(result?.attempts || 0),
+                    nextAction: String(result?.nextAction || '').trim() || undefined
+                };
             }
         } catch (err: any) {
-            if (isRateLimitError(err)) {
+            const isRetryableFailure = isRateLimitError(err) || isTransientNetworkError(err);
+            if (isRetryableFailure) {
                 const retryAfterMs = getRetryAfterMs(err) || 3000;
+                const previousRetryCount = Number.isFinite(Number(product.imageAttemptCount)) ? Number(product.imageAttemptCount) : 0;
                 product.status = 'pending';
-                product.error = `Rate limit: aguardando ${Math.ceil(retryAfterMs / 1000)}s para tentar novamente...`;
-                return { ok: false, rateLimited: true, retryAfterMs };
+                product.error = isRateLimitError(err)
+                    ? `Rate limit: aguardando ${Math.ceil(retryAfterMs / 1000)}s para tentar novamente...`
+                    : `Rede instável: aguardando ${Math.ceil(retryAfterMs / 1000)}s para tentar novamente...`;
+                product.imageSource = 'fallback';
+                product.imageProvider = 'network';
+                product.imageConfidence = 0;
+                product.imageCandidateCount = 0;
+                product.imageAttemptCount = Math.max(1, previousRetryCount + 1);
+                product.imageDecisionReason = product.imageReviewReason = product.error;
+                return { ok: false, rateLimited: true, retryAfterMs, reviewPending: false, imageProvider: product.imageProvider };
             }
             if (isExpectedNoImageError(err)) {
                 const noImageMessage = extractErrorMessage(err, 'Imagem não encontrada');
                 product.status = 'error';
                 product.error = noImageMessage;
                 product.imageDecisionReason = noImageMessage;
+                product.imageReviewReason = noImageMessage;
+                product.imageConfidence = 0;
+                product.imageSource = 'fallback';
+                product.imageProvider = 'registry';
+                product.imageCandidateCount = 0;
+                product.imageAttemptCount = 0;
                 console.warn('[ProductProcessor] Imagem não encontrada:', product.name, '-', noImageMessage);
-                return { ok: false };
+                return { ok: false, reviewPending: false, imageProvider: product.imageProvider };
             }
 
             console.error('[ProductProcessor] Falha ao processar imagem:', product.name, err);
             product.status = 'error';
             product.error = extractErrorMessage(err, 'Falha no processamento');
             product.imageDecisionReason = product.error;
-            return { ok: false };
+            product.imageReviewReason = product.error;
+            product.imageConfidence = 0;
+            product.imageSource = 'fallback';
+            product.imageProvider = 'server';
+            product.imageCandidateCount = 0;
+            product.imageAttemptCount = 0;
+            return { ok: false, reviewPending: false, imageProvider: product.imageProvider };
         }
     }
 
-    const processAllImages = async (options: { bgPolicy?: BgPolicy } = {}) => {
+    const processAllImages = async (
+        options: {
+            bgPolicy?: BgPolicy;
+            matchMode?: ImageMatchMode;
+            concurrency?: number;
+            force?: boolean;
+        } = {}
+    ) => {
+        const runId = ++processingRunId.value;
+        const mode: ImageMatchMode = options.matchMode || 'precise';
+        const force = !!options.force;
+        const concurrency = Math.min(8, Math.max(1, Number(options.concurrency || 4)));
+        const resolvedBySignature = new Map<string, {
+            imageUrl: string;
+            imageSource?: SmartProduct['imageSource'];
+            imageConfidence?: number;
+            imageProvider?: string;
+            imageCandidateCount?: number;
+            imageAttemptCount?: number;
+            imageDecisionReason?: string;
+            imageReviewReason?: string;
+        }>();
+
+        const writeResolvedSignature = (signature: string, sourceProduct: SmartProduct) => {
+            if (!sourceProduct.imageUrl) return;
+            resolvedBySignature.set(signature, {
+                imageUrl: sourceProduct.imageUrl,
+                imageSource: sourceProduct.imageSource,
+                imageConfidence: sourceProduct.imageConfidence,
+                imageProvider: sourceProduct.imageProvider,
+                imageCandidateCount: sourceProduct.imageCandidateCount,
+                imageAttemptCount: sourceProduct.imageAttemptCount,
+                imageDecisionReason: sourceProduct.imageDecisionReason,
+                imageReviewReason: sourceProduct.imageReviewReason
+            });
+        };
+
+        const applyResolvedDuplicateState = (target: SmartProduct, sourceState: any) => {
+            target.imageUrl = sourceState.imageUrl;
+            target.status = sourceState.imageUrl ? 'done' : target.status;
+            target.error = sourceState.imageUrl ? undefined : target.error;
+            target.imageSource = sourceState.imageSource;
+            target.imageConfidence = sourceState.imageConfidence;
+            target.imageProvider = sourceState.imageProvider;
+            target.imageCandidateCount = sourceState.imageCandidateCount;
+            target.imageAttemptCount = sourceState.imageAttemptCount;
+            target.imageDecisionReason = sourceState.imageDecisionReason;
+            target.imageReviewReason = sourceState.imageReviewReason;
+        };
+
+        imageQueueState.value = {
+            total: 0,
+            done: 0,
+            failed: 0,
+            retrying: 0,
+            inFlight: 0,
+            running: true,
+            paused: false,
+            cancelled: false
+        };
+
         console.log('[ProductProcessor] processAllImages called, products:', products.value.length);
-        const resolvedBySignature = new Map<string, string>();
         
         // ===== DEDUPLICAÇÃO: agrupar produtos com mesmo search term normalizado =====
         const dedupMap = new Map<string, number[]>(); // normalizedKey → [indices]
         
         products.value.forEach((p, i) => {
             const signature = buildDedupSignature(p);
-            if (p.imageUrl) {
-                resolvedBySignature.set(signature, p.imageUrl);
+            if (!force && p.imageUrl) {
+                writeResolvedSignature(signature, p);
                 p.status = 'done';
                 p.error = undefined;
                 return;
             }
             if (p.status === 'processing') return;
-            const resolvedImage = resolvedBySignature.get(signature);
-            if (resolvedImage) {
-                p.imageUrl = resolvedImage;
-                p.status = 'done';
-                p.error = undefined;
-                return;
+            if (!force) {
+                const resolvedImage = resolvedBySignature.get(signature);
+                if (resolvedImage) {
+                    applyResolvedDuplicateState(p, resolvedImage);
+                    p.status = 'done';
+                    p.error = undefined;
+                    return;
+                }
             }
             if (!dedupMap.has(signature)) {
                 dedupMap.set(signature, []);
@@ -483,53 +714,179 @@ export const useProductProcessor = () => {
             dedupMap.get(signature)!.push(i);
         });
         
-        const uniqueGroups = Array.from(dedupMap.entries());
+        const uniqueGroups = Array.from(dedupMap.entries())
+            .map(([signature, indices]) => ({ signature, indices: indices.filter((v) => Number.isInteger(v)) }))
+            .filter((entry) => entry.indices.length > 0);
         console.log(`[ProductProcessor] ${products.value.length} produtos → ${uniqueGroups.length} buscas únicas (${products.value.length - uniqueGroups.length} duplicatas evitadas)`);
-        
-        // Processar apenas o primeiro de cada grupo, depois replicar para os demais.
-        // Se bater rate-limit (429), aguarda Retry-After e tenta novamente automaticamente.
-        for (const [signature, indices] of uniqueGroups) {
-            const primaryIndex = indices[0];
-            if (primaryIndex === undefined) continue;
-            const primaryProduct = products.value[primaryIndex];
-            if (!primaryProduct) continue;
-            console.log(`[ProductProcessor] Processing: ${primaryProduct.name} (${indices.length} duplicata(s), assinatura="${signature}")`);
+        imageQueueState.value.total = uniqueGroups.length;
+        imageQueueState.value.done = 0;
+        imageQueueState.value.failed = 0;
+        imageQueueState.value.retrying = 0;
 
-            let attempts = 0;
-            while (attempts < 6) {
-                attempts += 1;
-                const res = await processProductImage(primaryIndex, { bgPolicy: options.bgPolicy || 'auto' });
-                if (!res?.rateLimited) break;
-                const waitMs = Math.max(800, Number(res.retryAfterMs || 0) || 3000);
-                await sleep(waitMs);
+        let cursor = 0;
+        const hasCancelled = () => runId !== processingRunId.value || imageQueueState.value.cancelled;
+        const normalizeQueueProgressBounds = () => {
+            const total = Math.max(0, Number(imageQueueState.value.total || 0));
+            const done = Math.max(0, Number(imageQueueState.value.done || 0));
+            imageQueueState.value.total = total;
+            imageQueueState.value.done = total ? Math.min(total, done) : 0;
+            imageQueueState.value.failed = Math.max(0, Number(imageQueueState.value.failed || 0));
+            imageQueueState.value.retrying = Math.max(0, Number(imageQueueState.value.retrying || 0));
+            imageQueueState.value.inFlight = Math.max(0, Math.min(total, Number(imageQueueState.value.inFlight || 0)));
+        };
+        const waitForRetryDelay = async (delayMs: number) => {
+            let remaining = Math.max(0, Number(delayMs || 0));
+            while (remaining > 0 && !hasCancelled()) {
+                const step = Math.min(remaining, 250);
+                await sleep(step);
+                remaining -= step;
             }
-            
-            // Replicar resultado para duplicatas
-            if (indices.length > 1 && primaryProduct.imageUrl) {
-                resolvedBySignature.set(signature, primaryProduct.imageUrl);
-                for (let i = 1; i < indices.length; i++) {
-                    const duplicateIndex = indices[i];
-                    if (duplicateIndex === undefined) continue;
-                    const dupProduct = products.value[duplicateIndex];
-                    if (!dupProduct) continue;
-                    dupProduct.imageUrl = primaryProduct.imageUrl;
-                    dupProduct.status = 'done';
-                    console.log(`[ProductProcessor] Replicado imagem para duplicata: ${dupProduct.name}`);
-                }
-            } else if (indices.length > 1 && (primaryProduct.status === 'error' || primaryProduct.status === 'review_pending')) {
-                // Se falhou, marcar duplicatas como erro também
-                for (let i = 1; i < indices.length; i++) {
-                    const duplicateIndex = indices[i];
-                    if (duplicateIndex === undefined) continue;
-                    const dupProduct = products.value[duplicateIndex];
-                    if (!dupProduct) continue;
-                    dupProduct.status = primaryProduct.status;
-                    dupProduct.error = primaryProduct.error;
-                    dupProduct.imageDecisionReason = primaryProduct.imageDecisionReason;
-                }
+        };
+        const waitIfPaused = async () => {
+            while (runId === processingRunId.value && imageQueueState.value.paused) {
+                await sleep(250);
             }
+        };
+
+        const processWorker = async () => {
+            while (!hasCancelled()) {
+                await waitIfPaused();
+                if (hasCancelled()) return;
+
+                const item = uniqueGroups[cursor++];
+                if (!item) return;
+                const primaryIndexRaw = item.indices[0];
+                if (!Number.isInteger(primaryIndexRaw)) continue;
+                const primaryIndex = primaryIndexRaw as number;
+                const signature = item.signature;
+                const primaryProduct = products.value[primaryIndex];
+                if (!primaryProduct) {
+                    imageQueueState.value.done += 1;
+                    continue;
+                }
+
+                imageQueueState.value.inFlight += 1;
+                let attempts = 0;
+                while (!hasCancelled() && attempts < 6) {
+                    attempts += 1;
+                    const res = await processProductImage(primaryIndex, {
+                        bgPolicy: options.bgPolicy || 'auto',
+                        matchMode: mode,
+                        force: !!options.force
+                    });
+
+                    if (!res?.rateLimited) break;
+                    imageQueueState.value.retrying += 1;
+                    const retryDelayMs = Number(res?.retryAfterMs || 3000);
+                    await waitForRetryDelay(retryDelayMs);
+                    imageQueueState.value.retrying = Math.max(0, imageQueueState.value.retrying - 1);
+                }
+                imageQueueState.value.inFlight = Math.max(0, imageQueueState.value.inFlight - 1);
+
+                if (hasCancelled()) {
+                    if (primaryProduct.status === 'processing' || primaryProduct.status === 'pending') {
+                        primaryProduct.status = 'pending';
+                    }
+                    continue;
+                }
+
+                // Replicar resultado para duplicatas
+                if (item.indices.length > 1 && primaryProduct.imageUrl) {
+                    writeResolvedSignature(signature, primaryProduct);
+                    for (let i = 1; i < item.indices.length; i++) {
+                        const duplicateIndexRaw = item.indices[i];
+                        if (!Number.isInteger(duplicateIndexRaw)) continue;
+                        const duplicateIndex = duplicateIndexRaw as number;
+                        const dupProduct = products.value[duplicateIndex];
+                        if (!dupProduct) continue;
+                        dupProduct.imageUrl = primaryProduct.imageUrl;
+                        dupProduct.status = 'done';
+                        dupProduct.error = undefined;
+                        dupProduct.imageDecisionReason = primaryProduct.imageDecisionReason;
+                        dupProduct.imageReviewReason = primaryProduct.imageReviewReason;
+                        dupProduct.imageSource = primaryProduct.imageSource;
+                        dupProduct.imageConfidence = primaryProduct.imageConfidence;
+                        dupProduct.imageProvider = primaryProduct.imageProvider;
+                        dupProduct.imageCandidateCount = primaryProduct.imageCandidateCount;
+                        dupProduct.imageAttemptCount = primaryProduct.imageAttemptCount;
+                        console.log(`[ProductProcessor] Replicado imagem para duplicata: ${dupProduct.name}`);
+                    }
+                } else if (item.indices.length > 1 && (primaryProduct.status === 'error' || primaryProduct.status === 'review_pending')) {
+                    // Se falhou, marcar duplicatas como erro também
+                    for (let i = 1; i < item.indices.length; i++) {
+                        const duplicateIndexRaw = item.indices[i];
+                        if (!Number.isInteger(duplicateIndexRaw)) continue;
+                        const duplicateIndex = duplicateIndexRaw as number;
+                        const dupProduct = products.value[duplicateIndex];
+                        if (!dupProduct) continue;
+                        dupProduct.status = primaryProduct.status;
+                        dupProduct.imageUrl = null;
+                        dupProduct.error = primaryProduct.error;
+                        dupProduct.imageDecisionReason = primaryProduct.imageDecisionReason;
+                        dupProduct.imageReviewReason = primaryProduct.imageReviewReason;
+                        dupProduct.imageSource = primaryProduct.imageSource;
+                        dupProduct.imageConfidence = primaryProduct.imageConfidence;
+                        dupProduct.imageProvider = primaryProduct.imageProvider;
+                        dupProduct.imageCandidateCount = primaryProduct.imageCandidateCount;
+                        dupProduct.imageAttemptCount = primaryProduct.imageAttemptCount;
+                    }
+                } else if (attempts >= 6 && primaryProduct.status === 'pending') {
+                    primaryProduct.status = 'review_pending';
+                    primaryProduct.error = primaryProduct.error || 'Falha temporária de comunicação com limite de tentativas. Reprocessar manualmente.';
+                    if (!primaryProduct.imageReviewReason) {
+                        primaryProduct.imageReviewReason = primaryProduct.error;
+                    }
+                    if (!primaryProduct.imageDecisionReason) {
+                        primaryProduct.imageDecisionReason = primaryProduct.error;
+                    }
+                    console.warn('[ProductProcessor] Retry esgotado para produto:', primaryProduct.name);
+                }
+                if (primaryProduct.status === 'error' || primaryProduct.status === 'review_pending') {
+                    imageQueueState.value.failed += 1;
+                }
+
+                imageQueueState.value.done += 1;
+            }
+        };
+
+        const workers = Array.from({ length: concurrency }, () => processWorker());
+        await Promise.all(workers);
+        if (runId !== processingRunId.value) {
+            return;
         }
+        imageQueueState.value.running = false;
+        imageQueueState.value.paused = false;
+        imageQueueState.value.inFlight = 0;
+        imageQueueState.value.cancelled = false;
+        imageQueueState.value.retrying = 0;
+        normalizeQueueProgressBounds();
     }
+
+    const cancelImageProcessing = () => {
+        imageQueueState.value.cancelled = true;
+        imageQueueState.value.running = false;
+        imageQueueState.value.paused = false;
+        imageQueueState.value.inFlight = 0;
+        imageQueueState.value.retrying = 0;
+        processingRunId.value += 1;
+    };
+
+    const pauseImageProcessing = () => {
+        if (!imageQueueState.value.running) return;
+        imageQueueState.value.paused = true;
+    };
+
+    const resumeImageProcessing = () => {
+        if (!imageQueueState.value.running) return;
+        imageQueueState.value.paused = false;
+    };
+
+    const resetImageProcessingState = () => {
+        imageQueueState.value = createInitialImageQueueState();
+    };
+
+    const isImageProcessing = computed(() => imageQueueState.value.running);
+    const imageQueueStateSnapshot = computed(() => imageQueueState.value);
 
     const removeProduct = (index: number) => {
         products.value.splice(index, 1);
@@ -543,6 +900,12 @@ export const useProductProcessor = () => {
         parseFile,
         processProductImage,
         processAllImages,
+        imageQueueState: imageQueueStateSnapshot,
+        isImageProcessing,
+        pauseImageProcessing,
+        resumeImageProcessing,
+        cancelImageProcessing,
+        resetImageProcessingState,
         removeProduct
     }
 }

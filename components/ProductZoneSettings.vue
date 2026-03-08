@@ -92,7 +92,7 @@ const expandedSections = ref({
 });
 
 // Presets expansion state
-const presetsExpanded = ref(true);
+const presetsExpanded = ref(false);
 
 const isSpacingSynced = () => {
   const pad = Number(props.zone.padding ?? 15);
@@ -308,6 +308,60 @@ const currentPreset = computed(() => {
   return exact?.id ?? 'auto';
 });
 
+const currentPresetName = computed(() => {
+  if (currentPreset.value === 'auto') return 'Layout customizado';
+  return LAYOUT_PRESETS.find((preset) => preset.id === currentPreset.value)?.name ?? 'Layout customizado';
+});
+
+const zoneColumnsLabel = computed(() =>
+  normalizedZoneState.value.columns > 0
+    ? `${normalizedZoneState.value.columns} colunas`
+    : 'Colunas automáticas'
+);
+
+const spacingSummaryLabel = computed(() => {
+  const pad = Math.round(toSafeNumber(props.zone.padding, 15));
+  if (syncGaps.value) return `Padding ${pad}px · gaps sincronizados`;
+  const gapH = Math.round(toSafeNumber(props.zone.gapHorizontal, pad));
+  const gapV = Math.round(toSafeNumber(props.zone.gapVertical, pad));
+  return `Pad ${pad}px · H ${gapH}px · V ${gapV}px`;
+});
+
+const highlightSummaryLabel = computed(() => {
+  const count = Math.max(0, Math.round(toSafeNumber(props.zone.highlightCount, 0)));
+  if (count <= 0) return 'Sem destaque ativo';
+
+  const posMap: Record<HighlightPos, string> = {
+    first: 'primeiros',
+    last: 'ultimos',
+    random: 'aleatorio',
+    center: 'centro',
+    top: 'topo',
+    bottom: 'base'
+  };
+  const pos = posMap[normalizeHighlightPos(props.zone.highlightPos)];
+  return `${count} destaque${count > 1 ? 's' : ''} · ${pos}`;
+});
+
+const activeTemplateName = computed(() => {
+  const templateId = String(props.globalStyles?.splashTemplateId || '').trim();
+  if (!templateId) return 'Etiqueta padrao da zona';
+  return props.labelTemplates?.find((tpl) => String(tpl.id) === templateId)?.name || 'Modelo selecionado';
+});
+
+const styleSummaryLabel = computed(() => {
+  const splashStyle = SPLASH_STYLES.find((style) => style.id === (props.globalStyles?.splashStyle ?? 'classic'));
+  if (props.globalStyles?.splashTemplateId) return activeTemplateName.value;
+  return `Splash ${splashStyle?.name || 'Classic'}`;
+});
+
+const sectionSummary = computed(() => ({
+  layout: zoneColumnsLabel.value,
+  spacing: syncGaps.value ? 'Ritmo vinculado ao padding' : 'Gaps independentes',
+  highlight: highlightSummaryLabel.value,
+  styles: styleSummaryLabel.value
+}));
+
 // Organize presets by category
 const gridPresets = computed(() => LAYOUT_PRESETS.filter(p => p.category === 'grid'));
 const specialPresets = computed(() => LAYOUT_PRESETS.filter(p => p.category === 'special'));
@@ -379,15 +433,56 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
 <template>
   <div class="p-4 space-y-4 text-white text-sm">
+    <div class="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(34,197,94,0.12),rgba(24,24,27,0.94))] p-4 shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-300/80">Orquestracao da Zona</div>
+          <div class="mt-1 text-sm font-semibold text-white">Ajuste a grade sem afogar o operador em controles.</div>
+          <p class="mt-1 text-[11px] leading-relaxed text-zinc-300/85">
+            Layout, espacamento, destaques e estilo global organizados por prioridade de decisao.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-200 transition-colors hover:bg-white/10"
+          @click="emit('recalculate')"
+        >
+          Recalcular
+        </button>
+      </div>
+
+      <div class="mt-4 grid grid-cols-2 gap-2">
+        <div class="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <div class="text-[9px] uppercase tracking-[0.18em] text-zinc-500">Preset ativo</div>
+          <div class="mt-1 text-[12px] font-semibold text-white">{{ currentPresetName }}</div>
+        </div>
+        <div class="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <div class="text-[9px] uppercase tracking-[0.18em] text-zinc-500">Estrutura</div>
+          <div class="mt-1 text-[12px] font-semibold text-white">{{ zoneColumnsLabel }}</div>
+        </div>
+        <div class="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <div class="text-[9px] uppercase tracking-[0.18em] text-zinc-500">Ritmo</div>
+          <div class="mt-1 text-[12px] font-semibold text-white">{{ spacingSummaryLabel }}</div>
+        </div>
+        <div class="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <div class="text-[9px] uppercase tracking-[0.18em] text-zinc-500">Estilo</div>
+          <div class="mt-1 text-[12px] font-semibold text-white">{{ styleSummaryLabel }}</div>
+        </div>
+      </div>
+    </div>
     
     <!-- Presets Section -->
-    <div class="space-y-3">
+    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
       <div class="flex items-center justify-between">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Produtos por Linha</span>
+        <div>
+          <div class="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Produtos por Linha</div>
+          <div class="mt-1 text-[11px] text-zinc-500">Escolha uma base rapida e refine so se necessario.</div>
+        </div>
         <button
           @click="presetsExpanded = !presetsExpanded"
-          class="text-zinc-500 hover:text-zinc-300 transition-colors"
+          class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
         >
+          <span class="text-[9px] font-semibold uppercase tracking-[0.16em]">{{ currentPresetName }}</span>
           <component
             :is="presetsExpanded ? ChevronDown : ChevronRight"
             class="w-3.5 h-3.5"
@@ -463,16 +558,22 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </div>
     </div>
 
-    <div class="h-px bg-white/5" />
-
     <!-- Layout Avançado Section (simplified: just columns slider + highlight controls) -->
-    <div class="space-y-3">
+    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
       <button 
         @click="toggleSection('layout')"
-        class="flex items-center justify-between w-full text-left"
+        class="flex items-center justify-between w-full text-left gap-3"
       >
-        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Layout Avançado</span>
-        <component :is="expandedSections.layout ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
+        <div>
+          <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Layout Avancado</span>
+          <div class="mt-1 text-[11px] text-zinc-500">{{ sectionSummary.layout }}</div>
+        </div>
+        <div class="inline-flex items-center gap-2">
+          <span class="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+            {{ sectionSummary.layout }}
+          </span>
+          <component :is="expandedSections.layout ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
+        </div>
       </button>
       
       <div v-if="expandedSections.layout" class="space-y-3 animate-in slide-in-from-top-2 duration-200">
@@ -517,16 +618,22 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </div>
     </div>
 
-    <div class="h-px bg-white/5" />
-
     <!-- Spacing Section -->
-    <div class="space-y-3">
+    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
       <button 
         @click="toggleSection('spacing')"
-        class="flex items-center justify-between w-full text-left"
+        class="flex items-center justify-between w-full text-left gap-3"
       >
-        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Espaçamento</span>
-        <component :is="expandedSections.spacing ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
+        <div>
+          <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Espacamento</span>
+          <div class="mt-1 text-[11px] text-zinc-500">{{ sectionSummary.spacing }}</div>
+        </div>
+        <div class="inline-flex items-center gap-2">
+          <span class="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+            {{ syncGaps ? 'Sincronizado' : 'Manual' }}
+          </span>
+          <component :is="expandedSections.spacing ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
+        </div>
       </button>
       
       <div v-if="expandedSections.spacing" class="space-y-3 animate-in slide-in-from-top-2 duration-200">
@@ -612,18 +719,21 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </div>
     </div>
 
-    <div class="h-px bg-white/5" />
-
     <!-- Highlight Section -->
-    <div class="space-y-3">
+    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
       <button 
         @click="toggleSection('highlight')"
-        class="flex items-center justify-between w-full text-left"
+        class="flex items-center justify-between w-full text-left gap-3"
       >
-        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
           <Star class="w-3 h-3" /> Destaques
         </span>
-        <component :is="expandedSections.highlight ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
+        <div class="inline-flex items-center gap-2">
+          <span class="rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-yellow-200/85">
+            {{ sectionSummary.highlight }}
+          </span>
+          <component :is="expandedSections.highlight ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
+        </div>
       </button>
       
       <div v-if="expandedSections.highlight" class="space-y-3 animate-in slide-in-from-top-2 duration-200">
@@ -683,18 +793,21 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </div>
     </div>
 
-    <div class="h-px bg-white/5" />
-
     <!-- Styles Section -->
-    <div class="space-y-3">
+    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
       <button 
         @click="toggleSection('styles')"
-        class="flex items-center justify-between w-full text-left"
+        class="flex items-center justify-between w-full text-left gap-3"
       >
-        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
           <Palette class="w-3 h-3" /> Estilos Globais
         </span>
-        <component :is="expandedSections.styles ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
+        <div class="inline-flex items-center gap-2">
+          <span class="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
+            {{ sectionSummary.styles }}
+          </span>
+          <component :is="expandedSections.styles ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
+        </div>
       </button>
       
       <div v-if="expandedSections.styles" class="space-y-3 animate-in slide-in-from-top-2 duration-200">

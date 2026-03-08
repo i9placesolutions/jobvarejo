@@ -208,15 +208,6 @@ const saveColor = computed(() => {
   }
 })
 
-const realtimeBadgeColor = computed(() => {
-  switch (realtimeStatus.value) {
-    case 'connected': return 'text-emerald-400 border-emerald-500/30'
-    case 'connecting': return 'text-yellow-300 border-yellow-500/30'
-    case 'error': return 'text-red-300 border-red-500/30'
-    default: return 'text-zinc-500 border-white/10'
-  }
-})
-
 const openPageHistory = () => {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('editor:open-page-history'))
@@ -247,9 +238,6 @@ const openPageHistory = () => {
           <span>{{ saveText }}</span>
           <span v-if="saveSubtext" class="text-zinc-400">{{ saveSubtext }}</span>
         </div>
-        <span :class="['text-[10px] px-2 py-0.5 rounded-md border', realtimeBadgeColor]">
-          {{ realtimeStatus === 'connected' ? 'Realtime ON' : realtimeStatus === 'connecting' ? 'Realtime...' : realtimeStatus === 'error' ? 'Realtime OFF' : 'Realtime' }}
-        </span>
         <button
           v-if="remoteUpdatePending"
           type="button"
