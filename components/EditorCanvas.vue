@@ -714,7 +714,7 @@ const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
 const BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID = 'tpl_oferta_amarela'
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const BUILTIN_RED_BURST_SEED_VERSION = 2
-const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 7
+const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
 const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors']
 const MANUAL_TEMPLATE_STABLE_PROPS = ['__manualTemplateBaseW', '__manualTemplateBaseH'] as const;
 const MANUAL_TEMPLATE_DERIVED_PROPS = ['__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors'] as const;
@@ -30457,13 +30457,42 @@ async function renderLabelTemplatePreview(tpl: LabelTemplate): Promise<string | 
         // Always run runtime layout in the preview instance so thumbnails stay stable
         // after reload (manual templates use layoutManualTemplateGroup here).
         layoutPriceGroup(g, 320, 220);
-        g.set({ left: sc.getWidth() / 2, top: sc.getHeight() / 2 });
+        const canvasCenterX = sc.getWidth() / 2;
+        const canvasCenterY = sc.getHeight() / 2;
+        g.set({ left: canvasCenterX, top: canvasCenterY });
+        g.setCoords?.();
         // Fit with a bit of padding
         const bw = g.getScaledWidth?.() ?? g.width ?? 1;
         const bh = g.getScaledHeight?.() ?? g.height ?? 1;
         // Allow upscaling so the label fills the thumbnail area (prevents tiny previews).
-        const scale = Math.min((sc.getWidth() * 0.95) / bw, (sc.getHeight() * 0.9) / bh, 3);
-        g.set({ scaleX: scale, scaleY: scale });
+        const previewFitScale = Math.min((sc.getWidth() * 0.95) / bw, (sc.getHeight() * 0.9) / bh, 3);
+        const currentScaleX = Number(g.scaleX ?? 1);
+        const currentScaleY = Number(g.scaleY ?? 1);
+        g.set({
+            scaleX: (Number.isFinite(currentScaleX) && currentScaleX !== 0 ? currentScaleX : 1) * previewFitScale,
+            scaleY: (Number.isFinite(currentScaleY) && currentScaleY !== 0 ? currentScaleY : 1) * previewFitScale
+        });
+        g.setCoords?.();
+        try {
+            const bounds = g.getBoundingRect?.(true);
+            if (
+                bounds &&
+                Number.isFinite(bounds.left) &&
+                Number.isFinite(bounds.top) &&
+                Number.isFinite(bounds.width) &&
+                Number.isFinite(bounds.height)
+            ) {
+                const boundsCenterX = bounds.left + (bounds.width / 2);
+                const boundsCenterY = bounds.top + (bounds.height / 2);
+                g.set({
+                    left: Number(g.left || 0) + (canvasCenterX - boundsCenterX),
+                    top: Number(g.top || 0) + (canvasCenterY - boundsCenterY)
+                });
+                g.setCoords?.();
+            }
+        } catch {
+            // Ignore preview recenter errors and keep best-effort render.
+        }
         sc.add(g);
         try {
             sc.renderAll();
@@ -32155,13 +32184,13 @@ async function handleUpdateTemplateFromMiniEditor(
             ...prev,
             name: (updates.name ?? prev.name),
             group: nextGroup,
-            previewDataUrl: updates.previewDataUrl ?? prev.previewDataUrl,
             updatedAt: new Date().toISOString()
         };
-        // If mini editor preview generation failed (tainted canvas), regenerate here.
-        if (!next.previewDataUrl) {
-            next.previewDataUrl = await renderLabelTemplatePreview(next);
-        }
+        const regeneratedPreview = await renderLabelTemplatePreview(next);
+        next.previewDataUrl = regeneratedPreview ?? updates.previewDataUrl ?? prev.previewDataUrl;
+        (next as any).__previewRenderVersion = regeneratedPreview
+            ? LABEL_TEMPLATE_PREVIEW_RENDER_VERSION
+            : Number((prev as any)?.__previewRenderVersion || 0);
 
         (next as any).__fromDb = false;
         (next as any).__localOverride = true;

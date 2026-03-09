@@ -3352,16 +3352,6 @@ const save = async () => {
       groupJson = base
     }
 
-    // Preview = current editor canvas. This can fail if the canvas is tainted
-    // (e.g. external image without CORS). In that case, still save the template.
-    let previewDataUrl: string | undefined = undefined
-    try {
-      previewDataUrl = canvas?.toDataURL?.({ format: 'png', multiplier: 1 })
-    } catch (e: any) {
-      console.warn('[LabelTemplateMiniEditor] preview toDataURL failed (tainted canvas?)', e)
-      previewDataUrl = undefined
-    }
-
     const saveResult = await new Promise<TemplateSaveResult>((resolve) => {
       let settled = false
       const finalize = (result: TemplateSaveResult) => {
@@ -3374,7 +3364,7 @@ const save = async () => {
         finalize({ ok: false, message: 'Template inválido para salvar.' })
         return
       }
-      emit('save', templateId, { group: groupJson, previewDataUrl, name }, finalize)
+      emit('save', templateId, { group: groupJson, name }, finalize)
       setTimeout(() => {
         finalize({ ok: false, message: 'Tempo esgotado ao salvar a etiqueta. Tente novamente.' })
       }, 20000)
