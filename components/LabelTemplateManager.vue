@@ -93,7 +93,7 @@ const formatDate = (dateStr: string) => {
         </div>
         <div class="ltm-title-section">
           <h2 class="ltm-title">Modelos de Etiqueta</h2>
-          <p class="ltm-subtitle">Gerencie e aplique modelos de preços padronizados</p>
+          <p class="ltm-subtitle">Gerencie e aplique suas etiquetas manuais</p>
         </div>
       </div>
       <button class="ltm-close-btn" @click="emit('close')">
@@ -137,7 +137,7 @@ const formatDate = (dateStr: string) => {
         <svg class="ltm-action-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
-        <span>Resetar para Padrão</span>
+        <span>Remover da Zona</span>
       </button>
     </div>
 
@@ -150,7 +150,7 @@ const formatDate = (dateStr: string) => {
             v-model="name"
             class="ltm-input"
             placeholder="Ex: Etiqueta Neon, Oferta Black, etc."
-            @keyup.enter="canSaveFromSelection ? emit('create-from-selection', name) : emit('create-default', name)"
+            @keyup.enter="canSaveFromSelection ? emit('create-from-selection', name) : undefined"
           />
         </div>
         <div class="ltm-create-actions">
@@ -164,15 +164,6 @@ const formatDate = (dateStr: string) => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
             </svg>
             Salvar da Seleção
-          </button>
-          <button
-            class="ltm-create-btn ltm-create-btn--default"
-            @click="emit('create-default', name)"
-          >
-            <svg class="ltm-create-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Criar Padrão
           </button>
         </div>
         <p v-if="!canSaveFromSelection" class="ltm-hint">
@@ -227,7 +218,6 @@ const formatDate = (dateStr: string) => {
               </svg>
               <span>Sem preview</span>
             </div>
-            <span v-if="tpl.isBuiltIn" class="ltm-template-badge">Padrão</span>
             <span v-if="tpl.id === selectedTemplateId" class="ltm-template-badge ltm-template-badge--active">
               <svg fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -302,7 +292,6 @@ const formatDate = (dateStr: string) => {
               </svg>
             </button>
             <button
-              v-if="!tpl.isBuiltIn"
               class="ltm-template-action ltm-template-action--delete"
               @click="pendingDeleteId = tpl.id"
               title="Excluir modelo"

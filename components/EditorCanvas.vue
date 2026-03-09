@@ -725,6 +725,26 @@ const getLabelTemplateTimestamp = (tpl: any): number => {
     return Number.isFinite(ts) ? ts : Number.NaN;
 };
 
+const normalizeLabelTemplateGroupAsManual = (group: any) => {
+    if (!group || typeof group !== 'object') return group;
+    sanitizeRedBurstTemplateGroupJson(group);
+    (group as any).__preserveManualLayout = true;
+    (group as any).__isCustomTemplate = true;
+    if ((group as any).__forceAtacarejoCanonical === true) {
+        (group as any).__forceAtacarejoCanonical = false;
+    }
+    return group;
+};
+
+const normalizeLabelTemplateRecordAsManual = (tpl: any) => {
+    if (!tpl || typeof tpl !== 'object') return tpl;
+    return {
+        ...tpl,
+        group: normalizeLabelTemplateGroupAsManual((tpl as any).group),
+        isBuiltIn: false
+    } as any;
+};
+
 const shouldUseIncomingTemplateSnapshot = (prev: any, incoming: any): boolean => {
     const prevTs = getLabelTemplateTimestamp(prev);
     const incomingTs = getLabelTemplateTimestamp(incoming);
@@ -748,16 +768,16 @@ const shouldUseIncomingTemplateSnapshot = (prev: any, incoming: any): boolean =>
 };
 
 const serializeLabelTemplatesForProject = () => {
-    // Keep project JSON lean: previews can be regenerated client-side.
-    // Avoid embedding DB/library templates into every project (keeps canvas_data smaller),
-    // except when user edited one locally (local override must survive reloads).
+    // Persist all current templates in the project so manual layouts never regress
+    // to an older DB/library snapshot after reload or page switch.
     return (labelTemplates.value || [])
-        .filter((t: any) => !(t as any)?.__fromDb || (t as any)?.__localOverride === true)
         .map((t: any) => {
-            sanitizeRedBurstTemplateGroupJson((t as any)?.group);
+            const normalized = normalizeLabelTemplateRecordAsManual(t);
             return {
-                ...t,
+                ...normalized,
                 __fromDb: undefined,
+                __localOverride: undefined,
+                isBuiltIn: undefined,
                 previewDataUrl: undefined
             };
         })
@@ -772,25 +792,25 @@ const hydrateLabelTemplatesFromProjectJson = (json: any) => {
     for (const t of raw as any[]) {
         if (!t?.id) continue;
         const id = String(t.id);
-        sanitizeRedBurstTemplateGroupJson((t as any)?.group);
+        const incomingTemplate = normalizeLabelTemplateRecordAsManual(t);
         const prev = byId.get(id);
         if (!prev) {
             byId.set(id, {
-                ...t,
+                ...incomingTemplate,
                 __fromDb: false,
                 __localOverride: true
             });
             continue;
         }
 
-        const incomingIsLocalOverride = !!(t as any)?.__localOverride;
+        const incomingIsLocalOverride = !!(incomingTemplate as any)?.__localOverride;
         const prevIsLocalOverride = !!(prev as any)?.__localOverride;
-        const useIncoming = shouldUseIncomingTemplateSnapshot(prev, t);
+        const useIncoming = shouldUseIncomingTemplateSnapshot(prev, incomingTemplate);
 
         const merged = {
-            ...(useIncoming ? prev : t),
-            ...(useIncoming ? t : prev),
-            previewDataUrl: ((useIncoming ? t : prev) as any)?.previewDataUrl ?? ((useIncoming ? prev : t) as any)?.previewDataUrl
+            ...(useIncoming ? prev : incomingTemplate),
+            ...(useIncoming ? incomingTemplate : prev),
+            previewDataUrl: ((useIncoming ? incomingTemplate : prev) as any)?.previewDataUrl ?? ((useIncoming ? prev : incomingTemplate) as any)?.previewDataUrl
         } as any;
 
         const hasLocalOverride = prevIsLocalOverride || incomingIsLocalOverride;
@@ -799,7 +819,7 @@ const hydrateLabelTemplatesFromProjectJson = (json: any) => {
             merged.__localOverride = true;
         }
 
-        byId.set(id, merged);
+        byId.set(id, normalizeLabelTemplateRecordAsManual(merged));
     }
     labelTemplates.value = Array.from(byId.values()) as any;
 }
@@ -828,17 +848,15 @@ const syncLabelTemplatesIntoProjectPages = (source: 'user' | 'system' = 'user') 
 
 const normalizeDbLabelTemplate = (row: any): LabelTemplate | null => {
     if (!row?.id || !row?.group) return null;
-    const group = row.group ?? (row as any)['group'];
-    sanitizeRedBurstTemplateGroupJson(group);
-    return {
+    return normalizeLabelTemplateRecordAsManual({
         id: String(row.id),
         name: String(row.name || 'Etiqueta'),
         kind: (row.kind || 'priceGroup-v1') as any,
-        group,
+        group: row.group ?? (row as any)['group'],
         previewDataUrl: row.preview_data_url ?? undefined,
         createdAt: row.created_at ? String(row.created_at) : new Date().toISOString(),
         updatedAt: row.updated_at ? String(row.updated_at) : (row.created_at ? String(row.created_at) : new Date().toISOString())
-    };
+    }) as LabelTemplate;
 }
 
 const loadLabelTemplatesFromDb = async () => {
@@ -876,9 +894,9 @@ const loadLabelTemplatesFromDb = async () => {
                 } else if (useDb) {
                     merged.__fromDb = true;
                 }
-                byId.set(String(t.id), merged);
+                byId.set(String(t.id), normalizeLabelTemplateRecordAsManual(merged));
             } else {
-                byId.set(String(t.id), { ...t, __fromDb: true });
+                byId.set(String(t.id), normalizeLabelTemplateRecordAsManual({ ...t, __fromDb: true }));
             }
         }
         labelTemplates.value = Array.from(byId.values()) as any;
@@ -889,11 +907,6 @@ const loadLabelTemplatesFromDb = async () => {
 
 const ensureLabelTemplatesReady = async () => {
     await loadLabelTemplatesFromDb();
-    await ensureBuiltInDefaultLabelTemplate();
-    await ensureBuiltInBlackYellowLabelTemplate();
-    await ensureBuiltInOfertaAmarelaLabelTemplate();
-    await ensureBuiltInRedBurstLabelTemplate();
-    await ensureBuiltInAtacarejoLabelTemplate();
 
     // Generate/refresh previews in-memory.
     // This self-heals stale/broken thumbnails after reload or renderer updates.
@@ -932,9 +945,9 @@ const ensureLabelTemplatesReady = async () => {
 }
 
 const upsertLabelTemplateToDb = async (tpl: LabelTemplate): Promise<boolean> => {
-    if (!tpl || (tpl as any).isBuiltIn) return true;
+    if (!tpl) return true;
     try {
-        sanitizeRedBurstTemplateGroupJson((tpl as any)?.group);
+        normalizeLabelTemplateGroupAsManual((tpl as any)?.group);
         const headers = await getApiAuthHeaders();
         const resp: any = await $fetch('/api/label-templates', {
             method: 'POST',
@@ -23314,7 +23327,7 @@ const createSmartObject = async (
         const pg = await instantiatePriceGroupFromTemplate(tpl);
         pg.set({ left: 0, top: 0, name: 'priceGroup' });
         setPriceOnPriceGroup(pg, priceStr, unitText);
-        const isRedBurst = isRedBurstPriceGroup(pg) || String(tpl?.id || '') === BUILTIN_RED_BURST_LABEL_TEMPLATE_ID;
+        const isRedBurst = isRedBurstPriceGroup(pg);
         const headerParts = inferHeaderPartsFromProduct(product, 'OFERTA', {
             preferFullNameWithWeight: isRedBurst,
             splitUnitIntoDedicatedField: !isRedBurst
@@ -23397,7 +23410,7 @@ const createSmartObject = async (
         });
     }
 
-    const isRedBurstCard = isRedBurstPriceGroup(priceTagGroup) || String(labelTpl?.id || '') === BUILTIN_RED_BURST_LABEL_TEMPLATE_ID;
+    const isRedBurstCard = isRedBurstPriceGroup(priceTagGroup);
     if (isRedBurstCard) {
         title.set({
             visible: false,
@@ -30009,8 +30022,7 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
         if (repairedJson) {
             (tpl as any).group = repairedJson;
             const tplId = String((tpl as any)?.id || '').trim();
-            const isBuiltInTemplate = !!(tpl as any)?.isBuiltIn;
-            if (tplId && !isBuiltInTemplate && !autoHealedLabelTemplateIds.has(tplId)) {
+            if (tplId && !autoHealedLabelTemplateIds.has(tplId)) {
                 autoHealedLabelTemplateIds.add(tplId);
                 queueMicrotask(async () => {
                     try {
@@ -30783,8 +30795,6 @@ async function updateLabelTemplateFromSelection(templateId: string) {
 }
 
 function deleteLabelTemplateById(templateId: string) {
-    const t = labelTemplates.value.find(x => x.id === templateId);
-    if (t?.isBuiltIn) return;
     labelTemplates.value = (labelTemplates.value || []).filter(x => x.id !== templateId);
     syncLabelTemplatesIntoProjectPages('user');
     saveCurrentState();
@@ -30886,7 +30896,7 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
         const c = newPg.getObjects?.().find((o: any) => o.name === 'price_currency_text');
         if (c && typeof c.set === 'function') c.set('text', oldCurrencyText);
     }
-    const isRedBurst = isRedBurstPriceGroup(newPg) || String(templateId || '') === BUILTIN_RED_BURST_LABEL_TEMPLATE_ID;
+    const isRedBurst = isRedBurstPriceGroup(newPg);
     const headerParts = inferHeaderPartsForPriceTemplate(card, 'OFERTA', {
         preferFullNameWithWeight: isRedBurst,
         splitUnitIntoDedicatedField: !isRedBurst
