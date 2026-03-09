@@ -25,25 +25,60 @@ const {
   hasUnsavedChanges,
   triggerAutoSave,
   cancelAutoSave,
+  projectServerUpdatedAt,
   realtimeClientId
 } = useProject()
 
 const realtimeStatus = ref<'idle' | 'connecting' | 'connected' | 'error'>('idle')
 const remoteUpdatePending = ref(false)
+const { getApiAuthHeaders } = useApiAuth()
 let realtimeEventSource: EventSource | null = null
 let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let realtimePollTimer: ReturnType<typeof setTimeout> | null = null
 let visibilityHandler: (() => void) | null = null
+
+const isGithubPreviewHost = (): boolean => {
+  if (typeof window === 'undefined') return false
+  const hostname = String(window.location.hostname || '').trim().toLowerCase()
+  return hostname.endsWith('.app.github.dev') || hostname.endsWith('.github.dev')
+}
+
+const getIsoTimeMs = (value: string | null | undefined): number => {
+  const timestamp = Date.parse(String(value || '').trim())
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
 
 const closeProjectRealtime = () => {
   if (realtimeRefreshTimer) {
     clearTimeout(realtimeRefreshTimer)
     realtimeRefreshTimer = null
   }
+  if (realtimePollTimer) {
+    clearTimeout(realtimePollTimer)
+    realtimePollTimer = null
+  }
   if (realtimeEventSource) {
     realtimeEventSource.close()
     realtimeEventSource = null
   }
   realtimeStatus.value = 'idle'
+}
+
+const fetchProjectRevision = async (id: string): Promise<string | null> => {
+  const projectId = String(id || '').trim()
+  if (!projectId) return null
+
+  try {
+    const headers = await getApiAuthHeaders()
+    const response = await $fetch<{ updated_at?: string | null }>('/api/projects/revision', {
+      headers,
+      query: { id: projectId }
+    })
+    const updatedAt = String(response?.updated_at || '').trim()
+    return updatedAt || null
+  } catch {
+    return null
+  }
 }
 
 const scheduleRemoteReload = (id: string) => {
@@ -53,6 +88,41 @@ const scheduleRemoteReload = (id: string) => {
     const loaded = await loadProjectDB(id)
     if (loaded) remoteUpdatePending.value = false
   }, 450)
+}
+
+const scheduleRealtimePoll = (id: string, delayMs = 20_000) => {
+  if (realtimePollTimer) {
+    clearTimeout(realtimePollTimer)
+    realtimePollTimer = null
+  }
+
+  const projectId = String(id || '').trim()
+  if (!projectId) return
+
+  realtimePollTimer = setTimeout(async () => {
+    realtimePollTimer = null
+
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      scheduleRealtimePoll(projectId, delayMs)
+      return
+    }
+
+    const latestUpdatedAt = await fetchProjectRevision(projectId)
+    if (latestUpdatedAt) {
+      const knownUpdatedAt = getIsoTimeMs(projectServerUpdatedAt.value)
+      const remoteUpdatedAt = getIsoTimeMs(latestUpdatedAt)
+
+      if (remoteUpdatedAt > knownUpdatedAt) {
+        if (hasUnsavedChanges.value) {
+          remoteUpdatePending.value = true
+        } else {
+          scheduleRemoteReload(projectId)
+        }
+      }
+    }
+
+    scheduleRealtimePoll(projectId, delayMs)
+  }, delayMs)
 }
 
 const handleRealtimeProjectChange = (rawPayload: string) => {
@@ -81,6 +151,12 @@ const openProjectRealtime = (id: string) => {
 
   closeProjectRealtime()
   realtimeStatus.value = 'connecting'
+
+  if (isGithubPreviewHost()) {
+    realtimeStatus.value = 'connected'
+    scheduleRealtimePoll(projectId)
+    return
+  }
 
   const params = new URLSearchParams({
     id: projectId,

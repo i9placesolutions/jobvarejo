@@ -1395,10 +1395,11 @@ export const useProject = () => {
         loadProjectDB,
         deleteProjectDB,
         isSaving,
-        saveStatus,
-        lastSavedAt,
-        hasUnsavedChanges,
-        isProjectLoaded,
-        realtimeClientId
-    }
-}
+	        saveStatus,
+	        lastSavedAt,
+	        hasUnsavedChanges,
+	        isProjectLoaded,
+	        projectServerUpdatedAt,
+	        realtimeClientId
+	    }
+	}

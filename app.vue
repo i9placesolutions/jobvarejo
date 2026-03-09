@@ -1,17 +1,3 @@
-<script setup lang="ts">
-// Keep a client-side safety check for direct URL access.
-onMounted(async () => {
-  if (!process.client) return
-  if (window.location.pathname.startsWith('/auth')) return
-
-  const auth = useAuth()
-  await auth.getSession()
-  if (!auth.isAuthenticated.value) {
-    window.location.href = '/auth/login'
-  }
-})
-</script>
-
 <template>
   <NuxtLayout>
     <NuxtPage :page-key="(route) => route.fullPath" />

@@ -166,6 +166,16 @@ const TEMPLATE_EXTRA_PROPS = [
   '__manualGapWholesale',
   '__manualSingleAnchors'
 ]
+const MANUAL_TEMPLATE_STABLE_PROPS = [
+  '__manualTemplateBaseW',
+  '__manualTemplateBaseH'
+] as const
+const MANUAL_TEMPLATE_DERIVED_PROPS = [
+  '__manualGapSingle',
+  '__manualGapRetail',
+  '__manualGapWholesale',
+  '__manualSingleAnchors'
+] as const
 
 const ATAC_VALUE_VARIANT_KEYS = ['tiny', 'normal', 'large'] as const
 type AtacValueVariantKey = (typeof ATAC_VALUE_VARIANT_KEYS)[number]
@@ -544,6 +554,360 @@ const ensureAtacarejoPreviewContrast = (priceGroup: any) => {
   ensureTextVisible('wholesale_pack_line_text', '#111827')
 
   safeAddWithUpdate(priceGroup)
+}
+
+const normalizeVisibleScaleLocal = (raw: any, fallback: any, min = 0.08, max = 3.2) => {
+  const fallbackNum = Number(fallback)
+  const safeFallback = Number.isFinite(fallbackNum) && Math.abs(fallbackNum) > 0 ? fallbackNum : 1
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed === 0) return safeFallback
+  const sign = parsed < 0 ? -1 : 1
+  const mag = Math.min(max, Math.max(min, Math.abs(parsed)))
+  return sign * mag
+}
+
+const reviveRedBurstNodeLocal = (
+  obj: any,
+  opts: { fallbackFill?: string; fallbackFontSize?: number; fallbackText?: string; forceVisible?: boolean } = {}
+) => {
+  if (!obj || typeof obj.set !== 'function') return false
+  let changed = false
+  const next: Record<string, any> = {}
+  const forceVisible = opts.forceVisible !== false
+
+  if (forceVisible && obj.visible === false) {
+    next.visible = true
+    changed = true
+  }
+  const opacity = Number(obj.opacity ?? 1)
+  if (!Number.isFinite(opacity) || opacity <= 0) {
+    next.opacity = 1
+    changed = true
+  }
+
+  const restoreScaleX = normalizeVisibleScaleLocal((obj as any).__visibleScaleX ?? (obj as any).__originalScaleX, obj.scaleX)
+  const restoreScaleY = normalizeVisibleScaleLocal((obj as any).__visibleScaleY ?? (obj as any).__originalScaleY, obj.scaleY)
+  if (!Number.isFinite(Number(obj.scaleX)) || Math.abs(Number(obj.scaleX || 0)) < 0.0001) {
+    next.scaleX = restoreScaleX
+    changed = true
+  }
+  if (!Number.isFinite(Number(obj.scaleY)) || Math.abs(Number(obj.scaleY || 0)) < 0.0001) {
+    next.scaleY = restoreScaleY
+    changed = true
+  }
+
+  if (Object.keys(next).length) obj.set(next)
+
+  const type = String(obj.type || '').toLowerCase()
+  const isText = type === 'text' || type === 'i-text' || type === 'itext' || type === 'textbox'
+  if (isText) {
+    const currentFont = Number(obj.fontSize)
+    const fallbackFont = Number(opts.fallbackFontSize ?? (obj as any).__originalFontSize ?? currentFont)
+    if (!Number.isFinite(currentFont) || currentFont <= 0) {
+      obj.set('fontSize', Number.isFinite(fallbackFont) && fallbackFont > 0 ? fallbackFont : 18)
+      changed = true
+    }
+    if (typeof opts.fallbackText === 'string' && !String(obj.text || '').trim()) {
+      obj.set('text', opts.fallbackText)
+      changed = true
+    }
+    if (typeof opts.fallbackFill === 'string' && isTransparentLikeColorLocal(obj.fill)) {
+      obj.set('fill', opts.fallbackFill)
+      changed = true
+    }
+    obj.initDimensions?.()
+  }
+
+  obj.setCoords?.()
+  return changed
+}
+
+const ensureRedBurstPreviewVisibility = (priceGroup: any) => {
+  if (!priceGroup) return
+  const all = collectObjectsDeepLocal(priceGroup)
+  const byName = (name: string) => findByNameInObjects(all, name)
+  const priceBg = byName('price_bg')
+  const headerBg = byName('price_header_bg')
+  const headerText = byName('price_header_text')
+  const burst = byName('price_burst_line_a')
+  const currencyText = byName('price_currency_text')
+  const priceInteger = byName('price_integer_text')
+  const priceDecimal = byName('price_decimal_text')
+  if (!(priceBg && headerBg && headerText && burst && priceInteger && priceDecimal)) return
+
+  let changed = false
+  const ensureShellVisible = (obj: any) => {
+    if (!obj || typeof obj.set !== 'function') return
+    const next: Record<string, any> = {}
+    if (obj.visible === false) next.visible = true
+    const opacity = Number(obj.opacity ?? 1)
+    if (!Number.isFinite(opacity) || opacity <= 0) next.opacity = 1
+    if (!Object.keys(next).length) return
+    obj.set(next)
+    obj.setCoords?.()
+    changed = true
+  }
+
+  ensureShellVisible(priceBg)
+  ensureShellVisible(headerBg)
+  changed = reviveRedBurstNodeLocal(headerText, { fallbackFill: '#ffd94c', fallbackFontSize: 28, fallbackText: 'OFERTA' }) || changed
+  changed = reviveRedBurstNodeLocal(currencyText, { fallbackFill: '#ffffff', fallbackFontSize: 30, fallbackText: 'R$' }) || changed
+  changed = reviveRedBurstNodeLocal(priceInteger, { fallbackFill: '#ffffff', fallbackFontSize: 92, fallbackText: '0' }) || changed
+  changed = reviveRedBurstNodeLocal(priceDecimal, { fallbackFill: '#ffffff', fallbackFontSize: 44, fallbackText: ',00' }) || changed
+
+  if (changed) safeAddWithUpdate(priceGroup)
+}
+
+const getSinglePriceBackgroundCandidateLocal = (priceGroup: any) => {
+  const all = collectObjectsDeepLocal(priceGroup)
+  const byName = (name: string) => findByNameInObjects(all, name)
+  const named = byName('price_bg') || byName('price_bg_image') || byName('splash_image')
+  if (named) return named
+
+  const candidates = all.filter((obj: any) => {
+    if (!obj || obj === priceGroup) return false
+    const type = String(obj?.type || '').toLowerCase()
+    if (type !== 'image' && type !== 'rect') return false
+    const name = String(obj?.name || '')
+    if (name === 'price_currency_bg' || name === 'priceSymbolBg') return false
+    if (name.startsWith('atac_') || name.startsWith('retail_') || name.startsWith('wholesale_')) return false
+    return true
+  })
+  if (!candidates.length) return null
+
+  const getArea = (obj: any) => {
+    const width = Math.max(1, Number(obj?.width || 0))
+    const height = Math.max(1, Number(obj?.height || 0))
+    const scaleX = Math.abs(Number(obj?.scaleX ?? (String(obj?.type || '').toLowerCase() === 'image' ? 1 : 0))) || 1
+    const scaleY = Math.abs(Number(obj?.scaleY ?? (String(obj?.type || '').toLowerCase() === 'image' ? 1 : 0))) || 1
+    const effectiveArea = width * height * scaleX * scaleY
+    return Number.isFinite(effectiveArea) && effectiveArea > 0 ? effectiveArea : (width * height)
+  }
+
+  return candidates.sort((a: any, b: any) => getArea(b) - getArea(a))[0] || null
+}
+
+const hasCollapsedSinglePriceTemplateGeometryLocal = (priceGroup: any) => {
+  if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false
+  const all = collectObjectsDeepLocal(priceGroup)
+  if (findByNameInObjects(all, 'atac_retail_bg')) return false
+
+  const priceText = findByNameInObjects(all, 'price_value_text') || findByNameInObjects(all, 'smart_price')
+  const integer = findByNameInObjects(all, 'price_integer_text') || findByNameInObjects(all, 'priceInteger') || findByNameInObjects(all, 'price_integer')
+  const decimal = findByNameInObjects(all, 'price_decimal_text') || findByNameInObjects(all, 'priceDecimal') || findByNameInObjects(all, 'price_decimal')
+  if (!(priceText || (integer && decimal))) return false
+
+  const bounds = measureContentBoundsLocal(all.filter((o: any) => o && o !== priceGroup && isObjectShownForBoundsLocal(o)))
+  const background = getSinglePriceBackgroundCandidateLocal(priceGroup)
+  const backgroundBounds = background ? measureContentBoundsLocal([background]) : null
+  const baseW = Number((priceGroup as any).__manualTemplateBaseW)
+  const baseH = Number((priceGroup as any).__manualTemplateBaseH)
+  const textNodes = [
+    findByNameInObjects(all, 'price_currency_text') || findByNameInObjects(all, 'priceSymbol') || findByNameInObjects(all, 'price_currency'),
+    integer,
+    decimal,
+    findByNameInObjects(all, 'price_unit_text') || findByNameInObjects(all, 'priceUnit') || findByNameInObjects(all, 'price_unit'),
+    priceText
+  ].filter(Boolean) as any[]
+  const tinyScales = textNodes.filter((obj: any) => {
+    const sx = Math.abs(Number(obj?.scaleX ?? 1))
+    const sy = Math.abs(Number(obj?.scaleY ?? 1))
+    return sx > 0 && sy > 0 && (sx < 0.02 || sy < 0.02)
+  }).length
+  const clusteredAtOrigin = textNodes.length > 0 && textNodes.every((obj: any) =>
+    Math.abs(Number(obj?.left || 0)) < 0.02 && Math.abs(Number(obj?.top || 0)) < 0.02
+  )
+
+  return (
+    (Number.isFinite(baseW) && baseW > 0 && baseW <= 2.5) ||
+    (Number.isFinite(baseH) && baseH > 0 && baseH <= 2.5) ||
+    (!!bounds && (bounds.width < 18 || bounds.height < 10)) ||
+    (!!backgroundBounds && (backgroundBounds.width < 18 || backgroundBounds.height < 10)) ||
+    (tinyScales >= Math.max(2, textNodes.length - 1) && clusteredAtOrigin)
+  )
+}
+
+const repairCollapsedSinglePriceTemplateGeometryLocal = (priceGroup: any, reason = 'unknown') => {
+  if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false
+  if (!hasCollapsedSinglePriceTemplateGeometryLocal(priceGroup)) return false
+
+  const all = collectObjectsDeepLocal(priceGroup)
+  const background = getSinglePriceBackgroundCandidateLocal(priceGroup)
+  const currency = findByNameInObjects(all, 'price_currency_text') || findByNameInObjects(all, 'priceSymbol') || findByNameInObjects(all, 'price_currency')
+  const integer = findByNameInObjects(all, 'price_integer_text') || findByNameInObjects(all, 'priceInteger') || findByNameInObjects(all, 'price_integer')
+  const decimal = findByNameInObjects(all, 'price_decimal_text') || findByNameInObjects(all, 'priceDecimal') || findByNameInObjects(all, 'price_decimal')
+  const unit = findByNameInObjects(all, 'price_unit_text') || findByNameInObjects(all, 'priceUnit') || findByNameInObjects(all, 'price_unit')
+  const legacyPrice = findByNameInObjects(all, 'price_value_text') || findByNameInObjects(all, 'smart_price')
+  if (!(legacyPrice || (integer && decimal))) return false
+
+  const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
+  const reviveNode = (obj: any, opts: { defaultScale?: number; defaultFontSize?: number; defaultText?: string } = {}) => {
+    if (!obj || typeof obj.set !== 'function') return
+    const defaultScale = Number.isFinite(Number(opts.defaultScale)) ? Number(opts.defaultScale) : 1
+    const fallbackScaleX = Number((obj as any).__visibleScaleX ?? (obj as any).__originalScaleX)
+    const fallbackScaleY = Number((obj as any).__visibleScaleY ?? (obj as any).__originalScaleY)
+    const nextScaleX = Number.isFinite(fallbackScaleX) && Math.abs(fallbackScaleX) >= 0.08 ? Math.abs(fallbackScaleX) : defaultScale
+    const nextScaleY = Number.isFinite(fallbackScaleY) && Math.abs(fallbackScaleY) >= 0.08 ? Math.abs(fallbackScaleY) : defaultScale
+    const next: Record<string, any> = { visible: true, opacity: 1 }
+    if (!Number.isFinite(Number(obj.scaleX)) || Math.abs(Number(obj.scaleX || 0)) < 0.02) next.scaleX = nextScaleX
+    if (!Number.isFinite(Number(obj.scaleY)) || Math.abs(Number(obj.scaleY || 0)) < 0.02) next.scaleY = nextScaleY
+    obj.set(next)
+    const type = String(obj.type || '').toLowerCase()
+    if (type === 'text' || type === 'i-text' || type === 'itext' || type === 'textbox') {
+      const currentFont = Number(obj.fontSize || 0)
+      const fallbackFont = Number((obj as any).__originalFontSize ?? opts.defaultFontSize ?? currentFont)
+      if (!Number.isFinite(currentFont) || currentFont <= 0) {
+        obj.set('fontSize', Number.isFinite(fallbackFont) && fallbackFont > 0 ? fallbackFont : 18)
+      }
+      if (typeof opts.defaultText === 'string' && !String(obj.text || '').trim()) obj.set('text', opts.defaultText)
+      obj.initDimensions?.()
+    }
+    obj.setCoords?.()
+  }
+  const centerObjectsX = (objs: any[], centerX = 0) => {
+    const shown = (objs || []).filter((o: any) => isObjectShownForBoundsLocal(o))
+    const bounds = measureHorizontalBoundsLocal(shown)
+    if (!bounds) return
+    const currentCenter = (bounds.left + bounds.right) / 2
+    const dx = centerX - currentCenter
+    if (Math.abs(dx) < 0.001) return
+    shown.forEach((obj: any) => obj?.set?.({ left: Number(obj.left || 0) + dx }))
+  }
+
+  reviveNode(background, { defaultScale: 1 })
+  reviveNode(currency, { defaultScale: 1, defaultFontSize: 18, defaultText: 'R$' })
+  reviveNode(integer, { defaultScale: 1, defaultFontSize: 42, defaultText: '22' })
+  reviveNode(decimal, { defaultScale: 1, defaultFontSize: 24, defaultText: ',99' })
+  reviveNode(unit, { defaultScale: 1, defaultFontSize: 15, defaultText: 'UN' })
+  reviveNode(legacyPrice, { defaultScale: 1, defaultFontSize: 36, defaultText: '22,99' })
+
+  if (background && String(background?.type || '').toLowerCase() === 'image') {
+    const name = String(background?.name || '')
+    if (!name || name.startsWith('custom_image_')) background.set('name', 'splash_image')
+  }
+
+  const unitVisible = isObjectShownForBoundsLocal(unit) && String(unit?.text || '').trim().length > 0
+  const rawBgW = Math.max(1, Number(background?.width || 0))
+  const rawBgH = Math.max(1, Number(background?.height || 0))
+  const measuredChainW = legacyPrice
+    ? getScaledWidthLocal(legacyPrice)
+    : (getScaledWidthLocal(integer) + getScaledWidthLocal(decimal) + (unitVisible ? Math.max(0, getScaledWidthLocal(unit) - (getScaledWidthLocal(decimal) * 0.2)) : 0))
+  const measuredChainH = legacyPrice
+    ? getScaledHeightLocal(legacyPrice)
+    : Math.max(getScaledHeightLocal(integer), getScaledHeightLocal(decimal) + (unitVisible ? getScaledHeightLocal(unit) * 0.72 : 0))
+  const targetH = clamp(Math.max(56, measuredChainH * 1.45), 56, 140)
+  const targetW = clamp(Math.max(140, measuredChainW * 1.22 + 26), 140, 360)
+
+  let effectiveW = targetW
+  let effectiveH = targetH
+  if (background && typeof background.set === 'function') {
+    const type = String(background?.type || '').toLowerCase()
+    if (type === 'rect') {
+      background.set({
+        name: 'price_bg',
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: 0,
+        width: targetW,
+        height: targetH,
+        scaleX: 1,
+        scaleY: 1
+      })
+      effectiveW = targetW
+      effectiveH = targetH
+    } else {
+      const scale = clamp(Math.max(targetW / rawBgW, targetH / rawBgH), 0.04, 2.5)
+      background.set({
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: 0,
+        scaleX: scale,
+        scaleY: scale,
+        visible: true,
+        opacity: 1
+      })
+      effectiveW = rawBgW * scale
+      effectiveH = rawBgH * scale
+    }
+  }
+
+  if (legacyPrice && (!integer || !decimal)) {
+    legacyPrice.set({ originX: 'center', originY: 'center', left: 0, top: 0, scaleX: 1, scaleY: 1 })
+    const maxLegacyW = Math.max(40, effectiveW * 0.76)
+    const legacyW = getScaledWidthLocal(legacyPrice)
+    if (legacyW > maxLegacyW && legacyW > 0) {
+      const shrink = clamp(maxLegacyW / legacyW, 0.4, 1)
+      legacyPrice.set({ scaleX: shrink, scaleY: shrink })
+    }
+  } else if (integer && decimal) {
+    integer.set?.({ originX: 'left', originY: 'center', scaleX: 1, scaleY: 1 })
+    decimal.set?.({ originX: 'left', originY: 'center', scaleX: 1, scaleY: 1 })
+    if (unit) unit.set?.({ originX: 'center', originY: 'center', visible: unitVisible, scaleX: 1, scaleY: 1 })
+    if (currency) currency.set?.({ originX: 'left', originY: 'center', scaleX: 1, scaleY: 1 })
+    integer.initDimensions?.()
+    decimal.initDimensions?.()
+    unit?.initDimensions?.()
+    currency?.initDimensions?.()
+
+    const leftPad = clamp(effectiveW * 0.11, 10, 28)
+    const rightPad = clamp(effectiveW * 0.08, 8, 24)
+    const currencyGap = Math.max(4, effectiveH * 0.028)
+    const currencyW = currency ? getScaledWidthLocal(currency) : 0
+    const maxTextW = Math.max(36, effectiveW - leftPad - rightPad - (currency ? (currencyW + currencyGap) : 0))
+    const intY = effectiveH * 0.03
+    const decY = -effectiveH * 0.17
+    const unitY = effectiveH * 0.22
+    const intX = (-effectiveW / 2) + leftPad + (currency ? (currencyW + currencyGap) : 0)
+
+    layoutPriceLocal({
+      integer,
+      decimal,
+      unit: unitVisible ? unit : undefined,
+      intX,
+      intY,
+      decY,
+      unitY,
+      maxWidth: maxTextW,
+      gapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+      minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+      maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
+    })
+
+    const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[]
+    const chainBounds = measureHorizontalBoundsLocal(chain)
+    if (currency && chainBounds) {
+      currency.set({
+        originX: 'left',
+        originY: 'center',
+        left: chainBounds.left - currencyGap - getScaledWidthLocal(currency),
+        top: 0
+      })
+      currency.initDimensions?.()
+    }
+
+    const full = [currency, ...chain].filter((o: any) => isObjectShownForBoundsLocal(o))
+    centerObjectsX(full, 0)
+    ;(priceGroup as any).__manualSingleAnchors = {
+      targetCenterX: 0,
+      intX: Number(getObjectHorizontalBoundsLocal(integer)?.left ?? integer.left ?? 0),
+      intY: Number(integer.top || 0),
+      decY: Number(decimal.top || 0),
+      unitY: Number(unit?.top || decimal.top || 0),
+      currencyY: Number(currency?.top || integer.top || 0),
+      intDecGap: PRICE_INTEGER_DECIMAL_GAP_PX,
+      currencyGap,
+      padLeft: leftPad,
+      padRight: rightPad
+    }
+  }
+
+  ;(priceGroup as any).__manualTemplateBaseW = Math.max(1, effectiveW)
+  ;(priceGroup as any).__manualTemplateBaseH = Math.max(1, effectiveH)
+  safeAddWithUpdate(priceGroup)
+  console.warn('[MiniEditor] single-price template recovered from collapsed geometry', { reason, background: String(background?.name || background?.type || 'none') })
+  return true
 }
 
 const layoutPriceLocal = (opts: {
@@ -1254,12 +1618,7 @@ const instantiateGroupFromTemplate = async (tpl: LabelTemplate) => {
       '__atacValueVariants',
       '__atacVariantGroups',
       '__isCustomTemplate',
-      '__manualTemplateBaseW',
-      '__manualTemplateBaseH',
-      '__manualGapSingle',
-      '__manualGapRetail',
-      '__manualGapWholesale',
-      '__manualSingleAnchors'
+      ...MANUAL_TEMPLATE_STABLE_PROPS
     ] as const
     for (const key of rehydrateKeys) {
       if (key in baseGroupJson) {
@@ -1267,11 +1626,15 @@ const instantiateGroupFromTemplate = async (tpl: LabelTemplate) => {
       }
     }
   }
+  MANUAL_TEMPLATE_DERIVED_PROPS.forEach((key) => {
+    try { delete (g as any)[key] } catch { /* ignore */ }
+  })
   if (!shouldUseAtacVariantSnapshots()) {
     ;(g as any).__atacVariantGroups = {}
   }
   // Never force canonical layout in mini editor; templates are manual.
   ;(g as any).__forceAtacarejoCanonical = false
+  repairCollapsedSinglePriceTemplateGeometryLocal(g, `instantiate:${String(tpl?.id || tpl?.name || 'template')}`)
 
   g.set({ name: 'priceGroup', originX: 'center', originY: 'center' })
   // Allow selecting inner parts
@@ -1307,6 +1670,8 @@ const normalizeEditorGroupTransform = (g: any) => {
 
 const serializeGroupForTemplate = (g: any) => {
   if (!g) return null
+  ensureRedBurstPreviewVisibility(g)
+  repairCollapsedSinglePriceTemplateGeometryLocal(g, 'serialize')
   const prev = {
     left: g.left,
     top: g.top,
@@ -1380,6 +1745,10 @@ const serializeGroupForTemplate = (g: any) => {
     if (shouldUseAtacVariantSnapshots()) json.__atacVariantGroups = cloneSafe((g as any).__atacVariantGroups)
   }
   if (!shouldUseAtacVariantSnapshots()) delete json.__atacVariantGroups
+  // Derived layout caches are recomputed from the authored geometry on apply/open.
+  MANUAL_TEMPLATE_DERIVED_PROPS.forEach((key) => {
+    delete json[key]
+  })
 
   g.set(prev)
   safeAddWithUpdate(g)
@@ -2105,6 +2474,7 @@ const normalizeAndLayoutForEditor = (g: any) => {
 
   // Normalize group transform so it doesn't open off-screen.
   g.set({ originX: 'center', originY: 'center', left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0 })
+  repairCollapsedSinglePriceTemplateGeometryLocal(g, 'normalize-editor')
 
   const all: any[] = g.getObjects()
 
@@ -2117,6 +2487,8 @@ const normalizeAndLayoutForEditor = (g: any) => {
     layoutAtacarejoCanonicalForEditor(g)
     return
   }
+
+  ensureRedBurstPreviewVisibility(g)
 
   // ===== STANDARD SINGLE-PRICE TEMPLATE =====
   const priceBg = all.find(o => o?.name === 'price_bg')
@@ -2274,6 +2646,10 @@ const hasReasonableEditorBounds = (g: any) => {
 
 const recoverMiniEditorLayoutIfNeeded = (g: any) => {
   if (!g) return
+  if (repairCollapsedSinglePriceTemplateGeometryLocal(g, 'recover-editor')) {
+    safeAddWithUpdate(g)
+    return
+  }
   if (hasReasonableEditorBounds(g)) return
   console.warn('[MiniEditor] invalid bounds detected, normalizing layout for editor preview')
   normalizeAndLayoutForEditor(g)
@@ -2777,12 +3153,16 @@ const onAddImage = async (e: Event) => {
     // Fabric v7: fromURL returns a Promise
     const img: any = await fabric.Image.fromURL(dataUrl, { crossOrigin: 'anonymous' })
     
+    const existingBgImage =
+      findObjectByNameDeep(group, 'price_bg_image') ||
+      findObjectByNameDeep(group, 'splash_image') ||
+      findObjectByNameDeep(group, 'price_bg')
     img.set({
       left: 0,
       top: 0,
       originX: 'center',
       originY: 'center',
-      name: `custom_image_${Math.random().toString(36).slice(2, 7)}`
+      name: existingBgImage ? `custom_image_${Math.random().toString(36).slice(2, 7)}` : 'splash_image'
     })
     
     const iw = img.width || 1

@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import Dialog from './ui/Dialog.vue'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
-import { Sparkles, X, Check, AlertCircle, Loader2, Upload, Plus, Play, RefreshCw, ChevronDown, Menu } from 'lucide-vue-next'
+import { Sparkles, X, Check, AlertCircle, Loader2, Upload, Plus, Play, RefreshCw, ChevronDown } from 'lucide-vue-next'
 import { useProductProcessor, type SmartProduct } from '../composables/useProductProcessor'
 import { toWasabiDirectUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
@@ -781,13 +781,6 @@ watch(
 )
 
 watch(
-    () => filteredProductRows.value.length,
-    () => {
-        syncActiveReviewRowToFiltered()
-    }
-)
-
-watch(
     reviewPage,
     () => {
         const rows = filteredProductRows.value
@@ -1138,6 +1131,13 @@ const syncActiveReviewRowToFiltered = () => {
     const fallback = rows[Math.min(Math.max(0, (reviewPage.value - 1) * REVIEW_PAGE_SIZE), rows.length - 1)]
     activeReviewRowIndex.value = fallback ? fallback.index : rows[0]?.index || null
 }
+
+watch(
+    () => filteredProductRows.value.length,
+    () => {
+        syncActiveReviewRowToFiltered()
+    }
+)
 
 const onReviewKeydown = (event: KeyboardEvent) => {
     if (step.value !== 'review' || !props.modelValue) return
@@ -2002,11 +2002,11 @@ const getAssetDisplayName = (asset: any): string => {
                 v-else
                 ref="reviewContainerRef"
                 tabindex="0"
-                class="flex flex-col gap-4 flex-1 h-full overflow-hidden"
+                class="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto pr-1"
                 @keydown="onReviewKeydown"
             >
                 <!-- Review Header / Controls -->
-                <div class="p-4 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,12,0.96))] shadow-[0_16px_44px_rgba(0,0,0,0.28)] space-y-4">
+                <div class="shrink-0 p-4 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,12,0.96))] shadow-[0_16px_44px_rgba(0,0,0,0.28)] space-y-4">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-200/90">
                             Revisao operacional
@@ -2053,6 +2053,16 @@ const getAssetDisplayName = (asset: any): string => {
                             <span class="text-[11px] font-bold uppercase tracking-widest">
                                 {{ imageQueueActionLabel }}
                             </span>
+                        </Button>
+                        <Button
+                            v-if="targetMode !== 'multi-frame'"
+                            class="xl:w-auto w-full h-10 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                            :disabled="importButtonDisabled"
+                            @click="handleImport"
+                        >
+                            <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="w-3.5 h-3.5 mr-2 animate-spin" />
+                            <Check v-else class="w-3.5 h-3.5 mr-2" />
+                            Importar {{ products.length }} Produtos
                         </Button>
                     </div>
                     <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
@@ -2336,7 +2346,7 @@ const getAssetDisplayName = (asset: any): string => {
                     </div>
                 </div>
 
-                <div class="overflow-y-auto custom-scrollbar flex-1 border border-zinc-800 rounded-xl bg-zinc-900/50">
+                <div class="shrink-0 min-h-[300px] max-h-[46vh] overflow-y-auto custom-scrollbar border border-zinc-800 rounded-xl bg-zinc-900/50">
                     <table class="w-full text-left text-xs border-collapse">
                         <thead class="bg-zinc-800 text-zinc-400 sticky top-0 z-10">
                             <tr>
@@ -2357,40 +2367,43 @@ const getAssetDisplayName = (asset: any): string => {
                             >
                                 <!-- Image Column -->
                                 <td class="p-3">
-                                    <div :class="[
-                                        'w-26 h-26 rounded-lg bg-zinc-800/80 flex items-center justify-center overflow-hidden border relative',
-                                        thumbnailUiStateClass(row.product)
-                                    ]">
-                                        <template v-if="row.product?.imageUrl">
-                                            <div class="absolute inset-0 bg-zinc-700/60 animate-pulse" />
-                                            <img
-                                                loading="lazy"
-                                                :src="resolveProductImageUrl(row.product.imageUrl)"
-                                                class="relative z-10 w-full h-full object-contain"
-                                                :class="row.product?.status === 'processing' ? 'opacity-30' : ''"
-                                                alt="Pré-visualização do produto"
-                                            />
-                                            <div v-if="row.product?.status === 'processing'" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 bg-black/45">
-                                                <Loader2 class="w-4 h-4 text-blue-300 animate-spin" />
-                                                <span class="text-[9px] text-zinc-200">processando</span>
-                                            </div>
-                                        </template>
-                                        <template v-else-if="row.product?.status === 'processing'">
-                                            <Loader2 class="w-4 h-4 text-blue-500 animate-spin" />
-                                        </template>
-                                        <template v-else>
-                                            <div class="text-[9px] text-zinc-500 text-center px-2">
-                                                <AlertCircle
-                                                    v-if="row.product?.status === 'review_pending' || row.product?.status === 'error'"
-                                                    class="w-4 h-4 mx-auto mb-1"
-                                                    :class="{
-                                                        'text-amber-500': row.product?.status === 'review_pending',
-                                                        'text-red-500': row.product?.status === 'error'
-                                                    }"
+                                    <div class="w-[10.5rem] space-y-2">
+                                        <div :class="[
+                                            'w-[10.5rem] h-[10.5rem] rounded-xl bg-zinc-900/70 flex items-center justify-center overflow-hidden border relative',
+                                            thumbnailUiStateClass(row.product)
+                                        ]">
+                                            <template v-if="row.product?.imageUrl">
+                                                <div class="absolute inset-0 bg-zinc-700/45 animate-pulse" />
+                                                <img
+                                                    loading="lazy"
+                                                    :src="resolveProductImageUrl(row.product.imageUrl)"
+                                                    class="relative z-10 w-full h-full object-contain"
+                                                    :class="row.product?.status === 'processing' ? 'opacity-30' : ''"
+                                                    alt="Pré-visualização do produto"
                                                 />
-                                                {{ thumbnailStatusText(row.product) }}
-                                            </div>
-                                        </template>
+                                                <div v-if="row.product?.status === 'processing'" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 bg-black/45">
+                                                    <Loader2 class="w-4 h-4 text-blue-300 animate-spin" />
+                                                    <span class="text-[9px] text-zinc-200">processando</span>
+                                                </div>
+                                            </template>
+                                            <template v-else-if="row.product?.status === 'processing'">
+                                                <Loader2 class="w-4 h-4 text-blue-500 animate-spin" />
+                                            </template>
+                                            <template v-else>
+                                                <div class="text-[10px] text-zinc-500 text-center px-2">
+                                                    <AlertCircle
+                                                        v-if="row.product?.status === 'review_pending' || row.product?.status === 'error'"
+                                                        class="w-4 h-4 mx-auto mb-1"
+                                                        :class="{
+                                                            'text-amber-500': row.product?.status === 'review_pending',
+                                                            'text-red-500': row.product?.status === 'error'
+                                                        }"
+                                                    />
+                                                    {{ thumbnailStatusText(row.product) }}
+                                                </div>
+                                            </template>
+                                        </div>
+
                                         <input
                                             :id="`image-upload-${row.productId}`"
                                             type="file"
@@ -2400,74 +2413,51 @@ const getAssetDisplayName = (asset: any): string => {
                                             @change="handleImageUpload($event, row.index)"
                                         />
 
-                                        <details class="absolute top-1 left-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-30">
-                                            <summary class="list-none bg-black/60 text-white rounded p-1 cursor-pointer">
-                                                <Menu class="w-3 h-3" />
-                                            </summary>
-                                            <div class="absolute left-0 top-7 bg-zinc-900 border border-zinc-700 rounded shadow-lg whitespace-nowrap p-1 space-y-1 min-w-40">
-                                                <button
-                                                    type="button"
-                                                    class="w-full text-left px-2 py-1 text-[10px] rounded text-zinc-200 hover:bg-zinc-800"
-                                                    @click.stop="processProductImage(row.index, { bgPolicy: imageBgPolicy, matchMode: clampImageMatchMode(imageMatchMode), force: true })"
-                                                >
-                                                    Buscar automática
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    class="w-full text-left px-2 py-1 text-[10px] rounded text-zinc-200 hover:bg-zinc-800"
-                                                    @click.stop="openAssetPicker(row.index)"
-                                                >
-                                                    Buscar no storage
-                                                </button>
-                                                <label
-                                                    :for="`image-upload-${row.productId}`"
-                                                    class="w-full block text-left px-2 py-1 text-[10px] rounded text-zinc-200 hover:bg-zinc-800 cursor-pointer"
-                                                >
-                                                    Enviar imagem local
-                                                </label>
-                                                <button
-                                                    type="button"
-                                                    class="w-full text-left px-2 py-1 text-[10px] rounded text-zinc-200 hover:bg-zinc-800"
-                                                    @click.stop="reprocessProductImage(row.index, true)"
-                                                >
-                                                    Reprocessar com modo {{ imageMatchMode === 'precise' ? 'preciso' : 'rápido' }}
-                                                </button>
-                                            </div>
-                                        </details>
-                                        <div class="mt-1.5 flex flex-wrap gap-1">
+                                        <div class="grid grid-cols-2 gap-1.5">
                                             <button
                                                 type="button"
-                                                class="h-6 px-2 text-[9px] rounded border border-zinc-700/80 bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700/80 transition-colors"
+                                                class="h-7 px-2.5 text-[10px] rounded-md border border-sky-500/50 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25 transition-colors font-semibold"
                                                 :disabled="row.product?.status === 'processing'"
                                                 @click.stop="runImageQuickAction(row, 'search')"
                                             >
-                                                Buscar {{ imageMatchMode === 'precise' ? 'preciso' : 'rápido' }}
+                                                Buscar
                                             </button>
+
                                             <button
                                                 type="button"
-                                                v-if="row.imageNextAction"
-                                                class="h-6 px-2 text-[9px] rounded border border-amber-700/70 bg-amber-800/40 text-amber-100 hover:bg-amber-700/60 transition-colors"
-                                                @click.stop="runImageNextAction(row)"
+                                                class="h-7 px-2.5 text-[10px] rounded-md border border-zinc-700/80 bg-zinc-800/70 text-zinc-100 hover:bg-zinc-700/80 transition-colors"
                                                 :disabled="row.product?.status === 'processing'"
+                                                @click.stop="reprocessProductImage(row.index, true)"
                                             >
-                                                {{ row.imageNextAction?.label || 'Próxima ação' }}
+                                                Reprocessar
                                             </button>
+
                                             <label
-                                                v-if="row.product?.status === 'review_pending' || row.product?.status === 'error'"
                                                 :for="`image-upload-${row.productId}`"
-                                                class="h-6 inline-flex items-center px-2 text-[9px] rounded border border-zinc-700/80 bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700/80 cursor-pointer transition-colors"
+                                                class="h-7 inline-flex items-center px-2.5 text-[10px] rounded-md border border-zinc-700/80 bg-zinc-800/70 text-zinc-100 hover:bg-zinc-700/80 cursor-pointer transition-colors"
                                             >
                                                 Upload
                                             </label>
+
                                             <button
                                                 type="button"
                                                 v-if="row.product?.status === 'review_pending' || row.product?.status === 'error'"
-                                                class="h-6 px-2 text-[9px] rounded border border-zinc-700/80 bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700/80 transition-colors"
+                                                class="h-7 px-2.5 text-[10px] rounded-md border border-zinc-700/80 bg-zinc-800/70 text-zinc-100 hover:bg-zinc-700/80 transition-colors"
                                                 @click.stop="runImageQuickAction(row, 'storage')"
                                             >
                                                 Storage
                                             </button>
                                         </div>
+
+                                        <button
+                                            type="button"
+                                            v-if="row.imageNextAction"
+                                            class="w-full h-7 px-2.5 text-[10px] rounded-md border border-amber-700/70 bg-amber-800/40 text-amber-100 hover:bg-amber-700/60 transition-colors text-left"
+                                            @click.stop="runImageNextAction(row)"
+                                            :disabled="row.product?.status === 'processing'"
+                                        >
+                                            {{ row.imageNextAction?.label || 'Próxima ação' }}
+                                        </button>
                                     </div>
                                 </td>
 
@@ -2706,7 +2696,7 @@ const getAssetDisplayName = (asset: any): string => {
                     </table>
                 </div>
 
-                <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pt-2 border-t border-white/5">
+                <div class="shrink-0 flex flex-col sm:flex-row justify-between sm:items-center gap-2 pt-2 border-t border-white/5">
                     <button @click="startAppendFromReview" class="text-xs text-zinc-500 hover:text-white flex items-center gap-1">
                          <Plus class="w-3 h-3" /> Adicionar via lista/arquivo
                     </button>

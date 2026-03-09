@@ -13,9 +13,14 @@ const email = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const isLoading = ref(false)
+const isRedirecting = ref(false)
 const errorMessage = ref('')
 
 const handleLogin = async () => {
+  if (isLoading.value || isRedirecting.value) {
+    return
+  }
+
   if (!email.value || !password.value) {
     errorMessage.value = 'Por favor, preencha todos os campos'
     return
@@ -27,9 +32,11 @@ const handleLogin = async () => {
   try {
     await auth.signIn(email.value, password.value)
 
-    // Redirect to dashboard
-    await navigateTo('/')
+    // Avoid overlapping Nuxt navigations if the user submits twice.
+    isRedirecting.value = true
+    await navigateTo('/', { replace: true })
   } catch (error: any) {
+    isRedirecting.value = false
     errorMessage.value = error.message || 'Erro ao fazer login. Verifique suas credenciais.'
   } finally {
     isLoading.value = false

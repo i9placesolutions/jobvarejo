@@ -49,7 +49,7 @@ export default defineEventHandler(async (event) => {
     }).catch(() => {
       // no-op, onClosed will handle cleanup
     })
-  }, 25_000)
+  }, 10_000)
 
   stream.onClosed(async () => {
     clearInterval(heartbeatInterval)
