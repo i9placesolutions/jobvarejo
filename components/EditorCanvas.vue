@@ -907,6 +907,11 @@ const loadLabelTemplatesFromDb = async () => {
 
 const ensureLabelTemplatesReady = async () => {
     await loadLabelTemplatesFromDb();
+    await ensureBuiltInDefaultLabelTemplate();
+    await ensureBuiltInAtacarejoLabelTemplate();
+    await ensureBuiltInBlackYellowLabelTemplate();
+    await ensureBuiltInOfertaAmarelaLabelTemplate();
+    await ensureBuiltInRedBurstLabelTemplate();
 
     // Generate/refresh previews in-memory.
     // This self-heals stale/broken thumbnails after reload or renderer updates.
@@ -30795,6 +30800,8 @@ async function updateLabelTemplateFromSelection(templateId: string) {
 }
 
 function deleteLabelTemplateById(templateId: string) {
+    const template = (labelTemplates.value || []).find(x => x.id === templateId);
+    if ((template as any)?.isBuiltIn) return;
     labelTemplates.value = (labelTemplates.value || []).filter(x => x.id !== templateId);
     syncLabelTemplatesIntoProjectPages('user');
     saveCurrentState();

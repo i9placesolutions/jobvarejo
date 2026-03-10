@@ -292,6 +292,7 @@ const formatDate = (dateStr: string) => {
               </svg>
             </button>
             <button
+              v-if="!tpl.isBuiltIn"
               class="ltm-template-action ltm-template-action--delete"
               @click="pendingDeleteId = tpl.id"
               title="Excluir modelo"
