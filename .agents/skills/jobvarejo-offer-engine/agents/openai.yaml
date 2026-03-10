@@ -1,0 +1,4 @@
+interface:
+  display_name: "JobVarejo Offer Engine"
+  short_description: "Opera fluxo de ofertas e encartes"
+  default_prompt: "Use $jobvarejo-offer-engine para estruturar, validar ou automatizar o fluxo de ofertas do JobVarejo."

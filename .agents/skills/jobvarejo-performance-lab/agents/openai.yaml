@@ -1,0 +1,4 @@
+interface:
+  display_name: "JobVarejo Performance Lab"
+  short_description: "Investiga gargalos do editor e APIs"
+  default_prompt: "Use $jobvarejo-performance-lab para investigar ou corrigir gargalos de performance no JobVarejo."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Figma + Canva Bridge"
+  short_description: "Integra Figma MCP e Canva ao repo"
+  default_prompt: "Use $figma-canva-bridge para configurar ou aplicar integracoes de Figma e Canva neste projeto."
