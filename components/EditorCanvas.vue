@@ -4614,6 +4614,7 @@ const {
   triggerAutoSave,
   cancelAutoSave,
   flushAutoSave,
+  flushPendingLocalDrafts,
   ensurePageCanvasDataLoaded,
   scheduleCanvasDataPrefetch,
   isSaving,
@@ -6835,6 +6836,12 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
             } catch (err) {
                 console.warn('[persist] Falha ao salvar estado em flush de lifecycle:', err);
             }
+        }
+
+        try {
+            flushPendingLocalDrafts();
+        } catch (err) {
+            console.warn('[persist] Falha ao flushar drafts locais pendentes:', err);
         }
 
         // Also force remote save path whenever possible.
@@ -24469,7 +24476,12 @@ const simulateSmartGrid = async (
 
         // If the user picked a template while appending, keep the zone consistent (apply to existing cards too).
         if (targetZone && mode === 'append' && requestedTplId && requestedTplId !== prevZoneTplIdNormalized && existingCount > 0) {
-            await applyLabelTemplateToZone(targetZone, requestedTplId);
+            await applyLabelTemplateToZone(targetZone, requestedTplId, {
+                applyToExisting: true,
+                requestRender: false,
+                save: false,
+                cards: existingZoneCardsAtStart
+            });
         }
 
         const zoneStylesForNewCards = targetZone
@@ -24760,7 +24772,11 @@ const simulateSmartGrid = async (
             try {
                 const cache = (mode === 'append') ? [...existingCards, ...smartObjects] : smartObjects;
                 syncZoneCardFrameBindings(targetZone, cache);
-                recalculateZoneLayout(targetZone, cache, { save: false });
+                recalculateZoneLayout(targetZone, cache, {
+                    save: false,
+                    requestRender: false,
+                    trustCachedChildren: true
+                });
             } catch (calcErr) {
                 console.warn('Grid layout recalc error:', calcErr);
             }
@@ -25542,7 +25558,7 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
     return changed;
 };
 
-const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opts: { prop?: string } = {}) => {
+const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opts: { prop?: string; cards?: any[] } = {}) => {
     const summary = { cardsTouched: 0, fastApplied: 0, fullRelayout: 0 };
     if (!canvas.value) {
         console.warn('⚠️ [applyGlobalStylesToCards] No canvas!');
@@ -25578,6 +25594,7 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
         });
         return Array.from(map.values());
     };
+    const suppliedCards = Array.isArray(opts?.cards) ? dedupeCards(opts.cards.filter(Boolean)) : [];
     const hasStrongCardSignature = (o: any) => {
         if (!o || o.type !== 'group' || typeof o.getObjects !== 'function') return false;
         const cw = Number((o as any)?._cardWidth);
@@ -25595,7 +25612,7 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
         return hasPriceGroup && hasImage;
     };
 
-    let list: any[] = allCards;
+    let list: any[] = suppliedCards.length > 0 ? suppliedCards : allCards;
     const zoneWarnKey = String((zone as any)?._customId || '').trim() || 'unknown-zone';
     const resolveCardsForZone = (zoneObj: any, pool: any[]) => {
         const zid = String((zoneObj as any)?._customId || '').trim();
@@ -25632,7 +25649,7 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
 
         return dedupeCards([...fromBinding, ...fromSlot, ...fromHeuristic, ...fromIntersection]);
     };
-    if (zone && isLikelyProductZone(zone)) {
+    if (!suppliedCards.length && zone && isLikelyProductZone(zone)) {
         list = resolveCardsForZone(zone, allCards);
 
         // Multi-zone safety: never bleed a zone style into every card.
@@ -31950,8 +31967,27 @@ const cloneTemplateGroupJson = (group: any) => {
     }
 };
 
-async function applyLabelTemplateToZone(zone: any, templateId?: string, applyToExisting: boolean = false) {
+type ApplyLabelTemplateToZoneOptions = {
+    applyToExisting?: boolean;
+    requestRender?: boolean;
+    save?: boolean;
+    cards?: any[];
+};
+
+async function applyLabelTemplateToZone(
+    zone: any,
+    templateId?: string,
+    options: boolean | ApplyLabelTemplateToZoneOptions = false
+) {
     if (!canvas.value || !zone || !isLikelyProductZone(zone)) return;
+    const applyOptions = typeof options === 'boolean'
+        ? { applyToExisting: options, requestRender: true, save: true, cards: undefined }
+        : {
+            applyToExisting: !!options?.applyToExisting,
+            requestRender: options?.requestRender !== false,
+            save: options?.save !== false,
+            cards: Array.isArray(options?.cards) ? options.cards.filter(Boolean) : undefined
+        };
     const id = templateId || undefined;
     const prev = getZoneGlobalStyles(zone);
     (zone as any)._zoneGlobalStyles = { ...prev, splashTemplateId: id };
@@ -31970,26 +32006,32 @@ async function applyLabelTemplateToZone(zone: any, templateId?: string, applyToE
 
     // Only apply to existing cards if explicitly requested (e.g., user explicitly changes template)
     // If applyToExisting is false, just update the reference for new products
-    if (applyToExisting) {
-        const cards = getZoneChildren(zone);
+    if (applyOptions.applyToExisting) {
+        const cards = applyOptions.cards && applyOptions.cards.length > 0
+            ? applyOptions.cards
+            : getZoneChildren(zone);
         for (const card of cards) {
-            if (id) await applyLabelTemplateToCard(card, id);
-            else await resetCardPriceGroupToDefault(card);
+            try {
+                if (id) await applyLabelTemplateToCard(card, id);
+                else await resetCardPriceGroupToDefault(card);
+            } catch (err) {
+                console.warn('[labelTemplates] Failed to apply zone template to card', err);
+            }
         }
 
         // Also re-apply colors/text style if the zone has global styles.
         const styles = getZoneGlobalStyles(zone);
-        applyGlobalStylesToCards(styles, zone);
+        applyGlobalStylesToCards(styles, zone, { cards });
     }
 
-    canvas.value.requestRenderAll();
-    saveCurrentState();
+    if (applyOptions.requestRender) canvas.value.requestRenderAll();
+    if (applyOptions.save) saveCurrentState();
 }
 
 const applyTemplateToActiveZone = (templateId?: string) => {
     const zone = canvas.value?.getActiveObject?.();
     if (zone && isLikelyProductZone(zone)) {
-        void applyLabelTemplateToZone(zone, templateId, true);
+        void applyLabelTemplateToZone(zone, templateId, { applyToExisting: true });
     }
 }
 
@@ -33878,21 +33920,31 @@ const getZoneHighlightPredicate = (zone: any, cards: any[]) => {
     };
 };
 
-const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?: boolean } = {}) => {
+type RecalculateZoneLayoutOptions = {
+    save?: boolean;
+    requestRender?: boolean;
+    trustCachedChildren?: boolean;
+};
+
+const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: RecalculateZoneLayoutOptions = {}) => {
     if (!zone || !canvas.value) return;
     const shouldSave = opts.save !== false;
+    const shouldRender = opts.requestRender !== false;
+    const cachedList = Array.isArray(cachedChildren) ? cachedChildren.filter(Boolean) : [];
     
     // 1. Find cards in zone (Use cache if available for performance)
     const cardMap = new Map<any, any>();
-    (cachedChildren || []).forEach((card: any) => {
+    cachedList.forEach((card: any) => {
         const key = card._customId ?? card.id ?? card;
         cardMap.set(key, card);
     });
-    
-    getZoneChildren(zone).forEach((card: any) => {
-        const key = card._customId ?? card.id ?? card;
-        cardMap.set(key, card);
-    });
+
+    if (!opts.trustCachedChildren || cachedList.length === 0) {
+        getZoneChildren(zone).forEach((card: any) => {
+            const key = card._customId ?? card.id ?? card;
+            cardMap.set(key, card);
+        });
+    }
     
     let cards = Array.from(cardMap.values());
     
@@ -34126,7 +34178,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
                             placeCard(card, x, y, cellW, normCardH, cards.indexOf(card));
                         });
 
-                        canvas.value.requestRenderAll();
+                        if (shouldRender) canvas.value.requestRenderAll();
                         if (shouldSave) saveCurrentState();
                         return;
                     }
@@ -34223,7 +34275,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
                         placeCard(card, x, y, cellW, normCardH, cards.indexOf(card));
                     });
 
-                    canvas.value.requestRenderAll();
+                    if (shouldRender) canvas.value.requestRenderAll();
                     if (shouldSave) saveCurrentState();
                     return;
                 }
@@ -34321,7 +34373,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: { save?:
         placeCard(card, x, y, rowItemW, itemH, index);
     });
 
-    canvas.value.requestRenderAll();
+    if (shouldRender) canvas.value.requestRenderAll();
     if (shouldSave) saveCurrentState();
 }
 

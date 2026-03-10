@@ -68,7 +68,25 @@ const getDraftKey = (projectId: string, pageId: string) => `${DRAFT_KEY_PREFIX}$
 type DraftPayload = { updatedAt: number; canvasData: any }
 const DRAFT_PROJECT_KEY_PREFIX = 'jobvarejo:draft:project:'
 const getProjectDraftKey = (projectId: string) => `${DRAFT_PROJECT_KEY_PREFIX}${projectId}`
-type ProjectDraftPayload = { updatedAt: number; project: { id: string; name: string; pages: Page[]; activePageIndex: number } }
+type ProjectDraftPagePayload = Omit<Page, 'canvasData'> & { canvasData?: any }
+type ProjectDraftPayload = {
+    updatedAt: number
+    project: {
+        id: string
+        name: string
+        pages: ProjectDraftPagePayload[]
+        activePageIndex: number
+    }
+}
+type PendingLocalDraftOperation =
+    | { type: 'set'; value: unknown }
+    | { type: 'remove' }
+
+const pendingLocalDraftOperations = new Map<string, PendingLocalDraftOperation>()
+let pendingLocalDraftFlushTimer: ReturnType<typeof setTimeout> | null = null
+let pendingLocalDraftFlushIdleId: number | null = null
+const LOCAL_DRAFT_FLUSH_DELAY_MS = 180
+const LOCAL_DRAFT_FLUSH_IDLE_TIMEOUT_MS = 1200
 
 const makePageId = (): string => Math.random().toString(36).substr(2, 9)
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -172,12 +190,77 @@ const pickBestRemoteCanvasData = (storageCanvasData: any, dbCanvasData: any) => 
     return { data: storageCanvasData, source: 'storage(legacy-default)' as const }
 }
 
+const getPendingLocalDraftValue = (key: string): unknown | null | undefined => {
+    const op = pendingLocalDraftOperations.get(key)
+    if (!op) return undefined
+    return op.type === 'set' ? op.value : null
+}
+
+const clearPendingLocalDraftFlushSchedule = () => {
+    if (pendingLocalDraftFlushTimer) {
+        clearTimeout(pendingLocalDraftFlushTimer)
+        pendingLocalDraftFlushTimer = null
+    }
+    if (pendingLocalDraftFlushIdleId !== null && typeof window !== 'undefined') {
+        const cic = (window as any).cancelIdleCallback
+        if (typeof cic === 'function') {
+            cic(pendingLocalDraftFlushIdleId)
+        }
+        pendingLocalDraftFlushIdleId = null
+    }
+}
+
+const flushPendingLocalDrafts = () => {
+    if (import.meta.server) return
+    clearPendingLocalDraftFlushSchedule()
+    if (!pendingLocalDraftOperations.size) return
+
+    const operations = Array.from(pendingLocalDraftOperations.entries())
+    pendingLocalDraftOperations.clear()
+    for (const [key, operation] of operations) {
+        try {
+            if (operation.type === 'set') {
+                localStorage.setItem(key, JSON.stringify(operation.value))
+            } else {
+                localStorage.removeItem(key)
+            }
+        } catch {
+            // ignore quota / serialization issues
+        }
+    }
+}
+
+const schedulePendingLocalDraftFlush = () => {
+    if (import.meta.server || !pendingLocalDraftOperations.size) return
+    if (pendingLocalDraftFlushTimer || pendingLocalDraftFlushIdleId !== null) return
+
+    if (typeof window !== 'undefined') {
+        const ric = (window as any).requestIdleCallback
+        if (typeof ric === 'function') {
+            pendingLocalDraftFlushIdleId = ric(() => {
+                pendingLocalDraftFlushIdleId = null
+                flushPendingLocalDrafts()
+            }, { timeout: LOCAL_DRAFT_FLUSH_IDLE_TIMEOUT_MS })
+        }
+    }
+
+    pendingLocalDraftFlushTimer = setTimeout(() => {
+        pendingLocalDraftFlushTimer = null
+        flushPendingLocalDrafts()
+    }, LOCAL_DRAFT_FLUSH_DELAY_MS)
+}
+
 const readDraft = (projectId: string, pageId: string): DraftPayload | null => {
     if (import.meta.server) return null
     try {
-        const raw = localStorage.getItem(getDraftKey(projectId, pageId))
-        if (!raw) return null
-        const parsed = JSON.parse(raw)
+        const key = getDraftKey(projectId, pageId)
+        const queuedValue = getPendingLocalDraftValue(key)
+        const parsed = queuedValue !== undefined
+            ? queuedValue
+            : (() => {
+                const raw = localStorage.getItem(key)
+                return raw ? JSON.parse(raw) : null
+            })()
         if (!parsed || typeof parsed !== 'object') return null
         if (typeof parsed.updatedAt !== 'number' || !('canvasData' in parsed)) return null
         return parsed as DraftPayload
@@ -185,11 +268,22 @@ const readDraft = (projectId: string, pageId: string): DraftPayload | null => {
         return null
     }
 }
-const writeDraft = (projectId: string, pageId: string, canvasData: any) => {
+const writeDraft = (
+    projectId: string,
+    pageId: string,
+    canvasData: any,
+    opts: { immediate?: boolean } = {}
+) => {
     if (import.meta.server) return
     try {
+        const key = getDraftKey(projectId, pageId)
         const payload: DraftPayload = { updatedAt: Date.now(), canvasData }
-        localStorage.setItem(getDraftKey(projectId, pageId), JSON.stringify(payload))
+        pendingLocalDraftOperations.set(key, { type: 'set', value: payload })
+        if (opts.immediate) {
+            flushPendingLocalDrafts()
+        } else {
+            schedulePendingLocalDraftFlush()
+        }
     } catch {
         // ignore quota / serialization issues
     }
@@ -197,7 +291,9 @@ const writeDraft = (projectId: string, pageId: string, canvasData: any) => {
 const clearDraft = (projectId: string, pageId: string) => {
     if (import.meta.server) return
     try {
-        localStorage.removeItem(getDraftKey(projectId, pageId))
+        const key = getDraftKey(projectId, pageId)
+        pendingLocalDraftOperations.delete(key)
+        localStorage.removeItem(key)
     } catch {
         // ignore
     }
@@ -254,9 +350,14 @@ const resolveCanvasDataWithDraft = (opts: {
 const readProjectDraft = (projectId: string): ProjectDraftPayload | null => {
     if (import.meta.server) return null
     try {
-        const raw = localStorage.getItem(getProjectDraftKey(projectId))
-        if (!raw) return null
-        const parsed = JSON.parse(raw)
+        const key = getProjectDraftKey(projectId)
+        const queuedValue = getPendingLocalDraftValue(key)
+        const parsed = queuedValue !== undefined
+            ? queuedValue
+            : (() => {
+                const raw = localStorage.getItem(key)
+                return raw ? JSON.parse(raw) : null
+            })()
         if (!parsed || typeof parsed !== 'object') return null
         if (typeof parsed.updatedAt !== 'number' || !parsed.project) return null
         return parsed as ProjectDraftPayload
@@ -265,20 +366,98 @@ const readProjectDraft = (projectId: string): ProjectDraftPayload | null => {
     }
 }
 
-const writeProjectDraft = () => {
+const serializeProjectDraftPages = (pages: Page[]): ProjectDraftPagePayload[] => {
+    if (!Array.isArray(pages)) return []
+    return pages.map((page) => ({
+        id: String(page?.id || '').trim() || makePageId(),
+        name: String(page?.name || '').trim() || 'Sem título',
+        width: Number(page?.width || 1080),
+        height: Number(page?.height || 1920),
+        type: page?.type === 'FREE_DESIGN' ? 'FREE_DESIGN' : 'RETAIL_OFFER',
+        canvasDataPath: typeof page?.canvasDataPath === 'string'
+            ? (page.canvasDataPath.trim() || undefined)
+            : undefined,
+        thumbnail: typeof page?.thumbnail === 'string' ? page.thumbnail : undefined,
+        thumbnailUrl: typeof page?.thumbnailUrl === 'string'
+            ? (page.thumbnailUrl.trim() || undefined)
+            : undefined,
+        lastLoadedFingerprint: typeof page?.lastLoadedFingerprint === 'string'
+            ? page.lastLoadedFingerprint
+            : undefined,
+        lastSavedFingerprint: typeof page?.lastSavedFingerprint === 'string'
+            ? page.lastSavedFingerprint
+            : undefined,
+        lastPersistedObjectCount: Number.isFinite(Number(page?.lastPersistedObjectCount))
+            ? Number(page.lastPersistedObjectCount)
+            : undefined,
+        dirty: !!page?.dirty
+    }))
+}
+
+const hydratePagesFromProjectDraft = (projectId: string, pages: ProjectDraftPagePayload[]): Page[] => {
+    if (!Array.isArray(pages)) return []
+    return pages.map((page) => {
+        const pageId = String(page?.id || '').trim() || makePageId()
+        const pageDraft = readDraft(projectId, pageId)
+        const preferredCanvasData = pageDraft?.canvasData ?? page?.canvasData ?? null
+        const normalizedCanvasData = normalizeCanvasAssetUrls(preferredCanvasData, {
+            clone: false,
+            silent: true
+        }).data
+        const hasCanvasData = !!normalizedCanvasData
+        const fingerprint = hasCanvasData ? computeCanvasFingerprint(normalizedCanvasData) : 'empty'
+        const persistedObjectCount = hasCanvasData
+            ? getCanvasObjectCount(normalizedCanvasData)
+            : (Number.isFinite(Number(page?.lastPersistedObjectCount))
+                ? Number(page.lastPersistedObjectCount)
+                : 0)
+
+        return {
+            id: pageId,
+            name: String(page?.name || '').trim() || 'Sem título',
+            width: Number(page?.width || 1080),
+            height: Number(page?.height || 1920),
+            type: page?.type === 'FREE_DESIGN' ? 'FREE_DESIGN' : 'RETAIL_OFFER',
+            canvasData: normalizedCanvasData,
+            canvasDataPath: typeof page?.canvasDataPath === 'string'
+                ? (page.canvasDataPath.trim() || undefined)
+                : undefined,
+            thumbnail: typeof page?.thumbnail === 'string' ? page.thumbnail : undefined,
+            thumbnailUrl: typeof page?.thumbnailUrl === 'string'
+                ? (page.thumbnailUrl.trim() || undefined)
+                : undefined,
+            lastLoadedFingerprint: hasCanvasData
+                ? fingerprint
+                : (typeof page?.lastLoadedFingerprint === 'string' ? page.lastLoadedFingerprint : fingerprint),
+            lastSavedFingerprint: hasCanvasData
+                ? fingerprint
+                : (typeof page?.lastSavedFingerprint === 'string' ? page.lastSavedFingerprint : fingerprint),
+            lastPersistedObjectCount: persistedObjectCount,
+            dirty: !!pageDraft?.canvasData || page?.dirty !== false
+        } as Page
+    })
+}
+
+const writeProjectDraft = (opts: { immediate?: boolean } = {}) => {
     if (import.meta.server) return
     try {
         if (!project.id) return
+        const key = getProjectDraftKey(project.id)
         const payload: ProjectDraftPayload = {
             updatedAt: Date.now(),
             project: {
                 id: project.id,
                 name: project.name,
-                pages: JSON.parse(JSON.stringify(project.pages)),
+                pages: serializeProjectDraftPages(project.pages as Page[]),
                 activePageIndex: project.activePageIndex
             }
         }
-        localStorage.setItem(getProjectDraftKey(project.id), JSON.stringify(payload))
+        pendingLocalDraftOperations.set(key, { type: 'set', value: payload })
+        if (opts.immediate) {
+            flushPendingLocalDrafts()
+        } else {
+            schedulePendingLocalDraftFlush()
+        }
     } catch {
         // ignore
     }
@@ -287,7 +466,9 @@ const writeProjectDraft = () => {
 const clearProjectDraft = (projectId: string) => {
     if (import.meta.server) return
     try {
-        localStorage.removeItem(getProjectDraftKey(projectId))
+        const key = getProjectDraftKey(projectId)
+        pendingLocalDraftOperations.delete(key)
+        localStorage.removeItem(key)
     } catch {
         // ignore
     }
@@ -564,13 +745,7 @@ export const useProject = () => {
                 try {
                     project.id = local.project.id || project.id
                     project.name = local.project.name || project.name
-                    project.pages = (local.project.pages || []).map((page: any) => ({
-                        ...page,
-                        canvasData: normalizeCanvasAssetUrls(page?.canvasData, {
-                            clone: false,
-                            silent: true
-                        }).data
-                    }))
+                    project.pages = hydratePagesFromProjectDraft(project.id, local.project.pages || [])
                     normalizeProjectPageIds(project.pages as any[], 'initProject:draft')
                     project.activePageIndex = Math.min(
                         Math.max(0, Number(local.project.activePageIndex || 0)),
@@ -670,13 +845,14 @@ export const useProject = () => {
             if (shouldMarkUnsaved) markAsUnsaved()
             // Also persist a local draft to survive reloads/offline.
             const p = project.pages[index]
+            const shouldFlushLocalDraftsNow = opts.source === 'system'
             if (p?.id && project.id) {
-                writeDraft(project.id, p.id, stampedJson)
+                writeDraft(project.id, p.id, stampedJson, { immediate: shouldFlushLocalDraftsNow })
                 if (import.meta.dev) {
                     console.log(`📝 Draft local salvo para página ${p.id}`);
                 }
             }
-            writeProjectDraft()
+            writeProjectDraft({ immediate: shouldFlushLocalDraftsNow })
             return true
         } else {
             console.error(`❌ updatePageData: página ${index} não existe!`);
@@ -1141,6 +1317,7 @@ export const useProject = () => {
         saveTimeout = null
         scheduledAutoSaveRevision = -1
         scheduledAutoSaveProjectId = ''
+        flushPendingLocalDrafts()
         if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) return
         if (!project.id || project.id.startsWith('proj_')) return
 
@@ -1170,6 +1347,7 @@ export const useProject = () => {
             return false
         }
         cancelAutoSave()
+        flushPendingLocalDrafts()
         deferredCanvasPrefetchRunId += 1
         pageCanvasLoadPromises.clear()
 
@@ -1319,21 +1497,10 @@ export const useProject = () => {
                 console.log('📝 Restaurando projeto do rascunho local (offline fallback):', id)
                 project.id = local.project.id || id
                 project.name = local.project.name || project.name
-                project.pages = (local.project.pages || []).map((page) => {
-                    const normalizedCanvasData = normalizeCanvasAssetUrls(page?.canvasData, {
-                        clone: false,
-                        silent: true
-                    }).data
-                    const fp = computeCanvasFingerprint(normalizedCanvasData)
-                    return {
-                        ...page,
-                        canvasData: normalizedCanvasData,
-                        lastLoadedFingerprint: fp,
-                        lastSavedFingerprint: fp,
-                        lastPersistedObjectCount: getCanvasObjectCount(normalizedCanvasData),
-                        dirty: true
-                    } as Page
-                })
+                project.pages = hydratePagesFromProjectDraft(project.id, local.project.pages || []).map((page) => ({
+                    ...page,
+                    dirty: true
+                }))
                 normalizeProjectPageIds(project.pages as any[], 'loadProjectDB:offline-fallback')
 	                project.activePageIndex = local.project.activePageIndex || 0
 	                hasUnsavedChanges.value = true
@@ -1390,6 +1557,7 @@ export const useProject = () => {
         triggerAutoSave,
         cancelAutoSave,
         flushAutoSave,
+        flushPendingLocalDrafts,
         ensurePageCanvasDataLoaded,
         scheduleCanvasDataPrefetch,
         loadProjectDB,

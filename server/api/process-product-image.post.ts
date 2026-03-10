@@ -53,13 +53,31 @@ const GENERIC_FLAVOR_TOKENS = new Set([
 const VARIANT_CONFLICT_TOKENS = new Set([
     'zero', 'diet', 'light', 'original', 'tradicional', 'classico',
     'limao', 'laranja', 'uva', 'morango', 'manga', 'abacaxi', 'guarana',
-    'coco', 'chocolate', 'baunilha', 'cafe', 'caramelo', 'menta'
+    'coco', 'chocolate', 'baunilha', 'cafe', 'caramelo', 'menta',
+    'integral', 'desnatado', 'semidesnatado', 'lactose', 'organico', 'natural',
+    'mini', 'max', 'plus', 'ultra', 'suave', 'forte', 'premium', 'gold'
 ]);
+const NUMERIC_SIGNAL_TOKEN_RE = /^\d{2,}$/;
+const PRODUCT_CODE_SIGNAL_TOKEN_RE = /^\d{4,}$/;
 
 const extractWeightTokens = (value: string): string[] =>
     tokenizeNormalized(value, 1)
         .filter((token) => WEIGHT_TOKEN_RE.test(token) || MULTIPACK_WEIGHT_TOKEN_RE.test(token))
         .filter((token, idx, arr) => arr.indexOf(token) === idx);
+
+const extractVariantTokens = (value: string): string[] =>
+    tokenizeNormalized(value, 1)
+        .filter((token) => VARIANT_CONFLICT_TOKENS.has(token))
+        .filter((token, idx, arr) => arr.indexOf(token) === idx);
+
+const extractNumericSignalTokens = (value: string, minLen = 2): string[] =>
+    tokenizeNormalized(value, 1)
+        .filter((token) => token.length >= minLen)
+        .filter((token) => NUMERIC_SIGNAL_TOKEN_RE.test(token))
+        .filter((token, idx, arr) => arr.indexOf(token) === idx);
+
+const extractProductCodeSignalTokens = (value: string): string[] =>
+    extractNumericSignalTokens(value, 4).filter((token) => PRODUCT_CODE_SIGNAL_TOKEN_RE.test(token));
 
 const hasTokenIntersection = (a: string[], bSet: Set<string>): boolean => {
     for (const token of a) {
@@ -79,8 +97,10 @@ const passesMetadataHardGate = (opts: {
     brand?: string;
     flavor?: string;
     weight?: string;
+    productCode?: string;
 }): boolean => {
-    const haystackRaw = [opts.title, opts.source, opts.domain, opts.url].filter(Boolean).join(' ');
+    const metadataRaw = [opts.title, opts.source, opts.domain].filter(Boolean).join(' ');
+    const haystackRaw = [metadataRaw, opts.url].filter(Boolean).join(' ');
     const haystackNormalized = normalizeSearchTerm(haystackRaw);
     const haystackTokenSet = new Set(haystackNormalized.split(' ').filter(Boolean));
     if (haystackTokenSet.size === 0) return false;
@@ -97,10 +117,27 @@ const passesMetadataHardGate = (opts: {
         if (hasConflictingVariantHint) return false;
     }
 
+    const queryVariantTokens = extractVariantTokens([opts.term, opts.flavor].filter(Boolean).join(' '));
+    const candidateVariantTokens = extractVariantTokens(haystackRaw);
+    if (queryVariantTokens.length > 0 && candidateVariantTokens.length > 0) {
+        const queryVariantSet = new Set(queryVariantTokens);
+        const hasExpectedVariant = candidateVariantTokens.some((token) => queryVariantSet.has(token));
+        const hasConflictingVariant = candidateVariantTokens.some((token) => !queryVariantSet.has(token));
+        if (!hasExpectedVariant || hasConflictingVariant) return false;
+    }
+
     const expectedWeightTokens = extractWeightTokens(String(opts.weight || ''));
     if (expectedWeightTokens.length > 0) {
         const candidateWeightTokens = new Set(extractWeightTokens(haystackRaw));
         if (candidateWeightTokens.size > 0 && !expectedWeightTokens.some((token) => candidateWeightTokens.has(token))) {
+            return false;
+        }
+    }
+
+    const productCodeTokens = extractProductCodeSignalTokens(String(opts.productCode || ''));
+    if (productCodeTokens.length > 0) {
+        const candidateCodeTokens = new Set(extractProductCodeSignalTokens(metadataRaw));
+        if (candidateCodeTokens.size > 0 && !productCodeTokens.some((token) => candidateCodeTokens.has(token))) {
             return false;
         }
     }
@@ -111,9 +148,21 @@ const passesMetadataHardGate = (opts: {
     for (const t of termTokens) {
         if (haystackTokenSet.has(t)) hits++;
     }
-    const requiredHits = termTokens.length >= 5
-        ? Math.ceil(termTokens.length * 0.5)
-        : Math.max(1, Math.ceil(termTokens.length * 0.45));
+    const hasStrongMetadataSignals =
+        flavorTokens.length > 0 ||
+        queryVariantTokens.length > 0 ||
+        expectedWeightTokens.length > 0 ||
+        productCodeTokens.length > 0;
+    const requiredHits = hasStrongMetadataSignals
+        ? Math.min(
+            termTokens.length,
+            termTokens.length >= 5
+                ? Math.ceil(termTokens.length * 0.6)
+                : Math.max(1, Math.ceil(termTokens.length * 0.5))
+        )
+        : (termTokens.length >= 5
+            ? Math.ceil(termTokens.length * 0.5)
+            : Math.max(1, Math.ceil(termTokens.length * 0.45)));
     if (hits < requiredHits) return false;
 
     if (BAD_HINT_REGEX.test(haystackRaw) && hits < Math.max(2, requiredHits)) return false;
@@ -190,26 +239,38 @@ const buildSerperQueryVariants = (opts: {
 
 const rankExternalCandidatesByMetadata = (
     list: ExternalCandidate[],
-    opts: { term: string; brand?: string; flavor?: string; weight?: string }
+    opts: { term: string; brand?: string; flavor?: string; weight?: string; productCode?: string }
 ): ExternalCandidate[] => {
     const tokenizedTerm = tokenizeNormalized(opts.term).filter((token) => token.length >= 3);
     const termTokenSet = [...new Set(tokenizedTerm)];
     const brandTokens = tokenizeNormalized(String(opts.brand || ''), 2);
     const flavorTokens = tokenizeNormalized(String(opts.flavor || ''))
         .filter((token) => !GENERIC_FLAVOR_TOKENS.has(token));
+    const queryVariantTokens = extractVariantTokens([opts.term, opts.flavor].filter(Boolean).join(' '));
+    const queryVariantSet = new Set(queryVariantTokens);
     const weightTokens = extractWeightTokens(String(opts.weight || ''));
+    const productCodeTokens = extractProductCodeSignalTokens(String(opts.productCode || ''));
+    const criticalNumericTokens = extractNumericSignalTokens(String(opts.term || ''));
     const badDomainRegex = /(pinterest|pinimg|freepik|wikimedia|wikipedia|shutterstock|depositphotos|istockphoto|vectorstock)/i;
 
     return [...list]
         .map((entry) => {
-            const haystackRaw = [entry.title, entry.source, entry.domain, entry.url].filter(Boolean).join(' ');
+            const metadataRaw = [entry.title, entry.source, entry.domain].filter(Boolean).join(' ');
+            const haystackRaw = [metadataRaw, entry.url].filter(Boolean).join(' ');
             const haystackNormalized = normalizeSearchTerm(haystackRaw);
             const haystackTokenSet = new Set(haystackNormalized.split(' ').filter(Boolean));
             const haystackWeightSet = new Set(extractWeightTokens(haystackRaw));
+            const candidateVariantTokens = extractVariantTokens(haystackRaw);
+            const candidateNumericTokens = new Set(extractNumericSignalTokens(metadataRaw));
+            const candidateProductCodeTokens = new Set(extractProductCodeSignalTokens(metadataRaw));
             let score = Number(entry.score || 0);
+            let termHits = 0;
 
             for (const token of termTokenSet) {
-                if (haystackTokenSet.has(token)) score += 2.1;
+                if (haystackTokenSet.has(token)) {
+                    score += 2.1;
+                    termHits += 1;
+                }
             }
             if (brandTokens.length > 0) {
                 score += hasTokenIntersection(brandTokens, haystackTokenSet) ? 14 : -12;
@@ -217,9 +278,29 @@ const rankExternalCandidatesByMetadata = (
             if (flavorTokens.length > 0) {
                 score += hasTokenIntersection(flavorTokens, haystackTokenSet) ? 6 : -3.5;
             }
+            if (queryVariantTokens.length > 0) {
+                const variantHits = candidateVariantTokens.filter((token) => queryVariantSet.has(token));
+                const conflictingVariants = candidateVariantTokens.filter((token) => !queryVariantSet.has(token));
+                if (variantHits.length > 0) score += 9;
+                else if (candidateVariantTokens.length > 0) score -= 18;
+                else score -= 2.5;
+                if (conflictingVariants.length > 0) score -= 14;
+            } else if (candidateVariantTokens.length > 0) {
+                score -= 2.5;
+            }
             if (weightTokens.length > 0) {
                 if (haystackWeightSet.size === 0) score -= 1.5;
                 else score += weightTokens.some((token) => haystackWeightSet.has(token)) ? 9 : -12;
+            }
+            if (productCodeTokens.length > 0) {
+                if (productCodeTokens.some((token) => candidateProductCodeTokens.has(token))) score += 18;
+                else if (candidateProductCodeTokens.size > 0) score -= 16;
+                else score -= 1.5;
+            }
+            if (criticalNumericTokens.length > 0) {
+                const numericHits = criticalNumericTokens.filter((token) => candidateNumericTokens.has(token)).length;
+                if (numericHits > 0) score += numericHits * 3.2;
+                else if (candidateNumericTokens.size > 0) score -= 4;
             }
             if (BAD_HINT_REGEX.test(haystackRaw)) score -= 9;
             if (badDomainRegex.test(String(entry.domain || entry.source || ''))) score -= 4;
@@ -231,6 +312,7 @@ const rankExternalCandidatesByMetadata = (
                 if (minSide >= 280) score += 2;
                 else if (minSide < 120) score -= 4;
             }
+            if (termTokenSet.length > 0 && (termHits / termTokenSet.length) < 0.5) score -= 4.5;
 
             return { entry, score };
         })
@@ -751,7 +833,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (candidates.length > 1) {
-        candidates = rankExternalCandidatesByMetadata(candidates, { term, brand, flavor, weight }).slice(0, 8);
+        candidates = rankExternalCandidatesByMetadata(candidates, { term, brand, flavor, weight, productCode }).slice(0, 8);
     }
 
     if (candidates.length === 0) {
@@ -785,7 +867,8 @@ export default defineEventHandler(async (event) => {
         term,
         brand,
         flavor,
-        weight
+        weight,
+        productCode
     }));
     if (gatedCandidates.length > 0) {
         candidates = gatedCandidates;

@@ -88,27 +88,27 @@ const expandedSections = ref({
 });
 
 const lastRowBehaviorOptions = [
-  { value: 'fill', label: 'Preencher', hint: 'Expande a linha restante.' },
-  { value: 'center', label: 'Centralizar', hint: 'Mantem o grupo compacto.' },
-  { value: 'left', label: 'Início', hint: 'Alinha tudo ao começo.' },
-  { value: 'stretch', label: 'Distribuir', hint: 'Abre o respiro entre cards.' }
+  { value: 'fill', label: 'Expandir', hint: 'Alarga a linha final para evitar buracos.' },
+  { value: 'center', label: 'Centralizar', hint: 'Mantém os últimos cards agrupados.' },
+  { value: 'left', label: 'À esquerda', hint: 'Fecha a linha no mesmo lado da leitura.' },
+  { value: 'stretch', label: 'Distribuir', hint: 'Espalha o espaço entre os cards restantes.' }
 ] as const;
 
 const layoutDirectionOptions = [
-  { value: 'horizontal', label: 'Por linhas', hint: 'Preenche da esquerda para a direita.' },
-  { value: 'vertical', label: 'Por colunas', hint: 'Prioriza o fluxo de cima para baixo.' }
+  { value: 'horizontal', label: 'Linha a linha', hint: 'Preenche na leitura natural, da esquerda para a direita.' },
+  { value: 'vertical', label: 'Coluna a coluna', hint: 'Desce primeiro e depois avança para o lado.' }
 ] as const;
 
 const verticalAlignOptions = [
   { value: 'top', label: 'Topo' },
   { value: 'center', label: 'Centro' },
   { value: 'bottom', label: 'Base' },
-  { value: 'stretch', label: 'Esticar' }
+  { value: 'stretch', label: 'Preencher' }
 ] as const;
 
 const cardAspectRatioOptions = [
-  { value: 'fill', label: 'Preencher' },
-  { value: 'auto', label: 'Auto' },
+  { value: 'fill', label: 'Livre' },
+  { value: 'auto', label: 'Automático' },
   { value: 'square', label: '1:1' },
   { value: '3:4', label: '3:4' },
   { value: '4:3', label: '4:3' },
@@ -392,14 +392,14 @@ const activePreviewCells = computed(() => createPreviewCells(activePreviewPreset
 
 const zoneColumnsLabel = computed(() =>
   normalizedZoneState.value.columns > 0
-    ? `${normalizedZoneState.value.columns} colunas`
+    ? `${normalizedZoneState.value.columns} por linha`
     : 'Colunas automáticas'
 );
 
 const zoneRowsLabel = computed(() =>
   normalizedZoneState.value.rows > 0
     ? `${normalizedZoneState.value.rows} linhas`
-    : 'Linhas automáticas'
+    : 'Altura livre'
 );
 
 const spacingSummaryLabel = computed(() => {
@@ -443,15 +443,15 @@ const zoneLockLabel = computed(() => (
 ));
 
 const flowLabel = computed(() =>
-  layoutDirectionOptions.find((option) => option.value === normalizedZoneState.value.layoutDirection)?.label ?? 'Por linhas'
+  layoutDirectionOptions.find((option) => option.value === normalizedZoneState.value.layoutDirection)?.label ?? 'Linha a linha'
 );
 
 const verticalAlignLabel = computed(() =>
-  verticalAlignOptions.find((option) => option.value === normalizedZoneState.value.verticalAlign)?.label ?? 'Esticar'
+  verticalAlignOptions.find((option) => option.value === normalizedZoneState.value.verticalAlign)?.label ?? 'Preencher'
 );
 
 const aspectRatioLabel = computed(() =>
-  cardAspectRatioOptions.find((option) => option.value === normalizedZoneState.value.cardAspectRatio)?.label ?? 'Preencher'
+  cardAspectRatioOptions.find((option) => option.value === normalizedZoneState.value.cardAspectRatio)?.label ?? 'Livre'
 );
 
 const overviewMetrics = computed(() => ([
@@ -723,7 +723,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
                 <span class="section-title">Estrutura da grade</span>
                 <span class="section-summary">{{ zoneColumnsLabel }}</span>
               </div>
-              <p class="section-description">Ajustes finos de colunas, linhas e distribuição interna.</p>
+              <p class="section-description">Defina a malha da zona e como os cards fecham cada espaço.</p>
             </div>
           </div>
           <component :is="expandedSections.layout ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -731,13 +731,19 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
         <div v-show="expandedSections.layout" class="section-panel">
           <div class="control-card">
-            <div class="control-card__head">
-              <div>
-                <label class="field-label">Colunas por linha</label>
-                <p class="field-hint">Use `0` para deixar a zona decidir automaticamente.</p>
+            <div class="control-card__head control-card__head--stacked">
+              <div class="control-card__copy">
+                <div class="control-card__title-row">
+                  <label for="product-zone-columns" class="field-label">Colunas</label>
+                  <span class="value-badge">{{ zone.columns === 0 ? 'Autoajuste' : 'Quantidade fixa' }}</span>
+                </div>
+                <p id="product-zone-columns-hint" class="field-hint">
+                  Define quantos cards entram em cada linha. Use `0` para a zona se ajustar sozinha.
+                </p>
               </div>
-              <div class="value-editor">
+              <div class="value-editor value-editor--full">
                 <input
+                  id="product-zone-columns"
                   type="number"
                   min="0"
                   max="8"
@@ -745,8 +751,9 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
                   inputmode="numeric"
                   class="value-input"
                   :value="zone.columns ?? 0"
-                  aria-label="Colunas por linha"
-                  title="0 = automático"
+                  aria-describedby="product-zone-columns-hint"
+                  aria-label="Colunas da grade"
+                  title="0 = autoajuste"
                   @input="updateZoneInt('columns', ($event.target as HTMLInputElement).valueAsNumber, zone.columns ?? 0, 0, 8)"
                 />
                 <span class="value-suffix">{{ zone.columns === 0 ? 'Auto' : 'col' }}</span>
@@ -758,22 +765,30 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
               max="8"
               :value="zone.columns ?? 0"
               class="slider text-sky-400"
+              aria-label="Controle deslizante de colunas da grade"
               @input="updateZoneInt('columns', ($event.target as HTMLInputElement).value, zone.columns ?? 0, 0, 8)"
             />
             <div class="range-scale">
-              <span>Auto</span>
-              <span>8</span>
+              <span>Autoajuste</span>
+              <span>8 colunas</span>
             </div>
           </div>
 
           <div class="control-card">
-            <div class="control-card__head">
-              <div>
-                <label class="field-label">Linhas visadas</label>
-                <p class="field-hint">Bom para impor uma moldura fixa em encartes fechados.</p>
+            <div class="control-card__head control-card__head--stacked">
+              <div class="control-card__copy">
+                <div class="control-card__title-row">
+                  <label for="product-zone-rows" class="field-label">Linhas</label>
+                  <span class="value-badge">{{ zone.rows === 0 ? 'Altura livre' : 'Moldura fixa' }}</span>
+                </div>
+                <p id="product-zone-rows-hint" class="field-hint">
+                  Limita a altura da grade quando você quer fechar a vitrine num número fixo de faixas. Use `0`
+                  para crescer conforme a oferta.
+                </p>
               </div>
-              <div class="value-editor">
+              <div class="value-editor value-editor--full">
                 <input
+                  id="product-zone-rows"
                   type="number"
                   min="0"
                   max="8"
@@ -781,8 +796,9 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
                   inputmode="numeric"
                   class="value-input"
                   :value="zone.rows ?? 0"
-                  aria-label="Linhas visadas"
-                  title="0 = automático"
+                  aria-describedby="product-zone-rows-hint"
+                  aria-label="Linhas da grade"
+                  title="0 = altura livre"
                   @input="updateZoneInt('rows', ($event.target as HTMLInputElement).valueAsNumber, zone.rows ?? 0, 0, 8)"
                 />
                 <span class="value-suffix">{{ zone.rows === 0 ? 'Auto' : 'lin' }}</span>
@@ -794,18 +810,19 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
               max="8"
               :value="zone.rows ?? 0"
               class="slider text-sky-400"
+              aria-label="Controle deslizante de linhas da grade"
               @input="updateZoneInt('rows', ($event.target as HTMLInputElement).value, zone.rows ?? 0, 0, 8)"
             />
             <div class="range-scale">
-              <span>Auto</span>
-              <span>8</span>
+              <span>Altura livre</span>
+              <span>8 linhas</span>
             </div>
           </div>
 
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Fluxo de preenchimento</label>
-              <p class="field-hint">Controla a ordem em que os produtos ocupam a grade.</p>
+              <label class="field-label">Ordem de preenchimento</label>
+              <p class="field-hint">Define se a grade avança linha a linha ou coluna a coluna.</p>
             </div>
             <div class="segmented-grid segmented-grid--2">
               <button
@@ -824,8 +841,8 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Comportamento da última linha</label>
-              <p class="field-hint">Evita uma última faixa desbalanceada quando sobram poucos cards.</p>
+              <label class="field-label">Fechamento da última linha</label>
+              <p class="field-hint">Escolhe como acomodar os cards que sobrarem no fim da grade.</p>
             </div>
             <div class="segmented-grid segmented-grid--2">
               <button
@@ -844,8 +861,8 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Alinhamento vertical</label>
-              <p class="field-hint">Define como os cartões ocupam a altura do slot disponível.</p>
+              <label class="field-label">Ocupação vertical</label>
+              <p class="field-hint">Controla como cada card usa a altura disponível do slot.</p>
             </div>
             <div class="segmented-grid segmented-grid--2">
               <button
@@ -863,8 +880,8 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Proporção dos cartões</label>
-              <p class="field-hint">Útil quando a zona precisa parecer mais editorial ou mais compacta.</p>
+              <label class="field-label">Formato dos cards</label>
+              <p class="field-hint">Ajuda a deixar a vitrine mais compacta, técnica ou editorial.</p>
             </div>
             <select
               :value="zone.cardAspectRatio ?? 'fill'"
@@ -2320,6 +2337,25 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
   gap: 10px;
 }
 
+.control-card__head--stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.control-card__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control-card__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .template-card__footer {
   align-items: center;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -2346,6 +2382,15 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
   align-items: center;
   gap: 8px;
   flex: none;
+}
+
+.value-editor--full {
+  width: 100%;
+}
+
+.value-editor--full .value-input {
+  width: auto;
+  flex: 1 1 auto;
 }
 
 .value-input {
