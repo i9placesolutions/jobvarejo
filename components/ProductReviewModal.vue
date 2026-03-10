@@ -2441,8 +2441,8 @@ const getAssetDisplayName = (asset: any): string => {
 
                                             <button
                                                 type="button"
-                                                v-if="row.product?.status === 'review_pending' || row.product?.status === 'error'"
                                                 class="h-7 px-2.5 text-[10px] rounded-md border border-zinc-700/80 bg-zinc-800/70 text-zinc-100 hover:bg-zinc-700/80 transition-colors"
+                                                :disabled="row.product?.status === 'processing'"
                                                 @click.stop="runImageQuickAction(row, 'storage')"
                                             >
                                                 Storage

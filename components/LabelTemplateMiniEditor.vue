@@ -3283,6 +3283,34 @@ const setZoom = (pct: number) => {
   canvas.requestRenderAll()
 }
 
+const clampMiniEditorNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+const toMiniEditorNumber = (value: unknown, fallback: number) => {
+  const next = Number(value)
+  return Number.isFinite(next) ? next : fallback
+}
+
+const setZoomFromInput = (value: unknown) => {
+  setZoom(clampMiniEditorNumber(toMiniEditorNumber(value, zoomPct.value), 50, 200))
+}
+
+const patchClampedMiniEditorNumber = (
+  prop: string,
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+  precision = 0
+) => {
+  const factor = 10 ** precision
+  const next = clampMiniEditorNumber(
+    Math.round(toMiniEditorNumber(value, fallback) * factor) / factor,
+    min,
+    max
+  )
+  patch(prop, next)
+}
+
 const commitEditingTextObjects = (root: any) => {
   if (!root) return
   const queue: any[] = [root]
@@ -3646,6 +3674,18 @@ watch(
               class="me-zoom-slider-compact"
               @input="setZoom(Number(($event.target as HTMLInputElement).value))"
             />
+            <div class="me-prop-input-with-unit me-range-value">
+              <input
+                type="number"
+                min="50"
+                max="200"
+                step="1"
+                class="me-prop-input me-prop-input--compact"
+                :value="zoomPct"
+                @input="setZoomFromInput(($event.target as HTMLInputElement).valueAsNumber)"
+              />
+              <span class="me-prop-unit">%</span>
+            </div>
           </div>
         </div>
       </div>
@@ -3810,7 +3850,18 @@ watch(
                       :value="Number(current('opacity', 1))"
                       @input="patch('opacity', parseFloat(($event.target as HTMLInputElement).value))"
                     />
-                    <span class="me-opacity-value">{{ Math.round(Number(current('opacity', 1)) * 100) }}%</span>
+                    <div class="me-prop-input-with-unit me-range-value">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        class="me-prop-input me-prop-input--compact"
+                        :value="Math.round(Number(current('opacity', 1)) * 100)"
+                        @input="patchClampedMiniEditorNumber('opacity', Number(($event.target as HTMLInputElement).value) / 100, Number(current('opacity', 1)), 0, 1, 2)"
+                      />
+                      <span class="me-prop-unit">%</span>
+                    </div>
                   </div>
                 </div>
                 <div class="me-prop-item">
@@ -4658,6 +4709,10 @@ watch(
 
 .me-opacity-value {
   @apply text-[10px] text-zinc-400 w-10 text-right tabular-nums;
+}
+
+.me-range-value {
+  @apply w-20 shrink-0;
 }
 
 .me-checkbox-row {

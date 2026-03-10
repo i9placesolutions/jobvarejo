@@ -23196,7 +23196,8 @@ const createSmartObject = async (
     });
 
     // 2. Title (Top) - positioned at top of card
-    const titleY = -halfH + (cardHeight * 0.08); // Near top
+    const titleOffsetY = typeof effectiveStyles.prodNameOffsetY === 'number' ? effectiveStyles.prodNameOffsetY : 0;
+    const titleY = -halfH + (cardHeight * 0.08) + titleOffsetY; // Near top
     const title = new fabric.Textbox(String(cleanedName || ''), {
         fontSize: baseSize * 0.09,
         fontFamily: 'Inter',
@@ -24828,6 +24829,7 @@ function normalizeGlobalStyles(styles?: Partial<GlobalStyles> | null): GlobalSty
         cardBorderWidth: DEFAULT_GLOBAL_STYLES.cardBorderWidth ?? 0,
         prodNameScale: DEFAULT_GLOBAL_STYLES.prodNameScale ?? 1,
         prodNameLineHeight: DEFAULT_GLOBAL_STYLES.prodNameLineHeight ?? 1.05,
+        prodNameOffsetY: DEFAULT_GLOBAL_STYLES.prodNameOffsetY ?? 0,
         splashScale: DEFAULT_GLOBAL_STYLES.splashScale ?? 1,
         splashTextScale: DEFAULT_GLOBAL_STYLES.splashTextScale ?? 1,
         splashRoundness: DEFAULT_GLOBAL_STYLES.splashRoundness ?? 1,
@@ -24882,13 +24884,17 @@ function normalizeGlobalStyles(styles?: Partial<GlobalStyles> | null): GlobalSty
         cardBorderWidth: toFinite(merged.cardBorderWidth, defaultNumber.cardBorderWidth, 0, 24),
         prodNameScale: toFinite(merged.prodNameScale, defaultNumber.prodNameScale, 0.5, 2.5),
         prodNameLineHeight: toFinite(merged.prodNameLineHeight, defaultNumber.prodNameLineHeight, 0.7, 2.2),
-        splashScale: toFinite(merged.splashScale, defaultNumber.splashScale, 0.35, 2.5),
+        prodNameOffsetY: toFinite(merged.prodNameOffsetY, defaultNumber.prodNameOffsetY, -300, 300),
+        splashScale: toFinite(merged.splashScale, defaultNumber.splashScale, 0.35, 20),
         splashTextScale: toFinite(merged.splashTextScale, defaultNumber.splashTextScale, 0.4, 2.8),
         splashRoundness: toFinite(merged.splashRoundness, defaultNumber.splashRoundness, 0, 1),
         splashOffsetY: toFinite(merged.splashOffsetY, defaultNumber.splashOffsetY, -300, 300),
         priceTextColor: normalizeHexColor(merged.priceTextColor, defaultColor.splashTextColor, { allowUndefined: true }),
         priceCurrencyColor: normalizeHexColor(merged.priceCurrencyColor, defaultColor.splashTextColor, { allowUndefined: true }),
-        priceFontWeight: merged.priceFontWeight === '' || merged.priceFontWeight === null ? undefined : merged.priceFontWeight
+        priceFontWeight: merged.priceFontWeight === '' || merged.priceFontWeight === null ? undefined : merged.priceFontWeight,
+        priceFontStyle: String(merged.priceFontStyle ?? DEFAULT_GLOBAL_STYLES.priceFontStyle ?? 'normal').trim().toLowerCase() === 'italic'
+            ? 'italic'
+            : 'normal'
     };
 
     const align = String(normalized.prodNameAlign || '').toLowerCase();
@@ -24904,6 +24910,9 @@ function normalizeGlobalStyles(styles?: Partial<GlobalStyles> | null): GlobalSty
     }
     if (typeof normalized.prodNameFont !== 'string' || !normalized.prodNameFont.trim()) {
         normalized.prodNameFont = DEFAULT_GLOBAL_STYLES.prodNameFont;
+    }
+    if (normalized.priceFontStyle !== 'italic') {
+        normalized.priceFontStyle = 'normal';
     }
 
     return normalized;
@@ -24924,7 +24933,8 @@ const DEBOUNCED_GLOBAL_STYLE_PROPS = new Set<string>([
     'splashRoundness',
     'splashOffsetY',
     'prodNameScale',
-    'prodNameLineHeight'
+    'prodNameLineHeight',
+    'prodNameOffsetY'
 ]);
 
 const isDebouncedGlobalStyleProp = (prop: string) => DEBOUNCED_GLOBAL_STYLE_PROPS.has(String(prop || ''));
@@ -25236,6 +25246,7 @@ const LIGHTWEIGHT_GLOBAL_STYLE_PROPS = new Set<string>([
     'priceCurrencyColor',
     'priceFont',
     'priceFontWeight',
+    'priceFontStyle',
     'splashTextScale',
     'splashFill'
 ]);
@@ -25430,12 +25441,14 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             p === 'splashTextColor' ||
             p === 'priceFont' ||
             p === 'priceFontWeight' ||
+            p === 'priceFontStyle' ||
             p === 'splashTextScale'
     ) &&
         priceGroup &&
         String(priceGroup?.type || '').toLowerCase() === 'group' &&
         typeof priceGroup.getObjects === 'function'
     ) {
+        const preserveTemplateVisual = shouldPreserveManualTemplateVisual(priceGroup);
         const parts = collectObjectsDeep(priceGroup);
         const priceBg = parts.find((o: any) => o?.name === 'price_bg');
         const currencyText = parts.find((o: any) => o?.name === 'price_currency_text');
@@ -25468,20 +25481,56 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             }
         }
 
-        if (p === 'priceFont' || p === 'priceFontWeight' || p === 'splashTextScale') {
+        if (p === 'priceFont' || p === 'priceFontWeight' || p === 'priceFontStyle' || p === 'splashTextScale') {
             const allPriceTexts = [currencyText, ...priceTexts];
             allPriceTexts.forEach((txt: any) => {
                 if (!isTextLikeObject(txt)) return;
                 if (styles.priceFont) txt.set('fontFamily', styles.priceFont);
                 if (styles.priceFontWeight !== undefined) txt.set('fontWeight', styles.priceFontWeight as any);
+                txt.set('fontStyle', styles.priceFontStyle === 'italic' ? 'italic' : 'normal');
 
                 const mult = typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
-                if (typeof txt.__fontScale === 'number') {
+                if (preserveTemplateVisual) {
+                    const originalFont = Number((txt as any).__originalFontSize);
+                    const currentFont = Number(txt.fontSize || 0);
+                    const baseFont = Number((txt as any).__fontSizeBase);
+                    const fallbackBase = Number.isFinite(originalFont) && originalFont > 0
+                        ? originalFont
+                        : (Number.isFinite(currentFont) && currentFont > 0 ? currentFont : 0);
+                    const sourceBase = Number.isFinite(baseFont) && baseFont > 0 ? baseFont : fallbackBase;
+                    if (sourceBase > 0) {
+                        (txt as any).__fontSizeBase = sourceBase;
+                        txt.set({
+                            fontSize: sourceBase * mult,
+                            scaleX: 1,
+                            scaleY: 1
+                        });
+                    }
+                } else if (typeof txt.__fontScale === 'number') {
                     if (typeof txt.__fontScaleBase !== 'number') txt.__fontScaleBase = txt.__fontScale;
                     txt.__fontScale = txt.__fontScaleBase * mult;
+                } else {
+                    const currentFont = Number(txt.fontSize || 0);
+                    const baseFont = Number((txt as any).__fontSizeBase);
+                    const sourceBase = Number.isFinite(baseFont) && baseFont > 0
+                        ? baseFont
+                        : (Number.isFinite(currentFont) && currentFont > 0 ? currentFont : 0);
+                    if (sourceBase > 0) {
+                        (txt as any).__fontSizeBase = sourceBase;
+                        txt.set({
+                            fontSize: sourceBase * mult,
+                            scaleX: 1,
+                            scaleY: 1
+                        });
+                    }
                 }
                 if (typeof txt.initDimensions === 'function') txt.initDimensions();
             });
+
+            if (preserveTemplateVisual) {
+                fitManualSinglePriceValuesIntoTemplate(priceGroup);
+                fitManualAtacarejoValuesIntoTemplate(priceGroup);
+            }
 
             if (cardW > 0 && cardH > 0) {
                 layoutPriceGroup(priceGroup, cardW, cardH);
@@ -32289,9 +32338,11 @@ const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: P
         priceCurrencyColor: txt((s as any).priceCurrencyColor),
         priceFont: txt((s as any).priceFont),
         priceFontWeight: txt((s as any).priceFontWeight),
+        priceFontStyle: txt((s as any).priceFontStyle),
         prodNameScale: num((s as any).prodNameScale),
         prodNameTransform: txt((s as any).prodNameTransform),
         prodNameLineHeight: num((s as any).prodNameLineHeight),
+        prodNameOffsetY: num((s as any).prodNameOffsetY),
         cardBorderRadius: num((s as any).cardBorderRadius)
     };
 
@@ -32537,12 +32588,13 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         }
         // Margin Top: 5% of height
         const marginTop = h * 0.05;
+        const titleOffsetY = typeof styles?.prodNameOffsetY === 'number' ? styles.prodNameOffsetY : 0;
         if (!isManual(title)) {
             title.set({
                 originX: 'center',
                 originY: 'top',
                 left: 0,
-                top: -halfH + marginTop,
+                top: -halfH + marginTop + titleOffsetY,
                 scaleX: 1, scaleY: 1
             });
         }
@@ -32606,21 +32658,22 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
 
     // 2.1 Limit badge/text (Below Title)
     let limitH = 0;
-    if (limit && String(limit.type || '').includes('text')) {
-        const marginTop = h * 0.05;
-        const gap = Math.max(4, h * 0.008);
+        if (limit && String(limit.type || '').includes('text')) {
+            const marginTop = h * 0.05;
+            const gap = Math.max(4, h * 0.008);
+            const titleOffsetY = typeof styles?.prodNameOffsetY === 'number' ? styles.prodNameOffsetY : 0;
 
-        const titleHeight = title ? (title.getScaledHeight?.() ?? title.height ?? 0) : 0;
-        if (!isManual(limit)) {
-            limit.set({
-                originX: 'center',
-                originY: 'top',
-                left: 0,
-                top: -halfH + marginTop + titleHeight + gap,
-                scaleX: 1,
-                scaleY: 1
-            });
-        }
+            const titleHeight = title ? (title.getScaledHeight?.() ?? title.height ?? 0) : 0;
+            if (!isManual(limit)) {
+                limit.set({
+                    originX: 'center',
+                    originY: 'top',
+                    left: 0,
+                    top: -halfH + marginTop + titleOffsetY + titleHeight + gap,
+                    scaleX: 1,
+                    scaleY: 1
+                });
+            }
 
         if (styles) {
             if (styles.limitFont) limit.set('fontFamily', styles.limitFont);
@@ -32658,6 +32711,9 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         let preserveTemplateVisual = false;
         let layoutScaleX = 1;
         let layoutScaleY = 1;
+
+        if ((splash as any).objectCaching) (splash as any).objectCaching = false;
+        if ((splash as any).statefullCache) (splash as any).statefullCache = false;
 
         // Extract priceBg for later use (shadow update needs pillH from layout)
         let priceBg: any = null;
@@ -32703,6 +32759,10 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     !preserveTemplateVisual ||
                     String(styles.priceFontWeight) !== String(DEFAULT_GLOBAL_STYLES.priceFontWeight ?? '')
                 );
+                const hasExplicitPriceStyle = typeof styles.priceFontStyle === 'string' && styles.priceFontStyle.trim().length > 0 && (
+                    !preserveTemplateVisual ||
+                    styles.priceFontStyle !== (DEFAULT_GLOBAL_STYLES.priceFontStyle ?? 'normal')
+                );
                 const hasExplicitPriceTextColor = typeof styles.priceTextColor === 'string' && styles.priceTextColor.trim().length > 0;
                 const hasExplicitSplashTextColor = typeof styles.splashTextColor === 'string' && styles.splashTextColor.trim().length > 0 && (
                     !preserveTemplateVisual || normalizeColorToken(styles.splashTextColor) !== defaultSplashTextColor
@@ -32741,6 +32801,9 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     if ((!preserveTemplateVisual || hasExplicitPriceFont) && styles.priceFont) t.set('fontFamily', styles.priceFont);
                     if ((!preserveTemplateVisual || hasExplicitPriceWeight) && styles.priceFontWeight !== undefined) {
                         t.set('fontWeight', styles.priceFontWeight as any);
+                    }
+                    if (!preserveTemplateVisual || hasExplicitPriceStyle) {
+                        t.set('fontStyle', styles.priceFontStyle === 'italic' ? 'italic' : 'normal');
                     }
 
                     const mult = typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
@@ -32866,20 +32929,6 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 // Armazenar largura original do cartão para próximos redimensionamentos
                 (splash as any).__originalCardWidth = w;
 
-                // Clamp para não ultrapassar limites
-                if ((splash.width * sScaleX) > w * 0.9) {
-                    const clampScale = (w * 0.9) / splash.width;
-                    sScaleX = clampScale;
-                    sScaleY = clampScale;
-                }
-
-                const maxSplashH = h * 0.35;
-                if ((splash.height * sScaleY) > maxSplashH) {
-                    const clampScale = maxSplashH / splash.height;
-                    sScaleX = clampScale;
-                    sScaleY = clampScale;
-                }
-
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
 
@@ -32903,37 +32952,36 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 bottomH = (splash.height * sScaleY) + marginBottom;
             }
         } else {
-            // Max height for splash: 30% of card
-            const maxSplashH = h * 0.35;
-            
-            // Scale splash to fit width or max height
-            let sScale = splash.scaleX; // Use current or reset? Better maintain relative scale if possible, or reset.
-            // Assuming splash starts at scale 1 relative to card creation size...
-            // But users scale splash individually.
-            // Let's rely on bounding Width relative to W.
-            
-            // Fit width (90%)
-            if ((splash.width * sScale) > w * 0.9) {
-                sScale = (w * 0.9) / splash.width;
+            const globalScale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
+            const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+
+            if (typeof (splash as any).__originalScaleX !== 'number') {
+                (splash as any).__originalScaleX = splash.scaleX || 1;
+                (splash as any).__originalScaleY = splash.scaleY || 1;
             }
-            
-            // Check height Constraint
-            if ((splash.height * sScale) > maxSplashH) {
-                sScale = maxSplashH / splash.height;
-            }
+
+            const baseScaleX = (splash as any).__originalScaleX || 1;
+            const baseScaleY = (splash as any).__originalScaleY || 1;
+            const sScaleX = baseScaleX * globalScale;
+            const sScaleY = baseScaleY * globalScale;
             
             if (!splashManual) {
                 splash.set({
-                    scaleX: sScale,
-                    scaleY: sScale,
+                    scaleX: sScaleX,
+                    scaleY: sScaleY,
                     originX: 'center',
                     originY: 'bottom',
                     left: 0,
-                    top: halfH - marginBottom
+                    top: halfH - marginBottom + offsetY
+                });
+            } else {
+                splash.set({
+                    scaleX: sScaleX,
+                    scaleY: sScaleY
                 });
             }
             
-            bottomH = (splash.height * sScale) + marginBottom;
+            bottomH = (splash.height * sScaleY) + marginBottom;
         }
 
         // If the user positioned the splash manually, reserve space based on its current size,
@@ -33027,7 +33075,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     };
     objects.forEach((o: any) => {
         if (!o || o === bg) return;
-        if (isManual(o)) clampChildToCard(o);
+        const allowOverflowOutsideCard = o === splash || String(o?.name || '') === 'priceGroup';
+        if (isManual(o) && !allowOverflowOutsideCard) clampChildToCard(o);
     });
 
     // Ensure stacking order stays predictable (image should not hide the title).

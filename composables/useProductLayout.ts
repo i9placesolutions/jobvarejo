@@ -102,7 +102,7 @@ export const useProductLayout = () => {
       fontWeight: styles.prodNameWeight ?? 'bold',
       textAlign: styles.prodNameAlign ?? 'center',
       fill: prod.nameColor ?? styles.prodNameColor ?? '#000000',
-      top: -cardHeight/2 + padding,
+      top: -cardHeight/2 + padding + (styles.prodNameOffsetY ?? 0),
       left: 0,
       originX: 'center',
       originY: 'top',

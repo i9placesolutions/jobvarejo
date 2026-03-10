@@ -5,21 +5,22 @@
 // - "Family"
 // - "Family:400,700,900"
 export const GOOGLE_WEBFONT_FAMILIES: string[] = [
-  'Inter:400,500,600,700,800,900',
-  'Roboto:300,400,500,700,900',
-  'Montserrat:300,400,500,600,700,800,900',
-  'Poppins:300,400,500,600,700,800,900',
-  'Open Sans:300,400,500,600,700,800',
-  'Raleway:300,400,500,600,700,800,900',
+  'Barlow:100,100italic,200,200italic,300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
+  'Inter:400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
+  'Roboto:300,300italic,400,400italic,500,500italic,700,700italic,900,900italic',
+  'Montserrat:300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
+  'Poppins:300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
+  'Open Sans:300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic',
+  'Raleway:300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
   'Oswald:300,400,500,600,700',
-  'Lato:300,400,700,900',
-  'Playfair Display:400,500,600,700,800,900',
-  'Merriweather:300,400,700,900',
-  'PT Sans:400,700',
-  'Josefin Sans:300,400,500,600,700',
-  'Rubik:300,400,500,600,700,800,900',
-  'Bitter:300,400,500,600,700,800,900',
-  'Archivo:300,400,500,600,700,800,900',
+  'Lato:300,300italic,400,400italic,700,700italic,900,900italic',
+  'Playfair Display:400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
+  'Merriweather:300,300italic,400,400italic,700,700italic,900,900italic',
+  'PT Sans:400,400italic,700,700italic',
+  'Josefin Sans:300,300italic,400,400italic,500,500italic,600,600italic,700,700italic',
+  'Rubik:300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
+  'Bitter:300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
+  'Archivo:300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
   'Manrope:400,500,600,700,800',
 
   // Display / promo-friendly (useful for etiquetas)
@@ -42,13 +43,13 @@ export const GOOGLE_WEBFONT_FAMILIES: string[] = [
   'Permanent Marker',
 
   // Clean alternatives
-  'Nunito:300,400,600,700,800,900',
+  'Nunito:300,300italic,400,400italic,600,600italic,700,700italic,800,800italic,900,900italic',
   'Roboto Slab:300,400,500,700,900',
-  'Libre Baskerville:400,700',
-  'DM Serif Display:400',
-  'DM Sans:400,500,700',
+  'Libre Baskerville:400,400italic,700',
+  'DM Serif Display:400,400italic',
+  'DM Sans:400,400italic,500,500italic,700,700italic',
   'Space Grotesk:300,400,500,600,700',
-  'Fira Sans:300,400,500,700,800,900'
+  'Fira Sans:300,300italic,400,400italic,500,500italic,700,700italic,800,800italic,900,900italic'
 ]
 
 // This list is used in dropdowns/autocomplete. Include a few system fallbacks too.
@@ -59,6 +60,7 @@ export const AVAILABLE_FONT_FAMILIES: string[] = [
   'Courier New',
 
   // Web fonts (must exist in GOOGLE_WEBFONT_FAMILIES above)
+  'Barlow',
   'Inter',
   'Roboto',
   'Montserrat',
@@ -125,6 +127,33 @@ const SYSTEM_FONT_WEIGHT_VALUES: Record<string, number[]> = {
   'Courier New': [400, 700]
 }
 
+const FONT_FAMILIES_WITH_ITALIC = new Set<string>([
+  'Arial',
+  'Georgia',
+  'Times New Roman',
+  'Courier New',
+  'Barlow',
+  'Inter',
+  'Roboto',
+  'Montserrat',
+  'Poppins',
+  'Open Sans',
+  'Raleway',
+  'Lato',
+  'Playfair Display',
+  'Merriweather',
+  'PT Sans',
+  'Josefin Sans',
+  'Rubik',
+  'Bitter',
+  'Archivo',
+  'Nunito',
+  'Libre Baskerville',
+  'DM Serif Display',
+  'DM Sans',
+  'Fira Sans'
+])
+
 const normalizeWeightValues = (weights: number[]): number[] => {
   const unique = new Set<number>()
   for (const weight of weights) {
@@ -174,6 +203,12 @@ export const getSupportedFontWeights = (fontFamily?: string | null): number[] =>
   const weights = FONT_WEIGHT_VALUES_BY_FAMILY[family]
   if (!Array.isArray(weights) || !weights.length) return [...DEFAULT_FONT_WEIGHT_VALUES]
   return normalizeWeightValues(weights)
+}
+
+export const fontSupportsItalic = (fontFamily?: string | null): boolean => {
+  const family = String(fontFamily || '').trim()
+  if (!family) return false
+  return FONT_FAMILIES_WITH_ITALIC.has(family)
 }
 
 export const normalizeFontWeightForFamily = (fontFamily: string | null | undefined, fontWeight: number): number => {

@@ -84,6 +84,12 @@ const resultUrl = ref<string>('')
 
 const uploadsForPick = computed(() => (props.uploads || []).slice(0, 80))
 
+const setBrushSize = (value: unknown) => {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return
+  brushSize.value = Math.max(8, Math.min(140, Math.round(next)))
+}
+
 const revokeImagePreviewObjectUrl = () => {
   const objectUrl = imagePreviewObjectUrl.value
   if (!objectUrl) return
@@ -552,7 +558,18 @@ onUnmounted(() => {
                   <label class="text-[10px] text-zinc-400">Pincel</label>
                   <span class="text-[10px] text-zinc-500">{{ brushSize }}px</span>
                 </div>
-                <input type="range" min="8" max="140" v-model="brushSize" class="w-full" />
+                <div class="flex items-center gap-2">
+                  <input type="range" min="8" max="140" :value="brushSize" @input="setBrushSize(($event.target as HTMLInputElement).value)" class="w-full" />
+                  <input
+                    type="number"
+                    min="8"
+                    max="140"
+                    step="1"
+                    :value="brushSize"
+                    @input="setBrushSize(($event.target as HTMLInputElement).valueAsNumber)"
+                    class="w-16 rounded-lg border border-white/10 bg-zinc-900/80 px-2 py-1 text-[11px] text-white focus:outline-none focus:border-violet-500/50"
+                  />
+                </div>
                 <div class="flex items-center gap-2">
                   <button class="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-xs text-zinc-200 inline-flex items-center gap-2" @click="clearMask">
                     <Scissors class="w-4 h-4" /> Limpar máscara

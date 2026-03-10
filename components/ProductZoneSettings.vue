@@ -1,12 +1,5 @@
 <script setup lang="ts">
-/**
- * ProductZoneSettings Component
- * 
- * Painel de configuração para Product Zone
- * Inclui: presets, layout, espaçamento, destaques, estilos
- */
-
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
   Columns3,
   ChevronDown,
@@ -16,8 +9,11 @@ import {
   AlignVerticalSpaceAround,
   AlignHorizontalSpaceAround,
   Star,
-  Palette,
-  Settings2
+  Settings2,
+  LayoutGrid,
+  CreditCard,
+  Type,
+  Tag
 } from 'lucide-vue-next';
 import { LAYOUT_PRESETS, SPLASH_STYLES, type LayoutPreset } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
@@ -25,11 +21,11 @@ import type { GlobalStyles } from '~/types/product-zone';
 import ColorPicker from './ui/ColorPicker.vue';
 import {
   AVAILABLE_FONT_FAMILIES,
+  fontSupportsItalic,
   getFontWeightOptionsForFamily,
   normalizeFontWeightForFamily
 } from '~/utils/font-catalog';
 
-// Props
 const props = defineProps<{
   zone: {
     columns?: number;
@@ -53,7 +49,6 @@ const props = defineProps<{
   labelTemplates?: LabelTemplate[];
 }>();
 
-// Emits
 const emit = defineEmits<{
   (e: 'update:zone', prop: string, value: any): void;
   (e: 'update:global-styles', prop: string, value: any): void;
@@ -64,35 +59,71 @@ const emit = defineEmits<{
   (e: 'apply-template-to-zone'): void;
 }>();
 
-// UI State
-const showCardColorPicker = ref(false)
-const showAccentColorPicker = ref(false)
-const showSplashColorPicker = ref(false)
-const showSplashTextColorPicker = ref(false)
-const showCardBorderColorPicker = ref(false)
-const showProdNameColorPicker = ref(false)
-const showSplashFillPicker = ref(false)
-const showPriceTextColorPicker = ref(false)
-const showPriceCurrencyColorPicker = ref(false)
-const cardColorPickerRef = ref<HTMLElement | null>(null)
-const accentColorPickerRef = ref<HTMLElement | null>(null)
-const splashColorPickerRef = ref<HTMLElement | null>(null)
-const splashTextColorPickerRef = ref<HTMLElement | null>(null)
-const cardBorderColorPickerRef = ref<HTMLElement | null>(null)
-const prodNameColorPickerRef = ref<HTMLElement | null>(null)
-const splashFillPickerRef = ref<HTMLElement | null>(null)
-const priceTextColorPickerRef = ref<HTMLElement | null>(null)
-const priceCurrencyColorPickerRef = ref<HTMLElement | null>(null)
+const showCardColorPicker = ref(false);
+const showAccentColorPicker = ref(false);
+const showSplashColorPicker = ref(false);
+const showSplashTextColorPicker = ref(false);
+const showCardBorderColorPicker = ref(false);
+const showProdNameColorPicker = ref(false);
+const showPriceTextColorPicker = ref(false);
+const showPriceCurrencyColorPicker = ref(false);
+
+const cardColorPickerRef = ref<HTMLElement | null>(null);
+const accentColorPickerRef = ref<HTMLElement | null>(null);
+const splashColorPickerRef = ref<HTMLElement | null>(null);
+const splashTextColorPickerRef = ref<HTMLElement | null>(null);
+const cardBorderColorPickerRef = ref<HTMLElement | null>(null);
+const prodNameColorPickerRef = ref<HTMLElement | null>(null);
+const priceTextColorPickerRef = ref<HTMLElement | null>(null);
+const priceCurrencyColorPickerRef = ref<HTMLElement | null>(null);
 
 const expandedSections = ref({
-  layout: false,
+  presets: true,
+  layout: true,
   spacing: false,
   highlight: false,
-  styles: false
+  cardStyle: false,
+  typography: false,
+  priceTag: false
 });
 
-// Presets expansion state
-const presetsExpanded = ref(false);
+const lastRowBehaviorOptions = [
+  { value: 'fill', label: 'Preencher', hint: 'Expande a linha restante.' },
+  { value: 'center', label: 'Centralizar', hint: 'Mantem o grupo compacto.' },
+  { value: 'left', label: 'Início', hint: 'Alinha tudo ao começo.' },
+  { value: 'stretch', label: 'Distribuir', hint: 'Abre o respiro entre cards.' }
+] as const;
+
+const layoutDirectionOptions = [
+  { value: 'horizontal', label: 'Por linhas', hint: 'Preenche da esquerda para a direita.' },
+  { value: 'vertical', label: 'Por colunas', hint: 'Prioriza o fluxo de cima para baixo.' }
+] as const;
+
+const verticalAlignOptions = [
+  { value: 'top', label: 'Topo' },
+  { value: 'center', label: 'Centro' },
+  { value: 'bottom', label: 'Base' },
+  { value: 'stretch', label: 'Esticar' }
+] as const;
+
+const cardAspectRatioOptions = [
+  { value: 'fill', label: 'Preencher' },
+  { value: 'auto', label: 'Auto' },
+  { value: 'square', label: '1:1' },
+  { value: '3:4', label: '3:4' },
+  { value: '4:3', label: '4:3' },
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' }
+] as const;
+
+const highlightPositionOptions = [
+  { value: 'first', label: 'Primeiros' },
+  { value: 'last', label: 'Últimos' },
+  { value: 'center', label: 'Centro' },
+  { value: 'top', label: 'Topo' },
+  { value: 'bottom', label: 'Base' },
+  { value: 'random', label: 'Aleatório' }
+] as const;
 
 const isSpacingSynced = () => {
   const pad = Number(props.zone.padding ?? 15);
@@ -102,6 +133,13 @@ const isSpacingSynced = () => {
 };
 
 const syncGaps = ref(isSpacingSynced());
+
+watch(
+  () => [props.zone.padding, props.zone.gapHorizontal, props.zone.gapVertical],
+  () => {
+    syncGaps.value = isSpacingSynced();
+  }
+);
 
 type HighlightPos = 'first' | 'last' | 'random' | 'center' | 'top' | 'bottom';
 type PreviewTone = 'base' | 'highlight';
@@ -116,6 +154,7 @@ type NormalizedZonePresetState = {
   highlightPos: HighlightPos;
   highlightHeight: number;
 };
+
 type PresetPreviewCell = {
   id: string;
   col: number;
@@ -131,6 +170,11 @@ const toSafeNumber = (value: unknown, fallback: number) => {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const sanitizeHexColor = (value: string, fallback: string) => {
+  const raw = String(value || '').trim().replace(/^#/, '');
+  return raw ? `#${raw}` : fallback;
+};
 
 const normalizeHighlightPos = (value: unknown): HighlightPos => {
   if (
@@ -301,17 +345,50 @@ const previewCellsByPreset = computed<Record<string, PresetPreviewCell[]>>(() =>
 
 const getPreviewCells = (preset: LayoutPreset) => previewCellsByPreset.value[preset.id] ?? [];
 
-// Computed - detect active preset from zone signature
-const currentPreset = computed(() => {
+const matchedPreset = computed(() =>
+  LAYOUT_PRESETS.find(preset => presetMatchesZone(preset, normalizedZoneState.value)) ?? null
+);
+
+const currentPreset = computed(() => matchedPreset.value?.id ?? 'custom');
+
+const currentPresetName = computed(() => matchedPreset.value?.name ?? 'Layout customizado');
+
+const getCustomPreviewKind = (zone: NormalizedZonePresetState): LayoutPreset['previewKind'] => {
+  if (zone.highlightCount <= 0) return 'grid';
+  if (zone.highlightCount > 1) return 'sidebar';
+  if (zone.highlightPos === 'center') return 'hero-center';
+  if (zone.highlightPos === 'bottom') return 'hero-bottom';
+  if (zone.highlightPos === 'top') return 'hero-top';
+  return 'hero';
+};
+
+const customPreviewPreset = computed<LayoutPreset>(() => {
   const zone = normalizedZoneState.value;
-  const exact = LAYOUT_PRESETS.find(preset => presetMatchesZone(preset, zone));
-  return exact?.id ?? 'auto';
+  const previewCols = clamp(zone.columns > 0 ? zone.columns : 4, 1, 6);
+  const previewRows = clamp(zone.rows > 0 ? zone.rows : 3, 2, 4);
+  return {
+    id: 'custom-preview',
+    name: 'Atual',
+    category: zone.highlightCount > 0 ? 'special' : 'grid',
+    columns: zone.columns,
+    rows: zone.rows,
+    layoutDirection: zone.layoutDirection,
+    cardAspectRatio: zone.cardAspectRatio as LayoutPreset['cardAspectRatio'],
+    lastRowBehavior: zone.lastRowBehavior,
+    verticalAlign: zone.verticalAlign,
+    highlightCount: zone.highlightCount,
+    highlightPos: zone.highlightPos,
+    highlightHeight: zone.highlightHeight,
+    previewKind: getCustomPreviewKind(zone),
+    previewCols,
+    previewRows,
+    previewCount: previewCols * previewRows
+  };
 });
 
-const currentPresetName = computed(() => {
-  if (currentPreset.value === 'auto') return 'Layout customizado';
-  return LAYOUT_PRESETS.find((preset) => preset.id === currentPreset.value)?.name ?? 'Layout customizado';
-});
+const activePreviewPreset = computed(() => matchedPreset.value ?? customPreviewPreset.value);
+const activePreviewStyle = computed(() => getPreviewGridStyle(activePreviewPreset.value));
+const activePreviewCells = computed(() => createPreviewCells(activePreviewPreset.value));
 
 const zoneColumnsLabel = computed(() =>
   normalizedZoneState.value.columns > 0
@@ -319,22 +396,28 @@ const zoneColumnsLabel = computed(() =>
     : 'Colunas automáticas'
 );
 
+const zoneRowsLabel = computed(() =>
+  normalizedZoneState.value.rows > 0
+    ? `${normalizedZoneState.value.rows} linhas`
+    : 'Linhas automáticas'
+);
+
 const spacingSummaryLabel = computed(() => {
   const pad = Math.round(toSafeNumber(props.zone.padding, 15));
-  if (syncGaps.value) return `Padding ${pad}px · gaps sincronizados`;
+  if (syncGaps.value) return `Padding ${pad}px com gaps vinculados`;
   const gapH = Math.round(toSafeNumber(props.zone.gapHorizontal, pad));
   const gapV = Math.round(toSafeNumber(props.zone.gapVertical, pad));
-  return `Pad ${pad}px · H ${gapH}px · V ${gapV}px`;
+  return `Padding ${pad}px · X ${gapH}px · Y ${gapV}px`;
 });
 
 const highlightSummaryLabel = computed(() => {
   const count = Math.max(0, Math.round(toSafeNumber(props.zone.highlightCount, 0)));
-  if (count <= 0) return 'Sem destaque ativo';
+  if (count <= 0) return 'Sem produto hero';
 
   const posMap: Record<HighlightPos, string> = {
     first: 'primeiros',
-    last: 'ultimos',
-    random: 'aleatorio',
+    last: 'últimos',
+    random: 'aleatório',
     center: 'centro',
     top: 'topo',
     bottom: 'base'
@@ -345,34 +428,82 @@ const highlightSummaryLabel = computed(() => {
 
 const activeTemplateName = computed(() => {
   const templateId = String(props.globalStyles?.splashTemplateId || '').trim();
-  if (!templateId) return 'Etiqueta padrao da zona';
+  if (!templateId) return 'Etiqueta padrão da zona';
   return props.labelTemplates?.find((tpl) => String(tpl.id) === templateId)?.name || 'Modelo selecionado';
 });
 
 const styleSummaryLabel = computed(() => {
   const splashStyle = SPLASH_STYLES.find((style) => style.id === (props.globalStyles?.splashStyle ?? 'classic'));
   if (props.globalStyles?.splashTemplateId) return activeTemplateName.value;
-  return `Splash ${splashStyle?.name || 'Classic'}`;
+  return `Splash ${splashStyle?.name || 'Clássico'}`;
 });
 
-const sectionSummary = computed(() => ({
-  layout: zoneColumnsLabel.value,
-  spacing: syncGaps.value ? 'Ritmo vinculado ao padding' : 'Gaps independentes',
-  highlight: highlightSummaryLabel.value,
-  styles: styleSummaryLabel.value
-}));
+const zoneLockLabel = computed(() => (
+  props.zone.isLocked ? 'Zona bloqueada' : 'Zona editável'
+));
 
-// Organize presets by category
-const gridPresets = computed(() => LAYOUT_PRESETS.filter(p => p.category === 'grid'));
-const specialPresets = computed(() => LAYOUT_PRESETS.filter(p => p.category === 'special'));
+const flowLabel = computed(() =>
+  layoutDirectionOptions.find((option) => option.value === normalizedZoneState.value.layoutDirection)?.label ?? 'Por linhas'
+);
 
-// Handlers
+const verticalAlignLabel = computed(() =>
+  verticalAlignOptions.find((option) => option.value === normalizedZoneState.value.verticalAlign)?.label ?? 'Esticar'
+);
+
+const aspectRatioLabel = computed(() =>
+  cardAspectRatioOptions.find((option) => option.value === normalizedZoneState.value.cardAspectRatio)?.label ?? 'Preencher'
+);
+
+const overviewMetrics = computed(() => ([
+  { label: 'Fluxo', value: flowLabel.value },
+  { label: 'Alinhamento', value: verticalAlignLabel.value },
+  { label: 'Cartões', value: aspectRatioLabel.value },
+  { label: 'Etiqueta', value: styleSummaryLabel.value }
+] as const));
+
+const gridPresets = computed(() => LAYOUT_PRESETS.filter(preset => preset.category === 'grid'));
+const specialPresets = computed(() => LAYOUT_PRESETS.filter(preset => preset.category === 'special'));
+
 const updateZone = (prop: string, value: any) => {
   emit('update:zone', prop, value);
 };
 
 const updateGlobal = (prop: string, value: any) => {
   emit('update:global-styles', prop, value);
+};
+
+const updateGlobalInt = (prop: string, value: unknown, fallback: number, min: number, max: number) => {
+  updateGlobal(prop, clamp(Math.round(toSafeNumber(value, fallback)), min, max));
+};
+
+const updateGlobalFloat = (
+  prop: string,
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+  precision = 1
+) => {
+  const factor = 10 ** precision;
+  const next = clamp(Math.round(toSafeNumber(value, fallback) * factor) / factor, min, max);
+  updateGlobal(prop, next);
+};
+
+const updateZoneInt = (prop: string, value: unknown, fallback: number, min: number, max: number) => {
+  updateZone(prop, clamp(Math.round(toSafeNumber(value, fallback)), min, max));
+};
+
+const updateZoneFloat = (
+  prop: string,
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+  precision = 1
+) => {
+  const factor = 10 ** precision;
+  const next = clamp(Math.round(toSafeNumber(value, fallback) * factor) / factor, min, max);
+  updateZone(prop, next);
 };
 
 const FONT_DATALIST_ID = 'product-zone-fonts';
@@ -394,6 +525,8 @@ const priceWeightOptions = computed(() =>
   })
 );
 
+const priceFontSupportsItalic = computed(() => fontSupportsItalic(props.globalStyles?.priceFont));
+
 const handleProdNameFontChange = (event: Event) => {
   const nextFont = String((event.target as HTMLSelectElement).value || '').trim();
   updateGlobal('prodNameFont', nextFont);
@@ -408,17 +541,29 @@ const handlePriceFontChange = (event: Event) => {
   updateGlobal('priceFont', nextFont);
 
   const currentWeight = toWeightNumber(props.globalStyles?.priceFontWeight);
-  if (currentWeight === null) return;
+  if (currentWeight !== null) {
+    const nextWeight = normalizeFontWeightForFamily(nextFont, currentWeight);
+    if (nextWeight !== currentWeight) updateGlobal('priceFontWeight', nextWeight);
+  }
 
-  const nextWeight = normalizeFontWeightForFamily(nextFont, currentWeight);
-  if (nextWeight !== currentWeight) updateGlobal('priceFontWeight', nextWeight);
+  if (!fontSupportsItalic(nextFont) && props.globalStyles?.priceFontStyle === 'italic') {
+    updateGlobal('priceFontStyle', 'normal');
+  }
 };
 
-const handlePaddingChange = (value: number) => {
+const handlePaddingChange = (value: unknown) => {
+  const next = clamp(Math.round(toSafeNumber(value, props.zone.padding ?? 15)), 0, 60);
   if (syncGaps.value) {
-    emit('sync-gaps', value);
+    emit('sync-gaps', next);
   } else {
-    updateZone('padding', value);
+    updateZone('padding', next);
+  }
+};
+
+const handleSyncToggle = (checked: boolean) => {
+  syncGaps.value = checked;
+  if (checked) {
+    emit('sync-gaps', clamp(Math.round(toSafeNumber(props.zone.padding, 15)), 0, 60));
   }
 };
 
@@ -432,1036 +577,2115 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 </script>
 
 <template>
-  <div class="p-4 space-y-4 text-white text-sm">
-    <div class="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(34,197,94,0.12),rgba(24,24,27,0.94))] p-4 shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-300/80">Orquestracao da Zona</div>
-          <div class="mt-1 text-sm font-semibold text-white">Ajuste a grade sem afogar o operador em controles.</div>
-          <p class="mt-1 text-[11px] leading-relaxed text-zinc-300/85">
-            Layout, espacamento, destaques e estilo global organizados por prioridade de decisao.
+  <div class="inspector-shell">
+    <section class="inspector-card overview-card">
+      <div class="overview-card__copy">
+        <div class="overview-card__eyebrow">
+          <span class="inspector-eyebrow">Inspector da zona</span>
+          <span class="status-chip" :class="zone.isLocked ? 'status-chip--warn' : 'status-chip--ok'">
+            {{ zoneLockLabel }}
+          </span>
+        </div>
+        <div>
+          <h3 class="overview-card__title">Zona de produtos</h3>
+          <p class="overview-card__description">
+            Organize a vitrine com uma grade legível, respiro consistente e etiqueta previsível.
           </p>
         </div>
-        <button
-          type="button"
-          class="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-200 transition-colors hover:bg-white/10"
-          @click="emit('recalculate')"
-        >
-          Recalcular
-        </button>
+        <div class="overview-card__chips">
+          <span class="metric-chip metric-chip--accent">{{ currentPresetName }}</span>
+          <span class="metric-chip">{{ zoneColumnsLabel }}</span>
+          <span class="metric-chip">{{ zoneRowsLabel }}</span>
+          <span class="metric-chip">{{ highlightSummaryLabel }}</span>
+        </div>
       </div>
 
-      <div class="mt-4 grid grid-cols-2 gap-2">
-        <div class="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-          <div class="text-[9px] uppercase tracking-[0.18em] text-zinc-500">Preset ativo</div>
-          <div class="mt-1 text-[12px] font-semibold text-white">{{ currentPresetName }}</div>
+      <div class="overview-card__preview">
+        <div class="overview-card__preview-head">
+          <span class="inspector-eyebrow inspector-eyebrow--muted">Mapa rápido</span>
+          <span class="text-[11px] text-zinc-400">{{ currentPreset === 'custom' ? 'Ajuste manual' : 'Base ativa' }}</span>
         </div>
-        <div class="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-          <div class="text-[9px] uppercase tracking-[0.18em] text-zinc-500">Estrutura</div>
-          <div class="mt-1 text-[12px] font-semibold text-white">{{ zoneColumnsLabel }}</div>
-        </div>
-        <div class="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-          <div class="text-[9px] uppercase tracking-[0.18em] text-zinc-500">Ritmo</div>
-          <div class="mt-1 text-[12px] font-semibold text-white">{{ spacingSummaryLabel }}</div>
-        </div>
-        <div class="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-          <div class="text-[9px] uppercase tracking-[0.18em] text-zinc-500">Estilo</div>
-          <div class="mt-1 text-[12px] font-semibold text-white">{{ styleSummaryLabel }}</div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Presets Section -->
-    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Produtos por Linha</div>
-          <div class="mt-1 text-[11px] text-zinc-500">Escolha uma base rapida e refine so se necessario.</div>
-        </div>
-        <button
-          @click="presetsExpanded = !presetsExpanded"
-          class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-zinc-400 hover:text-zinc-200 hover:bg-white/10 transition-colors"
-        >
-          <span class="text-[9px] font-semibold uppercase tracking-[0.16em]">{{ currentPresetName }}</span>
-          <component
-            :is="presetsExpanded ? ChevronDown : ChevronRight"
-            class="w-3.5 h-3.5"
-          />
-        </button>
-      </div>
-
-      <div v-if="presetsExpanded" class="space-y-3">
-        <!-- Grid Presets: mini previews -->
-        <div class="grid grid-cols-4 gap-1.5">
-          <button
-            v-for="preset in gridPresets"
-            :key="preset.id"
-            @click="applyPreset(preset.id)"
+        <div class="layout-preview layout-preview--large" :style="activePreviewStyle">
+          <span
+            v-for="cell in activePreviewCells"
+            :key="cell.id"
             :class="[
-              'flex flex-col gap-1.5 p-2 rounded-lg border transition-all',
-              currentPreset === preset.id
-                ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                : 'bg-zinc-800/50 border-zinc-700/50 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200'
+              'layout-preview__cell',
+              cell.tone === 'highlight' ? 'layout-preview__cell--highlight' : 'layout-preview__cell--base'
             ]"
-            :title="preset.description"
-          >
-            <div class="preset-preview" :style="getPreviewGridStyle(preset)">
-              <span
-                v-for="cell in getPreviewCells(preset)"
-                :key="cell.id"
-                :class="[
-                  'preset-preview-cell',
-                  cell.tone === 'highlight'
-                    ? 'preset-preview-cell--highlight'
-                    : 'preset-preview-cell--base'
-                ]"
-                :style="getPreviewCellStyle(cell)"
-              />
-            </div>
-            <span class="text-[8px] font-medium leading-tight text-center">{{ preset.name }}</span>
-          </button>
+            :style="getPreviewCellStyle(cell)"
+          />
         </div>
+        <dl class="overview-metrics">
+          <div v-for="metric in overviewMetrics" :key="metric.label" class="overview-metrics__item">
+            <dt>{{ metric.label }}</dt>
+            <dd :title="metric.value">{{ metric.value }}</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
 
-        <!-- Special Presets -->
-        <div class="space-y-1.5">
-          <span class="text-[9px] font-semibold text-yellow-500/80 uppercase tracking-wide">Destaques</span>
-          <div class="grid grid-cols-4 gap-1.5">
-            <button
-              v-for="preset in specialPresets"
-              :key="preset.id"
-              @click="applyPreset(preset.id)"
-              :class="[
-                'flex flex-col gap-1.5 p-2 rounded-lg border transition-all',
-                currentPreset === preset.id
-                  ? 'bg-yellow-500/20 border-yellow-500 text-yellow-300'
-                  : 'bg-zinc-800/50 border-zinc-700/50 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200'
-              ]"
-              :title="preset.description"
-            >
-              <div class="preset-preview" :style="getPreviewGridStyle(preset)">
-                <span
-                  v-for="cell in getPreviewCells(preset)"
-                  :key="cell.id"
-                  :class="[
-                    'preset-preview-cell',
-                    cell.tone === 'highlight'
-                      ? 'preset-preview-cell--highlight'
-                      : 'preset-preview-cell--base'
-                  ]"
-                  :style="getPreviewCellStyle(cell)"
-                />
+    <div class="section-stack">
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.presets }">
+        <button type="button" class="section-toggle" @click="toggleSection('presets')">
+          <div class="section-toggle__lead">
+            <div class="section-icon section-icon--emerald">
+              <LayoutGrid class="h-4 w-4" />
+            </div>
+            <div class="section-toggle__copy">
+              <div class="section-toggle__title-row">
+                <span class="section-title">Bases de layout</span>
+                <span class="section-summary">{{ currentPresetName }}</span>
               </div>
-              <span class="text-[8px] font-medium leading-tight text-center">{{ preset.name }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Layout Avançado Section (simplified: just columns slider + highlight controls) -->
-    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
-      <button 
-        @click="toggleSection('layout')"
-        class="flex items-center justify-between w-full text-left gap-3"
-      >
-        <div>
-          <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Layout Avancado</span>
-          <div class="mt-1 text-[11px] text-zinc-500">{{ sectionSummary.layout }}</div>
-        </div>
-        <div class="inline-flex items-center gap-2">
-          <span class="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
-            {{ sectionSummary.layout }}
-          </span>
-          <component :is="expandedSections.layout ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
-        </div>
-      </button>
-      
-      <div v-if="expandedSections.layout" class="space-y-3 animate-in slide-in-from-top-2 duration-200">
-        
-        <!-- Columns Slider -->
-        <div class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500 flex items-center gap-1.5">
-            <Columns3 class="w-3 h-3" /> Colunas por Linha
-          </label>
-          <div class="flex items-center gap-2">
-            <input
-              type="range"
-              :value="zone.columns ?? 0"
-              @input="updateZone('columns', Number(($event.target as HTMLInputElement).value))"
-              min="0"
-              max="8"
-              class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-            />
-            <span class="w-8 text-center text-[10px] font-mono text-zinc-400">
-              {{ zone.columns === 0 ? 'Auto' : zone.columns }}
-            </span>
-          </div>
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500">Última linha</label>
-          <select
-            :value="zone.lastRowBehavior ?? 'fill'"
-            @change="updateZone('lastRowBehavior', ($event.target as HTMLSelectElement).value)"
-            class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
-          >
-            <option value="fill">Preencher largura</option>
-            <option value="center">Centralizar</option>
-            <option value="left">Alinhar à esquerda</option>
-          </select>
-        </div>
-
-        <p class="text-[10px] text-zinc-500 leading-relaxed">
-          Use <strong class="text-zinc-300">Auto</strong> em colunas para ajuste responsivo.
-          O sistema mantém os cards dentro da zona automaticamente.
-        </p>
-      </div>
-    </div>
-
-    <!-- Spacing Section -->
-    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
-      <button 
-        @click="toggleSection('spacing')"
-        class="flex items-center justify-between w-full text-left gap-3"
-      >
-        <div>
-          <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Espacamento</span>
-          <div class="mt-1 text-[11px] text-zinc-500">{{ sectionSummary.spacing }}</div>
-        </div>
-        <div class="inline-flex items-center gap-2">
-          <span class="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
-            {{ syncGaps ? 'Sincronizado' : 'Manual' }}
-          </span>
-          <component :is="expandedSections.spacing ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
-        </div>
-      </button>
-      
-      <div v-if="expandedSections.spacing" class="space-y-3 animate-in slide-in-from-top-2 duration-200">
-        
-        <!-- Sync Toggle -->
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input 
-            type="checkbox" 
-            v-model="syncGaps"
-            class="w-3 h-3 rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 focus:ring-offset-0"
-          />
-          <span class="text-[10px] text-zinc-400">Sincronizar gaps com padding</span>
-        </label>
-
-        <!-- Main Padding -->
-        <div class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500 flex items-center gap-1.5">
-            <AlignVerticalSpaceAround class="w-3 h-3" /> Padding Principal
-          </label>
-          <div class="flex items-center gap-2">
-            <input
-              type="range"
-              :value="zone.padding ?? 15"
-              @input="handlePaddingChange(Number(($event.target as HTMLInputElement).value))"
-              min="0"
-              max="50"
-              class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-            />
-            <input
-              type="number"
-              :value="zone.padding ?? 15"
-              @blur="handlePaddingChange(Number(($event.target as HTMLInputElement).value))"
-              class="w-12 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[10px] text-center"
-            />
-          </div>
-        </div>
-
-        <!-- Horizontal Gap (if not synced) -->
-        <div v-if="!syncGaps" class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500 flex items-center gap-1.5">
-            <AlignHorizontalSpaceAround class="w-3 h-3" /> Gap Horizontal
-          </label>
-          <div class="flex items-center gap-2">
-            <input
-              type="range"
-              :value="zone.gapHorizontal ?? 15"
-              @input="updateZone('gapHorizontal', Number(($event.target as HTMLInputElement).value))"
-              min="0"
-              max="50"
-              class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-            />
-            <input
-              type="number"
-              :value="zone.gapHorizontal ?? 15"
-              @blur="updateZone('gapHorizontal', Number(($event.target as HTMLInputElement).value))"
-              class="w-12 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[10px] text-center"
-            />
-          </div>
-        </div>
-
-        <!-- Vertical Gap (if not synced) -->
-        <div v-if="!syncGaps" class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500 flex items-center gap-1.5">
-            <AlignVerticalSpaceAround class="w-3 h-3" /> Gap Vertical
-          </label>
-          <div class="flex items-center gap-2">
-            <input
-              type="range"
-              :value="zone.gapVertical ?? 15"
-              @input="updateZone('gapVertical', Number(($event.target as HTMLInputElement).value))"
-              min="0"
-              max="50"
-              class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-            />
-            <input
-              type="number"
-              :value="zone.gapVertical ?? 15"
-              @blur="updateZone('gapVertical', Number(($event.target as HTMLInputElement).value))"
-              class="w-12 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[10px] text-center"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Highlight Section -->
-    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
-      <button 
-        @click="toggleSection('highlight')"
-        class="flex items-center justify-between w-full text-left gap-3"
-      >
-        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
-          <Star class="w-3 h-3" /> Destaques
-        </span>
-        <div class="inline-flex items-center gap-2">
-          <span class="rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-yellow-200/85">
-            {{ sectionSummary.highlight }}
-          </span>
-          <component :is="expandedSections.highlight ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
-        </div>
-      </button>
-      
-      <div v-if="expandedSections.highlight" class="space-y-3 animate-in slide-in-from-top-2 duration-200">
-        
-        <!-- Highlight Count -->
-        <div class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500">Quantidade de Destaques</label>
-          <div class="flex items-center gap-2">
-            <input
-              type="range"
-              :value="zone.highlightCount ?? 0"
-              @input="updateZone('highlightCount', Number(($event.target as HTMLInputElement).value))"
-              min="0"
-              max="4"
-              class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-yellow-500"
-            />
-            <span class="w-6 text-center text-[10px] font-mono text-zinc-400">
-              {{ zone.highlightCount ?? 0 }}
-            </span>
-          </div>
-        </div>
-
-        <!-- Highlight Position (if count > 0) -->
-        <div v-if="(zone.highlightCount ?? 0) > 0" class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500">Posição</label>
-          <select
-            :value="zone.highlightPos ?? 'first'"
-            @change="updateZone('highlightPos', ($event.target as HTMLSelectElement).value)"
-            class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
-          >
-            <option value="first">Primeiros</option>
-            <option value="last">Últimos</option>
-            <option value="center">Centro</option>
-            <option value="top">Cima</option>
-            <option value="bottom">Baixo</option>
-            <option value="random">Aleatório</option>
-          </select>
-        </div>
-
-        <!-- Highlight Height Multiplier -->
-        <div v-if="(zone.highlightCount ?? 0) > 0" class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500">Altura do Destaque (multiplicador)</label>
-          <div class="flex items-center gap-2">
-            <input
-              type="range"
-              :value="(zone.highlightHeight ?? 1.5) * 10"
-              @input="updateZone('highlightHeight', Number(($event.target as HTMLInputElement).value) / 10)"
-              min="10"
-              max="25"
-              class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-yellow-500"
-            />
-            <span class="w-10 text-center text-[10px] font-mono text-zinc-400">
-              {{ (zone.highlightHeight ?? 1.5).toFixed(1) }}x
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Styles Section -->
-    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
-      <button 
-        @click="toggleSection('styles')"
-        class="flex items-center justify-between w-full text-left gap-3"
-      >
-        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
-          <Palette class="w-3 h-3" /> Estilos Globais
-        </span>
-        <div class="inline-flex items-center gap-2">
-          <span class="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
-            {{ sectionSummary.styles }}
-          </span>
-          <component :is="expandedSections.styles ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-zinc-600" />
-        </div>
-      </button>
-      
-      <div v-if="expandedSections.styles" class="space-y-3 animate-in slide-in-from-top-2 duration-200">
-        <datalist :id="FONT_DATALIST_ID">
-          <option v-for="f in AVAILABLE_FONT_FAMILIES" :key="f" :value="f">{{ f }}</option>
-        </datalist>
-        
-        <!-- Card Color -->
-        <div class="flex items-center justify-between">
-          <label class="text-[10px] text-zinc-500">Cor do Card</label>
-          <div class="flex items-center gap-2">
-            <div ref="cardColorPickerRef" class="relative">
-              <div
-                class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
-                :style="{ backgroundColor: globalStyles?.cardColor ?? '#ffffff' }"
-                @click="showCardColorPicker = true"
-              ></div>
-              <ColorPicker
-                :show="showCardColorPicker"
-                :model-value="globalStyles?.cardColor ?? '#ffffff'"
-                :trigger-element="cardColorPickerRef"
-                @update:show="showCardColorPicker = $event"
-                @update:model-value="(val: string) => updateGlobal('cardColor', val)"
-              />
-            </div>
-            <input
-              type="text"
-              :value="(globalStyles?.cardColor ?? '#ffffff').replace('#', '').toUpperCase()"
-              @blur="updateGlobal('cardColor', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
-              class="w-16 bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
-              placeholder="FFFFFF"
-              maxlength="6"
-            />
-          </div>
-        </div>
-
-        <!-- Accent Color -->
-        <div class="flex items-center justify-between">
-          <label class="text-[10px] text-zinc-500">Cor de Destaque</label>
-          <div class="flex items-center gap-2">
-            <div ref="accentColorPickerRef" class="relative">
-              <div
-                class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
-                :style="{ backgroundColor: globalStyles?.accentColor ?? '#dc2626' }"
-                @click="showAccentColorPicker = true"
-              ></div>
-              <ColorPicker
-                :show="showAccentColorPicker"
-                :model-value="globalStyles?.accentColor ?? '#dc2626'"
-                :trigger-element="accentColorPickerRef"
-                @update:show="showAccentColorPicker = $event"
-                @update:model-value="(val: string) => updateGlobal('accentColor', val)"
-              />
-            </div>
-            <input
-              type="text"
-              :value="(globalStyles?.accentColor ?? '#dc2626').replace('#', '').toUpperCase()"
-              @blur="updateGlobal('accentColor', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
-              class="w-16 bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
-              placeholder="DC2626"
-              maxlength="6"
-            />
-          </div>
-        </div>
-
-        <!-- Transparent Background -->
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input 
-            type="checkbox" 
-            :checked="globalStyles?.isProdBgTransparent ?? false"
-            @change="updateGlobal('isProdBgTransparent', ($event.target as HTMLInputElement).checked)"
-            class="w-3 h-3 rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 focus:ring-offset-0"
-          />
-          <span class="text-[10px] text-zinc-400">Fundo transparente nos cards</span>
-        </label>
-
-        <!-- Card Border -->
-        <div class="grid grid-cols-2 gap-2">
-          <div class="space-y-1.5">
-            <label class="text-[10px] text-zinc-500">Arredondamento (Card)</label>
-            <div class="flex items-center gap-2">
-              <input
-                type="range"
-                :value="globalStyles?.cardBorderRadius ?? 8"
-                @input="updateGlobal('cardBorderRadius', Number(($event.target as HTMLInputElement).value))"
-                min="0"
-                max="40"
-                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-              />
-              <span class="w-10 text-center text-[10px] font-mono text-zinc-400">
-                {{ Math.round(globalStyles?.cardBorderRadius ?? 8) }}
-              </span>
+              <p class="section-description">Escolha uma estrutura pronta ou mantenha um ajuste manual.</p>
             </div>
           </div>
-          <div class="space-y-1.5">
-            <label class="text-[10px] text-zinc-500">Borda (Card)</label>
-            <div class="flex items-center gap-2">
-              <input
-                type="range"
-                :value="globalStyles?.cardBorderWidth ?? 0"
-                @input="updateGlobal('cardBorderWidth', Number(($event.target as HTMLInputElement).value))"
-                min="0"
-                max="12"
-                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-              />
-              <span class="w-10 text-center text-[10px] font-mono text-zinc-400">
-                {{ Math.round(globalStyles?.cardBorderWidth ?? 0) }}
-              </span>
-            </div>
-          </div>
-        </div>
+          <component :is="expandedSections.presets ? ChevronDown : ChevronRight" class="section-chevron" />
+        </button>
 
-        <div class="flex items-center justify-between">
-          <label class="text-[10px] text-zinc-500">Cor da borda (Card)</label>
-          <div class="flex items-center gap-2">
-            <div ref="cardBorderColorPickerRef" class="relative">
-              <div
-                class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
-                :style="{ backgroundColor: globalStyles?.cardBorderColor ?? '#000000' }"
-                @click="showCardBorderColorPicker = true"
-              ></div>
-              <ColorPicker
-                :show="showCardBorderColorPicker"
-                :model-value="globalStyles?.cardBorderColor ?? '#000000'"
-                :trigger-element="cardBorderColorPickerRef"
-                @update:show="showCardBorderColorPicker = $event"
-                @update:model-value="(val: string) => updateGlobal('cardBorderColor', val)"
-              />
+        <div v-show="expandedSections.presets" class="section-panel">
+          <div class="section-block">
+            <div class="section-block__head">
+              <p class="section-kicker">Grades equilibradas</p>
+              <p class="section-note">Boas para listas regulares e tabloides densos.</p>
             </div>
-            <input
-              type="text"
-              :value="(globalStyles?.cardBorderColor ?? '#000000').replace('#', '').toUpperCase()"
-              @blur="updateGlobal('cardBorderColor', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
-              class="w-16 bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
-              placeholder="000000"
-              maxlength="6"
-            />
-          </div>
-        </div>
-
-        <!-- Label Template -->
-        <div class="space-y-1.5">
-          <div class="flex items-center justify-between">
-            <label class="text-[10px] text-zinc-500">Modelo de Etiqueta</label>
-            <div class="flex items-center gap-2">
+            <div class="preset-grid">
               <button
+                v-for="preset in gridPresets"
+                :key="preset.id"
                 type="button"
-                class="text-[10px] text-violet-300 hover:text-violet-200 transition-colors"
-                @click="emit('manage-label-templates')"
+                class="preset-card"
+                :class="{ 'preset-card--active': currentPreset === preset.id }"
+                @click="applyPreset(preset.id)"
               >
-                Gerenciar
+                <div class="layout-preview" :style="getPreviewGridStyle(preset)">
+                  <span
+                    v-for="cell in getPreviewCells(preset)"
+                    :key="cell.id"
+                    :class="[
+                      'layout-preview__cell',
+                      cell.tone === 'highlight' ? 'layout-preview__cell--highlight' : 'layout-preview__cell--base'
+                    ]"
+                    :style="getPreviewCellStyle(cell)"
+                  />
+                </div>
+                <div class="preset-card__content">
+                  <strong>{{ preset.name }}</strong>
+                  <span>{{ preset.description }}</span>
+                </div>
               </button>
             </div>
           </div>
-          <select
-            :value="globalStyles?.splashTemplateId ?? ''"
-            @change="updateGlobal('splashTemplateId', (($event.target as HTMLSelectElement).value || undefined))"
-            class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
-          >
-            <option value="">Padrão (Sem modelo)</option>
-            <option v-for="tpl in (labelTemplates ?? [])" :key="tpl.id" :value="tpl.id">
-              {{ tpl.name }}
-            </option>
-          </select>
-          <div class="flex items-center gap-2">
-            <p class="text-[9px] text-zinc-500 leading-snug flex-1">
-              Usado para novos produtos. Para aplicar aos existentes:
-            </p>
-            <button
-              type="button"
-              class="text-[9px] text-green-400 hover:text-green-300 transition-colors underline"
-              @click="emit('apply-template-to-zone')"
-            >
-              Aplicar a todos
-            </button>
-          </div>
-        </div>
 
-        <!-- Splash Style -->
-        <div class="space-y-1.5">
-          <label class="text-[10px] text-zinc-500">Estilo do Splash</label>
-          <select
-            :value="globalStyles?.splashStyle ?? 'classic'"
-            @change="updateGlobal('splashStyle', ($event.target as HTMLSelectElement).value)"
-            class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
-          >
-            <option v-for="style in SPLASH_STYLES" :key="style.id" :value="style.id">
-              {{ style.name }}
-            </option>
-          </select>
-        </div>
-
-        <!-- Splash Colors -->
-        <div class="grid grid-cols-2 gap-2">
-          <div class="space-y-1">
-            <label class="text-[9px] text-zinc-500">Cor Splash</label>
-            <div ref="splashColorPickerRef" class="relative">
-              <div
-                class="w-full h-7 rounded border border-white/10 cursor-pointer relative overflow-hidden"
-                :style="{ backgroundColor: globalStyles?.splashColor ?? '#dc2626' }"
-                @click="showSplashColorPicker = true"
-              ></div>
-              <ColorPicker
-                :show="showSplashColorPicker"
-                :model-value="globalStyles?.splashColor ?? '#dc2626'"
-                :trigger-element="splashColorPickerRef"
-                @update:show="showSplashColorPicker = $event"
-                @update:model-value="(val: string) => updateGlobal('splashColor', val)"
-              />
+          <div class="section-block">
+            <div class="section-block__head">
+              <p class="section-kicker">Com produto hero</p>
+              <p class="section-note">Para destacar campeões de oferta sem quebrar a grade.</p>
             </div>
-          </div>
-          <div class="space-y-1">
-            <label class="text-[9px] text-zinc-500">Texto Splash</label>
-            <div ref="splashTextColorPickerRef" class="relative">
-              <div
-                class="w-full h-7 rounded border border-white/10 cursor-pointer relative overflow-hidden"
-                :style="{ backgroundColor: globalStyles?.splashTextColor ?? '#ffffff' }"
-                @click="showSplashTextColorPicker = true"
-              ></div>
-              <ColorPicker
-                :show="showSplashTextColorPicker"
-                :model-value="globalStyles?.splashTextColor ?? '#ffffff'"
-                :trigger-element="splashTextColorPickerRef"
-                @update:show="showSplashTextColorPicker = $event"
-                @update:model-value="(val: string) => updateGlobal('splashTextColor', val)"
-              />
+            <div class="preset-grid">
+              <button
+                v-for="preset in specialPresets"
+                :key="preset.id"
+                type="button"
+                class="preset-card preset-card--special"
+                :class="{ 'preset-card--active': currentPreset === preset.id }"
+                @click="applyPreset(preset.id)"
+              >
+                <div class="layout-preview" :style="getPreviewGridStyle(preset)">
+                  <span
+                    v-for="cell in getPreviewCells(preset)"
+                    :key="cell.id"
+                    :class="[
+                      'layout-preview__cell',
+                      cell.tone === 'highlight' ? 'layout-preview__cell--highlight' : 'layout-preview__cell--base'
+                    ]"
+                    :style="getPreviewCellStyle(cell)"
+                  />
+                </div>
+                <div class="preset-card__content">
+                  <strong>{{ preset.name }}</strong>
+                  <span>{{ preset.description }}</span>
+                </div>
+              </button>
             </div>
           </div>
         </div>
+      </section>
 
-        <div class="h-px bg-white/5" />
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.layout }">
+        <button type="button" class="section-toggle" @click="toggleSection('layout')">
+          <div class="section-toggle__lead">
+            <div class="section-icon section-icon--blue">
+              <Columns3 class="h-4 w-4" />
+            </div>
+            <div class="section-toggle__copy">
+              <div class="section-toggle__title-row">
+                <span class="section-title">Estrutura da grade</span>
+                <span class="section-summary">{{ zoneColumnsLabel }}</span>
+              </div>
+              <p class="section-description">Ajustes finos de colunas, linhas e distribuição interna.</p>
+            </div>
+          </div>
+          <component :is="expandedSections.layout ? ChevronDown : ChevronRight" class="section-chevron" />
+        </button>
 
-        <!-- Product Name Typography -->
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Nome do Produto</span>
+        <div v-show="expandedSections.layout" class="section-panel">
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Colunas por linha</label>
+                <p class="field-hint">Use `0` para deixar a zona decidir automaticamente.</p>
+              </div>
+              <div class="value-editor">
+                <input
+                  type="number"
+                  min="0"
+                  max="8"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="zone.columns ?? 0"
+                  aria-label="Colunas por linha"
+                  title="0 = automático"
+                  @input="updateZoneInt('columns', ($event.target as HTMLInputElement).valueAsNumber, zone.columns ?? 0, 0, 8)"
+                />
+                <span class="value-suffix">{{ zone.columns === 0 ? 'Auto' : 'col' }}</span>
+              </div>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="8"
+              :value="zone.columns ?? 0"
+              class="slider text-sky-400"
+              @input="updateZoneInt('columns', ($event.target as HTMLInputElement).value, zone.columns ?? 0, 0, 8)"
+            />
+            <div class="range-scale">
+              <span>Auto</span>
+              <span>8</span>
+            </div>
           </div>
 
-          <div class="space-y-1.5">
-            <label class="text-[10px] text-zinc-500">Fonte</label>
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Linhas visadas</label>
+                <p class="field-hint">Bom para impor uma moldura fixa em encartes fechados.</p>
+              </div>
+              <div class="value-editor">
+                <input
+                  type="number"
+                  min="0"
+                  max="8"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="zone.rows ?? 0"
+                  aria-label="Linhas visadas"
+                  title="0 = automático"
+                  @input="updateZoneInt('rows', ($event.target as HTMLInputElement).valueAsNumber, zone.rows ?? 0, 0, 8)"
+                />
+                <span class="value-suffix">{{ zone.rows === 0 ? 'Auto' : 'lin' }}</span>
+              </div>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="8"
+              :value="zone.rows ?? 0"
+              class="slider text-sky-400"
+              @input="updateZoneInt('rows', ($event.target as HTMLInputElement).value, zone.rows ?? 0, 0, 8)"
+            />
+            <div class="range-scale">
+              <span>Auto</span>
+              <span>8</span>
+            </div>
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Fluxo de preenchimento</label>
+              <p class="field-hint">Controla a ordem em que os produtos ocupam a grade.</p>
+            </div>
+            <div class="segmented-grid segmented-grid--2">
+              <button
+                v-for="option in layoutDirectionOptions"
+                :key="option.value"
+                type="button"
+                class="segmented-option"
+                :class="{ 'segmented-option--active': (zone.layoutDirection ?? 'horizontal') === option.value }"
+                @click="updateZone('layoutDirection', option.value)"
+              >
+                <strong>{{ option.label }}</strong>
+                <span>{{ option.hint }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Comportamento da última linha</label>
+              <p class="field-hint">Evita uma última faixa desbalanceada quando sobram poucos cards.</p>
+            </div>
+            <div class="segmented-grid segmented-grid--2">
+              <button
+                v-for="option in lastRowBehaviorOptions"
+                :key="option.value"
+                type="button"
+                class="segmented-option"
+                :class="{ 'segmented-option--active': (zone.lastRowBehavior ?? 'fill') === option.value }"
+                @click="updateZone('lastRowBehavior', option.value)"
+              >
+                <strong>{{ option.label }}</strong>
+                <span>{{ option.hint }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Alinhamento vertical</label>
+              <p class="field-hint">Define como os cartões ocupam a altura do slot disponível.</p>
+            </div>
+            <div class="segmented-grid segmented-grid--2">
+              <button
+                v-for="option in verticalAlignOptions"
+                :key="option.value"
+                type="button"
+                class="segmented-option"
+                :class="{ 'segmented-option--active': (zone.verticalAlign ?? 'stretch') === option.value }"
+                @click="updateZone('verticalAlign', option.value)"
+              >
+                <strong>{{ option.label }}</strong>
+              </button>
+            </div>
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Proporção dos cartões</label>
+              <p class="field-hint">Útil quando a zona precisa parecer mais editorial ou mais compacta.</p>
+            </div>
             <select
-              :value="globalStyles?.prodNameFont ?? 'Inter'"
-              @change="handleProdNameFontChange"
-              class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              :value="zone.cardAspectRatio ?? 'fill'"
+              class="field-select"
+              @change="updateZone('cardAspectRatio', ($event.target as HTMLSelectElement).value)"
             >
-              <option v-for="f in AVAILABLE_FONT_FAMILIES" :key="f" :value="f">{{ f }}</option>
+              <option v-for="option in cardAspectRatioOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.spacing }">
+        <button type="button" class="section-toggle" @click="toggleSection('spacing')">
+          <div class="section-toggle__lead">
+            <div class="section-icon section-icon--cyan">
+              <AlignVerticalSpaceAround class="h-4 w-4" />
+            </div>
+            <div class="section-toggle__copy">
+              <div class="section-toggle__title-row">
+                <span class="section-title">Ritmo e espaçamento</span>
+                <span class="section-summary">{{ spacingSummaryLabel }}</span>
+              </div>
+              <p class="section-description">Mantenha o respiro da zona estável e previsível.</p>
+            </div>
+          </div>
+          <component :is="expandedSections.spacing ? ChevronDown : ChevronRight" class="section-chevron" />
+        </button>
+
+        <div v-show="expandedSections.spacing" class="section-panel">
+          <label class="switch-card">
+            <div>
+              <span class="field-label">Vincular gaps ao padding</span>
+              <p class="field-hint">Quando ativo, a grade inteira respira no mesmo ritmo.</p>
+            </div>
+            <span class="switch" :class="{ 'switch--checked': syncGaps }">
+              <input
+                type="checkbox"
+                class="sr-only"
+                :checked="syncGaps"
+                @change="handleSyncToggle(($event.target as HTMLInputElement).checked)"
+              />
+              <span class="switch__track"></span>
+              <span class="switch__thumb"></span>
+            </span>
+          </label>
+
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Padding externo</label>
+                <p class="field-hint">Respiro entre a borda da zona e o primeiro bloco de produto.</p>
+              </div>
+              <div class="value-editor">
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="Math.round(zone.padding ?? 15)"
+                  aria-label="Padding externo"
+                  @input="handlePaddingChange(($event.target as HTMLInputElement).valueAsNumber)"
+                />
+                <span class="value-suffix">px</span>
+              </div>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="60"
+              :value="zone.padding ?? 15"
+              class="slider text-cyan-400"
+              @input="handlePaddingChange(($event.target as HTMLInputElement).value)"
+            />
+          </div>
+
+          <template v-if="!syncGaps">
+            <div class="control-card">
+              <div class="control-card__head">
+                <div>
+                  <label class="field-label">Gap horizontal</label>
+                  <p class="field-hint">Espaço entre colunas.</p>
+                </div>
+                <div class="value-editor">
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    inputmode="numeric"
+                    class="value-input"
+                    :value="Math.round(zone.gapHorizontal ?? zone.padding ?? 15)"
+                    aria-label="Gap horizontal"
+                    @input="updateZoneInt('gapHorizontal', ($event.target as HTMLInputElement).valueAsNumber, zone.gapHorizontal ?? zone.padding ?? 15, 0, 60)"
+                  />
+                  <span class="value-suffix">px</span>
+                </div>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="60"
+                :value="zone.gapHorizontal ?? zone.padding ?? 15"
+                class="slider text-cyan-400"
+                @input="updateZoneInt('gapHorizontal', ($event.target as HTMLInputElement).value, zone.gapHorizontal ?? zone.padding ?? 15, 0, 60)"
+              />
+            </div>
+
+            <div class="control-card">
+              <div class="control-card__head">
+                <div>
+                  <label class="field-label">Gap vertical</label>
+                  <p class="field-hint">Espaço entre linhas.</p>
+                </div>
+                <div class="value-editor">
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="1"
+                    inputmode="numeric"
+                    class="value-input"
+                    :value="Math.round(zone.gapVertical ?? zone.padding ?? 15)"
+                    aria-label="Gap vertical"
+                    @input="updateZoneInt('gapVertical', ($event.target as HTMLInputElement).valueAsNumber, zone.gapVertical ?? zone.padding ?? 15, 0, 60)"
+                  />
+                  <span class="value-suffix">px</span>
+                </div>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="60"
+                :value="zone.gapVertical ?? zone.padding ?? 15"
+                class="slider text-cyan-400"
+                @input="updateZoneInt('gapVertical', ($event.target as HTMLInputElement).value, zone.gapVertical ?? zone.padding ?? 15, 0, 60)"
+              />
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.highlight }">
+        <button type="button" class="section-toggle" @click="toggleSection('highlight')">
+          <div class="section-toggle__lead">
+            <div class="section-icon section-icon--amber">
+              <Star class="h-4 w-4" />
+            </div>
+            <div class="section-toggle__copy">
+              <div class="section-toggle__title-row">
+                <span class="section-title">Produto hero</span>
+                <span class="section-summary">{{ highlightSummaryLabel }}</span>
+              </div>
+              <p class="section-description">Defina quantos cards quebram a grade para chamar atenção.</p>
+            </div>
+          </div>
+          <component :is="expandedSections.highlight ? ChevronDown : ChevronRight" class="section-chevron" />
+        </button>
+
+        <div v-show="expandedSections.highlight" class="section-panel">
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Quantidade de destaques</label>
+              <p class="field-hint">`0` mantém todos os produtos na mesma hierarquia.</p>
+            </div>
+            <div class="segmented-grid segmented-grid--5">
+              <button
+                v-for="count in [0, 1, 2, 3, 4]"
+                :key="count"
+                type="button"
+                class="segmented-option segmented-option--compact"
+                :class="{ 'segmented-option--active': (zone.highlightCount ?? 0) === count }"
+                @click="updateZone('highlightCount', count)"
+              >
+                <strong>{{ count }}</strong>
+              </button>
+            </div>
+          </div>
+
+          <template v-if="(zone.highlightCount ?? 0) > 0">
+            <div class="field-stack">
+              <div class="field-stack__head">
+                <label class="field-label">Posição preferida</label>
+                <p class="field-hint">Escolha onde a área hero deve aparecer na leitura visual.</p>
+              </div>
+              <div class="segmented-grid segmented-grid--2">
+                <button
+                  v-for="option in highlightPositionOptions"
+                  :key="option.value"
+                  type="button"
+                  class="segmented-option segmented-option--compact"
+                  :class="{ 'segmented-option--active': (zone.highlightPos ?? 'first') === option.value }"
+                  @click="updateZone('highlightPos', option.value)"
+                >
+                  <strong>{{ option.label }}</strong>
+                </button>
+              </div>
+            </div>
+
+            <div class="control-card">
+              <div class="control-card__head">
+                <div>
+                  <label class="field-label">Altura do hero</label>
+                  <p class="field-hint">Aumenta a presença vertical do card destacado.</p>
+                </div>
+                <div class="value-editor">
+                  <input
+                    type="number"
+                    min="1"
+                    max="2.5"
+                    step="0.1"
+                    inputmode="decimal"
+                    class="value-input"
+                    :value="(zone.highlightHeight ?? 1.5).toFixed(1)"
+                    aria-label="Altura do hero"
+                    @input="updateZoneFloat('highlightHeight', ($event.target as HTMLInputElement).valueAsNumber, zone.highlightHeight ?? 1.5, 1, 2.5)"
+                  />
+                  <span class="value-suffix">x</span>
+                </div>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="25"
+                :value="Math.round((zone.highlightHeight ?? 1.5) * 10)"
+                class="slider text-amber-400"
+                @input="updateZoneFloat('highlightHeight', Number(($event.target as HTMLInputElement).value) / 10, zone.highlightHeight ?? 1.5, 1, 2.5)"
+              />
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.cardStyle }">
+        <button type="button" class="section-toggle" @click="toggleSection('cardStyle')">
+          <div class="section-toggle__lead">
+            <div class="section-icon section-icon--neutral">
+              <CreditCard class="h-4 w-4" />
+            </div>
+            <div class="section-toggle__copy">
+              <div class="section-toggle__title-row">
+                <span class="section-title">Card e moldura</span>
+                <span class="section-summary">Base visual da oferta</span>
+              </div>
+              <p class="section-description">Cores, transparência, raio e borda do módulo de produto.</p>
+            </div>
+          </div>
+          <component :is="expandedSections.cardStyle ? ChevronDown : ChevronRight" class="section-chevron" />
+        </button>
+
+        <div v-show="expandedSections.cardStyle" class="section-panel">
+          <div class="field-stack">
+            <div class="color-field">
+              <div class="color-field__copy">
+                <label class="field-label">Fundo do card</label>
+                <p class="field-hint">Plano principal do bloco de produto.</p>
+              </div>
+              <div class="color-field__controls">
+                <ColorPicker
+                  :show="showCardColorPicker"
+                  :model-value="globalStyles?.cardColor ?? '#ffffff'"
+                  :trigger-element="cardColorPickerRef"
+                  @update:show="showCardColorPicker = $event"
+                  @update:model-value="(val) => updateGlobal('cardColor', val)"
+                />
+                <button
+                  ref="cardColorPickerRef"
+                  type="button"
+                  class="color-trigger"
+                  :style="{ backgroundColor: globalStyles?.cardColor ?? '#ffffff' }"
+                  @click="showCardColorPicker = true"
+                />
+                <input
+                  type="text"
+                  class="hex-input"
+                  :value="(globalStyles?.cardColor ?? '#ffffff').replace('#', '').toUpperCase()"
+                  @blur="updateGlobal('cardColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.cardColor ?? '#ffffff'))"
+                />
+              </div>
+            </div>
+
+            <div class="color-field">
+              <div class="color-field__copy">
+                <label class="field-label">Cor de destaque</label>
+                <p class="field-hint">Usada nas ênfases do card e da etiqueta.</p>
+              </div>
+              <div class="color-field__controls">
+                <ColorPicker
+                  :show="showAccentColorPicker"
+                  :model-value="globalStyles?.accentColor ?? '#dc2626'"
+                  :trigger-element="accentColorPickerRef"
+                  @update:show="showAccentColorPicker = $event"
+                  @update:model-value="(val) => updateGlobal('accentColor', val)"
+                />
+                <button
+                  ref="accentColorPickerRef"
+                  type="button"
+                  class="color-trigger"
+                  :style="{ backgroundColor: globalStyles?.accentColor ?? '#dc2626' }"
+                  @click="showAccentColorPicker = true"
+                />
+                <input
+                  type="text"
+                  class="hex-input"
+                  :value="(globalStyles?.accentColor ?? '#dc2626').replace('#', '').toUpperCase()"
+                  @blur="updateGlobal('accentColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.accentColor ?? '#dc2626'))"
+                />
+              </div>
+            </div>
+
+            <label class="switch-card">
+              <div>
+                <span class="field-label">Produto sem fundo</span>
+                <p class="field-hint">Útil para embalagens e garrafas que precisam parecer recortadas.</p>
+              </div>
+              <span class="switch" :class="{ 'switch--checked': globalStyles?.isProdBgTransparent ?? false }">
+                <input
+                  type="checkbox"
+                  class="sr-only"
+                  :checked="globalStyles?.isProdBgTransparent ?? false"
+                  @change="updateGlobal('isProdBgTransparent', ($event.target as HTMLInputElement).checked)"
+                />
+                <span class="switch__track"></span>
+                <span class="switch__thumb"></span>
+              </span>
+            </label>
+
+            <div class="control-card">
+              <div class="control-card__head">
+                <div>
+                  <label class="field-label">Raio dos cantos</label>
+                  <p class="field-hint">Deixa o card mais técnico ou mais amigável.</p>
+                </div>
+                <div class="value-editor">
+                  <input
+                    type="number"
+                    min="0"
+                    max="40"
+                    step="1"
+                    inputmode="numeric"
+                    class="value-input"
+                    :value="Math.round(globalStyles?.cardBorderRadius ?? 8)"
+                    aria-label="Raio dos cantos"
+                    @input="updateGlobalInt('cardBorderRadius', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.cardBorderRadius ?? 8, 0, 40)"
+                  />
+                  <span class="value-suffix">px</span>
+                </div>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="40"
+                :value="globalStyles?.cardBorderRadius ?? 8"
+                class="slider text-zinc-300"
+                @input="updateGlobal('cardBorderRadius', Number(($event.target as HTMLInputElement).value))"
+              />
+            </div>
+
+            <div class="control-card">
+              <div class="control-card__head">
+                <div>
+                  <label class="field-label">Espessura da borda</label>
+                  <p class="field-hint">Cria separação entre os produtos e o fundo da página.</p>
+                </div>
+                <div class="value-editor">
+                  <input
+                    type="number"
+                    min="0"
+                    max="12"
+                    step="1"
+                    inputmode="numeric"
+                    class="value-input"
+                    :value="Math.round(globalStyles?.cardBorderWidth ?? 0)"
+                    aria-label="Espessura da borda"
+                    @input="updateGlobalInt('cardBorderWidth', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.cardBorderWidth ?? 0, 0, 12)"
+                  />
+                  <span class="value-suffix">px</span>
+                </div>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="12"
+                :value="globalStyles?.cardBorderWidth ?? 0"
+                class="slider text-zinc-300"
+                @input="updateGlobal('cardBorderWidth', Number(($event.target as HTMLInputElement).value))"
+              />
+            </div>
+
+            <div class="color-field">
+              <div class="color-field__copy">
+                <label class="field-label">Cor da borda</label>
+                <p class="field-hint">Aparece quando a espessura da borda for maior que `0`.</p>
+              </div>
+              <div class="color-field__controls">
+                <ColorPicker
+                  :show="showCardBorderColorPicker"
+                  :model-value="globalStyles?.cardBorderColor ?? '#000000'"
+                  :trigger-element="cardBorderColorPickerRef"
+                  @update:show="showCardBorderColorPicker = $event"
+                  @update:model-value="(val) => updateGlobal('cardBorderColor', val)"
+                />
+                <button
+                  ref="cardBorderColorPickerRef"
+                  type="button"
+                  class="color-trigger"
+                  :style="{ backgroundColor: globalStyles?.cardBorderColor ?? '#000000' }"
+                  @click="showCardBorderColorPicker = true"
+                />
+                <input
+                  type="text"
+                  class="hex-input"
+                  :value="(globalStyles?.cardBorderColor ?? '#000000').replace('#', '').toUpperCase()"
+                  @blur="updateGlobal('cardBorderColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.cardBorderColor ?? '#000000'))"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.typography }">
+        <button type="button" class="section-toggle" @click="toggleSection('typography')">
+          <div class="section-toggle__lead">
+            <div class="section-icon section-icon--green">
+              <Type class="h-4 w-4" />
+            </div>
+            <div class="section-toggle__copy">
+              <div class="section-toggle__title-row">
+                <span class="section-title">Nome do produto</span>
+                <span class="section-summary">Tipografia e alinhamento</span>
+              </div>
+              <p class="section-description">Organize a leitura do texto sem esmagar o card.</p>
+            </div>
+          </div>
+          <component :is="expandedSections.typography ? ChevronDown : ChevronRight" class="section-chevron" />
+        </button>
+
+        <div v-show="expandedSections.typography" class="section-panel">
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Família tipográfica</label>
+              <p class="field-hint">Mantém consistência com o restante da oferta.</p>
+            </div>
+            <select :value="globalStyles?.prodNameFont ?? 'Inter'" class="field-select" @change="handleProdNameFontChange">
+              <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
             </select>
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Cor</label>
-              <div class="flex items-center gap-2">
-                <div ref="prodNameColorPickerRef" class="relative">
-                  <div
-                    class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
-                    :style="{ backgroundColor: globalStyles?.prodNameColor ?? '#000000' }"
-                    @click="showProdNameColorPicker = true"
-                  ></div>
-                  <ColorPicker
-                    :show="showProdNameColorPicker"
-                    :model-value="globalStyles?.prodNameColor ?? '#000000'"
-                    :trigger-element="prodNameColorPickerRef"
-                    @update:show="showProdNameColorPicker = $event"
-                    @update:model-value="(val: string) => updateGlobal('prodNameColor', val)"
-                  />
-                </div>
-                <input
-                  type="text"
-                  :value="(globalStyles?.prodNameColor ?? '#000000').replace('#', '').toUpperCase()"
-                  @blur="updateGlobal('prodNameColor', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
-                  class="w-full bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
-                  placeholder="000000"
-                  maxlength="6"
-                />
-              </div>
+          <div class="color-field">
+            <div class="color-field__copy">
+              <label class="field-label">Cor do nome</label>
+              <p class="field-hint">Use alto contraste para leitura rápida em tabloide.</p>
             </div>
-
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Peso</label>
-              <select
-                :value="globalStyles?.prodNameWeight ?? 700"
-                @change="updateGlobal('prodNameWeight', Number(($event.target as HTMLSelectElement).value))"
-                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              >
-                <option v-for="w in prodNameWeightOptions" :key="w.value" :value="w.value">{{ w.label }}</option>
-              </select>
+            <div class="color-field__controls">
+              <ColorPicker
+                :show="showProdNameColorPicker"
+                :model-value="globalStyles?.prodNameColor ?? '#000000'"
+                :trigger-element="prodNameColorPickerRef"
+                @update:show="showProdNameColorPicker = $event"
+                @update:model-value="(val) => updateGlobal('prodNameColor', val)"
+              />
+              <button
+                ref="prodNameColorPickerRef"
+                type="button"
+                class="color-trigger"
+                :style="{ backgroundColor: globalStyles?.prodNameColor ?? '#000000' }"
+                @click="showProdNameColorPicker = true"
+              />
+              <input
+                type="text"
+                class="hex-input"
+                :value="(globalStyles?.prodNameColor ?? '#000000').replace('#', '').toUpperCase()"
+                @blur="updateGlobal('prodNameColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.prodNameColor ?? '#000000'))"
+              />
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Escala (tamanho)</label>
-              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Peso da fonte</label>
+            </div>
+            <select
+              :value="globalStyles?.prodNameWeight ?? 700"
+              class="field-select"
+              @change="updateGlobal('prodNameWeight', Number(($event.target as HTMLSelectElement).value))"
+            >
+              <option v-for="weight in prodNameWeightOptions" :key="weight.value" :value="weight.value">
+                {{ weight.label }}
+              </option>
+            </select>
+          </div>
+
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Escala do texto</label>
+                <p class="field-hint">Ajusta o impacto do nome sem mudar a hierarquia da etiqueta.</p>
+              </div>
+              <div class="value-editor">
                 <input
-                  type="range"
-                  :value="Math.round(((globalStyles?.prodNameScale ?? 1) * 100))"
-                  @input="updateGlobal('prodNameScale', Number(($event.target as HTMLInputElement).value) / 100)"
+                  type="number"
                   min="60"
                   max="170"
-                  class="w-full min-w-0 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="Math.round((globalStyles?.prodNameScale ?? 1) * 100)"
+                  aria-label="Escala do texto"
+                  @input="updateGlobalFloat('prodNameScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.prodNameScale ?? 1, 0.6, 1.7, 2)"
                 />
-                <span class="w-12 shrink-0 text-center text-[10px] font-mono text-zinc-400">
-                  {{ Math.round((globalStyles?.prodNameScale ?? 1) * 100) }}%
-                </span>
+                <span class="value-suffix">%</span>
               </div>
             </div>
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Altura da linha</label>
-              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                <input
-                  type="range"
-                  :value="Math.round(((globalStyles?.prodNameLineHeight ?? 1.05) * 100))"
-                  @input="updateGlobal('prodNameLineHeight', Number(($event.target as HTMLInputElement).value) / 100)"
-                  min="80"
-                  max="180"
-                  class="w-full min-w-0 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-                />
-                <span class="w-12 shrink-0 text-center text-[10px] font-mono text-zinc-400">
-                  {{ (globalStyles?.prodNameLineHeight ?? 1.05).toFixed(2) }}
-                </span>
-              </div>
-            </div>
+            <input
+              type="range"
+              min="60"
+              max="170"
+              :value="Math.round((globalStyles?.prodNameScale ?? 1) * 100)"
+              class="slider text-emerald-400"
+              @input="updateGlobal('prodNameScale', Number(($event.target as HTMLInputElement).value) / 100)"
+            />
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Transformação</label>
-              <select
-                :value="globalStyles?.prodNameTransform ?? 'upper'"
-                @change="updateGlobal('prodNameTransform', ($event.target as HTMLSelectElement).value)"
-                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              >
-                <option value="upper">MAIÚSCULO</option>
-                <option value="lower">minúsculo</option>
-                <option value="none">Normal</option>
-              </select>
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Altura de linha</label>
+                <p class="field-hint">Ajuda nomes longos sem virar bloco pesado.</p>
+              </div>
+              <div class="value-editor">
+                <input
+                  type="number"
+                  min="0.8"
+                  max="1.8"
+                  step="0.01"
+                  inputmode="decimal"
+                  class="value-input"
+                  :value="(globalStyles?.prodNameLineHeight ?? 1.05).toFixed(2)"
+                  aria-label="Altura de linha"
+                  @input="updateGlobalFloat('prodNameLineHeight', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.prodNameLineHeight ?? 1.05, 0.8, 1.8, 2)"
+                />
+                <span class="value-suffix">lh</span>
+              </div>
             </div>
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Alinhamento</label>
-              <select
-                :value="globalStyles?.prodNameAlign ?? 'center'"
-                @change="updateGlobal('prodNameAlign', ($event.target as HTMLSelectElement).value)"
-                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            <input
+              type="range"
+              min="80"
+              max="180"
+              :value="Math.round((globalStyles?.prodNameLineHeight ?? 1.05) * 100)"
+              class="slider text-emerald-400"
+              @input="updateGlobal('prodNameLineHeight', Number(($event.target as HTMLInputElement).value) / 100)"
+            />
+          </div>
+
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Deslocamento Y</label>
+                <p class="field-hint">Move o nome do produto para cima ou para baixo dentro do card.</p>
+              </div>
+              <div class="value-editor">
+                <input
+                  type="number"
+                  min="-160"
+                  max="160"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="Math.round(globalStyles?.prodNameOffsetY ?? 0)"
+                  aria-label="Deslocamento Y do nome do produto"
+                  @input="updateGlobalInt('prodNameOffsetY', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.prodNameOffsetY ?? 0, -160, 160)"
+                />
+                <span class="value-suffix">px</span>
+              </div>
+            </div>
+            <input
+              type="range"
+              min="-160"
+              max="160"
+              :value="globalStyles?.prodNameOffsetY ?? 0"
+              class="slider text-emerald-400"
+              @input="updateGlobal('prodNameOffsetY', Number(($event.target as HTMLInputElement).value))"
+            />
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Transformação</label>
+            </div>
+            <select
+              :value="globalStyles?.prodNameTransform ?? 'upper'"
+              class="field-select"
+              @change="updateGlobal('prodNameTransform', ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="upper">Maiúsculas</option>
+              <option value="lower">Minúsculas</option>
+              <option value="none">Normal</option>
+            </select>
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Alinhamento do texto</label>
+            </div>
+            <div class="segmented-grid segmented-grid--3">
+              <button
+                type="button"
+                class="segmented-option segmented-option--compact"
+                :class="{ 'segmented-option--active': globalStyles?.prodNameAlign === 'left' }"
+                @click="updateGlobal('prodNameAlign', 'left')"
               >
-                <option value="left">Esquerda</option>
-                <option value="center">Centro</option>
-                <option value="right">Direita</option>
-              </select>
+                <strong>Esquerda</strong>
+              </button>
+              <button
+                type="button"
+                class="segmented-option segmented-option--compact"
+                :class="{ 'segmented-option--active': (globalStyles?.prodNameAlign ?? 'center') === 'center' }"
+                @click="updateGlobal('prodNameAlign', 'center')"
+              >
+                <strong>Centro</strong>
+              </button>
+              <button
+                type="button"
+                class="segmented-option segmented-option--compact"
+                :class="{ 'segmented-option--active': globalStyles?.prodNameAlign === 'right' }"
+                @click="updateGlobal('prodNameAlign', 'right')"
+              >
+                <strong>Direita</strong>
+              </button>
             </div>
           </div>
         </div>
+      </section>
 
-        <div class="h-px bg-white/5" />
-
-        <!-- Price Tag (Etiqueta) -->
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Etiqueta de Preço</span>
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="text-[10px] text-zinc-500">Tamanho da etiqueta (escala)</label>
-            <div class="flex items-center gap-2">
-              <input
-                type="range"
-                :value="Math.round(((globalStyles?.splashScale ?? 1) * 100))"
-                @input="updateGlobal('splashScale', Number(($event.target as HTMLInputElement).value) / 100)"
-                min="60"
-                max="170"
-                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-              />
-              <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
-                {{ Math.round((globalStyles?.splashScale ?? 1) * 100) }}%
-              </span>
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.priceTag }">
+        <button type="button" class="section-toggle" @click="toggleSection('priceTag')">
+          <div class="section-toggle__lead">
+            <div class="section-icon section-icon--magenta">
+              <Tag class="h-4 w-4" />
             </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Fundo da etiqueta</label>
-              <div class="flex items-center gap-2">
-                <div ref="splashFillPickerRef" class="relative">
-                  <div
-                    class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
-                    :style="{ backgroundColor: globalStyles?.splashFill ?? '#000000' }"
-                    @click="showSplashFillPicker = true"
-                  ></div>
-                  <ColorPicker
-                    :show="showSplashFillPicker"
-                    :model-value="globalStyles?.splashFill ?? '#000000'"
-                    :trigger-element="splashFillPickerRef"
-                    @update:show="showSplashFillPicker = $event"
-                    @update:model-value="(val: string) => updateGlobal('splashFill', val)"
-                  />
-                </div>
-                <input
-                  type="text"
-                  :value="(globalStyles?.splashFill ?? '#000000').replace('#', '').toUpperCase()"
-                  @blur="updateGlobal('splashFill', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
-                  class="w-full bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
-                  placeholder="000000"
-                  maxlength="6"
-                />
+            <div class="section-toggle__copy">
+              <div class="section-toggle__title-row">
+                <span class="section-title">Etiqueta de preço</span>
+                <span class="section-summary">{{ styleSummaryLabel }}</span>
               </div>
+              <p class="section-description">Biblioteca, fallback visual e ajustes de posição.</p>
             </div>
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Arredondamento</label>
-              <div class="flex items-center gap-2">
-                <input
-                  type="range"
-                  :value="Math.round(((globalStyles?.splashRoundness ?? 1) * 100))"
-                  @input="updateGlobal('splashRoundness', Number(($event.target as HTMLInputElement).value) / 100)"
-                  min="0"
-                  max="100"
-                  class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-                />
-                <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
-                  {{ Math.round((globalStyles?.splashRoundness ?? 1) * 100) }}%
-                </span>
+          </div>
+          <component :is="expandedSections.priceTag ? ChevronDown : ChevronRight" class="section-chevron" />
+        </button>
+
+        <div v-show="expandedSections.priceTag" class="section-panel">
+          <div class="template-card">
+            <div class="template-card__head">
+              <div>
+                <label class="field-label">Modelo da zona</label>
+                <p class="field-hint">Aplique uma etiqueta comum para todos os cards da zona.</p>
               </div>
+              <button type="button" class="ghost-button" @click="emit('manage-label-templates')">
+                Gerenciar
+              </button>
+            </div>
+
+            <select
+              :value="globalStyles?.splashTemplateId ?? ''"
+              class="field-select"
+              @change="updateGlobal('splashTemplateId', (($event.target as HTMLSelectElement).value || undefined))"
+            >
+              <option value="">Padrão vetorial da zona</option>
+              <option v-for="tpl in (labelTemplates ?? [])" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
+            </select>
+
+            <div class="template-card__footer">
+              <span class="template-card__status">{{ activeTemplateName }}</span>
+              <button type="button" class="secondary-button" @click="emit('apply-template-to-zone')">
+                Aplicar em todos os cards
+              </button>
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Fonte (Preço)</label>
+          <template v-if="!globalStyles?.splashTemplateId">
+            <div class="field-stack">
+              <div class="field-stack__head">
+                <label class="field-label">Fallback da etiqueta</label>
+                <p class="field-hint">Usado quando a zona não está com um template customizado.</p>
+              </div>
               <select
-                :value="globalStyles?.priceFont ?? 'Inter'"
-                @change="handlePriceFontChange"
-                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                :value="globalStyles?.splashStyle ?? 'classic'"
+                class="field-select"
+                @change="updateGlobal('splashStyle', ($event.target as HTMLSelectElement).value)"
               >
-                <option v-for="f in AVAILABLE_FONT_FAMILIES" :key="f" :value="f">{{ f }}</option>
+                <option v-for="style in SPLASH_STYLES" :key="style.id" :value="style.id">
+                  {{ style.name }}
+                </option>
               </select>
             </div>
-            <div class="space-y-1.5">
-              <label class="text-[10px] text-zinc-500">Peso (Preço)</label>
-              <select
-                :value="(globalStyles?.priceFontWeight as any) ?? ''"
-                @change="updateGlobal('priceFontWeight', (($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : undefined))"
-                class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+
+            <div class="color-field">
+              <div class="color-field__copy">
+                <label class="field-label">Fundo da etiqueta</label>
+                <p class="field-hint">Plano principal do splash.</p>
+              </div>
+              <div class="color-field__controls">
+                <ColorPicker
+                  :show="showSplashColorPicker"
+                  :model-value="globalStyles?.splashColor ?? '#dc2626'"
+                  :trigger-element="splashColorPickerRef"
+                  @update:show="showSplashColorPicker = $event"
+                  @update:model-value="(val) => updateGlobal('splashColor', val)"
+                />
+                <button
+                  ref="splashColorPickerRef"
+                  type="button"
+                  class="color-trigger"
+                  :style="{ backgroundColor: globalStyles?.splashColor ?? '#dc2626' }"
+                  @click="showSplashColorPicker = true"
+                />
+                <input
+                  type="text"
+                  class="hex-input"
+                  :value="(globalStyles?.splashColor ?? '#dc2626').replace('#', '').toUpperCase()"
+                  @blur="updateGlobal('splashColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashColor ?? '#dc2626'))"
+                />
+              </div>
+            </div>
+
+            <div class="color-field">
+              <div class="color-field__copy">
+                <label class="field-label">Texto da etiqueta</label>
+                <p class="field-hint">Cor principal do preço no fallback vetorial.</p>
+              </div>
+              <div class="color-field__controls">
+                <ColorPicker
+                  :show="showSplashTextColorPicker"
+                  :model-value="globalStyles?.splashTextColor ?? '#ffffff'"
+                  :trigger-element="splashTextColorPickerRef"
+                  @update:show="showSplashTextColorPicker = $event"
+                  @update:model-value="(val) => updateGlobal('splashTextColor', val)"
+                />
+                <button
+                  ref="splashTextColorPickerRef"
+                  type="button"
+                  class="color-trigger"
+                  :style="{ backgroundColor: globalStyles?.splashTextColor ?? '#ffffff' }"
+                  @click="showSplashTextColorPicker = true"
+                />
+                <input
+                  type="text"
+                  class="hex-input"
+                  :value="(globalStyles?.splashTextColor ?? '#ffffff').replace('#', '').toUpperCase()"
+                  @blur="updateGlobal('splashTextColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashTextColor ?? '#ffffff'))"
+                />
+              </div>
+            </div>
+          </template>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Fonte do preço</label>
+            </div>
+            <select :value="globalStyles?.priceFont ?? 'Arial'" class="field-select" @change="handlePriceFontChange">
+              <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
+            </select>
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Peso do preço</label>
+            </div>
+            <select
+              :value="globalStyles?.priceFontWeight ?? ''"
+              class="field-select"
+              @change="updateGlobal('priceFontWeight', ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : undefined)"
+            >
+              <option value="">Manter automático</option>
+              <option v-for="weight in priceWeightOptions" :key="weight.value" :value="weight.value">
+                {{ weight.label }}
+              </option>
+            </select>
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Estilo da fonte</label>
+              <p class="field-hint">
+                {{
+                  priceFontSupportsItalic
+                    ? 'Aplica itálico em todos os textos da etiqueta.'
+                    : 'A família atual não tem variante itálica no catálogo carregado.'
+                }}
+              </p>
+            </div>
+            <div class="segmented-grid segmented-grid--2">
+              <button
+                type="button"
+                class="segmented-option segmented-option--compact"
+                :class="{ 'segmented-option--active': (globalStyles?.priceFontStyle ?? 'normal') !== 'italic' }"
+                @click="updateGlobal('priceFontStyle', 'normal')"
               >
-                <option value="">Padrão</option>
-                <option v-for="w in priceWeightOptions" :key="w.value" :value="w.value">{{ w.label }}</option>
-              </select>
+                <strong>Normal</strong>
+                <span>Leitura estável</span>
+              </button>
+              <button
+                type="button"
+                class="segmented-option segmented-option--compact"
+                :class="{ 'segmented-option--active': (globalStyles?.priceFontStyle ?? 'normal') === 'italic' }"
+                :disabled="!priceFontSupportsItalic"
+                @click="updateGlobal('priceFontStyle', 'italic')"
+              >
+                <strong>Itálico</strong>
+                <span>{{ priceFontSupportsItalic ? 'Destaque promocional' : 'Indisponível nessa fonte' }}</span>
+              </button>
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
-            <div class="space-y-1">
-              <div class="flex items-center justify-between">
-                <label class="text-[9px] text-zinc-500">Texto (Preço)</label>
-                <button
-                  v-if="globalStyles?.priceTextColor"
-                  type="button"
-                  class="text-[9px] text-zinc-400 hover:text-zinc-200 transition-colors"
-                  @click="updateGlobal('priceTextColor', undefined)"
-                  title="Voltar para a cor do modelo"
-                >
-                  Padrão
-                </button>
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Escala dos textos</label>
+                <p class="field-hint">Amplia `R$`, valor e complemento mantendo a proporção da etiqueta.</p>
               </div>
-              <div class="flex items-center gap-2">
-                <div ref="priceTextColorPickerRef" class="relative">
-                  <div
-                    class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
-                    :style="{
-                      backgroundColor: globalStyles?.priceTextColor ?? 'transparent',
-                      backgroundImage: globalStyles?.priceTextColor ? undefined : 'linear-gradient(45deg, rgba(255,255,255,0.12) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.12) 75%, transparent 75%, transparent)',
-                      backgroundSize: globalStyles?.priceTextColor ? undefined : '8px 8px'
-                    }"
-                    @click="showPriceTextColorPicker = true"
-                  ></div>
-                  <ColorPicker
-                    :show="showPriceTextColorPicker"
-                    :model-value="globalStyles?.priceTextColor ?? '#ffffff'"
-                    :trigger-element="priceTextColorPickerRef"
-                    @update:show="showPriceTextColorPicker = $event"
-                    @update:model-value="(val: string) => updateGlobal('priceTextColor', val)"
-                  />
-                </div>
+              <div class="value-editor">
                 <input
-                  type="text"
-                  :value="globalStyles?.priceTextColor ? globalStyles.priceTextColor.replace('#', '').toUpperCase() : ''"
-                  @blur="(e) => { const v = (e.target as HTMLInputElement).value.trim(); updateGlobal('priceTextColor', v ? ('#' + v.replace('#', '')) : undefined) }"
-                  class="w-full bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
-                  placeholder="PADRÃO"
-                  maxlength="6"
+                  type="number"
+                  min="60"
+                  max="220"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="Math.round((globalStyles?.splashTextScale ?? 1) * 100)"
+                  aria-label="Escala dos textos da etiqueta"
+                  @input="updateGlobalFloat('splashTextScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashTextScale ?? 1, 0.6, 2.2, 2)"
                 />
+                <span class="value-suffix">%</span>
               </div>
             </div>
+            <input
+              type="range"
+              min="60"
+              max="220"
+              :value="Math.round((globalStyles?.splashTextScale ?? 1) * 100)"
+              class="slider text-fuchsia-400"
+              @input="updateGlobal('splashTextScale', Number(($event.target as HTMLInputElement).value) / 100)"
+            />
+          </div>
 
-            <div class="space-y-1">
-              <div class="flex items-center justify-between">
-                <label class="text-[9px] text-zinc-500">Cifra (R$)</label>
-                <button
-                  v-if="globalStyles?.priceCurrencyColor"
-                  type="button"
-                  class="text-[9px] text-zinc-400 hover:text-zinc-200 transition-colors"
-                  @click="updateGlobal('priceCurrencyColor', undefined)"
-                  title="Voltar para a cor do modelo"
-                >
-                  Padrão
-                </button>
+          <div class="color-field">
+            <div class="color-field__copy">
+              <label class="field-label">Cor do valor</label>
+              <p class="field-hint">Sobrescreve a cor principal do preço quando necessário.</p>
+            </div>
+            <div class="color-field__controls">
+              <ColorPicker
+                :show="showPriceTextColorPicker"
+                :model-value="globalStyles?.priceTextColor ?? '#111111'"
+                :trigger-element="priceTextColorPickerRef"
+                @update:show="showPriceTextColorPicker = $event"
+                @update:model-value="(val) => updateGlobal('priceTextColor', val)"
+              />
+              <button
+                ref="priceTextColorPickerRef"
+                type="button"
+                class="color-trigger"
+                :style="{ backgroundColor: globalStyles?.priceTextColor ?? '#111111' }"
+                @click="showPriceTextColorPicker = true"
+              />
+              <input
+                type="text"
+                class="hex-input"
+                :value="(globalStyles?.priceTextColor ?? '#111111').replace('#', '').toUpperCase()"
+                @blur="updateGlobal('priceTextColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.priceTextColor ?? '#111111'))"
+              />
+            </div>
+          </div>
+
+          <div class="color-field">
+            <div class="color-field__copy">
+              <label class="field-label">Cor do símbolo</label>
+              <p class="field-hint">Permite separar o `R$` do valor principal.</p>
+            </div>
+            <div class="color-field__controls">
+              <ColorPicker
+                :show="showPriceCurrencyColorPicker"
+                :model-value="globalStyles?.priceCurrencyColor ?? '#111111'"
+                :trigger-element="priceCurrencyColorPickerRef"
+                @update:show="showPriceCurrencyColorPicker = $event"
+                @update:model-value="(val) => updateGlobal('priceCurrencyColor', val)"
+              />
+              <button
+                ref="priceCurrencyColorPickerRef"
+                type="button"
+                class="color-trigger"
+                :style="{ backgroundColor: globalStyles?.priceCurrencyColor ?? '#111111' }"
+                @click="showPriceCurrencyColorPicker = true"
+              />
+              <input
+                type="text"
+                class="hex-input"
+                :value="(globalStyles?.priceCurrencyColor ?? '#111111').replace('#', '').toUpperCase()"
+                @blur="updateGlobal('priceCurrencyColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.priceCurrencyColor ?? '#111111'))"
+              />
+            </div>
+          </div>
+
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Escala da etiqueta</label>
+                <p class="field-hint">Reduz ou amplia a etiqueta, mesmo quando ela ultrapassa o card.</p>
               </div>
-              <div class="flex items-center gap-2">
-                <div ref="priceCurrencyColorPickerRef" class="relative">
-                  <div
-                    class="w-6 h-6 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
-                    :style="{
-                      backgroundColor: globalStyles?.priceCurrencyColor ?? 'transparent',
-                      backgroundImage: globalStyles?.priceCurrencyColor ? undefined : 'linear-gradient(45deg, rgba(255,255,255,0.12) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.12) 75%, transparent 75%, transparent)',
-                      backgroundSize: globalStyles?.priceCurrencyColor ? undefined : '8px 8px'
-                    }"
-                    @click="showPriceCurrencyColorPicker = true"
-                  ></div>
-                  <ColorPicker
-                    :show="showPriceCurrencyColorPicker"
-                    :model-value="globalStyles?.priceCurrencyColor ?? '#000000'"
-                    :trigger-element="priceCurrencyColorPickerRef"
-                    @update:show="showPriceCurrencyColorPicker = $event"
-                    @update:model-value="(val: string) => updateGlobal('priceCurrencyColor', val)"
-                  />
-                </div>
+              <div class="value-editor">
                 <input
-                  type="text"
-                  :value="globalStyles?.priceCurrencyColor ? globalStyles.priceCurrencyColor.replace('#', '').toUpperCase() : ''"
-                  @blur="(e) => { const v = (e.target as HTMLInputElement).value.trim(); updateGlobal('priceCurrencyColor', v ? ('#' + v.replace('#', '')) : undefined) }"
-                  class="w-full bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 text-[9px] font-mono text-white focus:outline-none focus:border-violet-500/50 uppercase"
-                  placeholder="PADRÃO"
-                  maxlength="6"
+                  type="number"
+                  min="60"
+                  max="2000"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="Math.round((globalStyles?.splashScale ?? 1) * 100)"
+                  aria-label="Escala da etiqueta"
+                  @input="updateGlobalFloat('splashScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashScale ?? 1, 0.6, 20, 2)"
                 />
+                <span class="value-suffix">%</span>
               </div>
             </div>
+            <input
+              type="range"
+              min="60"
+              max="2000"
+              :value="Math.round((globalStyles?.splashScale ?? 1) * 100)"
+              class="slider text-fuchsia-400"
+              @input="updateGlobal('splashScale', Number(($event.target as HTMLInputElement).value) / 100)"
+            />
           </div>
 
-          <div class="space-y-1.5">
-            <label class="text-[10px] text-zinc-500">Escala dos textos (Etiqueta)</label>
-            <div class="flex items-center gap-2">
-              <input
-                type="range"
-                :value="Math.round(((globalStyles?.splashTextScale ?? 1) * 100))"
-                @input="updateGlobal('splashTextScale', Number(($event.target as HTMLInputElement).value) / 100)"
-                min="70"
-                max="160"
-                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-              />
-              <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
-                {{ Math.round((globalStyles?.splashTextScale ?? 1) * 100) }}%
-              </span>
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Deslocamento Y</label>
+                <p class="field-hint">Move a etiqueta para cima ou para baixo dentro do card.</p>
+              </div>
+              <div class="value-editor">
+                <input
+                  type="number"
+                  min="-120"
+                  max="120"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="Math.round(globalStyles?.splashOffsetY ?? 0)"
+                  aria-label="Deslocamento Y da etiqueta"
+                  @input="updateGlobalInt('splashOffsetY', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.splashOffsetY ?? 0, -120, 120)"
+                />
+                <span class="value-suffix">px</span>
+              </div>
             </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="text-[10px] text-zinc-500">Offset Y (Etiqueta)</label>
-            <div class="flex items-center gap-2">
-              <input
-                type="range"
-                :value="globalStyles?.splashOffsetY ?? 0"
-                @input="updateGlobal('splashOffsetY', Number(($event.target as HTMLInputElement).value))"
-                min="-120"
-                max="120"
-                class="flex-1 h-1 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-violet-500"
-              />
-              <span class="w-12 text-center text-[10px] font-mono text-zinc-400">
-                {{ globalStyles?.splashOffsetY ?? 0 }}px
-              </span>
-            </div>
+            <input
+              type="range"
+              min="-120"
+              max="120"
+              :value="globalStyles?.splashOffsetY ?? 0"
+              class="slider text-fuchsia-400"
+              @input="updateGlobal('splashOffsetY', Number(($event.target as HTMLInputElement).value))"
+            />
           </div>
         </div>
-      </div>
+      </section>
     </div>
 
-    <div class="h-px bg-white/5" />
-
-    <!-- Lock Toggle -->
-    <div class="flex items-center justify-between p-2 bg-zinc-800/50 rounded-lg">
-      <span class="text-[10px] text-zinc-400 flex items-center gap-2">
-        <component :is="zone.isLocked ? Lock : Unlock" class="w-3.5 h-3.5" />
-        Travar posição da zona
-      </span>
+    <div class="sticky-dock">
       <button
+        type="button"
+        class="dock-button dock-button--lock"
+        :class="{ 'dock-button--lock-active': zone.isLocked }"
         @click="updateZone('isLocked', !zone.isLocked)"
-        :class="[
-          'w-8 h-4 rounded-full transition-all relative',
-          zone.isLocked ? 'bg-violet-500' : 'bg-zinc-700'
-        ]"
       >
-        <span 
-          :class="[
-            'absolute w-3 h-3 bg-white rounded-full top-0.5 transition-all',
-            zone.isLocked ? 'left-4' : 'left-0.5'
-          ]"
-        />
+        <div class="dock-button__icon">
+          <component :is="zone.isLocked ? Lock : Unlock" class="h-4 w-4" />
+        </div>
+        <span>{{ zoneLockLabel }}</span>
+      </button>
+
+      <button type="button" class="dock-button dock-button--primary" @click="emit('recalculate')">
+        <Settings2 class="h-4 w-4" />
+        <span>Recalcular grade</span>
       </button>
     </div>
 
-    <!-- Recalculate Button -->
-    <button
-      @click="emit('recalculate')"
-      class="w-full py-2 px-3 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 rounded-lg text-violet-300 text-[11px] font-medium transition-all flex items-center justify-center gap-2"
-    >
-      <Settings2 class="w-3.5 h-3.5" />
-      Recalcular Layout
-    </button>
-
+    <datalist :id="FONT_DATALIST_ID">
+      <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font" />
+    </datalist>
   </div>
 </template>
 
 <style scoped>
-/* Range slider customization */
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  background: #8b5cf6;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: transform 0.15s ease;
+.inspector-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  padding-bottom: 20px;
+  color: #f4f4f5;
 }
 
-input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+.section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inspector-card {
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(39, 39, 42, 0.72), rgba(15, 15, 18, 0.92));
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+}
+
+.inspector-card--active {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.16), transparent 32%),
+    linear-gradient(180deg, rgba(39, 39, 42, 0.84), rgba(12, 12, 14, 0.98));
+}
+
+.overview-card__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.overview-card__eyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inspector-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #e4e4e7;
+}
+
+.inspector-eyebrow--muted {
+  color: #a1a1aa;
+}
+
+.overview-card__title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #fafafa;
+}
+
+.overview-card__description {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #a1a1aa;
+}
+
+.overview-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metric-chip,
+.status-chip,
+.value-badge,
+.section-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1;
+  color: #e4e4e7;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.metric-chip--accent {
+  border-color: rgba(45, 212, 191, 0.34);
+  color: #ccfbf1;
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.status-chip {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-chip--ok {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(16, 185, 129, 0.14);
+  color: #d1fae5;
+}
+
+.status-chip--warn {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.14);
+  color: #fef3c7;
+}
+
+.overview-card__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 10, 11, 0.48);
+}
+
+.overview-card__preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.layout-preview {
+  display: grid;
+  gap: 4px;
+  min-height: 68px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(32, 32, 35, 0.9), rgba(18, 18, 20, 0.92));
+}
+
+.layout-preview--large {
+  min-height: 120px;
+}
+
+.layout-preview__cell {
+  border-radius: 8px;
+  transition: transform 0.16s ease, background-color 0.16s ease;
+}
+
+.layout-preview__cell--base {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.layout-preview__cell--highlight {
+  background: linear-gradient(180deg, #fcd34d, #f59e0b);
+  box-shadow: 0 10px 24px rgba(245, 158, 11, 0.18);
+}
+
+.overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.overview-metrics__item dt {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.overview-metrics__item dd {
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #e4e4e7;
+}
+
+.section-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  text-align: left;
+  transition: background-color 0.18s ease;
+}
+
+.section-toggle:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.section-toggle__lead {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.section-icon {
+  display: flex;
+  height: 36px;
+  width: 36px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.section-icon--emerald {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.section-icon--blue {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.section-icon--cyan {
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.section-icon--amber {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.section-icon--green {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.section-icon--magenta {
+  color: #f472b6;
+  background: rgba(217, 70, 239, 0.12);
+}
+
+.section-icon--neutral {
+  color: #d4d4d8;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.section-toggle__copy {
+  min-width: 0;
+}
+
+.section-toggle__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fafafa;
+}
+
+.section-summary {
+  max-width: 100%;
+  font-size: 10px;
+  color: #d4d4d8;
+}
+
+.section-description {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #a1a1aa;
+}
+
+.section-chevron {
+  flex: none;
+  color: #71717a;
+}
+
+.section-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 14px;
+}
+
+.section-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-block__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+}
+
+.section-note {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #71717a;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.preset-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.preset-card--special .layout-preview {
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.preset-card--active {
+  border-color: rgba(45, 212, 191, 0.34);
+  background: rgba(45, 212, 191, 0.08);
+}
+
+.preset-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preset-card__content strong {
+  font-size: 12px;
+  color: #f4f4f5;
+}
+
+.preset-card__content span {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #a1a1aa;
+}
+
+.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field-stack__head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f4f4f5;
+}
+
+.field-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #8f8f97;
+}
+
+.field-select,
+.hex-input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #f4f4f5;
+  outline: none;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.field-select:focus,
+.hex-input:focus {
+  border-color: rgba(45, 212, 191, 0.34);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hex-input {
+  max-width: 110px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  text-transform: uppercase;
+}
+
+.control-card,
+.switch-card,
+.template-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+.switch-card {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.control-card__head,
+.template-card__head,
+.template-card__footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.template-card__footer {
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 10px;
+}
+
+.template-card__status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: #d4d4d8;
+}
+
+.value-badge {
+  flex: none;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.value-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.value-input {
+  min-width: 0;
+  width: 92px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(9, 9, 11, 0.7);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.value-input::placeholder {
+  color: #71717a;
+}
+
+.value-suffix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e4e4e7;
+}
+
+.range-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #71717a;
+}
+
+.segmented-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.segmented-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.segmented-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.segmented-grid--5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.segmented-option {
+  display: flex;
+  min-height: 60px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+  text-align: left;
+  transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.segmented-option:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.segmented-option:disabled {
+  cursor: not-allowed;
+  transform: none;
+  opacity: 0.48;
+}
+
+.segmented-option strong {
+  font-size: 11px;
+  color: #f4f4f5;
+}
+
+.segmented-option span {
+  font-size: 10px;
+  line-height: 1.3;
+  color: #8f8f97;
+}
+
+.segmented-option--compact {
+  min-height: 44px;
+  align-items: center;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.segmented-option--active {
+  border-color: rgba(45, 212, 191, 0.34);
+  background: rgba(45, 212, 191, 0.09);
+}
+
+.segmented-option--active strong,
+.segmented-option--active span {
+  color: #ecfeff;
+}
+
+.color-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.color-field__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.color-field__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-trigger {
+  height: 38px;
+  width: 38px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  height: 24px;
+  width: 42px;
+  flex: none;
+}
+
+.switch__track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(113, 113, 122, 0.56);
+  transition: background-color 0.16s ease;
+}
+
+.switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  height: 18px;
+  width: 18px;
+  border-radius: 999px;
+  background: white;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22);
+  transition: transform 0.16s ease;
+}
+
+.switch--checked .switch__track {
+  background: rgba(45, 212, 191, 0.34);
+}
+
+.switch--checked .switch__thumb {
+  transform: translateX(18px);
+}
+
+.ghost-button,
+.secondary-button,
+.dock-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.ghost-button:hover,
+.secondary-button:hover,
+.dock-button:hover {
+  transform: translateY(-1px);
+}
+
+.ghost-button {
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f4f5;
+}
+
+.secondary-button {
+  background: rgba(217, 70, 239, 0.12);
+  border-color: rgba(217, 70, 239, 0.24);
+  color: #f5d0fe;
+}
+
+.sticky-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 4px;
+  margin-left: -12px;
+  margin-right: -12px;
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(20, 20, 22, 0.75), rgba(12, 12, 14, 0.96));
+  backdrop-filter: blur(12px);
+}
+
+.dock-button {
+  min-height: 48px;
+}
+
+.dock-button--lock {
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f4f5;
+}
+
+.dock-button--lock-active {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fef3c7;
+}
+
+.dock-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dock-button--primary {
+  border-color: rgba(45, 212, 191, 0.28);
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.94), rgba(52, 211, 153, 0.92));
+  color: #042f2e;
+  box-shadow: 0 14px 24px rgba(16, 185, 129, 0.22);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(63, 63, 70, 0.9);
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(63, 63, 70, 0.9);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(63, 63, 70, 0.9);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -4px;
+  height: 14px;
+  width: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(9, 9, 11, 0.9);
+  background: currentColor;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  background: #8b5cf6;
-  border-radius: 50%;
+  height: 14px;
+  width: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(9, 9, 11, 0.9);
+  background: currentColor;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+.slider {
   cursor: pointer;
-  border: none;
 }
 
-.preset-preview {
-  display: grid;
-  width: 100%;
-  height: 34px;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(24, 24, 27, 0.85);
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(45, 212, 191, 0.8);
+  outline-offset: 2px;
 }
 
-.preset-preview-cell {
-  border-radius: 3px;
-}
+@media (max-width: 360px) {
+  .preset-grid,
+  .segmented-grid--2,
+  .segmented-grid--3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-.preset-preview-cell--base {
-  background: rgba(255, 255, 255, 0.22);
-}
+  .sticky-dock {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-.preset-preview-cell--highlight {
-  background: rgba(250, 204, 21, 0.92);
+  .overview-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .color-field__controls,
+  .template-card__footer,
+  .template-card__head,
+  .switch-card,
+  .control-card__head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hex-input {
+    max-width: none;
+  }
+
+  .value-editor {
+    width: 100%;
+  }
+
+  .value-input {
+    width: 100%;
+  }
 }
 </style>

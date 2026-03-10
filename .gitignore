@@ -53,3 +53,5 @@ node_modules
 .kilocode/
 tmp/
 .vercel
+.env*.local
+.playwright-cli/

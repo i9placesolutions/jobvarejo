@@ -199,6 +199,7 @@ export interface GlobalStyles {
   prodNameWeight?: number;
   prodNameAlign?: 'left' | 'center' | 'right';
   prodNameLineHeight?: number;
+  prodNameOffsetY?: number;
   prodNameTransform?: 'none' | 'upper' | 'lower';
   // Limite
   limitFont?: string;
@@ -223,6 +224,7 @@ export interface GlobalStyles {
   priceFont?: string;
   priceFontSize?: number;
   priceFontWeight?: number | string;
+  priceFontStyle?: 'normal' | 'italic';
   priceTextColor?: string;
   priceCurrencyColor?: string;
   currencySymbol?: string;
@@ -947,6 +949,7 @@ export const DEFAULT_GLOBAL_STYLES: GlobalStyles = {
   prodNameWeight: 700,
   prodNameAlign: 'center',
   prodNameLineHeight: 1.05,
+  prodNameOffsetY: 0,
   prodNameTransform: 'upper',
   limitColor: '#ef4444',
   limitSize: 14,
@@ -962,6 +965,7 @@ export const DEFAULT_GLOBAL_STYLES: GlobalStyles = {
   priceFont: 'Arial',
   priceFontSize: 60,
   priceFontWeight: undefined,
+  priceFontStyle: 'normal',
   priceTextColor: undefined,
   // Keep undefined by default to preserve the template's own currency color (ex: black on yellow circle).
   // Users can override per design/zone via Product Zone settings.

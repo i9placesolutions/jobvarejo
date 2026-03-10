@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import {
   AlignLeft, AlignCenter, AlignRight,
   AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Target,
@@ -212,14 +212,81 @@ const isLikelyProductZone = (obj: any): boolean => {
   return !!(zoneRect && Array.isArray(zoneRect.strokeDashArray))
 }
 
-const isProductZone = computed(() => isLikelyProductZone(props.selectedObject))
+const normalizeSelectionId = (obj: any): string => String(obj?._customId || '').trim()
+
+const lastStableZoneSelection = shallowRef<any | null>(null)
+const lastStableZoneFingerprint = ref('')
+
+const getZoneSelectionFingerprint = (obj: any): string => {
+  if (!isLikelyProductZone(obj)) return ''
+
+  const pad = typeof obj?._zonePadding === 'number' ? obj._zonePadding : (obj?.padding || 20)
+  const zoneStyles = obj?._zoneGlobalStyles && typeof obj._zoneGlobalStyles === 'object'
+    ? obj._zoneGlobalStyles
+    : {}
+
+  return JSON.stringify([
+    normalizeSelectionId(obj),
+    obj?.columns ?? 0,
+    obj?.rows ?? 0,
+    pad,
+    typeof obj?.gapHorizontal === 'number' ? obj.gapHorizontal : pad,
+    typeof obj?.gapVertical === 'number' ? obj.gapVertical : pad,
+    obj?.layoutDirection ?? 'horizontal',
+    obj?.cardAspectRatio ?? 'auto',
+    obj?.lastRowBehavior ?? 'fill',
+    obj?.verticalAlign ?? 'top',
+    obj?.highlightCount ?? 0,
+    obj?.highlightPos ?? 'first',
+    obj?.highlightHeight ?? 1.5,
+    !!(obj?.lockMovementX || obj?.lockMovementY || obj?.lockScalingX || obj?.lockScalingY),
+    zoneStyles
+  ])
+}
+
+watch(
+  () => props.selectedObject,
+  (next) => {
+    if (isLikelyProductZone(next)) {
+      const nextFingerprint = getZoneSelectionFingerprint(next)
+      if (nextFingerprint !== lastStableZoneFingerprint.value) {
+        lastStableZoneSelection.value = next
+        lastStableZoneFingerprint.value = nextFingerprint
+      }
+      return
+    }
+
+    const nextId = normalizeSelectionId(next)
+    const cachedId = normalizeSelectionId(lastStableZoneSelection.value)
+    if (!next || !cachedId || nextId !== cachedId) {
+      lastStableZoneSelection.value = null
+      lastStableZoneFingerprint.value = ''
+    }
+  },
+  { immediate: true }
+)
+
+const resolvedZoneSelection = computed(() => {
+  if (isLikelyProductZone(props.selectedObject)) return props.selectedObject
+
+  const cached = lastStableZoneSelection.value
+  if (!cached) return null
+
+  const currentId = normalizeSelectionId(props.selectedObject)
+  const cachedId = normalizeSelectionId(cached)
+  if (currentId && cachedId && currentId === cachedId) return cached
+
+  return null
+})
+
+const isProductZone = computed(() => !!resolvedZoneSelection.value)
 const isProductZoneSectionOpen = ref(false)
 
 // Extract zone data directly from selected object when it's a product zone
 const currentZoneData = computed(() => {
-  if (!isProductZone.value || !props.selectedObject) return props.productZone ?? {}
+  const obj = resolvedZoneSelection.value
+  if (!obj) return props.productZone ?? {}
 
-  const obj = props.selectedObject
   const pad = typeof obj._zonePadding === 'number' ? obj._zonePadding : (obj.padding || 20)
 
   return {
@@ -244,10 +311,11 @@ const currentZoneData = computed(() => {
 
 // Extract global styles from selected zone object
 const currentGlobalStyles = computed(() => {
-  if (!isProductZone.value || !props.selectedObject) return props.productGlobalStyles
+  const obj = resolvedZoneSelection.value
+  if (!obj) return props.productGlobalStyles
 
   // Get styles from zone object, fall back to prop
-  const zoneStyles = (props.selectedObject as any)._zoneGlobalStyles
+  const zoneStyles = (obj as any)._zoneGlobalStyles
   if (zoneStyles && typeof zoneStyles === 'object') {
     return { ...props.productGlobalStyles, ...zoneStyles }
   }
@@ -520,6 +588,26 @@ const handleBlur = () => {
 // Input handler that emits and maintains local state
 const handlePropertyInput = (prop: string, value: any) => {
   emit('update-property', prop, value)
+}
+
+const toFiniteNumber = (value: unknown, fallback = 0) => {
+  const next = Number(value)
+  return Number.isFinite(next) ? next : fallback
+}
+
+const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+const emitClampedProperty = (
+  prop: string,
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+  precision = 0
+) => {
+  const factor = 10 ** precision
+  const next = clampNumber(Math.round(toFiniteNumber(value, fallback) * factor) / factor, min, max)
+  emit('update-property', prop, next)
 }
 
 // Helper functions for page color/opacity
@@ -880,7 +968,19 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             </div>
             <div class="flex-1 flex items-center gap-1 min-w-0">
               <input type="range" min="0" max="1" step="0.05" :value="Number(getVal('opacity', 1))" @input="$emit('update-property', 'opacity', Number(($event.target as any).value))" class="flex-1 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500 min-w-0" title="Opacidade" />
-              <span class="text-[9px] text-zinc-500 w-7 text-right shrink-0">{{ Math.round(Number(getVal('opacity', 1)) * 100) }}%</span>
+              <div class="pp-input-row w-16 shrink-0">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  :value="Math.round(Number(getVal('opacity', 1)) * 100)"
+                  @input="emitClampedProperty('opacity', Number(($event.target as HTMLInputElement).value) / 100, Number(getVal('opacity', 1)), 0, 1, 2)"
+                  class="pp-number-input"
+                  title="Opacidade"
+                />
+                <span class="text-[9px] text-zinc-600">%</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1305,9 +1405,21 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 
               <!-- Opacidade -->
               <div class="space-y-0.5">
-                  <div class="flex justify-between items-center">
+                  <div class="flex justify-between items-center gap-2">
                     <span class="text-[9px] text-zinc-500">Opacidade</span>
-                    <span class="text-[9px] text-zinc-400">{{ Math.round(stickerOutlineOpacity * 100) }}%</span>
+                    <div class="pp-input-row w-16 shrink-0">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        :value="Math.round(stickerOutlineOpacity * 100)"
+                        @input="emitClampedProperty('stickerOutlineOpacity', Number(($event.target as HTMLInputElement).value) / 100, stickerOutlineOpacity, 0, 1, 2)"
+                        class="pp-number-input"
+                        title="Opacidade do contorno sticker"
+                      />
+                      <span class="text-[9px] text-zinc-600">%</span>
+                    </div>
                   </div>
                   <input
                     type="range"
@@ -1583,45 +1695,94 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                            }"
 	                            class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-amber-500/40 uppercase min-w-0"
 	                            maxlength="6"
-	                          />
-	                          <div class="flex items-center gap-1">
-	                              <span class="text-[9px] text-zinc-500">Op</span>
-	                              <input
-	                                type="range"
+		                          />
+		                          <div class="flex items-center gap-1">
+		                              <span class="text-[9px] text-zinc-500">Op</span>
+		                              <input
+		                                type="range"
 	                                min="0"
 	                                max="1"
 	                                step="0.05"
 	                                :value="shadowOpacity"
 	                                @input="e => $emit('update-property', 'shadow-opacity', Number((e.target as any).value))"
-	                                class="w-20 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
-	                                title="Opacidade"
-	                              />
-	                          </div>
-	                      </div>
+		                                class="w-20 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+		                                title="Opacidade"
+		                              />
+                                      <div class="pp-input-row w-14 shrink-0">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          step="1"
+                                          :value="Math.round(shadowOpacity * 100)"
+                                          @input="emitClampedProperty('shadow-opacity', Number(($event.target as HTMLInputElement).value) / 100, shadowOpacity, 0, 1, 2)"
+                                          class="pp-number-input"
+                                          title="Opacidade da sombra"
+                                        />
+                                        <span class="text-[9px] text-zinc-600">%</span>
+                                      </div>
+		                          </div>
+		                      </div>
 
-	                      <div class="grid grid-cols-3 gap-2">
-	                          <div class="space-y-0.5">
-	                              <div class="flex justify-between items-center">
-	                                <span class="text-[9px] text-zinc-500">X</span>
-	                                <span class="text-[9px] text-zinc-400">{{ Number(selectedShadow?.offsetX || 0) }}</span>
-	                              </div>
-	                              <input type="range" min="-50" max="50" step="1" :value="Number(selectedShadow?.offsetX || 0)" @input="e => $emit('update-property', 'shadow-x', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
-	                          </div>
-	                          <div class="space-y-0.5">
-	                              <div class="flex justify-between items-center">
-	                                <span class="text-[9px] text-zinc-500">Y</span>
-	                                <span class="text-[9px] text-zinc-400">{{ Number(selectedShadow?.offsetY || 0) }}</span>
-	                              </div>
-	                              <input type="range" min="-50" max="50" step="1" :value="Number(selectedShadow?.offsetY || 0)" @input="e => $emit('update-property', 'shadow-y', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
-	                          </div>
-	                          <div class="space-y-0.5">
-	                              <div class="flex justify-between items-center">
-	                                <span class="text-[9px] text-zinc-500">Blur</span>
-	                                <span class="text-[9px] text-zinc-400">{{ Number(selectedShadow?.blur || 0) }}</span>
-	                              </div>
-	                              <input type="range" min="0" max="60" step="1" :value="Number(selectedShadow?.blur || 0)" @input="e => $emit('update-property', 'shadow-blur', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
-	                          </div>
-	                      </div>
+		                      <div class="grid grid-cols-3 gap-2">
+		                          <div class="space-y-0.5">
+		                              <div class="flex justify-between items-center gap-2">
+		                                <span class="text-[9px] text-zinc-500">X</span>
+                                        <div class="pp-input-row w-16 shrink-0">
+                                          <input
+                                            type="number"
+                                            min="-50"
+                                            max="50"
+                                            step="1"
+                                            :value="Number(selectedShadow?.offsetX || 0)"
+                                            @input="emitClampedProperty('shadow-x', ($event.target as HTMLInputElement).valueAsNumber, Number(selectedShadow?.offsetX || 0), -50, 50)"
+                                            class="pp-number-input"
+                                            title="Deslocamento X da sombra"
+                                          />
+                                          <span class="text-[9px] text-zinc-600">px</span>
+                                        </div>
+		                              </div>
+		                              <input type="range" min="-50" max="50" step="1" :value="Number(selectedShadow?.offsetX || 0)" @input="e => $emit('update-property', 'shadow-x', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+		                          </div>
+		                          <div class="space-y-0.5">
+		                              <div class="flex justify-between items-center gap-2">
+		                                <span class="text-[9px] text-zinc-500">Y</span>
+                                        <div class="pp-input-row w-16 shrink-0">
+                                          <input
+                                            type="number"
+                                            min="-50"
+                                            max="50"
+                                            step="1"
+                                            :value="Number(selectedShadow?.offsetY || 0)"
+                                            @input="emitClampedProperty('shadow-y', ($event.target as HTMLInputElement).valueAsNumber, Number(selectedShadow?.offsetY || 0), -50, 50)"
+                                            class="pp-number-input"
+                                            title="Deslocamento Y da sombra"
+                                          />
+                                          <span class="text-[9px] text-zinc-600">px</span>
+                                        </div>
+		                              </div>
+		                              <input type="range" min="-50" max="50" step="1" :value="Number(selectedShadow?.offsetY || 0)" @input="e => $emit('update-property', 'shadow-y', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+		                          </div>
+		                          <div class="space-y-0.5">
+		                              <div class="flex justify-between items-center gap-2">
+		                                <span class="text-[9px] text-zinc-500">Blur</span>
+                                        <div class="pp-input-row w-16 shrink-0">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max="60"
+                                            step="1"
+                                            :value="Number(selectedShadow?.blur || 0)"
+                                            @input="emitClampedProperty('shadow-blur', ($event.target as HTMLInputElement).valueAsNumber, Number(selectedShadow?.blur || 0), 0, 60)"
+                                            class="pp-number-input"
+                                            title="Desfoque da sombra"
+                                          />
+                                          <span class="text-[9px] text-zinc-600">px</span>
+                                        </div>
+		                              </div>
+		                              <input type="range" min="0" max="60" step="1" :value="Number(selectedShadow?.blur || 0)" @input="e => $emit('update-property', 'shadow-blur', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+		                          </div>
+		                      </div>
 	                  </div>
 	              </div>
 
@@ -1691,46 +1852,102 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                      </div>
 	                  </div>
 
-	                  <div v-if="isImage" class="space-y-2">
-	                      <div class="space-y-0.5">
-	                          <div class="flex justify-between items-center">
-	                            <span class="text-[9px] text-zinc-500">Desfoque</span>
-	                            <span class="text-[9px] text-zinc-400">{{ filterBlurPx }}px</span>
-	                          </div>
-	                          <input type="range" min="0" max="20" step="1" :value="filterBlurPx" @input="e => $emit('update-property', 'filter-blur', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
-	                      </div>
+		                  <div v-if="isImage" class="space-y-2">
+		                      <div class="space-y-0.5">
+		                          <div class="flex justify-between items-center gap-2">
+		                            <span class="text-[9px] text-zinc-500">Desfoque</span>
+                                    <div class="pp-input-row w-16 shrink-0">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max="20"
+                                        step="1"
+                                        :value="filterBlurPx"
+                                        @input="emitClampedProperty('filter-blur', ($event.target as HTMLInputElement).valueAsNumber, filterBlurPx, 0, 20)"
+                                        class="pp-number-input"
+                                        title="Desfoque"
+                                      />
+                                      <span class="text-[9px] text-zinc-600">px</span>
+                                    </div>
+		                          </div>
+		                          <input type="range" min="0" max="20" step="1" :value="filterBlurPx" @input="e => $emit('update-property', 'filter-blur', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+		                      </div>
 
-	                      <div class="space-y-0.5">
-	                          <div class="flex justify-between items-center">
-	                            <span class="text-[9px] text-zinc-500">Brilho</span>
-	                            <span class="text-[9px] text-zinc-400">{{ filterBrightness.toFixed(2) }}</span>
-	                          </div>
-	                          <input type="range" min="-1" max="1" step="0.05" :value="filterBrightness" @input="e => $emit('update-property', 'filter-brightness', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
-	                      </div>
+		                      <div class="space-y-0.5">
+		                          <div class="flex justify-between items-center gap-2">
+		                            <span class="text-[9px] text-zinc-500">Brilho</span>
+                                    <div class="pp-input-row w-16 shrink-0">
+                                      <input
+                                        type="number"
+                                        min="-1"
+                                        max="1"
+                                        step="0.05"
+                                        :value="filterBrightness.toFixed(2)"
+                                        @input="emitClampedProperty('filter-brightness', ($event.target as HTMLInputElement).valueAsNumber, filterBrightness, -1, 1, 2)"
+                                        class="pp-number-input"
+                                        title="Brilho"
+                                      />
+                                    </div>
+		                          </div>
+		                          <input type="range" min="-1" max="1" step="0.05" :value="filterBrightness" @input="e => $emit('update-property', 'filter-brightness', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+		                      </div>
 
-	                      <div class="space-y-0.5">
-	                          <div class="flex justify-between items-center">
-	                            <span class="text-[9px] text-zinc-500">Contraste</span>
-	                            <span class="text-[9px] text-zinc-400">{{ filterContrast.toFixed(2) }}</span>
-	                          </div>
-	                          <input type="range" min="-1" max="1" step="0.05" :value="filterContrast" @input="e => $emit('update-property', 'filter-contrast', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
-	                      </div>
+		                      <div class="space-y-0.5">
+		                          <div class="flex justify-between items-center gap-2">
+		                            <span class="text-[9px] text-zinc-500">Contraste</span>
+                                    <div class="pp-input-row w-16 shrink-0">
+                                      <input
+                                        type="number"
+                                        min="-1"
+                                        max="1"
+                                        step="0.05"
+                                        :value="filterContrast.toFixed(2)"
+                                        @input="emitClampedProperty('filter-contrast', ($event.target as HTMLInputElement).valueAsNumber, filterContrast, -1, 1, 2)"
+                                        class="pp-number-input"
+                                        title="Contraste"
+                                      />
+                                    </div>
+		                          </div>
+		                          <input type="range" min="-1" max="1" step="0.05" :value="filterContrast" @input="e => $emit('update-property', 'filter-contrast', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+		                      </div>
 
-	                      <div class="space-y-0.5">
-	                          <div class="flex justify-between items-center">
-	                            <span class="text-[9px] text-zinc-500">Saturação</span>
-	                            <span class="text-[9px] text-zinc-400">{{ filterSaturation.toFixed(2) }}</span>
-	                          </div>
-	                          <input type="range" min="-1" max="1" step="0.05" :value="filterSaturation" @input="e => $emit('update-property', 'filter-saturation', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
-	                      </div>
+		                      <div class="space-y-0.5">
+		                          <div class="flex justify-between items-center gap-2">
+		                            <span class="text-[9px] text-zinc-500">Saturação</span>
+                                    <div class="pp-input-row w-16 shrink-0">
+                                      <input
+                                        type="number"
+                                        min="-1"
+                                        max="1"
+                                        step="0.05"
+                                        :value="filterSaturation.toFixed(2)"
+                                        @input="emitClampedProperty('filter-saturation', ($event.target as HTMLInputElement).valueAsNumber, filterSaturation, -1, 1, 2)"
+                                        class="pp-number-input"
+                                        title="Saturação"
+                                      />
+                                    </div>
+		                          </div>
+		                          <input type="range" min="-1" max="1" step="0.05" :value="filterSaturation" @input="e => $emit('update-property', 'filter-saturation', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+		                      </div>
 
-	                      <div class="space-y-0.5">
-	                          <div class="flex justify-between items-center">
-	                            <span class="text-[9px] text-zinc-500">Matiz</span>
-	                            <span class="text-[9px] text-zinc-400">{{ filterHue.toFixed(2) }}</span>
-	                          </div>
-	                          <input type="range" min="-1" max="1" step="0.05" :value="filterHue" @input="e => $emit('update-property', 'filter-hue', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
-	                      </div>
+		                      <div class="space-y-0.5">
+		                          <div class="flex justify-between items-center gap-2">
+		                            <span class="text-[9px] text-zinc-500">Matiz</span>
+                                    <div class="pp-input-row w-16 shrink-0">
+                                      <input
+                                        type="number"
+                                        min="-1"
+                                        max="1"
+                                        step="0.05"
+                                        :value="filterHue.toFixed(2)"
+                                        @input="emitClampedProperty('filter-hue', ($event.target as HTMLInputElement).valueAsNumber, filterHue, -1, 1, 2)"
+                                        class="pp-number-input"
+                                        title="Matiz"
+                                      />
+                                    </div>
+		                          </div>
+		                          <input type="range" min="-1" max="1" step="0.05" :value="filterHue" @input="e => $emit('update-property', 'filter-hue', Number((e.target as any).value))" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+		                      </div>
 
 	                      <div class="grid grid-cols-3 gap-1.5">
 	                          <button type="button" class="h-7 rounded border border-white/10 text-[9px] font-bold uppercase tracking-widest transition-colors" :class="filterGrayscale ? 'bg-violet-500/20 text-violet-200 border-violet-500/30' : 'bg-[#2a2a2a] text-zinc-400 hover:text-white'" @click="$emit('update-property', 'filter-grayscale', !filterGrayscale)">P&B</button>
@@ -1857,7 +2074,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
              </div>
           </button>
           <ProductZoneSettings
-            v-if="isProductZone && isProductZoneSectionOpen"
+            v-show="isProductZoneSectionOpen"
             :zone="currentZoneData"
             :global-styles="currentGlobalStyles"
             :label-templates="labelTemplates"
