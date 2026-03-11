@@ -85,13 +85,15 @@ watch(
 </script>
 
 <template>
-  <div class="dashboard-root h-screen overflow-hidden bg-[#09090d] text-white flex flex-col">
-    <header class="dashboard-header h-14 px-6 border-b border-white/12 bg-[#15141d]/95 flex items-center justify-between shrink-0 backdrop-blur-sm sticky top-0 z-30">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-violet-400/35 bg-linear-to-br from-violet-500/35 to-fuchsia-500/20 shadow-[0_10px_20px_-10px_rgba(168,85,247,0.45)]">
-          <Sparkles class="w-4 h-4 text-violet-200" />
-        </div>
-        <span class="text-sm font-semibold tracking-wide text-white">Studio PRO</span>
+  <div class="dashboard-root h-screen w-screen overflow-hidden p-3 md:p-5 flex flex-col">
+    <!-- Floating Glassmorphism Window -->
+    <div class="flex-1 w-full h-full max-w-[1920px] mx-auto overflow-hidden bg-[#111116]/60 backdrop-blur-3xl border border-white/10 rounded-[2rem] shadow-2xl flex flex-col relative z-20 ring-1 ring-white/5">
+      <header class="dashboard-header h-16 px-8 border-b border-white/5 bg-transparent flex items-center justify-between shrink-0 sticky top-0 z-30">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center border border-violet-400/40 bg-linear-to-br from-violet-500/40 to-fuchsia-500/20 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+            <Sparkles class="w-4 h-4 text-violet-100" />
+          </div>
+          <span class="text-base font-bold tracking-tight text-white drop-shadow-sm">Studio PRO</span>
       </div>
 
       <div class="flex items-center gap-3">
@@ -102,9 +104,9 @@ watch(
       </div>
     </header>
 
-    <div class="relative z-10 flex-1 flex overflow-hidden min-h-0">
-      <aside class="w-64 h-full min-h-0 border-r border-white/12 bg-[#13131d]/95 flex flex-col shrink-0 backdrop-blur overflow-hidden">
-        <div class="h-12 px-3 border-b border-white/12 flex items-center gap-2 shrink-0">
+      <div class="dashboard-layout relative flex-1 flex overflow-hidden min-h-0 bg-black/20">
+        <aside class="w-72 h-full min-h-0 border-r border-white/5 bg-[#0a0a0c]/40 flex flex-col shrink-0 overflow-hidden relative z-10 transition-all duration-300 backdrop-blur-md">
+          <div class="h-12 px-3 border-b border-white/12 flex items-center gap-2 shrink-0">
           <div class="w-7 h-7 bg-linear-to-br from-violet-500 to-fuchsia-500 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 overflow-hidden">
             <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" class="w-full h-full object-cover" />
             <span v-else>{{ avatarInitial }}</span>
@@ -152,10 +154,14 @@ watch(
         </div>
       </aside>
 
-      <main class="flex-1 overflow-y-auto bg-[#09090d] px-6 py-6">
-        <div class="max-w-5xl mx-auto">
-          <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium mb-2">Conta</p>
-          <h1 class="text-[1.95rem] leading-tight font-medium text-white mb-1 tracking-tight">Meu Perfil</h1>
+        <!-- Section Title -->
+        <main class="dashboard-main flex-1 overflow-y-auto bg-transparent px-8 pt-8 pb-4 relative z-10">
+          <div class="max-w-5xl mx-auto">
+            <p class="text-[11px] uppercase tracking-[0.2em] text-violet-400/70 font-semibold mb-2 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-violet-400/50 animate-pulse"></span>
+              Conta
+            </p>
+            <h1 class="text-4xl leading-tight font-bold text-transparent bg-clip-text bg-linear-to-r from-white to-zinc-400 mb-2 tracking-tight drop-shadow-sm">Meu Perfil</h1>
           <p class="text-xs text-zinc-400 leading-relaxed">Dados principais da sua conta no sistema.</p>
 
           <div v-if="isLoading" class="mt-6 grid gap-4 md:grid-cols-2">
@@ -187,7 +193,7 @@ watch(
           </div>
 
           <div v-else class="mt-6 grid gap-4 md:grid-cols-3">
-            <section class="md:col-span-1 rounded-2xl border border-white/10 bg-[#171727] p-5">
+            <section class="md:col-span-1 rounded-2xl border border-white/5 bg-[#121216]/80 backdrop-blur-sm p-5 shadow-xs">
               <div class="w-20 h-20 rounded-full bg-linear-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-2xl font-semibold text-white overflow-hidden mb-4">
                 <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" class="w-full h-full object-cover" />
                 <span v-else>{{ avatarInitial }}</span>
@@ -200,7 +206,7 @@ watch(
               </div>
             </section>
 
-            <section class="md:col-span-2 rounded-2xl border border-white/10 bg-[#171727] p-5">
+            <section class="md:col-span-2 rounded-2xl border border-white/5 bg-[#121216]/80 backdrop-blur-sm p-5 shadow-xs">
               <p class="text-[11px] uppercase tracking-[0.14em] text-zinc-500 mb-4">Informacoes da conta</p>
               <div class="space-y-3">
                 <div class="rounded-xl border border-white/10 bg-white/5 p-3 flex items-center gap-3">
@@ -231,25 +237,26 @@ watch(
         </div>
       </main>
     </div>
+    </div> <!-- End of Floating Glassmorphism Window -->
   </div>
 </template>
 
 <style scoped>
 .dashboard-root {
-  background:
+  background: 
     radial-gradient(circle at 16% 8%, rgba(168, 85, 247, 0.09), transparent 38%),
     radial-gradient(circle at 82% 14%, rgba(129, 140, 248, 0.06), transparent 36%),
-    #09090d;
+    #09090b;
 }
 
 .dashboard-root::before {
   content: '';
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(130deg, rgba(255, 255, 255, 0.03) 0.5px, transparent 0.5px) 0 0 / 48px 48px,
-    linear-gradient(240deg, rgba(255, 255, 255, 0.02) 0.5px, transparent 0.5px) 0 0 / 96px 96px;
+    linear-gradient(130deg, rgba(255, 255, 255, 0.02) 0.5px, transparent 0.5px) 0 0 / 48px 48px,
+    linear-gradient(240deg, rgba(255, 255, 255, 0.015) 0.5px, transparent 0.5px) 0 0 / 96px 96px;
   opacity: 0.35;
 }
 

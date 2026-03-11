@@ -60,46 +60,48 @@ const commitPageRename = (index: number) => {
 </script>
 
 <template>
-  <aside class="w-60 border-r border-white/5 bg-[#1a1a1a] flex flex-col shrink-0 z-10 text-white h-full select-none">
-       <!-- Top: Menu, File Name & Tabs (Figma Style) -->
-       <div class="border-b border-white/5 shrink-0">
+  <aside class="w-60 border-r border-white/5 bg-[#18181b] flex flex-col shrink-0 z-10 text-white h-full select-none">
+       <!-- Top: Menu, File Name & Tabs -->
+       <div class="border-b border-white/5 shrink-0 bg-[#18181b]/50 backdrop-blur-md">
          <!-- Menu & File Name -->
-         <div class="h-10 px-3 flex items-center gap-2 border-b border-white/5">
+         <div class="h-12 px-3 flex items-center gap-2 border-b border-white/5">
            <!-- Menu Icon -->
            <button 
              @click="$emit('open-menu')"
-             class="w-7 h-7 hover:bg-white/10 rounded-lg flex items-center justify-center cursor-pointer transition-colors shrink-0"
+             class="w-8 h-8 hover:bg-white/10 rounded-lg flex items-center justify-center cursor-pointer transition-colors shrink-0"
              title="Menu"
            >
              <Menu class="w-4 h-4 text-zinc-400" />
            </button>
            
            <!-- File Name -->
-           <div class="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer group hover:bg-white/5 rounded-lg px-2 py-1.5 transition-all">
-             <span class="text-xs font-medium text-white truncate">{{ project.name || 'Sem título' }}</span>
-             <ChevronDown class="w-3.5 h-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+           <div class="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer group hover:bg-white/5 rounded-md px-2 py-1.5 transition-all">
+             <span class="text-xs font-semibold text-zinc-100 truncate tracking-wide">{{ project.name || 'Sem título' }}</span>
+             <ChevronDown class="w-3.5 h-3.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
            </div>
            
-           <div class="flex items-center gap-1">
-             <span class="text-[10px] text-blue-400 font-medium px-1.5 py-0.5 rounded bg-blue-500/10">Grátis</span>
+           <div class="flex items-center gap-1 shrink-0">
+             <span class="text-[9px] text-fuchsia-300 font-bold px-1.5 py-0.5 rounded bg-fuchsia-500/15 border border-fuchsia-500/20 uppercase tracking-widest shadow-[0_0_10px_rgba(217,70,239,0.1)]">Pro</span>
            </div>
          </div>
          
          <!-- File / Assets Tabs -->
-         <div class="h-9 flex items-center px-2 gap-1 text-[11px] font-medium shrink-0">
+         <div class="h-10 flex items-center px-1 gap-1 text-[10px] font-bold uppercase tracking-widest shrink-0">
             <button 
                 @click="activeTab = 'layers'"
-                class="h-full px-3 border-b-2 transition-colors rounded-t-md"
-                :class="activeTab === 'layers' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'"
+                class="flex-1 h-full flex items-center justify-center border-b-2 transition-all relative"
+                :class="activeTab === 'layers' ? 'border-violet-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5'"
             >
                 Arquivo
+                <div v-if="activeTab === 'layers'" class="absolute bottom-0 left-0 w-full h-[2px] bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
             </button>
             <button 
                 @click="activeTab = 'assets'"
-                class="h-full px-3 border-b-2 transition-colors rounded-t-md"
-                :class="activeTab === 'assets' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'"
+                class="flex-1 h-full flex items-center justify-center border-b-2 transition-all relative"
+                :class="activeTab === 'assets' ? 'border-violet-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5'"
             >
                 Recursos
+                <div v-if="activeTab === 'assets'" class="absolute bottom-0 left-0 w-full h-[2px] bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
             </button>
        </div>
        </div>
@@ -111,8 +113,8 @@ const commitPageRename = (index: number) => {
                <input 
                    v-model="sidebarSearch"
                    type="text" 
-                   placeholder="Buscar" 
-                   class="w-full h-8 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white pl-8 pr-3 focus:outline-none focus:border-violet-500/50 placeholder:text-zinc-500 transition-all" 
+                   placeholder="Buscar elementos..." 
+                   class="w-full h-8 bg-[#2a2a2a]/60 border border-white/5 rounded-md text-[11px] text-zinc-100 pl-8 pr-3 focus:outline-none focus:border-violet-500/50 focus:bg-[#2a2a2a] placeholder:text-zinc-500 transition-all shadow-inner" 
                />
            </div>
        </div>
@@ -123,24 +125,25 @@ const commitPageRename = (index: number) => {
            <!-- TAB: FILE (Pages + Layers) -->
            <div v-if="activeTab === 'layers'" class="flex flex-col h-full animate-in fade-in duration-200">
                <!-- Pages Section -->
-               <div class="shrink-0">
-                 <div class="px-3 py-2 flex items-center justify-between border-b border-white/5">
-                   <span class="text-[10px] font-semibold uppercase text-zinc-500">Páginas</span>
-                   <button @click.stop="createPage('story')" class="w-5 h-5 hover:bg-white/10 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Nova Página">
+               <div class="shrink-0 mb-2">
+                 <div class="px-3 py-2.5 flex items-center justify-between border-b border-white/5">
+                   <span class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Páginas</span>
+                   <button @click.stop="createPage('story')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all bg-white/5 border border-white/5" title="Nova Página">
                      <Plus class="w-3.5 h-3.5" />
                    </button>
                  </div>
                  
-                 <div class="px-1 py-1">
+                 <div class="px-2 py-2 space-y-0.5">
                    <div 
                      v-for="(page, index) in project.pages" 
                      :key="page.id"
-                     class="flex items-center h-8 px-2 gap-2 cursor-pointer group transition-all rounded-lg"
-                     :class="index === project.activePageIndex ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-zinc-400'"
+                     class="flex items-center h-8 px-2 gap-2 cursor-pointer group transition-all rounded-md relative overflow-hidden"
+                     :class="index === project.activePageIndex ? 'bg-violet-500/10 text-violet-100' : 'hover:bg-white/5 text-zinc-400'"
                      @click="switchPage(index)"
                      @dblclick.stop="startPageRename(index)"
                    >
-                     <FileText class="w-3.5 h-3.5 opacity-70 shrink-0" />
+                     <div v-if="index === project.activePageIndex" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-violet-500 rounded-r-md"></div>
+                     <FileText class="w-3.5 h-3.5 shrink-0" :class="index === project.activePageIndex ? 'text-violet-400' : 'opacity-70'" />
 	                     <input
 	                       v-if="editingPageId === page.id"
 	                       ref="pageNameInputRef"
@@ -176,18 +179,19 @@ const commitPageRename = (index: number) => {
 
            <!-- TAB: ASSETS (Elementos + Meus Arquivos) -->
            <div v-else-if="activeTab === 'assets'" class="flex flex-col h-full animate-in fade-in duration-200">
-               <!-- Sub-tabs -->
-               <div class="px-2 pt-2 pb-1.5 flex gap-1 shrink-0">
-                   <button
-                       @click="assetsSubTab = 'elements'"
-                       class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all"
-                       :class="assetsSubTab === 'elements' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'"
-                   >Elementos</button>
-                   <button
-                       @click="assetsSubTab = 'files'"
-                       class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all"
-                       :class="assetsSubTab === 'files' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'"
-                   >Meus Arquivos</button>
+               <div class="px-3 pt-3 pb-2 flex shrink-0">
+                   <div class="flex p-0.5 bg-[#2a2a2a] rounded-md border border-white/5 w-full">
+                       <button
+                           @click="assetsSubTab = 'elements'"
+                           class="flex-1 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all"
+                           :class="assetsSubTab === 'elements' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'"
+                       >Elementos</button>
+                       <button
+                           @click="assetsSubTab = 'files'"
+                           class="flex-1 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all"
+                           :class="assetsSubTab === 'files' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'"
+                       >Meus Arquivos</button>
+                   </div>
                </div>
                <!-- Sub: Elementos -->
                <ElementsPanel v-if="assetsSubTab === 'elements'" :search-query="sidebarSearch" @insert-element="(el) => emit('insert-element', el)" />

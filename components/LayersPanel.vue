@@ -415,25 +415,27 @@ defineExpose({
 <template>
   <div class="flex flex-col h-full bg-transparent">
     <!-- Layers Header -->
-    <div class="px-3 py-2 border-b border-white/5 shrink-0 flex items-center gap-2">
-      <Layers class="w-3 h-3 text-zinc-500" />
-      <span class="text-[10px] font-semibold uppercase text-zinc-500">Camadas</span>
+    <div class="px-3 py-2.5 border-b border-white/5 shrink-0 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <Layers class="w-3.5 h-3.5 text-zinc-400" />
+        <span class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Camadas</span>
+      </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
+    <div class="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar">
       <div
         v-for="item in buildLayerTree"
         :key="item.id"
         :class="[
-          'flex items-center gap-2 py-1.5 rounded-xs transition-all duration-150 group cursor-grab active:cursor-grabbing select-none border border-transparent',
+          'flex items-center gap-2 py-1.5 rounded-md transition-all duration-150 group cursor-grab active:cursor-grabbing select-none border border-transparent relative overflow-hidden',
           isLayerSelected(item.id)
-            ? 'bg-violet-500 text-white font-medium'
+            ? 'bg-violet-500/15 text-violet-100 font-semibold border-violet-500/20'
             : 'hover:bg-white/5 text-zinc-400 hover:text-white',
-          dragOverId === item.id && dragOverPlacement === 'before' ? 'border-t-violet-400' : '',
-          dragOverId === item.id && dragOverPlacement === 'after' ? 'border-b-violet-400' : '',
-          dragSourceId === item.id ? 'opacity-60' : ''
+          dragOverId === item.id && dragOverPlacement === 'before' ? 'border-t-violet-400 border-t-2' : '',
+          dragOverId === item.id && dragOverPlacement === 'after' ? 'border-b-violet-400 border-b-2' : '',
+          dragSourceId === item.id ? 'opacity-40' : ''
         ]"
-        :style="{ paddingLeft: `${item.depth * 12 + 6}px` }"
+        :style="{ paddingLeft: `${item.depth * 14 + 6}px` }"
         draggable="true"
         @click="handleLayerRowClick(item.id, $event)"
         @contextmenu.prevent.stop="handleLayerContextMenu(item.id, $event)"
@@ -474,11 +476,11 @@ defineExpose({
             @blur="finishEditing"
             @keyup.enter="finishEditing"
             @keyup.esc="editingId = null"
-            class="w-full bg-[#1e1e1e] text-white text-[10px] px-1 py-0.5 border border-violet-500 rounded focus:outline-none"
+            class="w-full bg-[#1e1e1e] text-white text-[10px] px-1 py-0.5 border border-violet-500 rounded focus:outline-none shadow-sm"
             autoFocus
           />
           <template v-else>
-            <span :class="['text-[10px] font-bold uppercase tracking-wider truncate block transition-all', isLayerSelected(item.id) ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300']">
+            <span :class="['text-[10px] tracking-wide truncate block transition-colors', isLayerSelected(item.id) ? 'text-violet-100 font-bold' : 'text-zinc-300 group-hover:text-white font-medium']">
               {{ item.name }}
             </span>
             <span v-if="item.masked" class="inline-flex items-center gap-1 text-[8px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-200 border border-violet-300/30 shrink-0">
@@ -528,12 +530,12 @@ defineExpose({
     </div>
 
     <!-- Move Actions -->
-    <div class="px-3 py-4 border-t border-zinc-800 flex items-center gap-2 bg-[#09090b]">
-      <button @click="selectedId && emit('move-up', selectedId)" :disabled="!selectedId" class="flex-1 h-8 flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-[0.15em] border border-zinc-700 rounded bg-zinc-800 text-white hover:bg-zinc-700 disabled:opacity-30 transition-all active:scale-95 shadow-sm">
-        <ArrowUp class="w-3 h-3" /> Subir
+    <div class="px-3 py-3 border-t border-white/5 flex items-center gap-2 bg-[#18181b]/50 backdrop-blur-md">
+      <button @click="selectedId && emit('move-up', selectedId)" :disabled="!selectedId" class="flex-1 h-8 flex items-center justify-center gap-1.5 text-[9px] font-bold uppercase tracking-widest border border-white/10 rounded-md bg-[#2a2a2a] text-zinc-300 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-[#2a2a2a] disabled:hover:text-zinc-300 transition-all active:scale-95 shadow-sm">
+        <ArrowUp class="w-3.5 h-3.5" /> Subir
       </button>
-      <button @click="selectedId && emit('move-down', selectedId)" :disabled="!selectedId" class="flex-1 h-8 flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-[0.15em] border border-zinc-700 rounded bg-zinc-800 text-white hover:bg-zinc-700 disabled:opacity-30 transition-all active:scale-95 shadow-sm">
-        <ArrowDown class="w-3 h-3" /> Descer
+      <button @click="selectedId && emit('move-down', selectedId)" :disabled="!selectedId" class="flex-1 h-8 flex items-center justify-center gap-1.5 text-[9px] font-bold uppercase tracking-widest border border-white/10 rounded-md bg-[#2a2a2a] text-zinc-300 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-[#2a2a2a] disabled:hover:text-zinc-300 transition-all active:scale-95 shadow-sm">
+        <ArrowDown class="w-3.5 h-3.5" /> Descer
       </button>
     </div>
   </div>

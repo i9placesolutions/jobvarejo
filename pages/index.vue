@@ -1432,15 +1432,17 @@ const handleDropOnRoot = async (event: DragEvent) => {
 </script>
 
 <template>
-  <div class="dashboard-root h-screen overflow-hidden bg-[#09090d] text-white flex flex-col">
-    <!-- Modern Header (Spatial) -->
-    <header class="dashboard-header h-14 px-6 border-b border-white/12 bg-[#15141d]/95 flex items-center justify-between shrink-0">
+  <div class="dashboard-root h-screen w-screen overflow-hidden p-3 md:p-5 flex flex-col">
+    <!-- Floating Glassmorphism Window -->
+    <div class="flex-1 w-full h-full max-w-[1920px] mx-auto overflow-hidden bg-[#111116]/60 backdrop-blur-3xl border border-white/10 rounded-[2rem] shadow-2xl flex flex-col relative z-20 ring-1 ring-white/5">
+      <!-- Modern Header (Transparent Glass) -->
+      <header class="dashboard-header h-16 px-8 border-b border-white/5 bg-transparent flex items-center justify-between shrink-0 sticky top-0 z-30">
       <!-- Logo and App Name -->
       <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-violet-400/35 bg-linear-to-br from-violet-500/35 to-fuchsia-500/20 shadow-[0_10px_20px_-10px_rgba(168,85,247,0.45)]">
-          <Sparkles class="w-4 h-4 text-violet-200" />
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center border border-violet-400/40 bg-linear-to-br from-violet-500/40 to-fuchsia-500/20 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+          <Sparkles class="w-4 h-4 text-violet-100" />
         </div>
-        <span class="text-sm font-semibold tracking-wide text-white">Studio PRO</span>
+        <span class="text-base font-bold tracking-tight text-white drop-shadow-sm">Studio PRO</span>
       </div>
 
       <!-- User Avatar -->
@@ -1451,9 +1453,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </div>
     </header>
 
-    <div class="dashboard-layout relative flex-1 flex overflow-hidden min-h-0">
+    <div class="dashboard-layout relative flex-1 flex overflow-hidden min-h-0 bg-black/20">
       <!-- Sidebar (Spatial Rail) -->
-      <aside class="dashboard-sidebar w-64 h-full min-h-0 border-r border-white/12 bg-[#13131d]/95 flex flex-col shrink-0 overflow-hidden">
+      <aside class="dashboard-sidebar w-72 h-full min-h-0 border-r border-white/5 bg-[#0a0a0c]/40 flex flex-col shrink-0 overflow-hidden relative z-10 transition-all duration-300 backdrop-blur-md">
         <!-- Top Header (Figma Style) -->
         <div class="h-12 px-3 border-b border-white/12 flex items-center justify-between shrink-0">
           <!-- User/Workspace Selector -->
@@ -1626,11 +1628,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </aside>
 
       <!-- Main Content -->
-      <main class="dashboard-main flex-1 flex flex-col overflow-hidden bg-[#09090d]">
+      <main class="dashboard-main flex-1 flex flex-col overflow-hidden bg-transparent relative z-10">
         <!-- Section Title -->
-        <div class="relative px-6 pt-6 pb-4">
-          <p class="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium mb-2">Workspace</p>
-          <h1 class="text-[1.95rem] leading-tight font-medium text-white mb-1 tracking-tight">
+        <div class="relative px-8 pt-8 pb-4">
+          <p class="text-[11px] uppercase tracking-[0.2em] text-violet-400/70 font-semibold mb-2 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-violet-400/50 animate-pulse"></span>
+            Workspace
+          </p>
+          <h1 class="text-4xl leading-tight font-bold text-transparent bg-clip-text bg-gradient-to-r from-zinc-100 to-zinc-500 mb-2 tracking-tight drop-shadow-sm">
             {{ dashboardTitle }}
           </h1>
           <p class="text-xs text-zinc-400 leading-relaxed">{{ dashboardContextHint }}</p>
@@ -1713,9 +1718,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <!-- New Project Button -->
             <button
               @click="showCreateProject = true"
-              class="self-end h-9 px-4 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
+              class="self-end h-9 px-4 bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all duration-300 shadow-[0_8px_20px_rgba(139,92,246,0.3)] hover:shadow-[0_12px_24px_rgba(139,92,246,0.4)] hover:-translate-y-0.5 border border-violet-400/20"
             >
-              <Plus class="w-4 h-4" />
+              <Plus class="w-4 h-4 text-violet-100" />
               <span>Novo Projeto</span>
             </button>
 
@@ -1748,8 +1753,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   v-for="folder in visibleFoldersOnDashboard"
                   :key="folder.id"
                   type="button"
-                  class="group text-left rounded-xl border border-white/12 bg-[#181824] px-3 py-3 transition-all hover:border-violet-300/55 hover:bg-[#1d1d2e] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/50"
-                  :class="{ 'border-violet-400/80 bg-violet-500/12': activeFolderId === folder.id }"
+                  class="group text-left rounded-2xl border border-white/5 bg-[#18181b] px-4 py-4 transition-all duration-200 hover:border-white/15 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 shadow-sm hover:shadow-lg"
+                  :class="{ 'border-violet-500/50 bg-violet-500/10 shadow-[0_0_15px_rgba(139,92,246,0.15)]': activeFolderId === folder.id }"
                   @click="openFolderFromSidebar(folder.id)"
                   @contextmenu="(e: MouseEvent) => showFolderContextMenu(folder.id, e)"
                 >
@@ -1775,23 +1780,23 @@ const handleDropOnRoot = async (event: DragEvent) => {
               class="grid gap-4"
               :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-1'"
             >
-              <div
-                v-for="(project, projectIndex) in filteredProjects"
-                :key="project.id"
-                :ref="(el) => setProjectPreviewHost(project.id, el as Element | null)"
-                :data-preview-id="project.id"
-                class="project-card-shell group relative bg-[#171727] border border-white/12 hover:border-white/20 overflow-hidden transition-[border-color] duration-200 cursor-pointer rounded-xl motion-reduce:transition-none"
-                draggable="true"
-                @mousedown="handleProjectPointerDown(project.id, $event)"
-                @dragstart="handleDragStart(project.id, $event)"
-                @dragend="handleDragEnd"
-                @click="handleProjectCardClick(project.id, $event)"
-                @mouseenter="promoteProjectPreview(project, projectIndex)"
-              >
-                <!-- Thumbnail (Rounded Top) -->
                 <div
-                  class="aspect-video bg-linear-to-br from-[#2a2a2a] to-[#1a1a1a] relative overflow-hidden rounded-t-xl"
+                  v-for="(project, projectIndex) in filteredProjects"
+                  :key="project.id"
+                  :ref="(el) => setProjectPreviewHost(project.id, el as Element | null)"
+                  :data-preview-id="project.id"
+                  class="project-card-shell group relative bg-[#18181b] border border-white/5 hover:border-white/15 hover:bg-[#1e1e21] flex flex-col overflow-hidden transition-all duration-300 ease-out cursor-pointer rounded-2xl shadow-sm hover:shadow-[0_12px_35px_rgba(0,0,0,0.5)] hover:-translate-y-1 motion-reduce:transition-none"
+                  draggable="true"
+                  @mousedown="handleProjectPointerDown(project.id, $event)"
+                  @dragstart="handleDragStart(project.id, $event)"
+                  @dragend="handleDragEnd"
+                  @click="handleProjectCardClick(project.id, $event)"
+                  @mouseenter="promoteProjectPreview(project, projectIndex)"
                 >
+                  <!-- Thumbnail (Rounded Top) -->
+                  <div
+                    class="aspect-video bg-[#121214] relative overflow-hidden"
+                  >
                   <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 p-2 flex items-center justify-center">
                     <img
                       :src="getProjectPreviewSrc(project, projectIndex)"
@@ -1820,7 +1825,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     </div>
                   </div>
                   <div
-                    class="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/65 text-white text-[10px] font-semibold tracking-wide pointer-events-none"
+                    class="absolute bottom-3 left-3 px-2 py-1.5 rounded-md bg-black/40 backdrop-blur-md text-white text-[10px] font-semibold tracking-widest pointer-events-none border border-white/10 shadow-lg"
                   >
                     {{ getProjectInitials(project) }}
                   </div>
@@ -1831,10 +1836,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     @mousedown.stop
                     @touchstart.stop
                     @click.stop="showProjectContextMenu(project.id, $event)"
-                    class="absolute top-2 right-2 p-2 bg-black/75 rounded-lg hover:bg-black/90"
+                    class="absolute top-3 right-3 p-2 bg-black/40 backdrop-blur-md rounded-lg text-white/70 hover:text-white hover:bg-black/70 border border-white/5 transition-all opacity-0 group-hover:opacity-100"
                     title="Ações"
                   >
-                    <MoreVertical class="w-4 h-4 text-white" />
+                    <MoreVertical class="w-4 h-4" />
                   </button>
 
                   <!-- Star Button (top left - Rounded) -->
@@ -1843,15 +1848,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     @mousedown.stop
                     @touchstart.stop
                     @click.stop="toggleStarred(project.id)"
-                    :class="['absolute top-2 left-2 p-2 rounded-lg', project.is_starred ? 'bg-yellow-500/90 text-white' : 'bg-black/75 text-white hover:bg-black/90']"
+                    :class="['absolute top-3 left-3 p-2 rounded-lg backdrop-blur-md border border-white/5 transition-all opacity-0 group-hover:opacity-100', project.is_starred ? 'bg-amber-500/20 text-amber-400 opacity-100' : 'bg-black/40 text-white/70 hover:text-white hover:bg-black/70']"
                     title="Favoritar"
                   >
-                    <Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" />
+                    <Star class="w-4 h-4 drop-shadow" :class="{ 'fill-current': project.is_starred }" />
                   </button>
                 </div>
 
-                <!-- Content (Rounded Bottom) -->
-                <div class="p-3 rounded-b-xl">
+                  <!-- Content (Rounded Bottom) -->
+                  <div class="px-4 py-3 border-t border-white/5 flex flex-col justify-center min-h-[72px] bg-transparent">
                   <!-- Renaming mode -->
                   <div v-if="renamingProjectId === project.id" @click.stop class="mb-1">
                     <input
@@ -1865,16 +1870,19 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     />
                   </div>
                   <!-- Normal mode -->
-                  <h3 v-else class="font-medium text-xs text-white mb-1 truncate">
+                  <h3 v-else class="font-semibold text-[13px] text-zinc-100 mb-1.5 truncate tracking-tight transition-colors group-hover:text-violet-300">
                     {{ project.name || 'Sem título' }}
                   </h3>
-                  <div class="mt-0.5 flex items-center justify-between gap-2">
-                    <p class="text-[10px] text-zinc-500 truncate">{{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}</p>
+                  <div class="mt-0.5 flex items-center justify-between gap-3">
+                    <p class="text-[11px] text-zinc-500 truncate font-medium flex items-center gap-1.5">
+                      <Clock class="w-3 h-3 opacity-70" />
+                      {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
+                    </p>
                     <span
                       v-if="!String(project.folder_id || '').trim()"
-                      class="inline-flex items-center rounded-full border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200"
+                      class="inline-flex items-center rounded-full border border-white/5 bg-white/[0.03] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500"
                     >
-                      Sem pasta
+                      Raiz
                     </span>
                   </div>
                 </div>
@@ -2252,12 +2260,27 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </Transition>
     </teleport>
 
+    </div> <!-- End of Floating Glassmorphism Window -->
   </div>
 </template>
 
 <style scoped>
 .dashboard-root {
-  background: #09090d;
+  background: 
+    radial-gradient(circle at 16% 8%, rgba(168, 85, 247, 0.09), transparent 38%),
+    radial-gradient(circle at 82% 14%, rgba(129, 140, 248, 0.06), transparent 36%),
+    #09090b;
+}
+
+.dashboard-root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(130deg, rgba(255, 255, 255, 0.02) 0.5px, transparent 0.5px) 0 0 / 48px 48px,
+    linear-gradient(240deg, rgba(255, 255, 255, 0.015) 0.5px, transparent 0.5px) 0 0 / 96px 96px;
+  opacity: 0.35;
 }
 
 .folder-tree {
@@ -2270,20 +2293,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
   position: relative;
 }
 
-/* Chromium-safe mode: avoid hover repaints/composition glitches */
-.dashboard-root *,
-.dashboard-root *::before,
-.dashboard-root *::after {
-  animation: none !important;
-  transition-duration: 0s !important;
-  transition-delay: 0s !important;
-  will-change: auto !important;
-}
-
-.project-card-shell:focus-within,
 button:focus-visible,
-input:focus-visible {
-  outline: 1px solid rgba(167, 139, 250, 0.7);
+input:focus-visible,
+.project-card-shell:focus-within {
+  outline: 2px solid rgba(167, 139, 250, 0.6);
   outline-offset: 2px;
 }
 
@@ -2298,11 +2311,11 @@ input:focus-visible {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3c3c3c;
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4c4c4c;
+  background: rgba(255, 255, 255, 0.2);
 }
 </style>

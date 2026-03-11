@@ -960,16 +960,16 @@ const handleFileUpload = async (event: Event) => {
 </script>
 
 <template>
-    <div class="flex flex-col h-full bg-[#1a1a1a]">
+    <div class="flex flex-col h-full bg-[#18181b]/50">
         <!-- Category Nav (compact, matching PropertiesPanel) -->
-        <div class="flex items-center gap-0.5 px-2 py-1.5 border-b border-white/5 shrink-0 overflow-x-auto nav-scrollbar">
+        <div class="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 shrink-0 overflow-x-auto nav-scrollbar bg-[#18181b]/50 backdrop-blur-md shadow-sm">
             <button 
                 v-for="cat in categories" 
                 :key="cat.id"
                 @click="activeCategory = cat.id; currentFolderId = null"
                 :class="[
-                    'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide cursor-pointer transition-all whitespace-nowrap shrink-0',
-                    activeCategory === cat.id ? 'bg-violet-500/15 text-violet-400' : 'text-zinc-500 hover:text-zinc-400'
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold tracking-widest uppercase cursor-pointer transition-all whitespace-nowrap shrink-0 border border-transparent',
+                    activeCategory === cat.id ? 'bg-[#2a2a2a]/80 text-violet-300 border-white/10 shadow-inner' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
                 ]"
             >
                 <component :is="cat.icon" class="w-3 h-3" />
@@ -977,13 +977,13 @@ const handleFileUpload = async (event: Event) => {
             </button>
         </div>
 
-        <div v-if="activeCategory === 'uploads' || activeCategory === 'brand' || (activeCategory === 'folders' && currentFolderId)" class="px-2 py-1.5 border-b border-white/5">
+        <div v-if="activeCategory === 'uploads' || activeCategory === 'brand' || (activeCategory === 'folders' && currentFolderId)" class="px-3 py-2.5 border-b border-white/5 bg-[#1e1e21]/40 backdrop-blur-sm shadow-sm">
             <input type="file" ref="fileInput" class="hidden" accept="image/*" multiple @change="handleFileUpload" />
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-2">
                 <button 
                     @click="triggerUpload" 
                     :disabled="isAnyUploading"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer disabled:opacity-40"
+                    class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[10px] font-bold tracking-widest uppercase text-violet-100 hover:text-white bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 hover:border-violet-400/50 shadow-sm transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     <template v-if="isAnyUploading">
                         <span class="animate-pulse">{{ uploadButtonText }}</span>
@@ -995,30 +995,30 @@ const handleFileUpload = async (event: Event) => {
                 </button>
                 <button
                     @click="aiStudio.openStudio({ initial: { mode: 'generate', filenameBase: 'ai-image' }, applyMode: 'insert' })"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
+                    class="flex items-center gap-2 px-3 py-2 rounded-md text-[10px] font-bold tracking-widest uppercase text-cyan-200 hover:text-white bg-cyan-900/40 hover:bg-cyan-800/60 border border-cyan-500/30 shadow-sm transition-all cursor-pointer ring-1 ring-black/50"
                 >
-                    <Sparkles class="w-3 h-3" />
-                    IA
+                    <Sparkles class="w-3.5 h-3.5" />
+                    Gerar Anúncio com IA
                 </button>
             </div>
             <p v-if="uploadError" class="text-[9px] text-red-400 mt-1">{{ uploadError }}</p>
         </div>
 
         <!-- Breadcrumb / Header for Folders -->
-        <div v-if="activeCategory === 'folders'" class="px-2 py-1.5 border-b border-white/5 flex items-center justify-between text-zinc-400">
+        <div v-if="activeCategory === 'folders'" class="px-3 py-2 border-b border-white/5 flex items-center justify-between text-zinc-400 bg-[#1e1e21]/40 backdrop-blur-sm">
             <div class="flex items-center gap-1.5">
                 <template v-if="currentFolderId">
-                    <button @click="goBack" class="p-0.5 hover:bg-white/10 rounded">
-                        <ArrowLeft class="w-3.5 h-3.5" />
+                    <button @click="goBack" class="p-1 hover:bg-white/10 rounded-md transition-colors bg-white/5 shadow-inner">
+                        <ArrowLeft class="w-3.5 h-3.5 text-zinc-300" />
                     </button>
-                    <div class="flex items-center gap-1 text-[10px]">
-                        <span class="cursor-pointer hover:text-white" @click="currentFolderId = null">Raiz</span>
-                        <ChevronRight class="w-2.5 h-2.5" />
-                        <span class="text-white font-semibold uppercase tracking-wide">{{ currentFolder?.name }}</span>
+                    <div class="flex items-center gap-1 text-[9px] font-bold tracking-widest uppercase ml-1">
+                        <span class="cursor-pointer hover:text-violet-300 transition-colors" @click="currentFolderId = null">Raiz</span>
+                        <ChevronRight class="w-3 h-3 text-zinc-600" />
+                        <span class="text-white bg-white/5 px-2 py-0.5 rounded shadow-sm">{{ currentFolder?.name }}</span>
                     </div>
                 </template>
                 <template v-else>
-                     <span class="text-[10px] font-semibold uppercase tracking-wide pl-0.5">Minhas Pastas</span>
+                     <span class="text-[9px] font-bold uppercase tracking-widest pl-1 text-zinc-400">Minhas Pastas</span>
                 </template>
             </div>
             <button 
@@ -1051,12 +1051,14 @@ const handleFileUpload = async (event: Event) => {
                         @mouseup="cancelLongPress"
                         @mouseleave="cancelLongPress"
                         @touchend="cancelLongPress"
-                        class="col-span-2 flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer text-zinc-400 hover:text-white border border-transparent hover:border-white/10 transition-all select-none"
+                        class="col-span-2 flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[#2a2a2a]/60 cursor-pointer text-zinc-400 hover:text-white border border-white/5 hover:border-violet-500/30 transition-all select-none group shadow-sm bg-white/5"
                     >
-                        <Folder class="w-3.5 h-3.5 text-yellow-500 fill-yellow-500/20" />
-                        <div class="flex flex-col">
-                             <span class="text-[11px] font-medium">{{ item.name }}</span>
-                             <span class="text-[9px] text-zinc-500">Pasta</span>
+                        <div class="w-8 h-8 rounded bg-yellow-500/10 flex items-center justify-center shrink-0 border border-yellow-500/20 group-hover:border-yellow-500/40 transition-colors">
+                            <Folder class="w-4 h-4 text-yellow-500 fill-yellow-500/20" />
+                        </div>
+                        <div class="flex flex-col flex-1 min-w-0">
+                             <span class="text-[11px] font-bold text-zinc-200 group-hover:text-white truncate uppercase tracking-wide">{{ item.name }}</span>
+                             <span class="text-[9px] text-zinc-500 tracking-widest uppercase">Pasta</span>
                         </div>
                     </div>
 
@@ -1064,7 +1066,7 @@ const handleFileUpload = async (event: Event) => {
                     <div 
                         v-for="asset in currentItems.filter(i => i.type !== 'folder')" 
                         :key="asset.id"
-                        class="aspect-square bg-[#1e1e1e] rounded overflow-hidden relative group cursor-grab active:cursor-grabbing border border-white/5 hover:border-white/15 transition-all"
+                        class="aspect-square bg-[#2a2a2a]/60 rounded-md overflow-hidden relative group cursor-grab active:cursor-grabbing border border-white/5 hover:border-violet-500/40 shadow-sm transition-all"
                         draggable="true"
                         @click="handleAssetClick(asset)"
                         @dragstart="(e) => handleDragStart(e, asset)"
@@ -1075,9 +1077,9 @@ const handleFileUpload = async (event: Event) => {
                         @mouseleave="cancelLongPress"
                         @touchend="cancelLongPress"
                     >
-                        <img :src="asset.url" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2 pointer-events-none">
-                            <span class="text-[9px] text-white font-medium truncate w-full">{{ asset.name }}</span>
+                        <img :src="asset.url" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300" />
+                        <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 pt-6 opacity-0 group-hover:opacity-100 transition-opacity flex items-end pointer-events-none translate-y-2 group-hover:translate-y-0 duration-200">
+                            <span class="text-[9px] font-bold text-white tracking-wide truncate w-full drop-shadow-md">{{ asset.name }}</span>
                         </div>
                     </div>
                 </template>
@@ -1094,7 +1096,7 @@ const handleFileUpload = async (event: Event) => {
                     <div 
                         v-for="asset in currentItems" 
                         :key="asset.id"
-                        class="aspect-square bg-[#1e1e1e] rounded overflow-hidden relative group cursor-grab active:cursor-grabbing border border-white/5 hover:border-white/15 transition-all"
+                        class="aspect-square bg-[#2a2a2a]/60 rounded-md overflow-hidden relative group cursor-grab active:cursor-grabbing border border-white/5 hover:border-violet-500/40 shadow-sm transition-all"
                         draggable="true"
                         @click="handleAssetClick(asset)"
                         @dragstart="(e) => handleDragStart(e, asset)"
@@ -1106,16 +1108,16 @@ const handleFileUpload = async (event: Event) => {
                         @touchend="cancelLongPress"
                     >
                         <template v-if="asset.url">
-                            <img :src="asset.url" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                            <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2 pointer-events-none">
-                                <span class="text-[9px] text-white font-medium truncate w-full">{{ asset.name }}</span>
+                            <img :src="asset.url" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300" />
+                            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 pt-6 opacity-0 group-hover:opacity-100 transition-opacity flex items-end pointer-events-none translate-y-2 group-hover:translate-y-0 duration-200">
+                                <span class="text-[9px] font-bold text-white tracking-wide truncate w-full drop-shadow-md">{{ asset.name }}</span>
                             </div>
                         </template>
                         <template v-else>
-                             <div class="w-full h-full flex flex-col items-center justify-center p-2 text-zinc-500 bg-[#1e1e1e]">
-                                <ShoppingCart class="w-5 h-5 mb-1 opacity-20" />
-                                <span class="text-[9px] text-zinc-300 font-medium text-center line-clamp-2 leading-tight">{{ asset.name }}</span>
-                                <span v-if="asset.price" class="text-[10px] text-green-400 font-bold mt-1">R$ {{ asset.price }}</span>
+                             <div class="w-full h-full flex flex-col items-center justify-center p-2 text-zinc-500 bg-[#2a2a2a]/40">
+                                <ShoppingCart class="w-6 h-6 mb-2 opacity-30 group-hover:opacity-50 transition-opacity text-violet-400" />
+                                <span class="text-[9px] font-bold tracking-wide uppercase text-zinc-300 text-center line-clamp-2 leading-tight">{{ asset.name }}</span>
+                                <span v-if="asset.price" class="text-[10px] text-green-400 font-bold mt-1 tracking-widest bg-green-500/10 px-1.5 py-0.5 rounded">R$ {{ asset.price }}</span>
                             </div>
                         </template>
                     </div>

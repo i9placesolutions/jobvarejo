@@ -65,8 +65,8 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <aside class="w-75 border-l border-white/5 h-full bg-[#1a1a1a] text-white flex flex-col shrink-0 z-10 overflow-hidden">
-    <div class="h-10 px-2 flex items-center justify-end border-b border-white/5 shrink-0 min-w-0">
+  <aside class="w-[360px] border-l border-white/5 h-full bg-[#18181b] text-white flex flex-col shrink-0 z-10 overflow-hidden shadow-[inset_1px_0_0_rgba(255,255,255,0.02)]">
+    <div class="h-14 px-4 flex items-center justify-end border-b border-white/5 shrink-0 min-w-0 bg-[#18181b] z-20">
       <EditorTopControls
         :collaborators="collaborators"
         :current-user="currentUser"

@@ -8257,7 +8257,12 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             });
             
             // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
-            rehydrateCanvasZones({ legacyImageRepairMode: legacyProductCardImageRepairMode });
+            rehydrateCanvasZones({
+                legacyImageRepairMode: legacyProductCardImageRepairMode,
+                // Reload must preserve the exact card/label geometry already saved in canvas JSON.
+                // Reapplying zone styles here can relayout price groups and resurrect broken labels.
+                applyZoneStyles: false
+            });
             
             // Ensure all frames have layerName set to "FRAMER" if missing (for LayersPanel display)
             const allObjs = canvas.value.getObjects();
@@ -9739,7 +9744,11 @@ onMounted(async () => {
                       });
                       
                        // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
-                      rehydrateCanvasZones({ legacyImageRepairMode: legacyProductCardImageRepairMode });
+                      rehydrateCanvasZones({
+                          legacyImageRepairMode: legacyProductCardImageRepairMode,
+                          // Same safeguard for the legacy loader path: trust persisted canvas visuals on reload.
+                          applyZoneStyles: false
+                      });
                       
                       // CRITICAL FIX: Restore lost object names in product cards after JSON load
                       // When canvas is loaded from JSON, nested object names inside groups are lost

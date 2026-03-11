@@ -115,14 +115,20 @@ const handleRegister = async () => {
     <!-- Glass Card -->
     <div class="w-full">
       <!-- Main Glass Card -->
-      <div class="glass-card">
+      <div class="bg-[#18181b]/80 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 sm:p-10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] relative overflow-hidden">
+        
+        <!-- Decoration light -->
+        <div class="absolute -top-32 -left-32 w-64 h-64 bg-violet-600/20 rounded-full blur-[80px] pointer-events-none"></div>
+        <div class="absolute -bottom-32 -right-32 w-64 h-64 bg-fuchsia-600/10 rounded-full blur-[80px] pointer-events-none"></div>
+
         <!-- Logo & Header -->
-        <div class="text-center mb-6">
-          <div class="inline-flex items-center justify-center w-14 h-14 bg-violet-500/20 backdrop-blur-sm rounded-xl mb-3 border border-violet-500/30 shadow-lg">
-            <Sparkles class="w-7 h-7 text-violet-400" />
+        <div class="text-center mb-10 relative z-10">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-violet-600/20 to-fuchsia-600/20 backdrop-blur-md rounded-2xl mb-5 border border-white/10 shadow-[0_0_30px_rgba(139,92,246,0.15)] relative group">
+            <div class="absolute inset-0 bg-violet-500/20 rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <Sparkles class="w-8 h-8 text-violet-300 relative z-10" />
           </div>
-          <h1 class="text-xl font-bold mb-1 text-white">Crie sua conta</h1>
-          <p class="text-sm text-zinc-400">
+          <h1 class="text-2xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-zinc-400 tracking-tight">Crie sua conta</h1>
+          <p class="text-sm font-medium text-zinc-500">
             Comece sua jornada criativa
           </p>
         </div>
@@ -156,139 +162,136 @@ const handleRegister = async () => {
         </div>
 
         <!-- Register Form -->
-        <form @submit.prevent="handleRegister" class="space-y-4">
+        <form @submit.prevent="handleRegister" class="space-y-5 relative z-10">
           <!-- Name Input -->
-          <div class="form-group">
-            <label class="form-label text-zinc-300" for="name">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="name">
               Nome completo
             </label>
-            <div class="relative">
-              <User class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+            <div class="relative group">
+              <User class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within:text-violet-400" />
               <input
                 id="name"
                 v-model="name"
                 type="text"
                 autocomplete="name"
                 placeholder="Seu nome"
-                class="input-field pl-12"
-                :class="{ 'border-red-500': errorMessage }"
+                class="w-full h-12 pl-12 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all"
+                :class="{ 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20': errorMessage }"
                 required
               />
             </div>
           </div>
 
           <!-- Email Input -->
-          <div class="form-group">
-            <label class="form-label text-zinc-300" for="email">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="email">
               E-mail
             </label>
-            <div class="relative">
-              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+            <div class="relative group">
+              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within:text-violet-400" />
               <input
                 id="email"
                 v-model="email"
                 type="email"
                 autocomplete="email"
                 placeholder="seu@email.com"
-                class="input-field pl-12"
-                :class="{ 'border-red-500': errorMessage }"
+                class="w-full h-12 pl-12 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all"
+                :class="{ 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20': errorMessage }"
                 required
               />
             </div>
           </div>
 
           <!-- Password Input -->
-          <div class="form-group">
-            <label class="form-label text-zinc-300" for="password">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="password">
               Senha
             </label>
-            <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+            <div class="relative group">
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within:text-violet-400" />
               <input
                 id="password"
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
                 autocomplete="new-password"
                 placeholder="••••••••"
-                class="input-field pl-12 pr-12"
-                :class="{ 'border-red-500': errorMessage }"
+                class="w-full h-12 pl-12 pr-12 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all"
+                :class="{ 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20': errorMessage }"
                 required
               />
               <button
                 type="button"
                 @click="showPassword = !showPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
+                class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
                 tabindex="-1"
               >
-                <EyeOff v-if="showPassword" class="w-5 h-5" />
-                <Eye v-else class="w-5 h-5" />
+                <EyeOff v-if="showPassword" class="w-4 h-4" />
+                <Eye v-else class="w-4 h-4" />
               </button>
             </div>
 
             <!-- Password Strength Indicator -->
-            <div v-if="password" class="mt-2">
-              <div class="flex items-center justify-between mb-1.5">
-                <span class="text-xs text-zinc-500">Força da senha</span>
-                <span class="text-xs font-medium" :class="passwordStrength <= 2 ? 'text-red-400' : passwordStrength <= 3 ? 'text-yellow-400' : 'text-green-400'">
-                  {{ passwordStrengthLabel }}
-                </span>
-              </div>
-              <div class="flex gap-1">
+            <div v-if="password" class="mt-1">
+              <div class="flex gap-1 mb-1">
                 <div
                   v-for="i in 5"
                   :key="i"
                   class="h-1 flex-1 rounded-full transition-colors duration-300"
-                  :class="i <= passwordStrength ? passwordStrengthColor : 'bg-zinc-700'"
+                  :class="i <= passwordStrength ? passwordStrengthColor : 'bg-white/10'"
                 ></div>
               </div>
-              <p class="text-xs text-zinc-500 mt-2">
-                Mínimo 8 caracteres. Recomendado: maiúsculas, minúsculas, números e símbolos.
-              </p>
+              <div class="flex items-center justify-between">
+                <p class="text-[10px] text-zinc-500">Mínimo 8 caracteres (A-Z, a-z, 0-9).</p>
+                <span class="text-[10px] font-bold uppercase" :class="passwordStrength <= 2 ? 'text-red-400' : passwordStrength <= 3 ? 'text-yellow-400' : 'text-green-400'">
+                  {{ passwordStrengthLabel }}
+                </span>
+              </div>
             </div>
           </div>
 
           <!-- Confirm Password Input -->
-          <div class="form-group">
-            <label class="form-label text-zinc-300" for="confirmPassword">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="confirmPassword">
               Confirmar senha
             </label>
-            <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+            <div class="relative group">
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within:text-violet-400" />
               <input
                 id="confirmPassword"
                 v-model="confirmPassword"
                 :type="showConfirmPassword ? 'text' : 'password'"
                 autocomplete="new-password"
                 placeholder="••••••••"
-                class="input-field pl-12 pr-12"
-                :class="{ 'border-red-500': errorMessage && confirmPassword !== password }"
+                class="w-full h-12 pl-12 pr-12 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all"
+                :class="{ 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20': errorMessage && confirmPassword !== password }"
                 required
               />
               <button
                 type="button"
                 @click="showConfirmPassword = !showConfirmPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
+                class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
                 tabindex="-1"
               >
-                <EyeOff v-if="showConfirmPassword" class="w-5 h-5" />
-                <Eye v-else class="w-5 h-5" />
+                <EyeOff v-if="showConfirmPassword" class="w-4 h-4" />
+                <Eye v-else class="w-4 h-4" />
               </button>
             </div>
           </div>
 
           <!-- Terms Checkbox -->
-          <div class="flex items-start gap-3">
+          <div class="flex items-start gap-3 mt-4 pt-2">
             <input
               id="terms"
               type="checkbox"
               required
-              class="mt-1 w-4 h-4 rounded border-zinc-600 bg-[#2c2c2c] text-violet-600 focus:ring-2 focus:ring-violet-500/30"
+              class="mt-0.5 w-4 h-4 rounded border-white/10 bg-[#09090b]/50 text-violet-500 focus:ring-2 focus:ring-violet-500/30 transition-colors"
             />
-            <label for="terms" class="text-sm text-zinc-400 leading-tight">
+            <label for="terms" class="text-xs text-zinc-400 leading-tight">
               Eu concordo com os
-              <NuxtLink to="/terms" class="text-violet-400 hover:underline">Termos de Uso</NuxtLink>
+              <NuxtLink to="/terms" class="text-zinc-300 font-medium hover:text-white decoration-white/20 hover:underline underline-offset-4 transition-colors">Termos de Uso</NuxtLink>
               e
-              <NuxtLink to="/privacy" class="text-violet-400 hover:underline">Política de Privacidade</NuxtLink>
+              <NuxtLink to="/privacy" class="text-zinc-300 font-medium hover:text-white decoration-white/20 hover:underline underline-offset-4 transition-colors">Política de Privacidade</NuxtLink>
             </label>
           </div>
 
@@ -296,7 +299,7 @@ const handleRegister = async () => {
           <button
             type="submit"
             :disabled="isLoading"
-            class="btn-primary w-full group"
+            class="w-full h-12 mt-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all duration-300 shadow-[0_8px_20px_rgba(139,92,246,0.25)] hover:shadow-[0_12px_25px_rgba(139,92,246,0.4)] border border-violet-400/20 group hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             <span v-if="isLoading">Criando conta...</span>
             <span v-else class="flex items-center justify-center gap-2">
@@ -336,118 +339,5 @@ const handleRegister = async () => {
 </template>
 
 <style scoped>
-/* Glassmorphism Card */
-.glass-card {
-  background: rgba(30, 30, 30, 0.9);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1.25rem;
-  padding: 1.5rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  animation: cardEntry 0.5s ease-out;
-}
-
-/* Entry Animation */
-@keyframes cardEntry {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* Form Group */
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-/* Input Field */
-.input-field {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: rgba(44, 44, 44, 0.8);
-  backdrop-filter: blur(4px);
-  border: 1px solid #3f3f46;
-  border-radius: 0.75rem;
-  color: white;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-}
-
-.input-field::placeholder {
-  color: #71717a;
-}
-
-.input-field:hover {
-  background: rgba(60, 60, 60, 0.8);
-  border-color: #52525b;
-}
-
-.input-field:focus {
-  outline: none;
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
-}
-
-.input-field.border-red-500 {
-  border-color: #ef4444;
-}
-
-/* Primary Button */
-.btn-primary {
-  position: relative;
-  padding: 0.875rem 1.5rem;
-  background: #7c3aed;
-  color: white;
-  border-radius: 0.75rem;
-  font-weight: 600;
-  box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
-  transition: all 0.2s;
-  overflow: hidden;
-}
-
-.btn-primary:hover {
-  box-shadow: 0 20px 25px -5px rgba(124, 58, 237, 0.3);
-  transform: translateY(-2px);
-}
-
-.btn-primary:active {
-  transform: translateY(0);
-  box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.2);
-}
-
-.btn-primary:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.5), 0 0 0 4px rgba(124, 58, 237, 0.2);
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: translateY(0);
-}
-
-.btn-primary::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0.2), transparent);
-  border-radius: 0.75rem;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.btn-primary:hover::before {
-  opacity: 1;
-}
+/* Scoped overrides if needed */
 </style>

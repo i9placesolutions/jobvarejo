@@ -792,10 +792,10 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
     </div>
 
     <!-- Scrollable Inspector -->
-    <div class="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+    <div class="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-[#111113] p-2 space-y-2">
 
       <!-- PROTOTYPE TAB (Figma-style interactions panel) -->
-      <div v-if="activeTab === 'prototype'" class="p-3 space-y-3">
+      <div v-if="activeTab === 'prototype'" class="space-y-3">
         <!-- Empty state for prototype -->
         <div v-if="!getVal('interactionDestination', '')" class="text-center py-8">
           <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-800/50 flex items-center justify-center">
@@ -850,162 +850,162 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       <div v-else class="pp-design-panel">
 
       <!-- Ações Rápidas (Visibilidade, Bloquear, Excluir) -->
-      <div class="flex items-center justify-between px-2 py-1 border-b border-white/5 bg-[#1e1e1e]/50">
-        <div class="flex items-center gap-1">
+      <div class="bg-[#18181b] border border-white/5 rounded-xl p-2 mb-2 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-1.5">
           <button
-            class="w-6 h-6 rounded flex items-center justify-center transition-all"
+            class="w-7 h-7 rounded-lg flex items-center justify-center transition-all"
             :class="getVal('visible', true) ? 'text-violet-400 bg-violet-500/10' : 'text-zinc-500 hover:text-white hover:bg-white/10'"
             @click="$emit('update-property', 'visible', !getVal('visible', true))"
             :title="getVal('visible', true) ? 'Ocultar elemento' : 'Mostrar elemento'"
           >
-            <Eye class="w-3.5 h-3.5" />
+            <Eye class="w-4 h-4" />
           </button>
           <button
-            class="w-6 h-6 rounded flex items-center justify-center transition-all"
+            class="w-7 h-7 rounded-lg flex items-center justify-center transition-all"
             :class="isLocked ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-white hover:bg-white/10'"
             @click="$emit('update-property', 'lockMovement', !isLocked)"
             :title="isLocked ? 'Desbloquear movimento' : 'Bloquear movimento'"
           >
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </button>
           <button
-            class="w-6 h-6 rounded flex items-center justify-center transition-all text-zinc-500 hover:text-white hover:bg-white/10"
+            class="w-7 h-7 rounded-lg flex items-center justify-center transition-all text-zinc-500 hover:text-white hover:bg-white/10"
             @click="$emit('action', 'duplicate')"
             title="Duplicar"
           >
-            <Copy class="w-3.5 h-3.5" />
+            <Copy class="w-4 h-4" />
           </button>
         </div>
         <button
-          class="w-6 h-6 rounded flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+          class="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
           @click="$emit('action', 'delete')"
           title="Excluir elemento"
         >
-          <Trash2 class="w-3.5 h-3.5" />
+          <Trash2 class="w-4 h-4" />
         </button>
       </div>
 
       <!-- Alinhamento e Distribuição -->
-      <div class="px-2 py-1 border-b border-white/5 flex flex-wrap gap-1 justify-between text-zinc-400">
+      <div class="bg-[#18181b] border border-white/5 rounded-xl px-2.5 py-2 mb-2 flex flex-wrap gap-1 justify-between text-zinc-400 shadow-sm">
           <div class="flex gap-0.5">
-            <button @click="$emit('update-property', 'alignment', 'left')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar à esquerda"><AlignLeft class="w-3 h-3" /></button>
-            <button @click="$emit('update-property', 'alignment', 'center')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Centralizar"><AlignCenter class="w-3 h-3" /></button>
-            <button @click="$emit('update-property', 'alignment', 'right')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar à direita"><AlignRight class="w-3 h-3" /></button>
+            <button @click="$emit('update-property', 'alignment', 'left')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Alinhar à esquerda"><AlignLeft class="w-4 h-4" /></button>
+            <button @click="$emit('update-property', 'alignment', 'center')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Centralizar"><AlignCenter class="w-4 h-4" /></button>
+            <button @click="$emit('update-property', 'alignment', 'right')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Alinhar à direita"><AlignRight class="w-4 h-4" /></button>
           </div>
           
-          <div class="w-px h-3 bg-white/10 my-auto"></div>
+          <div class="w-px h-4 bg-white/10 my-auto"></div>
 
           <div class="flex gap-0.5">
-             <button @click="$emit('action', 'center-h')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Centralizar horizontalmente"><AlignHorizontalJustifyCenter class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'center-v')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Centralizar verticalmente"><AlignVerticalJustifyCenter class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'center-both')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Centralizar (ambos)"><Target class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'center-h')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Centralizar horizontalmente"><AlignHorizontalJustifyCenter class="w-4 h-4" /></button>
+             <button @click="$emit('action', 'center-v')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Centralizar verticalmente"><AlignVerticalJustifyCenter class="w-4 h-4" /></button>
+             <button @click="$emit('action', 'center-both')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Centralizar (ambos)"><Target class="w-4 h-4" /></button>
           </div>
 
-          <div class="w-px h-3 bg-white/10 my-auto"></div>
+          <div class="w-px h-4 bg-white/10 my-auto"></div>
 
           <div class="flex gap-0.5">
-             <button @click="$emit('action', 'align-top')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar ao topo"><ChevronsUp class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'align-middle')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar ao meio"><Minus class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'align-bottom')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Alinhar à base"><ChevronsDown class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'align-top')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Alinhar ao topo"><ChevronsUp class="w-4 h-4" /></button>
+             <button @click="$emit('action', 'align-middle')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Alinhar ao meio"><Minus class="w-4 h-4" /></button>
+             <button @click="$emit('action', 'align-bottom')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Alinhar à base"><ChevronsDown class="w-4 h-4" /></button>
           </div>
 
-          <div class="w-px h-3 bg-white/10 my-auto"></div>
+          <div class="w-px h-4 bg-white/10 my-auto"></div>
 
           <div class="flex gap-0.5">
-             <button @click="$emit('action', 'distribute-h')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Distribuir horizontalmente"><ArrowRightFromLine class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'distribute-v')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Distribuir verticalmente"><ArrowDownFromLine class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'distribute-h')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Distribuir horizontalmente"><ArrowRightFromLine class="w-4 h-4" /></button>
+             <button @click="$emit('action', 'distribute-v')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Distribuir verticalmente"><ArrowDownFromLine class="w-4 h-4" /></button>
           </div>
 
-          <div class="w-px h-3 bg-white/10 my-auto"></div>
+          <div class="w-px h-4 bg-white/10 my-auto"></div>
 
           <div class="flex gap-0.5">
-            <button @click="$emit('action', 'flip-h')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Espelhar horizontal"><FlipHorizontal class="w-3 h-3" /></button>
-            <button @click="$emit('action', 'flip-v')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Espelhar vertical"><FlipVertical class="w-3 h-3" /></button>
+            <button @click="$emit('action', 'flip-h')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Espelhar horizontal"><FlipHorizontal class="w-4 h-4" /></button>
+            <button @click="$emit('action', 'flip-v')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Espelhar vertical"><FlipVertical class="w-4 h-4" /></button>
           </div>
 
-          <div v-if="isGroup" class="w-px h-3 bg-white/10 my-auto"></div>
+          <div v-if="isGroup" class="w-px h-4 bg-white/10 my-auto"></div>
           
           <div v-if="isGroup" class="flex gap-0.5">
-             <button v-if="selectedObject.type === 'activeSelection'" @click="$emit('action', 'group')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Agrupar"><Group class="w-3 h-3" /></button>
-             <button v-if="selectedObject.type === 'group'" @click="$emit('action', 'ungroup')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Desagrupar"><Ungroup class="w-3 h-3" /></button>
+             <button v-if="selectedObject.type === 'activeSelection'" @click="$emit('action', 'group')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Agrupar"><Group class="w-4 h-4" /></button>
+             <button v-if="selectedObject.type === 'group'" @click="$emit('action', 'ungroup')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Desagrupar"><Ungroup class="w-4 h-4" /></button>
           </div>
 
           <!-- Operações Booleanas -->
-          <div v-if="isMultiSelect" class="w-px h-3 bg-white/10 my-auto"></div>
+          <div v-if="isMultiSelect" class="w-px h-4 bg-white/10 my-auto"></div>
           <div v-if="isMultiSelect" class="flex gap-0.5">
-             <button @click="$emit('action', 'union')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Unir seleção"><Combine class="w-3 h-3" /></button>
-             <button @click="$emit('action', 'subtract')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Subtrair seleção"><Scissors class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'union')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Unir seleção"><Combine class="w-4 h-4" /></button>
+             <button @click="$emit('action', 'subtract')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Subtrair seleção"><Scissors class="w-4 h-4" /></button>
           </div>
 
           <!-- Máscara -->
-          <div v-if="canMask" class="w-px h-3 bg-white/10 my-auto"></div>
+          <div v-if="canMask" class="w-px h-4 bg-white/10 my-auto"></div>
           <div v-if="canMask" class="flex gap-0.5">
-             <button @click="$emit('action', 'toggle-mask')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" :class="(isMaskedObject || allSelectedMasked) ? 'text-violet-400 bg-violet-500/10' : ''" :title="maskButtonTitle"><Scan class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'toggle-mask')" class="p-1 rounded-md hover:bg-white/5 transition-colors" :class="(isMaskedObject || allSelectedMasked) ? 'text-violet-400 bg-violet-500/15' : 'hover:text-white'" :title="maskButtonTitle"><Scan class="w-4 h-4" /></button>
           </div>
 
           <!-- Recortar -->
-          <div v-if="canCrop" class="w-px h-3 bg-white/10 my-auto"></div>
+          <div v-if="canCrop" class="w-px h-4 bg-white/10 my-auto"></div>
           <div v-if="canCrop" class="flex gap-0.5">
-             <button @click="$emit('action', 'activate-crop')" class="hover:text-white p-1 rounded hover:bg-white/5 transition-colors" title="Ativar modo de recorte"><Crop class="w-3 h-3" /></button>
+             <button @click="$emit('action', 'activate-crop')" class="hover:text-white p-1 rounded-md hover:bg-white/5 transition-colors" title="Ativar modo de recorte"><Crop class="w-4 h-4" /></button>
           </div>
 
           <!-- Espaçamento do Layout -->
-          <div v-if="isGroup" class="w-px h-3 bg-white/10 my-auto"></div>
-          <div v-if="isGroup" class="flex items-center gap-0.5 bg-[#2c2c2c] rounded px-1 h-5" title="Espaçamento entre itens">
-              <GripVertical class="w-2.5 h-2.5 text-zinc-500" />
-              <input type="number" :value="selectedObject.gap || 0" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="bg-transparent w-6 text-[9px] text-white focus:outline-none text-center" />
+          <div v-if="isGroup" class="w-px h-4 bg-white/10 my-auto"></div>
+          <div v-if="isGroup" class="flex items-center gap-1 bg-[#27272a] rounded-md px-1.5 h-6" title="Espaçamento entre itens">
+              <GripVertical class="w-3 h-3 text-zinc-500" />
+              <input type="number" :value="selectedObject.gap || 0" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="bg-transparent w-7 text-[11px] text-white focus:outline-none text-center" />
           </div>
       </div>
 
       <!-- Posição e Tamanho -->
-      <div class="border-b border-white/5">
+      <div class="bg-[#18181b] border border-white/5 rounded-xl mb-2 overflow-hidden shadow-sm">
         <button
-          class="pp-section-header"
+          class="pp-section-header px-4 py-3"
           :class="{ 'pp-section-header--collapsed': isSectionCollapsed('transform') }"
           @click="toggleSection('transform')"
         >
-          <svg class="w-3.5 h-3.5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
           </svg>
-          <span>Posição e Tamanho</span>
-          <svg class="pp-section-chevron" :class="{ 'pp-section-chevron--collapsed': isSectionCollapsed('transform') }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Posição e Tamanho</span>
+          <svg class="pp-section-chevron w-4 h-4 text-zinc-500" :class="{ 'pp-section-chevron--collapsed': isSectionCollapsed('transform') }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
           </svg>
         </button>
-        <div v-show="!isSectionCollapsed('transform')" class="pp-section-content">
-          <div class="pp-grid-4">
+        <div v-show="!isSectionCollapsed('transform')" class="p-3 bg-[#111113]/50">
+          <div class="pp-grid-4 gap-2">
             <div class="pp-input-row">
-              <span class="pp-input-label" title="Posição horizontal">X</span>
+              <span class="pp-input-label text-[#71717a] font-medium w-4" title="Posição horizontal">X</span>
               <input type="number" :value="displayLeft ?? Math.round(getVal('left', 0))" @focus="handleFocus('left')" @blur="handleBlur" @input="e => handlePropertyInput('left', Number((e.target as any).value))" class="pp-number-input" />
             </div>
             <div class="pp-input-row">
-              <span class="pp-input-label" title="Posição vertical">Y</span>
+              <span class="pp-input-label text-[#71717a] font-medium w-4" title="Posição vertical">Y</span>
               <input type="number" :value="displayTop ?? Math.round(getVal('top', 0))" @focus="handleFocus('top')" @blur="handleBlur" @input="e => handlePropertyInput('top', Number((e.target as any).value))" class="pp-number-input" />
             </div>
             <div class="pp-input-row">
-              <span class="pp-input-label" title="Largura">L</span>
+              <span class="pp-input-label text-[#71717a] font-medium w-4" title="Largura">L</span>
               <input type="number" :value="displayWidth ?? Math.round(getScaledWidth())" @focus="handleFocus('width')" @blur="handleBlur" @input="e => handlePropertyInput('width', Number((e.target as any).value))" class="pp-number-input" />
             </div>
             <div class="pp-input-row">
-              <span class="pp-input-label" title="Altura">A</span>
+              <span class="pp-input-label text-[#71717a] font-medium w-4" title="Altura">A</span>
               <input type="number" :value="displayHeight ?? Math.round(getScaledHeight())" @focus="handleFocus('height')" @blur="handleBlur" @input="e => handlePropertyInput('height', Number((e.target as any).value))" class="pp-number-input" />
             </div>
           </div>
-          <div class="flex items-center gap-2">
-            <div class="pp-input-row w-16 shrink-0">
-              <span class="pp-input-label" title="Rotação">∠</span>
-              <input type="number" :value="displayAngle ?? Math.round(getVal('angle', 0))" @focus="handleFocus('angle')" @blur="handleBlur" @input="e => handlePropertyInput('angle', Number((e.target as any).value))" class="pp-number-input" />
-              <span class="text-[9px] text-zinc-600">°</span>
+          <div class="flex items-center gap-2 mt-2">
+            <div class="pp-input-row w-[76px] shrink-0">
+              <span class="pp-input-label text-[#71717a]" title="Rotação">∠</span>
+              <input type="number" :value="displayAngle ?? Math.round(getVal('angle', 0))" @focus="handleFocus('angle')" @blur="handleBlur" @input="e => handlePropertyInput('angle', Number((e.target as any).value))" class="pp-number-input pr-4" />
+              <span class="absolute right-1 text-[10px] text-zinc-500">°</span>
             </div>
-            <div class="pp-input-row w-14 shrink-0" v-if="isRectLike && !isText">
-              <span class="pp-input-label" title="Raio dos cantos">R</span>
+            <div class="pp-input-row w-[76px] shrink-0" v-if="isRectLike && !isText">
+              <span class="pp-input-label text-[#71717a]" title="Raio dos cantos">R</span>
               <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="pp-number-input" />
             </div>
-            <div class="flex-1 flex items-center gap-1 min-w-0">
-              <input type="range" min="0" max="1" step="0.05" :value="Number(getVal('opacity', 1))" @input="$emit('update-property', 'opacity', Number(($event.target as any).value))" class="flex-1 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-violet-500 min-w-0" title="Opacidade" />
-              <div class="pp-input-row w-16 shrink-0">
+            <div class="flex-1 flex items-center gap-2 min-w-0">
+              <input type="range" min="0" max="1" step="0.05" :value="Number(getVal('opacity', 1))" @input="$emit('update-property', 'opacity', Number(($event.target as any).value))" class="flex-1 h-1 bg-zinc-700/50 rounded-lg appearance-none cursor-pointer accent-violet-500 min-w-0" title="Opacidade" />
+              <div class="pp-input-row w-[68px] shrink-0 relative">
                 <input
                   type="number"
                   min="0"
@@ -1013,10 +1013,10 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                   step="1"
                   :value="Math.round(Number(getVal('opacity', 1)) * 100)"
                   @input="emitClampedProperty('opacity', Number(($event.target as HTMLInputElement).value) / 100, Number(getVal('opacity', 1)), 0, 1, 2)"
-                  class="pp-number-input"
+                  class="pp-number-input pr-4"
                   title="Opacidade"
                 />
-                <span class="text-[9px] text-zinc-600">%</span>
+                <span class="absolute right-1 text-[10px] text-zinc-500">%</span>
               </div>
             </div>
           </div>
@@ -1024,109 +1024,101 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- Seção Vetor -->
-      <div v-if="isVectorPath" class="px-3 py-2 border-b border-white/5 space-y-1.5">
-          <div class="flex items-center gap-1.5">
-              <svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2L2 7l10 5 10-5-10-5z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 17l10 5 10-5" /></svg>
-              <span class="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Vetor</span>
+      <div v-if="isVectorPath" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
+          <div class="flex items-center gap-2 mb-1">
+              <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2L2 7l10 5 10-5-10-5z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 17l10 5 10-5" /></svg>
+              <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Vetor</span>
           </div>
           
           <!-- Alinhamento -->
-          <div class="space-y-1">
+          <div class="space-y-1.5">
               <label class="text-[9px] text-zinc-500 font-medium">Alinhamento</label>
-              <div class="flex items-center gap-0.5 flex-wrap">
-                  <button @click="$emit('update-property', 'textAlign', 'left')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar à esquerda"><AlignLeft class="w-3 h-3" /></button>
-                  <button @click="$emit('update-property', 'textAlign', 'center')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Centralizar"><AlignCenter class="w-3 h-3" /></button>
-                  <button @click="$emit('update-property', 'textAlign', 'right')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar à direita"><AlignRight class="w-3 h-3" /></button>
-                  <button @click="$emit('action', 'align-top')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar ao topo"><ChevronsUp class="w-3 h-3" /></button>
-                  <button @click="$emit('action', 'align-middle')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar ao meio"><Minus class="w-3 h-3" /></button>
-                  <button @click="$emit('action', 'align-bottom')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar à base"><ChevronsDown class="w-3 h-3" /></button>
-                  <button @click="$emit('action', 'distribute-h')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Distribuir horizontalmente"><ArrowRightFromLine class="w-3 h-3" /></button>
+              <div class="flex items-center gap-1 flex-wrap">
+                  <button @click="$emit('update-property', 'textAlign', 'left')" class="w-7 h-7 hover:bg-white/10 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar à esquerda"><AlignLeft class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('update-property', 'textAlign', 'center')" class="w-7 h-7 hover:bg-white/10 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Centralizar"><AlignCenter class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('update-property', 'textAlign', 'right')" class="w-7 h-7 hover:bg-white/10 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar à direita"><AlignRight class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('action', 'align-top')" class="w-7 h-7 hover:bg-white/10 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar ao topo"><ChevronsUp class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('action', 'align-middle')" class="w-7 h-7 hover:bg-white/10 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar ao meio"><Minus class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('action', 'align-bottom')" class="w-7 h-7 hover:bg-white/10 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Alinhar à base"><ChevronsDown class="w-3.5 h-3.5" /></button>
+                  <button @click="$emit('action', 'distribute-h')" class="w-7 h-7 hover:bg-white/10 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Distribuir horizontalmente"><ArrowRightFromLine class="w-3.5 h-3.5" /></button>
               </div>
           </div>
           
           <!-- Posição -->
-          <div class="space-y-1">
+          <div class="space-y-1.5">
               <label class="text-[9px] text-zinc-500 font-medium">Posição</label>
-              <div class="grid grid-cols-2 gap-1.5">
-                  <div class="flex items-center gap-1">
-                      <span class="text-[9px] text-zinc-500">X</span>
-                      <input type="number" :value="Math.round(getVal('left', 0))" @input="e => $emit('update-property', 'left', Number((e.target as any).value))" class="flex-1 bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" />
+              <div class="pp-grid-2">
+                  <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
+                      <span class="pp-input-label w-5">X</span>
+                      <input type="number" :value="Math.round(getVal('left', 0))" @input="e => $emit('update-property', 'left', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 text-left h-auto py-0" />
                   </div>
-                  <div class="flex items-center gap-1">
-                      <span class="text-[9px] text-zinc-500">Y</span>
-                      <input type="number" :value="Math.round(getVal('top', 0))" @input="e => $emit('update-property', 'top', Number((e.target as any).value))" class="flex-1 bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" />
+                  <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
+                      <span class="pp-input-label w-5">Y</span>
+                      <input type="number" :value="Math.round(getVal('top', 0))" @input="e => $emit('update-property', 'top', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 text-left h-auto py-0" />
                   </div>
               </div>
           </div>
           
           <!-- Tipo de Ponto -->
-          <div class="space-y-1">
+          <div class="space-y-1.5">
               <label class="text-[9px] text-zinc-500 font-medium">Tipo de Ponto</label>
-              <div class="flex items-center gap-0.5">
-                  <button @click="$emit('action', 'convert-to-smooth')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Converter para suave (S)">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                      </svg>
+              <div class="flex items-center gap-1">
+                  <button @click="$emit('action', 'convert-to-smooth')" class="h-6 px-2.5 bg-[#27272a]/50 hover:bg-white/10 border border-white/5 rounded-md flex items-center justify-center text-[10px] text-zinc-400 hover:text-white transition-all gap-1" title="Converter para suave (S)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                      Suave
                   </button>
-                  <button @click="$emit('action', 'convert-to-corner')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Converter para canto (C)">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                  <button @click="$emit('action', 'convert-to-corner')" class="h-6 px-2.5 bg-[#27272a]/50 hover:bg-white/10 border border-white/5 rounded-md flex items-center justify-center text-[10px] text-zinc-400 hover:text-white transition-all gap-1" title="Converter para canto (C)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                      Canto
                   </button>
               </div>
           </div>
           
           <!-- Espelhamento -->
-          <div class="space-y-1">
+          <div class="space-y-1.5">
               <label class="text-[9px] text-zinc-500 font-medium">Espelhamento</label>
-              <div class="flex items-center gap-0.5">
-                  <button @click="$emit('action', 'mirror-handles')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Espelhar alças (M)">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                      </svg>
+              <div class="flex items-center gap-1">
+                  <button @click="$emit('action', 'mirror-handles')" class="w-7 h-7 bg-[#27272a]/50 hover:bg-white/10 border border-white/5 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Espelhar alças (M)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                   </button>
-                  <button @click="$emit('action', 'reset-handles')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Redefinir alças">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
+                  <button @click="$emit('action', 'reset-handles')" class="w-7 h-7 bg-[#27272a]/50 hover:bg-white/10 border border-white/5 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Redefinir alças">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                   </button>
-                  <button @click="$emit('action', 'smooth-handles')" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Suavizar alças (S)">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
+                  <button @click="$emit('action', 'smooth-handles')" class="w-7 h-7 bg-[#27272a]/50 hover:bg-white/10 border border-white/5 rounded-md flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Suavizar alças (S)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                   </button>
               </div>
           </div>
           
           <!-- Raio dos Cantos -->
-          <div class="space-y-1">
+          <div class="space-y-1.5">
               <div class="flex items-center justify-between">
                   <label class="text-[9px] text-zinc-500 font-medium">Raio dos cantos</label>
-                  <button class="w-4 h-4 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Cantos independentes">
-                      <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <button class="w-5 h-5 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all" title="Cantos independentes">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                       </svg>
                   </button>
               </div>
-              <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="w-full bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" />
+              <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="pp-number-input w-full text-left" />
           </div>
       </div>
 
       <!-- Frame -->
-      <div v-if="isFrame" class="px-3 py-2 border-b border-white/5 space-y-1.5">
-          <div class="flex items-center gap-1.5">
-              <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2"/></svg>
-              <span class="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Frame</span>
+      <div v-if="isFrame" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-2.5 shadow-sm">
+          <div class="flex items-center gap-2 mb-1">
+              <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2"/></svg>
+              <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Frame</span>
           </div>
           <button
             type="button"
-            class="w-full flex items-center justify-between rounded px-2 py-1.5 bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
+            class="w-full flex items-center justify-between rounded-lg px-2.5 py-2 bg-[#27272a]/50 border border-white/5 hover:bg-white/10 transition-colors"
             @click="$emit('update-property', 'clipContent', !clipContentEnabled)"
           >
-            <span class="text-[11px] text-zinc-200">Recortar conteúdo</span>
+            <span class="text-[11px] text-zinc-300">Recortar conteúdo</span>
             <span
-              class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded"
-              :class="clipContentEnabled ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'"
+              class="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded"
+              :class="clipContentEnabled ? 'text-green-400 bg-green-500/10' : 'text-zinc-500 bg-white/5'"
             >
               {{ clipContentEnabled ? 'ATIVO' : 'INATIVO' }}
             </span>
@@ -1134,147 +1126,148 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- Camada (Blend Mode) -->
-      <div class="px-3 py-2 border-b border-white/5 space-y-1.5">
-          <div class="flex items-center gap-1.5">
-              <Layers class="w-3 h-3 text-zinc-400" />
-              <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Camada</span>
+      <div class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 shadow-sm">
+          <div class="flex items-center gap-2 mb-3">
+              <Layers class="w-4 h-4 text-zinc-400" />
+              <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Camada</span>
           </div>
-          <div class="grid grid-cols-2 gap-1.5">
-              <select :value="getVal('globalCompositeOperation', 'source-over')" @change="e => $emit('update-property', 'globalCompositeOperation', (e.target as any).value)" class="bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50">
+          <div class="pp-grid-2">
+              <select :value="getVal('globalCompositeOperation', 'source-over')" @change="e => $emit('update-property', 'globalCompositeOperation', (e.target as any).value)" class="pp-number-input !text-left h-8 cursor-pointer pl-2 appearance-none">
                   <option value="source-over">Normal</option>
                   <option v-for="mode in BLEND_MODES" :key="mode" :value="mode">{{ mode }}</option>
               </select>
-              <div class="flex items-center gap-1.5 bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6">
-                  <span class="text-[9px] text-zinc-500">%</span>
-                  <input type="number" :value="Math.round(getVal('opacity', 1) * 100)" @input="e => $emit('update-property', 'opacity', Number((e.target as any).value) / 100)" class="bg-transparent w-full text-[11px] text-white focus:outline-none text-right" title="Opacidade" />
+              <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-lg border border-white/5 relative">
+                  <input type="number" :value="Math.round(getVal('opacity', 1) * 100)" @input="e => $emit('update-property', 'opacity', Number((e.target as any).value) / 100)" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 l-1" title="Opacidade" />
+                  <span class="absolute right-2 text-[10px] text-zinc-500">%</span>
               </div>
           </div>
       </div>
 
       <!-- Texto -->
-      <div v-if="isText" class="px-3 py-2 border-b border-white/5 space-y-1.5">
-          <div class="flex items-center gap-1.5">
-              <Type class="w-3 h-3 text-orange-400" />
-              <span class="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Texto</span>
+      <div v-if="isText" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
+          <div class="flex items-center gap-2 mb-1">
+              <Type class="w-4 h-4 text-orange-400" />
+              <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Texto</span>
           </div>
           
-          <select :value="getVal('fontFamily', 'Arial')" @change="e => $emit('update-property', 'fontFamily', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50">
+          <select :value="getVal('fontFamily', 'Arial')" @change="e => $emit('update-property', 'fontFamily', (e.target as any).value)" class="pp-number-input !text-left h-8 cursor-pointer pl-2 appearance-none">
               <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
           </select>
 
-          <div class="grid grid-cols-2 gap-1.5">
-              <select :value="getVal('fontWeight', 'normal')" @change="e => $emit('update-property', 'fontWeight', (e.target as any).value)" class="bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50">
+          <div class="pp-grid-2">
+              <select :value="getVal('fontWeight', 'normal')" @change="e => $emit('update-property', 'fontWeight', (e.target as any).value)" class="pp-number-input !text-left h-8 cursor-pointer pl-2 appearance-none">
                   <option value="normal">Regular</option>
                   <option value="bold">Negrito</option>
                   <option value="900">Extra Negrito</option>
               </select>
-              <div class="flex items-center bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6">
-                  <span class="text-[9px] text-zinc-500 mr-1" title="Tamanho da fonte">Tam</span>
+              <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative">
+                  <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">T:</span>
                   <input
                     type="text"
                     :value="fontSizeInputValue"
                     :placeholder="fontSizeInputPlaceholder"
                     @input="e => handleFontSizeChange((e.target as any).value)"
-                    class="bg-transparent w-full text-[11px] text-white focus:outline-none"
+                    class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-6"
                   />
               </div>
           </div>
 
           <!-- Text Style Buttons (Bold, Italic, Underline) -->
-          <div class="flex gap-0.5">
+          <div class="flex gap-1">
             <button
-              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
-              :class="{ 'bg-violet-500/20 text-violet-400': getVal('fontWeight') === 'bold' || getVal('fontWeight') === '700' || getVal('fontWeight') === 700 }"
+              class="flex-1 h-7 flex items-center justify-center rounded-md bg-[#27272a]/50 border border-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+              :class="{ 'border-violet-500/30 bg-violet-500/10 text-violet-400': getVal('fontWeight') === 'bold' || getVal('fontWeight') === '700' || getVal('fontWeight') === 700 }"
               @click="$emit('update-property', 'fontWeight', getVal('fontWeight') === 'bold' || getVal('fontWeight') === '700' || getVal('fontWeight') === 700 ? 'normal' : 'bold')"
               title="Negrito"
             >
-              <Bold class="w-3 h-3" />
+              <Bold class="w-3.5 h-3.5" />
             </button>
             <button
-              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
-              :class="{ 'bg-violet-500/20 text-violet-400': getVal('fontStyle') === 'italic' }"
+              class="flex-1 h-7 flex items-center justify-center rounded-md bg-[#27272a]/50 border border-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+              :class="{ 'border-violet-500/30 bg-violet-500/10 text-violet-400': getVal('fontStyle') === 'italic' }"
               @click="$emit('update-property', 'fontStyle', getVal('fontStyle') === 'italic' ? 'normal' : 'italic')"
               title="Itálico"
             >
-              <Italic class="w-3 h-3" />
+              <Italic class="w-3.5 h-3.5" />
             </button>
             <button
-              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
-              :class="{ 'bg-violet-500/20 text-violet-400': !!getVal('underline') }"
+              class="flex-1 h-7 flex items-center justify-center rounded-md bg-[#27272a]/50 border border-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+              :class="{ 'border-violet-500/30 bg-violet-500/10 text-violet-400': !!getVal('underline') }"
               @click="$emit('update-property', 'underline', !getVal('underline'))"
               title="Sublinhado"
             >
-              <Underline class="w-3 h-3" />
+              <Underline class="w-3.5 h-3.5" />
             </button>
             <button
-              class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
-              :class="{ 'bg-violet-500/20 text-violet-400': !!getVal('linethrough') }"
+              class="flex-1 h-7 flex items-center justify-center rounded-md bg-[#27272a]/50 border border-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+              :class="{ 'border-violet-500/30 bg-violet-500/10 text-violet-400': !!getVal('linethrough') }"
               @click="$emit('update-property', 'linethrough', !getVal('linethrough'))"
               title="Tachado"
             >
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
           <!-- Propriedades avançadas de texto -->
-          <div class="grid grid-cols-2 gap-1.5">
-               <div class="flex items-center bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6" title="Altura da linha">
-                  <span class="text-[9px] text-zinc-500 mr-1">Alt.L</span>
-                  <input type="number" step="0.1" :value="getVal('lineHeight', 1.2)" @input="e => $emit('update-property', 'lineHeight', Number((e.target as any).value))" class="bg-transparent w-full text-[11px] text-white focus:outline-none" />
+          <div class="pp-grid-2">
+               <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative" title="Altura da linha">
+                  <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">L↓</span>
+                  <input type="number" step="0.1" :value="getVal('lineHeight', 1.2)" @input="e => $emit('update-property', 'lineHeight', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-6" />
               </div>
-              <div class="flex items-center bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6" title="Espaçamento entre letras">
-                  <span class="text-[9px] text-zinc-500 mr-1">Esp.</span>
-                  <input type="number" :value="getVal('charSpacing', 0)" @input="e => $emit('update-property', 'charSpacing', Number((e.target as any).value))" class="bg-transparent w-full text-[11px] text-white focus:outline-none" />
+              <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative" title="Espaçamento entre letras">
+                  <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">E↔</span>
+                  <input type="number" :value="getVal('charSpacing', 0)" @input="e => $emit('update-property', 'charSpacing', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-7" />
               </div>
           </div>
           
           <!-- Alinhamento e Maiúsculas/Minúsculas -->
-          <div class="flex gap-1.5">
-            <div class="flex flex-1 bg-[#1e1e1e] rounded border border-white/10 p-0.5 gap-0.5">
-                <button class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'left' ? 'bg-violet-500/20 text-violet-400' : ''" @click="$emit('update-property', 'textAlign', 'left')" title="Alinhar à esquerda"><AlignLeft class="w-3 h-3"/></button>
-                <button class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'center' ? 'bg-violet-500/20 text-violet-400' : ''" @click="$emit('update-property', 'textAlign', 'center')" title="Centralizar"><AlignCenter class="w-3 h-3"/></button>
-                <button class="flex-1 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'right' ? 'bg-violet-500/20 text-violet-400' : ''" @click="$emit('update-property', 'textAlign', 'right')" title="Alinhar à direita"><AlignRight class="w-3 h-3"/></button>
+          <div class="flex gap-1">
+            <div class="flex flex-1 bg-[#27272a]/50 rounded-md border border-white/5 p-0.5 gap-0.5">
+                <button class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'left' ? 'bg-white/10 text-white' : ''" @click="$emit('update-property', 'textAlign', 'left')" title="Alinhar à esquerda"><AlignLeft class="w-3.5 h-3.5"/></button>
+                <button class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'center' ? 'bg-white/10 text-white' : ''" @click="$emit('update-property', 'textAlign', 'center')" title="Centralizar"><AlignCenter class="w-3.5 h-3.5"/></button>
+                <button class="flex-1 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-all" :class="getVal('textAlign') == 'right' ? 'bg-white/10 text-white' : ''" @click="$emit('update-property', 'textAlign', 'right')" title="Alinhar à direita"><AlignRight class="w-3.5 h-3.5"/></button>
             </div>
-            <div class="flex bg-[#1e1e1e] rounded border border-white/10 p-0.5 gap-0.5">
-                <button class="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded text-[9px] font-bold text-zinc-400 hover:text-white transition-all" title="Maiúsculas" @click="$emit('action', 'text-upper')">AG</button>
-                <button class="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded text-[9px] text-zinc-400 hover:text-white transition-all" title="Minúsculas" @click="$emit('action', 'text-lower')">ag</button>
+            <div class="flex bg-[#27272a]/50 rounded-md border border-white/5 p-0.5 gap-0.5">
+                <button class="w-8 h-7 flex items-center justify-center hover:bg-white/10 rounded text-[10px] font-bold text-zinc-400 hover:text-white transition-all" title="Maiúsculas" @click="$emit('action', 'text-upper')">AG</button>
+                <button class="w-8 h-7 flex items-center justify-center hover:bg-white/10 rounded text-[10px] text-zinc-400 hover:text-white transition-all" title="Minúsculas" @click="$emit('action', 'text-lower')">ag</button>
             </div>
           </div>
 
           <!-- Botão Componente -->
-          <div class="flex justify-center">
-             <button @click="$emit('action', 'create-component')" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all text-[9px] font-bold uppercase tracking-widest" :class="isComponent ? 'border-violet-500 text-violet-400 bg-violet-500/10' : 'border-zinc-700 text-zinc-400 hover:border-violet-500 hover:text-violet-400'">
-                 <Component class="w-3 h-3" />
+          <div class="flex justify-center pt-2">
+             <button @click="$emit('action', 'create-component')" class="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg border transition-all text-[10px] font-bold uppercase tracking-widest" :class="isComponent ? 'border-violet-500/50 text-violet-400 bg-violet-500/10' : 'border-white/10 text-zinc-400 hover:border-violet-500/50 hover:bg-violet-500/5 hover:text-violet-400'">
+                 <Component class="w-3.5 h-3.5" />
                  <span>{{ isComponent ? 'Componente Principal' : 'Criar Componente' }}</span>
              </button>
           </div>
       </div>
 
       <!-- Preenchimento -->
-      <div v-if="!isImage && !isLineLike" class="px-3 py-2 border-b border-white/5 space-y-1.5">
-          <div class="flex items-center justify-between group">
-              <div class="flex items-center gap-1.5">
-                <Palette class="w-3 h-3 text-zinc-400" />
-                <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Preenchimento</span>
+      <div v-if="!isImage && !isLineLike" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
+          <div class="flex items-center justify-between group cursor-pointer" @click="$emit('update-property', 'fillEnabled', !fillEnabled)">
+              <div class="flex items-center gap-2">
+                <Palette class="w-4 h-4 text-zinc-400" />
+                <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Preenchimento</span>
               </div>
               <button
                 type="button"
-                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
-                @click="$emit('update-property', 'fillEnabled', !fillEnabled)"
+                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded transition-colors"
+                :class="fillEnabled ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-500'"
+                @click.stop="$emit('update-property', 'fillEnabled', !fillEnabled)"
               >
-                <span :class="fillEnabled ? 'text-green-400' : 'text-red-400'">{{ fillEnabled ? 'ATIVO' : 'INATIVO' }}</span>
+                {{ fillEnabled ? 'ATIVO' : 'INATIVO' }}
               </button>
           </div>
           
-          <div class="flex items-center gap-1.5 group" :class="!fillEnabled ? 'opacity-50 pointer-events-none' : ''">
+          <div class="flex items-center gap-2 transition-opacity" :class="!fillEnabled ? 'opacity-50 pointer-events-none' : ''">
               <div 
                 ref="fillColorPickerRef"
                 class="relative"
               >
                 <div 
-                  class="w-5 h-5 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
+                  class="w-7 h-7 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden shadow-inner"
                   :style="{ backgroundColor: fillControlValue }"
                   @click="showFillColorPicker = true"
                 ></div>
@@ -1286,112 +1279,110 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                   @update:model-value="(val: string) => $emit('update-property', 'fill', val)"
                 />
               </div>
-              <div v-if="textFillMixed" class="text-[9px] text-amber-400 font-bold uppercase tracking-widest shrink-0">MISTO</div>
+              <div v-if="textFillMixed" class="text-[9px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest shrink-0 border border-amber-500/20">MISTO</div>
               <input 
                 type="text" 
                 :value="fillHexInputValue" 
                 @change="e => handleFillHexChange((e.target as any).value)" 
-                class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-violet-500/50 uppercase min-w-0" 
+                class="pp-number-input !text-left font-mono uppercase bg-[#27272a]/50 min-w-0" 
                 :placeholder="fillHexInputPlaceholder"
                 maxlength="6"
               />
-              <input 
-                type="text" 
-                value="100" 
-                class="w-10 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1 text-center focus:outline-none focus:border-violet-500/50" 
-              />
-              <span class="text-[10px] text-zinc-400 shrink-0">%</span>
+              <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-lg border border-white/5 relative w-16 shrink-0">
+                  <input type="number" value="100" class="pp-number-input !bg-transparent !border-0 py-0 pr-4 text-center h-6" />
+                  <span class="absolute right-2 text-[10px] text-zinc-500">%</span>
+              </div>
           </div>
           
           <!-- Ações de Gradiente -->
-          <div class="flex justify-between items-center">
-             <div class="text-[9px] text-violet-400 cursor-pointer hover:underline" @click="$emit('update-property', 'fill-gradient', 'linear')">Usar Gradiente</div>
-             <button class="text-[9px] text-zinc-500 hover:text-white" @click="$emit('add-color-style', fillControlValue)">+ Estilo</button>
+          <div class="flex justify-between items-center px-1">
+             <div class="text-[10px] text-violet-400/80 cursor-pointer hover:text-violet-400 transition-colors" @click="$emit('update-property', 'fill-gradient', 'linear')">Usar Gradiente</div>
+             <button class="text-[10px] text-zinc-500 hover:text-white transition-colors" @click="$emit('add-color-style', fillControlValue)">+ Extrair Estilo</button>
           </div>
           
           <!-- Color Styles List -->
-          <div v-if="colorStyles && colorStyles.length > 0" class="flex flex-wrap gap-1 mt-2">
+          <div v-if="colorStyles && colorStyles.length > 0" class="flex flex-wrap gap-1.5 mt-1 border-t border-white/5 pt-2">
               <button 
                 v-for="style in colorStyles" 
                 :key="style.id" 
                 @click="$emit('apply-color-style', style.id)"
-                class="w-4 h-4 rounded-full border border-white/10 hover:border-white transition-all"
+                class="w-5 h-5 rounded-full border border-white/10 hover:border-white hover:scale-110 transition-all shadow-sm"
                 :style="{backgroundColor: style.value}"
                 :title="style.name"
               ></button>
           </div>
       </div>
 
-	      <!-- Layout Automático -->
-	      <div v-if="isGroup" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <!-- Layout Automático -->
+      <div v-if="isGroup" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
           <div class="flex items-center justify-between">
-              <div class="flex items-center gap-1.5">
-                <svg class="w-3 h-3 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
-                <span class="text-[10px] font-bold text-teal-400 uppercase tracking-widest">Layout Automático</span>
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
+                <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Layout Automático</span>
               </div>
-              <div class="flex items-center gap-0.5 bg-[#2c2c2c] rounded px-1 h-5">
-                  <GripVertical class="w-2.5 h-2.5 text-zinc-500" />
-                  <input type="number" :value="getVal('gap', 0)" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="bg-transparent w-5 text-[9px] text-white focus:outline-none text-center" placeholder="0" title="Espaçamento" />
-              </div>
-          </div>
-          
-          <div class="grid grid-cols-2 gap-1.5">
-              <div class="flex items-center gap-1.5 bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6" title="Preenchimento horizontal">
-                  <span class="text-[9px] text-zinc-500">PH</span>
-                  <input type="number" :value="getVal('paddingX', 0)" @input="e => $emit('action', 'update-padding-x:' + (e.target as any).value)" class="bg-transparent w-full text-[11px] text-white focus:outline-none" />
-              </div>
-              <div class="flex items-center gap-1.5 bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6" title="Preenchimento vertical">
-                  <span class="text-[9px] text-zinc-500">PV</span>
-                  <input type="number" :value="getVal('paddingY', 0)" @input="e => $emit('action', 'update-padding-y:' + (e.target as any).value)" class="bg-transparent w-full text-[11px] text-white focus:outline-none" />
+              <div class="flex items-center gap-1 bg-[#27272a]/50 border border-white/5 rounded px-1.5 h-6">
+                  <GripVertical class="w-3 h-3 text-zinc-500" />
+                  <input type="number" :value="getVal('gap', 0)" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="pp-number-input !bg-transparent !border-0 text-center w-10 py-0" placeholder="0" title="Espaçamento" />
               </div>
           </div>
           
-          <div class="flex gap-1">
-              <button @click="$emit('action', 'layout-hug')" class="flex-1 py-1 text-[9px] bg-[#1e1e1e] border border-white/10 rounded hover:border-zinc-500 transition-colors text-zinc-400 hover:text-white" title="Ajustar ao conteúdo">Ajustar</button>
-              <button @click="$emit('action', 'layout-fill')" class="flex-1 py-1 text-[9px] bg-[#1e1e1e] border border-white/10 rounded hover:border-zinc-500 transition-colors text-zinc-400 hover:text-white" title="Preencher container">Preencher</button>
+          <div class="pp-grid-2">
+              <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative" title="Preenchimento horizontal">
+                  <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">PH</span>
+                  <input type="number" :value="getVal('paddingX', 0)" @input="e => $emit('action', 'update-padding-x:' + (e.target as any).value)" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-7" />
+              </div>
+              <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative" title="Preenchimento vertical">
+                  <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">PV</span>
+                  <input type="number" :value="getVal('paddingY', 0)" @input="e => $emit('action', 'update-padding-y:' + (e.target as any).value)" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-7" />
+              </div>
+          </div>
+          
+          <div class="flex gap-1.5">
+              <button @click="$emit('action', 'layout-hug')" class="flex-1 py-1.5 text-[10px] font-medium bg-[#27272a]/50 border border-white/5 rounded-md hover:border-zinc-500 hover:bg-white/5 transition-colors text-zinc-400 hover:text-white" title="Ajustar ao conteúdo">Ajustar ao Conteúdo</button>
+              <button @click="$emit('action', 'layout-fill')" class="flex-1 py-1.5 text-[10px] font-medium bg-[#27272a]/50 border border-white/5 rounded-md hover:border-zinc-500 hover:bg-white/5 transition-colors text-zinc-400 hover:text-white" title="Preencher container">Preencher Espaço</button>
           </div>
       </div>
 
       <!-- Contorno Sticker (alpha-based, somente imagens) -->
-      <div v-if="isImage" class="px-3 py-2 border-b border-white/5 space-y-1.5">
-          <div class="flex items-center justify-between group">
-              <div class="flex items-center gap-1.5">
-                <svg class="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
-                <span class="text-[10px] font-bold text-amber-400 uppercase tracking-widest">Contorno Sticker</span>
+      <div v-if="isImage" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
+          <div class="flex items-center justify-between group cursor-pointer" @click="$emit('update-property', 'stickerOutlineEnabled', !stickerOutlineEnabled)">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Contorno Sticker</span>
               </div>
               <button
                 type="button"
-                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
-                @click="$emit('update-property', 'stickerOutlineEnabled', !stickerOutlineEnabled)"
+                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded transition-colors"
+                :class="stickerOutlineEnabled ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-500'"
+                @click.stop="$emit('update-property', 'stickerOutlineEnabled', !stickerOutlineEnabled)"
               >
-                <span :class="stickerOutlineEnabled ? 'text-green-400' : 'text-red-400'">{{ stickerOutlineEnabled ? 'ATIVO' : 'INATIVO' }}</span>
+                {{ stickerOutlineEnabled ? 'ATIVO' : 'INATIVO' }}
               </button>
           </div>
 
           <!-- Aviso: sem transparência -->
-          <div v-if="stickerOutlineEnabled && stickerNoTransparency" class="flex items-center gap-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded px-2 py-1">
-              <svg class="w-3 h-3 text-yellow-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
-              <span class="text-[9px] text-yellow-300">Imagem sem transparência — o contorno será retangular.</span>
+          <div v-if="stickerOutlineEnabled && stickerNoTransparency" class="flex items-start gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2 mt-2">
+              <svg class="w-3.5 h-3.5 text-yellow-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+              <span class="text-[10px] text-yellow-200 leading-tight">Imagem sem fundo transparente identificado. O contorno será gerado ao redor dos limites retangulares.</span>
           </div>
 
-	          <div :class="!stickerOutlineEnabled ? 'opacity-50 pointer-events-none' : ''" class="space-y-1.5">
+	          <div :class="!stickerOutlineEnabled ? 'opacity-50 pointer-events-none' : ''" class="space-y-3 pt-1 transition-opacity">
 	              <!-- Posição (Interno / Externo) -->
-	              <div class="flex items-center justify-between gap-2">
-	                  <span class="text-[9px] text-zinc-500">Posição</span>
-	                  <div class="flex items-center bg-[#2a2a2a] border border-white/10 rounded overflow-hidden h-6">
+	              <div class="flex items-center justify-between gap-3">
+	                  <span class="text-[10px] text-zinc-500 font-medium tracking-wide w-12 shrink-0">POSIÇÃO</span>
+	                  <div class="flex flex-1 items-center bg-[#27272a]/50 border border-white/5 rounded-md p-0.5 overflow-hidden">
 	                      <button
 	                        type="button"
-	                        class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
-	                        :class="stickerOutlineMode === 'outside' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400 hover:text-white'"
+	                        class="flex-1 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm"
+	                        :class="stickerOutlineMode === 'outside' ? 'bg-amber-500/20 text-amber-400 shadow-sm' : 'text-zinc-500 hover:text-white hover:bg-white/5'"
 	                        @click="$emit('update-property', 'stickerOutlineMode', 'outside')"
 	                      >
 	                        Externo
 	                      </button>
-	                      <div class="w-px h-full bg-white/10"></div>
 	                      <button
 	                        type="button"
-	                        class="px-2 text-[9px] font-bold uppercase tracking-widest transition-colors"
-	                        :class="stickerOutlineMode === 'inside' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400 hover:text-white'"
+	                        class="flex-1 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm"
+	                        :class="stickerOutlineMode === 'inside' ? 'bg-amber-500/20 text-amber-400 shadow-sm' : 'text-zinc-500 hover:text-white hover:bg-white/5'"
 	                        @click="$emit('update-property', 'stickerOutlineMode', 'inside')"
 	                      >
 	                        Interno
@@ -1400,13 +1391,13 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	              </div>
 
 	              <!-- Cor + Espessura -->
-	              <div class="flex items-center gap-1.5">
+	              <div class="flex items-center gap-2">
 	                  <div
 	                    ref="stickerOutlineColorPickerRef"
                     class="relative"
                   >
                     <div
-                      class="w-5 h-5 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
+                      class="w-7 h-7 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden shadow-inner"
                       :style="{ backgroundColor: stickerOutlineColor }"
                       @click="showStickerOutlineColorPicker = true"
                     ></div>
@@ -1422,18 +1413,18 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                     type="text"
                     :value="stickerOutlineColor.replace('#', '').toUpperCase()"
                     @change="e => $emit('update-property', 'stickerOutlineColor', '#' + (e.target as any).value.replace('#', ''))"
-                    class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-amber-500/50 uppercase min-w-0"
+                    class="pp-number-input !text-left font-mono uppercase bg-[#27272a]/50 min-w-0 flex-1"
                     placeholder="FFFFFF"
                     maxlength="6"
                   />
-                  <div class="flex items-center gap-0.5">
-                    <span class="text-[9px] text-zinc-500">W</span>
+                  <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-lg border border-white/5 relative w-16 shrink-0">
+                    <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">W:</span>
                     <input
                       type="number"
                       :value="stickerOutlineWidth"
                       @input="e => $emit('update-property', 'stickerOutlineWidth', Math.max(1, Number((e.target as any).value)))"
-                      class="w-10 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 text-center focus:outline-none focus:border-amber-500/50"
-                      title="Espessura do contorno sticker (px)"
+                      class="pp-number-input !bg-transparent !border-0 py-0 pl-6 text-left h-6"
+                      title="Espessura do contorno (px)"
                       min="1"
                       max="50"
                     />
@@ -1441,10 +1432,10 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </div>
 
               <!-- Opacidade -->
-              <div class="space-y-0.5">
+              <div class="space-y-1.5 pt-1 border-t border-white/5">
                   <div class="flex justify-between items-center gap-2">
-                    <span class="text-[9px] text-zinc-500">Opacidade</span>
-                    <div class="pp-input-row w-16 shrink-0">
+                    <span class="text-[10px] text-zinc-500 font-medium tracking-wide">OPACIDADE</span>
+                    <div class="pp-input-row w-16 shrink-0 bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative">
                       <input
                         type="number"
                         min="0"
@@ -1452,10 +1443,9 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                         step="1"
                         :value="Math.round(stickerOutlineOpacity * 100)"
                         @input="emitClampedProperty('stickerOutlineOpacity', Number(($event.target as HTMLInputElement).value) / 100, stickerOutlineOpacity, 0, 1, 2)"
-                        class="pp-number-input"
-                        title="Opacidade do contorno sticker"
+                        class="pp-number-input !bg-transparent !border-0 text-center h-5 py-0 pr-3"
                       />
-                      <span class="text-[9px] text-zinc-600">%</span>
+                      <span class="text-[9px] text-zinc-600 absolute right-2">%</span>
                     </div>
                   </div>
                   <input
@@ -1465,35 +1455,36 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                     step="0.05"
                     :value="stickerOutlineOpacity"
                     @input="e => $emit('update-property', 'stickerOutlineOpacity', Number((e.target as any).value))"
-                    class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    class="w-full h-1.5 bg-[#27272a] rounded-lg appearance-none cursor-pointer accent-amber-500 outline-none"
                   />
               </div>
           </div>
       </div>
 
       <!-- Contorno -->
-      <div class="px-3 py-2 border-b border-white/5 space-y-1.5">
-          <div class="flex items-center justify-between group">
-              <div class="flex items-center gap-1.5">
-                <svg class="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" stroke-dasharray="4 2"/></svg>
-                <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Contorno</span>
+      <div class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
+          <div class="flex items-center justify-between group cursor-pointer" @click="$emit('update-property', 'strokeEnabled', !strokeEnabled)">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" stroke-dasharray="4 2"/></svg>
+                <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Contorno</span>
               </div>
               <button
                 type="button"
-                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors"
-                @click="$emit('update-property', 'strokeEnabled', !strokeEnabled)"
+                class="flex items-center text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded transition-colors"
+                :class="strokeEnabled ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-500'"
+                @click.stop="$emit('update-property', 'strokeEnabled', !strokeEnabled)"
               >
-                <span :class="strokeEnabled ? 'text-green-400' : 'text-red-400'">{{ strokeEnabled ? 'ATIVO' : 'INATIVO' }}</span>
+                {{ strokeEnabled ? 'ATIVO' : 'INATIVO' }}
               </button>
           </div>
           
-          <div class="flex items-center gap-1.5 group" :class="!strokeEnabled ? 'opacity-50 pointer-events-none' : ''">
+          <div class="flex items-center gap-2 transition-opacity" :class="!strokeEnabled ? 'opacity-50 pointer-events-none' : ''">
               <div 
                 ref="strokeColorPickerRef"
                 class="relative"
               >
                 <div 
-                  class="w-5 h-5 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden"
+                  class="w-7 h-7 rounded border border-white/10 cursor-pointer shrink-0 relative overflow-hidden shadow-inner"
                   :style="{ backgroundColor: getVal('stroke', '#000000') || '#000000' }"
                   @click="showStrokeColorPicker = true"
                 ></div>
@@ -1509,41 +1500,36 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 type="text" 
                 :value="(getVal('stroke', '') || '#000000').toString().replace('#', '').toUpperCase()" 
                 @change="e => $emit('update-property', 'stroke', '#' + (e.target as any).value.replace('#', ''))" 
-                class="flex-1 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 font-mono focus:outline-none focus:border-violet-500/50 uppercase min-w-0" 
+                class="pp-number-input !text-left font-mono uppercase bg-[#27272a]/50 min-w-0 flex-1" 
                 placeholder="1E1E1E"
                 maxlength="6"
               />
               
-              <input type="number" :value="getVal('strokeWidth', 0)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="w-10 h-6 bg-[#2a2a2a] border border-white/10 rounded text-[11px] text-white px-1.5 text-center focus:outline-none focus:border-violet-500/50" title="Espessura do contorno" />
+              <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-lg border border-white/5 relative w-16 shrink-0">
+                  <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">W:</span>
+                  <input type="number" :value="getVal('strokeWidth', 0)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 py-0 pl-6 text-left h-6" title="Espessura do contorno" />
+              </div>
           </div>
           
           <!-- Opções do Contorno -->
-          <div class="space-y-1.5" v-if="strokeEnabled && getVal('strokeWidth', 0) > 0">
+          <div class="space-y-3 pt-2 border-t border-white/5" v-if="strokeEnabled && getVal('strokeWidth', 0) > 0">
                <!-- Posição (Interno/Centro/Externo) -->
-               <div v-if="isVectorPath" class="space-y-0.5">
-                   <label class="text-[9px] text-zinc-500 font-medium">Posição</label>
-                   <select :value="getVal('strokePosition', 'center')" @change="e => $emit('update-property', 'strokePosition', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-[10px] text-white rounded border border-white/10 h-5 px-1.5 focus:outline-none focus:border-violet-500/50">
+               <div v-if="isVectorPath" class="space-y-1">
+                   <label class="text-[10px] text-zinc-500 font-medium tracking-wide uppercase">Posição</label>
+                   <select :value="getVal('strokePosition', 'center')" @change="e => $emit('update-property', 'strokePosition', (e.target as any).value)" class="pp-number-input !text-left h-8 cursor-pointer pl-2 appearance-none">
                        <option value="inside">Interno</option>
                        <option value="center">Centro</option>
                        <option value="outside">Externo</option>
                    </select>
                </div>
                
-               <!-- Espessura -->
-               <div v-if="isVectorPath" class="space-y-0.5">
-                   <label class="text-[9px] text-zinc-500 font-medium">Espessura</label>
-                   <div class="flex items-center gap-1.5">
-                       <input type="number" :value="getVal('strokeWidth', 1)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="flex-1 bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" />
-                   </div>
-               </div>
-               
-               <div class="grid grid-cols-2 gap-1.5">
-                    <select :value="getVal('strokeLineCap', 'butt')" @change="e => $emit('update-property', 'strokeLineCap', (e.target as any).value)" class="bg-[#1e1e1e] text-[9px] text-white rounded border border-white/10 h-5 px-1 focus:outline-none focus:border-violet-500/50">
+               <div class="pp-grid-2">
+                    <select :value="getVal('strokeLineCap', 'butt')" @change="e => $emit('update-property', 'strokeLineCap', (e.target as any).value)" class="pp-number-input !text-left h-7 cursor-pointer pl-2 appearance-none text-[10px]">
                         <option value="butt">Terminal: Reto</option>
                         <option value="round">Terminal: Arredondado</option>
                         <option value="square">Terminal: Quadrado</option>
                     </select>
-                    <select :value="getVal('strokeLineJoin', 'miter')" @change="e => $emit('update-property', 'strokeLineJoin', (e.target as any).value)" class="bg-[#1e1e1e] text-[9px] text-white rounded border border-white/10 h-5 px-1 focus:outline-none focus:border-violet-500/50">
+                    <select :value="getVal('strokeLineJoin', 'miter')" @change="e => $emit('update-property', 'strokeLineJoin', (e.target as any).value)" class="pp-number-input !text-left h-7 cursor-pointer pl-2 appearance-none text-[10px]">
                         <option value="miter">Junção: Esquadro</option>
                         <option value="round">Junção: Arredondada</option>
                         <option value="bevel">Junção: Chanfro</option>
@@ -1551,41 +1537,33 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                </div>
                
                <!-- Limite de Esquadro -->
-               <div v-if="getVal('strokeLineJoin', 'miter') === 'miter'" class="space-y-0.5">
-                   <label class="text-[9px] text-zinc-500 font-medium">Limite de esquadro</label>
-                   <input type="number" :value="getVal('strokeMiterLimit', 4)" @input="e => $emit('update-property', 'strokeMiterLimit', Number((e.target as any).value))" class="w-full bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 px-1.5 h-6 focus:outline-none focus:border-violet-500/50" min="1" max="100" step="0.1" />
+               <div v-if="getVal('strokeLineJoin', 'miter') === 'miter'" class="flex items-center justify-between gap-3">
+                   <label class="text-[10px] text-zinc-500 font-medium tracking-wide uppercase max-w-[80px] leading-tight shrink-0">Limite Esquadro</label>
+                   <input type="number" :value="getVal('strokeMiterLimit', 4)" @input="e => $emit('update-property', 'strokeMiterLimit', Number((e.target as any).value))" class="pp-number-input" min="1" max="100" step="0.1" />
                </div>
                
                <!-- Padrão de Traço -->
-               <div class="space-y-0.5">
-                   <label class="text-[9px] text-zinc-500 font-medium">Padrão de traço</label>
-                   <div class="flex justify-between items-center">
-                       <button class="text-[9px] px-2 py-0.5 rounded hover:bg-white/10 transition-colors" :class="!getVal('strokeDashArray') ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-400 hover:text-white'" @click="$emit('update-property', 'strokeDashArray', null)">Sólido</button>
-                       <button class="text-[9px] px-2 py-0.5 rounded hover:bg-white/10 transition-colors" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([12, 8]) ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-400 hover:text-white'" @click="$emit('update-property', 'strokeDashArray', [12, 8])">Tracejado</button>
-                       <button class="text-[9px] px-2 py-0.5 rounded hover:bg-white/10 transition-colors" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([2, 6]) ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-400 hover:text-white'" @click="$emit('update-property', 'strokeDashArray', [2, 6])">Pontilhado</button>
+               <div class="space-y-1.5">
+                   <label class="text-[10px] text-zinc-500 font-medium tracking-wide uppercase">Padrão de traço</label>
+                   <div class="flex items-center gap-1 bg-[#27272a]/50 border border-white/5 rounded-md p-0.5 overflow-hidden">
+                       <button class="flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-all rounded-sm" :class="!getVal('strokeDashArray') ? 'bg-violet-500/10 text-violet-400 shadow-sm' : 'text-zinc-500 hover:text-white hover:bg-white/5'" @click="$emit('update-property', 'strokeDashArray', null)">Sólido</button>
+                       <button class="flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-all rounded-sm" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([12, 8]) ? 'bg-violet-500/10 text-violet-400 shadow-sm' : 'text-zinc-500 hover:text-white hover:bg-white/5'" @click="$emit('update-property', 'strokeDashArray', [12, 8])">Tracejado</button>
+                       <button class="flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-all rounded-sm" :class="JSON.stringify(getVal('strokeDashArray')) === JSON.stringify([2, 6]) ? 'bg-violet-500/10 text-violet-400 shadow-sm' : 'text-zinc-500 hover:text-white hover:bg-white/5'" @click="$emit('update-property', 'strokeDashArray', [2, 6])">Pontilhado</button>
                    </div>
                </div>
-               
-               <!-- Botão Avançado -->
-               <button class="w-full flex items-center justify-between px-1.5 py-1 bg-[#1e1e1e] border border-white/10 rounded hover:bg-white/5 transition-colors text-[9px] text-zinc-400 hover:text-white">
-                   <span>Avançado</span>
-                   <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                   </svg>
-               </button>
           </div>
       </div>
 
       <!-- Arredondamento -->
-      <div v-if="isRectLike && !isImage" class="px-3 py-2 border-b border-white/5 space-y-1.5">
+      <div v-if="isRectLike && !isImage" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
           <div class="flex items-center justify-between">
-              <div class="flex items-center gap-1.5">
-                <svg class="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2M16 4h2a2 2 0 012 2v2M16 20h2a2 2 0 002-2v-2"/></svg>
-                <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Arredondamento</span>
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2M16 4h2a2 2 0 012 2v2M16 20h2a2 2 0 002-2v-2"/></svg>
+                <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Arredondamento</span>
               </div>
               <button
                 type="button"
-                class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#2c2c2c] border border-white/10 hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+                class="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded transition-colors text-zinc-400 hover:text-white bg-[#27272a]/50 border border-white/5 hover:bg-white/10"
                 @click="() => {
                   if (useIndividualRadii) {
                     $emit('update-property', 'cornerRadius', Number(cornerRadii.tl || 0))
@@ -1599,37 +1577,37 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </button>
           </div>
 
-          <div class="grid grid-cols-2 gap-1.5">
-              <div class="flex items-center gap-1.5 bg-[#1e1e1e] rounded border border-white/10 px-1.5 h-6">
-                  <span class="text-[9px] text-zinc-500">R</span>
+          <div class="flex items-center justify-between gap-3 bg-[#27272a]/50 border border-white/5 rounded-md p-1 pl-3" v-if="!useIndividualRadii">
+              <div class="flex items-center gap-1.5 w-full">
+                  <span class="text-[10px] text-zinc-500 font-medium">R</span>
                   <input
                     type="number"
                     :value="Math.round(cornerRadii.tl || 0)"
                     @input="e => $emit('update-property', 'cornerRadius', Number((e.target as any).value))"
-                    class="bg-transparent w-full text-[11px] text-white focus:outline-none"
+                    class="pp-number-input !bg-transparent !border-0 text-left h-7 py-0 w-full"
                   />
               </div>
-              <div class="text-[9px] text-zinc-500 flex items-center justify-end">
-                  {{ useIndividualRadii ? 'Individuais' : 'Todos iguais' }}
-              </div>
+              <span class="text-[9px] text-zinc-600 uppercase tracking-widest px-2 whitespace-nowrap border-l border-white/5">
+                  TODOS IGUAIS
+              </span>
           </div>
 
-          <div class="grid grid-cols-4 gap-1.5" v-if="useIndividualRadii">
-              <div class="flex flex-col gap-0.5">
-                  <label class="text-[8px] text-zinc-500" title="Superior esquerdo">SE</label>
-                  <input type="number" class="w-full bg-[#1e1e1e] border border-white/10 rounded px-1.5 h-6 text-[11px] text-white focus:outline-none focus:border-violet-500/50" :value="cornerRadii.tl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tl: Number((e.target as any).value) })" />
+          <div class="pp-grid-4 gap-2" v-if="useIndividualRadii">
+              <div class="flex flex-col gap-1 relative pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
+                  <span class="text-[9px] text-zinc-500 absolute left-1.5 top-1.5 pointer-events-none font-medium">SE</span>
+                  <input type="number" class="pp-number-input !bg-transparent !border-0 !text-right h-6 py-0 w-full" :value="cornerRadii.tl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tl: Number((e.target as any).value) })" />
               </div>
-              <div class="flex flex-col gap-0.5">
-                  <label class="text-[8px] text-zinc-500" title="Superior direito">SD</label>
-                  <input type="number" class="w-full bg-[#1e1e1e] border border-white/10 rounded px-1.5 h-6 text-[11px] text-white focus:outline-none focus:border-violet-500/50" :value="cornerRadii.tr" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tr: Number((e.target as any).value) })" />
+              <div class="flex flex-col gap-1 relative pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
+                  <span class="text-[9px] text-zinc-500 absolute left-1.5 top-1.5 pointer-events-none font-medium">SD</span>
+                  <input type="number" class="pp-number-input !bg-transparent !border-0 !text-right h-6 py-0 w-full" :value="cornerRadii.tr" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tr: Number((e.target as any).value) })" />
               </div>
-              <div class="flex flex-col gap-0.5">
-                  <label class="text-[8px] text-zinc-500" title="Inferior direito">ID</label>
-                  <input type="number" class="w-full bg-[#1e1e1e] border border-white/10 rounded px-1.5 h-6 text-[11px] text-white focus:outline-none focus:border-violet-500/50" :value="cornerRadii.br" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, br: Number((e.target as any).value) })" />
+              <div class="flex flex-col gap-1 relative pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
+                  <span class="text-[9px] text-zinc-500 absolute left-1.5 top-1.5 pointer-events-none font-medium">IE</span>
+                  <input type="number" class="pp-number-input !bg-transparent !border-0 !text-right h-6 py-0 w-full" :value="cornerRadii.bl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, bl: Number((e.target as any).value) })" />
               </div>
-              <div class="flex flex-col gap-0.5">
-                  <label class="text-[8px] text-zinc-500" title="Inferior esquerdo">IE</label>
-                  <input type="number" class="w-full bg-[#1e1e1e] border border-white/10 rounded px-1.5 h-6 text-[11px] text-white focus:outline-none focus:border-violet-500/50" :value="cornerRadii.bl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, bl: Number((e.target as any).value) })" />
+              <div class="flex flex-col gap-1 relative pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
+                  <span class="text-[9px] text-zinc-500 absolute left-1.5 top-1.5 pointer-events-none font-medium">ID</span>
+                  <input type="number" class="pp-number-input !bg-transparent !border-0 !text-right h-6 py-0 w-full" :value="cornerRadii.br" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, br: Number((e.target as any).value) })" />
               </div>
           </div>
       </div>
@@ -2055,14 +2033,15 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	      </div>
 
       <!-- Grade Inteligente -->
-      <div v-if="isSmartGroup" class="px-3 py-2 border-b border-white/5 space-y-1.5 bg-violet-500/5">
-          <div class="flex items-center gap-1.5">
-             <Box class="w-3 h-3 text-violet-400" />
-             <span class="text-[10px] font-bold text-violet-400 uppercase tracking-widest">Item de Grade Inteligente</span>
+      <div v-if="isSmartGroup" class="bg-[#18181b] border border-violet-500/20 rounded-xl mb-2 p-3 space-y-3 shadow-sm relative overflow-hidden">
+          <div class="absolute inset-0 bg-violet-500/5 mix-blend-overlay pointer-events-none"></div>
+          <div class="flex items-center gap-2 relative z-10">
+             <Box class="w-4 h-4 text-violet-400" />
+             <span class="text-[11px] font-semibold tracking-wide text-violet-300">Item Smart Grade</span>
           </div>
-          <div class="space-y-1">
-               <label class="text-[9px] text-zinc-400 font-medium">Modo</label>
-               <select :value="getVal('priceMode', 'standard')" @change="e => $emit('update-smart-group', 'priceMode', (e.target as any).value)" class="w-full bg-[#1e1e1e] text-[11px] text-white rounded border border-white/10 h-6 px-1.5 focus:outline-none focus:border-violet-500/50">
+          <div class="space-y-1.5 relative z-10">
+               <label class="text-[10px] text-zinc-400 font-medium uppercase tracking-wide">Modo de Preço</label>
+               <select :value="getVal('priceMode', 'standard')" @change="e => $emit('update-smart-group', 'priceMode', (e.target as any).value)" class="pp-number-input w-full !text-left h-8 cursor-pointer pl-2 appearance-none focus:border-violet-500/50">
                    <option value="standard">Padrão</option>
                    <option value="de_por">De / Por</option>
                    <option value="clube">Clube</option>
@@ -2072,51 +2051,51 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- 9. Zona de Produtos -->
-      <div v-show="isProductZone" class="border-b border-white/5 bg-emerald-500/[0.03]">
+      <div v-show="isProductZone" class="bg-[#18181b] border border-emerald-500/20 rounded-xl mb-2 shadow-sm relative overflow-hidden">
+          <div class="absolute inset-0 bg-emerald-500/5 mix-blend-overlay pointer-events-none"></div>
           <button
               type="button"
-              class="w-full px-3 py-3 flex items-start justify-between gap-3 border-b border-white/5 hover:bg-white/[0.04] transition-colors text-left"
+              class="w-full relative z-10 px-3 py-3 flex items-start justify-between gap-3 hover:bg-white/5 transition-colors text-left"
+              :class="{ 'border-b border-white/5': isProductZoneSectionOpen }"
               @click="isProductZoneSectionOpen = !isProductZoneSectionOpen"
           >
-             <div class="flex items-start gap-2.5 min-w-0">
-               <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10">
-                 <LayoutGrid class="w-3.5 h-3.5 text-emerald-300" />
+             <div class="flex items-start gap-3 min-w-0">
+               <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/20 shadow-inner">
+                 <LayoutGrid class="w-4 h-4 text-emerald-400" />
                </div>
-               <div class="min-w-0">
+               <div class="min-w-0 flex-1">
                  <div class="flex items-center gap-2">
-                   <span class="text-[10px] font-bold text-emerald-300 uppercase tracking-[0.18em]">Zona de Produtos</span>
-                   <span class="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-100/85">
+                   <span class="text-[11px] font-semibold text-emerald-400 tracking-wide uppercase">Zona de Produtos</span>
+                   <span class="rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-emerald-200">
                      {{ (currentZoneData?.columns ?? 0) === 0 ? 'Auto' : `${currentZoneData?.columns ?? 0} cols` }}
                    </span>
                  </div>
-                 <p class="mt-1 text-[10px] leading-relaxed text-zinc-500">
-                   Controle estrutura, ritmo e visual da grade sem abrir opcoes redundantes.
+                 <p class="mt-1 text-[10px] text-zinc-400 leading-snug">
+                   Controle estrutura, ritmo e visual da grade principal.
                  </p>
-                 <div class="mt-2 flex flex-wrap gap-1">
-                   <span class="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-emerald-100">
+                 <div class="mt-2 flex flex-wrap gap-1.5">
+                   <span class="rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-emerald-300">
                      {{ currentZoneData?.contentStatus || 'empty' }}
                    </span>
-                   <span v-if="currentZoneData?.productCount" class="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-zinc-400">
+                   <span v-if="currentZoneData?.productCount" class="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                      {{ currentZoneData?.productCount }} itens
                    </span>
-                   <span class="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-zinc-400">
+                   <span class="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                      Pad {{ currentZoneData?.padding ?? 20 }}
                    </span>
-                   <span class="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-zinc-400">
-                     Destaques {{ currentZoneData?.highlightCount ?? 0 }}
-                   </span>
-                   <span class="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-zinc-400">
-                     {{ currentGlobalStyles?.splashTemplateId ? 'Template ativo' : 'Splash padrao' }}
+                   <span class="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
+                     Dest {{ currentZoneData?.highlightCount ?? 0 }}
                    </span>
                  </div>
                </div>
              </div>
-             <div class="shrink-0 rounded-full border border-white/10 bg-white/[0.04] p-1.5">
-               <ChevronsDown v-if="isProductZoneSectionOpen" class="w-3 h-3 text-emerald-300" />
-               <ChevronsUp v-else class="w-3 h-3 text-emerald-300" />
+             <div class="shrink-0 rounded-full border border-white/10 bg-[#27272a] p-1 shadow-sm mt-1 group-hover:bg-white/10 transition-colors">
+               <ChevronsDown v-if="isProductZoneSectionOpen" class="w-3.5 h-3.5 text-emerald-400" />
+               <ChevronsUp v-else class="w-3.5 h-3.5 text-emerald-400" />
              </div>
           </button>
           <ProductZoneSettings
+            class="relative z-10 p-3 pt-2"
             v-show="isProductZoneSectionOpen"
             :zone="currentZoneData"
             :global-styles="currentGlobalStyles"
@@ -2370,14 +2349,14 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 
 <style scoped>
 /* ============================
-   Painel de Propriedades - Estilos
+   Painel de Propriedades - Estilos Avançados
    ============================ */
 
 /* Scrollbar personalizada */
-.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(113, 113, 122, 0.3); border-radius: 4px; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(113, 113, 122, 0.5); }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(113, 113, 122, 0.4); border-radius: 6px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(113, 113, 122, 0.6); }
 
 /* Remover setas de input numérico */
 input[type=number]::-webkit-inner-spin-button,
@@ -2387,186 +2366,77 @@ input[type=number]::-webkit-outer-spin-button {
 }
 input[type=number] { -moz-appearance: textfield; }
 
-/* Protótipo */
-.pp-interaction-card {
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  background: rgba(139, 92, 246, 0.05);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.pp-info-box {
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(24, 24, 27, 0.5);
-}
-
-.pp-info-box--collapsed {
-  background: rgba(24, 24, 27, 0.3);
-}
-
-/* Painel Design */
-.pp-design-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
 /* Cabeçalho de seção (colapsável) */
 .pp-section-header {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 8px;
   text-align: left;
-  transition: background-color 0.15s;
+  transition: background-color 0.2s;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
-
 .pp-section-header:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
 }
-
-.pp-section-header span {
-  flex: 1;
-  font-size: 10px;
-  font-weight: 600;
-  color: #71717a;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
 .pp-section-chevron {
-  width: 14px;
-  height: 14px;
-  color: #52525b;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-left: auto;
 }
-
 .pp-section-chevron--collapsed {
   transform: rotate(-90deg);
 }
 
-.pp-section-content {
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-/* Linha de input */
-.pp-input-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pp-input-label {
-  font-size: 9px;
-  color: #71717a;
-  width: 14px;
-  font-weight: 500;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-/* Campo de input genérico */
-.pp-input-field {
-  flex: 1;
-  background: rgba(39, 39, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-  padding: 3px 6px;
-  font-size: 11px;
-  color: white;
-  transition: border-color 0.15s;
-}
-
-.pp-input-field:focus {
-  outline: none;
-  border-color: rgba(139, 92, 246, 0.5);
-}
-
-/* Input numérico */
+/* Campos Numéricos Refinados */
 .pp-number-input {
   width: 100%;
-  background: rgba(39, 39, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-  padding: 3px 6px;
+  background: rgba(39, 39, 42, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 4px 8px;
   font-size: 11px;
   color: white;
   text-align: center;
-  transition: border-color 0.15s;
+  transition: all 0.2s;
+  height: 28px;
 }
-
 .pp-number-input:focus {
   outline: none;
-  border-color: rgba(139, 92, 246, 0.5);
+  border-color: rgba(139, 92, 246, 0.6);
+  background: rgba(39, 39, 42, 0.5);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2);
 }
-
-.pp-number-input:hover {
+.pp-number-input:hover:not(:focus) {
   border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(39, 39, 42, 0.4);
 }
 
-/* Slider com estilo */
+/* Grids Avançados */
+.pp-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.pp-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pp-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+
+/* Input Range Avançado */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 3px;
-  background: #3f3f46;
-  border-radius: 3px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
   cursor: pointer;
 }
-
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #8b5cf6;
-  border: 2px solid #1a1a1a;
+  border: 2px solid #18181b;
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3);
   cursor: pointer;
   transition: transform 0.1s;
 }
-
 input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
-
-/* Select com estilo */
-select {
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-select:hover {
-  border-color: rgba(255, 255, 255, 0.15) !important;
-}
-
-/* Grids de layout */
-.pp-grid-2 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-}
-
-.pp-grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-
-.pp-grid-4 {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  transform: scale(1.25);
 }
 </style>
