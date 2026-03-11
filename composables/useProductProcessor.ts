@@ -1,5 +1,20 @@
 import { toWasabiDirectUrl } from '~/utils/storageProxy';
 
+export interface SmartProductImageCandidate {
+    id: string;
+    url: string;
+    previewUrl?: string | null;
+    key?: string | null;
+    title?: string | null;
+    source?: 's3' | 'external' | 'manual' | string;
+    provider?: string | null;
+    domain?: string | null;
+    score?: number | null;
+    confidence?: number | null;
+    reason?: string | null;
+    recommended?: boolean;
+}
+
 export interface SmartProduct {
     id: string;
     name: string;
@@ -42,6 +57,8 @@ export interface SmartProduct {
     imageAttemptCount?: number;
     imageCandidateCount?: number;
     imageReviewReason?: string;
+    imageDecision?: 'approved' | 'ambiguous' | 'blocked';
+    imageCandidates?: SmartProductImageCandidate[];
     // Original extracted data
     raw?: any;
 }
@@ -59,11 +76,14 @@ type ImageProcessResult = {
     attempts?: number;
     nextAction?: string;
     reviewPending?: boolean;
+    decision?: 'approved' | 'ambiguous' | 'blocked';
+    candidates?: SmartProductImageCandidate[];
 };
 type ImageProcessOptions = {
     bgPolicy?: BgPolicy;
     force?: boolean;
     matchMode?: ImageMatchMode;
+    selectedCandidate?: SmartProductImageCandidate | null;
 };
 type ImageQueueState = {
     total: number;
@@ -278,6 +298,36 @@ export const useProductProcessor = () => {
         return 'fallback';
     };
 
+    const normalizeSmartProductCandidates = (input: any): SmartProductImageCandidate[] => {
+        if (!Array.isArray(input)) return [];
+        return input
+            .map((entry: any, index: number) => {
+                const url = String(entry?.url || '').trim();
+                const previewUrl = String(entry?.previewUrl || entry?.url || '').trim();
+                if (!url && !previewUrl) return null;
+                const source = String(entry?.source || '').trim().toLowerCase() || 'external';
+                const id = String(entry?.id || entry?.key || url || previewUrl || `candidate-${index + 1}`).trim();
+                const score = Number(entry?.score);
+                const confidence = Number(entry?.confidence);
+                return {
+                    id,
+                    url: url || previewUrl,
+                    previewUrl: previewUrl || url,
+                    key: String(entry?.key || '').trim() || null,
+                    title: String(entry?.title || '').trim() || null,
+                    source,
+                    provider: String(entry?.provider || entry?.source || '').trim() || null,
+                    domain: String(entry?.domain || '').trim() || null,
+                    score: Number.isFinite(score) ? score : null,
+                    confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : null,
+                    reason: String(entry?.reason || '').trim() || null,
+                    recommended: !!entry?.recommended
+                } satisfies SmartProductImageCandidate;
+            })
+            .filter((entry): entry is SmartProductImageCandidate => !!entry)
+            .slice(0, 6);
+    };
+
     const mapParsedProducts = (data: any) => {
         if (!data || !Array.isArray(data.products)) return [];
         return data.products.map((p: any) => ({
@@ -458,6 +508,8 @@ export const useProductProcessor = () => {
             product.imageAttemptCount = Number.isFinite(Number(product.imageAttemptCount)) ? Number(product.imageAttemptCount) : 0;
             product.imageCandidateCount = Number.isFinite(Number(product.imageCandidateCount)) ? Number(product.imageCandidateCount) : 0;
             product.imageConfidence = Number.isFinite(Number(product.imageConfidence)) ? Number(product.imageConfidence) : (product.imageSource === 'manual' ? 1 : product.imageConfidence);
+            product.imageDecision = 'approved';
+            product.imageCandidates = Array.isArray(product.imageCandidates) ? product.imageCandidates : [];
             return { ok: true };
         }
 
@@ -473,6 +525,8 @@ export const useProductProcessor = () => {
         product.imageProvider = undefined;
         product.imageAttemptCount = undefined;
         product.imageCandidateCount = undefined;
+        product.imageDecision = undefined;
+        product.imageCandidates = [];
 
         try {
             // Priorizar gramatura encontrada no nome completo (mais confiável que parser isolado).
@@ -498,6 +552,8 @@ export const useProductProcessor = () => {
                 attempts?: number;
                 nextAction?: string;
                 imageReviewReason?: string;
+                decision?: 'approved' | 'ambiguous' | 'blocked';
+                candidates?: SmartProductImageCandidate[];
             }>('/api/process-product-image', {
                 method: 'POST',
                 headers,
@@ -510,11 +566,14 @@ export const useProductProcessor = () => {
                     weight: effectiveWeight,
                     bgPolicy: options.bgPolicy || 'auto',
                     matchMode: options.matchMode || 'precise',
-                    strictMode: (options.matchMode || 'precise') === 'precise'
+                    strictMode: (options.matchMode || 'precise') === 'precise',
+                    selectedCandidate: options.selectedCandidate || undefined
                 }
             });
 
-                if (result && result.url) {
+            const normalizedCandidates = normalizeSmartProductCandidates(result?.candidates);
+
+            if (result && result.url) {
                 product.imageUrl = toWasabiDirectUrl(String(result.url || '').trim()) || result.url;
                 product.status = 'done';
                 product.imageDecisionReason = '';
@@ -530,15 +589,19 @@ export const useProductProcessor = () => {
                 product.imageCandidateCount = Number.isFinite(candidateCount) ? Math.max(0, candidateCount) : undefined;
                 const attemptCount = Number(result.attempts);
                 product.imageAttemptCount = Number.isFinite(attemptCount) ? Math.max(0, attemptCount) : undefined;
+                product.imageDecision = 'approved';
+                product.imageCandidates = normalizedCandidates;
                 console.log('[ProductProcessor] Image found:', product.name, result.url.substring(0, 80) + '...');
                 return {
                     ok: true,
                     reviewPending: false,
+                    decision: 'approved',
                     confidence: product.imageConfidence,
                     source: String(result.source || ''),
                     imageProvider: product.imageProvider,
                     candidateCount: Number(result.candidateCount || 0),
-                    attempts: Number(result.attempts || 0)
+                    attempts: Number(result.attempts || 0),
+                    candidates: normalizedCandidates
                 };
             } else {
                 const rawReason = String(result?.reason || '').trim();
@@ -561,6 +624,10 @@ export const useProductProcessor = () => {
                 product.imageCandidateCount = Number.isFinite(candidateCount) ? Math.max(0, candidateCount) : 0;
                 const attemptCount = Number(result.attempts);
                 product.imageAttemptCount = Number.isFinite(attemptCount) ? Math.max(0, attemptCount) : 0;
+                product.imageCandidates = normalizedCandidates;
+                product.imageDecision = result?.decision
+                    ? result.decision
+                    : (normalizedCandidates.length > 0 ? 'ambiguous' : 'blocked');
                 if (result.nextAction && String(result.nextAction || '').trim()) {
                     product.imageReviewReason = String(result.nextAction || '').trim();
                     product.imageDecisionReason = product.imageReviewReason;
@@ -570,12 +637,14 @@ export const useProductProcessor = () => {
                 return {
                     ok: false,
                     reviewPending: isReviewPending,
+                    decision: product.imageDecision,
                     source: String(result?.source || ''),
                     imageProvider: product.imageProvider,
                     confidence: product.imageConfidence,
                     candidateCount: Number(result?.candidateCount || 0),
                     attempts: Number(result?.attempts || 0),
-                    nextAction: String(result?.nextAction || '').trim() || undefined
+                    nextAction: String(result?.nextAction || '').trim() || undefined,
+                    candidates: normalizedCandidates
                 };
             }
         } catch (err: any) {
@@ -593,6 +662,8 @@ export const useProductProcessor = () => {
                 product.imageCandidateCount = 0;
                 product.imageAttemptCount = Math.max(1, previousRetryCount + 1);
                 product.imageDecisionReason = product.imageReviewReason = product.error;
+                product.imageDecision = 'blocked';
+                product.imageCandidates = [];
                 return { ok: false, rateLimited: true, retryAfterMs, reviewPending: false, imageProvider: product.imageProvider };
             }
             if (isExpectedNoImageError(err)) {
@@ -606,6 +677,8 @@ export const useProductProcessor = () => {
                 product.imageProvider = 'registry';
                 product.imageCandidateCount = 0;
                 product.imageAttemptCount = 0;
+                product.imageDecision = 'blocked';
+                product.imageCandidates = [];
                 console.warn('[ProductProcessor] Imagem não encontrada:', product.name, '-', noImageMessage);
                 return { ok: false, reviewPending: false, imageProvider: product.imageProvider };
             }
@@ -620,9 +693,24 @@ export const useProductProcessor = () => {
             product.imageProvider = 'server';
             product.imageCandidateCount = 0;
             product.imageAttemptCount = 0;
+            product.imageDecision = 'blocked';
+            product.imageCandidates = [];
             return { ok: false, reviewPending: false, imageProvider: product.imageProvider };
         }
     }
+
+    const applyImageCandidate = async (
+        index: number,
+        candidate: SmartProductImageCandidate,
+        options: { bgPolicy?: BgPolicy; matchMode?: ImageMatchMode } = {}
+    ): Promise<ImageProcessResult> => {
+        return await processProductImage(index, {
+            bgPolicy: options.bgPolicy || 'auto',
+            matchMode: options.matchMode || 'precise',
+            force: true,
+            selectedCandidate: candidate
+        });
+    };
 
     const processAllImages = async (
         options: {
@@ -657,7 +745,11 @@ export const useProductProcessor = () => {
                 imageCandidateCount: sourceProduct.imageCandidateCount,
                 imageAttemptCount: sourceProduct.imageAttemptCount,
                 imageDecisionReason: sourceProduct.imageDecisionReason,
-                imageReviewReason: sourceProduct.imageReviewReason
+                imageReviewReason: sourceProduct.imageReviewReason,
+                imageDecision: sourceProduct.imageDecision,
+                imageCandidates: Array.isArray(sourceProduct.imageCandidates)
+                    ? JSON.parse(JSON.stringify(sourceProduct.imageCandidates))
+                    : []
             });
         };
 
@@ -672,6 +764,10 @@ export const useProductProcessor = () => {
             target.imageAttemptCount = sourceState.imageAttemptCount;
             target.imageDecisionReason = sourceState.imageDecisionReason;
             target.imageReviewReason = sourceState.imageReviewReason;
+            target.imageDecision = sourceState.imageDecision;
+            target.imageCandidates = Array.isArray(sourceState.imageCandidates)
+                ? JSON.parse(JSON.stringify(sourceState.imageCandidates))
+                : [];
         };
 
         imageQueueState.value = {
@@ -809,6 +905,10 @@ export const useProductProcessor = () => {
                         dupProduct.imageProvider = primaryProduct.imageProvider;
                         dupProduct.imageCandidateCount = primaryProduct.imageCandidateCount;
                         dupProduct.imageAttemptCount = primaryProduct.imageAttemptCount;
+                        dupProduct.imageDecision = primaryProduct.imageDecision;
+                        dupProduct.imageCandidates = Array.isArray(primaryProduct.imageCandidates)
+                            ? JSON.parse(JSON.stringify(primaryProduct.imageCandidates))
+                            : [];
                         console.log(`[ProductProcessor] Replicado imagem para duplicata: ${dupProduct.name}`);
                     }
                 } else if (item.indices.length > 1 && (primaryProduct.status === 'error' || primaryProduct.status === 'review_pending')) {
@@ -829,6 +929,10 @@ export const useProductProcessor = () => {
                         dupProduct.imageProvider = primaryProduct.imageProvider;
                         dupProduct.imageCandidateCount = primaryProduct.imageCandidateCount;
                         dupProduct.imageAttemptCount = primaryProduct.imageAttemptCount;
+                        dupProduct.imageDecision = primaryProduct.imageDecision;
+                        dupProduct.imageCandidates = Array.isArray(primaryProduct.imageCandidates)
+                            ? JSON.parse(JSON.stringify(primaryProduct.imageCandidates))
+                            : [];
                     }
                 } else if (attempts >= 6 && primaryProduct.status === 'pending') {
                     primaryProduct.status = 'review_pending';
@@ -839,6 +943,7 @@ export const useProductProcessor = () => {
                     if (!primaryProduct.imageDecisionReason) {
                         primaryProduct.imageDecisionReason = primaryProduct.error;
                     }
+                    primaryProduct.imageDecision = primaryProduct.imageCandidates?.length ? 'ambiguous' : 'blocked';
                     console.warn('[ProductProcessor] Retry esgotado para produto:', primaryProduct.name);
                 }
                 if (primaryProduct.status === 'error' || primaryProduct.status === 'review_pending') {
@@ -899,6 +1004,7 @@ export const useProductProcessor = () => {
         parseText,
         parseFile,
         processProductImage,
+        applyImageCandidate,
         processAllImages,
         imageQueueState: imageQueueStateSnapshot,
         isImageProcessing,

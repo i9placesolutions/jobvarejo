@@ -4,7 +4,7 @@ import Dialog from './ui/Dialog.vue'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
 import { Sparkles, X, Check, AlertCircle, Loader2, Upload, Plus, Play, RefreshCw, ChevronDown } from 'lucide-vue-next'
-import { useProductProcessor, type SmartProduct } from '../composables/useProductProcessor'
+import { useProductProcessor, type SmartProduct, type SmartProductImageCandidate } from '../composables/useProductProcessor'
 import { toWasabiDirectUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
 
@@ -41,6 +41,8 @@ type ReviewRowWithMeta = {
     imageStatusMeta: ImageStatusMeta
     imageNextAction: ImageNextAction | null
 }
+type ReviewFilter = 'all' | 'approved' | 'suspect' | 'blocked' | 'pending'
+type ReviewDecisionState = 'approved' | 'ambiguous' | 'blocked' | 'pending'
 
 const props = defineProps<{
     modelValue: boolean
@@ -73,6 +75,10 @@ const frameAssignmentsMap = ref<Record<string, string | null>>({})
 const imageBgPolicy = ref<ImageBgPolicy>('always')
 const isSubmittingImport = ref(false)
 const appendBaseProducts = ref<SmartProduct[] | null>(null)
+const reviewFilter = ref<ReviewFilter>('all')
+const reviewSuggestionMap = ref<Record<string, SmartProductImageCandidate[]>>({})
+const reviewSuggestionLoadingMap = ref<Record<string, boolean>>({})
+const reviewSuggestionErrorMap = ref<Record<string, string | null>>({})
 
 const LIST_FILE_ACCEPT = 'image/*,.csv,.tsv,.xlsx,.xls,.pdf,text/plain'
 const REVIEW_PAGE_SIZE = 80
@@ -87,6 +93,7 @@ const {
     parseText, 
     parseFile,
     processProductImage, 
+    applyImageCandidate,
     processAllImages, 
     imageQueueState,
     pauseImageProcessing,
@@ -201,17 +208,21 @@ type ImageStatusMeta = {
 const imageStatusMetaCache = new WeakMap<object, { key: string; value: ImageStatusMeta }>()
 const imageStatusMetaFingerprint = (p: SmartProduct): string => {
     const status = String(p?.status || '')
+    const decision = String(p?.imageDecision || '')
     const source = String(p?.imageSource || '')
     const provider = String(p?.imageProvider || '')
     const confidence = Number.isFinite(Number(p?.imageConfidence)) ? Number(p.imageConfidence).toFixed(4) : 'na'
     const candidates = Number.isFinite(Number(p?.imageCandidateCount))
         ? String(Math.max(0, Math.floor(Number(p.imageCandidateCount))))
         : 'na'
+    const candidateIds = Array.isArray(p?.imageCandidates)
+        ? p.imageCandidates.map((candidate) => String(candidate?.id || '')).filter(Boolean).join(',')
+        : ''
     const attempts = Number.isFinite(Number(p?.imageAttemptCount))
         ? String(Math.max(0, Math.floor(Number(p.imageAttemptCount))))
         : 'na'
     const reviewReason = String(p?.imageReviewReason || p?.imageDecisionReason || p?.error || '')
-    return `${status}|${source}|${provider}|${confidence}|${candidates}|${attempts}|${reviewReason}`
+    return `${status}|${decision}|${source}|${provider}|${confidence}|${candidates}|${candidateIds}|${attempts}|${reviewReason}`
 }
 
 const isRetryingImage = (p: SmartProduct): boolean => {
@@ -266,6 +277,8 @@ const buildImageStatusMeta = (p: SmartProduct): ImageStatusMeta => {
     }
 
     if (p.status === 'review_pending') {
+        const decision = String(p?.imageDecision || '').toLowerCase()
+        const hasCandidates = Array.isArray(p?.imageCandidates) && p.imageCandidates.length > 0
         if (isRetryingImage(p)) {
             return {
                 state: 'Reprocessando',
@@ -281,8 +294,23 @@ const buildImageStatusMeta = (p: SmartProduct): ImageStatusMeta => {
                 candidatesText
             }
         }
+        if (decision === 'blocked' || !hasCandidates) {
+            return {
+                state: 'Bloqueado',
+                stateTone: 'critical',
+                source,
+                providerLabel,
+                confidence: formatConfidence(confidence ?? undefined),
+                tone: confidence !== null && confidence > 0.35 ? 'low' : 'critical',
+                toneClass: getImageConfidenceToneClass(confidence !== null && confidence > 0.35 ? 'low' : 'critical'),
+                attempts,
+                candidates,
+                attemptsText,
+                candidatesText
+            }
+        }
         return {
-            state: 'Revisão',
+            state: 'Suspeito',
             stateTone: 'low',
             source,
             providerLabel,
@@ -396,6 +424,10 @@ watch(() => props.modelValue, (newVal) => {
     if (!newVal) {
         isSubmittingImport.value = false
         appendBaseProducts.value = null
+        reviewFilter.value = 'all'
+        reviewSuggestionMap.value = {}
+        reviewSuggestionLoadingMap.value = {}
+        reviewSuggestionErrorMap.value = {}
         stopImageQueue()
         resetImageProcessingState()
         reviewPage.value = 1
@@ -404,6 +436,10 @@ watch(() => props.modelValue, (newVal) => {
     }
 
     isSubmittingImport.value = false
+    reviewFilter.value = 'all'
+    reviewSuggestionMap.value = {}
+    reviewSuggestionLoadingMap.value = {}
+    reviewSuggestionErrorMap.value = {}
     importMode.value = props.initialImportMode === 'append' ? 'append' : 'replace'
     importSource.value = 'manual'
     if (props.initialProducts && props.initialProducts.length > 0) {
@@ -866,10 +902,40 @@ const filteredProducts = computed(() => {
     })
 })
 
+const getReviewDecisionState = (product: SmartProduct): ReviewDecisionState => {
+    if (product?.status === 'done' && product?.imageUrl) return 'approved'
+    if (
+        product?.imageDecision === 'ambiguous' ||
+        (product?.status === 'review_pending' && Array.isArray(product?.imageCandidates) && product.imageCandidates.length > 0)
+    ) {
+        return 'ambiguous'
+    }
+    if (
+        product?.imageDecision === 'blocked' ||
+        product?.status === 'error' ||
+        product?.status === 'review_pending'
+    ) {
+        return 'blocked'
+    }
+    return 'pending'
+}
+
+const matchesReviewFilter = (product: SmartProduct): boolean => {
+    const bucket = getReviewDecisionState(product)
+    if (reviewFilter.value === 'all') return true
+    if (reviewFilter.value === 'suspect') return bucket === 'ambiguous'
+    if (reviewFilter.value === 'approved') return bucket === 'approved'
+    if (reviewFilter.value === 'blocked') return bucket === 'blocked'
+    if (reviewFilter.value === 'pending') return bucket === 'pending'
+    return true
+}
+
 const filteredProductRows = computed(() => {
-    if (!reviewSearch.value.trim()) return productRows.value
-    const filteredSet = new Set<any>(filteredProducts.value)
-    return productRows.value.filter((row) => filteredSet.has(row.product))
+    const filteredSet = reviewSearch.value.trim() ? new Set<any>(filteredProducts.value) : null
+    return productRows.value.filter((row) => {
+        if (filteredSet && !filteredSet.has(row.product)) return false
+        return matchesReviewFilter(row.product)
+    })
 })
 
 const filteredProductRowsForAll = computed(() => filteredProducts.value.map((product) => product))
@@ -893,17 +959,35 @@ const gotoReviewPage = (nextPage: number) => {
 
 const imageStatusCounters = computed(() => {
     const rows = filteredProductRowsForAll.value
-    let done = 0
+    let approved = 0
     let pending = 0
-    let conflict = 0
+    let ambiguous = 0
+    let blocked = 0
     for (const row of rows) {
         if (!row) continue
-        if (row.status === 'done') done += 1
-        else if (row.status === 'review_pending' || row.status === 'error') conflict += 1
+        const bucket = getReviewDecisionState(row)
+        if (bucket === 'approved') approved += 1
+        else if (bucket === 'ambiguous') ambiguous += 1
+        else if (bucket === 'blocked') blocked += 1
         else pending += 1
     }
-    return { done, pending, conflict, total: rows.length }
+    return {
+        approved,
+        pending,
+        ambiguous,
+        blocked,
+        total: rows.length,
+        attention: ambiguous + blocked
+    }
 })
+
+const reviewFilterOptions = computed(() => ([
+    { value: 'all' as const, label: 'Todos', count: imageStatusCounters.value.total },
+    { value: 'suspect' as const, label: 'Suspeitos', count: imageStatusCounters.value.ambiguous },
+    { value: 'blocked' as const, label: 'Bloqueados', count: imageStatusCounters.value.blocked },
+    { value: 'approved' as const, label: 'Prontos', count: imageStatusCounters.value.approved },
+    { value: 'pending' as const, label: 'Pendentes', count: imageStatusCounters.value.pending }
+]))
 
 const activeReviewRow = computed(() => {
     const rows = filteredProductRows.value
@@ -923,6 +1007,207 @@ const activeReviewRow = computed(() => {
     }
     return null
 })
+
+const mapAssetToReviewCandidate = (asset: any, index: number): SmartProductImageCandidate | null => {
+    const key = String(asset?.key || '').trim()
+    const url = resolveProductImageUrl(asset?.url || '')
+    if (!key && !url) return null
+    const assetSource = String(asset?.source || '').trim().toLowerCase()
+    return {
+        id: String(asset?.id || key || url || `storage-candidate-${index + 1}`),
+        key: key || undefined,
+        url: url || key,
+        previewUrl: url || key || undefined,
+        title: String(asset?.name || key || '').trim() || undefined,
+        source: key || assetSource === 's3' ? 's3' : 'external',
+        provider: assetSource === 'cache' ? 'internal-cache' : 'internal-storage',
+        score: Number.isFinite(Number(asset?.score)) ? Number(asset.score) : undefined,
+        reason: assetSource === 'cache'
+            ? 'Sugestão encontrada no histórico interno do storage.'
+            : 'Sugestão encontrada no Wasabi para este produto.',
+        recommended: index === 0
+    }
+}
+
+const mergeReviewCandidates = (...lists: Array<SmartProductImageCandidate[] | undefined | null>): SmartProductImageCandidate[] => {
+    const merged: SmartProductImageCandidate[] = []
+    const seen = new Set<string>()
+    for (const list of lists) {
+        if (!Array.isArray(list)) continue
+        for (const candidate of list) {
+            if (!candidate) continue
+            const dedupeKey = String(candidate.key || candidate.url || candidate.id || '').trim()
+            if (!dedupeKey || seen.has(dedupeKey)) continue
+            seen.add(dedupeKey)
+            merged.push(candidate)
+        }
+    }
+    return merged
+}
+
+const activeStorageSuggestions = computed<SmartProductImageCandidate[]>(() => {
+    const row = activeReviewRow.value
+    if (!row) return []
+    return reviewSuggestionMap.value[row.productId] || []
+})
+
+const activeReviewSuggestionError = computed(() => {
+    const row = activeReviewRow.value
+    if (!row) return ''
+    return String(reviewSuggestionErrorMap.value[row.productId] || '').trim()
+})
+
+const isActiveReviewSuggestionLoading = computed(() => {
+    const row = activeReviewRow.value
+    if (!row) return false
+    return !!reviewSuggestionLoadingMap.value[row.productId]
+})
+
+const activeReviewCandidates = computed<SmartProductImageCandidate[]>(() => {
+    const product = activeReviewRow.value?.product
+    return mergeReviewCandidates(
+        Array.isArray(product?.imageCandidates) ? product.imageCandidates : [],
+        activeStorageSuggestions.value
+    )
+})
+
+const activeReviewDecisionState = computed<ReviewDecisionState>(() => {
+    const product = activeReviewRow.value?.product
+    return product ? getReviewDecisionState(product) : 'pending'
+})
+
+const activeDecisionToneClass = computed(() => {
+    const bucket = activeReviewDecisionState.value
+    if (bucket === 'approved') return 'bg-emerald-500/15 text-emerald-200 border-emerald-500/35'
+    if (bucket === 'ambiguous') return 'bg-amber-500/15 text-amber-100 border-amber-500/35'
+    if (bucket === 'blocked') return 'bg-rose-500/15 text-rose-100 border-rose-500/35'
+    return 'bg-sky-500/15 text-sky-100 border-sky-500/35'
+})
+
+const activeDecisionLabel = computed(() => {
+    const bucket = activeReviewDecisionState.value
+    if (bucket === 'approved') return 'Aprovado'
+    if (bucket === 'ambiguous') return 'Suspeito'
+    if (bucket === 'blocked') return 'Bloqueado'
+    return 'Pendente'
+})
+
+const selectedImportModeLabel = computed(() => importMode.value === 'append' ? 'Adicionar' : 'Substituir')
+const selectedTargetModeLabel = computed(() => targetMode.value === 'multi-frame' ? 'Multi-frame' : 'Zona atual')
+const selectedLabelTemplateSummary = computed(() => selectedLabelTemplate.value?.name || 'Padrão da zona')
+const importImpactSummary = computed(() => {
+    const totalProducts = products.value.length
+    if (targetMode.value === 'multi-frame') {
+        return `${multiFrameImportCount.value} ofertas serão distribuídas nos frames selecionados.`
+    }
+    const existing = Math.max(0, Number(props.existingCount || 0))
+    if (importMode.value === 'replace') {
+        return `${totalProducts} produtos novos entrarão e ${existing} itens atuais da zona serão substituídos.`
+    }
+    return `${totalProducts} produtos serão adicionados aos ${existing} itens já presentes na zona.`
+})
+
+const importReadinessText = computed(() => {
+    if (imageStatusCounters.value.blocked > 0) return 'Importação travada: existem itens bloqueados que ainda precisam de imagem ou revisão manual.'
+    if (imageStatusCounters.value.ambiguous > 0) return 'Importação aguardando sua escolha: existem itens suspeitos com mais de uma imagem possível.'
+    if (imageStatusCounters.value.pending > 0) return 'A fila ainda está processando imagens.'
+    return 'Lote pronto para importar com o template e destino selecionados.'
+})
+
+const importReadinessToneClass = computed(() => {
+    if (imageStatusCounters.value.blocked > 0) return 'border-rose-500/25 bg-rose-500/10 text-rose-100'
+    if (imageStatusCounters.value.ambiguous > 0) return 'border-amber-500/25 bg-amber-500/10 text-amber-100'
+    if (imageStatusCounters.value.pending > 0) return 'border-sky-500/25 bg-sky-500/10 text-sky-100'
+    return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-100'
+})
+
+watch(
+    () => [props.modelValue, step.value, activeReviewRow.value?.productId || '', activeReviewDecisionState.value] as const,
+    ([open, currentStep, productId, decision]) => {
+        if (!open || currentStep !== 'review' || !productId) return
+        if (decision === 'approved') return
+        const row = activeReviewRow.value
+        if (!row) return
+        void fetchReviewSuggestionsForRow(row)
+    }
+)
+
+const formatCandidateConfidence = (candidate: SmartProductImageCandidate): string => {
+    const confidence = Number(candidate?.confidence)
+    if (Number.isFinite(confidence)) return `${Math.round(Math.max(0, Math.min(1, confidence)) * 100)}%`
+    const score = Number(candidate?.score)
+    if (Number.isFinite(score)) return score.toFixed(score >= 10 ? 0 : 2)
+    return '—'
+}
+
+const applyCandidateToReviewRow = async (
+    row: { index: number; productId: string; product: SmartProduct } | null,
+    candidate: SmartProductImageCandidate
+) => {
+    if (!row || !candidate) return
+    await applyImageCandidate(row.index, candidate, {
+        bgPolicy: imageBgPolicy.value,
+        matchMode: imageMatchMode.value
+    })
+}
+
+const fetchReviewSuggestionsForRow = async (
+    row: { index: number; productId: string; product: SmartProduct } | null,
+    options: { force?: boolean } = {}
+) => {
+    if (!row) return
+    const productId = String(row.productId || '').trim()
+    if (!productId) return
+    if (reviewSuggestionLoadingMap.value[productId]) return
+    if (!options.force && Array.isArray(reviewSuggestionMap.value[productId]) && reviewSuggestionMap.value[productId]!.length > 0) {
+        return
+    }
+    if (
+        !options.force &&
+        Array.isArray(row.product?.imageCandidates) &&
+        row.product.imageCandidates.some((candidate) => candidate?.source === 's3')
+    ) {
+        return
+    }
+
+    const query = buildCacheSearchTerm(row.product)
+    if (query.length < MIN_ASSET_SEARCH_CHARS) return
+
+    reviewSuggestionLoadingMap.value = { ...reviewSuggestionLoadingMap.value, [productId]: true }
+    reviewSuggestionErrorMap.value = { ...reviewSuggestionErrorMap.value, [productId]: null }
+
+    try {
+        const headers = await getApiAuthHeaders()
+        const data = await fetchUntyped('/api/assets', {
+            headers,
+            query: {
+                q: query,
+                limit: 8,
+                source: 'uploads',
+                fresh: options.force ? '1' : undefined,
+                productName: String(row.product?.name || ''),
+                brand: String(row.product?.brand || ''),
+                flavor: String(row.product?.flavor || ''),
+                weight: String(row.product?.weight || '')
+            }
+        })
+        const next = Array.isArray(data)
+            ? data
+                .map((asset, index) => mapAssetToReviewCandidate(asset, index))
+                .filter((candidate): candidate is SmartProductImageCandidate => !!candidate)
+                .slice(0, 6)
+            : []
+        reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: next }
+    } catch (error: any) {
+        reviewSuggestionErrorMap.value = {
+            ...reviewSuggestionErrorMap.value,
+            [productId]: String(error?.data?.message || error?.message || 'Falha ao carregar sugestões internas.')
+        }
+        reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: [] }
+    } finally {
+        reviewSuggestionLoadingMap.value = { ...reviewSuggestionLoadingMap.value, [productId]: false }
+    }
+}
 
 const activeReviewRowVisibleIndex = computed(() => {
     if (!filteredProductRows.value.length) return -1
@@ -975,19 +1260,21 @@ const toggleAdvancedFields = (rowId: string) => {
 }
 
 const thumbnailUiStateClass = (row: any): string => {
-    const status = String(row?.status || '')
-    if (status === 'done') return 'ring-1 ring-emerald-500/50 border-emerald-700/70'
-    if (status === 'processing') return 'ring-1 ring-blue-500/55 border-blue-700/70'
-    if (status === 'review_pending') return 'ring-1 ring-amber-500/55 border-amber-700/70'
-    if (status === 'error') return 'ring-1 ring-rose-500/55 border-rose-700/70'
+    const bucket = getReviewDecisionState(row as SmartProduct)
+    if (bucket === 'approved') return 'ring-1 ring-emerald-500/50 border-emerald-700/70'
+    if (bucket === 'ambiguous') return 'ring-1 ring-amber-500/55 border-amber-700/70'
+    if (bucket === 'blocked') return 'ring-1 ring-rose-500/55 border-rose-700/70'
+    if (String(row?.status || '') === 'processing') return 'ring-1 ring-blue-500/55 border-blue-700/70'
     return 'ring-1 ring-zinc-700/60 border-zinc-700'
 }
 
 const thumbnailStatusText = (row: any): string => {
     const status = String(row?.status || '')
+    const bucket = getReviewDecisionState(row as SmartProduct)
     if (status === 'pending' && isRetryingImage(row)) return 'Reprocessando'
     if (status === 'processing') return 'Processando...'
-    if (status === 'review_pending') return 'Revisão pendente'
+    if (bucket === 'ambiguous') return 'Escolher imagem'
+    if (bucket === 'blocked') return 'Bloqueado'
     if (status === 'error') return 'Sem imagem'
     if (status === 'pending') return 'Aguardando'
     return 'Sem imagem'
@@ -1415,6 +1702,7 @@ const importButtonDisabled = computed(() => {
     if (isSubmittingImport.value) return true
     if (isProcessingProducts.value) return true
     if (isImageQueueLocked.value) return true
+    if (imageStatusCounters.value.attention > 0) return true
     if (targetMode.value !== 'multi-frame') return false
     if (!canUseMultiFrame.value) return true
     if (selectedFrameIds.value.length === 0) return true
@@ -1661,6 +1949,8 @@ const markManualImageSelection = (product: SmartProduct, reason: string) => {
     product.imageConfidence = 1
     product.imageDecisionReason = reason
     product.imageReviewReason = reason
+    product.imageDecision = 'approved'
+    product.imageCandidates = []
 }
 
 watch(showAssetPicker, (open) => {
@@ -1745,6 +2035,8 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
     product.imageUrl = localPreview
     product.status = 'processing'
     product.error = undefined
+    product.imageDecision = undefined
+    product.imageCandidates = []
 
     try {
         const compressed = await compressImageInBrowser(file).catch(() => file)
@@ -2079,7 +2371,7 @@ const getAssetDisplayName = (asset: any): string => {
                     <div class="grid gap-2 grid-cols-1 sm:grid-cols-3">
                         <div class="rounded-xl border border-emerald-500/15 bg-emerald-500/8 p-3 text-[11px]">
                             <div class="text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-200/75">Prontas</div>
-                            <div class="mt-1 text-lg font-semibold text-white">{{ imageStatusCounters.done }}</div>
+                            <div class="mt-1 text-lg font-semibold text-white">{{ imageStatusCounters.approved }}</div>
                             <div class="text-[10px] text-emerald-100/65">itens concluidos de {{ imageStatusCounters.total }}</div>
                         </div>
                         <div class="rounded-xl border border-sky-500/15 bg-sky-500/8 p-3 text-[11px]">
@@ -2088,10 +2380,23 @@ const getAssetDisplayName = (asset: any): string => {
                             <div class="text-[10px] text-sky-100/65">aguardando busca, pausa ou retry</div>
                         </div>
                         <div class="rounded-xl border border-amber-500/15 bg-amber-500/8 p-3 text-[11px]">
-                            <div class="text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-200/75">Conflito</div>
-                            <div class="mt-1 text-lg font-semibold text-white">{{ imageStatusCounters.conflict }}</div>
-                            <div class="text-[10px] text-amber-100/65">pedem decisao manual ou novo processamento</div>
+                            <div class="text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-200/75">Suspeitos</div>
+                            <div class="mt-1 text-lg font-semibold text-white">{{ imageStatusCounters.ambiguous }}</div>
+                            <div class="text-[10px] text-amber-100/65">pedem escolha entre candidatas</div>
                         </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <button
+                            v-for="option in reviewFilterOptions"
+                            :key="option.value"
+                            type="button"
+                            class="h-8 rounded-full px-3 text-[10px] font-bold uppercase tracking-[0.16em] border transition-all"
+                            :class="reviewFilter === option.value ? 'bg-white/10 text-white border-white/15' : 'text-zinc-400 border-white/5 hover:bg-white/5'"
+                            @click="reviewFilter = option.value"
+                        >
+                            {{ option.label }} · {{ option.count }}
+                        </button>
                     </div>
 
                     <div
@@ -2353,6 +2658,187 @@ const getAssetDisplayName = (asset: any): string => {
                                 <Check v-else class="w-3.5 h-3.5 mr-2" />
                                 Importar {{ multiFrameImportCount }} Produtos
                             </Button>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    v-if="activeReviewRow"
+                    class="shrink-0 grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_340px]"
+                >
+                    <div class="rounded-2xl border border-white/10 bg-zinc-950/80 p-4 space-y-4 shadow-[0_16px_38px_rgba(0,0,0,0.24)]">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em]" :class="activeDecisionToneClass">
+                                        {{ activeDecisionLabel }}
+                                    </span>
+                                    <span v-if="activeReviewCandidates.length" class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
+                                        {{ activeReviewCandidates.length }} sugest{{ activeReviewCandidates.length > 1 ? 'oes' : 'ao' }}
+                                    </span>
+                                </div>
+                                <div class="mt-2 text-lg font-semibold text-white leading-tight">
+                                    {{ activeReviewRow.product.name || `Produto ${activeReviewRow.index + 1}` }}
+                                </div>
+                                <div class="mt-1 text-[11px] text-zinc-400">
+                                    {{ activeReviewRow.product.brand || 'Sem marca' }}
+                                    <span v-if="activeReviewRow.product.weight"> • {{ activeReviewRow.product.weight }}</span>
+                                    <span v-if="activeReviewRow.product.productCode"> • {{ activeReviewRow.product.productCode }}</span>
+                                </div>
+                                <div class="mt-2 text-[11px] leading-relaxed text-zinc-500">
+                                    {{ activeReviewRow.product.imageReviewReason || activeReviewRow.product.imageDecisionReason || 'Analise a melhor imagem, confirme template e importe com seguranca.' }}
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 shrink-0">
+                                <button
+                                    type="button"
+                                    class="h-9 rounded-lg border border-sky-500/35 bg-sky-500/10 text-sky-100 text-[10px] font-bold uppercase tracking-[0.14em] hover:bg-sky-500/20 transition-colors"
+                                    @click="runImageQuickAction(activeReviewRow, 'search')"
+                                >
+                                    Buscar
+                                </button>
+                                <button
+                                    type="button"
+                                    class="h-9 rounded-lg border border-white/10 bg-white/5 text-zinc-100 text-[10px] font-bold uppercase tracking-[0.14em] hover:bg-white/10 transition-colors"
+                                    @click="reprocessProductImage(activeReviewRow.index, true)"
+                                >
+                                    Reprocessar
+                                </button>
+                                <button
+                                    type="button"
+                                    class="h-9 rounded-lg border border-white/10 bg-white/5 text-zinc-100 text-[10px] font-bold uppercase tracking-[0.14em] hover:bg-white/10 transition-colors"
+                                    @click="openAssetPicker(activeReviewRow.index)"
+                                >
+                                    Storage
+                                </button>
+                                <label
+                                    :for="`image-upload-${activeReviewRow.productId}`"
+                                    class="h-9 rounded-lg border border-white/10 bg-white/5 text-zinc-100 text-[10px] font-bold uppercase tracking-[0.14em] hover:bg-white/10 transition-colors inline-flex items-center justify-center cursor-pointer"
+                                >
+                                    Upload
+                                </label>
+                            </div>
+                        </div>
+
+                        <div v-if="activeReviewCandidates.length || isActiveReviewSuggestionLoading || activeReviewSuggestionError" class="space-y-2">
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
+                                    Sugestões do storage e da busca inteligente
+                                </div>
+                                <button
+                                    type="button"
+                                    class="h-7 rounded-lg border border-white/10 bg-white/5 px-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-200 hover:bg-white/10 transition-colors disabled:opacity-50"
+                                    :disabled="isActiveReviewSuggestionLoading"
+                                    @click="fetchReviewSuggestionsForRow(activeReviewRow, { force: true })"
+                                >
+                                    <Loader2 v-if="isActiveReviewSuggestionLoading" class="w-3.5 h-3.5 animate-spin" />
+                                    <span v-else>Atualizar sugestões</span>
+                                </button>
+                            </div>
+                            <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-5 text-[11px] text-zinc-400 leading-relaxed">
+                                Buscando imagens no Wasabi e no histórico interno para este produto.
+                            </div>
+                            <div v-else-if="activeReviewCandidates.length" class="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                                <button
+                                    v-for="candidate in activeReviewCandidates"
+                                    :key="candidate.id"
+                                    type="button"
+                                    class="group rounded-xl overflow-hidden border border-white/10 bg-white/[0.03] text-left hover:border-emerald-400/45 hover:bg-emerald-500/5 transition-all"
+                                    @click="applyCandidateToReviewRow(activeReviewRow, candidate)"
+                                >
+                                    <div class="aspect-[4/3] bg-zinc-900/70 relative">
+                                        <img
+                                            :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)"
+                                            class="w-full h-full object-contain"
+                                            alt="Candidata de imagem"
+                                        />
+                                        <div v-if="candidate.recommended" class="absolute top-2 left-2 rounded-full bg-emerald-500/90 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
+                                            Recomendada
+                                        </div>
+                                        <div class="absolute right-2 top-2 rounded-full border border-black/20 bg-black/45 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
+                                            {{ candidate.source === 's3' ? 'Storage' : 'Busca' }}
+                                        </div>
+                                    </div>
+                                    <div class="p-3 space-y-2">
+                                        <div class="flex items-start justify-between gap-2">
+                                            <div class="min-w-0">
+                                                <div class="text-[11px] font-semibold text-white line-clamp-2">
+                                                    {{ candidate.title || candidate.domain || 'Imagem sugerida' }}
+                                                </div>
+                                                <div class="text-[10px] text-zinc-500">
+                                                    {{ candidate.source === 's3' ? 'Wasabi/Storage' : (candidate.provider || candidate.domain || 'Busca externa') }}
+                                                </div>
+                                            </div>
+                                            <div class="text-right shrink-0">
+                                                <div class="text-[10px] font-semibold text-zinc-200">
+                                                    {{ formatCandidateConfidence(candidate) }}
+                                                </div>
+                                                <div class="text-[9px] text-zinc-500 uppercase tracking-wider">
+                                                    {{ candidate.confidence != null ? 'Conf.' : 'Score' }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div v-if="candidate.reason" class="text-[10px] text-zinc-500 leading-relaxed line-clamp-2">
+                                            {{ candidate.reason }}
+                                        </div>
+                                        <div class="pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-200 group-hover:text-emerald-100">
+                                            Usar esta imagem
+                                        </div>
+                                    </div>
+                                </button>
+                            </div>
+                            <div v-else class="rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-5 text-[11px] text-zinc-500 leading-relaxed">
+                                {{ activeReviewSuggestionError || 'Ainda não há sugestões automáticas para este item.' }}
+                            </div>
+                            <div v-if="activeReviewSuggestionError" class="text-[10px] text-rose-200/80 leading-relaxed">
+                                {{ activeReviewSuggestionError }}
+                            </div>
+                        </div>
+                        <div v-else class="rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-5 text-[11px] text-zinc-500 leading-relaxed">
+                            Não há candidatas prontas para este item. Use Storage, Upload ou Reprocessar para fechar a decisão antes da importação.
+                        </div>
+                    </div>
+
+                    <div class="rounded-2xl border border-white/10 bg-zinc-950/80 p-4 space-y-4 shadow-[0_16px_38px_rgba(0,0,0,0.24)]">
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Resumo da importação</div>
+                            <div class="mt-2 text-sm font-semibold text-white">Tudo visível antes de importar</div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 text-[11px]">
+                            <div class="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                                <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Modo</div>
+                                <div class="mt-1 text-zinc-100 font-semibold">{{ selectedImportModeLabel }}</div>
+                            </div>
+                            <div class="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                                <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Destino</div>
+                                <div class="mt-1 text-zinc-100 font-semibold">{{ selectedTargetModeLabel }}</div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-3">
+                            <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Etiqueta ativa</div>
+                            <div class="flex items-center gap-3">
+                                <img
+                                    v-if="selectedLabelTemplate?.previewDataUrl"
+                                    :src="selectedLabelTemplate.previewDataUrl"
+                                    alt="Preview da etiqueta"
+                                    class="w-24 h-14 rounded-lg border border-zinc-700 bg-zinc-900/70 object-contain"
+                                />
+                                <div class="min-w-0">
+                                    <div class="text-sm font-semibold text-white line-clamp-2">{{ selectedLabelTemplateSummary }}</div>
+                                    <div class="text-[11px] text-zinc-500">Aplicada aos novos cards desta importação</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border p-3 text-[11px] leading-relaxed" :class="importReadinessToneClass">
+                            {{ importReadinessText }}
+                        </div>
+
+                        <div class="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-[11px] text-zinc-300 leading-relaxed">
+                            {{ importImpactSummary }}
                         </div>
                     </div>
                 </div>
@@ -2688,6 +3174,12 @@ const getAssetDisplayName = (asset: any): string => {
                                         class="mt-1 text-[9px] text-zinc-500 leading-snug"
                                     >
                                         {{ row.product.imageReviewReason }}
+                                    </div>
+                                    <div
+                                        v-if="row.product?.imageCandidates?.length"
+                                        class="mt-2 text-[9px] text-zinc-400 leading-snug"
+                                    >
+                                        {{ row.product.imageCandidates.length }} sugest{{ row.product.imageCandidates.length > 1 ? 'oes' : 'ao' }} disponíve{{ row.product.imageCandidates.length > 1 ? 'is' : 'l' }}. Selecione a linha para escolher.
                                     </div>
                                 </td>
 

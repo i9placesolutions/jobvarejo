@@ -242,6 +242,16 @@ export const hasWeightInNormalized = (normalized: string): boolean => {
   return extractWeightTokens(words).length > 0
 }
 
+export type RankedS3MatchCandidate = {
+  key: string
+  score: number
+  ratio?: number
+  overlap?: number
+  reason: string
+  kind: 'exact' | 'strict' | 'relaxed' | 'partial'
+  alias?: string
+}
+
 export const buildExpandedNormalizedCandidates = (opts: {
   rawInputs: string[]
   enforceWeight: boolean
@@ -615,6 +625,36 @@ export const findBestS3Match = async (opts: {
     const normalizedKeyPath = getNormalizedS3KeyPathForMatch(key)
     const aliasNormalized = alias ? normalizeAliasForMatch(alias) : ''
     const normalizedKey = mergeNormalizedSearchTexts(normalizedKeyBase, normalizedKeyPath, aliasNormalized)
+    const exactKeyTokens = tokenSet(normalizedKey || aliasNormalized || normalizedKeyPath || normalizedKeyBase)
+
+    const exactVariant = queryVariants.find(({ normalized }) =>
+      normalized === normalizedKeyBase ||
+      normalized === normalizedKeyPath ||
+      normalized === aliasNormalized ||
+      normalized === normalizedKey
+    )
+    if (exactVariant) {
+      let exactScore = 3
+      if (exactVariant.normalized === aliasNormalized) exactScore += 1.35
+      if (exactVariant.normalized === normalizedKeyBase) exactScore += 0.95
+      if (exactVariant.normalized === normalizedKeyPath) exactScore += 0.75
+      if (exactVariant.normalized === normalizedKey) exactScore += 0.55
+      if (key.startsWith('uploads/')) exactScore += 0.2
+      if (requiredBrandTokens.length > 0 && hasAnyToken(requiredBrandTokens, exactKeyTokens)) exactScore += 0.15
+      if (requiredWeightTokens.length > 0 && requiredWeightTokens.some((token) => exactKeyTokens.has(token))) exactScore += 0.18
+      if (!bestExact || exactScore > bestExact.score) {
+        const exactReason = exactVariant.normalized === aliasNormalized
+          ? 'alias-exato'
+          : exactVariant.normalized === normalizedKeyBase
+            ? 'arquivo-exato'
+            : exactVariant.normalized === normalizedKeyPath
+              ? 'caminho-exato'
+              : 'combinado-exato'
+        bestExact = { key, score: exactScore, reason: exactReason }
+      }
+      continue
+    }
+
     if (!normalizedKey) continue
     const keyTokens = tokenSet(normalizedKey)
     if (keyTokens.size < 2) continue
@@ -644,33 +684,6 @@ export const findBestS3Match = async (opts: {
 
     if (hasRequiredProductCodeSignal && opts.strictOnly && !requiredProductCodeTokens.some((token) => keyTokens.has(token))) {
       continue
-    }
-
-    const exactVariant = queryVariants.find(({ normalized }) =>
-      normalized === normalizedKeyBase ||
-      normalized === normalizedKeyPath ||
-      normalized === aliasNormalized ||
-      normalized === normalizedKey
-    )
-    if (exactVariant) {
-      let exactScore = 3
-      if (exactVariant.normalized === aliasNormalized) exactScore += 1.35
-      if (exactVariant.normalized === normalizedKeyBase) exactScore += 0.95
-      if (exactVariant.normalized === normalizedKeyPath) exactScore += 0.75
-      if (exactVariant.normalized === normalizedKey) exactScore += 0.55
-      if (key.startsWith('uploads/')) exactScore += 0.2
-      if (requiredBrandTokens.length > 0 && hasAnyToken(requiredBrandTokens, keyTokens)) exactScore += 0.15
-      if (requiredWeightTokens.length > 0 && requiredWeightTokens.some((token) => keyTokens.has(token))) exactScore += 0.18
-      if (!bestExact || exactScore > bestExact.score) {
-        const exactReason = exactVariant.normalized === aliasNormalized
-          ? 'alias-exato'
-          : exactVariant.normalized === normalizedKeyBase
-            ? 'arquivo-exato'
-            : exactVariant.normalized === normalizedKeyPath
-              ? 'caminho-exato'
-              : 'combinado-exato'
-        bestExact = { key, score: exactScore, reason: exactReason }
-      }
     }
 
     for (let idx = 0; idx < queryVariants.length; idx++) {
@@ -810,4 +823,255 @@ export const findBestS3Match = async (opts: {
   }
 
   return null
+}
+
+export const findTopS3Matches = async (opts: {
+  s3: any
+  bucketName: string
+  prefixes: string[]
+  normalizedCandidates: string[]
+  brand?: string
+  flavor?: string
+  weight?: string
+  productCode?: string
+  strictOnly?: boolean
+  keyAliases?: Map<string, string>
+  cacheNamespace?: string
+  maxKeysPerPrefix?: number
+  limit?: number
+}): Promise<RankedS3MatchCandidate[]> => {
+  const queryVariants = opts.normalizedCandidates
+    .filter(Boolean)
+    .map((normalized) => ({
+      normalized,
+      tokens: getQueryTokens(normalized),
+      criticalNumericTokens: getCriticalNumericTokens(normalized)
+    }))
+    .filter((entry) => entry.tokens.length > 0)
+
+  if (!queryVariants.length) return []
+
+  const requiredBrandTokens = buildMetadataTokens(String(opts.brand || ''), 2)
+  const requiredFlavorTokens = buildMetadataTokens(String(opts.flavor || ''))
+    .filter((token) => !FLAVOR_NOISE_TOKENS.has(token))
+  const requiredWeightTokens = extractWeightTokens(tokenSet(normalizeSearchTerm(String(opts.weight || ''))))
+  const requiredWeightSet = new Set(requiredWeightTokens)
+  const requiredProductCodeTokens = normalizeSearchTerm(String(opts.productCode || ''))
+    .split(' ')
+    .filter(Boolean)
+    .filter((token) => /^\d{4,}$/.test(token))
+  const hasStrictSignalContext = requiredWeightTokens.length > 0 || requiredFlavorTokens.length > 0 || requiredProductCodeTokens.length > 0
+
+  const listedObjects = await getCachedS3Objects({
+    s3: opts.s3,
+    bucket: opts.bucketName,
+    prefixes: opts.prefixes,
+    ttlMs: 60_000,
+    maxKeysPerPrefix: Math.max(1_000, Number(opts.maxKeysPerPrefix || 8_000)),
+    excludeKeyPrefixes: ['uploads/bg-removed-']
+  })
+
+  const rankedByKey = new Map<string, RankedS3MatchCandidate>()
+  const pushCandidate = (candidate: RankedS3MatchCandidate) => {
+    const existing = rankedByKey.get(candidate.key)
+    if (!existing) {
+      rankedByKey.set(candidate.key, candidate)
+      return
+    }
+
+    if (candidate.score > existing.score) {
+      rankedByKey.set(candidate.key, candidate)
+      return
+    }
+
+    if (candidate.score === existing.score) {
+      const candidateOverlap = Number(candidate.overlap || 0)
+      const existingOverlap = Number(existing.overlap || 0)
+      if (candidateOverlap > existingOverlap) {
+        rankedByKey.set(candidate.key, candidate)
+      }
+    }
+  }
+
+  for (const item of listedObjects) {
+    const key = item.key
+    if (!key) continue
+
+    const alias = String(opts.keyAliases?.get(key) || '').trim()
+    const normalizedKeyBase = getNormalizedS3KeyForMatch(key)
+    const normalizedKeyPath = getNormalizedS3KeyPathForMatch(key)
+    const aliasNormalized = alias ? normalizeAliasForMatch(alias) : ''
+    const normalizedKey = mergeNormalizedSearchTexts(normalizedKeyBase, normalizedKeyPath, aliasNormalized)
+    const keyTokens = tokenSet(normalizedKey || aliasNormalized || normalizedKeyPath || normalizedKeyBase)
+
+    const exactVariant = queryVariants.find(({ normalized }) =>
+      normalized === normalizedKeyBase ||
+      normalized === normalizedKeyPath ||
+      normalized === aliasNormalized ||
+      normalized === normalizedKey
+    )
+    if (exactVariant) {
+      let exactScore = 400
+      if (exactVariant.normalized === aliasNormalized) exactScore += 12
+      if (exactVariant.normalized === normalizedKeyBase) exactScore += 9
+      if (exactVariant.normalized === normalizedKeyPath) exactScore += 7
+      if (exactVariant.normalized === normalizedKey) exactScore += 5
+      if (key.startsWith('uploads/')) exactScore += 2
+      if (requiredBrandTokens.length > 0 && hasAnyToken(requiredBrandTokens, keyTokens)) exactScore += 2
+      if (requiredWeightTokens.length > 0 && requiredWeightTokens.some((token) => keyTokens.has(token))) exactScore += 3
+      const exactReason = exactVariant.normalized === aliasNormalized
+        ? 'Match interno exato por nome renomeado'
+        : exactVariant.normalized === normalizedKeyBase
+          ? 'Match interno exato por nome de arquivo'
+          : exactVariant.normalized === normalizedKeyPath
+            ? 'Match interno exato por caminho do storage'
+            : 'Match interno exato pelo texto combinado'
+      pushCandidate({
+        key,
+        score: exactScore,
+        ratio: 1,
+        overlap: exactVariant.tokens.length,
+        reason: exactReason,
+        kind: 'exact',
+        alias: alias || undefined
+      })
+      continue
+    }
+
+    if (!normalizedKey) continue
+    if (keyTokens.size < 2) continue
+
+    if (requiredBrandTokens.length > 0 && !hasAnyToken(requiredBrandTokens, keyTokens)) {
+      continue
+    }
+    if (requiredFlavorTokens.length > 0 && !hasAnyToken(requiredFlavorTokens, keyTokens)) {
+      const hasVariantSignalInKey = Array.from(VARIANT_KEYWORDS).some((token) => keyTokens.has(token))
+      if (hasVariantSignalInKey) continue
+    }
+
+    const keyWeightTokens = extractWeightTokens(keyTokens)
+    const keyWeightSet = new Set(keyWeightTokens)
+    if (requiredWeightTokens.length > 0) {
+      if (opts.strictOnly && keyWeightTokens.length === 0) {
+        continue
+      }
+      if (!requiredWeightTokens.some((token) => keyWeightSet.has(token))) {
+        continue
+      }
+    }
+
+    if (requiredProductCodeTokens.length > 0 && opts.strictOnly && !requiredProductCodeTokens.some((token) => keyTokens.has(token))) {
+      continue
+    }
+
+    let bestForKey: RankedS3MatchCandidate | null = null
+    const aliasTokens = tokenSet(aliasNormalized)
+    const pathTokens = normalizedKeyPath ? tokenSet(normalizedKeyPath) : new Set<string>()
+
+    for (let idx = 0; idx < queryVariants.length; idx++) {
+      const queryNormalized = queryVariants[idx]!.normalized
+      if (!isFuzzyMatchValid(queryNormalized, normalizedKey)) continue
+
+      const queryTokens = queryVariants[idx]!.tokens
+      const criticalNumericTokens = queryVariants[idx]!.criticalNumericTokens
+      const strictSignals = buildStrongSignalTokens({ normalized: queryNormalized, productCode: opts.productCode })
+      const hasStrongSignalFromQuery = strictSignals.some((token) => keyTokens.has(token))
+      const hasStrongWeightSignal = requiredWeightSet.size > 0 && requiredWeightTokens.some((token) => keyWeightSet.has(token))
+      const hasStrongFlavorSignal = requiredFlavorTokens.length > 0 && hasAnyToken(requiredFlavorTokens, keyTokens)
+      const hasStrongCodeSignal = requiredProductCodeTokens.length > 0 && requiredProductCodeTokens.some((token) => keyTokens.has(token))
+      const hasStrictFallbackSignal = hasStrongSignalFromQuery || hasStrongWeightSignal || hasStrongFlavorSignal || hasStrongCodeSignal
+
+      if (criticalNumericTokens.length > 0 && criticalNumericTokens.some((token) => !keyTokens.has(token))) {
+        continue
+      }
+
+      const { ratio, overlap } = scoreKeyMatch(queryTokens, keyTokens)
+      const aliasOverlap = aliasTokens.size > 0 ? getTokenOverlapCount(queryTokens, aliasTokens) : 0
+      const pathOverlap = pathTokens.size > 0 ? getTokenOverlapCount(queryTokens, pathTokens) : 0
+      const requiresWeightStrict = hasWeightInNormalized(queryNormalized)
+      const shouldEnforceStrictSignals = !!opts.strictOnly && (hasStrictSignalContext || requiredFlavorTokens.length > 0 || requiredWeightTokens.length > 0)
+      const minRatio = shouldEnforceStrictSignals
+        ? (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.92 : 0.9)
+        : (requiresWeightStrict
+          ? (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.9 : 0.86)
+          : (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.86 : 0.8))
+      const minOverlap = queryTokens.length >= 6
+        ? (shouldEnforceStrictSignals ? 5 : 4)
+        : Math.min(shouldEnforceStrictSignals ? 4 : 3, queryTokens.length)
+
+      let candidate: RankedS3MatchCandidate | null = null
+
+      if (ratio >= minRatio && overlap >= minOverlap) {
+        const aliasBoost = aliasOverlap > 0
+          ? ((aliasOverlap / Math.max(1, queryTokens.length)) * 26) + (aliasOverlap === queryTokens.length ? 10 : 0)
+          : 0
+        const pathBoost = pathOverlap > 0 ? Math.min(10, pathOverlap * 1.6) : 0
+        const prefixBoost = key.startsWith('uploads/') ? 8 : (key.startsWith('imagens/') ? 3 : 0)
+        const exactishBoost =
+          queryNormalized === aliasNormalized ? 18 :
+          queryNormalized === normalizedKeyBase ? 14 :
+          queryNormalized === normalizedKeyPath ? 10 :
+          queryNormalized === normalizedKey ? 8 :
+          0
+        candidate = {
+          key,
+          score: 250 + (ratio * 100) + (overlap * 2) + aliasBoost + pathBoost + prefixBoost + exactishBoost,
+          ratio,
+          overlap,
+          reason: 'Match interno forte por nome, metadata e sinais do produto',
+          kind: 'strict',
+          alias: alias || undefined
+        }
+      } else if (queryTokens.length >= 5) {
+        const relaxedMinRatio = requiresWeightStrict ? 0.72 : 0.68
+        const relaxedMinOverlap = queryTokens.length >= 7 ? 4 : 3
+        if (ratio >= relaxedMinRatio && overlap >= relaxedMinOverlap) {
+          const aliasBoost = aliasOverlap > 0
+            ? ((aliasOverlap / Math.max(1, queryTokens.length)) * 14)
+            : 0
+          const pathBoost = pathOverlap > 0 ? Math.min(8, pathOverlap * 1.1) : 0
+          const prefixBoost = key.startsWith('uploads/') ? 5 : (key.startsWith('imagens/') ? 2 : 0)
+          candidate = {
+            key,
+            score: 150 + (ratio * 100) + (overlap * 1.8) + aliasBoost + pathBoost + prefixBoost,
+            ratio,
+            overlap,
+            reason: 'Match interno plausível; precisa de confirmação visual',
+            kind: 'relaxed',
+            alias: alias || undefined
+          }
+        }
+      }
+
+      if (!candidate && hasStrictFallbackSignal && overlap >= Math.min(Math.max(2, queryTokens.length - 2), queryTokens.length) && ratio >= 0.58) {
+        candidate = {
+          key,
+          score: 90 + (ratio * 100) + (overlap * 1.4) + (hasStrongSignalFromQuery ? 10 : 0) + (key.startsWith('uploads/') ? 4 : 0),
+          ratio,
+          overlap,
+          reason: 'Sinais internos relevantes encontrados, mas ainda com dúvida',
+          kind: 'partial',
+          alias: alias || undefined
+        }
+      }
+
+      if (candidate && (!bestForKey || candidate.score > bestForKey.score)) {
+        bestForKey = candidate
+      }
+    }
+
+    if (bestForKey) {
+      pushCandidate(bestForKey)
+    }
+  }
+
+  return Array.from(rankedByKey.values())
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score
+      const aOverlap = Number(a.overlap || 0)
+      const bOverlap = Number(b.overlap || 0)
+      if (bOverlap !== aOverlap) return bOverlap - aOverlap
+      return a.key.localeCompare(b.key)
+    })
+    .slice(0, Math.max(1, Number(opts.limit || 6)))
 }

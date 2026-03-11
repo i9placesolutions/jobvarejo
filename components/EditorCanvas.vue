@@ -11598,6 +11598,12 @@ const removeImageObjectsDeep = (node: any): any => {
 const handleObjectModified = (e: any) => {
     const obj = e.target;
     if (!obj) return;
+
+    if (isProductCardContainer(obj)) {
+        syncCardProductDataNameFromTitleTarget(obj, { normalizeDisplayedText: true });
+        syncCardProductDataTitleWidthFromTarget(obj);
+    }
+
     const transformTarget = e?.transform?.target;
     const isChildImageTransformOnCard = !!(
         obj &&
@@ -12381,6 +12387,178 @@ const assignNewCustomIdsDeep = (obj: any) => {
     }
 };
 
+const isUsableFabricObjectClone = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return false;
+    return typeof obj.set === 'function' && typeof obj.setCoords === 'function';
+};
+
+const cloneFabricObjectSafely = async (
+    original: any,
+    cloneProps: string[],
+    logPrefix = 'duplicate'
+) => {
+    if (!original) return null;
+
+    let cloned: any = null;
+    const isGroup = String((original as any)?.type || '').toLowerCase() === 'group';
+
+    if (isGroup) {
+        try {
+            const json = typeof original.toObject === 'function' ? original.toObject(cloneProps) : null;
+            if (json && fabric?.util?.enlivenObjects) {
+                const objs = await fabric.util.enlivenObjects([json]);
+                cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
+            }
+        } catch (err) {
+            console.warn(`[${logPrefix}] Falha no serialize+enliven do grupo`, err);
+            cloned = null;
+        }
+    }
+
+    if (!isUsableFabricObjectClone(cloned)) {
+        try {
+            const maybe = typeof (original as any).clone === 'function'
+                ? (original as any).clone(cloneProps)
+                : null;
+            if (maybe && typeof maybe.then === 'function') {
+                cloned = await maybe;
+            } else if (isUsableFabricObjectClone(maybe)) {
+                cloned = maybe;
+            }
+        } catch (err) {
+            console.warn(`[${logPrefix}] Falha no clone nativo`, err);
+            cloned = null;
+        }
+    }
+
+    if (!isUsableFabricObjectClone(cloned) && !isGroup) {
+        try {
+            const json = typeof original.toObject === 'function' ? original.toObject(cloneProps) : null;
+            if (json && fabric?.util?.enlivenObjects) {
+                const objs = await fabric.util.enlivenObjects([json]);
+                cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
+            }
+        } catch (err) {
+            console.warn(`[${logPrefix}] Falha no fallback serialize+enliven`, err);
+            cloned = null;
+        }
+    }
+
+    if (
+        isUsableFabricObjectClone(cloned) &&
+        String((cloned as any)?.type || '').toLowerCase() === 'group' &&
+        typeof (cloned as any).getObjects === 'function'
+    ) {
+        const children = (cloned as any).getObjects() || [];
+        const allValid = children.every((child: any) => (
+            child &&
+            typeof child === 'object' &&
+            typeof child.set === 'function' &&
+            typeof child.setCoords === 'function'
+        ));
+
+        if (!allValid) {
+            try {
+                const json = typeof original.toObject === 'function' ? original.toObject(cloneProps) : null;
+                if (json && fabric?.util?.enlivenObjects) {
+                    const objs = await fabric.util.enlivenObjects([json]);
+                    cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
+                }
+            } catch (err) {
+                console.warn(`[${logPrefix}] Falha ao revalidar clone do grupo`, err);
+                cloned = null;
+            }
+        }
+    }
+
+    return isUsableFabricObjectClone(cloned) ? cloned : null;
+};
+
+const resetDuplicatedObjectRuntime = (root: any) => {
+    const visit = (node: any, isRoot = false) => {
+        if (!node || typeof node !== 'object') return;
+
+        try {
+            if (Array.isArray((node as any)._activeObjects)) {
+                (node as any)._activeObjects = [];
+            }
+            if ((node as any)._activeObject) {
+                delete (node as any)._activeObject;
+            }
+            if ((node as any).__corner) {
+                delete (node as any).__corner;
+            }
+            if ((node as any).isEditing && typeof (node as any).exitEditing === 'function') {
+                try { (node as any).exitEditing(); } catch {}
+            }
+        } catch {
+            // ignore runtime cleanup failures
+        }
+
+        if (typeof (node as any).set === 'function') {
+            const nextState: Record<string, any> = {
+                objectCaching: false,
+                noScaleCache: false,
+                statefullCache: false,
+                dirty: true
+            };
+            if (isRoot) {
+                nextState.selectable = true;
+                nextState.evented = true;
+                nextState.hasControls = true;
+                nextState.hasBorders = true;
+            }
+            try { (node as any).set(nextState); } catch {}
+        }
+
+        if (isTextStyleObject(node) && typeof (node as any).initDimensions === 'function') {
+            try { (node as any).initDimensions(); } catch {}
+        }
+
+        if (typeof (node as any).getObjects === 'function') {
+            try {
+                ((node as any).getObjects() || []).forEach((child: any) => visit(child, false));
+            } catch {
+                // ignore child traversal failures
+            }
+        }
+        if ((node as any).clipPath && typeof (node as any).clipPath === 'object') {
+            visit((node as any).clipPath, false);
+        }
+
+        try { (node as any).setCoords?.(); } catch {}
+    };
+
+    visit(root, true);
+
+    if (
+        root &&
+        String((root as any)?.type || '').toLowerCase() === 'group' &&
+        ((root as any).isSmartObject || (root as any).isProductCard || isLikelyProductCard(root))
+    ) {
+        try {
+            (root as any).set({ subTargetCheck: true, interactive: true, dirty: true });
+            ((root as any).getObjects?.() || []).forEach((child: any) => {
+                const isBackground = child?.name === 'offerBackground' || child?.name === 'price_bg';
+                child?.set?.({
+                    selectable: !isBackground,
+                    evented: !isBackground,
+                    hasControls: !isBackground,
+                    hasBorders: !isBackground,
+                    objectCaching: false,
+                    noScaleCache: false,
+                    statefullCache: false,
+                    dirty: true
+                });
+                child?.setCoords?.();
+            });
+            (root as any).setCoords?.();
+        } catch {
+            // ignore product-card specific cleanup failures
+        }
+    }
+};
+
 const findProductCardParentGroup = (obj: any) => {
     if (!obj || !canvas.value) return null;
     const direct = (obj as any).group;
@@ -12417,6 +12595,81 @@ const findProductCardParentGroup = (obj: any) => {
     return null;
 };
 
+const insertObjectIntoGroupWithoutRelayout = (
+    group: any,
+    object: any,
+    opts: {
+        insertAfter?: any;
+        localLeft?: number;
+        localTop?: number;
+    } = {}
+): boolean => {
+    if (!canvas.value || !group || !object) return false;
+
+    const localLeft = Number(opts.localLeft);
+    const localTop = Number(opts.localTop);
+    if (Number.isFinite(localLeft) || Number.isFinite(localTop)) {
+        object.set?.({
+            left: Number.isFinite(localLeft) ? localLeft : (Number((object as any).left) || 0),
+            top: Number.isFinite(localTop) ? localTop : (Number((object as any).top) || 0)
+        });
+    }
+
+    const layoutManager = (group as any).layoutManager;
+    const originalPerformLayout = layoutManager?.performLayout;
+    if (layoutManager) layoutManager.performLayout = () => {};
+
+    try {
+        const groupObjects = typeof (group as any).getObjects === 'function'
+            ? ((group as any).getObjects() || [])
+            : (Array.isArray((group as any)._objects) ? (group as any)._objects : []);
+        const insertAfter = opts.insertAfter;
+        const sourceIndex = insertAfter ? groupObjects.indexOf(insertAfter) : -1;
+        const insertIndex = sourceIndex >= 0
+            ? Math.min(sourceIndex + 1, groupObjects.length)
+            : -1;
+
+        if (insertIndex >= 0 && typeof (group as any).insertAt === 'function') {
+            (group as any).insertAt(insertIndex, object);
+        } else if (Array.isArray((group as any)._objects)) {
+            if (insertIndex >= 0) {
+                (group as any)._objects.splice(insertIndex, 0, object);
+            } else {
+                (group as any)._objects.push(object);
+            }
+            (object as any).group = group;
+            object.canvas = canvas.value;
+        } else if (typeof (group as any).add === 'function') {
+            (group as any).add(object);
+        } else {
+            return false;
+        }
+    } finally {
+        if (layoutManager) layoutManager.performLayout = originalPerformLayout;
+    }
+
+    object.set?.({
+        selectable: true,
+        evented: true,
+        hasControls: true,
+        hasBorders: true,
+        objectCaching: false,
+        noScaleCache: false,
+        statefullCache: false,
+        dirty: true
+    });
+    object.setCoords?.();
+
+    group.set?.({ subTargetCheck: true, interactive: true, dirty: true });
+    group.setCoords?.();
+
+    if (shouldApplyContainmentConstraints(object)) {
+        applyContainmentConstraints(object);
+    }
+
+    return true;
+};
+
 const duplicateObjectWithContext = async (
     original: any,
     opts: { offsetX?: number; offsetY?: number } = {}
@@ -12426,15 +12679,11 @@ const duplicateObjectWithContext = async (
     const offsetY = Number(opts.offsetY ?? DUPLICATE_OFFSET) || 0;
 
     let cloned: any = null;
-    try {
-        cloned = await (original as any).clone(DUPLICATE_CLONE_PROPS);
-    } catch (err) {
-        console.warn('[duplicate] Falha ao clonar objeto', err);
-        return null;
-    }
+    cloned = await cloneFabricObjectSafely(original, DUPLICATE_CLONE_PROPS, 'duplicate');
     if (!cloned) return null;
 
     assignNewCustomIdsDeep(cloned);
+    resetDuplicatedObjectRuntime(cloned);
 
     const parentCardGroup = findProductCardParentGroup(original);
     const cloneInsideCard =
@@ -12446,11 +12695,11 @@ const duplicateObjectWithContext = async (
     if (cloneInsideCard && parentCardGroup) {
         const localLeft = Number((original as any).left) || 0;
         const localTop = Number((original as any).top) || 0;
-        const targetCanvas = groupLocalToCanvasPoint(parentCardGroup, localLeft + offsetX, localTop + offsetY);
+        const canInsertWithoutRelayout = (original as any)?.group === parentCardGroup;
 
         cloned.set({
-            left: targetCanvas.x,
-            top: targetCanvas.y,
+            left: canInsertWithoutRelayout ? (localLeft + offsetX) : groupLocalToCanvasPoint(parentCardGroup, localLeft + offsetX, localTop + offsetY).x,
+            top: canInsertWithoutRelayout ? (localTop + offsetY) : groupLocalToCanvasPoint(parentCardGroup, localLeft + offsetX, localTop + offsetY).y,
             originX: (original as any).originX || 'center',
             originY: (original as any).originY || 'center',
             angle: (original as any).angle || 0,
@@ -12468,9 +12717,23 @@ const duplicateObjectWithContext = async (
         // Child clones inside product cards should not carry top-level zone/frame bindings.
         cloned.parentZoneId = undefined;
         cloned.parentFrameId = undefined;
-        safeAddWithUpdate(parentCardGroup, cloned);
-        parentCardGroup.set({ subTargetCheck: true, interactive: true });
-        parentCardGroup.setCoords?.();
+
+        const inserted = canInsertWithoutRelayout
+            ? insertObjectIntoGroupWithoutRelayout(parentCardGroup, cloned, {
+                insertAfter: original,
+                localLeft: localLeft + offsetX,
+                localTop: localTop + offsetY
+            })
+            : false;
+
+        if (!inserted) {
+            safeAddWithUpdate(parentCardGroup, cloned);
+            parentCardGroup.set({ subTargetCheck: true, interactive: true });
+            parentCardGroup.setCoords?.();
+            if (shouldApplyContainmentConstraints(cloned)) {
+                applyContainmentConstraints(cloned);
+            }
+        }
         return cloned;
     }
 
@@ -12795,6 +13058,7 @@ const finalizeDuplicatedObjects = (clones: any[]) => {
     const affectedZones = new Map<string, any>();
     clones.forEach((obj: any) => {
         if (!obj) return;
+        resetDuplicatedObjectRuntime(obj);
         reapplyRuntimeVisualPatchesTree(obj);
         if (obj?.isFrame) {
             getOrCreateFrameClipRect(obj);
@@ -12823,10 +13087,13 @@ const finalizeDuplicatedObjects = (clones: any[]) => {
     });
 
     const topLevelClones = clones.filter((obj: any) => !obj?.group);
+    canvas.value.discardActiveObject();
     if (topLevelClones.length > 1 && fabric?.ActiveSelection) {
         const selection = new fabric.ActiveSelection(topLevelClones, { canvas: canvas.value });
+        selection.setCoords?.();
         canvas.value.setActiveObject(selection);
     } else {
+        clones[0]?.setCoords?.();
         canvas.value.setActiveObject(clones[0]);
     }
 
@@ -13359,10 +13626,12 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                             let targetTop = Number((clipItem as any)._sourceTop) || 0;
                             targetLeft += 20;
                             targetTop += 20;
-                            const targetCanvas = groupLocalToCanvasPoint(originalParentGroup, targetLeft, targetTop);
+                            const insertAfter = activeBeforePaste && (activeBeforePaste as any).group === originalParentGroup
+                                ? activeBeforePaste
+                                : null;
                             cloned.set({
-                                left: targetCanvas.x,
-                                top: targetCanvas.y,
+                                left: targetLeft,
+                                top: targetTop,
                                 originX: 'center',
                                 originY: 'center',
                                 angle: (clipItem as any).angle || 0,
@@ -13377,9 +13646,18 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                                 hasBorders: true,
                             });
 
-                            safeAddWithUpdate(originalParentGroup, cloned);
-                            originalParentGroup.set({ subTargetCheck: true, interactive: true });
-                            originalParentGroup.setCoords?.();
+                            const inserted = insertObjectIntoGroupWithoutRelayout(originalParentGroup, cloned, {
+                                insertAfter,
+                                localLeft: targetLeft,
+                                localTop: targetTop
+                            });
+                            if (!inserted) {
+                                const targetCanvas = groupLocalToCanvasPoint(originalParentGroup, targetLeft, targetTop);
+                                cloned.set({ left: targetCanvas.x, top: targetCanvas.y });
+                                safeAddWithUpdate(originalParentGroup, cloned);
+                                originalParentGroup.set({ subTargetCheck: true, interactive: true });
+                                originalParentGroup.setCoords?.();
+                            }
                             canvas.value.setActiveObject(cloned);
                             canvas.value.requestRenderAll();
                             refreshCanvasObjects();
@@ -13506,11 +13784,13 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                     let targetTop = Number((clip as any)._sourceTop) || 0;
                     targetLeft += 20;
                     targetTop += 20;
-                    const targetCanvas = groupLocalToCanvasPoint(originalParentGroup, targetLeft, targetTop);
+                    const insertAfter = activeBeforePaste && (activeBeforePaste as any).group === originalParentGroup
+                        ? activeBeforePaste
+                        : null;
 
                     cloned.set({
-                        left: targetCanvas.x,
-                        top: targetCanvas.y,
+                        left: targetLeft,
+                        top: targetTop,
                         originX: 'center',
                         originY: 'center',
                         angle: (clip as any).angle || 0,
@@ -13525,9 +13805,18 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                         hasBorders: true,
                     });
 
-                    safeAddWithUpdate(originalParentGroup, cloned);
-                    originalParentGroup.set({ subTargetCheck: true, interactive: true });
-                    originalParentGroup.setCoords?.();
+                    const inserted = insertObjectIntoGroupWithoutRelayout(originalParentGroup, cloned, {
+                        insertAfter,
+                        localLeft: targetLeft,
+                        localTop: targetTop
+                    });
+                    if (!inserted) {
+                        const targetCanvas = groupLocalToCanvasPoint(originalParentGroup, targetLeft, targetTop);
+                        cloned.set({ left: targetCanvas.x, top: targetCanvas.y });
+                        safeAddWithUpdate(originalParentGroup, cloned);
+                        originalParentGroup.set({ subTargetCheck: true, interactive: true });
+                        originalParentGroup.setCoords?.();
+                    }
 
                     canvas.value.setActiveObject(cloned);
                     canvas.value.requestRenderAll();
@@ -17857,6 +18146,11 @@ const setupReactivity = () => {
     canvas.value.on('object:modified', (e: any) => {
         const obj = e.target;
         if (obj) {
+            if (isProductCardContainer(obj)) {
+                syncCardProductDataNameFromTitleTarget(obj, { normalizeDisplayedText: true });
+                syncCardProductDataTitleWidthFromTarget(obj);
+            }
+
             // Product card zone-lock should be finalized here to avoid per-frame work.
             if (!isLikelyProductZone(obj) && !obj.isFrame) {
                 const isCardLike = !!(
@@ -17878,6 +18172,7 @@ const setupReactivity = () => {
             // Re-center textboxes inside product cards after resize
             if (obj.type === 'textbox' && obj.originX === 'center' && obj.group && (obj.group.isSmartObject || obj.group.isProductCard || isLikelyProductCard(obj.group))) {
                 obj.set({ left: 0 });
+                syncCardProductDataNameFromTitleTarget(obj, { normalizeDisplayedText: true });
                 syncCardProductDataTitleWidthFromTarget(obj);
                 obj.setCoords();
                 canvas.value.requestRenderAll();
@@ -17902,16 +18197,21 @@ const setupReactivity = () => {
 
     // Keep `_productData.name` aligned with the visible title text so manual line breaks survive
     // all persistence/rebuild paths (reload, re-import review modal, relayout side-effects).
-    const syncCardProductDataNameFromTitleTarget = (target: any): boolean => {
-        if (!target || !isTextTargetObject(target)) return false;
+    const syncCardProductDataNameFromTitleTarget = (
+        target: any,
+        opts: { normalizeDisplayedText?: boolean } = {}
+    ): boolean => {
+        const { card, titleObj } = resolveCardTitleStateFromTarget(target);
+        if (!card || !titleObj) return false;
 
-        const card = findProductCardParentGroup(target);
-        if (!card || !isProductCardContainer(card)) return false;
-
-        const titleObj = getCardTitleText(card);
-        if (!titleObj || titleObj !== target) return false;
-
-        const nextName = String((titleObj as any).text ?? '').replace(/\r\n?/g, '\n');
+        const nextName = buildPersistedCardTitleText(titleObj);
+        const currentText = String((titleObj as any).text ?? '').replace(/\r\n?/g, '\n');
+        if (opts.normalizeDisplayedText && !((titleObj as any).isEditing) && nextName && nextName !== currentText) {
+            titleObj.set('text', nextName);
+            if (typeof titleObj.initDimensions === 'function') titleObj.initDimensions();
+            titleObj.dirty = true;
+            titleObj.setCoords?.();
+        }
         (titleObj as any).__rawText = nextName;
 
         const currentName = String((card as any)?._productData?.name ?? '');
@@ -17930,7 +18230,7 @@ const setupReactivity = () => {
     const handleTextChanged = (e: any) => {
         syncTextSelectionSnapshot(e);
         const target = e?.target;
-        const didSyncCardName = syncCardProductDataNameFromTitleTarget(target);
+        const didSyncCardName = syncCardProductDataNameFromTitleTarget(target, { normalizeDisplayedText: false });
         const didSyncCardTitleWidth = syncCardProductDataTitleWidthFromTarget(target);
         if (didSyncCardName || didSyncCardTitleWidth || isTextTargetObject(target)) {
             queueTextEditSave('text-edit');
@@ -17940,7 +18240,7 @@ const setupReactivity = () => {
     const handleTextEditingExited = (e: any) => {
         syncTextSelectionSnapshot(e);
         const target = e?.target;
-        const didSyncCardName = syncCardProductDataNameFromTitleTarget(target);
+        const didSyncCardName = syncCardProductDataNameFromTitleTarget(target, { normalizeDisplayedText: true });
         const didSyncCardTitleWidth = syncCardProductDataTitleWidthFromTarget(target);
         if (didSyncCardName || didSyncCardTitleWidth || isTextTargetObject(target)) {
             flushTextEditSave('text-edit-exit');
@@ -25531,18 +25831,61 @@ const getCardLimitText = (card: any) => {
     ) || null;
 };
 
-function syncCardProductDataTitleWidthFromTarget(target: any): boolean {
-    if (!target) return false;
+const resolveCardTitleStateFromTarget = (target: any): { card: any | null; titleObj: any | null } => {
+    if (!target) return { card: null, titleObj: null };
+
+    if (isProductCardContainer(target)) {
+        const titleObj = getCardTitleText(target);
+        return titleObj ? { card: target, titleObj } : { card: null, titleObj: null };
+    }
 
     const targetType = String(target?.type || '').toLowerCase();
-    if (targetType !== 'text' && targetType !== 'i-text' && targetType !== 'textbox') return false;
+    if (targetType !== 'text' && targetType !== 'i-text' && targetType !== 'textbox') {
+        return { card: null, titleObj: null };
+    }
 
     const card = findProductCardParentGroup(target);
-    if (!card || !isProductCardContainer(card)) return false;
+    if (!card || !isProductCardContainer(card)) return { card: null, titleObj: null };
 
     const titleObj = getCardTitleText(card);
-    if (!titleObj || titleObj !== target) return false;
-    if (!(titleObj as any).__manualTransform) return false;
+    if (!titleObj || titleObj !== target) return { card: null, titleObj: null };
+    return { card, titleObj };
+};
+
+const getRenderedTextboxLinesForPersistence = (textObj: any): string[] => {
+    if (!textObj || String(textObj?.type || '').toLowerCase() !== 'textbox') return [];
+    if (typeof textObj.initDimensions === 'function') textObj.initDimensions();
+
+    const rawLines = Array.isArray((textObj as any).textLines)
+        ? (textObj as any).textLines
+        : (Array.isArray((textObj as any)._textLines) ? (textObj as any)._textLines : []);
+
+    return rawLines
+        .map((line: any) => Array.isArray(line) ? line.join('') : String(line ?? ''))
+        .map((line: string) => line.replace(/\r/g, ''))
+        .filter((line: string, idx: number, arr: string[]) => line.length > 0 || arr.length === 1 || idx < arr.length - 1);
+};
+
+const buildPersistedCardTitleText = (titleObj: any): string => {
+    const rawText = String((titleObj as any)?.text ?? '').replace(/\r\n?/g, '\n');
+    if (rawText.includes('\n')) return rawText;
+
+    const renderedLines = getRenderedTextboxLinesForPersistence(titleObj)
+        .filter((line: string) => line.trim().length > 0);
+    if (renderedLines.length > 1) {
+        return renderedLines.join('\n');
+    }
+    return rawText;
+};
+
+function syncCardProductDataTitleWidthFromTarget(target: any): boolean {
+    const { card, titleObj } = resolveCardTitleStateFromTarget(target);
+    if (!card || !titleObj) return false;
+
+    const currentText = String((titleObj as any).text ?? '').replace(/\r\n?/g, '\n');
+    const renderedLines = getRenderedTextboxLinesForPersistence(titleObj);
+    const hasPersistedWrap = currentText.includes('\n') || renderedLines.length > 1;
+    if (!(titleObj as any).__manualTransform && !hasPersistedWrap) return false;
 
     const nextWidth = Number((titleObj as any).__manualTextWidth ?? titleObj.width ?? 0);
     if (!Number.isFinite(nextWidth) || nextWidth <= 0) return false;
@@ -25563,6 +25906,11 @@ function syncCardProductDataTitleWidthFromTarget(target: any): boolean {
     const widthChanged = !Number.isFinite(currentWidth) || Math.abs(currentWidth - nextWidth) > 0.5;
     const ratioChanged = nextRatio !== null && (!Number.isFinite(currentRatio) || Math.abs(currentRatio - nextRatio) > 0.001);
     if (!widthChanged && !ratioChanged) return false;
+
+    (titleObj as any).__manualTextWidth = nextWidth;
+    if (nextRatio !== null) {
+        (titleObj as any).__manualTextWidthRatio = nextRatio;
+    }
 
     (card as any)._productData = {
         ...baseProductData,

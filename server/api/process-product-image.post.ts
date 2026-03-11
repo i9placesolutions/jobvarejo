@@ -13,8 +13,10 @@ import {
     buildDeterministicS3Key,
     buildExpandedNormalizedCandidates,
     findBestS3Match,
+    findTopS3Matches,
     hasWeightInNormalized,
-    normalizeSearchTerm
+    normalizeSearchTerm,
+    type RankedS3MatchCandidate
 } from "../utils/product-image-matching";
 import {
     ensureBgRemoved,
@@ -38,6 +40,22 @@ type ExternalCandidate = {
     imageHeight?: number;
     score?: number;
 }
+
+type ReviewDecision = 'approved' | 'ambiguous' | 'blocked';
+type ReviewCandidate = {
+    id: string;
+    url: string;
+    previewUrl?: string;
+    key?: string;
+    title?: string;
+    source: 'external' | 's3';
+    provider: string;
+    domain?: string;
+    score?: number;
+    confidence?: number;
+    reason?: string;
+    recommended?: boolean;
+};
 
 const userAssetNamesMemo = new Map<string, { expiresAt: number; data: Map<string, string> }>();
 
@@ -79,6 +97,173 @@ const getUserAssetNamesMap = async (userId: string): Promise<Map<string, string>
     }
 
     return next;
+};
+
+const findExactAssetNameKey = (
+    normalizedCandidates: string[],
+    assetNamesByKey: Map<string, string>
+): string | null => {
+    if (!assetNamesByKey || assetNamesByKey.size === 0) return null;
+
+    const candidateOrder = new Map<string, number>();
+    const candidateSet = new Set<string>();
+    normalizedCandidates
+        .map((value) => normalizeSearchTerm(value))
+        .filter(Boolean)
+        .forEach((value, idx) => {
+            if (!candidateSet.has(value)) candidateOrder.set(value, idx);
+            candidateSet.add(value);
+        });
+
+    if (candidateSet.size === 0) return null;
+
+    let best: { key: string; score: number } | null = null;
+    for (const [key, displayName] of assetNamesByKey.entries()) {
+        const normalizedDisplayName = normalizeSearchTerm(displayName);
+        if (!normalizedDisplayName || !candidateSet.has(normalizedDisplayName)) continue;
+
+        const tokenCount = normalizedDisplayName.split(' ').filter(Boolean).length;
+        const candidateRank = Number(candidateOrder.get(normalizedDisplayName) ?? 999);
+        const prefixBoost = key.startsWith('uploads/')
+            ? 0.4
+            : (key.startsWith('imagens/') ? 0.2 : 0);
+        const score =
+            (tokenCount * 10) +
+            (normalizedDisplayName.length * 0.01) +
+            prefixBoost -
+            (candidateRank * 0.001);
+
+        if (!best || score > best.score) {
+            best = { key, score };
+        }
+    }
+
+    return best?.key || null;
+};
+
+const sanitizeReviewCandidates = (input: unknown): ReviewCandidate[] => {
+    if (!Array.isArray(input)) return [];
+    return input
+        .map((entry: any, index: number) => {
+            const url = String(entry?.url || '').trim();
+            const previewUrl = String(entry?.previewUrl || entry?.url || '').trim();
+            const key = String(entry?.key || '').trim();
+            if (!url && !previewUrl && !key) return null;
+            const sourceRaw = String(entry?.source || '').trim().toLowerCase();
+            const source: 'external' | 's3' = sourceRaw === 's3' ? 's3' : 'external';
+            const provider = String(entry?.provider || sourceRaw || source || 'external').trim() || 'external';
+            const score = Number(entry?.score);
+            const confidence = Number(entry?.confidence);
+            return {
+                id: String(entry?.id || key || url || previewUrl || `candidate-${index + 1}`),
+                url: url || previewUrl,
+                previewUrl: previewUrl || url,
+                key: key || undefined,
+                title: String(entry?.title || '').trim() || undefined,
+                source,
+                provider,
+                domain: String(entry?.domain || '').trim() || undefined,
+                score: Number.isFinite(score) ? Number(score.toFixed(3)) : undefined,
+                confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : undefined,
+                reason: String(entry?.reason || '').trim() || undefined,
+                recommended: !!entry?.recommended
+            } satisfies ReviewCandidate;
+        })
+        .filter((entry): entry is ReviewCandidate => !!entry)
+        .slice(0, 6);
+};
+
+const buildExternalReviewCandidates = (
+    list: ExternalCandidate[],
+    opts: { recommendedIndex?: number; confidence?: number; max?: number; reason?: string } = {}
+): ReviewCandidate[] => {
+    const recommendedIndex = Number.isInteger(opts.recommendedIndex) ? Number(opts.recommendedIndex) : -1;
+    const confidence = Number(opts.confidence);
+    return list
+        .slice(0, Math.max(1, Number(opts.max || 4)))
+        .map((entry, index) => ({
+            id: `external-${index + 1}-${Buffer.from(String(entry?.url || '')).toString('base64').slice(0, 12)}`,
+            url: String(entry?.url || '').trim(),
+            previewUrl: String(entry?.url || '').trim(),
+            title: String(entry?.title || '').trim() || undefined,
+            source: 'external' as const,
+            provider: String(entry?.source || entry?.domain || 'external').trim() || 'external',
+            domain: String(entry?.domain || '').trim() || undefined,
+            score: Number.isFinite(Number(entry?.score)) ? Number(Number(entry.score).toFixed(3)) : undefined,
+            confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : undefined,
+            reason: opts.reason || undefined,
+            recommended: index === recommendedIndex
+        }))
+        .filter((entry) => !!entry.url);
+};
+
+const decodeStorageCandidateTitle = (value: string): string => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const lastPart = raw.split('/').pop() || raw;
+    const withoutExt = lastPart.replace(/\.[^/.]+$/, '');
+    try {
+        return decodeURIComponent(withoutExt).replace(/[-_]+/g, ' ').trim();
+    } catch {
+        return withoutExt.replace(/[-_]+/g, ' ').trim();
+    }
+};
+
+const buildInternalReviewCandidates = async (
+    list: RankedS3MatchCandidate[],
+    userId: string
+): Promise<ReviewCandidate[]> => {
+    const normalizedUserId = String(userId || '').trim();
+    const limited = Array.isArray(list) ? list.slice(0, 6) : [];
+    const out = await Promise.all(limited.map(async (entry, index) => {
+        const key = String(entry?.key || '').trim();
+        if (!key) return null;
+        const resolvedUrl = await resolveStorageReadUrl(key, normalizedUserId);
+        const confidence = entry.kind === 'exact'
+            ? 0.96
+            : entry.kind === 'strict'
+                ? 0.82
+                : entry.kind === 'relaxed'
+                    ? 0.68
+                    : 0.54;
+        return {
+            id: `s3-${Buffer.from(key).toString('base64').slice(0, 12)}`,
+            key,
+            url: resolvedUrl,
+            previewUrl: resolvedUrl,
+            title: String(entry.alias || '').trim() || decodeStorageCandidateTitle(key) || undefined,
+            source: 's3' as const,
+            provider: 'internal',
+            score: Number.isFinite(Number(entry.score)) ? Number(Number(entry.score).toFixed(3)) : undefined,
+            confidence,
+            reason: String(entry.reason || '').trim() || undefined,
+            recommended: index === 0
+        } satisfies ReviewCandidate;
+    }));
+    return out.filter((entry): entry is ReviewCandidate => !!entry);
+};
+
+const mergeReviewCandidates = (...lists: Array<ReviewCandidate[] | undefined | null>): ReviewCandidate[] => {
+    const merged = new Map<string, ReviewCandidate>();
+    for (const list of lists) {
+        if (!Array.isArray(list)) continue;
+        for (const candidate of list) {
+            if (!candidate) continue;
+            const dedupeKey = String(candidate.key || candidate.url || candidate.id || '').trim();
+            if (!dedupeKey) continue;
+            const existing = merged.get(dedupeKey);
+            if (!existing) {
+                merged.set(dedupeKey, candidate);
+                continue;
+            }
+            const existingScore = Number(existing.score || existing.confidence || 0);
+            const nextScore = Number(candidate.score || candidate.confidence || 0);
+            if (nextScore > existingScore) {
+                merged.set(dedupeKey, candidate);
+            }
+        }
+    }
+    return Array.from(merged.values()).slice(0, 6);
 };
 
 const tokenizeNormalized = (value: string, minLen = 3): string[] =>
@@ -383,6 +568,9 @@ export default defineEventHandler(async (event) => {
         const flavor = String(body?.flavor || '').trim() || undefined;
         const weight = String(body?.weight || '').trim() || undefined;
         const productCode = String(body?.productCode || '').trim() || undefined;
+        const selectedCandidateInput = body?.selectedCandidate && typeof body?.selectedCandidate === 'object'
+            ? sanitizeReviewCandidates([body.selectedCandidate])[0] || null
+            : null;
     const matchMode = String(body?.matchMode || '').toLowerCase() === 'fast' ? 'fast' : 'precise';
     const strictMode = matchMode === 'precise' ? true : !!body?.strictMode;
         const allowExternal = body?.allowExternal === undefined ? true : !!body?.allowExternal;
@@ -446,6 +634,12 @@ export default defineEventHandler(async (event) => {
         const candidateKeys = [...new Set(candidateNormalizedTerms.map(buildDeterministicS3Key))];
         const noImageResponse = (reason: string, details: Record<string, any> = {}) => {
             const reasonText = String(reason || '').trim();
+            const {
+                candidates: rawCandidates,
+                reviewPending: reviewPendingOverride,
+                decision: decisionOverride,
+                ...restDetails
+            } = details || {};
             const fallbackNextAction = (() => {
                 if (!strictMode) return undefined;
                 if (reasonText.includes('external_search_config_missing') || reasonText.includes('external_search_disabled')) {
@@ -463,13 +657,18 @@ export default defineEventHandler(async (event) => {
                 return 'Revise manualmente e escolha outra fonte de imagem.';
             })();
 
-            const provider = details?.provider || 'external';
-            const source = String(details?.provider || 'external');
-            const candidateCount = Number(details?.candidateCount || candidateNormalizedTerms.length || 0);
-            const attempts = Number(details?.attempts || 0);
-            const confidence = Number.isFinite(Number(details?.confidence))
-                ? Math.max(0, Math.min(1, Number(details.confidence)))
+            const provider = restDetails?.provider || 'external';
+            const source = String(restDetails?.provider || 'external');
+            const candidates = sanitizeReviewCandidates(rawCandidates);
+            const reviewPending = reviewPendingOverride === undefined ? strictMode : !!reviewPendingOverride;
+            const candidateCount = Number(restDetails?.candidateCount || candidates.length || candidateNormalizedTerms.length || 0);
+            const attempts = Number(restDetails?.attempts || 0);
+            const confidence = Number.isFinite(Number(restDetails?.confidence))
+                ? Math.max(0, Math.min(1, Number(restDetails.confidence)))
                 : 0;
+            const decision: ReviewDecision = decisionOverride
+                ? decisionOverride
+                : (reviewPending && candidates.length > 0 ? 'ambiguous' : 'blocked');
 
             return {
                 found: false,
@@ -480,11 +679,13 @@ export default defineEventHandler(async (event) => {
                 candidateCount: candidateCount,
                 attempts,
                 confidence,
-                reviewPending: strictMode,
-                reviewReason: String(details?.reviewReason || reasonText || ''),
-                imageReviewReason: String(details?.imageReviewReason || reasonText || ''),
-                nextAction: String(details?.nextAction || fallbackNextAction || ''),
-                ...(details || {})
+                reviewPending,
+                decision,
+                reviewReason: String(restDetails?.reviewReason || reasonText || ''),
+                imageReviewReason: String(restDetails?.imageReviewReason || reasonText || ''),
+                nextAction: String(restDetails?.nextAction || fallbackNextAction || ''),
+                candidates,
+                ...(restDetails || {})
             };
         };
         const identityKey = buildProductIdentityKey({
@@ -502,6 +703,158 @@ export default defineEventHandler(async (event) => {
             }
         };
 
+        const processSelectedCandidate = async () => {
+            if (!selectedCandidateInput) return null;
+
+            const candidate = selectedCandidateInput;
+            const candidateKey = String(candidate.key || '').trim();
+            const candidateUrl = String(candidate.url || '').trim();
+            const candidateConfidence = Number.isFinite(Number(candidate.confidence))
+                ? Math.max(0, Math.min(1, Number(candidate.confidence)))
+                : 0.98;
+
+            if (candidate.source === 's3' && candidateKey) {
+                const exists = await s3KeyExists(s3, bucketName, candidateKey);
+                if (!exists) {
+                    return noImageResponse('selected_candidate_missing', {
+                        provider: candidate.provider || 'internal',
+                        reviewPending: true,
+                        decision: 'blocked',
+                        nextAction: 'A candidata escolhida não existe mais no storage. Busque novamente no storage.',
+                        imageReviewReason: 'A imagem escolhida não foi encontrada no storage.'
+                    });
+                }
+
+                if (bgPolicy === 'always') {
+                    const processed = await ensureBgRemoved({
+                        s3,
+                        bucketName,
+                        sourceKey: candidateKey,
+                        deterministicKey,
+                        normalizedTerm,
+                        term,
+                        brand,
+                        flavor,
+                        weight
+                    });
+                    if (processed) {
+                        await safeUpsertRegistry({
+                            productCode,
+                            identityKey,
+                            canonicalName: term,
+                            brand,
+                            flavor,
+                            weight,
+                            s3Key: processed.key,
+                            source: 'manual-choice-s3',
+                            validationLevel: 'manual-review-choice',
+                            validatedBy: user.id,
+                            status: 'approved'
+                        });
+                        return {
+                            source: processed.processed ? 'internal-processed' : 'internal',
+                            url: await resolveStorageReadUrl(processed.key, user.id),
+                            key: processed.key,
+                            provider: candidate.provider || 'internal',
+                            confidence: candidateConfidence,
+                            candidateCount: 1,
+                            attempts: 1,
+                            reviewPending: false,
+                            decision: 'approved' as ReviewDecision,
+                            candidates: []
+                        };
+                    }
+                }
+
+                await safeUpsertRegistry({
+                    productCode,
+                    identityKey,
+                    canonicalName: term,
+                    brand,
+                    flavor,
+                    weight,
+                    s3Key: candidateKey,
+                    source: 'manual-choice-s3',
+                    validationLevel: 'manual-review-choice',
+                    validatedBy: user.id,
+                    status: 'approved'
+                });
+                return {
+                    source: 'internal',
+                    url: await resolveStorageReadUrl(candidateKey, user.id),
+                    key: candidateKey,
+                    provider: candidate.provider || 'internal',
+                    confidence: candidateConfidence,
+                    candidateCount: 1,
+                    attempts: 1,
+                    reviewPending: false,
+                    decision: 'approved' as ReviewDecision,
+                    candidates: []
+                };
+            }
+
+            if (!candidateUrl) {
+                return noImageResponse('selected_candidate_invalid', {
+                    provider: candidate.provider || 'external',
+                    reviewPending: true,
+                    decision: 'blocked',
+                    nextAction: 'Escolha outra candidata ou use upload manual.',
+                    imageReviewReason: 'A candidata escolhida não tem URL válida.'
+                });
+            }
+
+            try {
+                const pipelineResult = await runExternalPipelineOnce({
+                    s3,
+                    bucketName,
+                    deterministicKey,
+                    normalizedTerm,
+                    term,
+                    brand,
+                    flavor,
+                    weight,
+                    selectedImageUrl: candidateUrl,
+                    bgPolicy
+                });
+                const resolvedKey = String(pipelineResult?.key || deterministicKey).trim() || deterministicKey;
+                await safeUpsertRegistry({
+                    productCode,
+                    identityKey,
+                    canonicalName: term,
+                    brand,
+                    flavor,
+                    weight,
+                    s3Key: resolvedKey,
+                    source: 'manual-choice-external',
+                    validationLevel: 'manual-review-choice',
+                    validatedBy: user.id,
+                    status: 'approved'
+                });
+                return {
+                    ...pipelineResult,
+                    confidence: candidateConfidence,
+                    provider: candidate.provider || 'external',
+                    candidateCount: 1,
+                    attempts: 1,
+                    reviewPending: false,
+                    decision: 'approved' as ReviewDecision,
+                    candidates: [],
+                    url: await resolveStorageReadUrl(pipelineResult?.key || pipelineResult?.url, user.id)
+                };
+            } catch (candidateErr: any) {
+                return noImageResponse('selected_candidate_processing_failed', {
+                    provider: candidate.provider || 'external',
+                    reviewPending: true,
+                    decision: 'blocked',
+                    candidateCount: 1,
+                    attempts: 1,
+                    confidence: candidateConfidence,
+                    nextAction: 'Escolha outra candidata, use storage ou faça upload manual.',
+                    imageReviewReason: String(candidateErr?.message || 'Falha ao processar a candidata escolhida.')
+                });
+            }
+        };
+
         if (!String(bucketName || '').trim()) {
             console.warn('⚠️ [process-product-image] wasabiBucket ausente no runtime config.');
             return noImageResponse('wasabi_bucket_missing', { missingConfig: ['wasabiBucket'] });
@@ -510,6 +863,11 @@ export default defineEventHandler(async (event) => {
         console.log(`🔍 [Search] Termo: "${primarySearchInput}" → Normalizado: "${normalizedTerm}" → Key: "${deterministicKey}"`);
         if (candidateNormalizedTerms.length > 1) {
             console.log(`🧭 [Search Variants] ${candidateNormalizedTerms.length} variantes:`, candidateNormalizedTerms.slice(0, 8));
+        }
+
+        const selectedCandidateResult = await processSelectedCandidate();
+        if (selectedCandidateResult) {
+            return selectedCandidateResult;
         }
 
     // ========================================
@@ -585,8 +943,86 @@ export default defineEventHandler(async (event) => {
     // ========================================
     // 1. INTERNAL SEARCH (Wasabi S3) - consulta uploads/ e imagens/ antes de cache DB/Google
     // ========================================
+    let internalReviewCandidates: ReviewCandidate[] = [];
     try {
         const assetNamesByKey = await getUserAssetNamesMap(String(user.id || ''));
+        const exactAssetNameKey = findExactAssetNameKey(candidateNormalizedTerms, assetNamesByKey);
+        if (exactAssetNameKey) {
+            const exists = await s3KeyExists(s3, bucketName, exactAssetNameKey);
+            if (exists) {
+                console.log(`OK [S3 Match:asset-name-exact] Reuse: "${exactAssetNameKey}"`);
+
+                if (bgPolicy === 'always') {
+                    const processed = await ensureBgRemoved({
+                        s3, bucketName,
+                        sourceKey: exactAssetNameKey,
+                        deterministicKey,
+                        normalizedTerm, term, brand, flavor, weight
+                    });
+                    if (processed) {
+                        await safeUpsertRegistry({
+                            productCode,
+                            identityKey,
+                            canonicalName: term,
+                            brand,
+                            flavor,
+                            weight,
+                            s3Key: processed.key,
+                            source: processed.processed ? 'internal-processed' : 'internal',
+                            validationLevel: 'bucket-alias-exact',
+                            validatedBy: user.id,
+                            status: 'approved'
+                        });
+                        return {
+                            source: processed.processed ? 'internal-processed' : 'internal',
+                            url: await resolveStorageReadUrl(processed.key, user.id),
+                            key: processed.key,
+                            provider: 'internal',
+                            confidence: 0.995,
+                            candidateCount: 1,
+                            attempts: 1,
+                            reviewPending: false
+                        };
+                    }
+                }
+
+                await saveProductImageCache({
+                    searchTerm: normalizedTerm,
+                    productName: term,
+                    brand, flavor, weight,
+                    imageUrl: getPublicUrl(exactAssetNameKey),
+                    s3Key: exactAssetNameKey,
+                    source: 'internal-exact-name'
+                });
+                await safeUpsertRegistry({
+                    productCode,
+                    identityKey,
+                    canonicalName: term,
+                    brand,
+                    flavor,
+                    weight,
+                    s3Key: exactAssetNameKey,
+                    source: 'internal',
+                    validationLevel: 'bucket-alias-exact',
+                    validatedBy: user.id,
+                    status: 'approved'
+                });
+
+                return {
+                    source: 'internal',
+                    url: await resolveStorageReadUrl(exactAssetNameKey, user.id),
+                    key: exactAssetNameKey,
+                    provider: 'internal',
+                    confidence: 0.995,
+                    candidateCount: 1,
+                    attempts: 1,
+                    reviewPending: false
+                };
+            }
+
+            console.warn(`⚠️ [S3 Match:asset-name-exact] asset_names apontou para key inexistente: ${exactAssetNameKey}`);
+        }
+
         const found = await findBestS3Match({
             s3,
             bucketName,
@@ -669,6 +1105,26 @@ export default defineEventHandler(async (event) => {
                 attempts: 1,
                 reviewPending: false
             };
+        }
+
+        const rankedInternalMatches = await findTopS3Matches({
+            s3,
+            bucketName,
+            prefixes: ['uploads/', 'imagens/'],
+            normalizedCandidates: candidateNormalizedTerms,
+            brand,
+            flavor,
+            weight,
+            productCode,
+            strictOnly: strictMode,
+            keyAliases: assetNamesByKey,
+            cacheNamespace: String(user.id || ''),
+            maxKeysPerPrefix: 12_000,
+            limit: 6
+        });
+        internalReviewCandidates = await buildInternalReviewCandidates(rankedInternalMatches, String(user.id || ''));
+        if (internalReviewCandidates.length > 0) {
+            console.log(`ℹ️ [S3 Match:candidates] ${internalReviewCandidates.length} candidata(s) internas para revisão.`);
         }
     } catch (err) {
         console.warn("Internal search failed:", err);
@@ -782,11 +1238,18 @@ export default defineEventHandler(async (event) => {
         });
         return noImageResponse('external_search_disabled', {
             provider: 'external-disabled',
-            candidateCount: candidateNormalizedTerms.length,
+            candidateCount: internalReviewCandidates.length || candidateNormalizedTerms.length,
             attempts: 0,
             confidence: 0,
-            nextAction: 'Ative a busca externa nas configurações e reprocesse em seguida.',
-            reviewPending: true
+            nextAction: internalReviewCandidates.length > 0
+                ? 'Escolha uma das imagens internas do storage para continuar.'
+                : 'Ative a busca externa nas configurações e reprocesse em seguida.',
+            reviewPending: true,
+            decision: internalReviewCandidates.length > 0 ? 'ambiguous' : 'blocked',
+            candidates: internalReviewCandidates,
+            imageReviewReason: internalReviewCandidates.length > 0
+                ? 'A busca externa está desligada, mas encontramos imagens internas no Wasabi para sua revisão.'
+                : undefined
         });
     }
 
@@ -807,11 +1270,19 @@ export default defineEventHandler(async (event) => {
         });
         return noImageResponse('external_search_config_missing', {
             provider: 'external',
-            candidateCount: candidateNormalizedTerms.length,
+            candidateCount: internalReviewCandidates.length || candidateNormalizedTerms.length,
             attempts: 0,
             confidence: 0,
             missingConfig: ['serperApiKey'],
-            nextAction: 'Configure Serper e execute novamente em modo preciso, ou use busca manual.'
+            nextAction: internalReviewCandidates.length > 0
+                ? 'Escolha uma das imagens internas do storage ou configure Serper para ampliar a busca.'
+                : 'Configure Serper e execute novamente em modo preciso, ou use busca manual.',
+            reviewPending: true,
+            decision: internalReviewCandidates.length > 0 ? 'ambiguous' : 'blocked',
+            candidates: internalReviewCandidates,
+            imageReviewReason: internalReviewCandidates.length > 0
+                ? 'A configuração externa está ausente, mas o storage já tem imagens internas para este produto.'
+                : undefined
         });
     }
 
@@ -897,6 +1368,19 @@ export default defineEventHandler(async (event) => {
             status: 'review_pending',
             reason: 'no_candidates'
         });
+        if (internalReviewCandidates.length > 0) {
+            return noImageResponse(`Internal images need review for "${term}"`, {
+                provider: 'internal',
+                candidateCount: internalReviewCandidates.length,
+                attempts: 0,
+                confidence: 0.62,
+                reviewPending: true,
+                decision: 'ambiguous',
+                candidates: internalReviewCandidates,
+                imageReviewReason: 'A busca externa não encontrou imagens confiáveis, mas o Wasabi já tem candidatas internas para sua escolha.',
+                nextAction: 'Escolha uma das imagens internas sugeridas ou faça upload manual.'
+            });
+        }
         return noImageResponse(`No image found for "${term}"`, {
             provider: providerUsed || lastProviderError?.provider || 'none',
             candidateCount: 0,
@@ -934,6 +1418,20 @@ export default defineEventHandler(async (event) => {
             status: 'review_pending',
             reason: 'metadata_gate_rejected'
         });
+        if (internalReviewCandidates.length > 0) {
+            return noImageResponse(`Internal images need review for "${term}"`, {
+                provider: providerUsed || 'internal',
+                reason: 'metadata_gate_rejected',
+                candidateCount: internalReviewCandidates.length,
+                attempts: 0,
+                confidence: 0.6,
+                reviewPending: true,
+                decision: 'ambiguous',
+                candidates: internalReviewCandidates,
+                imageReviewReason: 'A busca externa foi rejeitada pela metadata, mas existem candidatas internas no Wasabi para revisão manual.',
+                nextAction: 'Escolha uma imagem interna ou refine o termo do produto.'
+            });
+        }
             return noImageResponse(`No reliable image found for "${term}"`, {
             provider: providerUsed || 'none',
             reason: 'metadata_gate_rejected',
@@ -951,28 +1449,39 @@ export default defineEventHandler(async (event) => {
     let selectedImageConfidence = 0;
     let validationLevelForRegistry = 'ocr+ai-strict';
     if (!config.openaiApiKey) {
-        if (strictMode) {
-            await safeUpsertRegistry({
-                productCode,
-                identityKey,
-                canonicalName: term,
-                brand,
-                flavor,
-                weight,
-                source: providerUsed || 'external',
-                validationLevel: 'none',
-                validatedBy: user.id,
-                status: 'review_pending',
-                reason: 'openai_validation_missing'
-            });
+        await safeUpsertRegistry({
+            productCode,
+            identityKey,
+            canonicalName: term,
+            brand,
+            flavor,
+            weight,
+            source: providerUsed || 'external',
+            validationLevel: 'none',
+            validatedBy: user.id,
+            status: 'review_pending',
+            reason: 'openai_validation_missing'
+        });
+        const reviewCandidates = mergeReviewCandidates(
+            internalReviewCandidates,
+            buildExternalReviewCandidates(candidates, {
+                recommendedIndex: 0,
+                confidence: 0.32,
+                reason: 'Sem validação final por IA; escolha manual necessária.'
+            })
+        );
+        if (reviewCandidates.length > 1 || internalReviewCandidates.length > 0) {
             return noImageResponse(`No reliable image found for "${term}"`, {
                 reason: 'openai_validation_missing',
                 provider: providerUsed || 'external',
-                candidateCount: candidates.length,
+                candidateCount: reviewCandidates.length,
                 attempts: 0,
                 confidence: 0,
-                imageReviewReason: 'OpenAI não disponível para validação em modo preciso.',
-                nextAction: 'Cadastre a chave OpenAI nas configurações e reprocesse.'
+                reviewPending: true,
+                decision: 'ambiguous',
+                candidates: reviewCandidates,
+                imageReviewReason: 'A busca encontrou mais de uma imagem plausível, mas a validação final por IA não está disponível.',
+                nextAction: 'Escolha uma das sugestões, use storage ou faça upload manual.'
             });
         }
 
@@ -995,38 +1504,50 @@ export default defineEventHandler(async (event) => {
             const requiresExactMatch = strictMode;
             const bestIndexValid = validation.bestIndex >= 0 && validation.bestIndex < candidates.length;
             if (!bestIndexValid || validation.confidence < confidenceThreshold || (requiresExactMatch && !validation.isExactMatch)) {
-                if (strictMode) {
-                    await safeUpsertRegistry({
-                        productCode,
-                        identityKey,
-                        canonicalName: term,
-                        brand,
-                        flavor,
-                        weight,
-                        source: providerUsed || 'external',
-                        validationLevel: 'ai-strict',
-                        validatedBy: user.id,
-                        status: 'review_pending',
-                        reason: [
-                            `confidence=${validation.confidence.toFixed(2)}`,
-                            `isExact=${validation.isExactMatch}`,
-                            `strictMode=${strictMode}`,
-                            ...validation.mismatchReasons
-                        ].join('; ')
-                    });
+                await safeUpsertRegistry({
+                    productCode,
+                    identityKey,
+                    canonicalName: term,
+                    brand,
+                    flavor,
+                    weight,
+                    source: providerUsed || 'external',
+                    validationLevel: 'ai-strict',
+                    validatedBy: user.id,
+                    status: 'review_pending',
+                    reason: [
+                        `confidence=${validation.confidence.toFixed(2)}`,
+                        `isExact=${validation.isExactMatch}`,
+                        `strictMode=${strictMode}`,
+                        ...validation.mismatchReasons
+                    ].join('; ')
+                });
+                const reviewCandidates = mergeReviewCandidates(
+                    internalReviewCandidates,
+                    buildExternalReviewCandidates(candidates, {
+                        recommendedIndex: bestIndexValid ? validation.bestIndex : 0,
+                        confidence: Math.max(0, Math.min(1, validation.confidence)),
+                        reason: 'Mais de uma imagem plausível; validação não atingiu confiança suficiente.'
+                    })
+                );
+                if (reviewCandidates.length > 1 || internalReviewCandidates.length > 0) {
                     return noImageResponse(`No reliable image found for "${term}"`, {
                         aiConfidence: validation.confidence,
                         aiBestIndex: validation.bestIndex,
                         aiExactMatch: validation.isExactMatch,
                         aiMismatchReasons: validation.mismatchReasons,
                         provider: providerUsed || 'external',
-                        candidateCount: candidates.length,
+                        candidateCount: reviewCandidates.length,
                         attempts: 0,
                         confidence: Math.max(0, Math.min(1, validation.confidence)),
+                        reviewPending: true,
+                        decision: 'ambiguous',
+                        candidates: reviewCandidates,
                         imageReviewReason: [
                             `Confiança AI ${(validation.confidence * 100).toFixed(0)}% abaixo do mínimo (${(confidenceThreshold * 100).toFixed(0)}%).`,
                             ...validation.mismatchReasons
-                        ].filter(Boolean).join(' ')
+                        ].filter(Boolean).join(' '),
+                        nextAction: 'Escolha uma das sugestões ou faça upload manual.'
                     });
                 }
 
@@ -1048,28 +1569,39 @@ export default defineEventHandler(async (event) => {
             }
         } catch (err) {
             console.warn('⚠️ [AI] Validação estrita falhou:', (err as any)?.message);
-            if (strictMode) {
-                await safeUpsertRegistry({
-                    productCode,
-                    identityKey,
-                    canonicalName: term,
-                    brand,
-                    flavor,
-                    weight,
-                    source: providerUsed || 'external',
-                    validationLevel: 'ai-strict',
-                    validatedBy: user.id,
-                    status: 'review_pending',
-                    reason: 'ai_validation_failed'
-                });
+            await safeUpsertRegistry({
+                productCode,
+                identityKey,
+                canonicalName: term,
+                brand,
+                flavor,
+                weight,
+                source: providerUsed || 'external',
+                validationLevel: 'ai-strict',
+                validatedBy: user.id,
+                status: 'review_pending',
+                reason: 'ai_validation_failed'
+            });
+            const reviewCandidates = mergeReviewCandidates(
+                internalReviewCandidates,
+                buildExternalReviewCandidates(candidates, {
+                    recommendedIndex: 0,
+                    confidence: 0.28,
+                    reason: 'A validação automática falhou; escolha manual necessária.'
+                })
+            );
+            if (reviewCandidates.length > 1 || internalReviewCandidates.length > 0) {
                 return noImageResponse(`No reliable image found for "${term}"`, {
                     reason: 'ai_validation_failed',
                     provider: providerUsed || 'external',
-                    candidateCount: candidates.length,
+                    candidateCount: reviewCandidates.length,
                     attempts: 0,
                     confidence: 0,
-                    imageReviewReason: 'Falha crítica na validação por IA. Refaça com modo rápido ou ajuste o termo.',
-                    nextAction: 'Inclua EAN/código e tente novamente no modo preciso.'
+                    reviewPending: true,
+                    decision: 'ambiguous',
+                    candidates: reviewCandidates,
+                    imageReviewReason: 'Falha na validação automática. Escolha uma das imagens sugeridas ou use upload manual.',
+                    nextAction: 'Escolha uma sugestão, use storage ou faça upload manual.'
                 });
             }
 
@@ -1153,13 +1685,30 @@ export default defineEventHandler(async (event) => {
             status: 'review_pending',
             reason: 'processing_failed_all_candidates'
         });
+        const reviewCandidates = mergeReviewCandidates(
+            internalReviewCandidates,
+            buildExternalReviewCandidates(candidates, {
+                recommendedIndex: 0,
+                confidence: Math.max(0.3, Math.min(0.75, selectedImageConfidence || 0.42)),
+                reason: 'O processamento falhou; escolha uma candidata para tentar novamente.'
+            })
+        );
         return noImageResponse('processing_failed', {
             message: String(pipelineLastErr?.message || pipelineLastErr || 'unknown'),
             code: pipelineLastErr?.code,
             name: pipelineLastErr?.name,
             provider: providerUsed || 'external',
-            candidateCount: candidates.length,
-            attempts
+            candidateCount: reviewCandidates.length || candidates.length,
+            attempts,
+            reviewPending: reviewCandidates.length > 0,
+            decision: reviewCandidates.length > 0 ? 'ambiguous' : 'blocked',
+            candidates: reviewCandidates,
+            imageReviewReason: reviewCandidates.length > 0
+                ? 'O processamento falhou, mas você ainda pode escolher uma das imagens sugeridas.'
+                : undefined,
+            nextAction: reviewCandidates.length > 0
+                ? 'Escolha outra candidata ou faça upload manual.'
+                : undefined
         });
     } catch (err: any) {
         // Preserve expected HTTP errors (auth, validation, rate limit).
