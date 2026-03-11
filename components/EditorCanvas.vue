@@ -137,6 +137,8 @@ const currentEditingPath = ref<any>(null) // Path object currently being edited
 const activeMode = ref<'design' | 'prototype'>('design')
 const showZoomMenu = ref(false)
 let globalMouseUpHandler: ((e: MouseEvent) => void) | null = null
+let globalPointerUpHandler: ((e: PointerEvent) => void) | null = null
+let globalWindowBlurHandler: (() => void) | null = null
 let globalEscKeyHandler: ((e: KeyboardEvent) => void) | null = null
 let globalKeyUpHandler: ((e: KeyboardEvent) => void) | null = null
 let teardownSnapping: (() => void) | null = null
@@ -330,6 +332,42 @@ const safeRequestRenderAll = (canvasInstance?: any): void => {
             // Ignore
         }
     }
+};
+
+const releaseDanglingCanvasTransform = (evt?: MouseEvent | PointerEvent | null): boolean => {
+    if (!canvas.value) return false;
+    const canvasAny = canvas.value as any;
+    const currentTransform = canvasAny?._currentTransform;
+    if (!currentTransform || typeof canvasAny?._onMouseUp !== 'function') return false;
+
+    const clientX = Number(evt?.clientX ?? currentTransform?.ex ?? 0);
+    const clientY = Number(evt?.clientY ?? currentTransform?.ey ?? 0);
+    const button = typeof evt?.button === 'number' ? evt.button : 0;
+    const buttons = typeof evt?.buttons === 'number' ? evt.buttons : 0;
+    const upEvent = {
+        clientX,
+        clientY,
+        type: 'mouseup',
+        target: canvas.value.upperCanvasEl,
+        button,
+        buttons,
+        altKey: !!evt?.altKey,
+        ctrlKey: !!evt?.ctrlKey,
+        metaKey: !!evt?.metaKey,
+        shiftKey: !!evt?.shiftKey
+    } as any;
+
+    try {
+        canvasAny._onMouseUp(upEvent);
+    } catch {
+        // Ignore and force-clear below.
+    }
+
+    if (canvasAny._currentTransform) {
+        canvasAny._currentTransform = null;
+    }
+    safeRequestRenderAll();
+    return true;
 };
 
 // Hardens Fabric render calls to avoid the editor going black when something
@@ -9463,31 +9501,21 @@ onMounted(async () => {
       }
       if (!globalMouseUpHandler) {
           globalMouseUpHandler = (evt: MouseEvent) => {
-              if (!canvas.value) return;
-              const currentTransform = (canvas.value as any)._currentTransform;
-              if (!currentTransform) return;
-              
-              const upEvent = {
-                  clientX: evt.clientX,
-                  clientY: evt.clientY,
-                  type: 'mouseup',
-                  target: canvas.value.upperCanvasEl,
-                  button: evt.button,
-                  buttons: evt.buttons,
-                  altKey: evt.altKey,
-                  ctrlKey: evt.ctrlKey,
-                  metaKey: evt.metaKey,
-                  shiftKey: evt.shiftKey
-              } as any;
-              
-              (canvas.value as any)._onMouseUp(upEvent);
-
-              if ((canvas.value as any)._currentTransform) {
-                  (canvas.value as any)._currentTransform = null;
-                  safeRequestRenderAll();
-              }
+              releaseDanglingCanvasTransform(evt);
           };
           window.addEventListener('mouseup', globalMouseUpHandler);
+      }
+      if (!globalPointerUpHandler) {
+          globalPointerUpHandler = (evt: PointerEvent) => {
+              releaseDanglingCanvasTransform(evt);
+          };
+          window.addEventListener('pointerup', globalPointerUpHandler);
+      }
+      if (!globalWindowBlurHandler) {
+          globalWindowBlurHandler = () => {
+              releaseDanglingCanvasTransform(null);
+          };
+          window.addEventListener('blur', globalWindowBlurHandler);
       }
 
       // LEGACY loader desativado: mantemos um único pipeline no watch(activePage)
@@ -10120,6 +10148,14 @@ onUnmounted(() => {
   if (globalMouseUpHandler) {
     window.removeEventListener('mouseup', globalMouseUpHandler);
     globalMouseUpHandler = null;
+  }
+  if (globalPointerUpHandler) {
+    window.removeEventListener('pointerup', globalPointerUpHandler);
+    globalPointerUpHandler = null;
+  }
+  if (globalWindowBlurHandler) {
+    window.removeEventListener('blur', globalWindowBlurHandler);
+    globalWindowBlurHandler = null;
   }
   if (teardownSnapping) {
     teardownSnapping();
@@ -14499,8 +14535,12 @@ const setupZoomPan = () => {
     // Pen Tool: Track mouse movement for preview line - REAL-TIME with RAF for smooth updates
     let rafPending = false;
     canvas.value.on('mouse:move', (opt: any) => {
+        const evt = opt?.e;
+        if (evt?.buttons === 0) {
+            releaseDanglingCanvasTransform(evt);
+        }
+
         if (isDragging) {
-            const evt = opt?.e;
             if (!evt) return;
             if (evt.buttons === 0) {
                 isDragging = false;
