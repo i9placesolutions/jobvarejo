@@ -72,6 +72,21 @@ import {
     refreshSelectedRefWithRecovery,
     syncSelectionDomainState
 } from '~/utils/editorSelectionRuntime'
+import {
+    buildProductZoneDiagnostics,
+    getZoneContentStatusFromDiagnostics,
+    type ProductZoneDiagnostic
+} from '~/utils/product-zone-diagnostics'
+import {
+    getZoneDisplayName,
+    getZoneRoleLabel,
+    getZoneStatusLabel
+} from '~/utils/product-zone-metadata'
+import {
+    openProductReviewForZone as openProductReviewForZoneHelper,
+    resolveImportTargetZone as resolveImportTargetZoneHelper,
+    resolveZoneForProductImport as resolveZoneForProductImportHelper
+} from '~/utils/product-zone-target'
 import type { LabelTemplate } from '~/types/label-template'
 import { applyAiToPage } from '~/src/ai/aiApplyToProject'
 
@@ -84,6 +99,7 @@ const PenContextualToolbar = defineAsyncComponent(() => import('./PenContextualT
 const FrameLabelsOverlay = defineAsyncComponent(() => import('./FrameLabelsOverlay.vue'))
 const EditorModalsHost = defineAsyncComponent(() => import('./EditorModalsHost.vue'))
 const EditorRightSidebar = defineAsyncComponent(() => import('./EditorRightSidebar.vue'))
+const ZoneQuickActions = defineAsyncComponent(() => import('./ZoneQuickActions.vue'))
 import {
   Undo,
   Redo,
@@ -5467,12 +5483,49 @@ const getLegacyProductCardImageRepairMode = (
     return stats.needsPostLoadRepair ? 'force' : 'skip'
 }
 
-const syncPreparedCanvasStateToPage = (page: any, preparedCanvasData: any) => {
+const syncPreparedCanvasStateToPage = (
+    page: any,
+    preparedCanvasData: any,
+    opts: { keepExistingFingerprint?: boolean; fingerprint?: string | null } = {}
+) => {
     if (!page || !preparedCanvasData || typeof preparedCanvasData !== 'object') return
     page.canvasData = preparedCanvasData
-    const fingerprint = computeCanvasFingerprint(preparedCanvasData)
+    if (opts.keepExistingFingerprint) return
+    const fingerprint = typeof opts.fingerprint === 'string' && opts.fingerprint.trim()
+        ? opts.fingerprint
+        : computeCanvasFingerprint(preparedCanvasData)
     page.lastLoadedFingerprint = fingerprint
     page.lastSavedFingerprint = fingerprint
+};
+
+const refreshLoadedCanvasTextMetrics = (canvasInstance: any) => {
+    if (!canvasInstance) return
+
+    try {
+        const fabricCache = (fabric as any)?.cache;
+        if (fabricCache && typeof fabricCache.clearFontCache === 'function') {
+            fabricCache.clearFontCache();
+        }
+    } catch (_e) {
+        // ignore
+    }
+
+    const recalcAllText = (obj: any) => {
+        if (!obj) return;
+        const t = String(obj.type || '').toLowerCase();
+        if (t === 'i-text' || t === 'textbox' || t === 'text') {
+            if (typeof obj.initDimensions === 'function') obj.initDimensions();
+            obj.set('dirty', true);
+            if (typeof obj.setCoords === 'function') obj.setCoords();
+        }
+        if (typeof obj.getObjects === 'function') {
+            obj.getObjects().forEach(recalcAllText);
+            obj.set('dirty', true);
+        }
+    };
+
+    canvasInstance.getObjects().forEach(recalcAllText);
+    refitManualLabelTemplatesAfterFontMetrics(canvasInstance);
 };
 
 const pageSettings = ref({
@@ -7080,6 +7133,7 @@ const isAnalyzingImage = ref(false)
 const showProductReviewModal = ref(false)
 const reviewProducts = ref<any[]>([])
 const productImportExistingCount = ref(0)
+const productReviewInitialImportMode = ref<'replace' | 'append'>('replace')
 const targetGridZone = ref<any>(null) // Reference to the Grid Zone that was double-clicked
 const isConfirmingProductImport = ref(false)
 
@@ -7090,6 +7144,7 @@ type ProductImportOptions = {
     mode?: 'replace' | 'append'
     labelTemplateId?: string
     targetMode?: ImportTargetMode
+    sourceMode?: 'manual' | 'paste-list' | 'file-import'
     selectedFrameIds?: string[]
     frameAssignments?: FrameAssignment[]
     countRule?: 'min'
@@ -7175,108 +7230,43 @@ const extractProductsFromZoneForReview = (zone: any): any[] => {
     });
 }
 
-const resolveZoneForProductImport = (target: any): any | null => {
-    if (!target || !canvas.value) return null;
+const resolveZoneForProductImport = (target: any): any | null => resolveZoneForProductImportHelper({
+    canvas: canvas.value,
+    target,
+    isLikelyProductZone,
+    isProductCardContainer,
+    findContainmentZoneById,
+    resolveCardParentZone,
+    findProductCardParentGroup
+})
 
-    if (isLikelyProductZone(target)) return target;
+const resolveImportTargetZone = (): any | null => resolveImportTargetZoneHelper({
+    canvas: canvas.value,
+    targetGridZone: targetGridZone.value,
+    selectedObjectSnapshot: selectedObjectRef.value,
+    isLikelyProductZone,
+    resolveZoneForProductImport
+})
 
-    const resolveByZoneId = (zoneIdRaw: any): any | null => {
-        const zoneId = String(zoneIdRaw || '').trim();
-        if (!zoneId) return null;
-        return findContainmentZoneById(zoneId);
-    };
-
-    const directZoneByParent = resolveByZoneId((target as any)?.parentZoneId);
-    if (directZoneByParent) return directZoneByParent;
-    const directZoneBySlot = resolveByZoneId((target as any)?._zoneSlot?.zoneId);
-    if (directZoneBySlot) return directZoneBySlot;
-
-    if (isProductCardContainer(target)) {
-        const zoneFromCard = resolveCardParentZone(target, { allowNearest: true });
-        if (zoneFromCard) return zoneFromCard;
-    }
-
-    let cursor: any = target;
-    const visited = new Set<any>();
-    while (cursor && !visited.has(cursor)) {
-        visited.add(cursor);
-        if (isLikelyProductZone(cursor)) return cursor;
-
-        const byParent = resolveByZoneId((cursor as any)?.parentZoneId);
-        if (byParent) return byParent;
-        const bySlot = resolveByZoneId((cursor as any)?._zoneSlot?.zoneId);
-        if (bySlot) return bySlot;
-
-        if (isProductCardContainer(cursor)) {
-            const zoneFromCard = resolveCardParentZone(cursor, { allowNearest: true });
-            if (zoneFromCard) return zoneFromCard;
+const openProductReviewForZone = (zone: any, opts: { mode?: 'replace' | 'append' } = {}): boolean => {
+    productReviewInitialImportMode.value = opts.mode === 'append' ? 'append' : 'replace'
+    return openProductReviewForZoneHelper({
+        zone,
+        isLikelyProductZone,
+        getZoneChildren,
+        setTargetZone: (nextZone) => {
+            targetGridZone.value = nextZone
+        },
+        setExistingCount: (count) => {
+            productImportExistingCount.value = count
+        },
+        setReviewProducts: (products) => {
+            reviewProducts.value = products
+        },
+        setShowReviewModal: (value) => {
+            showProductReviewModal.value = value
         }
-
-        cursor = (cursor as any)?.group;
-    }
-
-    const parentCard = findProductCardParentGroup(target);
-    if (parentCard) {
-        const zoneFromParentCard = resolveCardParentZone(parentCard, { allowNearest: true });
-        if (zoneFromParentCard) return zoneFromParentCard;
-    }
-
-    return null;
-}
-
-const resolveImportTargetZone = (): any | null => {
-    if (!canvas.value) return null;
-
-    const zones = canvas.value.getObjects().filter((obj: any) => isLikelyProductZone(obj));
-    const byId = new Map<string, any>();
-    zones.forEach((zone: any) => {
-        const id = String((zone as any)?._customId || '').trim();
-        if (id) byId.set(id, zone);
-    });
-
-    const resolveById = (rawId: any): any | null => {
-        const id = String(rawId || '').trim();
-        if (!id) return null;
-        return byId.get(id) || null;
-    };
-
-    const explicit = targetGridZone.value;
-    if (explicit && isLikelyProductZone(explicit)) {
-        const refreshed = resolveById((explicit as any)?._customId);
-        return refreshed || explicit;
-    }
-    if (explicit) {
-        const byExplicitId = resolveById((explicit as any)?._customId) || resolveById((explicit as any)?.id);
-        if (byExplicitId) return byExplicitId;
-    }
-
-    const active = canvas.value.getActiveObject?.();
-    const fromActive = resolveZoneForProductImport(active);
-    if (fromActive) return fromActive;
-
-    const snap: any = selectedObjectRef.value;
-    const fromSnapshot =
-        resolveById(snap?._customId) ||
-        resolveById(snap?.parentZoneId) ||
-        resolveById(snap?._zoneSlot?.zoneId);
-    if (fromSnapshot) return fromSnapshot;
-
-    if (zones.length === 1) return zones[0];
-    return null;
-}
-
-const openProductReviewForZone = (zone: any): boolean => {
-    if (!zone || !isLikelyProductZone(zone)) return false;
-
-    targetGridZone.value = zone;
-    try {
-        productImportExistingCount.value = getZoneChildren(zone).length;
-    } catch {
-        productImportExistingCount.value = 0;
-    }
-    reviewProducts.value = [];
-    showProductReviewModal.value = true;
-    return true;
+    })
 }
 
 const tryOpenProductReviewFromDblClickTarget = (target: any): boolean => {
@@ -7285,7 +7275,7 @@ const tryOpenProductReviewFromDblClickTarget = (target: any): boolean => {
 
     const zone = resolveZoneForProductImport(target);
     if (!zone) return false;
-    return openProductReviewForZone(zone);
+    return openProductReviewForZone(zone, { mode: 'replace' });
 }
 
 const importZoneLabelTemplateId = computed(() => {
@@ -8013,6 +8003,8 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     designLoadExpectedCounts.value = pageToLoad.canvasData ? countCanvasJsonObjectsAndImages(pageToLoad.canvasData) : { objects: 0, images: 0 }
     designLoadActualCounts.value = null
     let degradedFailedCount: number | null = null
+    const expectedLoadObjects = Number(designLoadExpectedCounts.value?.objects || 0)
+    const deferHeavyPostLoad = !isInitialDesignLoadDone.value && expectedLoadObjects >= 80
 
     try {
         // 1. Snapshot logic...
@@ -8303,44 +8295,32 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 }
             });
 
-            // CRITICAL: Clear Fabric's char-width cache and recalculate text
-            // dimensions after loadFromJSON. The JSON may carry stale width/height
-            // that was measured with a fallback font. Even if fonts loaded later,
-            // Fabric caches per-char widths keyed by font name — those stale entries
-            // persist until explicitly cleared.
-            try {
-                const fabricCache = (fabric as any)?.cache;
-                if (fabricCache && typeof fabricCache.clearFontCache === 'function') {
-                    fabricCache.clearFontCache();
+            const finalizeHeavyPostLoad = () => {
+                if (isStaleLoad() || !canvas.value) return;
+                // Same issue as webfont load: JSON could have been measured with fallback fonts.
+                // Re-fit manual label templates so cards match the mini editor geometry.
+                refreshLoadedCanvasTextMetrics(canvas.value);
+                if (!degradedNewPage) {
+                    syncPreparedCanvasStateToPage(pageToLoad, canonicalCanvasDataToLoad);
                 }
-            } catch (_e) { /* ignore */ }
-
-            const recalcAllText = (obj: any) => {
-                if (!obj) return;
-                const t = String(obj.type || '').toLowerCase();
-                if (t === 'i-text' || t === 'textbox' || t === 'text') {
-                    if (typeof obj.initDimensions === 'function') obj.initDimensions();
-                    obj.set('dirty', true);
-                    if (typeof obj.setCoords === 'function') obj.setCoords();
-                }
-                if (typeof obj.getObjects === 'function') {
-                    obj.getObjects().forEach(recalcAllText);
-                    obj.set('dirty', true);
-                }
+                safeRequestRenderAll();
             };
-            canvas.value.getObjects().forEach(recalcAllText);
-            // Same issue as webfont load: JSON could have been measured with fallback fonts.
-            // Re-fit manual label templates so cards match the mini editor geometry.
-            refitManualLabelTemplatesAfterFontMetrics(canvas.value);
-            if (!degradedNewPage) {
-                syncPreparedCanvasStateToPage(pageToLoad, canonicalCanvasDataToLoad);
+            if (!degradedNewPage && deferHeavyPostLoad) {
+                syncPreparedCanvasStateToPage(pageToLoad, canonicalCanvasDataToLoad, {
+                    keepExistingFingerprint: true
+                });
+            }
+            if (deferHeavyPostLoad) {
+                scheduleIdleWork(finalizeHeavyPostLoad, 2400);
+            } else {
+                finalizeHeavyPostLoad();
             }
 
             if (deferredProductImageCount > 0) {
                 scheduleMissingProductImageRecovery(180, 10, nextPageId);
             }
 
-	            safeRequestRenderAll();
+	            if (deferHeavyPostLoad) safeRequestRenderAll();
 	            } else {
 	                // New Blank Page starts with default settings
 	                // canvas.value.backgroundColor = '#ffffff'; // NO! Workspace is dark. Artboard is white.
@@ -9921,6 +9901,9 @@ onMounted(async () => {
                           });
 
                           refreshCanvasObjects();
+                          if (!degradedPage) {
+                              syncPreparedCanvasStateToPage(page, canvasDataToLoad);
+                          }
                           safeRequestRenderAll();
                       };
 
@@ -9935,8 +9918,10 @@ onMounted(async () => {
                       // IMPORTANT: Get objects in exact order they were loaded (Fabric preserves order in _objects array)
                       const loadedObjs = canvas.value.getObjects();
                       refreshCanvasObjects({ source: loadedObjs, immediate: true });
-                      if (!degradedPage) {
-                          syncPreparedCanvasStateToPage(page, canvasDataToLoad);
+                      if (!degradedPage && deferHeavyPostLoad) {
+                          syncPreparedCanvasStateToPage(page, canvasDataToLoad, {
+                              keepExistingFingerprint: true
+                          });
                       }
                       
                       // Ensure objects have IDs restored if missing - BUT exclude frames
@@ -10264,6 +10249,11 @@ const CANVAS_CUSTOM_PROPS = [
     // Product zone metadata
     'isGridZone',
     'isProductZone',
+    'zoneName',
+    'role',
+    'contentSource',
+    'contentStatus',
+    'overflowPolicy',
     '_zoneWidth',
     '_zoneHeight',
     '_zonePadding',
@@ -13005,6 +12995,17 @@ const handleKeyDown = async (e: KeyboardEvent) => {
     }
 
     const isCtrl = e.ctrlKey || e.metaKey;
+
+    if (e.key === 'Enter') {
+        const active = canvas.value.getActiveObject?.();
+        if (active && isLikelyProductZone(active)) {
+            e.preventDefault();
+            openProductReviewForZone(active, {
+                mode: getZoneChildren(active).length > 0 ? 'append' : 'replace'
+            });
+            return;
+        }
+    }
 
     // --- Undo/Redo Shortcuts (Ctrl+Z / Cmd+Z, Ctrl+Shift+Z / Cmd+Shift+Z) ---
     // Verificar primeiro para garantir prioridade
@@ -20824,7 +20825,11 @@ const renameLayer = (id: string, newName: string) => {
     if (!canvas.value) return; 
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
-        obj.layerName = newName; // Custom property for our UI
+        if (isLikelyProductZone(obj)) {
+            obj.zoneName = String(newName || '').trim() || 'Zona de Produtos';
+        } else {
+            obj.layerName = newName; // Custom property for our UI
+        }
         // Also update fabric name if standard
         // obj.name = newName; 
 
@@ -20832,6 +20837,7 @@ const renameLayer = (id: string, newName: string) => {
             markFrameLabelsDirty();
             throttledUpdateFrameLabels();
         }
+        refreshSelectedRef();
         refreshCanvasObjects(); // Trigger reactivity
         saveCurrentState();
     }
@@ -21865,25 +21871,17 @@ const insertAssetToCanvas = async (asset: any, opts?: { pos?: { x: number; y: nu
     try {
         // Se houver um card de produto selecionado dentro da zona de produtos,
         // aplicar a imagem diretamente no card (em vez de inserir solta no canvas).
-        // Mantemos o fluxo de canvas quando há posição explícita (import em lote/spread).
+        // Aqui o comportamento deve ser não-destrutivo: uploads/assets vindos do sidebar
+        // podem representar OUTRO produto do combo, então não substituímos a imagem atual
+        // automaticamente. Quem quiser trocar usa os botões explícitos de "Substituir imagem".
         const shouldAutoPlaceInSelectedCard = !opts?.pos;
         if (shouldAutoPlaceInSelectedCard) {
             const active = canvas.value.getActiveObject?.();
             const ctx = resolveSelectedProductCardContext(active);
             const card = ctx?.card;
-            const image = ctx?.image;
             const cardInZone = !!(card && hasParentZoneBinding(card));
 
             if (card && cardInZone) {
-                if (image && String((image as any).type || '').toLowerCase() === 'image') {
-                    if (!(image as any)._customId) (image as any)._customId = makeCanvasObjectId();
-                    const replaced = await replaceImageByCustomId(String((image as any)._customId), asset.url, {
-                        save: true,
-                        setActive: true
-                    });
-                    if (replaced) return;
-                }
-
                 const added = await addImageToProductCardByUrl(card, asset.url, {
                     save: true,
                     setActive: true
@@ -22059,6 +22057,11 @@ const addImageToProductCardByUrl = async (
             _customId: makeCanvasObjectId()
         });
         (newImg as any).src = newUrl;
+        if (existingProductImage) {
+            (newImg as any).__manualTransform = true;
+            (newImg as any).__manualTransformCardW = Number((card as any)?._cardWidth ?? card?.width ?? 0) || undefined;
+            (newImg as any).__manualTransformCardH = Number((card as any)?._cardHeight ?? card?.height ?? 0) || undefined;
+        }
 
         safeAddWithUpdate(card, newImg);
         card.set({ subTargetCheck: true, interactive: true });
@@ -23515,15 +23518,14 @@ const handleImportProductList = () => {
 
     const active = canvas.value.getActiveObject();
     if (active && isLikelyProductZone(active)) {
-        targetGridZone.value = active;
-        try {
-            productImportExistingCount.value = getZoneChildren(active).length;
-        } catch {
-            productImportExistingCount.value = 0;
-        }
+        openProductReviewForZone(active, {
+            mode: getZoneChildren(active).length > 0 ? 'append' : 'replace'
+        });
+        return;
     }
 
-    showPasteListModal.value = true;
+    productReviewInitialImportMode.value = 'replace';
+    showProductReviewModal.value = true;
 }
 
 const normalizeImageSearchText = (value: any): string =>
@@ -23821,6 +23823,11 @@ const resolveOrCreateZoneForFrame = (frame: any): any | null => {
     })
 
     ;(zone as any)._customId = makeCanvasObjectId()
+    ;(zone as any).zoneName = 'Zona de Produtos'
+    ;(zone as any).role = 'grid'
+    ;(zone as any).contentSource = 'multi-frame'
+    ;(zone as any).contentStatus = 'empty'
+    ;(zone as any).overflowPolicy = 'warn'
     ;(zone as any)._zonePadding = 20
     ;(zone as any)._zoneWidth = zoneWidth
     ;(zone as any)._zoneHeight = zoneHeight
@@ -23935,6 +23942,8 @@ const importProductsToMultipleFrames = async (products: any[], opts?: ProductImp
                 persist: false
             }
         )
+        ;(zone as any).contentSource = 'multi-frame'
+        syncZoneDerivedMetadata(zone)
         applied += 1
     }
 
@@ -23980,12 +23989,18 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
             const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace'
             const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined
             await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, { mode, labelTemplateId })
+            const nextSource = opts?.sourceMode === 'paste-list' || opts?.sourceMode === 'file-import'
+                ? opts.sourceMode
+                : 'manual'
+            ;(zone as any).contentSource = nextSource
+            syncZoneDerivedMetadata(zone)
         }
     } finally {
         // Clear review state and zone reference
         reviewProducts.value = []
         targetGridZone.value = null
         productImportExistingCount.value = 0
+        productReviewInitialImportMode.value = 'replace'
 
         // Update layer panel
         if (canvas.value) {
@@ -24002,6 +24017,7 @@ const handleProductReviewModalVisibility = (value: boolean) => {
     reviewProducts.value = []
     targetGridZone.value = null
     productImportExistingCount.value = 0
+    productReviewInitialImportMode.value = 'replace'
 }
 
 const handleFileUpload = async (e: any) => {
@@ -24204,6 +24220,11 @@ const addGridZone = () => {
     
     // Add Custom ID
     (group as any)._customId = makeCanvasObjectId();
+    (group as any).zoneName = 'Zona de Produtos';
+    (group as any).role = 'grid';
+    (group as any).contentSource = 'manual';
+    (group as any).contentStatus = 'empty';
+    (group as any).overflowPolicy = 'warn';
     (group as any)._zonePadding = 20;
     // CRITICAL: Initialize zone dimensions for persistence
     (group as any)._zoneWidth = 400;
@@ -24777,6 +24798,7 @@ const simulateSmartGrid = async (
                     requestRender: false,
                     trustCachedChildren: true
                 });
+                syncZoneDerivedMetadata(targetZone);
             } catch (calcErr) {
                 console.warn('Grid layout recalc error:', calcErr);
             }
@@ -25044,6 +25066,190 @@ const getCurrentZoneObject = () => {
     return null;
 }
 
+const getZoneCardDiagnosticsPayload = (zone: any) => {
+    const zoneCards = getZoneChildren(zone);
+    return zoneCards.map((card: any) => {
+        const productData = (card as any)?._productData && typeof (card as any)._productData === 'object'
+            ? (card as any)._productData
+            : {};
+        return {
+            id: String((card as any)?._customId || '').trim(),
+            name: String(productData?.name || (card as any)?.productName || '').trim(),
+            imageUrl: (card as any)?.imageUrl || productData?.imageUrl || productData?.image || null,
+            status: productData?.status || null,
+            imageReviewReason: productData?.imageReviewReason || productData?.imageDecisionReason || null,
+            error: productData?.error || null,
+            priceMode: productData?.priceMode || productData?.price_mode || null,
+            pricePack: productData?.pricePack ?? null,
+            priceUnit: productData?.priceUnit ?? null,
+            priceSpecial: productData?.priceSpecial ?? null,
+            priceSpecialUnit: productData?.priceSpecialUnit ?? null,
+            specialCondition: productData?.specialCondition || null
+        };
+    });
+}
+
+const syncZoneDerivedMetadata = (zone: any, diagnostics?: ProductZoneDiagnostic[]) => {
+    if (!zone || !isLikelyProductZone(zone)) return null;
+    const zoneCards = getZoneChildren(zone);
+    const nextDiagnostics = diagnostics ?? buildProductZoneDiagnostics({
+        zone: {
+            name: String((zone as any)?.zoneName || '').trim() || undefined,
+            role: (zone as any)?.role || 'grid',
+            contentSource: (zone as any)?.contentSource || 'manual',
+            contentStatus: (zone as any)?.contentStatus || 'empty',
+            overflowPolicy: (zone as any)?.overflowPolicy || 'warn',
+            x: Number(zone?.left || 0),
+            y: Number(zone?.top || 0),
+            width: Number((zone as any)?._zoneWidth || zone?.width || 900),
+            height: Number((zone as any)?._zoneHeight || zone?.height || 600),
+            padding: Number((zone as any)?._zonePadding ?? zone?.padding ?? 15),
+            gapHorizontal: Number((zone as any)?.gapHorizontal ?? (zone as any)?._zonePadding ?? zone?.padding ?? 15),
+            gapVertical: Number((zone as any)?.gapVertical ?? (zone as any)?._zonePadding ?? zone?.padding ?? 15),
+            columns: Number((zone as any)?.columns ?? 0),
+            rows: Number((zone as any)?.rows ?? 0),
+            layoutDirection: (zone as any)?.layoutDirection ?? 'horizontal',
+            cardAspectRatio: (zone as any)?.cardAspectRatio ?? 'fill',
+            lastRowBehavior: (zone as any)?.lastRowBehavior ?? 'fill',
+            verticalAlign: (zone as any)?.verticalAlign ?? 'stretch',
+            highlightCount: Number((zone as any)?.highlightCount ?? 0),
+            highlightPos: (zone as any)?.highlightPos ?? 'first',
+            highlightHeight: Number((zone as any)?.highlightHeight ?? 1.5)
+        },
+        zoneCards: getZoneCardDiagnosticsPayload(zone),
+        globalStyles: getZoneGlobalStyles(zone)
+    });
+
+    if (!(zone as any).zoneName) {
+        (zone as any).zoneName = 'Zona de Produtos';
+    }
+    if (!(zone as any).role) {
+        (zone as any).role = 'grid';
+    }
+    if (!(zone as any).contentSource) {
+        (zone as any).contentSource = 'manual';
+    }
+    if (!(zone as any).overflowPolicy) {
+        (zone as any).overflowPolicy = 'warn';
+    }
+    (zone as any).contentStatus = getZoneContentStatusFromDiagnostics(zoneCards.length, nextDiagnostics);
+    return {
+        diagnostics: nextDiagnostics,
+        zoneCards
+    };
+}
+
+const selectedZoneQuickActions = computed(() => {
+    const zone = getCurrentZoneObject();
+    if (!zone || !isLikelyProductZone(zone)) return null;
+
+    const synced = syncZoneDerivedMetadata(zone);
+    const zoneCards = synced?.zoneCards || [];
+    const frameId = String((zone as any)?.parentFrameId || '').trim();
+    const frame = frameId ? getFrameById(frameId) : null;
+    const frameLabel = String((frame as any)?.layerName || (frame as any)?.name || '').trim();
+    const zoneName = getZoneDisplayName({ name: String((zone as any)?.zoneName || '').trim() || undefined });
+    const roleLabel = getZoneRoleLabel((zone as any)?.role || 'grid');
+    const statusLabel = getZoneStatusLabel((zone as any)?.contentStatus || 'empty');
+
+    return {
+        id: String((zone as any)?._customId || '').trim(),
+        zone,
+        name: zoneName,
+        roleLabel,
+        statusLabel,
+        frameLabel: frameLabel || undefined,
+        productCount: zoneCards.length,
+        isEmpty: zoneCards.length === 0,
+        diagnostics: synced?.diagnostics || []
+    };
+})
+
+const selectedZoneInspectorData = computed(() => {
+    const summary = selectedZoneQuickActions.value;
+    if (!summary) return null;
+
+    const zone = summary.zone;
+    const pad = typeof (zone as any)?._zonePadding === 'number'
+        ? Number((zone as any)._zonePadding)
+        : Number((zone as any)?.padding ?? 20);
+
+    return {
+        name: summary.name,
+        role: (zone as any)?.role || 'grid',
+        contentSource: (zone as any)?.contentSource || 'manual',
+        contentStatus: (zone as any)?.contentStatus || 'empty',
+        overflowPolicy: (zone as any)?.overflowPolicy || 'warn',
+        columns: Number((zone as any)?.columns ?? 0),
+        rows: Number((zone as any)?.rows ?? 0),
+        padding: pad,
+        gapHorizontal: Number((zone as any)?.gapHorizontal ?? pad),
+        gapVertical: Number((zone as any)?.gapVertical ?? pad),
+        layoutDirection: (zone as any)?.layoutDirection ?? 'horizontal',
+        cardAspectRatio: (zone as any)?.cardAspectRatio ?? 'auto',
+        lastRowBehavior: (zone as any)?.lastRowBehavior ?? 'fill',
+        verticalAlign: (zone as any)?.verticalAlign ?? 'stretch',
+        highlightCount: Number((zone as any)?.highlightCount ?? 0),
+        highlightPos: (zone as any)?.highlightPos ?? 'first',
+        highlightHeight: Number((zone as any)?.highlightHeight ?? 1.5),
+        isLocked: !!((zone as any)?.lockMovementX || (zone as any)?.lockMovementY || (zone as any)?.lockScalingX || (zone as any)?.lockScalingY),
+        backgroundColor: (zone as any)?.backgroundColor,
+        borderColor: (zone as any)?.borderColor,
+        showBorder: (zone as any)?.showBorder,
+        productCount: summary.productCount,
+        frameLabel: summary.frameLabel,
+        diagnostics: summary.diagnostics
+    };
+})
+
+const showZoneQuickActions = computed(() => {
+    if (!selectedZoneQuickActions.value) return false;
+    if (!selectedObjectPos.value.visible) return false;
+    if (figmaCrop.isCropActive.value) return false;
+    if (isPenMode.value || isNodeEditing.value || isDrawing.value) return false;
+    if (showProductReviewModal.value || showSaveModal.value || showLabelTemplatesModal.value) return false;
+    if (showAIModal.value || showExportModal.value || showShareModal.value || showPresentationModal.value) return false;
+    return true;
+})
+
+const focusProductZoneSettings = () => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('editor:focus-product-zone-settings'));
+}
+
+const handleZoneQuickActionFill = () => {
+    const summary = selectedZoneQuickActions.value;
+    if (!summary) return;
+    openProductReviewForZone(summary.zone, { mode: summary.isEmpty ? 'replace' : 'append' });
+}
+
+const handleZoneQuickActionAppend = () => {
+    const zone = selectedZoneQuickActions.value?.zone;
+    if (!zone) return;
+    openProductReviewForZone(zone, { mode: 'append' });
+}
+
+const handleZoneQuickActionReplace = () => {
+    const zone = selectedZoneQuickActions.value?.zone;
+    if (!zone) return;
+    openProductReviewForZone(zone, { mode: 'replace' });
+}
+
+const handleZoneQuickActionPreset = () => {
+    focusProductZoneSettings();
+}
+
+const handleZoneQuickActionDuplicate = async () => {
+    const zone = selectedZoneQuickActions.value?.zone;
+    if (!zone || !canvas.value) return;
+    try {
+        canvas.value.setActiveObject(zone);
+    } catch {
+        // ignore
+    }
+    await handleAction('duplicate');
+}
+
 const resolveZoneTargetsForUpdates = (opts: { allowAllFallback?: boolean } = {}) => {
     if (!canvas.value) return [] as any[];
 
@@ -25144,6 +25350,11 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
             zone._zonePadding = Number(val);
             zone.set('padding', 0);
             shouldRelayout = true;
+            return;
+        }
+
+        if (prop === 'name') {
+            zone.set('zoneName', String(val || '').trim() || 'Zona de Produtos');
             return;
         }
 
@@ -25501,9 +25712,15 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             const allPriceTexts = [currencyText, ...priceTexts];
             allPriceTexts.forEach((txt: any) => {
                 if (!isTextLikeObject(txt)) return;
-                if (styles.priceFont) txt.set('fontFamily', styles.priceFont);
-                if (styles.priceFontWeight !== undefined) txt.set('fontWeight', styles.priceFontWeight as any);
-                txt.set('fontStyle', styles.priceFontStyle === 'italic' ? 'italic' : 'normal');
+                if (p === 'priceFont' && styles.priceFont) {
+                    txt.set('fontFamily', styles.priceFont);
+                }
+                if (p === 'priceFontWeight' && styles.priceFontWeight !== undefined) {
+                    txt.set('fontWeight', styles.priceFontWeight as any);
+                }
+                if (p === 'priceFontStyle') {
+                    txt.set('fontStyle', styles.priceFontStyle === 'italic' ? 'italic' : 'normal');
+                }
 
                 const mult = typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
                 if (preserveTemplateVisual) {
@@ -25544,8 +25761,7 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             });
 
             if (preserveTemplateVisual) {
-                fitManualSinglePriceValuesIntoTemplate(priceGroup);
-                fitManualAtacarejoValuesIntoTemplate(priceGroup);
+                refreshManualTemplateAfterTypographyChange(priceGroup);
             }
 
             if (cardW > 0 && cardH > 0) {
@@ -25819,6 +26035,7 @@ const handleApplyZonePreset = (presetId: string) => {
     if (!active) return;
     const z = productZoneState.productZone.value;
     applyZoneUpdates(active, {
+        role: z.role ?? 'grid',
         padding: z.padding ?? 15,
         gapHorizontal: z.gapHorizontal ?? z.padding ?? 15,
         gapVertical: z.gapVertical ?? z.padding ?? 15,
@@ -27137,6 +27354,14 @@ const expandManualTemplateWidthForDynamicPrice = (priceGroup: any) => {
         priceGroup.dirty = true;
         priceGroup.setCoords?.();
     }
+};
+
+const refreshManualTemplateAfterTypographyChange = (priceGroup: any) => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return;
+    if (!shouldPreserveManualTemplateVisual(priceGroup)) return;
+    expandManualTemplateWidthForDynamicPrice(priceGroup);
+    fitManualSinglePriceValuesIntoTemplate(priceGroup);
+    fitManualAtacarejoValuesIntoTemplate(priceGroup);
 };
 
 const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
@@ -32412,6 +32637,27 @@ const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: P
     });
 };
 
+const resolvePriceGroupBaseScale = (priceGroup: any, axis: 'x' | 'y', zoneScale: number) => {
+    const originalKey = axis === 'x' ? '__originalScaleX' : '__originalScaleY';
+    const scaleKey = axis === 'x' ? 'scaleX' : 'scaleY';
+    const originalScale = Math.abs(Number((priceGroup as any)?.[originalKey]));
+    if (Number.isFinite(originalScale) && originalScale > 0.02) {
+        return originalScale;
+    }
+
+    const currentScale = Math.abs(Number((priceGroup as any)?.[scaleKey]));
+    const safeCurrentScale = Number.isFinite(currentScale) && currentScale > 0.02 ? currentScale : 1;
+    const safeZoneScale = Math.abs(Number(zoneScale));
+    if (Number.isFinite(safeZoneScale) && safeZoneScale > 0.02) {
+        const inferredBase = safeCurrentScale / safeZoneScale;
+        if (Number.isFinite(inferredBase) && inferredBase > 0.02) {
+            return inferredBase;
+        }
+    }
+
+    return safeCurrentScale;
+};
+
 const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
     // Reset Group Scale/Skew to ensure clean internal layout
     group.scale(1);
@@ -32893,9 +33139,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 applyCurrencyText(currencyText);
                 [priceInteger, priceDecimal, priceUnit].forEach(applyPriceText);
                 if (preserveTemplateVisual) {
-                    // Keep authored geometry and only re-fit dynamic values after typography changes.
-                    fitManualSinglePriceValuesIntoTemplate(splash);
-                    fitManualAtacarejoValuesIntoTemplate(splash);
+                    // Keep authored geometry, but expand the manual template when typography grows.
+                    refreshManualTemplateAfterTypographyChange(splash);
                 }
             }
 
@@ -32923,8 +33168,14 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 
                 if (!splashManual) {
                     const newTop = halfH - ((pillH * scale) / 2) - marginBottom + offsetY;
-                    const finalScaleX = preserveTemplateVisual ? (layoutScaleX * scale) : scale;
-                    const finalScaleY = preserveTemplateVisual ? (layoutScaleY * scale) : scale;
+                    const baseScaleX = preserveTemplateVisual ? resolvePriceGroupBaseScale(splash, 'x', scale) : layoutScaleX;
+                    const baseScaleY = preserveTemplateVisual ? resolvePriceGroupBaseScale(splash, 'y', scale) : layoutScaleY;
+                    if (preserveTemplateVisual) {
+                        (splash as any).__originalScaleX = baseScaleX;
+                        (splash as any).__originalScaleY = baseScaleY;
+                    }
+                    const finalScaleX = preserveTemplateVisual ? (baseScaleX * scale) : scale;
+                    const finalScaleY = preserveTemplateVisual ? (baseScaleY * scale) : scale;
                     splash.set({
                         scaleX: finalScaleX,
                         scaleY: finalScaleY,
@@ -32935,8 +33186,14 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     });
                 } else {
                     // Manual positioning: keep left/top, but still apply the zone-level scale.
-                    const finalScaleX = preserveTemplateVisual ? (layoutScaleX * scale) : scale;
-                    const finalScaleY = preserveTemplateVisual ? (layoutScaleY * scale) : scale;
+                    const baseScaleX = preserveTemplateVisual ? resolvePriceGroupBaseScale(splash, 'x', scale) : layoutScaleX;
+                    const baseScaleY = preserveTemplateVisual ? resolvePriceGroupBaseScale(splash, 'y', scale) : layoutScaleY;
+                    if (preserveTemplateVisual) {
+                        (splash as any).__originalScaleX = baseScaleX;
+                        (splash as any).__originalScaleY = baseScaleY;
+                    }
+                    const finalScaleX = preserveTemplateVisual ? (baseScaleX * scale) : scale;
+                    const finalScaleY = preserveTemplateVisual ? (baseScaleY * scale) : scale;
                     splash.set({ scaleX: finalScaleX, scaleY: finalScaleY });
                 }
                 
@@ -34658,6 +34915,10 @@ const rehydrateCanvasZones = (
             if (z.name === 'gridZone') z.isGridZone = true;
             if (z.name === 'productZoneContainer') z.isProductZone = true;
             if (!z.isGridZone && !z.isProductZone) z.isGridZone = true;
+            if (!(z as any).zoneName) (z as any).zoneName = 'Zona de Produtos';
+            if (!(z as any).role) (z as any).role = 'grid';
+            if (!(z as any).contentSource) (z as any).contentSource = 'manual';
+            if (!(z as any).overflowPolicy) (z as any).overflowPolicy = 'warn';
             getResolvedZoneFrameId(z);
 
             // CRITICAL: Clear clipPath from zone AND all its children
@@ -34719,6 +34980,7 @@ const rehydrateCanvasZones = (
                     console.debug('[rehydrateCanvasZones] Zone has no cards; skipping style reapply:', z._customId);
                 }
             }
+            syncZoneDerivedMetadata(z);
         });
 
         // ═══════════════════════════════════════════════════════════════════
@@ -35213,6 +35475,24 @@ const handleRecalculateLayout = () => {
                     @label-mousedown="handleFrameLabelMouseDown"
                   />
 
+                  <ZoneQuickActions
+                    :visible="showZoneQuickActions"
+                    :top="selectedObjectPos.top"
+                    :left="selectedObjectPos.left"
+                    :width="selectedObjectPos.width"
+                    :name="selectedZoneQuickActions?.name || 'Zona de Produtos'"
+                    :role-label="selectedZoneQuickActions?.roleLabel || 'Grid'"
+                    :status-label="selectedZoneQuickActions?.statusLabel || 'Vazia'"
+                    :frame-label="selectedZoneQuickActions?.frameLabel"
+                    :product-count="selectedZoneQuickActions?.productCount || 0"
+                    :is-empty="!!selectedZoneQuickActions?.isEmpty"
+                    @fill="handleZoneQuickActionFill"
+                    @append="handleZoneQuickActionAppend"
+                    @replace="handleZoneQuickActionReplace"
+                    @preset="handleZoneQuickActionPreset"
+                    @duplicate="handleZoneQuickActionDuplicate"
+                  />
+
                   <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" accept="image/*" multiple />
               </div>
 
@@ -35259,6 +35539,7 @@ const handleRecalculateLayout = () => {
             :page-settings="pageSettings"
             :color-styles="project.colorStyles || []"
             :product-zone="productZoneState.productZone.value"
+            :product-zone-inspector="selectedZoneInspectorData"
             :product-global-styles="productZoneState.globalStyles.value"
             :label-templates="labelTemplates"
             :view-show-grid="viewShowGrid"
@@ -35298,6 +35579,7 @@ const handleRecalculateLayout = () => {
             @sync-gaps="handleSyncZoneGaps"
             @recalculate-layout="handleRecalculateLayout"
             @manage-label-templates="showLabelTemplatesModal = true"
+            @open-zone-review="handleZoneQuickActionFill"
             @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
           />
       </div>
@@ -35328,6 +35610,7 @@ const handleRecalculateLayout = () => {
         :review-products="reviewProducts"
         :show-import-mode="!!(targetGridZone && isLikelyProductZone(targetGridZone))"
         :product-import-existing-count="productImportExistingCount"
+        :product-review-initial-import-mode="productReviewInitialImportMode"
         :import-zone-label-template-id="importZoneLabelTemplateId"
         :show-export-modal="showExportModal"
         :export-settings="exportSettings"

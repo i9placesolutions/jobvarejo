@@ -140,7 +140,12 @@ export interface Splash {
 // === PRODUCT ZONE (Container) ===
 export interface ProductZone {
   id?: string;
+  name?: string;
   enabled?: boolean; // Whether the zone is active/visible
+  role?: 'grid' | 'hero' | 'sidebar' | 'showcase';
+  contentSource?: 'manual' | 'paste-list' | 'file-import' | 'multi-frame';
+  contentStatus?: 'empty' | 'draft' | 'filled' | 'overflow';
+  overflowPolicy?: 'warn' | 'paginate';
   // Bounds
   x: number;
   y: number;
@@ -240,6 +245,7 @@ export interface LayoutPreset {
   name: string;
   icon?: string;
   category?: LayoutPresetCategory;
+  role?: ProductZone['role'];
   columns?: number;
   rows?: number;
   layoutDirection?: 'horizontal' | 'vertical';
@@ -283,6 +289,46 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     previewCols: 3,
     previewRows: 3,
     description: 'Calcula automaticamente a melhor distribuição'
+  },
+  {
+    id: 'oferta-padrao-3',
+    name: 'Oferta Padrão 3',
+    icon: 'grid-3x3',
+    category: 'grid',
+    role: 'grid',
+    columns: 3,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 14,
+    gapHorizontal: 12,
+    gapVertical: 12,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 3,
+    previewRows: 3,
+    description: 'Receita padrão para encarte com leitura equilibrada'
+  },
+  {
+    id: 'alta-densidade-6',
+    name: 'Alta Densidade 6',
+    icon: 'layout-grid',
+    category: 'grid',
+    role: 'grid',
+    columns: 6,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 8,
+    gapHorizontal: 6,
+    gapVertical: 6,
+    highlightCount: 0,
+    previewKind: 'grid',
+    previewCols: 6,
+    previewRows: 2,
+    description: 'Densidade alta para tabloide e comunicado de preço'
   },
   {
     id: 'cols-1',
@@ -572,10 +618,11 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
 
   // ==================== ESPECIAIS ====================
   {
-    id: 'featured',
-    name: 'Destaque',
+    id: 'hero-lateral',
+    name: 'Hero Lateral',
     icon: 'star',
     category: 'special',
+    role: 'hero',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -590,13 +637,80 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     previewKind: 'hero',
     previewCols: 4,
     previewRows: 4,
-    description: 'Primeiro produto maior (1.5x)'
+    description: 'Produto principal maior com apoio em grade'
+  },
+  {
+    id: 'atacarejo-pack-unit',
+    name: 'Atacarejo Pack + Unit',
+    icon: 'star',
+    category: 'special',
+    role: 'hero',
+    columns: 4,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 10,
+    gapHorizontal: 8,
+    gapVertical: 8,
+    highlightCount: 1,
+    highlightPos: 'first',
+    highlightHeight: 1.8,
+    previewKind: 'hero',
+    previewCols: 4,
+    previewRows: 4,
+    description: 'Receita para pack/unit com produto principal em destaque'
+  },
+  {
+    id: 'hortifruti-peso',
+    name: 'Hortifruti Peso',
+    icon: 'sparkles',
+    category: 'special',
+    role: 'showcase',
+    columns: 3,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 14,
+    gapHorizontal: 10,
+    gapVertical: 10,
+    highlightCount: 1,
+    highlightPos: 'first',
+    highlightHeight: 1.7,
+    previewKind: 'hero',
+    previewCols: 3,
+    previewRows: 3,
+    description: 'Preço dominante e composição limpa para itens por peso'
+  },
+  {
+    id: 'spread-multi-frame',
+    name: 'Spread Multi-frame',
+    icon: 'sparkles',
+    category: 'special',
+    role: 'showcase',
+    columns: 1,
+    rows: 0,
+    layoutDirection: 'horizontal',
+    cardAspectRatio: 'fill',
+    lastRowBehavior: 'fill',
+    padding: 16,
+    gapHorizontal: 12,
+    gapVertical: 12,
+    highlightCount: 1,
+    highlightPos: 'first',
+    highlightHeight: 2,
+    previewKind: 'hero',
+    previewCols: 1,
+    previewRows: 3,
+    description: 'Zona pensada para trabalhar um produto por frame'
   },
   {
     id: 'featured-center',
     name: 'Destaque Centro',
     icon: 'star',
     category: 'special',
+    role: 'hero',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -618,6 +732,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Destaque Cima',
     icon: 'star',
     category: 'special',
+    role: 'hero',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -639,6 +754,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Destaque Baixo',
     icon: 'star',
     category: 'special',
+    role: 'hero',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -660,6 +776,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Destaque x2',
     icon: 'star',
     category: 'special',
+    role: 'sidebar',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -681,6 +798,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Destaque x3',
     icon: 'star',
     category: 'special',
+    role: 'sidebar',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -702,6 +820,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Destaque x4',
     icon: 'star',
     category: 'special',
+    role: 'sidebar',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -723,6 +842,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Vitrine',
     icon: 'sparkles',
     category: 'special',
+    role: 'showcase',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -744,6 +864,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Vitrine Dir.',
     icon: 'sparkles',
     category: 'special',
+    role: 'showcase',
     columns: 0,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -765,6 +886,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Hero Esquerda',
     icon: 'sparkles',
     category: 'special',
+    role: 'hero',
     columns: 3,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -786,6 +908,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Hero Direita',
     icon: 'sparkles',
     category: 'special',
+    role: 'hero',
     columns: 3,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -807,6 +930,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Hero Duplo Esq.',
     icon: 'sparkles',
     category: 'special',
+    role: 'hero',
     columns: 4,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -828,6 +952,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Hero Duplo Dir.',
     icon: 'sparkles',
     category: 'special',
+    role: 'hero',
     columns: 4,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -849,6 +974,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Coluna Esq.',
     icon: 'star',
     category: 'special',
+    role: 'sidebar',
     columns: 4,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -870,6 +996,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     name: 'Coluna Dir.',
     icon: 'star',
     category: 'special',
+    role: 'sidebar',
     columns: 4,
     rows: 0,
     layoutDirection: 'horizontal',
@@ -912,7 +1039,12 @@ export type ProductZoneState = {
 
 // === DEFAULT VALUES ===
 export const DEFAULT_PRODUCT_ZONE: ProductZone = {
+  name: 'Zona de Produtos',
   enabled: false, // Disabled by default - user must explicitly enable
+  role: 'grid',
+  contentSource: 'manual',
+  contentStatus: 'empty',
+  overflowPolicy: 'warn',
   x: 50,
   y: 150,
   width: 900,

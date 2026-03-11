@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   Columns3,
   ChevronDown,
@@ -7,7 +7,6 @@ import {
   Lock,
   Unlock,
   AlignVerticalSpaceAround,
-  AlignHorizontalSpaceAround,
   Star,
   Settings2,
   LayoutGrid,
@@ -17,7 +16,7 @@ import {
 } from 'lucide-vue-next';
 import { LAYOUT_PRESETS, SPLASH_STYLES, type LayoutPreset } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
-import type { GlobalStyles } from '~/types/product-zone';
+import type { GlobalStyles, ProductZone } from '~/types/product-zone';
 import ColorPicker from './ui/ColorPicker.vue';
 import {
   AVAILABLE_FONT_FAMILIES,
@@ -25,9 +24,16 @@ import {
   getFontWeightOptionsForFamily,
   normalizeFontWeightForFamily
 } from '~/utils/font-catalog';
+import type { ProductZoneDiagnostic } from '~/utils/product-zone-diagnostics';
+import { getZoneRoleLabel, getZoneStatusLabel } from '~/utils/product-zone-metadata';
 
 const props = defineProps<{
   zone: {
+    name?: string;
+    role?: ProductZone['role'];
+    contentSource?: ProductZone['contentSource'];
+    contentStatus?: ProductZone['contentStatus'];
+    overflowPolicy?: ProductZone['overflowPolicy'];
     columns?: number;
     rows?: number;
     padding?: number;
@@ -44,6 +50,9 @@ const props = defineProps<{
     backgroundColor?: string;
     borderColor?: string;
     showBorder?: boolean;
+    productCount?: number;
+    frameLabel?: string;
+    diagnostics?: ProductZoneDiagnostic[];
   };
   globalStyles?: Partial<GlobalStyles>;
   labelTemplates?: LabelTemplate[];
@@ -57,6 +66,7 @@ const emit = defineEmits<{
   (e: 'recalculate'): void;
   (e: 'manage-label-templates'): void;
   (e: 'apply-template-to-zone'): void;
+  (e: 'open-review'): void;
 }>();
 
 const showCardColorPicker = ref(false);
@@ -78,14 +88,28 @@ const priceTextColorPickerRef = ref<HTMLElement | null>(null);
 const priceCurrencyColorPickerRef = ref<HTMLElement | null>(null);
 
 const expandedSections = ref({
+  content: true,
   presets: true,
   layout: true,
   spacing: false,
   highlight: false,
   cardStyle: false,
   typography: false,
-  priceTag: false
+  priceTag: false,
+  diagnostics: true
 });
+
+const zoneRoleOptions = [
+  { value: 'grid' as const, label: 'Grid', hint: 'Grade principal para a maioria das ofertas.' },
+  { value: 'hero' as const, label: 'Hero', hint: 'Reserva destaque para um produto ancora.' },
+  { value: 'sidebar' as const, label: 'Sidebar', hint: 'Boa para apoio lateral ou combo de apoio.' },
+  { value: 'showcase' as const, label: 'Vitrine', hint: 'Composição mais editorial para seleções especiais.' }
+] as const;
+
+const overflowPolicyOptions = [
+  { value: 'warn' as const, label: 'Avisar', hint: 'Mantém o layout e mostra risco de excesso.' },
+  { value: 'paginate' as const, label: 'Paginar', hint: 'Prepara a zona para distribuir o excesso depois.' }
+] as const;
 
 const lastRowBehaviorOptions = [
   { value: 'fill', label: 'Expandir', hint: 'Alarga a linha final para evitar buracos.' },
@@ -432,6 +456,33 @@ const activeTemplateName = computed(() => {
   return props.labelTemplates?.find((tpl) => String(tpl.id) === templateId)?.name || 'Modelo selecionado';
 });
 
+const zoneRoleLabel = computed(() => getZoneRoleLabel(props.zone.role ?? 'grid'));
+const zoneStatusLabel = computed(() => getZoneStatusLabel(props.zone.contentStatus ?? 'empty'));
+const zoneSourceLabel = computed(() => {
+  switch (props.zone.contentSource) {
+    case 'paste-list':
+      return 'Lista colada';
+    case 'file-import':
+      return 'Arquivo';
+    case 'multi-frame':
+      return 'Multi-frame';
+    case 'manual':
+    default:
+      return 'Manual';
+  }
+});
+
+const diagnostics = computed<ProductZoneDiagnostic[]>(() =>
+  Array.isArray(props.zone.diagnostics) ? props.zone.diagnostics : []
+);
+
+const diagnosticsSummaryLabel = computed(() => {
+  if (diagnostics.value.length === 0) return 'Sem alertas';
+  const critical = diagnostics.value.filter((item) => item.severity === 'critical').length;
+  if (critical > 0) return `${critical} crítico${critical > 1 ? 's' : ''}`;
+  return `${diagnostics.value.length} alerta${diagnostics.value.length > 1 ? 's' : ''}`;
+});
+
 const styleSummaryLabel = computed(() => {
   const splashStyle = SPLASH_STYLES.find((style) => style.id === (props.globalStyles?.splashStyle ?? 'classic'));
   if (props.globalStyles?.splashTemplateId) return activeTemplateName.value;
@@ -455,7 +506,10 @@ const aspectRatioLabel = computed(() =>
 );
 
 const overviewMetrics = computed(() => ([
+  { label: 'Função', value: zoneRoleLabel.value },
+  { label: 'Status', value: zoneStatusLabel.value },
   { label: 'Fluxo', value: flowLabel.value },
+  { label: 'Origem', value: zoneSourceLabel.value },
   { label: 'Alinhamento', value: verticalAlignLabel.value },
   { label: 'Cartões', value: aspectRatioLabel.value },
   { label: 'Etiqueta', value: styleSummaryLabel.value }
@@ -574,6 +628,39 @@ const applyPreset = (presetId: string) => {
 const toggleSection = (section: keyof typeof expandedSections.value) => {
   expandedSections.value[section] = !expandedSections.value[section];
 };
+
+const focusZoneSettingsFromCanvas = () => {
+  expandedSections.value.content = true;
+  expandedSections.value.presets = true;
+  expandedSections.value.layout = true;
+};
+
+const handleDiagnosticAction = (actionId?: ProductZoneDiagnostic['actionId']) => {
+  if (!actionId) return;
+  if (actionId === 'open-review') {
+    emit('open-review');
+    return;
+  }
+  if (actionId === 'open-layout') {
+    expandedSections.value.layout = true;
+    expandedSections.value.spacing = true;
+    expandedSections.value.highlight = true;
+    return;
+  }
+  if (actionId === 'open-template') {
+    expandedSections.value.priceTag = true;
+  }
+};
+
+onMounted(() => {
+  if (typeof window === 'undefined') return;
+  window.addEventListener('editor:focus-product-zone-settings', focusZoneSettingsFromCanvas);
+});
+
+onBeforeUnmount(() => {
+  if (typeof window === 'undefined') return;
+  window.removeEventListener('editor:focus-product-zone-settings', focusZoneSettingsFromCanvas);
+});
 </script>
 
 <template>
@@ -587,12 +674,16 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
           </span>
         </div>
         <div>
-          <h3 class="overview-card__title">Zona de produtos</h3>
+          <h3 class="overview-card__title">{{ zone.name || 'Zona de produtos' }}</h3>
           <p class="overview-card__description">
+            <span v-if="zone.frameLabel">Vinculada a {{ zone.frameLabel }}. </span>
             Organize a vitrine com uma grade legível, respiro consistente e etiqueta previsível.
           </p>
         </div>
         <div class="overview-card__chips">
+          <span class="metric-chip">{{ zoneRoleLabel }}</span>
+          <span class="metric-chip">{{ zoneStatusLabel }}</span>
+          <span class="metric-chip">{{ zone.productCount ?? 0 }} itens</span>
           <span class="metric-chip metric-chip--accent">{{ currentPresetName }}</span>
           <span class="metric-chip">{{ zoneColumnsLabel }}</span>
           <span class="metric-chip">{{ zoneRowsLabel }}</span>
@@ -626,6 +717,114 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
     </section>
 
     <div class="section-stack">
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.content }">
+        <button type="button" class="section-toggle" @click="toggleSection('content')">
+          <div class="section-toggle__lead">
+            <div class="section-icon section-icon--violet">
+              <Settings2 class="h-4 w-4" />
+            </div>
+            <div class="section-toggle__copy">
+              <div class="section-toggle__title-row">
+                <span class="section-title">Conteúdo</span>
+                <span class="section-summary">{{ zoneStatusLabel }}</span>
+              </div>
+              <p class="section-description">Nome, papel da zona, origem e acesso rápido para revisar os produtos.</p>
+            </div>
+          </div>
+          <component :is="expandedSections.content ? ChevronDown : ChevronRight" class="section-chevron" />
+        </button>
+
+        <div v-show="expandedSections.content" class="section-panel">
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label for="product-zone-name" class="field-label">Nome da zona</label>
+              <p class="field-hint">Aparece nas layers e ajuda a localizar a área certa para importar ou revisar.</p>
+            </div>
+            <input
+              id="product-zone-name"
+              type="text"
+              class="field-select"
+              :value="zone.name ?? 'Zona de Produtos'"
+              @input="updateZone('name', ($event.target as HTMLInputElement).value)"
+            />
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Função da zona</label>
+              <p class="field-hint">Ajuda a distinguir grade principal, destaque hero e áreas de apoio.</p>
+            </div>
+            <div class="segmented-grid segmented-grid--2">
+              <button
+                v-for="option in zoneRoleOptions"
+                :key="option.value"
+                type="button"
+                class="segmented-option"
+                :class="{ 'segmented-option--active': (zone.role ?? 'grid') === option.value }"
+                @click="updateZone('role', option.value)"
+              >
+                <strong>{{ option.label }}</strong>
+                <span>{{ option.hint }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="content-metrics-grid">
+            <div class="content-metric">
+              <span class="content-metric__label">Status</span>
+              <strong>{{ zoneStatusLabel }}</strong>
+            </div>
+            <div class="content-metric">
+              <span class="content-metric__label">Origem</span>
+              <strong>{{ zoneSourceLabel }}</strong>
+            </div>
+            <div class="content-metric">
+              <span class="content-metric__label">Produtos</span>
+              <strong>{{ zone.productCount ?? 0 }}</strong>
+            </div>
+            <div class="content-metric">
+              <span class="content-metric__label">Frame pai</span>
+              <strong>{{ zone.frameLabel || 'Sem frame' }}</strong>
+            </div>
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Política de overflow</label>
+              <p class="field-hint">Define o comportamento desejado quando a vitrine ficar apertada demais.</p>
+            </div>
+            <div class="segmented-grid segmented-grid--2">
+              <button
+                v-for="option in overflowPolicyOptions"
+                :key="option.value"
+                type="button"
+                class="segmented-option segmented-option--compact"
+                :class="{ 'segmented-option--active': (zone.overflowPolicy ?? 'warn') === option.value }"
+                @click="updateZone('overflowPolicy', option.value)"
+              >
+                <strong>{{ option.label }}</strong>
+                <span>{{ option.hint }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="template-card">
+            <div class="template-card__head">
+              <div>
+                <label class="field-label">Revisão e destino</label>
+                <p class="field-hint">Abra o fluxo de importação já apontando para esta zona e preservando o template ativo.</p>
+              </div>
+              <span class="template-card__status">{{ activeTemplateName }}</span>
+            </div>
+            <div class="action-row">
+              <button type="button" class="secondary-button" @click="emit('open-review')">
+                Abrir revisão
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.presets }">
         <button type="button" class="section-toggle" @click="toggleSection('presets')">
           <div class="section-toggle__lead">
@@ -1854,6 +2053,52 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
           </div>
         </div>
       </section>
+
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.diagnostics }">
+        <button type="button" class="section-toggle" @click="toggleSection('diagnostics')">
+          <div class="section-toggle__lead">
+            <div class="section-icon section-icon--rose">
+              <Tag class="h-4 w-4" />
+            </div>
+            <div class="section-toggle__copy">
+              <div class="section-toggle__title-row">
+                <span class="section-title">Diagnóstico</span>
+                <span class="section-summary">{{ diagnosticsSummaryLabel }}</span>
+              </div>
+              <p class="section-description">Mostra riscos comerciais e visuais antes de fechar a página.</p>
+            </div>
+          </div>
+          <component :is="expandedSections.diagnostics ? ChevronDown : ChevronRight" class="section-chevron" />
+        </button>
+
+        <div v-show="expandedSections.diagnostics" class="section-panel">
+          <div v-if="diagnostics.length === 0" class="diagnostic-empty">
+            <strong>Nenhum alerta relevante.</strong>
+            <span>A zona está pronta para seguir com ajuste fino ou exportação.</span>
+          </div>
+
+          <div v-else class="diagnostic-list">
+            <article v-for="diagnostic in diagnostics" :key="diagnostic.id" class="diagnostic-card">
+              <div class="diagnostic-card__head">
+                <span class="diagnostic-severity" :class="`diagnostic-severity--${diagnostic.severity}`">
+                  {{ diagnostic.severity === 'critical' ? 'Crítico' : diagnostic.severity === 'warning' ? 'Atenção' : 'Info' }}
+                </span>
+                <strong>{{ diagnostic.title }}</strong>
+              </div>
+              <p class="diagnostic-card__message">{{ diagnostic.message }}</p>
+              <div v-if="diagnostic.actionLabel" class="action-row">
+                <button
+                  type="button"
+                  class="ghost-button"
+                  @click="handleDiagnosticAction(diagnostic.actionId)"
+                >
+                  {{ diagnostic.actionLabel }}
+                </button>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
     </div>
 
     <div class="sticky-dock">
@@ -2133,9 +2378,19 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
   background: rgba(34, 197, 94, 0.12);
 }
 
+.section-icon--violet {
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.14);
+}
+
 .section-icon--magenta {
   color: #f472b6;
   background: rgba(217, 70, 239, 0.12);
+}
+
+.section-icon--rose {
+  color: #fda4af;
+  background: rgba(244, 63, 94, 0.12);
 }
 
 .section-icon--neutral {
@@ -2266,6 +2521,39 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
   gap: 10px;
 }
 
+.content-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.content-metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+}
+
+.content-metric__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8f8f97;
+}
+
+.content-metric strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #f4f4f5;
+}
+
 .field-stack__head {
   display: flex;
   flex-direction: column;
@@ -2369,6 +2657,12 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
   white-space: nowrap;
   font-size: 11px;
   color: #d4d4d8;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .value-badge {
@@ -2508,6 +2802,70 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.diagnostic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diagnostic-empty,
+.diagnostic-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+}
+
+.diagnostic-empty strong,
+.diagnostic-card strong {
+  font-size: 12px;
+  color: #f4f4f5;
+}
+
+.diagnostic-empty span,
+.diagnostic-card__message {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #a1a1aa;
+}
+
+.diagnostic-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.diagnostic-severity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.diagnostic-severity--info {
+  background: rgba(56, 189, 248, 0.12);
+  color: #bae6fd;
+}
+
+.diagnostic-severity--warning {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fde68a;
+}
+
+.diagnostic-severity--critical {
+  background: rgba(244, 63, 94, 0.16);
+  color: #fecdd3;
 }
 
 .color-field__copy {
@@ -2709,6 +3067,10 @@ input:focus-visible {
   }
 
   .overview-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .content-metrics-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

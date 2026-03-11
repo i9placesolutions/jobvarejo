@@ -1379,8 +1379,17 @@ export const useProject = () => {
                 return false
             }
 
-            console.log('📦 Dados do projeto carregados do banco:', { id: data.id, name: data.name, canvasDataType: typeof data.canvas_data })
-            console.log('📦 canvas_data preview:', JSON.stringify(data.canvas_data).substring(0, 500))
+            if (import.meta.dev) {
+                const storedPagesPreview = Array.isArray(data.canvas_data)
+                    ? data.canvas_data
+                    : (Array.isArray((data.canvas_data as any)?.pages) ? (data.canvas_data as any).pages : [])
+                console.log('📦 Dados do projeto carregados do banco:', {
+                    id: data.id,
+                    name: data.name,
+                    canvasDataType: typeof data.canvas_data,
+                    pages: storedPagesPreview.length
+                })
+            }
 
             project.id = data.id
             project.name = data.name

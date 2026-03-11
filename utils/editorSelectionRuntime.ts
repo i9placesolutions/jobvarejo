@@ -131,6 +131,11 @@ export const buildZoneSelectionConfig = (active: any) => {
     ? active._zonePadding
     : (active?.padding || 20)
   return {
+    name: String(active?.zoneName || '').trim() || 'Zona de Produtos',
+    role: active?.role || 'grid',
+    contentSource: active?.contentSource || 'manual',
+    contentStatus: active?.contentStatus || 'empty',
+    overflowPolicy: active?.overflowPolicy || 'warn',
     columns: active?.columns || 0,
     rows: active?.rows || 0,
     padding: pad,

@@ -394,6 +394,7 @@ export const useProductZone = () => {
     const nextGapV = Math.max(0, Number.isFinite(Number(preset.gapVertical)) ? Number(preset.gapVertical) : nextPadding);
 
     updateZone({
+      role: preset.role ?? productZone.value.role ?? DEFAULT_PRODUCT_ZONE.role ?? 'grid',
       columns: preset.columns,
       rows: preset.rows,
       layoutDirection: preset.layoutDirection,

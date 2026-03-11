@@ -125,10 +125,15 @@ export const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>
 
   if (obj.isGridZone != null) snap.isGridZone = obj.isGridZone
   if (obj.isProductZone != null) snap.isProductZone = obj.isProductZone
+  if (obj.zoneName != null) snap.zoneName = obj.zoneName
   if (obj._zoneGlobalStyles != null) snap._zoneGlobalStyles = obj._zoneGlobalStyles
   if (obj._zonePadding != null) snap._zonePadding = obj._zonePadding
   if (obj._zoneWidth != null) snap._zoneWidth = obj._zoneWidth
   if (obj._zoneHeight != null) snap._zoneHeight = obj._zoneHeight
+  if (obj.role != null) snap.role = obj.role
+  if (obj.contentSource != null) snap.contentSource = obj.contentSource
+  if (obj.contentStatus != null) snap.contentStatus = obj.contentStatus
+  if (obj.overflowPolicy != null) snap.overflowPolicy = obj.overflowPolicy
   if (obj.columns != null) snap.columns = obj.columns
   if (obj.rows != null) snap.rows = obj.rows
   if (obj.gapHorizontal != null) snap.gapHorizontal = obj.gapHorizontal

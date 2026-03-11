@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import Button from './ui/Button.vue'
-import { Eye, EyeOff, Lock, Unlock, Trash2, ArrowUp, ArrowDown, Box, Type, Image as ImageIcon, Square, Circle, Triangle, ChevronRight, ChevronDown, Layers, Scan, Link2 } from 'lucide-vue-next'
+import { Eye, EyeOff, Lock, Unlock, Trash2, ArrowUp, ArrowDown, Box, Type, Image as ImageIcon, Square, Circle, Triangle, ChevronRight, ChevronDown, Layers, Scan, Link2, LayoutGrid } from 'lucide-vue-next'
+import { getZoneDisplayName } from '~/utils/product-zone-metadata'
 
 const props = defineProps<{
   objects: any[]
@@ -159,6 +160,17 @@ const getLayerName = (obj: any, index: number) => {
   }
 
   const n = String(obj?.name || '').trim()
+  const isProductZone =
+    !!obj?.isProductZone ||
+    !!obj?.isGridZone ||
+    n === 'gridZone' ||
+    n === 'productZoneContainer' ||
+    typeof obj?._zonePadding === 'number'
+
+  if (isProductZone) {
+    return getZoneDisplayName({ name: obj?.zoneName })
+  }
+
   const isFrameLike =
     !!obj?.isFrame ||
     /^frame\b/i.test(n) ||
@@ -218,6 +230,7 @@ interface LayerItem {
   type: string
   depth: number
   isFrame: boolean
+  isProductZone?: boolean
   isExpanded: boolean
   visible: boolean
   locked: boolean
@@ -347,6 +360,9 @@ const buildLayerTree = computed(() => {
       const children = frameChildrenMap.get(obj._customId) || []
       item.childCount = children.length
     }
+    if (item.isProductZone) {
+      item.childCount = validObjects.filter((candidate: any) => String(candidate?.parentZoneId || '').trim() === String(obj?._customId || '').trim()).length
+    }
     items.push(item)
 
     if (isFrame && isFrameExpanded(obj._customId)) {
@@ -380,6 +396,7 @@ const createLayerItem = (
     type: obj.type,
     depth,
     isFrame,
+    isProductZone: !!(obj?.isProductZone || obj?.isGridZone || typeof obj?._zonePadding === 'number'),
     isExpanded: isFrameExpanded(obj._customId),
     visible: obj.visible !== false,
     locked: obj.lockMovementX || obj.lockMovementY,
@@ -440,6 +457,7 @@ defineExpose({
         <!-- Icon container -->
         <div class="w-4 h-4 flex items-center justify-center shrink-0 opacity-70">
           <Layers v-if="item.isFrame" class="w-3 h-3" />
+          <LayoutGrid v-else-if="item.isProductZone" class="w-3.5 h-3.5 text-emerald-300" />
           <Box v-else-if="item.type === 'group'" class="w-3 h-3" />
           <Type v-else-if="item.type.includes('text')" class="w-3.5 h-3.5" />
           <ImageIcon v-else-if="item.type === 'image'" class="w-3.5 h-3.5" />
@@ -479,6 +497,9 @@ defineExpose({
             </span>
             <!-- Child count badge for frames -->
             <span v-if="item.isFrame && item.childCount !== undefined" class="text-[8px] px-1 rounded bg-white/10 text-zinc-400 shrink-0">
+              {{ item.childCount }}
+            </span>
+            <span v-if="item.isProductZone && item.childCount !== undefined" class="text-[8px] px-1 rounded bg-emerald-500/12 text-emerald-200 shrink-0">
               {{ item.childCount }}
             </span>
           </template>

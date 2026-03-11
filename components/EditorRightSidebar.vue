@@ -16,6 +16,7 @@ defineProps<{
   pageSettings: any
   colorStyles: any[]
   productZone: any
+  productZoneInspector?: any
   productGlobalStyles: any
   labelTemplates: any[]
   viewShowGrid: boolean
@@ -58,6 +59,7 @@ const emit = defineEmits<{
   (e: 'sync-gaps', padding: number): void
   (e: 'recalculate-layout'): void
   (e: 'manage-label-templates'): void
+  (e: 'open-zone-review'): void
   (e: 'change-mode', mode: 'design' | 'prototype'): void
 }>()
 </script>
@@ -107,6 +109,7 @@ const emit = defineEmits<{
         :pageSettings="pageSettings"
         :colorStyles="colorStyles"
         :productZone="productZone"
+        :productZoneInspector="productZoneInspector"
         :productGlobalStyles="productGlobalStyles"
         :labelTemplates="labelTemplates"
         @update-property="(prop, value) => emit('update-property', prop, value)"
@@ -123,6 +126,7 @@ const emit = defineEmits<{
         @sync-gaps="(padding) => emit('sync-gaps', padding)"
         @recalculate-layout="emit('recalculate-layout')"
         @manage-label-templates="emit('manage-label-templates')"
+        @open-zone-review="emit('open-zone-review')"
         @change-mode="(mode: 'design' | 'prototype') => emit('change-mode', mode)"
       />
     </div>

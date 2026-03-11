@@ -352,25 +352,66 @@ export const isProcessedSmartKey = (key: string): boolean => {
   return k.includes(`-${PROCESS_VERSION}.webp`) || k.includes(`-${PROCESS_VERSION}.png`)
 }
 
-const normalizeS3KeyForMatch = (s3Key: string): string => {
-  let file = String(s3Key).split('/').pop() || ''
-  try {
-    file = decodeURIComponent(file)
-  } catch {
-    // keep raw filename if malformed URI component
-  }
+const GENERIC_PATH_SEGMENTS = new Set([
+  'imagens', 'uploads', 'upload', 'images', 'image', 'img', 'assets', 'asset',
+  'produto', 'produtos', 'product', 'products', 'smart', 'processed', 'original',
+  'bg-removed', 'tmp', 'temp', 'cache', 'logo', 'logos'
+])
 
-  const noExt = file.replace(/\.(webp|png|jpe?g|gif|svg)$/i, '')
-  const cleaned = noExt
+const decodeStorageKey = (value: string): string => {
+  try {
+    return decodeURIComponent(String(value || '').trim())
+  } catch {
+    return String(value || '').trim()
+  }
+}
+
+const cleanKeyFragmentForMatch = (value: string): string => {
+  const noExt = String(value || '').replace(/\.(webp|png|jpe?g|gif|svg|avif)$/i, '')
+  return noExt
     .replace(/^bg-removed-\d+$/i, '')
     .replace(/^\d+-/, '')
-    .replace(/^smart-/, '')
+    .replace(/^smart-(?:src|ext)?-/, '')
     .replace(/-v\d+$/i, '')
     .replace(/-[0-9a-f]{10,}(-v\d+)?$/i, '')
     .replace(/[-_]+/g, ' ')
     .trim()
+}
 
+const normalizeS3KeyForMatch = (s3Key: string): string => {
+  const decoded = decodeStorageKey(s3Key)
+  const file = decoded.split('/').pop() || ''
+  return normalizeSearchTerm(cleanKeyFragmentForMatch(file))
+}
+
+const normalizeS3KeyPathForMatch = (s3Key: string): string => {
+  const decoded = decodeStorageKey(s3Key)
+  const parts = decoded
+    .split('/')
+    .map((part) => cleanKeyFragmentForMatch(part))
+    .filter(Boolean)
+    .filter((part) => {
+      const normalized = normalizeSearchTerm(part)
+      if (!normalized) return false
+      if (GENERIC_PATH_SEGMENTS.has(normalized)) return false
+      if (/^\d{4}$/.test(normalized)) return false
+      if (/^\d{1,2}$/.test(normalized)) return false
+      return true
+    })
+
+  return normalizeSearchTerm(parts.join(' '))
+}
+
+const normalizeAliasForMatch = (alias: string): string => {
+  const cleaned = cleanKeyFragmentForMatch(alias)
   return normalizeSearchTerm(cleaned)
+}
+
+const mergeNormalizedSearchTexts = (...values: string[]): string => {
+  const tokens = values
+    .flatMap((value) => String(value || '').split(' ').map((token) => token.trim()).filter(Boolean))
+  if (!tokens.length) return ''
+  return [...new Set(tokens)].sort().join(' ')
 }
 
 const normalizedS3KeyMemo = new Map<string, string>()
@@ -380,6 +421,16 @@ const getNormalizedS3KeyForMatch = (s3Key: string): string => {
   const normalized = normalizeS3KeyForMatch(s3Key)
   if (normalizedS3KeyMemo.size > 20_000) normalizedS3KeyMemo.clear()
   normalizedS3KeyMemo.set(s3Key, normalized)
+  return normalized
+}
+
+const normalizedS3KeyPathMemo = new Map<string, string>()
+const getNormalizedS3KeyPathForMatch = (s3Key: string): string => {
+  const cached = normalizedS3KeyPathMemo.get(s3Key)
+  if (cached !== undefined) return cached
+  const normalized = normalizeS3KeyPathForMatch(s3Key)
+  if (normalizedS3KeyPathMemo.size > 20_000) normalizedS3KeyPathMemo.clear()
+  normalizedS3KeyPathMemo.set(s3Key, normalized)
   return normalized
 }
 
@@ -398,6 +449,7 @@ const buildBestS3MatchCacheKey = (opts: {
   weight?: string
   productCode?: string
   strictOnly?: boolean
+  cacheNamespace?: string
 }) => {
   const bucket = String(opts.bucketName || '').trim()
   const prefixes = [...new Set((opts.prefixes || []).map((p) => String(p || '').trim()).filter(Boolean))].sort()
@@ -406,7 +458,8 @@ const buildBestS3MatchCacheKey = (opts: {
   const metaFlavor = normalizeSearchTerm(String(opts.flavor || ''))
   const metaWeight = normalizeSearchTerm(String(opts.weight || ''))
   const metaProductCode = normalizeSearchTerm(String(opts.productCode || ''))
-  return `${bucket}::${prefixes.join('|')}::${candidates.join('|')}::${metaBrand}::${metaFlavor}::${metaWeight}::${metaProductCode}::${Boolean(opts.strictOnly) ? 'strict' : 'non-strict'}`
+  const cacheNamespace = String(opts.cacheNamespace || '').trim()
+  return `${bucket}::${prefixes.join('|')}::${candidates.join('|')}::${metaBrand}::${metaFlavor}::${metaWeight}::${metaProductCode}::${Boolean(opts.strictOnly) ? 'strict' : 'non-strict'}::${cacheNamespace}`
 }
 
 const getQueryTokens = (normalized: string): string[] =>
@@ -428,6 +481,14 @@ const scoreKeyMatch = (queryTokens: string[], keyTokenSet: Set<string>) => {
   let overlap = 0
   for (const t of queryTokens) if (keyTokenSet.has(t)) overlap++
   return { ratio: overlap / queryTokens.length, overlap }
+}
+
+const getTokenOverlapCount = (tokens: string[], tokenSet: Set<string>): number => {
+  let overlap = 0
+  for (const token of tokens) {
+    if (tokenSet.has(token)) overlap += 1
+  }
+  return overlap
 }
 
 const FLAVOR_NOISE_TOKENS = new Set([
@@ -480,6 +541,9 @@ export const findBestS3Match = async (opts: {
   weight?: string
   productCode?: string
   strictOnly?: boolean
+  keyAliases?: Map<string, string>
+  cacheNamespace?: string
+  maxKeysPerPrefix?: number
 }): Promise<string | null> => {
   const bestMatchCacheKey = buildBestS3MatchCacheKey(opts)
   const now = Date.now()
@@ -515,6 +579,7 @@ export const findBestS3Match = async (opts: {
 
   let bestStrict: { key: string; ratio: number; overlap: number; score: number } | null = null
   let bestRelaxed: { key: string; ratio: number; overlap: number; score: number } | null = null
+  let bestExact: { key: string; score: number; reason: string } | null = null
   const fuzzyRejectStats = {
     total: 0,
     variant: 0,
@@ -537,7 +602,7 @@ export const findBestS3Match = async (opts: {
     bucket: opts.bucketName,
     prefixes: opts.prefixes,
     ttlMs: 60_000,
-    maxKeysPerPrefix: 8_000,
+    maxKeysPerPrefix: Math.max(1_000, Number(opts.maxKeysPerPrefix || 8_000)),
     excludeKeyPrefixes: ['uploads/bg-removed-']
   })
 
@@ -545,10 +610,15 @@ export const findBestS3Match = async (opts: {
     const key = item.key
     if (!key) continue
 
-    const normalizedKey = getNormalizedS3KeyForMatch(key)
+    const alias = String(opts.keyAliases?.get(key) || '').trim()
+    const normalizedKeyBase = getNormalizedS3KeyForMatch(key)
+    const normalizedKeyPath = getNormalizedS3KeyPathForMatch(key)
+    const aliasNormalized = alias ? normalizeAliasForMatch(alias) : ''
+    const normalizedKey = mergeNormalizedSearchTexts(normalizedKeyBase, normalizedKeyPath, aliasNormalized)
     if (!normalizedKey) continue
     const keyTokens = tokenSet(normalizedKey)
     if (keyTokens.size < 2) continue
+    const aliasTokens = tokenSet(aliasNormalized)
 
     const hasQueryVariantSignal = requiredWeightTokens.length > 0 || requiredFlavorTokens.length > 0
     const hasRequiredProductCodeSignal = requiredProductCodeTokens.length > 0
@@ -576,6 +646,33 @@ export const findBestS3Match = async (opts: {
       continue
     }
 
+    const exactVariant = queryVariants.find(({ normalized }) =>
+      normalized === normalizedKeyBase ||
+      normalized === normalizedKeyPath ||
+      normalized === aliasNormalized ||
+      normalized === normalizedKey
+    )
+    if (exactVariant) {
+      let exactScore = 3
+      if (exactVariant.normalized === aliasNormalized) exactScore += 1.35
+      if (exactVariant.normalized === normalizedKeyBase) exactScore += 0.95
+      if (exactVariant.normalized === normalizedKeyPath) exactScore += 0.75
+      if (exactVariant.normalized === normalizedKey) exactScore += 0.55
+      if (key.startsWith('uploads/')) exactScore += 0.2
+      if (requiredBrandTokens.length > 0 && hasAnyToken(requiredBrandTokens, keyTokens)) exactScore += 0.15
+      if (requiredWeightTokens.length > 0 && requiredWeightTokens.some((token) => keyTokens.has(token))) exactScore += 0.18
+      if (!bestExact || exactScore > bestExact.score) {
+        const exactReason = exactVariant.normalized === aliasNormalized
+          ? 'alias-exato'
+          : exactVariant.normalized === normalizedKeyBase
+            ? 'arquivo-exato'
+            : exactVariant.normalized === normalizedKeyPath
+              ? 'caminho-exato'
+              : 'combinado-exato'
+        bestExact = { key, score: exactScore, reason: exactReason }
+      }
+    }
+
     for (let idx = 0; idx < queryVariants.length; idx++) {
       const queryNormalized = queryVariants[idx]!.normalized
       if (!isFuzzyMatchValid(queryNormalized, normalizedKey, collectFuzzyReject)) continue
@@ -598,6 +695,8 @@ export const findBestS3Match = async (opts: {
       }
 
       const { ratio, overlap } = scoreKeyMatch(queryTokens, keyTokens)
+      const aliasOverlap = aliasTokens.size > 0 ? getTokenOverlapCount(queryTokens, aliasTokens) : 0
+      const pathOverlap = normalizedKeyPath ? getTokenOverlapCount(queryTokens, tokenSet(normalizedKeyPath)) : 0
       const requiresWeightStrict = hasWeightInNormalized(queryNormalized)
       const shouldEnforceStrictSignals = opts.strictOnly && (hasStrictSignalContext || hasQueryVariantSignal)
       const minRatio = shouldEnforceStrictSignals
@@ -614,7 +713,25 @@ export const findBestS3Match = async (opts: {
         : Math.min(shouldEnforceStrictSignals ? 4 : 3, queryTokens.length)
 
       if (ratio >= minRatio && overlap >= minOverlap) {
-        const strictScore = ratio + (overlap * 0.02) + (Math.min(queryTokens.length, 8) * 0.03)
+        const aliasBoost = aliasOverlap > 0
+          ? ((aliasOverlap / Math.max(1, queryTokens.length)) * 0.26) + (aliasOverlap === queryTokens.length ? 0.24 : 0)
+          : 0
+        const pathBoost = pathOverlap > 0 ? Math.min(0.16, pathOverlap * 0.025) : 0
+        const prefixBoost = key.startsWith('uploads/') ? 0.08 : (key.startsWith('imagens/') ? 0.03 : 0)
+        const exactishBoost =
+          queryNormalized === aliasNormalized ? 0.65 :
+          queryNormalized === normalizedKeyBase ? 0.48 :
+          queryNormalized === normalizedKeyPath ? 0.34 :
+          queryNormalized === normalizedKey ? 0.28 :
+          0
+        const strictScore =
+          ratio +
+          (overlap * 0.02) +
+          (Math.min(queryTokens.length, 8) * 0.03) +
+          aliasBoost +
+          pathBoost +
+          prefixBoost +
+          exactishBoost
         if (
           !bestStrict ||
           strictScore > bestStrict.score ||
@@ -629,7 +746,18 @@ export const findBestS3Match = async (opts: {
         const relaxedMinRatio = requiresWeightStrict ? 0.72 : 0.68
         const relaxedMinOverlap = queryTokens.length >= 7 ? 4 : 3
         if (ratio >= relaxedMinRatio && overlap >= relaxedMinOverlap) {
-          const relaxedScore = ratio + (overlap * 0.015) + (Math.min(queryTokens.length, 8) * 0.02)
+          const aliasBoost = aliasOverlap > 0
+            ? ((aliasOverlap / Math.max(1, queryTokens.length)) * 0.18)
+            : 0
+          const pathBoost = pathOverlap > 0 ? Math.min(0.1, pathOverlap * 0.018) : 0
+          const prefixBoost = key.startsWith('uploads/') ? 0.05 : (key.startsWith('imagens/') ? 0.02 : 0)
+          const relaxedScore =
+            ratio +
+            (overlap * 0.015) +
+            (Math.min(queryTokens.length, 8) * 0.02) +
+            aliasBoost +
+            pathBoost +
+            prefixBoost
           if (
             !bestRelaxed ||
             relaxedScore > bestRelaxed.score ||
@@ -640,6 +768,15 @@ export const findBestS3Match = async (opts: {
         }
       }
     }
+  }
+
+  if (bestExact) {
+    console.log(`OK [S3 Match:exact] Reuse: "${bestExact.key}" (${bestExact.reason}, score=${bestExact.score.toFixed(3)})`)
+    bestS3MatchMemo.set(bestMatchCacheKey, { expiresAt: Date.now() + 45_000, result: bestExact.key })
+    if (bestS3MatchMemo.size > 5000) {
+      bestS3MatchMemo.clear()
+    }
+    return bestExact.key
   }
 
   const best = opts.strictOnly ? bestStrict : (bestStrict || bestRelaxed)

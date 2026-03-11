@@ -9,6 +9,7 @@ type ProductImportOptions = {
   mode?: 'replace' | 'append'
   labelTemplateId?: string
   targetMode?: ImportTargetMode
+  sourceMode?: 'manual' | 'paste-list' | 'file-import'
   selectedFrameIds?: string[]
   frameAssignments?: FrameAssignment[]
   countRule?: 'min'
@@ -62,6 +63,7 @@ defineProps<{
   reviewProducts: any[]
   showImportMode: boolean
   productImportExistingCount: number
+  productReviewInitialImportMode: 'replace' | 'append'
   importZoneLabelTemplateId: string
   showExportModal: boolean
   exportSettings: any
@@ -202,6 +204,7 @@ const emit = defineEmits<{
     :initial-products="reviewProducts"
     :show-import-mode="showImportMode"
     :existing-count="productImportExistingCount"
+    :initial-import-mode="productReviewInitialImportMode"
     :label-templates="labelTemplates"
     :initial-label-template-id="importZoneLabelTemplateId"
     :available-frames-for-import="availableFramesForImport"

@@ -9,6 +9,7 @@ import { toWasabiDirectUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
 
 type ImportTargetMode = 'zone' | 'multi-frame'
+type ImportSourceMode = 'manual' | 'paste-list' | 'file-import'
 type ImageBgPolicy = 'auto' | 'never' | 'always'
 type ImageMatchMode = 'precise' | 'fast'
 type ImageQuickAction = 'search' | 'upload' | 'storage' | 'reprocess'
@@ -18,6 +19,7 @@ type ProductImportOptions = {
     mode?: 'replace' | 'append'
     labelTemplateId?: string
     targetMode?: ImportTargetMode
+    sourceMode?: ImportSourceMode
     selectedFrameIds?: string[]
     frameAssignments?: FrameAssignment[]
     countRule?: 'min'
@@ -45,6 +47,7 @@ const props = defineProps<{
     initialProducts?: SmartProduct[]
     showImportMode?: boolean
     existingCount?: number
+    initialImportMode?: 'replace' | 'append'
     labelTemplates?: LabelTemplate[]
     initialLabelTemplateId?: string
     availableFramesForImport?: FrameCandidate[]
@@ -63,6 +66,7 @@ const step = ref<'input' | 'review'>('input')
 const listFileInput = ref<HTMLInputElement | null>(null)
 const importMode = ref<'replace' | 'append'>('replace')
 const targetMode = ref<ImportTargetMode>('zone')
+const importSource = ref<ImportSourceMode>('manual')
 const selectedFrameIds = ref<string[]>([])
 const frameAssignmentsMap = ref<Record<string, string | null>>({})
 // Importacao inteligente: por padrao, queremos remover o fundo das imagens encontradas.
@@ -400,6 +404,8 @@ watch(() => props.modelValue, (newVal) => {
     }
 
     isSubmittingImport.value = false
+    importMode.value = props.initialImportMode === 'append' ? 'append' : 'replace'
+    importSource.value = 'manual'
     if (props.initialProducts && props.initialProducts.length > 0) {
         // Load external products directly into review mode
         products.value = props.initialProducts.map((p: any) => ({
@@ -444,6 +450,7 @@ const mergeParsedProductsWithAppendBase = () => {
 const handleParse = async () => {
     if (!textInput.value.trim()) return;
     const shouldAppend = !!appendBaseProducts.value
+    importSource.value = 'paste-list'
     await parseText(textInput.value);
     
     if (products.value.length > 0) {
@@ -465,6 +472,7 @@ const handleFileSelected = async (event: Event) => {
     if (!file) return
 
     const shouldAppend = !!appendBaseProducts.value
+    importSource.value = 'file-import'
     await parseFile(file)
 
     if (products.value.length > 0) {
@@ -478,6 +486,7 @@ const handleDropFile = async (event: DragEvent) => {
     const file = event.dataTransfer?.files?.[0]
     if (!file) return
     const shouldAppend = !!appendBaseProducts.value
+    importSource.value = 'file-import'
     await parseFile(file)
     if (products.value.length > 0) {
         if (shouldAppend) mergeParsedProductsWithAppendBase()
@@ -514,6 +523,7 @@ const createEmptyProduct = (): SmartProduct => ({
 })
 
 const addManualProduct = () => {
+    importSource.value = 'manual'
     products.value.unshift(createEmptyProduct())
     reviewSearch.value = ''
 }
@@ -540,6 +550,7 @@ const handleImport = () => {
         mode: importMode.value,
         labelTemplateId: selectedLabelTemplateId.value || undefined,
         targetMode: targetMode.value,
+        sourceMode: importSource.value,
         imageMatchMode: imageMatchMode.value,
         imageConcurrency: clampImageConcurrency(imageConcurrency.value)
     }

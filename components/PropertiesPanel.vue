@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import {
   AlignLeft, AlignCenter, AlignRight,
   AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Target,
@@ -37,6 +37,7 @@ const props = defineProps<{
   colorStyles?: {id: string, name: string, value: string}[],
   // Product Zone Props
   productZone?: Partial<ProductZone>,
+  productZoneInspector?: any | null,
   productGlobalStyles?: Partial<GlobalStyles>,
   labelTemplates?: LabelTemplate[]
 }>()
@@ -55,6 +56,7 @@ const emit = defineEmits<{
   (e: 'sync-gaps', padding: number): void
   (e: 'recalculate-layout'): void
   (e: 'manage-label-templates'): void
+  (e: 'open-zone-review'): void
   (e: 'apply-template-to-zone'): void
   (e: 'change-mode', mode: 'design' | 'prototype'): void
   (e: 'add-interaction'): void
@@ -282,14 +284,46 @@ const resolvedZoneSelection = computed(() => {
 const isProductZone = computed(() => !!resolvedZoneSelection.value)
 const isProductZoneSectionOpen = ref(false)
 
+const openProductZoneInspector = () => {
+  if (!isProductZone.value) return
+  isProductZoneSectionOpen.value = true
+}
+
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  window.addEventListener('editor:focus-product-zone-settings', openProductZoneInspector)
+})
+
+onBeforeUnmount(() => {
+  if (typeof window === 'undefined') return
+  window.removeEventListener('editor:focus-product-zone-settings', openProductZoneInspector)
+})
+
 // Extract zone data directly from selected object when it's a product zone
-const currentZoneData = computed(() => {
+type ZoneInspectorData = Partial<ProductZone> & {
+  name?: string
+  role?: ProductZone['role']
+  contentSource?: ProductZone['contentSource']
+  contentStatus?: ProductZone['contentStatus']
+  overflowPolicy?: ProductZone['overflowPolicy']
+  productCount?: number
+  frameLabel?: string
+  diagnostics?: any[]
+}
+
+const currentZoneData = computed<ZoneInspectorData>(() => {
   const obj = resolvedZoneSelection.value
   if (!obj) return props.productZone ?? {}
 
   const pad = typeof obj._zonePadding === 'number' ? obj._zonePadding : (obj.padding || 20)
+  const inspectorMeta = props.productZoneInspector || {}
 
   return {
+    name: String((obj as any).zoneName || inspectorMeta?.name || '').trim() || 'Zona de Produtos',
+    role: (obj as any).role ?? inspectorMeta?.role ?? 'grid',
+    contentSource: (obj as any).contentSource ?? inspectorMeta?.contentSource ?? 'manual',
+    contentStatus: (obj as any).contentStatus ?? inspectorMeta?.contentStatus ?? 'empty',
+    overflowPolicy: (obj as any).overflowPolicy ?? inspectorMeta?.overflowPolicy ?? 'warn',
     columns: obj.columns ?? 0,
     rows: obj.rows ?? 0,
     padding: pad,
@@ -305,7 +339,10 @@ const currentZoneData = computed(() => {
     isLocked: !!(obj.lockMovementX || obj.lockMovementY || obj.lockScalingX || obj.lockScalingY),
     backgroundColor: obj.backgroundColor,
     borderColor: obj.borderColor,
-    showBorder: obj.showBorder
+    showBorder: obj.showBorder,
+    productCount: inspectorMeta?.productCount ?? 0,
+    frameLabel: inspectorMeta?.frameLabel ?? '',
+    diagnostics: Array.isArray(inspectorMeta?.diagnostics) ? inspectorMeta.diagnostics : []
   }
 })
 
@@ -2056,6 +2093,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                    Controle estrutura, ritmo e visual da grade sem abrir opcoes redundantes.
                  </p>
                  <div class="mt-2 flex flex-wrap gap-1">
+                   <span class="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-emerald-100">
+                     {{ currentZoneData?.contentStatus || 'empty' }}
+                   </span>
+                   <span v-if="currentZoneData?.productCount" class="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-zinc-400">
+                     {{ currentZoneData?.productCount }} itens
+                   </span>
                    <span class="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-zinc-400">
                      Pad {{ currentZoneData?.padding ?? 20 }}
                    </span>
@@ -2078,6 +2121,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             :zone="currentZoneData"
             :global-styles="currentGlobalStyles"
             :label-templates="labelTemplates"
+            @open-review="$emit('open-zone-review')"
             @update:zone="(prop, val) => $emit('update-zone', prop, val)"
             @update:global-styles="(prop, val) => $emit('update-global-styles', prop, val)"
             @apply-preset="presetId => $emit('apply-preset', presetId)"

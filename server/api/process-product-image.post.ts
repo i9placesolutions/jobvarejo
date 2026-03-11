@@ -1,5 +1,6 @@
 import { getS3Client, getPublicUrl } from "../utils/s3";
 import { requireAuthenticatedUser } from "../utils/auth";
+import { pgQuery } from "../utils/postgres";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { validateProductImageCandidatesWithAI } from "../utils/product-image-ai";
 import { searchSerperImageCandidates } from "../utils/product-image-serper";
@@ -37,6 +38,48 @@ type ExternalCandidate = {
     imageHeight?: number;
     score?: number;
 }
+
+const userAssetNamesMemo = new Map<string, { expiresAt: number; data: Map<string, string> }>();
+
+const getUserAssetNamesMap = async (userId: string): Promise<Map<string, string>> => {
+    const cacheKey = String(userId || '').trim();
+    if (!cacheKey) return new Map();
+
+    const cached = userAssetNamesMemo.get(cacheKey);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
+        return cached.data;
+    }
+
+    const next = new Map<string, string>();
+    try {
+        const { rows } = await pgQuery<{ asset_key: string; display_name: string }>(
+            `select asset_key, display_name
+             from public.asset_names
+             where user_id = $1`,
+            [cacheKey]
+        );
+        for (const row of rows || []) {
+            const key = String(row?.asset_key || '').trim();
+            const displayName = String(row?.display_name || '').trim();
+            if (!key || !displayName) continue;
+            next.set(key, displayName);
+        }
+    } catch {
+        // asset_names pode nao existir ainda; manter busca resiliente.
+    }
+
+    userAssetNamesMemo.set(cacheKey, {
+        expiresAt: now + 60_000,
+        data: next
+    });
+    if (userAssetNamesMemo.size > 500) {
+        const oldestKey = userAssetNamesMemo.keys().next().value;
+        if (oldestKey) userAssetNamesMemo.delete(oldestKey);
+    }
+
+    return next;
+};
 
 const tokenizeNormalized = (value: string, minLen = 3): string[] =>
     normalizeSearchTerm(value)
@@ -543,6 +586,7 @@ export default defineEventHandler(async (event) => {
     // 1. INTERNAL SEARCH (Wasabi S3) - consulta uploads/ e imagens/ antes de cache DB/Google
     // ========================================
     try {
+        const assetNamesByKey = await getUserAssetNamesMap(String(user.id || ''));
         const found = await findBestS3Match({
             s3,
             bucketName,
@@ -552,7 +596,10 @@ export default defineEventHandler(async (event) => {
             flavor,
             weight,
             productCode,
-            strictOnly: strictMode
+            strictOnly: strictMode,
+            keyAliases: assetNamesByKey,
+            cacheNamespace: String(user.id || ''),
+            maxKeysPerPrefix: 12_000
         });
 
         if (found) {
