@@ -1,28 +1,49 @@
-// Lazy load OpenAI para reduzir bundle size
 import { requireAuthenticatedUser } from '../utils/auth'
 import { enforceRateLimit } from '../utils/rate-limit'
 
-let openaiInstance: any = null
-const getOpenAI = async () => {
-  if (!openaiInstance) {
-    const { default: OpenAI } = await import('openai')
-    const config = useRuntimeConfig()
-    openaiInstance = new OpenAI({
-      apiKey: config.openaiApiKey || ''
-    })
-  }
-  return openaiInstance
-}
-
+const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
+const OPENAI_TIMEOUT_MS = 18_000
 const MAX_FILE_BYTES = 12 * 1024 * 1024
 const MAX_TEXT_CHARS = 60_000
 const MAX_PROMPT_SOURCE_CHARS = 20_000
 const MAX_IMAGE_DATA_URL_LENGTH = 12_000_000
+const MAX_VISION_IMAGE_DIMENSION = 1600
 
 const clampText = (value: unknown, maxChars = MAX_TEXT_CHARS): string => {
     const text = String(value ?? '').trim()
     if (!text) return ''
     return text.length > maxChars ? text.slice(0, maxChars) : text
+}
+
+const getTimeoutSignal = (timeoutMs: number): AbortSignal | undefined => {
+    const timeoutFactory = (AbortSignal as any)?.timeout
+    if (typeof timeoutFactory !== 'function') return undefined
+    return timeoutFactory(timeoutMs)
+}
+
+const getErrorMessage = (err: any, fallback: string): string => {
+    const msg = String(
+        err?.data?.message ||
+        err?.data?.statusMessage ||
+        err?.statusMessage ||
+        err?.message ||
+        err?.cause?.message ||
+        fallback
+    ).trim()
+    return msg || fallback
+}
+
+const isLikelyTimeoutError = (err: any): boolean => {
+    const msg = getErrorMessage(err, '').toLowerCase()
+    return (
+        String(err?.name || '').toLowerCase() === 'aborterror' ||
+        msg.includes('timeout') ||
+        msg.includes('timed out') ||
+        msg.includes('aborted') ||
+        msg.includes('headers timeout') ||
+        msg.includes('body timeout') ||
+        msg.includes('socket hang up')
+    )
 }
 
 const parsePdfBufferToText = async (buf: Buffer): Promise<string> => {
@@ -66,6 +87,50 @@ const parsePdfBufferToText = async (buf: Buffer): Promise<string> => {
     })
 }
 
+const optimizeImageForVision = async (buf: Buffer, mime: string): Promise<{ buffer: Buffer; mime: string }> => {
+    const normalizedMime = String(mime || '').trim().toLowerCase()
+    if (!normalizedMime.startsWith('image/')) {
+        return { buffer: buf, mime: normalizedMime || 'application/octet-stream' }
+    }
+
+    const isAnimated = normalizedMime === 'image/gif'
+    const isSvg = normalizedMime === 'image/svg+xml'
+    if (isAnimated || isSvg) {
+        return { buffer: buf, mime: normalizedMime }
+    }
+
+    try {
+        const sharp = (await import('sharp')).default
+        const meta = await sharp(buf, { animated: false }).metadata()
+        const hasAlpha = meta.hasAlpha === true
+
+        const pipeline = sharp(buf, { animated: false })
+            .rotate()
+            .resize(MAX_VISION_IMAGE_DIMENSION, MAX_VISION_IMAGE_DIMENSION, {
+                fit: 'inside',
+                withoutEnlargement: true
+            })
+
+        if (hasAlpha || normalizedMime === 'image/png') {
+            const optimized = await pipeline.png({
+                compressionLevel: 9,
+                palette: true,
+                quality: 90
+            }).toBuffer()
+            return { buffer: optimized, mime: 'image/png' }
+        }
+
+        const optimized = await pipeline.jpeg({
+            quality: 82,
+            mozjpeg: true
+        }).toBuffer()
+        return { buffer: optimized, mime: 'image/jpeg' }
+    } catch (err) {
+        console.warn('[parse-products] Vision image optimization failed, using original upload:', getErrorMessage(err, 'unknown error'))
+        return { buffer: buf, mime: normalizedMime || 'application/octet-stream' }
+    }
+}
+
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event)
     enforceRateLimit(event, `parse-products:${user.id}`, 20, 60_000)
@@ -93,8 +158,9 @@ export default defineEventHandler(async (event) => {
             }
 
             if (mime.startsWith('image/')) {
-                const base64 = buf.toString('base64');
-                imageDataUrl = `data:${mime};base64,${base64}`;
+                const optimizedImage = await optimizeImageForVision(buf, mime)
+                const base64 = optimizedImage.buffer.toString('base64');
+                imageDataUrl = `data:${optimizedImage.mime};base64,${base64}`;
                 if (imageDataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
                     throw createError({ statusCode: 400, statusMessage: 'Image payload too large (max 8MB)' })
                 }
@@ -144,9 +210,6 @@ export default defineEventHandler(async (event) => {
             message: `Missing server key. Set NUXT_OPENAI_API_KEY (recommended) or OPENAI_API_KEY in .env and restart \"npm run dev\". Debug: runtimeConfig.openaiApiKey=false env.NUXT_OPENAI_API_KEY=${hasNuxtKey} env.OPENAI_API_KEY=${hasLegacyKey}`
         });
     }
-
-    // Usar instância lazy-loaded do OpenAI
-    const openai = await getOpenAI()
 
     const prompt = `
 You extract structured products from supermarket/lists/retail price lists.
@@ -516,16 +579,81 @@ ${text ? `"${String(text).slice(0, MAX_PROMPT_SOURCE_CHARS)}"` : '(image attache
             }]
             : [{ role: "user", content: prompt }];
 
-        const completion = await openai.chat.completions.create({
-            messages,
-            model: "gpt-4o-mini",
-            response_format: { type: "json_object" },
-            temperature: 0.1,
-            max_tokens: 3200
+        const response = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.openaiApiKey}`
+            },
+            signal: getTimeoutSignal(OPENAI_TIMEOUT_MS),
+            body: JSON.stringify({
+                messages,
+                model: 'gpt-4o-mini',
+                response_format: { type: 'json_object' },
+                temperature: 0.1,
+                max_tokens: 3200
+            })
         });
 
-        const content = completion.choices?.[0]?.message?.content;
-        if (!content) throw new Error('No content returned');
+        let completion: any = null
+        try {
+            completion = await response.json()
+        } catch {
+            throw createError({
+                statusCode: 502,
+                statusMessage: 'OpenAI returned a non-JSON response'
+            })
+        }
+
+        if (!response.ok) {
+            const upstreamMessage = getErrorMessage(
+                completion?.error,
+                `OpenAI request failed (${response.status})`
+            )
+
+            if (response.status === 408 || response.status === 504) {
+                throw createError({
+                    statusCode: 504,
+                    statusMessage: 'OpenAI timed out while parsing products',
+                    message: upstreamMessage
+                })
+            }
+            if (response.status === 429) {
+                throw createError({
+                    statusCode: 503,
+                    statusMessage: 'OpenAI rate limited product parsing',
+                    message: upstreamMessage
+                })
+            }
+            if (response.status === 400 || response.status === 413 || response.status === 422) {
+                throw createError({
+                    statusCode: 422,
+                    statusMessage: 'Could not analyze the provided input',
+                    message: upstreamMessage
+                })
+            }
+            if (response.status === 401 || response.status === 403) {
+                throw createError({
+                    statusCode: 500,
+                    statusMessage: 'OpenAI authentication failed',
+                    message: 'The server AI configuration rejected the request'
+                })
+            }
+
+            throw createError({
+                statusCode: 502,
+                statusMessage: 'OpenAI request failed',
+                message: upstreamMessage
+            })
+        }
+
+        const content = String(completion?.choices?.[0]?.message?.content || '').trim();
+        if (!content) {
+            throw createError({
+                statusCode: 502,
+                statusMessage: 'OpenAI returned empty content'
+            })
+        }
         
         const result = JSON.parse(content);
         const rawProducts = Array.isArray(result?.products) ? result.products : [];
@@ -631,7 +759,21 @@ ${text ? `"${String(text).slice(0, MAX_PROMPT_SOURCE_CHARS)}"` : '(image attache
 
         return { products };
     } catch (error: any) {
-        console.error('OpenAI Error:', error);
-        throw createError({ statusCode: 500, statusMessage: 'Failed to parse products', message: error.message });
+        if (Number(error?.statusCode || error?.status || 0) > 0) {
+            throw error
+        }
+        if (isLikelyTimeoutError(error)) {
+            throw createError({
+                statusCode: 504,
+                statusMessage: 'Timed out while parsing products',
+                message: getErrorMessage(error, 'The AI request took too long to complete')
+            })
+        }
+        console.error('Parse products error:', error);
+        throw createError({
+            statusCode: 500,
+            statusMessage: 'Failed to parse products',
+            message: getErrorMessage(error, 'Unexpected parsing failure')
+        });
     }
 });

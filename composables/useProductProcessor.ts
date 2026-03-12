@@ -300,7 +300,7 @@ export const useProductProcessor = () => {
 
     const normalizeSmartProductCandidates = (input: any): SmartProductImageCandidate[] => {
         if (!Array.isArray(input)) return [];
-        return input
+        const normalized = input
             .map((entry: any, index: number) => {
                 const url = String(entry?.url || '').trim();
                 const previewUrl = String(entry?.previewUrl || entry?.url || '').trim();
@@ -324,8 +324,8 @@ export const useProductProcessor = () => {
                     recommended: !!entry?.recommended
                 } satisfies SmartProductImageCandidate;
             })
-            .filter((entry): entry is SmartProductImageCandidate => !!entry)
-            .slice(0, 6);
+            .filter(Boolean) as SmartProductImageCandidate[];
+        return normalized.slice(0, 6);
     };
 
     const mapParsedProducts = (data: any) => {
@@ -434,7 +434,39 @@ export const useProductProcessor = () => {
                 msg.includes('load failed')
             ) return true;
         }
-        return status === 502 || status === 503 || status === 504;
+        return status === 502 || status === 503;
+    };
+
+    const getParseFailureMessage = (err: any, kind: 'text' | 'file'): string => {
+        const status = getHttpStatus(err);
+        if (status === 429) {
+            return 'Muitas tentativas em sequência. Aguarde alguns segundos e tente novamente.';
+        }
+        if (status === 413) {
+            return 'O arquivo enviado é grande demais para processamento.';
+        }
+        if (status === 422) {
+            return extractErrorMessage(
+                err,
+                kind === 'file'
+                    ? 'Nao foi possivel analisar o arquivo enviado.'
+                    : 'Nao foi possivel analisar o texto enviado.'
+            );
+        }
+        if (status === 504) {
+            return kind === 'file'
+                ? 'O parse demorou alem do limite do servidor. Tente um arquivo menor ou cole o texto.'
+                : 'O parse demorou alem do limite do servidor. Tente dividir o texto em blocos menores.';
+        }
+        if (isTransientNetworkError(err)) {
+            return kind === 'file'
+                ? 'Conexao com o servidor oscilou durante o envio do arquivo. Tente novamente em alguns segundos.'
+                : 'Conexao com o servidor oscilou durante o parse. Tente novamente em alguns segundos.';
+        }
+        return extractErrorMessage(
+            err,
+            kind === 'file' ? 'Falha ao processar arquivo' : 'Falha ao processar texto'
+        );
     };
 
     const fetchParseProducts = async (body: any) => {
@@ -467,9 +499,7 @@ export const useProductProcessor = () => {
             products.value = mapParsedProducts(data);
         } catch (err: any) {
             console.error(err);
-            parsingError.value = isTransientNetworkError(err)
-                ? 'Conexão com o servidor oscilou durante o parse. Tente novamente em alguns segundos.'
-                : (err.message || 'Falha ao processar texto');
+            parsingError.value = getParseFailureMessage(err, 'text');
         } finally {
             isParsing.value = false;
         }
@@ -487,9 +517,7 @@ export const useProductProcessor = () => {
             products.value = mapParsedProducts(data);
         } catch (err: any) {
             console.error(err);
-            parsingError.value = isTransientNetworkError(err)
-                ? 'Conexão com o servidor oscilou durante o envio do arquivo. Tente novamente em alguns segundos.'
-                : (err.message || 'Falha ao processar arquivo');
+            parsingError.value = getParseFailureMessage(err, 'file');
         } finally {
             isParsing.value = false;
         }
@@ -733,6 +761,8 @@ export const useProductProcessor = () => {
             imageAttemptCount?: number;
             imageDecisionReason?: string;
             imageReviewReason?: string;
+            imageDecision?: SmartProduct['imageDecision'];
+            imageCandidates?: SmartProductImageCandidate[];
         }>();
 
         const writeResolvedSignature = (signature: string, sourceProduct: SmartProduct) => {

@@ -17,6 +17,11 @@ export default defineNuxtConfig({
 
   nitro: {
     preset: 'vercel',
+    vercel: {
+      functions: {
+        maxDuration: 30,
+      }
+    },
 
     // Minificar o output
     minify: true,

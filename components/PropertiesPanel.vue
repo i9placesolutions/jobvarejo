@@ -2364,7 +2364,10 @@ input[type=number]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
-input[type=number] { -moz-appearance: textfield; }
+input[type=number] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
 
 /* Cabeçalho de seção (colapsável) */
 .pp-section-header {
