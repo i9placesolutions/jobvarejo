@@ -6805,7 +6805,12 @@ const refreshSelectedRef = (extra?: Record<string, any>) => {
     })
 }
 
-const selectedObjectPos = ref<{top: number, left: number, width: number, visible: boolean}>({ top: 0, left: 0, width: 0, visible: false })
+const selectedObjectPos = ref<{top: number, left: number, width: number, height: number, visible: boolean}>({ top: 0, left: 0, width: 0, height: 0, visible: false })
+
+const resolveZoneQuickActionsAnchor = () => {
+    const zone = getCurrentZoneObject();
+    return zone && isLikelyProductZone(zone) ? zone : null;
+}
 
 // Debounced save for properties panel (prevents lag during rapid input changes)
 let propertySaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -6863,6 +6868,28 @@ const hasActiveTextEditingForPersist = () => {
     }
 };
 
+const clearPendingPersistenceTimers = () => {
+    if (propertySaveTimer) {
+        clearTimeout(propertySaveTimer);
+        propertySaveTimer = null;
+    }
+    if (textEditSaveTimer) {
+        clearTimeout(textEditSaveTimer);
+        textEditSaveTimer = null;
+    }
+    if (globalStylesSaveTimer) {
+        clearTimeout(globalStylesSaveTimer);
+        globalStylesSaveTimer = null;
+    }
+    if (viewportStateSaveTimer) {
+        clearTimeout(viewportStateSaveTimer);
+        viewportStateSaveTimer = null;
+    }
+    if (cancelPendingCoalescedSave) {
+        cancelPendingCoalescedSave();
+    }
+};
+
 const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => {
     const now = Date.now();
     const force = !!opts.force;
@@ -6878,7 +6905,7 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
         const hadPendingViewportSave = !!viewportStateSaveTimer;
         const hadPendingCoalescedSave = hasPendingCoalescedSave;
         const hadActiveTextEditing = hasActiveTextEditingForPersist();
-        const hasPendingProjectSync = hasUnsavedChanges.value || project.pages.some((page: any) => !!page?.dirty);
+        const hadPendingProjectSync = hasUnsavedChanges.value || project.pages.some((page: any) => !!page?.dirty);
         const shouldPersistLocalState = hadPendingPropertySave
             || hadPendingTextEditSave
             || hadPendingGlobalStylesSave
@@ -6886,29 +6913,11 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
             || hadPendingCoalescedSave
             || hadActiveTextEditing;
 
-        if (!shouldPersistLocalState && !hasPendingProjectSync) {
+        if (!shouldPersistLocalState && !hadPendingProjectSync) {
             return;
         }
 
-        if (propertySaveTimer) {
-            clearTimeout(propertySaveTimer);
-            propertySaveTimer = null;
-        }
-        if (textEditSaveTimer) {
-            clearTimeout(textEditSaveTimer);
-            textEditSaveTimer = null;
-        }
-        if (globalStylesSaveTimer) {
-            clearTimeout(globalStylesSaveTimer);
-            globalStylesSaveTimer = null;
-        }
-        if (viewportStateSaveTimer) {
-            clearTimeout(viewportStateSaveTimer);
-            viewportStateSaveTimer = null;
-        }
-        if (cancelPendingCoalescedSave) {
-            cancelPendingCoalescedSave();
-        }
+        clearPendingPersistenceTimers();
 
         if (hadActiveTextEditing) {
             finalizeActiveTextEditingForPersist();
@@ -6918,9 +6927,9 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
             // Save to in-memory project + local draft immediately (sync path inside saveState/updatePageData).
             try {
                 saveCurrentState({
-                    allowEmptyOverwrite: true,
                     reason: `lifecycle:${reason}`,
                     source: 'system',
+                    markUnsaved: true,
                     skipIfUnchanged: true,
                     skipCoalesce: true
                 });
@@ -6936,7 +6945,8 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
         }
 
         // Also force remote save path whenever possible.
-        if (hasPendingProjectSync) {
+        const hasPendingProjectSyncNow = hadPendingProjectSync || hasUnsavedChanges.value || project.pages.some((page: any) => !!page?.dirty);
+        if (hasPendingProjectSyncNow) {
             if (hasUnsavedChanges.value) triggerAutoSave();
             void flushAutoSave().catch((err: any) => {
                 console.warn('[persist] Falha no flushAutoSave:', err);
@@ -10175,12 +10185,13 @@ type SaveStateOptions = {
     forceEmptyOverwrite?: boolean;
     reason?: string;
     source?: 'user' | 'system';
+    markUnsaved?: boolean;
     skipIfUnchanged?: boolean;
     expectedPageId?: string;
     skipCoalesce?: boolean;
 };
 
-let saveCurrentState: (opts?: SaveStateOptions) => void | Promise<void> = () => {}; 
+let saveCurrentState: (opts?: SaveStateOptions) => boolean | Promise<boolean> = () => false; 
 let cancelPendingCoalescedSave: (() => void) | null = null;
 let teardownHistoryListeners: (() => void) | null = null;
 const applyViewportTransform = (vpt: number[]) => {
@@ -11307,7 +11318,7 @@ const removeImageObjectsDeep = (node: any): any => {
     let pendingCoalescedSaveTimer: ReturnType<typeof setTimeout> | null = null;
     let pendingCoalescedSaveOpts: SaveStateOptions | null = null;
     let pendingCoalescedSavePageId = '';
-    let invokeSaveStateSafely: (opts?: SaveStateOptions) => void = () => {};
+    let invokeSaveStateSafely: (opts?: SaveStateOptions) => Promise<boolean> = async () => false;
     const clearPendingCoalescedSave = () => {
         if (pendingCoalescedSaveTimer) {
             clearTimeout(pendingCoalescedSaveTimer)
@@ -11556,6 +11567,9 @@ const removeImageObjectsDeep = (node: any): any => {
             source,
             reason,
             currentFingerprint,
+            markUnsaved: typeof opts.markUnsaved === 'boolean'
+                ? !!opts.markUnsaved
+                : source !== 'system',
             pages: project.pages,
             resolvePageIndexById,
             updatePageData,
@@ -11589,16 +11603,20 @@ const removeImageObjectsDeep = (node: any): any => {
         }
     }
     
-    invokeSaveStateSafely = (opts: SaveStateOptions = {}) => {
+    invokeSaveStateSafely = async (opts: SaveStateOptions = {}) => {
         const nextOpts: SaveStateOptions = { ...(opts || {}) };
         if (!nextOpts.expectedPageId) {
             const pageId = getActiveProjectPageId();
             if (pageId) nextOpts.expectedPageId = pageId;
         }
-        void saveState(nextOpts).catch((err: any) => {
+        try {
+            await saveState(nextOpts);
+            return true;
+        } catch (err: any) {
             console.error('❌ [saveState] Falha ao salvar estado:', err);
             if (canvas.value) sanitizeCanvasObjectStack(canvas.value as any, 'saveState-catch');
-        });
+            return false;
+        }
     };
 
     // Export for external use
@@ -11643,6 +11661,8 @@ const removeImageObjectsDeep = (node: any): any => {
 const handleObjectModified = (e: any) => {
     const obj = e.target;
     if (!obj) return;
+
+    markPriceGroupAsManuallyCustomized(obj);
 
     if (isProductCardContainer(obj)) {
         syncCardProductDataNameFromTitleTarget(obj, { normalizeDisplayedText: true });
@@ -16508,7 +16528,10 @@ const setupSnapping = () => {
 const updateFloatingUI = () => {
     if (!canvas.value) return;
     const active = canvas.value.getActiveObject();
-    selectedObjectPos.value = getSelectedObjectFloatingPos(active, isLikelyProductZone);
+    const anchor = (active && isLikelyProductZone(active))
+        ? active
+        : resolveZoneQuickActionsAnchor();
+    selectedObjectPos.value = getSelectedObjectFloatingPos(anchor, isLikelyProductZone);
 }
 
 // Global updateSelection function (used by undo/redo and event handlers)
@@ -16537,7 +16560,10 @@ const updateSelection = () => {
         : [];
     // Always use a stable snapshot so the PropertiesPanel never "loses" sections (e.g. `type` can be non-enumerable on Fabric objects).
     selectedObjectRef.value = selectionUiState.selectedObjectSnapshot;
-    selectedObjectPos.value = floatingPos;
+    const zoneQuickActionsAnchor = floatingPos.visible ? null : resolveZoneQuickActionsAnchor();
+    selectedObjectPos.value = zoneQuickActionsAnchor
+        ? getSelectedObjectFloatingPos(zoneQuickActionsAnchor, isLikelyProductZone)
+        : floatingPos;
     markFrameLabelsDirty();
 
     // Show contextual toolbar for selected vector paths and node-edit sessions.
@@ -18279,6 +18305,7 @@ const setupReactivity = () => {
     const handleTextChanged = (e: any) => {
         syncTextSelectionSnapshot(e);
         const target = e?.target;
+        markPriceGroupAsManuallyCustomized(target, { captureSnapshot: false });
         const didSyncCardName = syncCardProductDataNameFromTitleTarget(target, { normalizeDisplayedText: false });
         const didSyncCardTitleWidth = syncCardProductDataTitleWidthFromTarget(target);
         if (didSyncCardName || didSyncCardTitleWidth || isTextTargetObject(target)) {
@@ -18289,6 +18316,7 @@ const setupReactivity = () => {
     const handleTextEditingExited = (e: any) => {
         syncTextSelectionSnapshot(e);
         const target = e?.target;
+        markPriceGroupAsManuallyCustomized(target);
         const didSyncCardName = syncCardProductDataNameFromTitleTarget(target, { normalizeDisplayedText: true });
         const didSyncCardTitleWidth = syncCardProductDataTitleWidthFromTarget(target);
         if (didSyncCardName || didSyncCardTitleWidth || isTextTargetObject(target)) {
@@ -18814,6 +18842,8 @@ const updateObjectProperty = (prop: string, value: any) => {
             }
             fn(styleTarget);
         };
+
+        markPriceGroupAsManuallyCustomized(active, { captureSnapshot: false });
 
         // --- Lock (Cadeado) ---
         // Blocks movement/scale/rotate but keeps the object selectable so the user can unlock.
@@ -19416,6 +19446,8 @@ const updateObjectProperty = (prop: string, value: any) => {
              }
         }
         
+        markPriceGroupAsManuallyCustomized(active);
+
         // If it's a group, we might want to dirty it
         if (active.group) safeAddWithUpdate(active.group);
         
@@ -22015,9 +22047,20 @@ const performShare = async () => {
 // --- Project Manager Helpers ---
 const saveProject = async () => {
     if (!canvas.value) return;
-    const json = canvas.value.toJSON([...CANVAS_CUSTOM_PROPS, 'data']);
-    (json as any)[LABEL_TEMPLATES_JSON_KEY] = serializeLabelTemplatesForProject();
-    updatePageData(project.activePageIndex, json);
+    clearPendingPersistenceTimers();
+    if (hasActiveTextEditingForPersist()) {
+        finalizeActiveTextEditingForPersist();
+    }
+    const didPersistCurrentState = await Promise.resolve(saveCurrentState({
+        reason: 'manual-project-save',
+        source: 'user',
+        skipCoalesce: true,
+        skipIfUnchanged: false
+    }));
+    if (didPersistCurrentState === false) {
+        console.warn('[saveProject] Salvamento remoto abortado: nao foi possivel consolidar o estado atual do canvas.');
+        return;
+    }
     
     // Persist to DB
     await saveProjectDB();
@@ -23512,7 +23555,14 @@ const createSmartObject = async (
     height: number,
     gridId: string,
     labelTpl?: LabelTemplate,
-    zoneStyles?: Partial<GlobalStyles>
+    zoneStyles?: Partial<GlobalStyles>,
+    labelPlacementSnapshot?: {
+        left?: number;
+        top?: number;
+        originX?: string;
+        originY?: string;
+        angle?: number;
+    } | null
 ) => {
     // Layout Constants
     const cardHeight = height || width * 1.4; // Aspect ratio 1:1.4 (fallback)
@@ -23754,12 +23804,19 @@ const createSmartObject = async (
 
     const layout = layoutPriceGroup(priceTagGroup, width, cardHeight);
     const hForAnchor = layout?.pillH ?? (priceTagGroup.getScaledHeight?.() ?? priceTagGroup.height ?? (cardHeight * 0.18));
+    const resolvedSplashLeft = Number.isFinite(Number(labelPlacementSnapshot?.left)) ? Number(labelPlacementSnapshot?.left) : 0;
+    const resolvedSplashTop = Number.isFinite(Number(labelPlacementSnapshot?.top))
+        ? Number(labelPlacementSnapshot?.top)
+        : (halfH - (hForAnchor / 2) - marginBottom);
+    const resolvedSplashAngle = Number.isFinite(Number(labelPlacementSnapshot?.angle)) ? Number(labelPlacementSnapshot?.angle) : 0;
     priceTagGroup.set({
-        originX: 'center',
-        originY: 'center',
-        left: 0,
-        top: halfH - (hForAnchor / 2) - marginBottom
+        originX: labelPlacementSnapshot?.originX || 'center',
+        originY: labelPlacementSnapshot?.originY || 'center',
+        left: resolvedSplashLeft,
+        top: resolvedSplashTop,
+        angle: resolvedSplashAngle
     });
+    normalizePriceGroupPlacementInCard(priceTagGroup, width, cardHeight, labelPlacementSnapshot || null);
 
     // Allow editing inside the label (select text/shapes).
     if (priceTagGroup && typeof priceTagGroup.getObjects === 'function') {
@@ -24825,11 +24882,11 @@ const simulateSmartGrid = async (
         };
 
         if (targetZone && !requestedTplId && existingZoneCardsAtStart.length > 0) {
-            // Preserve the CURRENT zone visual label for both replace and append
-            // when user did not explicitly pick a template in the modal.
+            // Without an explicit template choice, keep using the label that is visibly
+            // applied to the current zone cards instead of potentially stale zone metadata.
             const donorTpl = getDonorTemplateFromExistingCards();
             if (donorTpl) effectiveZoneTpl = donorTpl;
-        } else if (!effectiveZoneTpl && targetZone) {
+        } else if (!effectiveZoneTpl && targetZone && existingZoneCardsAtStart.length > 0) {
             // Last-resort source of truth when zone metadata doesn't define a usable template.
             const donorTpl = getDonorTemplateFromExistingCards();
             if (donorTpl) effectiveZoneTpl = donorTpl;
@@ -24857,6 +24914,11 @@ const simulateSmartGrid = async (
         const zoneStylesForNewCards = targetZone
             ? getZoneGlobalStyles(targetZone)
             : normalizeGlobalStyles(productZoneState.globalStyles.value);
+        const donorPriceGroupPlacements = targetZone && mode === 'replace' && !requestedTplId
+            ? existingZoneCardsAtStart.map((card: any) => getPriceGroupPlacementSnapshotFromCard(card))
+            : [];
+        const fallbackDonorPriceGroupPlacement =
+            donorPriceGroupPlacements.find((snapshot: any) => !!snapshot) || null;
 
         const promises = products.map(async (product: any, index: number) => {
             const slotIndex = existingCount + index;
@@ -25036,19 +25098,24 @@ const simulateSmartGrid = async (
                  cloned.excludeFromExport = false;
                  return cloned;
 
-                 } else {
-                  return await createSmartObject(
-                      product,
-                      finalX,
-                      finalY,
-                      itemWidth,
-                      itemHeight,
-                      batchGridId,
-                      effectiveZoneTpl,
-                      zoneStylesForNewCards
-                  );
-            }
-        });
+	                 } else {
+                      const labelPlacementSnapshot =
+                          (mode === 'replace' && !requestedTplId)
+                              ? (donorPriceGroupPlacements[index] || fallbackDonorPriceGroupPlacement)
+                              : null;
+	                  return await createSmartObject(
+	                      product,
+	                      finalX,
+	                      finalY,
+	                      itemWidth,
+	                      itemHeight,
+	                      batchGridId,
+	                      effectiveZoneTpl,
+	                      zoneStylesForNewCards,
+	                      labelPlacementSnapshot
+	                  );
+	            }
+	        });
 
         const smartObjects = await Promise.all(promises);
         
@@ -25553,6 +25620,10 @@ const selectedZoneInspectorData = computed(() => {
 
 const showZoneQuickActions = computed(() => {
     if (!selectedZoneQuickActions.value) return false;
+    const zone = getCurrentZoneObject();
+    if (!zone || !isLikelyProductZone(zone)) return false;
+    const active = canvas.value?.getActiveObject?.();
+    if (!active) return false;
     if (!selectedObjectPos.value.visible) return false;
     if (figmaCrop.isCropActive.value) return false;
     if (isPenMode.value || isNodeEditing.value || isDrawing.value) return false;
@@ -25667,7 +25738,7 @@ const handleUpdateZone = (propOrPayload: string | Record<string, any>, val?: any
     entries.forEach(([prop, value]) => updateZoneOnCanvas(prop, value));
 }
 
-const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?: boolean } = {}) => {
+const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?: boolean; saveReason?: string } = {}) => {
     if (!canvas.value || !zone) return;
     ensureZoneSanity(zone);
 
@@ -25750,7 +25821,15 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
     // FIX Fabric v7: Avoid triggerLayout() for non-structural changes.
     // triggerLayout() can deselect the zone group, breaking the UI loop.
     // Only recalculate group bounds when children/structure actually changed.
+    let restoredViewportObjects = 0;
     if (shouldRelayout) {
+        // Zone preset/layout changes can move cards that were previously culled back into view.
+        // If we relayout while they stay `visible=false`, the zone appears to blink/empty for a frame.
+        restoredViewportObjects = restoreViewportCulledObjects(canvas.value.getObjects?.() || []);
+        if (restoredViewportObjects > 0) {
+            lastViewportCullSignature = '';
+        }
+
         // Mark zone dirty and update coords (lightweight alternative to full addWithUpdate/triggerLayout)
         zone.dirty = true;
         zone.setCoords();
@@ -25773,10 +25852,18 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
     }
 
     canvas.value.requestRenderAll();
+    if (shouldRelayout || restoredViewportObjects > 0) {
+        nextTick(() => {
+            scheduleViewportCulling('zone-relayout');
+        });
+    }
     if (opts.save !== false) {
         // Set flag to prevent object:modified event from also saving state (prevents duplicate entries)
         isApplyingZoneUpdate = true;
-        saveCurrentState();
+        saveCurrentState({
+            allowEmptyOverwrite: true,
+            reason: opts.saveReason || 'object:modified(zone)'
+        });
         isApplyingZoneUpdate = false;
     }
     // Refresh snapshot so PropertiesPanel picks up the new values
@@ -26955,6 +27042,162 @@ const measureContentBoundsLocal = (
     };
 };
 
+const resolvePriceGroupVisibleBoundsLocal = (priceGroup: any) => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
+    const all = collectObjectsDeep(priceGroup).filter((obj: any) => obj && obj !== priceGroup && isObjectShownForBounds(obj));
+    const bounds = measureContentBoundsLocal(all);
+    if (bounds) return bounds;
+
+    const width = Math.abs(Number(priceGroup.getScaledWidth?.() ?? priceGroup.width ?? 0) || 0);
+    const height = Math.abs(Number(priceGroup.getScaledHeight?.() ?? priceGroup.height ?? 0) || 0);
+    if (!width || !height) return null;
+    return {
+        left: -(width / 2),
+        right: width / 2,
+        top: -(height / 2),
+        bottom: height / 2,
+        width,
+        height
+    };
+};
+
+const getPriceGroupPlacementSnapshotFromCard = (card: any) => {
+    const priceGroup = getPriceGroupFromAny(card);
+    if (!priceGroup) return null;
+
+    const cardW = Math.abs(Number((card as any)?._cardWidth ?? card?.width ?? card?.getScaledWidth?.() ?? 0) || 0);
+    const cardH = Math.abs(Number((card as any)?._cardHeight ?? card?.height ?? card?.getScaledHeight?.() ?? 0) || 0);
+    const bounds = resolvePriceGroupVisibleBoundsLocal(priceGroup);
+    const groupScaleX = Math.abs(Number(priceGroup.scaleX ?? 1)) || 1;
+    const groupScaleY = Math.abs(Number(priceGroup.scaleY ?? 1)) || 1;
+    const scaledLeft = Number(bounds?.left ?? 0) * groupScaleX;
+    const scaledRight = Number(bounds?.right ?? 0) * groupScaleX;
+    const scaledTop = Number(bounds?.top ?? 0) * groupScaleY;
+    const scaledBottom = Number(bounds?.bottom ?? 0) * groupScaleY;
+    const halfCardW = cardW / 2;
+    const halfCardH = cardH / 2;
+    const left = Number.isFinite(Number(priceGroup.left)) ? Number(priceGroup.left) : 0;
+    const top = Number.isFinite(Number(priceGroup.top)) ? Number(priceGroup.top) : 0;
+    const bottomGap = cardH > 0 ? Math.max(0, halfCardH - (top + scaledBottom)) : null;
+
+    return {
+        left,
+        top,
+        leftRatio: cardW > 0 ? (left / halfCardW) : 0,
+        topRatio: cardH > 0 ? (top / halfCardH) : 0,
+        bottomGapRatio: cardH > 0 && bottomGap !== null ? (bottomGap / cardH) : null,
+        originX: 'center',
+        originY: 'center',
+        angle: Number.isFinite(Number(priceGroup.angle)) ? Number(priceGroup.angle) : 0,
+        cardW,
+        cardH
+    };
+};
+
+const normalizePriceGroupPlacementInCard = (
+    priceGroup: any,
+    cardW: number,
+    cardH: number,
+    placement?: {
+        left?: number;
+        top?: number;
+        leftRatio?: number;
+        topRatio?: number;
+        bottomGapRatio?: number | null;
+        originX?: string;
+        originY?: string;
+        angle?: number;
+        cardW?: number;
+        cardH?: number;
+    } | null
+) => {
+    if (!priceGroup || cardW <= 0 || cardH <= 0) return false;
+
+    const maxWidthRatio = 0.96;
+    const maxHeightRatio = templateSnapshotHasAtacStructure(priceGroup) ? 0.62 : 0.48;
+    const halfCardW = cardW / 2;
+    const halfCardH = cardH / 2;
+    const safeAngle = Number.isFinite(Number(placement?.angle)) ? Number(placement?.angle) : Number(priceGroup.angle ?? 0) || 0;
+
+    const updateBounds = () => {
+        const local = resolvePriceGroupVisibleBoundsLocal(priceGroup);
+        if (!local) return null;
+        const sx = Math.abs(Number(priceGroup.scaleX ?? 1)) || 1;
+        const sy = Math.abs(Number(priceGroup.scaleY ?? 1)) || 1;
+        return {
+            left: Number(local.left) * sx,
+            right: Number(local.right) * sx,
+            top: Number(local.top) * sy,
+            bottom: Number(local.bottom) * sy,
+            width: Number(local.width) * sx,
+            height: Number(local.height) * sy
+        };
+    };
+
+    let bounds = updateBounds();
+    if (!bounds) return false;
+
+    const maxAllowedW = Math.max(24, cardW * maxWidthRatio);
+    const maxAllowedH = Math.max(24, cardH * maxHeightRatio);
+    const fitScale = Math.min(
+        1,
+        bounds.width > 0 ? (maxAllowedW / bounds.width) : 1,
+        bounds.height > 0 ? (maxAllowedH / bounds.height) : 1
+    );
+
+    if (Number.isFinite(fitScale) && fitScale > 0 && fitScale < 0.999) {
+        priceGroup.set({
+            scaleX: (Number(priceGroup.scaleX ?? 1) || 1) * fitScale,
+            scaleY: (Number(priceGroup.scaleY ?? 1) || 1) * fitScale
+        });
+        bounds = updateBounds();
+        if (!bounds) return false;
+    }
+
+    let nextLeft = Number(priceGroup.left ?? 0) || 0;
+    let nextTop = Number(priceGroup.top ?? 0) || 0;
+
+    if (placement && typeof placement === 'object') {
+        const ratioBaseW = Math.abs(Number(placement.cardW || 0)) || cardW;
+        const ratioBaseH = Math.abs(Number(placement.cardH || 0)) || cardH;
+        const halfBaseW = ratioBaseW / 2;
+        const halfBaseH = ratioBaseH / 2;
+
+        if (Number.isFinite(Number(placement.leftRatio)) && halfBaseW > 0) {
+            nextLeft = Math.max(-halfCardW, Math.min(halfCardW, Number(placement.leftRatio) * halfCardW));
+        } else if (Number.isFinite(Number(placement.left))) {
+            const donorLeft = Number(placement.left);
+            nextLeft = ratioBaseW > 0 ? donorLeft * (cardW / ratioBaseW) : donorLeft;
+        }
+
+        if (Number.isFinite(Number(placement.bottomGapRatio))) {
+            const gap = Math.max(0, Number(placement.bottomGapRatio) * cardH);
+            nextTop = halfCardH - gap - bounds.bottom;
+        } else if (Number.isFinite(Number(placement.topRatio)) && halfBaseH > 0) {
+            nextTop = Number(placement.topRatio) * halfCardH;
+        } else if (Number.isFinite(Number(placement.top))) {
+            const donorTop = Number(placement.top);
+            nextTop = ratioBaseH > 0 ? donorTop * (cardH / ratioBaseH) : donorTop;
+        }
+    }
+
+    const minLeft = -halfCardW - bounds.left;
+    const maxLeft = halfCardW - bounds.right;
+    const minTop = -halfCardH - bounds.top;
+    const maxTop = halfCardH - bounds.bottom;
+
+    priceGroup.set({
+        originX: 'center',
+        originY: 'center',
+        angle: safeAngle,
+        left: Math.min(maxLeft, Math.max(minLeft, nextLeft)),
+        top: Math.min(maxTop, Math.max(minTop, nextTop))
+    });
+    priceGroup.dirty = true;
+    priceGroup.setCoords?.();
+    return true;
+};
+
 const getSinglePriceBackgroundCandidate = (objects: any[]): any | null => {
     const named =
         findByName(objects, 'price_bg') ||
@@ -26985,6 +27228,94 @@ const getSinglePriceBackgroundCandidate = (objects: any[]): any | null => {
     };
 
     return candidates.sort((a: any, b: any) => getArea(b) - getArea(a))[0] || null;
+};
+
+const getSinglePriceCurrencyTextCandidate = (objects: any[]): any | null =>
+    findByName(objects, 'price_currency_text') ||
+    findByName(objects, 'priceSymbol') ||
+    findByName(objects, 'price_currency');
+
+const getSinglePriceCurrencyCircleCandidate = (objects: any[], currencyTextOverride?: any): any | null => {
+    const named = findByName(objects, 'price_currency_bg') || findByName(objects, 'priceSymbolBg');
+    if (named) return named;
+
+    const currencyText = currencyTextOverride || getSinglePriceCurrencyTextCandidate(objects);
+    if (!currencyText) return null;
+
+    const currencyBounds = measureContentBoundsLocal([currencyText]);
+    if (!currencyBounds) return null;
+
+    const currencyCenterX = (currencyBounds.left + currencyBounds.right) / 2;
+    const currencyCenterY = (currencyBounds.top + currencyBounds.bottom) / 2;
+    const currencyArea = Math.max(1, currencyBounds.width * currencyBounds.height);
+    const bg = getSinglePriceBackgroundCandidate(objects);
+    const bgBounds = bg ? measureContentBoundsLocal([bg]) : null;
+    const bgArea = bgBounds ? Math.max(1, bgBounds.width * bgBounds.height) : Number.POSITIVE_INFINITY;
+
+    const candidates = (objects || [])
+        .map((obj: any) => {
+            if (!obj || obj === currencyText || !isObjectShownForBounds(obj)) return null;
+            if (isTextLikeObject(obj)) return null;
+
+            const type = String(obj?.type || '').toLowerCase();
+            if (type !== 'circle' && type !== 'ellipse' && type !== 'rect') return null;
+
+            const name = String(obj?.name || '');
+            if (name === 'price_bg' || name === 'price_bg_image' || name === 'splash_image' || name === 'price_header_bg') return null;
+            if (name.startsWith('atac_') || name.startsWith('retail_') || name.startsWith('wholesale_')) return null;
+
+            const bounds = measureContentBoundsLocal([obj]);
+            if (!bounds) return null;
+
+            const area = Math.max(1, bounds.width * bounds.height);
+            const aspectRatio = Math.min(bounds.width, bounds.height) / Math.max(bounds.width, bounds.height);
+            if (!Number.isFinite(area) || area < 64) return null;
+            if (!Number.isFinite(aspectRatio) || aspectRatio < 0.72) return null;
+            if (Number.isFinite(bgArea) && bgArea > 0 && area >= (bgArea * 0.45)) return null;
+
+            const centerX = (bounds.left + bounds.right) / 2;
+            const centerY = (bounds.top + bounds.bottom) / 2;
+            const overlapW = Math.max(0, Math.min(currencyBounds.right, bounds.right) - Math.max(currencyBounds.left, bounds.left));
+            const overlapH = Math.max(0, Math.min(currencyBounds.bottom, bounds.bottom) - Math.max(currencyBounds.top, bounds.top));
+            const overlapRatio = (overlapW * overlapH) / currencyArea;
+            const containsCenter =
+                currencyCenterX >= bounds.left &&
+                currencyCenterX <= bounds.right &&
+                currencyCenterY >= bounds.top &&
+                currencyCenterY <= bounds.bottom;
+            const distance = Math.hypot(centerX - currencyCenterX, centerY - currencyCenterY);
+            const maxDistance = Math.max(bounds.width, bounds.height) * 0.75;
+            if (!containsCenter && overlapRatio < 0.15 && distance > maxDistance) return null;
+
+            const score =
+                (containsCenter ? 1000 : 0) +
+                (overlapRatio * 500) +
+                (aspectRatio * 100) -
+                distance;
+
+            return { obj, score };
+        })
+        .filter(Boolean)
+        .sort((a: any, b: any) => Number(b.score || 0) - Number(a.score || 0));
+
+    return candidates[0]?.obj || null;
+};
+
+const ensureSinglePriceCurrencyCircleAnchor = (priceGroup: any, objects?: any[]): any | null => {
+    const all = Array.isArray(objects)
+        ? objects
+        : (priceGroup && typeof priceGroup.getObjects === 'function' ? collectObjectsDeep(priceGroup) : []);
+    const currencyText = getSinglePriceCurrencyTextCandidate(all);
+    const currencyCircle = getSinglePriceCurrencyCircleCandidate(all, currencyText);
+    if (
+        currencyCircle &&
+        typeof currencyCircle.set === 'function' &&
+        String(currencyCircle?.name || '') !== 'price_currency_bg'
+    ) {
+        currencyCircle.set('name', 'price_currency_bg');
+        currencyCircle.setCoords?.();
+    }
+    return currencyCircle;
 };
 
 const hasCollapsedSinglePriceTemplateGeometry = (priceGroup: any): boolean => {
@@ -27275,17 +27606,24 @@ const normalizeManualPriceChain = (group: any, cacheKey: string, integer: any, d
     });
 };
 
+const MANUAL_SINGLE_ANCHOR_VERSION = 2;
+
 const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean } = {}) => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
     const cached = (priceGroup as any).__manualSingleAnchors;
     // Anchor cache can become stale if it was computed before webfonts loaded.
     // Allow callers to force a recompute (used by fitting code after price text changes).
-    if (!opts.force && cached && typeof cached === 'object') return cached;
+    if (
+        !opts.force &&
+        cached &&
+        typeof cached === 'object' &&
+        Number((cached as any).__version) === MANUAL_SINGLE_ANCHOR_VERSION
+    ) return cached;
 
     const all = collectObjectsDeep(priceGroup);
     const priceBg = getSinglePriceBackgroundCandidate(all);
-    const currencyCircle = findByName(all, 'price_currency_bg') || findByName(all, 'priceSymbolBg');
-    const currency = findByName(all, 'price_currency_text') || findByName(all, 'priceSymbol') || findByName(all, 'price_currency');
+    const currency = getSinglePriceCurrencyTextCandidate(all);
+    const currencyCircle = ensureSinglePriceCurrencyCircleAnchor(priceGroup, all);
     const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer');
     const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
     const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
@@ -27349,13 +27687,6 @@ const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean }
         ? clamp(bgBounds.right - fullBounds.right, 4, 80)
         : fallbackPad;
 
-    // Prefer the authored center of the full block, otherwise fall back to bg center.
-    // Using bg center avoids "stuck at x=0" when text widths aren't measurable yet.
-    const targetCenterX = fullBounds
-        ? ((fullBounds.left + fullBounds.right) / 2)
-        : (bgBounds
-            ? ((bgBounds.left + bgBounds.right) / 2)
-            : (chainBounds ? ((chainBounds.left + chainBounds.right) / 2) : 0));
 	    const intDecGap = (intBounds && decBounds)
 	        ? clamp(decBounds.left - intBounds.right, -12, 60)
 	        : PRICE_INTEGER_DECIMAL_GAP_PX;
@@ -27368,8 +27699,40 @@ const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean }
 	    const unitCenterOffsetX = unitShown
 	        ? clamp(unitCenterX - decimalCenterX, -80, 80)
 	        : 0;
+        const hasCurrencyCircle = !!(currencyCircle && isObjectShownForBounds(currencyCircle));
+        const currencyBaseLeft = hasCurrencyCircle && currency
+            ? getOriginalNumber(currency, '__originalLeft', currency.left || 0)
+            : 0;
+        const currencyBaseTop = hasCurrencyCircle && currency
+            ? getOriginalNumber(currency, '__originalTop', currency.top || 0)
+            : 0;
+        const currencyCircleBaseLeft = hasCurrencyCircle
+            ? getOriginalNumber(currencyCircle, '__originalLeft', currencyCircle?.left || 0)
+            : 0;
+        const currencyCircleBaseTop = hasCurrencyCircle
+            ? getOriginalNumber(currencyCircle, '__originalTop', currencyCircle?.top || 0)
+            : 0;
+        const currencyOffsetX = hasCurrencyCircle && currency
+            ? clamp(currencyBaseLeft - currencyCircleBaseLeft, -120, 120)
+            : 0;
+        const currencyOffsetY = hasCurrencyCircle && currency
+            ? clamp(currencyBaseTop - currencyCircleBaseTop, -120, 120)
+            : 0;
+        const bgCenterX = bgBounds
+            ? ((bgBounds.left + bgBounds.right) / 2)
+            : 0;
+        const chainTargetCenterX = chainBounds
+            ? ((chainBounds.left + chainBounds.right) / 2)
+            : bgCenterX;
+        const fullTargetCenterX = fullBounds
+            ? ((fullBounds.left + fullBounds.right) / 2)
+            : (chainBounds
+                ? ((chainBounds.left + chainBounds.right) / 2)
+                : bgCenterX);
+        const targetCenterX = hasCurrencyCircle ? chainTargetCenterX : fullTargetCenterX;
 
 	    const anchors = {
+            __version: MANUAL_SINGLE_ANCHOR_VERSION,
 	        targetCenterX,
 	        intX,
 	        intY: getOriginalTop(integer, integer.top || 0),
@@ -27377,6 +27740,10 @@ const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean }
 	        unitY: getOriginalTop(unit, unit?.top || decimal.top || 0),
 	        unitCenterOffsetX,
 	        currencyY: getOriginalTop(currency, currency?.top || integer.top || 0),
+            currencyOffsetX,
+            currencyOffsetY,
+            currencyOriginX: String((currency as any)?.__originalOriginX || currency?.originX || 'center'),
+            currencyOriginY: String((currency as any)?.__originalOriginY || currency?.originY || 'center'),
 	        intDecGap,
 	        currencyGap,
 	        padLeft,
@@ -27396,8 +27763,8 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
     if (hasAtacarejo) return;
 
     const priceBg = getSinglePriceBackgroundCandidate(all);
-    const currencyCircle = findByName(all, 'price_currency_bg') || findByName(all, 'priceSymbolBg');
-    const currency = findByName(all, 'price_currency_text') || findByName(all, 'priceSymbol') || findByName(all, 'price_currency');
+    const currency = getSinglePriceCurrencyTextCandidate(all);
+    const currencyCircle = ensureSinglePriceCurrencyCircleAnchor(priceGroup, all);
     const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer');
     const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
     const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
@@ -27489,6 +27856,16 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
 	    const unitY = Number.isFinite(Number((anchors as any).unitY)) ? Number((anchors as any).unitY) : Number(unit?.top || decY);
 	    const unitVisible = isObjectShownForBounds(unit) && String(unit?.text || '').trim().length > 0;
 	    const unitCenterOffsetX = Number((anchors as any).unitCenterOffsetX);
+        const rawCurrencyOffsetX = Number((anchors as any).currencyOffsetX);
+        const rawCurrencyOffsetY = Number((anchors as any).currencyOffsetY);
+        const currencyOffsetX = Number.isFinite(rawCurrencyOffsetX) ? clamp(rawCurrencyOffsetX, -120, 120) : 0;
+        const currencyOffsetY = Number.isFinite(rawCurrencyOffsetY) ? clamp(rawCurrencyOffsetY, -120, 120) : 0;
+        const currencyOriginX = typeof (anchors as any).currencyOriginX === 'string'
+            ? String((anchors as any).currencyOriginX)
+            : String(currency?.originX || 'center');
+        const currencyOriginY = typeof (anchors as any).currencyOriginY === 'string'
+            ? String((anchors as any).currencyOriginY)
+            : String(currency?.originY || 'center');
 
 	    let currencyGap = Number((anchors as any).currencyGap);
 	    if (!Number.isFinite(currencyGap)) currencyGap = Math.max(2, bgW * 0.018);
@@ -27527,12 +27904,12 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
     const hasCurrencyCircle = !!(currencyCircle && isObjectShownForBounds(currencyCircle));
     if (currency && chainBounds) {
         if (hasCurrencyCircle) {
-            // Keep the "R$" locked to the yellow circle center from the authored template.
+            // Keep the "R$" locked to the authored position inside the yellow circle.
             currency.set?.({
-                originX: 'center',
-                originY: 'center',
-                left: Number(currencyCircle?.left || 0),
-                top: Number(currencyCircle?.top || 0)
+                originX: currencyOriginX,
+                originY: currencyOriginY,
+                left: Number(currencyCircle?.left || 0) + currencyOffsetX,
+                top: Number(currencyCircle?.top || 0) + currencyOffsetY
             });
             currency.initDimensions?.();
         } else {
@@ -27552,12 +27929,13 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
         ? Number((anchors as any).targetCenterX)
         : 0;
     const fitTargets = hasCurrencyCircle ? chain : full;
+    const recenterTargets = hasCurrencyCircle ? chain : full;
     const maxFitW = hasCurrencyCircle && currency
         ? Math.max(12, maxTotalW - Math.max(0, getW(currency)) - Math.max(0, currencyGap))
         : maxTotalW;
-	    centerObjectsX(full, targetCenterX);
+	    centerObjectsX(recenterTargets, targetCenterX);
 	    fitChainToWidth(fitTargets, maxFitW, minScale);
-	    centerObjectsX(full, targetCenterX);
+	    centerObjectsX(recenterTargets, targetCenterX);
 	    applyUnitHorizontalAnchor();
 
     if (bgBounds) {
@@ -27600,10 +27978,10 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
 	    if (currency && hasCurrencyCircle) {
         // Final pin after any chain recenter/clamp.
         currency.set?.({
-            originX: 'center',
-            originY: 'center',
-            left: Number(currencyCircle?.left || 0),
-            top: Number(currencyCircle?.top || 0)
+            originX: currencyOriginX,
+            originY: currencyOriginY,
+            left: Number(currencyCircle?.left || 0) + currencyOffsetX,
+            top: Number(currencyCircle?.top || 0) + currencyOffsetY
         });
         currency.initDimensions?.();
     }
@@ -29495,7 +29873,7 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     // Scale shadow blur proportionally
     if (fabric?.Shadow && priceBg.shadow) {
         const originalBlur = typeof (priceBg as any)?.__shadowBlur === 'number'
-            ? (priceBg as any).____shadowBlur
+            ? (priceBg as any).__shadowBlur
             : 15;
         const shadow = priceBg.shadow;
         shadow.blur = Math.max(2, originalBlur * scale);
@@ -29552,8 +29930,8 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     const priceInteger = all.find((o: any) => o.name === 'price_integer_text' || o.name === 'priceInteger' || o.name === 'price_integer');
     const priceDecimal = all.find((o: any) => o.name === 'price_decimal_text' || o.name === 'priceDecimal' || o.name === 'price_decimal');
     const priceUnit = all.find((o: any) => o.name === 'price_unit_text' || o.name === 'priceUnit' || o.name === 'price_unit');
-    const currencyText = all.find((o: any) => o.name === 'price_currency_text');
-    const currencyCircle = all.find((o: any) => o.name === 'price_currency_bg' || o.name === 'priceSymbolBg');
+    const currencyText = getSinglePriceCurrencyTextCandidate(all);
+    const currencyCircle = ensureSinglePriceCurrencyCircleAnchor(priceGroup, all);
     const priceText = all.find((o: any) => o.name === 'price_value_text' || o.name === 'smart_price');
 
     // Check if we have split price elements (integer + decimal)
@@ -29866,6 +30244,68 @@ const rememberPriceLayoutSnapshot = (group: any) => {
     return true;
 };
 
+function markPriceGroupAsManuallyCustomized(
+    target: any,
+    opts: { captureSnapshot?: boolean } = {}
+): any | null {
+    const priceGroup = getPriceGroupFromAny(target);
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
+
+    const isWithinPriceGroup = (() => {
+        if (!target) return false;
+        if (target === priceGroup) return true;
+        let cur: any = target.group || null;
+        while (cur) {
+            if (cur === priceGroup) return true;
+            cur = cur.group || null;
+        }
+        return false;
+    })();
+    if (!isWithinPriceGroup) return null;
+
+    const hostCard = getCardHostForPriceGroup(priceGroup) || getCardGroupFromAny(target);
+    const rawW = Math.abs(Number(priceGroup.width || 0) || 0);
+    const rawH = Math.abs(Number(priceGroup.height || 0) || 0);
+    const scaleX = Math.abs(Number(priceGroup.scaleX ?? 1)) || 1;
+    const scaleY = Math.abs(Number(priceGroup.scaleY ?? 1)) || 1;
+    const scaledW = Math.abs(Number(priceGroup.getScaledWidth?.() || (rawW * scaleX)) || 0);
+    const scaledH = Math.abs(Number(priceGroup.getScaledHeight?.() || (rawH * scaleY)) || 0);
+    const nextBaseW = rawW > 0 ? rawW : (scaledW > 0 ? (scaledW / scaleX) : 0);
+    const nextBaseH = rawH > 0 ? rawH : (scaledH > 0 ? (scaledH / scaleY) : 0);
+
+    // Editing nodes inside the label should preserve the authored template geometry,
+    // but should NOT freeze the whole block position inside the card.
+    (priceGroup as any).__preserveManualLayout = true;
+    (priceGroup as any).__isCustomTemplate = true;
+    if ((priceGroup as any).__forceAtacarejoCanonical === true) {
+        (priceGroup as any).__forceAtacarejoCanonical = false;
+    }
+
+    seedManualTemplateOriginalMetrics(priceGroup);
+
+    if (nextBaseW > 0) {
+        const currentBaseW = Number((priceGroup as any).__manualTemplateBaseW);
+        if (!Number.isFinite(currentBaseW) || currentBaseW <= 0) {
+            (priceGroup as any).__manualTemplateBaseW = nextBaseW;
+        }
+    }
+    if (nextBaseH > 0) {
+        const currentBaseH = Number((priceGroup as any).__manualTemplateBaseH);
+        if (!Number.isFinite(currentBaseH) || currentBaseH <= 0) {
+            (priceGroup as any).__manualTemplateBaseH = nextBaseH;
+        }
+    }
+
+    if (opts.captureSnapshot !== false) {
+        rememberPriceLayoutSnapshot(priceGroup);
+    }
+
+    priceGroup.dirty = true;
+    priceGroup.setCoords?.();
+    hostCard?.setCoords?.();
+    return priceGroup;
+}
+
 const restorePriceLayoutSnapshot = (group: any) => {
     if (!group || typeof group.getObjects !== 'function') return false;
     const snapshot = (group as any).__priceLayoutSnapshot;
@@ -30041,10 +30481,8 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
     const priceBg = all.find((o: any) => o.name === 'price_bg');
     const priceBgImage = all.find((o: any) => o.name === 'price_bg_image' || o.name === 'splash_image');
-    const currencyCircle = all.find((o: any) => o.name === 'price_currency_bg' || o.name === 'priceSymbolBg');
-    const currencyTextPrimary = all.find((o: any) => o.name === 'price_currency_text');
-    const currencyTextLegacy = all.find((o: any) => o.name === 'priceSymbol' || o.name === 'price_currency');
-    const currencyText = currencyTextPrimary || currencyTextLegacy;
+    const currencyText = getSinglePriceCurrencyTextCandidate(all);
+    const currencyCircle = ensureSinglePriceCurrencyCircleAnchor(priceGroup, all);
     const priceText = all.find((o: any) => o.name === 'price_value_text' || o.name === 'smart_price');
     const priceInteger = all.find((o: any) => o.name === 'price_integer_text' || o.name === 'priceInteger' || o.name === 'price_integer');
     const priceDecimal = all.find((o: any) => o.name === 'price_decimal_text' || o.name === 'priceDecimal' || o.name === 'price_decimal');
@@ -30704,6 +31142,7 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
     MANUAL_TEMPLATE_DERIVED_PROPS.forEach((key) => {
         try { delete (g as any)[key]; } catch { /* ignore */ }
     });
+    ensureSinglePriceCurrencyCircleAnchor(g);
     ensureRedBurstPriceGroupVisibility(g);
     const repairedCollapsedGeometry = repairCollapsedSinglePriceTemplateGeometry(
         g,
@@ -30753,10 +31192,8 @@ function normalizePriceGroupForPreview(pg: any) {
     // ===== STANDARD SINGLE-PRICE TEMPLATE =====
     const priceBg = all.find(o => o?.name === 'price_bg');
     const priceBgImage = all.find(o => o?.name === 'price_bg_image' || o?.name === 'splash_image');
-    const currencyCircle = all.find(o => o?.name === 'price_currency_bg' || o?.name === 'priceSymbolBg');
-    const currencyTextPrimary = all.find(o => o?.name === 'price_currency_text');
-    const currencyTextLegacy = all.find(o => o?.name === 'priceSymbol' || o?.name === 'price_currency');
-    const currencyText = currencyTextPrimary || currencyTextLegacy;
+    const currencyText = getSinglePriceCurrencyTextCandidate(all);
+    const currencyCircle = ensureSinglePriceCurrencyCircleAnchor(pg, all);
     const priceText = all.find(o => o?.name === 'smart_price' || o?.name === 'price_value_text');
     const priceInteger = all.find(o => o?.name === 'price_integer_text' || o?.name === 'priceInteger');
     const priceDecimal = all.find(o => o?.name === 'price_decimal_text' || o?.name === 'priceDecimal');
@@ -30857,68 +31294,66 @@ function serializePriceGroupForTemplate(pg: any) {
     (j as any).__isCustomTemplate = true;
 
     // Store original values on each object for proportional scaling
-    if (Array.isArray(j.objects)) {
-        j.objects.forEach((obj: any) => {
-            if (!obj) return;
+    collectTemplateJsonNodesDeep(j).forEach((obj: any) => {
+        if (!obj || obj === j) return;
 
-            // Store original position
-            obj.__originalLeft = obj.left;
-            obj.__originalTop = obj.top;
-            obj.__originalOriginX = obj.originX;
-            obj.__originalOriginY = obj.originY;
-            obj.__originalScaleX = obj.scaleX || 1;
-            obj.__originalScaleY = obj.scaleY || 1;
+        // Store original position
+        obj.__originalLeft = obj.left;
+        obj.__originalTop = obj.top;
+        obj.__originalOriginX = obj.originX;
+        obj.__originalOriginY = obj.originY;
+        obj.__originalScaleX = obj.scaleX || 1;
+        obj.__originalScaleY = obj.scaleY || 1;
 
-            // For text objects, store original font size and font family
-            if (isTextLikeObject(obj)) {
-                if (typeof obj.fontSize === 'number') {
-                    obj.__originalFontSize = obj.fontSize;
+        // For text objects, store original font size and font family
+        if (isTextLikeObject(obj)) {
+            if (typeof obj.fontSize === 'number') {
+                obj.__originalFontSize = obj.fontSize;
+            }
+            if (typeof obj.fontFamily === 'string') {
+                obj.__originalFontFamily = obj.fontFamily;
+            }
+            if (typeof obj.width === 'number') {
+                obj.__originalWidth = obj.width;
+            }
+            if (typeof obj.height === 'number') {
+                obj.__originalHeight = obj.height;
+            }
+        }
+
+        // For circles, store original radius
+        if (obj.type === 'circle' && typeof obj.radius === 'number') {
+            obj.__originalRadius = obj.radius;
+        }
+
+        // For rects, store original dimensions and radius
+        if (obj.type === 'rect') {
+            if (typeof obj.width === 'number') obj.__originalWidth = obj.width;
+            if (typeof obj.height === 'number') obj.__originalHeight = obj.height;
+            if (typeof obj.rx === 'number') obj.__originalRx = obj.rx;
+            if (typeof obj.ry === 'number') obj.__originalRy = obj.ry;
+
+            // For price_bg, store special metadata
+            if (obj.name === 'price_bg') {
+                obj.__originalWidth = obj.width;
+                obj.__originalHeight = obj.height;
+                obj.__roundness = typeof obj.rx === 'number' && obj.height > 0
+                    ? (obj.rx * 2) / obj.height
+                    : 1;
+                if (typeof obj.strokeWidth === 'number') {
+                    obj.__strokeWidth = obj.strokeWidth;
                 }
-                if (typeof obj.fontFamily === 'string') {
-                    obj.__originalFontFamily = obj.fontFamily;
-                }
-                if (typeof obj.width === 'number') {
-                    obj.__originalWidth = obj.width;
-                }
-                if (typeof obj.height === 'number') {
-                    obj.__originalHeight = obj.height;
+                if (obj.shadow && typeof obj.shadow.blur === 'number') {
+                    obj.__shadowBlur = obj.shadow.blur;
                 }
             }
+        }
 
-            // For circles, store original radius
-            if (obj.type === 'circle' && typeof obj.radius === 'number') {
-                obj.__originalRadius = obj.radius;
-            }
-
-            // For rects, store original dimensions and radius
-            if (obj.type === 'rect') {
-                if (typeof obj.width === 'number') obj.__originalWidth = obj.width;
-                if (typeof obj.height === 'number') obj.__originalHeight = obj.height;
-                if (typeof obj.rx === 'number') obj.__originalRx = obj.rx;
-                if (typeof obj.ry === 'number') obj.__originalRy = obj.ry;
-
-                // For price_bg, store special metadata
-                if (obj.name === 'price_bg') {
-                    obj.__originalWidth = obj.width;
-                    obj.__originalHeight = obj.height;
-                    obj.__roundness = typeof obj.rx === 'number' && obj.height > 0
-                        ? (obj.rx * 2) / obj.height
-                        : 1;
-                    if (typeof obj.strokeWidth === 'number') {
-                        obj.__strokeWidth = obj.strokeWidth;
-                    }
-                    if (obj.shadow && typeof obj.shadow.blur === 'number') {
-                        obj.__shadowBlur = obj.shadow.blur;
-                    }
-                }
-            }
-
-            // Store original stroke width
-            if (typeof obj.strokeWidth === 'number') {
-                obj.__originalStrokeWidth = obj.strokeWidth;
-            }
-        });
-    }
+        // Store original stroke width
+        if (typeof obj.strokeWidth === 'number') {
+            obj.__originalStrokeWidth = obj.strokeWidth;
+        }
+    });
 
     return j;
 }
@@ -31668,6 +32103,12 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
             const hForAnchor = layout?.pillH ?? (newPg.getScaledHeight?.() ?? newPg.height ?? (cardH * 0.18));
             newPg.set({ top: halfH - (hForAnchor / 2) - marginBottom });
         }
+        normalizePriceGroupPlacementInCard(newPg, cardW, cardH, {
+            left: Number(newPg.left ?? desiredLeft ?? 0) || 0,
+            top: Number(newPg.top ?? desiredTop ?? 0) || 0,
+            cardW,
+            cardH
+        });
     }
 
     const titleObj = getCardTitleText(card);
@@ -33593,6 +34034,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     const finalScaleY = preserveTemplateVisual ? (baseScaleY * scale) : scale;
                     splash.set({ scaleX: finalScaleX, scaleY: finalScaleY });
                 }
+
+                normalizePriceGroupPlacementInCard(splash, w, h, null);
                 
                 // Force coordinate update
                 splash.setCoords();
@@ -34030,12 +34473,12 @@ const ensureZoneSanity = (zone: any) => {
         needsBoundsUpdate = true;
     }
 
-    // Rows are auto-calculated in the current UX. Legacy saved fixed rows create holes after reload.
+    // Preserve explicit fixed rows from the zone inspector.
+    // Only coerce invalid legacy values back to auto (`0`).
     if (typeof (zone as any).rows !== 'number' || !Number.isFinite((zone as any).rows) || (zone as any).rows < 0) {
         (zone as any).rows = 0;
-    }
-    if ((zone as any).rows > 0) {
-        (zone as any).rows = 0;
+    } else {
+        (zone as any).rows = Math.max(0, Math.round((zone as any).rows));
     }
 
     // CRITICAL: Initialize _zoneWidth and _zoneHeight if missing (for persistence after reload)
@@ -35877,6 +36320,7 @@ const handleRecalculateLayout = () => {
                     :top="selectedObjectPos.top"
                     :left="selectedObjectPos.left"
                     :width="selectedObjectPos.width"
+                    :height="selectedObjectPos.height"
                     :name="selectedZoneQuickActions?.name || 'Zona de Produtos'"
                     :role-label="selectedZoneQuickActions?.roleLabel || 'Grid'"
                     :status-label="selectedZoneQuickActions?.statusLabel || 'Vazia'"

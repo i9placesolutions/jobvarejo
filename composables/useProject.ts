@@ -339,8 +339,8 @@ const resolveCanvasDataWithDraft = (opts: {
 
     // Protect unsynced changes on reload:
     // if local draft is newer than remote payload, prefer local draft and resync.
-    const draftIsNewer = draftTs > 0 && (remoteTs === 0 || draftTs > (remoteTs + 1500))
-    if (draftIsNewer) {
+    const draftShouldWin = draftTs > 0 && (remoteTs === 0 || draftTs >= remoteTs)
+    if (draftShouldWin) {
         return { canvasData: draftData, source: 'draft-newer-than-remote', needsRemoteSync: true as const }
     }
 

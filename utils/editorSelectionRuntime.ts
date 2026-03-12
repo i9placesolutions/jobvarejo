@@ -108,13 +108,14 @@ export const deriveSelectionUiState = (opts: DeriveSelectionUiStateOptions): {
 export const getSelectedObjectFloatingPos = (
   active: any,
   isLikelyProductZone: (obj: any) => boolean
-): { top: number; left: number; width: number; visible: boolean } => {
+): { top: number; left: number; width: number; height: number; visible: boolean } => {
   if (active && isLikelyProductZone(active)) {
     const boundingRect = active.getBoundingRect()
     return {
       top: Number(boundingRect?.top || 0),
       left: Number(boundingRect?.left || 0),
       width: Number(boundingRect?.width || 0),
+      height: Number(boundingRect?.height || 0),
       visible: true
     }
   }
@@ -122,6 +123,7 @@ export const getSelectedObjectFloatingPos = (
     top: 0,
     left: 0,
     width: 0,
+    height: 0,
     visible: false
   }
 }
@@ -174,7 +176,7 @@ export const buildSelectionSyncPayload = (opts: BuildSelectionSyncPayloadOptions
     selectedObjectSnapshot: any
     showPenContextualToolbar: boolean
   }
-  floatingPos: { top: number; left: number; width: number; visible: boolean }
+  floatingPos: { top: number; left: number; width: number; height: number; visible: boolean }
 } | null => {
   const canvas = opts.canvas
   if (!canvas) return null

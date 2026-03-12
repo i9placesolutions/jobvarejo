@@ -69,6 +69,14 @@ export const useAuth = () => {
   const getSession = async () => {
     state.value.isLoading = true
     try {
+      const token = readTokenFromCookie()
+      if (!token) {
+        state.value.user = null
+        state.value.isAuthenticated = false
+        updateAuthCookie(false)
+        return null
+      }
+
       const data = await $fetch<any>('/api/auth/session')
       const user = toUser(data?.user)
       if (!user) {

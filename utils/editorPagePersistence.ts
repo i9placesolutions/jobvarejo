@@ -6,6 +6,7 @@ type PersistSerializedPageStateOptions = {
   source: SaveSource
   reason: string
   currentFingerprint: string
+  markUnsaved: boolean
   pages: any[]
   resolvePageIndexById: (pageId: string) => number
   updatePageData: (
@@ -34,7 +35,7 @@ export const persistSerializedPageState = (
   const objectCount = opts.json?.objects?.length || 0
   const didUpdate = opts.updatePageData(targetPageIndex, opts.json, {
     source: opts.source,
-    markUnsaved: opts.source === 'user',
+    markUnsaved: opts.markUnsaved,
     skipIfSameFingerprint: true,
     reason: opts.reason
   })
