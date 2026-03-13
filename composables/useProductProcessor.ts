@@ -434,7 +434,7 @@ export const useProductProcessor = () => {
                 msg.includes('load failed')
             ) return true;
         }
-        return status === 502 || status === 503;
+        return status === 408 || status === 502 || status === 503 || status === 504;
     };
 
     const getParseFailureMessage = (err: any, kind: 'text' | 'file'): string => {

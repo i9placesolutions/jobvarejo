@@ -68,6 +68,10 @@ export default defineNuxtConfig({
     wasabiSecretKey: process.env.WASABI_SECRET_KEY || process.env.NUXT_WASABI_SECRET_KEY || '',
 
     openaiApiKey: process.env.NUXT_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
+    parseProductsTimeoutMs:
+      process.env.PARSE_PRODUCTS_TIMEOUT_MS ||
+      process.env.NUXT_PARSE_PRODUCTS_TIMEOUT_MS ||
+      (process.env.VERCEL ? '28000' : '45000'),
     serperApiKey: process.env.NUXT_SERPER_API_KEY || process.env.SERPER_API_KEY || '',
     googleCseApiKey:
       process.env.NUXT_GOOGLE_CSE_API_KEY ||
@@ -95,6 +99,9 @@ export default defineNuxtConfig({
       '',
 
     public: {
+      projectRealtimeTransport:
+        process.env.NUXT_PUBLIC_PROJECT_REALTIME_TRANSPORT ||
+        (process.env.VERCEL ? 'poll' : 'auto'),
       // Wasabi public config (needed for client-side URL construction)
       // IMPORTANT: These are not secrets, but they end up in the client bundle.
       // Keep access/secret keys ONLY in private runtimeConfig.

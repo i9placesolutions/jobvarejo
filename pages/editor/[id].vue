@@ -7,6 +7,7 @@ const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanva
 // Get project ID from route
 const route = useRoute()
 const projectId = route.params.id as string
+const runtimeConfig = useRuntimeConfig()
 
 // Page config
 definePageMeta({
@@ -31,6 +32,7 @@ const {
 
 const realtimeStatus = ref<'idle' | 'connecting' | 'connected' | 'error'>('idle')
 const remoteUpdatePending = ref(false)
+const realtimeForcePolling = ref(false)
 const { getApiAuthHeaders } = useApiAuth()
 let realtimeEventSource: EventSource | null = null
 let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -41,6 +43,18 @@ const isGithubPreviewHost = (): boolean => {
   if (typeof window === 'undefined') return false
   const hostname = String(window.location.hostname || '').trim().toLowerCase()
   return hostname.endsWith('.app.github.dev') || hostname.endsWith('.github.dev')
+}
+
+const getConfiguredRealtimeTransport = (): 'auto' | 'sse' | 'poll' => {
+  const rawValue = String(runtimeConfig.public?.projectRealtimeTransport || 'auto').trim().toLowerCase()
+  if (rawValue === 'sse' || rawValue === 'poll') return rawValue
+  return 'auto'
+}
+
+const shouldUsePollingRealtime = (): boolean => {
+  if (realtimeForcePolling.value) return true
+  if (isGithubPreviewHost()) return true
+  return getConfiguredRealtimeTransport() === 'poll'
 }
 
 const getIsoTimeMs = (value: string | null | undefined): number => {
@@ -62,6 +76,14 @@ const closeProjectRealtime = () => {
     realtimeEventSource = null
   }
   realtimeStatus.value = 'idle'
+}
+
+const activateRealtimePolling = (id: string, delayMs = 20_000) => {
+  const projectId = String(id || '').trim()
+  if (!projectId) return
+  closeProjectRealtime()
+  realtimeStatus.value = 'connected'
+  scheduleRealtimePoll(projectId, delayMs)
 }
 
 const fetchProjectRevision = async (id: string): Promise<string | null> => {
@@ -152,9 +174,8 @@ const openProjectRealtime = (id: string) => {
   closeProjectRealtime()
   realtimeStatus.value = 'connecting'
 
-  if (isGithubPreviewHost()) {
-    realtimeStatus.value = 'connected'
-    scheduleRealtimePoll(projectId)
+  if (shouldUsePollingRealtime()) {
+    activateRealtimePolling(projectId)
     return
   }
 
@@ -169,6 +190,8 @@ const openProjectRealtime = (id: string) => {
   }
   es.onerror = () => {
     realtimeStatus.value = 'error'
+    realtimeForcePolling.value = true
+    activateRealtimePolling(projectId, 10_000)
   }
   es.addEventListener('connected', () => {
     realtimeStatus.value = 'connected'

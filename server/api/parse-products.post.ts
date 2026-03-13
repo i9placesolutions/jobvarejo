@@ -2,7 +2,9 @@ import { requireAuthenticatedUser } from '../utils/auth'
 import { enforceRateLimit } from '../utils/rate-limit'
 
 const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
-const OPENAI_TIMEOUT_MS = 18_000
+const DEFAULT_OPENAI_TIMEOUT_MS = 28_000
+const MIN_OPENAI_TIMEOUT_MS = 5_000
+const MAX_OPENAI_TIMEOUT_MS = 55_000
 const MAX_FILE_BYTES = 12 * 1024 * 1024
 const MAX_TEXT_CHARS = 60_000
 const MAX_PROMPT_SOURCE_CHARS = 20_000
@@ -19,6 +21,15 @@ const getTimeoutSignal = (timeoutMs: number): AbortSignal | undefined => {
     const timeoutFactory = (AbortSignal as any)?.timeout
     if (typeof timeoutFactory !== 'function') return undefined
     return timeoutFactory(timeoutMs)
+}
+
+const getMaxOpenAiTimeoutMs = (): number =>
+    process.env.VERCEL ? DEFAULT_OPENAI_TIMEOUT_MS : MAX_OPENAI_TIMEOUT_MS
+
+const resolveOpenAiTimeoutMs = (value: unknown): number => {
+    const numericValue = Number.parseInt(String(value ?? '').trim(), 10)
+    if (!Number.isFinite(numericValue)) return DEFAULT_OPENAI_TIMEOUT_MS
+    return Math.min(getMaxOpenAiTimeoutMs(), Math.max(MIN_OPENAI_TIMEOUT_MS, numericValue))
 }
 
 const getErrorMessage = (err: any, fallback: string): string => {
@@ -200,6 +211,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const config = useRuntimeConfig();
+    const openAiTimeoutMs = resolveOpenAiTimeoutMs(config.parseProductsTimeoutMs)
     
     if (!config.openaiApiKey) {
         const hasNuxtKey = Boolean(process.env.NUXT_OPENAI_API_KEY);
@@ -585,7 +597,7 @@ ${text ? `"${String(text).slice(0, MAX_PROMPT_SOURCE_CHARS)}"` : '(image attache
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${config.openaiApiKey}`
             },
-            signal: getTimeoutSignal(OPENAI_TIMEOUT_MS),
+            signal: getTimeoutSignal(openAiTimeoutMs),
             body: JSON.stringify({
                 messages,
                 model: 'gpt-4o-mini',
