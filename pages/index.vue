@@ -1442,167 +1442,136 @@ const handleDropOnRoot = async (event: DragEvent) => {
 }
 </script>
 
+
 <template>
-  <div class="dashboard-root h-screen w-screen overflow-hidden p-3 md:p-5 flex flex-col">
-    <!-- Floating Glassmorphism Window -->
-    <div class="flex-1 w-full h-full max-w-[1920px] mx-auto overflow-hidden bg-[#111116]/60 backdrop-blur-3xl border border-white/10 rounded-[2rem] shadow-2xl flex flex-col relative z-20 ring-1 ring-white/5">
-      <!-- Modern Header (Transparent Glass) -->
-      <header class="dashboard-header h-16 px-8 border-b border-white/5 bg-transparent flex items-center justify-between shrink-0 sticky top-0 z-30">
-      <!-- Logo and App Name -->
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl flex items-center justify-center border border-violet-400/40 bg-linear-to-br from-violet-500/40 to-fuchsia-500/20 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
-          <Sparkles class="w-4 h-4 text-violet-100" />
-        </div>
-        <span class="text-base font-bold tracking-tight text-white drop-shadow-sm">Studio PRO</span>
-      </div>
+  <div class="dash-root h-screen w-screen overflow-hidden flex flex-col">
+    <div class="flex-1 w-full h-full max-w-[1920px] mx-auto overflow-hidden flex flex-col relative">
 
-      <!-- User Avatar -->
-      <div class="flex items-center gap-3">
-        <div v-if="user" class="w-8 h-8 bg-linear-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-semibold text-white">
-          {{ user.name?.charAt(0) || 'U' }}
-        </div>
-      </div>
-    </header>
-
-    <div class="dashboard-layout relative flex-1 flex overflow-hidden min-h-0 bg-black/20">
-      <!-- Sidebar (Spatial Rail) -->
-      <aside class="dashboard-sidebar w-72 h-full min-h-0 border-r border-white/5 bg-[#0a0a0c]/40 flex flex-col shrink-0 overflow-hidden relative z-10 transition-all duration-300 backdrop-blur-md">
-        <!-- Top Header (Figma Style) -->
-        <div class="h-12 px-3 border-b border-white/12 flex items-center justify-between shrink-0">
-          <!-- User/Workspace Selector -->
-          <div class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer group hover:bg-white/5 rounded-lg px-2 py-1.5 transition-all">
-            <!-- Avatar -->
-            <div v-if="user" class="w-7 h-7 bg-linear-to-br from-violet-500 to-fuchsia-500 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0">
-              <img 
-                v-if="user.avatar_url" 
-                :src="user.avatar_url" 
-                :alt="user.name"
-                class="w-full h-full rounded-full object-cover"
-              />
-              <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
-            </div>
-            <!-- Workspace Name -->
-            <div class="flex items-center gap-1.5 flex-1 min-w-0">
-              <span class="text-xs font-medium text-white truncate">{{ formatUserName(user?.name) }}</span>
-              <ChevronDown class="w-3.5 h-3.5 text-zinc-300 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
+      <!-- Top Bar -->
+      <header class="dash-topbar h-12 px-5 flex items-center justify-between shrink-0 relative z-30">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center bg-indigo-500/20 border border-indigo-400/25 shadow-[0_0_12px_rgba(99,102,241,0.2)]">
+            <Sparkles class="w-3.5 h-3.5 text-indigo-300" />
           </div>
-          
-          <!-- Notification Bell -->
-          <button 
+          <span class="text-[13px] font-semibold tracking-tight text-white/90">Studio <span class="text-white/30 font-normal">PRO</span></span>
+        </div>
+        <div class="flex items-center gap-1">
+          <button
             ref="notificationButtonRef"
             @click.stop="toggleNotifications"
-            class="notification-button w-8 h-8 flex items-center justify-center hover:bg-white/5 rounded-lg transition-all text-zinc-400 hover:text-white relative"
+            class="notification-button w-8 h-8 flex items-center justify-center hover:bg-white/6 rounded-lg transition-all text-zinc-500 hover:text-zinc-200 relative"
           >
             <Bell class="w-4 h-4" />
-            <!-- Notification Badge -->
-            <span 
-              v-if="unreadCount > 0" 
-              class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-violet-500 rounded-full"
-            ></span>
+            <span v-if="unreadCount > 0" class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-indigo-400 rounded-full ring-1 ring-black"></span>
           </button>
-        </div>
-
-        <!-- Search (Rounded) -->
-        <div class="p-3 border-b border-white/12">
-          <div class="relative">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Buscar"
-              class="w-full h-9 bg-[#1e1f2a] border border-white/12 rounded-lg text-xs text-white pl-9 pr-3 focus:outline-none focus:border-violet-400/55 focus:ring-1 focus:ring-violet-400/20 placeholder:text-zinc-500 transition-all"
-            />
+          <div v-if="user" class="flex items-center gap-2 px-2 py-1 hover:bg-white/6 rounded-lg cursor-pointer transition-all group">
+            <div class="w-6 h-6 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 overflow-hidden">
+              <img v-if="user.avatar_url" :src="user.avatar_url" :alt="user.name" class="w-full h-full object-cover" />
+              <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
+            </div>
+            <span class="text-[12px] font-medium text-zinc-400 group-hover:text-zinc-200 max-w-[140px] truncate transition-colors">{{ formatUserName(user?.name) }}</span>
+            <ChevronDown class="w-3 h-3 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
           </div>
         </div>
+      </header>
 
-        <!-- Navigation Links (Figma Style) -->
-        <div class="p-2 border-b border-white/12">
-          <button 
-            @click="activeView = 'recent'"
-            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mb-1 border border-transparent', activeView === 'recent' ? 'text-white bg-white/10 border-white/20 hover:bg-white/15' : 'text-zinc-300 hover:text-white hover:bg-white/5']"
-            aria-label="Visualizar projetos recentes"
-          >
-            <Clock class="w-4 h-4" />
-            Recentes
-          </button>
-          <button 
-            @click="activeView = 'all'"
-            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 border border-transparent', activeView === 'all' ? 'text-white bg-white/10 border-white/20 hover:bg-white/15' : 'text-zinc-300 hover:text-white hover:bg-white/5']"
-            aria-label="Visualizar todos os projetos"
-          >
-            <FolderOpen class="w-4 h-4" />
-            Todos os Projetos
-          </button>
-          <button 
-            @click="activeView = 'shared'"
-            :class="['w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mt-1 border border-transparent', activeView === 'shared' ? 'text-white bg-white/10 border-white/20 hover:bg-white/15' : 'text-zinc-300 hover:text-white hover:bg-white/5']"
-            aria-label="Visualizar projetos compartilhados"
-          >
-            <Users class="w-4 h-4" />
-            Compartilhados
-          </button>
-          <button
-            @click="navigateTo('/profile')"
-            class="w-full h-9 px-3 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 mt-1 border border-transparent text-zinc-300 hover:text-white hover:bg-white/5"
-            aria-label="Abrir perfil do usuário"
-          >
-            <User class="w-4 h-4" />
-            Meu Perfil
-          </button>
-        </div>
+      <!-- Layout -->
+      <div class="dash-layout relative flex-1 flex overflow-hidden min-h-0">
 
-        <!-- Folders Section (Figma Style) -->
-        <div class="flex-1 min-h-0 overflow-y-auto">
-          <div class="px-3 py-2">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Pastas</span>
-              <button
-                @click="showCreateFolder = true"
-                class="p-1 hover:bg-white/10 rounded-lg text-zinc-300 hover:text-white transition-all"
-                aria-label="Criar nova pasta"
-                title="Nova pasta"
-              >
-                <FolderPlus class="w-3.5 h-3.5" />
-              </button>
+        <!-- Sidebar -->
+        <aside class="dash-sidebar w-[220px] h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
+
+          <!-- Search -->
+          <div class="px-3 pt-3 pb-2.5 shrink-0">
+            <div class="relative">
+              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Buscar projetos…"
+                class="w-full h-8 bg-white/[0.04] border border-white/[0.07] rounded-lg text-[12px] text-white pl-8 pr-3 focus:outline-none focus:border-indigo-400/40 focus:bg-white/[0.06] placeholder:text-zinc-600 transition-all"
+              />
             </div>
+          </div>
 
-            <!-- All Projects (root) - Rounded -->
-            <div
-              :class="[
-                'flex items-center gap-2.5 h-9 px-3 rounded-lg cursor-pointer transition-all border border-transparent',
-                !activeFolderId ? 'bg-white/10 text-white border-white/20' : 'hover:bg-white/5 text-zinc-300'
-              ]"
-              @click="openFolderFromSidebar(null)"
-              @dragover="handleDragOver"
-              @drop="handleDropOnRoot"
+          <!-- Nav Section -->
+          <div class="px-2 pb-1 shrink-0">
+            <p class="sidebar-section-label px-2 mb-1">Explorar</p>
+            <button
+              @click="activeView = 'recent'"
+              :class="['dash-nav-item w-full', activeView === 'recent' ? 'active' : '']"
+              aria-label="Visualizar projetos recentes"
             >
-              <FolderOpen class="w-4 h-4 opacity-70" />
-              <span class="text-xs font-medium truncate flex-1">Todos os Projetos</span>
-              <span class="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">{{ safeProjects.length }}</span>
-            </div>
-
-            <!-- Sem pasta quick filter -->
-            <div
-              :class="[
-                'flex items-center gap-2 h-8 px-3 ml-2 rounded-lg cursor-pointer transition-all border border-transparent text-[11px] font-medium',
-                isNoFolderView ? 'bg-amber-500/15 text-amber-300 border-amber-500/20' : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/5'
-              ]"
+              <Clock class="w-3.5 h-3.5 shrink-0" />
+              <span class="flex-1 text-left">Recentes</span>
+              <span class="nav-count">10</span>
+            </button>
+            <button
+              @click="activeView = 'all'; setActiveFolder(null); filterFolderId = 'all'"
+              :class="['dash-nav-item w-full', activeView === 'all' && !isNoFolderView && !activeFolderId ? 'active' : '']"
+              aria-label="Visualizar todos os projetos"
+            >
+              <FolderOpen class="w-3.5 h-3.5 shrink-0" />
+              <span class="flex-1 text-left">Todos</span>
+              <span class="nav-count">{{ safeProjects.length }}</span>
+            </button>
+            <button
               @click="goToNoFolder"
+              :class="['dash-nav-item w-full', isNoFolderView ? 'active' : '']"
               title="Projetos sem pasta"
             >
-              <svg class="w-3.5 h-3.5 shrink-0 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
                 <line x1="9" y1="12" x2="15" y2="12" />
               </svg>
-              <span class="truncate flex-1">Sem pasta</span>
-              <span v-if="rootProjects.length > 0" class="text-[10px] px-1.5 py-0.5 rounded bg-white/5">{{ rootProjects.length }}</span>
-            </div>
+              <span class="flex-1 text-left">Sem pasta</span>
+              <span v-if="rootProjects.length > 0" class="nav-count">{{ rootProjects.length }}</span>
+            </button>
+            <button
+              @click="activeView = 'starred'"
+              :class="['dash-nav-item w-full', activeView === 'starred' ? 'active starred' : '']"
+            >
+              <Star class="w-3.5 h-3.5 shrink-0" :class="{ 'fill-current text-amber-400': activeView === 'starred' }" />
+              <span class="flex-1 text-left">Favoritos</span>
+              <span v-if="starredProjectsCount > 0" class="nav-count">{{ starredProjectsCount }}</span>
+            </button>
+            <button
+              @click="activeView = 'shared'"
+              :class="['dash-nav-item w-full', activeView === 'shared' ? 'active' : '']"
+              aria-label="Visualizar projetos compartilhados"
+            >
+              <Users class="w-3.5 h-3.5 shrink-0" />
+              <span class="flex-1 text-left">Compartilhados</span>
+            </button>
           </div>
 
-          <!-- Folder Tree -->
-          <div class="folder-tree">
-            <template v-if="isMounted">
+          <!-- Divider -->
+          <div class="sidebar-divider mx-3 my-1"></div>
+
+          <!-- Folders -->
+          <div class="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
+            <div class="flex items-center justify-between px-2 mb-1">
+              <p class="sidebar-section-label">Pastas</p>
+              <button
+                @click="showCreateFolder = true"
+                class="w-5 h-5 flex items-center justify-center hover:bg-white/10 rounded text-zinc-600 hover:text-zinc-300 transition-all"
+                title="Nova pasta"
+              >
+                <FolderPlus class="w-3 h-3" />
+              </button>
+            </div>
+            <div
+              :class="['dash-nav-item w-full', !activeFolderId && activeView === 'all' && !isNoFolderView ? 'active' : '']"
+              @click="openFolderFromSidebar(null)"
+              @dragover="handleDragOver"
+              @drop="handleDropOnRoot"
+              style="cursor:pointer"
+            >
+              <FolderOpen class="w-3.5 h-3.5 shrink-0 opacity-50" />
+              <span class="flex-1 text-left text-[12px] font-medium truncate">Raiz</span>
+              <span class="nav-count">{{ safeProjects.length }}</span>
+            </div>
+            <div class="folder-tree" v-if="isMounted">
               <FolderTreeItem
                 v-for="folder in folderTree"
                 :key="folder.id"
@@ -1624,219 +1593,156 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 @save-edit="saveFolderName"
                 @cancel-edit="cancelEditFolder"
               />
-            </template>
-          </div>
-        </div>
-
-        <!-- Starred Section (Figma Style) -->
-        <div class="px-3 py-2 border-t border-white/5 shrink-0">
-          <button
-            @click="activeView = 'starred'"
-            :class="['w-full flex items-center gap-2.5 h-9 px-3 rounded-lg transition-all cursor-pointer', activeView === 'starred' ? 'text-white bg-violet-500/20 hover:bg-violet-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/5']"
-          >
-            <Star class="w-4 h-4" :class="{ 'fill-current': activeView === 'starred' }" />
-            <span class="text-xs font-medium">Favoritos</span>
-            <span v-if="starredProjectsCount > 0" class="ml-auto text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">
-              {{ starredProjectsCount }}
-            </span>
-          </button>
-        </div>
-
-        <!-- Sign Out Button -->
-        <div class="p-3 border-t border-white/5 shrink-0 mt-auto">
-          <button
-            @click="handleSignOut"
-            class="w-full h-9 px-3 bg-red-600/10 hover:bg-red-600/20 text-red-400 hover:text-red-300 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-all"
-            title="Sair"
-          >
-            <LogOut class="w-4 h-4" />
-            <span>Sair</span>
-          </button>
-        </div>
-      </aside>
-
-      <!-- Main Content -->
-      <main class="dashboard-main flex-1 flex flex-col overflow-hidden bg-transparent relative z-10">
-        <!-- Section Title -->
-        <div class="relative px-8 pt-8 pb-4">
-          <p class="text-[11px] uppercase tracking-[0.2em] text-violet-400/70 font-semibold mb-2 flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-violet-400/50 animate-pulse"></span>
-            Workspace
-          </p>
-          <h1 class="text-4xl leading-tight font-bold text-transparent bg-clip-text bg-gradient-to-r from-zinc-100 to-zinc-500 mb-2 tracking-tight drop-shadow-sm">
-            {{ dashboardTitle }}
-          </h1>
-          <p class="text-xs text-zinc-400 leading-relaxed">{{ dashboardContextHint }}</p>
-          <p class="text-xs text-zinc-500 mt-2">{{ filteredProjects.length }} {{ filteredProjects.length === 1 ? 'projeto' : 'projetos' }}</p>
-        </div>
-
-        <!-- Filters and Controls (Figma Style) -->
-        <div class="px-6 pb-4 flex items-center justify-between gap-4">
-          <!-- Tabs -->
-          <div class="flex items-center gap-1 bg-white/5 rounded-lg p-1 border border-white/10">
-            <button
-              @click="activeView = 'recent'"
-              :class="['px-3 py-1.5 rounded-md text-xs font-medium transition-all', activeView === 'recent' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
-            >
-              Recentes
-            </button>
-            <button
-              @click="activeView = 'shared'"
-              :class="['px-3 py-1.5 rounded-md text-xs font-medium transition-all', activeView === 'shared' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
-            >
-              Compartilhados
-            </button>
-            <button
-              @click="activeView = 'all'"
-              :class="['px-3 py-1.5 rounded-md text-xs font-medium transition-all', activeView === 'all' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
-            >
-              Todos
-            </button>
-          </div>
-
-          <!-- Filters Row -->
-          <div class="flex items-end gap-2 flex-1 justify-end flex-wrap">
-            <!-- Filter Dropdowns -->
-            <FilterDropdown
-              v-model="filterOrganization"
-              label="Equipe"
-              :options="organizationFilterOptions"
-              min-width-class="min-w-[180px]"
-            />
-
-            <FilterDropdown
-              v-model="filterType"
-              label="Tipo de arquivo"
-              :options="typeFilterOptions"
-              min-width-class="min-w-[190px]"
-            />
-
-            <FilterDropdown
-              v-model="filterTime"
-              label="Recorte de tempo"
-              :options="timeFilterOptions"
-              min-width-class="min-w-[190px]"
-            />
-
-            <FilterDropdown
-              v-model="filterFolderId"
-              label="Pasta"
-              :options="folderFilterDropdownOptions"
-              min-width-class="min-w-[260px]"
-            />
-
-            <!-- View Mode Toggle -->
-            <div class="self-end h-9 flex items-center bg-white/5 rounded-lg p-1 border border-white/10">
-              <button
-                @click="viewMode = 'grid'"
-                :class="['p-1.5 rounded-md transition-all', viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
-                title="Visualização em grade"
-              >
-                <Grid class="w-4 h-4" />
-              </button>
-              <button
-                @click="viewMode = 'list'"
-                :class="['p-1.5 rounded-md transition-all', viewMode === 'list' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white']"
-                title="Visualização em lista"
-              >
-                <List class="w-4 h-4" />
-              </button>
             </div>
+          </div>
 
-            <!-- New Project Button -->
+          <!-- Bottom -->
+          <div class="px-2 pb-3 shrink-0">
+            <div class="sidebar-divider mx-1 mb-2"></div>
+            <button
+              @click="navigateTo('/profile')"
+              class="dash-nav-item w-full"
+              aria-label="Abrir perfil do usuário"
+            >
+              <User class="w-3.5 h-3.5 shrink-0" />
+              <span class="flex-1 text-left">Meu Perfil</span>
+            </button>
+            <button
+              @click="handleSignOut"
+              class="dash-nav-item signout w-full"
+              title="Sair"
+            >
+              <LogOut class="w-3.5 h-3.5 shrink-0" />
+              <span class="flex-1 text-left">Sair</span>
+            </button>
+          </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="dash-main flex-1 flex flex-col overflow-hidden relative z-10">
+
+          <!-- Page Header -->
+          <div class="px-7 pt-6 pb-4 flex items-start justify-between gap-4 shrink-0">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 mb-1">
+                <span class="text-[10px] uppercase tracking-[0.2em] text-zinc-600 font-semibold">
+                  {{ activeView === 'recent' ? 'Recentes' : activeView === 'starred' ? 'Favoritos' : activeView === 'shared' ? 'Compartilhados' : activeFolderId ? 'Pasta' : 'Workspace' }}
+                </span>
+                <template v-if="activeFolderId">
+                  <span class="text-zinc-700 text-[10px]">/</span>
+                  <span class="text-[10px] text-zinc-500 truncate max-w-[200px]">{{ folders.find(f => f.id === activeFolderId)?.name }}</span>
+                </template>
+              </div>
+              <h1 class="dash-page-title text-[20px] font-semibold leading-tight text-white tracking-tight truncate">{{ dashboardTitle }}</h1>
+              <p class="text-[11px] text-zinc-600 mt-0.5">
+                <span class="text-zinc-500 font-medium">{{ filteredProjects.length }}</span>
+                {{ filteredProjects.length === 1 ? ' projeto' : ' projetos' }}
+                <span class="mx-1.5 text-zinc-700">·</span>
+                {{ dashboardContextHint }}
+              </p>
+            </div>
             <button
               @click="showCreateProject = true"
-              class="self-end h-9 px-4 bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all duration-300 shadow-[0_8px_20px_rgba(139,92,246,0.3)] hover:shadow-[0_12px_24px_rgba(139,92,246,0.4)] hover:-translate-y-0.5 border border-violet-400/20"
+              class="dash-cta shrink-0 h-9 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all mt-1"
             >
-              <Plus class="w-4 h-4 text-violet-100" />
-              <span>Novo Projeto</span>
+              <Plus class="w-3.5 h-3.5" />
+              Novo Projeto
             </button>
-
           </div>
-        </div>
 
-        <!-- Active Filter Chips -->
-        <div v-if="activeFilterChips.length > 0" class="px-6 pb-3 flex items-center gap-2 flex-wrap">
-          <span class="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">Filtros:</span>
-          <button
-            v-for="chip in activeFilterChips"
-            :key="chip.key"
-            @click="chip.clear()"
-            class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-violet-500/15 text-violet-300 border border-violet-500/25 hover:bg-violet-500/25 hover:text-white transition-all"
-          >
-            {{ chip.label }}
-            <svg class="w-3 h-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          <button
-            v-if="activeFilterChips.length > 1"
-            @click="filterOrganization = 'all'; filterType = 'all'; filterTime = 'all'; filterFolderId = 'all'; setActiveFolder(null)"
-            class="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2"
-          >
-            Limpar tudo
-          </button>
-        </div>
-
-        <!-- Projects Grid/List -->
-        <div ref="projectGridViewportEl" class="flex-1 overflow-y-auto px-6 pb-6">
-          <!-- Loading State -->
-          <div v-if="isLoadingProjects" class="flex items-center justify-center h-full">
-            <div class="animate-spin w-8 h-8 border-3 border-violet-500 border-t-transparent rounded-full"></div>
+          <!-- Toolbar -->
+          <div class="px-7 pb-3 flex items-center gap-2.5 shrink-0">
+            <div class="dash-tabs flex items-center gap-0.5 p-0.5 rounded-lg shrink-0">
+              <button @click="activeView = 'recent'" :class="['dash-tab', activeView === 'recent' ? 'active' : '']">Recentes</button>
+              <button @click="activeView = 'all'" :class="['dash-tab', activeView === 'all' ? 'active' : '']">Todos</button>
+              <button @click="activeView = 'shared'" :class="['dash-tab', activeView === 'shared' ? 'active' : '']">Compartilhados</button>
+            </div>
+            <div class="flex-1 min-w-0"></div>
+            <FilterDropdown v-model="filterOrganization" label="Equipe" :options="organizationFilterOptions" min-width-class="min-w-[170px]" />
+            <FilterDropdown v-model="filterType" label="Tipo" :options="typeFilterOptions" min-width-class="min-w-[170px]" />
+            <FilterDropdown v-model="filterTime" label="Período" :options="timeFilterOptions" min-width-class="min-w-[175px]" />
+            <FilterDropdown v-model="filterFolderId" label="Pasta" :options="folderFilterDropdownOptions" min-width-class="min-w-[240px]" />
+            <div class="flex items-center bg-white/[0.04] rounded-lg p-0.5 border border-white/[0.07] shrink-0">
+              <button @click="viewMode = 'grid'" :class="['p-1.5 rounded-md transition-all', viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-300']" title="Grade"><Grid class="w-3.5 h-3.5" /></button>
+              <button @click="viewMode = 'list'" :class="['p-1.5 rounded-md transition-all', viewMode === 'list' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-300']" title="Lista"><List class="w-3.5 h-3.5" /></button>
+            </div>
           </div>
-          <div v-else>
-            <!-- Folders in current scope -->
-            <section
-              v-if="activeView === 'all' && !searchQuery && visibleFoldersOnDashboard.length > 0"
-              class="mb-5"
-            >
-              <div class="flex items-center justify-between mb-3">
-                <h2 class="text-xs font-semibold text-zinc-200 uppercase tracking-[0.16em]">
-                  <span v-if="activeFolderId">Pastas em: {{ folders.find(f => f.id === activeFolderId)?.name || 'Pasta' }}</span>
-                  <span v-else>Pastas na raiz</span>
-                </h2>
-                <span class="text-[10px] text-zinc-500">
-                  {{ visibleFoldersOnDashboard.length }} {{ visibleFoldersOnDashboard.length === 1 ? 'pasta' : 'pastas' }}
-                </span>
-              </div>
-              <div class="grid gap-2.5 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                <button
-                  v-for="folder in visibleFoldersOnDashboard"
-                  :key="folder.id"
-                  type="button"
-                  class="group text-left rounded-2xl border border-white/5 bg-[#18181b] px-4 py-4 transition-all duration-200 hover:border-white/15 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 shadow-sm hover:shadow-lg"
-                  :class="{ 'border-violet-500/50 bg-violet-500/10 shadow-[0_0_15px_rgba(139,92,246,0.15)]': activeFolderId === folder.id }"
-                  @click="openFolderFromSidebar(folder.id)"
-                  @contextmenu="(e: MouseEvent) => showFolderContextMenu(folder.id, e)"
-                >
-                  <div class="flex items-center justify-between gap-2">
-                    <Folder class="w-4 h-4 text-violet-400 shrink-0" />
-                    <span class="text-[10px] text-zinc-300 bg-white/5 px-1.5 py-0.5 rounded">
-                      {{ pluralize(getFolderProjectCount(folder.id), 'projeto', 'projetos') }}
-                    </span>
-                  </div>
-                  <p class="mt-2 text-sm font-semibold text-zinc-100 truncate leading-snug">
-                    {{ folder.name || 'Pasta sem nome' }}
-                  </p>
-                  <p class="mt-1 text-[10px] text-zinc-500">
-                    {{ pluralize(getFolderSubfolderCount(folder.id), 'subpasta', 'subpastas') }}
-                  </p>
-                </button>
-              </div>
-            </section>
 
-            <!-- Projects Grid (Figma Style - Rounded Cards) -->
-            <div
-              v-if="filteredProjects.length > 0"
-              class="grid gap-4"
-              :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-1'"
+          <!-- Active Filter Chips -->
+          <div v-if="activeFilterChips.length > 0" class="px-7 pb-3 flex items-center gap-2 flex-wrap shrink-0">
+            <span class="text-[10px] uppercase tracking-[0.15em] text-zinc-600 font-semibold">Filtros</span>
+            <button
+              v-for="chip in activeFilterChips"
+              :key="chip.key"
+              @click="chip.clear()"
+              class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-500/12 text-indigo-300 border border-indigo-400/20 hover:bg-indigo-500/20 hover:text-white transition-all"
             >
+              {{ chip.label }}
+              <svg class="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <button
+              v-if="activeFilterChips.length > 1"
+              @click="filterOrganization = 'all'; filterType = 'all'; filterTime = 'all'; filterFolderId = 'all'; setActiveFolder(null)"
+              class="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors underline underline-offset-2"
+            >Limpar tudo</button>
+          </div>
+
+          <!-- Content Grid -->
+          <div ref="projectGridViewportEl" class="flex-1 overflow-y-auto px-7 pb-7">
+            <div v-if="isLoadingProjects" class="flex items-center justify-center h-full">
+              <div class="w-5 h-5 border-[2px] border-indigo-500 border-t-transparent rounded-full animate-spin opacity-70"></div>
+            </div>
+
+            <div v-else>
+              <!-- Folder Cards -->
+              <section v-if="activeView === 'all' && !searchQuery && visibleFoldersOnDashboard.length > 0" class="mb-6">
+                <div class="flex items-center justify-between mb-3">
+                  <h2 class="section-label">
+                    <span v-if="activeFolderId">Subpastas</span>
+                    <span v-else>Pastas</span>
+                  </h2>
+                  <span class="text-[10px] text-zinc-700">{{ visibleFoldersOnDashboard.length }}</span>
+                </div>
+                <div class="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  <button
+                    v-for="folder in visibleFoldersOnDashboard"
+                    :key="folder.id"
+                    type="button"
+                    :class="['dash-folder-card group text-left', activeFolderId === folder.id ? 'active' : '']"
+                    @click="openFolderFromSidebar(folder.id)"
+                    @contextmenu="(e: MouseEvent) => showFolderContextMenu(folder.id, e)"
+                  >
+                    <div class="flex items-center justify-between mb-2.5">
+                      <div class="w-7 h-7 rounded-lg bg-indigo-500/12 border border-indigo-400/18 flex items-center justify-center">
+                        <Folder class="w-3.5 h-3.5 text-indigo-400" />
+                      </div>
+                      <span class="text-[10px] text-zinc-600 font-mono">{{ getFolderProjectCount(folder.id) }}</span>
+                    </div>
+                    <p class="text-[13px] font-semibold text-zinc-200 truncate leading-tight group-hover:text-white transition-colors">{{ folder.name || 'Sem nome' }}</p>
+                    <p class="mt-0.5 text-[10px] text-zinc-600">{{ pluralize(getFolderSubfolderCount(folder.id), 'subpasta', 'subpastas') }}</p>
+                  </button>
+                </div>
+              </section>
+
+              <div v-if="activeView === 'all' && visibleFoldersOnDashboard.length > 0 && filteredProjects.length > 0" class="flex items-center justify-between mb-3">
+                <h2 class="section-label">Projetos</h2>
+                <span class="text-[10px] text-zinc-700">{{ filteredProjects.length }}</span>
+              </div>
+
+              <!-- Project Cards -->
+              <div
+                v-if="filteredProjects.length > 0"
+                class="grid gap-3"
+                :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-1'"
+              >
                 <div
                   v-for="(project, projectIndex) in filteredProjects"
                   :key="project.id"
                   :ref="(el) => setProjectPreviewHost(project.id, el as Element | null)"
                   :data-preview-id="project.id"
-                  class="project-card-shell group relative bg-[#18181b] border border-white/5 hover:border-white/15 hover:bg-[#1e1e21] flex flex-col overflow-hidden transition-all duration-300 ease-out cursor-pointer rounded-2xl shadow-sm hover:shadow-[0_12px_35px_rgba(0,0,0,0.5)] hover:-translate-y-1 motion-reduce:transition-none"
+                  :class="['project-card-shell group relative flex flex-col overflow-hidden cursor-pointer transition-all duration-200', viewMode === 'grid' ? 'dash-project-card' : 'dash-project-list-item']"
                   draggable="true"
                   @mousedown="handleProjectPointerDown(project.id, $event)"
                   @dragstart="handleDragStart(project.id, $event)"
@@ -1844,350 +1750,236 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   @click="handleProjectCardClick(project.id, $event)"
                   @mouseenter="promoteProjectPreview(project, projectIndex)"
                 >
-                  <!-- Thumbnail (Rounded Top) -->
-                  <div
-                    class="aspect-video bg-[#121214] relative overflow-hidden"
-                  >
-                  <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 p-2 flex items-center justify-center">
-                    <img
-                      :src="getProjectPreviewSrc(project, projectIndex)"
-                      class="project-thumb-media max-w-full max-h-full object-contain rounded-lg"
-                      :alt="project.name"
-                      draggable="false"
-                      :loading="projectIndex < (viewMode === 'list' ? 2 : 8) ? 'eager' : 'lazy'"
-                      decoding="async"
-                      :fetchpriority="projectIndex < (viewMode === 'list' ? 1 : 4) ? 'high' : (visibleProjectPreviewIds[String(project.id || '')] ? 'auto' : 'low')"
-                      @dragstart.prevent
-                      @load="handleProjectThumbLoad(project, $event)"
-                      @error="project._thumbError = true"
-                    />
-                  </div>
-                  <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="w-full h-full p-2">
-                    <div
-                      class="w-full h-full rounded-lg border border-white/20 relative overflow-hidden flex flex-col justify-between p-3"
-                      :style="getProjectThumbStyle(project)"
-                    >
-                      <div class="absolute inset-0 opacity-20 pointer-events-none" style="background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35) 0%, transparent 38%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.22) 0%, transparent 42%);"></div>
-                      <div class="relative z-[1] text-[10px] font-medium uppercase tracking-[0.14em] text-white/75">
-                        {{ isProjectPreviewDeferred(project, projectIndex) ? 'Preview' : 'Sem preview' }}
+                  <!-- Grid mode -->
+                  <template v-if="viewMode === 'grid'">
+                    <div class="aspect-[16/10] bg-[#0d0d12] relative overflow-hidden">
+                      <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 p-2 flex items-center justify-center">
+                        <img
+                          :src="getProjectPreviewSrc(project, projectIndex)"
+                          class="project-thumb-media max-w-full max-h-full object-contain rounded-lg"
+                          :alt="project.name"
+                          draggable="false"
+                          :loading="projectIndex < 8 ? 'eager' : 'lazy'"
+                          decoding="async"
+                          :fetchpriority="projectIndex < 4 ? 'high' : (visibleProjectPreviewIds[String(project.id || '')] ? 'auto' : 'low')"
+                          @dragstart.prevent
+                          @load="handleProjectThumbLoad(project, $event)"
+                          @error="project._thumbError = true"
+                        />
                       </div>
-                      <div class="relative z-[1] text-white font-bold text-2xl leading-none">{{ getProjectInitials(project) }}</div>
-                      <div class="relative z-[1] text-[10px] text-white/85 truncate">{{ project.name || 'Projeto sem nome' }}</div>
+                      <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="absolute inset-0 p-2">
+                        <div class="w-full h-full rounded-lg border border-white/12 relative overflow-hidden flex flex-col justify-end p-3" :style="getProjectThumbStyle(project)">
+                          <div class="absolute inset-0 opacity-12 pointer-events-none" style="background:radial-gradient(circle at 25% 25%,rgba(255,255,255,0.5) 0%,transparent 45%)"></div>
+                          <div class="relative z-[1] text-white font-black text-3xl leading-none tracking-tighter drop-shadow-lg">{{ getProjectInitials(project) }}</div>
+                        </div>
+                      </div>
+                      <button
+                        @pointerdown.stop @mousedown.stop @touchstart.stop
+                        @click.stop="toggleStarred(project.id)"
+                        :class="['absolute top-2 left-2 w-7 h-7 rounded-lg backdrop-blur-sm flex items-center justify-center border transition-all', project.is_starred ? 'bg-amber-500/25 text-amber-400 border-amber-400/30 opacity-100' : 'bg-black/50 text-white/50 border-white/8 opacity-0 group-hover:opacity-100 hover:text-white']"
+                        title="Favoritar"
+                      ><Star class="w-3.5 h-3.5" :class="{ 'fill-current': project.is_starred }" /></button>
+                      <button
+                        @pointerdown.stop @mousedown.stop @touchstart.stop
+                        @click.stop="showProjectContextMenu(project.id, $event)"
+                        class="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/50 backdrop-blur-sm border border-white/8 text-white/50 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                        title="Ações"
+                      ><MoreVertical class="w-3.5 h-3.5" /></button>
                     </div>
-                  </div>
-                  <div
-                    class="absolute bottom-3 left-3 px-2 py-1.5 rounded-md bg-black/40 backdrop-blur-md text-white text-[10px] font-semibold tracking-widest pointer-events-none border border-white/10 shadow-lg"
-                  >
-                    {{ getProjectInitials(project) }}
-                  </div>
+                    <div class="px-3 pt-2.5 pb-3 flex flex-col gap-1.5 dash-card-info">
+                      <div v-if="renamingProjectId === project.id" @click.stop>
+                        <input v-model="editingProjectName" type="text" class="w-full px-2 py-1 text-[12px] bg-white/8 border border-indigo-500/50 rounded-md focus:outline-none text-white" @keyup.enter="saveProjectName(project.id)" @keyup.esc="cancelRenameProject" @blur="saveProjectName(project.id)" ref="renameInput" />
+                      </div>
+                      <h3 v-else class="font-semibold text-[13px] text-zinc-300 truncate tracking-tight transition-colors group-hover:text-white leading-tight">{{ project.name || 'Sem título' }}</h3>
+                      <div class="flex items-center justify-between gap-2">
+                        <p class="text-[10px] text-zinc-600 truncate flex items-center gap-1 font-medium">
+                          <Clock class="w-2.5 h-2.5 shrink-0" />
+                          {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
+                        </p>
+                        <span v-if="!String(project.folder_id || '').trim()" class="text-[9px] font-semibold uppercase tracking-wider text-zinc-700 border border-white/[0.06] rounded-full px-1.5 py-0.5 shrink-0">Raiz</span>
+                      </div>
+                    </div>
+                  </template>
 
-                  <!-- Actions Button (top right - Rounded) -->
-                  <button
-                    @pointerdown.stop
-                    @mousedown.stop
-                    @touchstart.stop
-                    @click.stop="showProjectContextMenu(project.id, $event)"
-                    class="absolute top-3 right-3 p-2 bg-black/40 backdrop-blur-md rounded-lg text-white/70 hover:text-white hover:bg-black/70 border border-white/5 transition-all opacity-0 group-hover:opacity-100"
-                    title="Ações"
-                  >
-                    <MoreVertical class="w-4 h-4" />
-                  </button>
-
-                  <!-- Star Button (top left - Rounded) -->
-                  <button
-                    @pointerdown.stop
-                    @mousedown.stop
-                    @touchstart.stop
-                    @click.stop="toggleStarred(project.id)"
-                    :class="['absolute top-3 left-3 p-2 rounded-lg backdrop-blur-md border border-white/5 transition-all opacity-0 group-hover:opacity-100', project.is_starred ? 'bg-amber-500/20 text-amber-400 opacity-100' : 'bg-black/40 text-white/70 hover:text-white hover:bg-black/70']"
-                    title="Favoritar"
-                  >
-                    <Star class="w-4 h-4 drop-shadow" :class="{ 'fill-current': project.is_starred }" />
-                  </button>
-                </div>
-
-                  <!-- Content (Rounded Bottom) -->
-                  <div class="px-4 py-3 border-t border-white/5 flex flex-col justify-center min-h-[72px] bg-transparent">
-                  <!-- Renaming mode -->
-                  <div v-if="renamingProjectId === project.id" @click.stop class="mb-1">
-                    <input
-                      v-model="editingProjectName"
-                      type="text"
-                      class="w-full px-2 py-1.5 text-xs bg-[#2a2a2a] border border-violet-500 rounded-lg focus:outline-none text-white"
-                      @keyup.enter="saveProjectName(project.id)"
-                      @keyup.esc="cancelRenameProject"
-                      @blur="saveProjectName(project.id)"
-                      ref="renameInput"
-                    />
-                  </div>
-                  <!-- Normal mode -->
-                  <h3 v-else class="font-semibold text-[13px] text-zinc-100 mb-1.5 truncate tracking-tight transition-colors group-hover:text-violet-300">
-                    {{ project.name || 'Sem título' }}
-                  </h3>
-                  <div class="mt-0.5 flex items-center justify-between gap-3">
-                    <p class="text-[11px] text-zinc-500 truncate font-medium flex items-center gap-1.5">
-                      <Clock class="w-3 h-3 opacity-70" />
-                      {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
-                    </p>
-                    <span
-                      v-if="!String(project.folder_id || '').trim()"
-                      class="inline-flex items-center rounded-full border border-white/5 bg-white/[0.03] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500"
-                    >
-                      Raiz
-                    </span>
-                  </div>
+                  <!-- List mode -->
+                  <template v-else>
+                    <div class="flex items-center gap-3 px-4 py-2.5">
+                      <div class="w-10 h-10 rounded-lg overflow-hidden bg-[#0d0d12] shrink-0 border border-white/[0.06]">
+                        <img v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" :src="getProjectPreviewSrc(project, projectIndex)" class="w-full h-full object-cover" draggable="false" :loading="projectIndex < 4 ? 'eager' : 'lazy'" @dragstart.prevent @load="handleProjectThumbLoad(project, $event)" @error="project._thumbError = true" />
+                        <div v-else class="w-full h-full flex items-center justify-center font-black text-sm text-white" :style="getProjectThumbStyle(project)">{{ getProjectInitials(project) }}</div>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div v-if="renamingProjectId === project.id" @click.stop>
+                          <input v-model="editingProjectName" type="text" class="w-full px-2 py-0.5 text-[12px] bg-white/8 border border-indigo-500/50 rounded focus:outline-none text-white" @keyup.enter="saveProjectName(project.id)" @keyup.esc="cancelRenameProject" @blur="saveProjectName(project.id)" ref="renameInput" />
+                        </div>
+                        <h3 v-else class="text-[13px] font-semibold text-zinc-300 truncate group-hover:text-white transition-colors">{{ project.name || 'Sem título' }}</h3>
+                        <p class="text-[10px] text-zinc-600 flex items-center gap-1 mt-0.5">
+                          <Clock class="w-2.5 h-2.5 shrink-0" />
+                          {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
+                        </p>
+                      </div>
+                      <div class="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                        <button @pointerdown.stop @mousedown.stop @touchstart.stop @click.stop="toggleStarred(project.id)" :class="['w-7 h-7 rounded-lg border flex items-center justify-center transition-all', project.is_starred ? 'bg-amber-500/18 text-amber-400 border-amber-400/25' : 'bg-white/4 text-zinc-600 border-white/[0.07] hover:text-white']"><Star class="w-3.5 h-3.5" :class="{ 'fill-current': project.is_starred }" /></button>
+                        <button @pointerdown.stop @mousedown.stop @touchstart.stop @click.stop="showProjectContextMenu(project.id, $event)" class="w-7 h-7 rounded-lg bg-white/4 border border-white/[0.07] text-zinc-600 hover:text-white flex items-center justify-center transition-all"><MoreVertical class="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  </template>
                 </div>
               </div>
-            </div>
 
-            <!-- Empty State (Figma Style) -->
-            <div v-if="filteredProjects.length === 0" class="flex items-center justify-center">
-              <div class="text-center">
-                <div class="w-16 h-16 bg-[#1a1a1a] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                  <FolderOpen class="w-8 h-8 text-zinc-500" />
+              <!-- Empty State -->
+              <div v-if="filteredProjects.length === 0 && !isLoadingProjects" class="flex items-center justify-center h-56">
+                <div class="text-center">
+                  <div class="w-11 h-11 bg-white/[0.04] rounded-xl flex items-center justify-center mx-auto mb-3 border border-white/[0.07]">
+                    <FolderOpen class="w-5 h-5 text-zinc-600" />
+                  </div>
+                  <h3 class="text-[14px] font-semibold text-zinc-500 mb-1">
+                    <span v-if="searchQuery">Nenhum resultado</span>
+                    <span v-else-if="activeFolderId">Pasta vazia</span>
+                    <span v-else>Nenhum projeto ainda</span>
+                  </h3>
+                  <p class="text-[12px] text-zinc-700 mb-4">
+                    <span v-if="searchQuery">Tente outra busca ou limpe os filtros</span>
+                    <span v-else>Crie seu primeiro projeto para começar</span>
+                  </p>
+                  <button v-if="!searchQuery" @click="showCreateProject = true" class="h-9 px-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[12px] font-medium inline-flex items-center gap-2 transition-all">
+                    <Plus class="w-3.5 h-3.5" />
+                    Criar Projeto
+                  </button>
                 </div>
-                <h3 class="text-base font-semibold text-white mb-2">
-                  <span v-if="searchQuery">Nenhum resultado encontrado</span>
-                  <span v-else-if="activeFolderId">Pasta vazia</span>
-                  <span v-else>Nenhum projeto ainda</span>
-                </h3>
-                <p class="text-xs text-zinc-500 mb-6">
-                  <span v-if="searchQuery">Tente outra busca</span>
-                  <span v-else>Crie seu primeiro projeto para começar</span>
-                </p>
-                <button
-                  v-if="!searchQuery"
-                  @click="showCreateProject = true"
-                  class="h-10 px-6 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium inline-flex items-center gap-2 transition-all shadow-lg shadow-violet-500/20"
-                >
-                  <Plus class="w-4 h-4" />
-                  Criar Projeto
-                </button>
               </div>
             </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
 
-    <!-- Create Project Modal (Figma Style) -->
-    <div
-      v-if="showCreateProject"
-      class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/80"
-      @click.self="showCreateProject = false"
-    >
-      <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
-        <h3 class="text-base font-semibold text-white mb-2">Novo Projeto</h3>
-        <p class="text-xs text-zinc-500 mb-4">
-          <span v-if="activeFolderId">Criar em: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
-          <span v-else>Criar na raiz</span>
+    <!-- Create Project Modal -->
+    <div v-if="showCreateProject" class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="showCreateProject = false">
+      <div class="dash-modal w-full max-w-sm">
+        <h3 class="text-[15px] font-semibold text-white mb-1">Novo Projeto</h3>
+        <p class="text-[12px] text-zinc-600 mb-5">
+          <span v-if="activeFolderId">Em: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
+          <span v-else>Na raiz do workspace</span>
         </p>
-        <input
-          v-model="newProjectName"
-          type="text"
-          placeholder="Nome do projeto..."
-          class="w-full h-10 px-3 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 mb-4 transition-all"
-          @keyup.enter="createProject()"
-        />
+        <input v-model="newProjectName" type="text" placeholder="Nome do projeto…" class="dash-modal-input mb-4" @keyup.enter="createProject()" />
         <div class="flex gap-2">
-          <button
-            @click="showCreateProject = false"
-            class="flex-1 h-10 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            @click="createProject()"
-            :disabled="isLoading || !isValidProjectName"
-            class="flex-1 h-10 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
-          >
-            {{ isLoading ? 'Criando...' : 'Criar' }}
-          </button>
+          <button @click="showCreateProject = false" class="dash-modal-btn-cancel flex-1">Cancelar</button>
+          <button @click="createProject()" :disabled="isLoading || !isValidProjectName" class="dash-modal-btn-confirm flex-1">{{ isLoading ? 'Criando…' : 'Criar' }}</button>
         </div>
       </div>
     </div>
 
-    <!-- Create Folder Modal (Figma Style) -->
-    <div
-      v-if="showCreateFolder"
-      class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/80"
-      @click.self="showCreateFolder = false"
-    >
-      <div class="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
-        <h3 class="text-base font-semibold text-white mb-2">Nova Pasta</h3>
-        <p class="text-xs text-zinc-500 mb-4">
-          <span v-if="activeFolderId">Criar dentro de: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
-          <span v-else>Criar na raiz</span>
+    <!-- Create Folder Modal -->
+    <div v-if="showCreateFolder" class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="showCreateFolder = false">
+      <div class="dash-modal w-full max-w-sm">
+        <h3 class="text-[15px] font-semibold text-white mb-1">Nova Pasta</h3>
+        <p class="text-[12px] text-zinc-600 mb-5">
+          <span v-if="activeFolderId">Dentro de: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
+          <span v-else>Na raiz</span>
         </p>
-        <input
-          v-model="newFolderName"
-          type="text"
-          placeholder="Nome da pasta..."
-          class="w-full h-10 px-3 bg-[#2a2a2a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500/50 mb-4 transition-all"
-          @keyup.enter="handleCreateFolder()"
-        />
+        <input v-model="newFolderName" type="text" placeholder="Nome da pasta…" class="dash-modal-input mb-4" @keyup.enter="handleCreateFolder()" />
         <div class="flex gap-2">
-          <button
-            @click="showCreateFolder = false"
-            class="flex-1 h-10 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            @click="handleCreateFolder()"
-            :disabled="!isValidFolderName"
-            class="flex-1 h-10 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
-          >
-            Criar
-          </button>
+          <button @click="showCreateFolder = false" class="dash-modal-btn-cancel flex-1">Cancelar</button>
+          <button @click="handleCreateFolder()" :disabled="!isValidFolderName" class="dash-modal-btn-confirm flex-1">Criar</button>
         </div>
       </div>
     </div>
 
-    <!-- Folder Context Menu (Figma Style) -->
+    <!-- Folder Context Menu -->
     <teleport to="body">
       <div
         v-if="showFolderMenu"
-        class="folder-context-menu fixed z-[100] bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-40 shadow-xl"
+        class="folder-context-menu fixed z-[100] bg-[#161618] border border-white/[0.09] rounded-xl py-1.5 min-w-[160px] shadow-2xl shadow-black/60"
         :style="{ left: `${folderMenuPosition.x}px`, top: `${folderMenuPosition.y}px` }"
       >
-        <button
-          @click="startEditFolder(folders.find(f => f.id === showFolderMenu))"
-          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
-        >
-          <Pencil class="w-4 h-4" />
+        <button @click="startEditFolder(folders.find(f => f.id === showFolderMenu))" class="ctx-menu-item w-full">
+          <Pencil class="w-3.5 h-3.5" />
           Renomear
         </button>
-        <button
-          @click="handleDeleteFolder(showFolderMenu)"
-          class="w-full px-3 py-2 text-xs text-left text-red-400 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors rounded mx-1"
-        >
-          <Trash2 class="w-4 h-4" />
+        <button @click="handleDeleteFolder(showFolderMenu)" class="ctx-menu-item danger w-full">
+          <Trash2 class="w-3.5 h-3.5" />
           Excluir
         </button>
       </div>
     </teleport>
 
-    <!-- Project Context Menu (Figma Style) -->
+    <!-- Project Context Menu -->
     <teleport to="body">
       <div
         v-if="showProjectMenu"
-        class="project-context-menu fixed z-[100] bg-[#1a1a1a] border border-white/10 rounded-lg py-1.5 min-w-40 shadow-xl"
+        class="project-context-menu fixed z-[100] bg-[#161618] border border-white/[0.09] rounded-xl py-1.5 min-w-[160px] shadow-2xl shadow-black/60"
         :style="{ left: `${projectMenuPosition.x}px`, top: `${projectMenuPosition.y}px` }"
       >
-        <button
-          @click="startRenameProject(projects.find(p => p.id === showProjectMenu))"
-          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
-        >
-          <Pencil class="w-4 h-4" />
+        <button @click="startRenameProject(projects.find(p => p.id === showProjectMenu))" class="ctx-menu-item w-full">
+          <Pencil class="w-3.5 h-3.5" />
           Renomear
         </button>
-        <button
-          @click="duplicateProject(showProjectMenu)"
-          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
-        >
-          <Copy class="w-4 h-4" />
+        <button @click="duplicateProject(showProjectMenu)" class="ctx-menu-item w-full">
+          <Copy class="w-3.5 h-3.5" />
           Duplicar
         </button>
-        <button
-          @click="openMoveProjectModal(showProjectMenu)"
-          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
-        >
-          <Folder class="w-4 h-4" />
+        <button @click="openMoveProjectModal(showProjectMenu)" class="ctx-menu-item w-full">
+          <Folder class="w-3.5 h-3.5" />
           Mover para pasta
         </button>
-        <button
-          @click="toggleStarred(showProjectMenu)"
-          class="w-full px-3 py-2 text-xs text-left text-white hover:bg-white/10 flex items-center gap-2.5 transition-colors rounded mx-1"
-        >
-          <Star class="w-4 h-4" :class="{ 'fill-current': projects.find(p => p.id === showProjectMenu)?.is_starred }" />
+        <button @click="toggleStarred(showProjectMenu)" class="ctx-menu-item w-full">
+          <Star class="w-3.5 h-3.5" :class="{ 'fill-current': projects.find(p => p.id === showProjectMenu)?.is_starred }" />
           {{ projects.find(p => p.id === showProjectMenu)?.is_starred ? 'Desfavoritar' : 'Favoritar' }}
         </button>
-        <div class="h-px bg-white/10 my-1.5 mx-2"></div>
-        <button
-          @click="deleteProject(showProjectMenu)"
-          class="w-full px-3 py-2 text-xs text-left text-red-400 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors rounded mx-1"
-        >
-          <Trash2 class="w-4 h-4" />
+        <div class="h-px bg-white/[0.07] my-1.5 mx-2"></div>
+        <button @click="deleteProject(showProjectMenu)" class="ctx-menu-item danger w-full">
+          <Trash2 class="w-3.5 h-3.5" />
           Excluir
         </button>
       </div>
     </teleport>
 
     <!-- Move Project Modal -->
-    <div
-      v-if="showMoveProjectModal"
-      class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/80"
-      @click.self="closeMoveProjectModal"
-    >
-      <div class="w-full max-w-xl bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
-        <h3 class="text-base font-semibold text-white mb-1">Mover projeto</h3>
-        <p class="text-xs text-zinc-500 mb-4">Escolha a pasta de destino com caminho completo.</p>
+    <div v-if="showMoveProjectModal" class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="closeMoveProjectModal">
+      <div class="dash-modal w-full max-w-xl">
+        <h3 class="text-[15px] font-semibold text-white mb-1">Mover projeto</h3>
+        <p class="text-[12px] text-zinc-600 mb-4">Escolha a pasta de destino.</p>
 
-        <div class="rounded-xl border border-white/10 bg-[#121212] p-3 mb-3">
-          <p class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Projeto selecionado</p>
-          <p class="text-sm text-zinc-100 font-medium truncate">{{ projectToMoveName }}</p>
+        <div class="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 mb-3">
+          <p class="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Projeto</p>
+          <p class="text-[13px] text-zinc-200 font-semibold truncate">{{ projectToMoveName }}</p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-          <div class="rounded-lg border border-white/10 bg-[#151515] p-2.5">
-            <p class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Pasta atual</p>
-            <p class="text-xs text-zinc-200 break-words">{{ projectToMoveCurrentFolderLabel }}</p>
+          <div class="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2.5">
+            <p class="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Pasta atual</p>
+            <p class="text-[12px] text-zinc-300 break-words">{{ projectToMoveCurrentFolderLabel }}</p>
           </div>
-          <div class="rounded-lg border border-violet-500/30 bg-violet-500/5 p-2.5">
-            <p class="text-[10px] uppercase tracking-wider text-violet-300/80 mb-1">Destino selecionado</p>
-            <p class="text-xs text-violet-100 break-words">{{ moveProjectDestinationFolderLabel }}</p>
+          <div class="rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-2.5">
+            <p class="text-[10px] uppercase tracking-wider text-indigo-400/70 mb-1">Destino</p>
+            <p class="text-[12px] text-indigo-200 break-words">{{ moveProjectDestinationFolderLabel }}</p>
           </div>
         </div>
 
-        <label class="block text-[11px] text-zinc-400 mb-2">Pastas de destino</label>
-        <div class="mb-4 max-h-60 overflow-y-auto rounded-xl border border-white/10 bg-[#131313] p-1.5">
-          <button
-            type="button"
-            class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all"
-            :class="normalizeFolderId(moveProjectFolderId) === '' ? 'bg-violet-500/20 border border-violet-500/30' : 'hover:bg-white/5 border border-transparent'"
-            @click="moveProjectFolderId = ''"
-          >
-            <Check v-if="normalizeFolderId(moveProjectFolderId) === ''" class="w-4 h-4 text-violet-300 shrink-0 mt-0.5" />
+        <label class="block text-[11px] text-zinc-500 mb-2">Selecionar destino</label>
+        <div class="mb-4 max-h-60 overflow-y-auto rounded-xl border border-white/[0.07] bg-[#0f0f14] p-1.5">
+          <button type="button" class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all" :class="normalizeFolderId(moveProjectFolderId) === '' ? 'bg-indigo-500/15 border border-indigo-500/25' : 'hover:bg-white/5 border border-transparent'" @click="moveProjectFolderId = ''">
+            <Check v-if="normalizeFolderId(moveProjectFolderId) === ''" class="w-4 h-4 text-indigo-300 shrink-0 mt-0.5" />
             <span v-else class="w-4 shrink-0"></span>
             <span class="min-w-0">
-              <span class="block text-xs text-zinc-100">Sem pasta (raiz)</span>
-              <span class="block text-[10px] text-zinc-500">Projetos fora de qualquer pasta.</span>
+              <span class="block text-[12px] text-zinc-200">Sem pasta (raiz)</span>
+              <span class="block text-[10px] text-zinc-600">Projetos fora de qualquer pasta.</span>
             </span>
           </button>
-
-          <button
-            v-for="folderOption in moveProjectFolderOptions"
-            :key="folderOption.id"
-            type="button"
-            class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all border"
-            :class="normalizeFolderId(moveProjectFolderId) === folderOption.id ? 'bg-violet-500/20 border-violet-500/30' : 'hover:bg-white/5 border-transparent'"
-            @click="moveProjectFolderId = folderOption.id"
-          >
-            <Check v-if="normalizeFolderId(moveProjectFolderId) === folderOption.id" class="w-4 h-4 text-violet-300 shrink-0 mt-0.5" />
+          <button v-for="folderOption in moveProjectFolderOptions" :key="folderOption.id" type="button" class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all border" :class="normalizeFolderId(moveProjectFolderId) === folderOption.id ? 'bg-indigo-500/15 border-indigo-500/25' : 'hover:bg-white/5 border-transparent'" @click="moveProjectFolderId = folderOption.id">
+            <Check v-if="normalizeFolderId(moveProjectFolderId) === folderOption.id" class="w-4 h-4 text-indigo-300 shrink-0 mt-0.5" />
             <span v-else class="w-4 shrink-0"></span>
             <span class="min-w-0">
-              <span class="block text-xs text-zinc-100 truncate" :style="{ paddingLeft: `${folderOption.depth * 10}px` }">
-                {{ folderOption.name }}
-              </span>
-              <span class="block text-[10px] text-zinc-500 truncate">{{ folderOption.pathLabel }}</span>
+              <span class="block text-[12px] text-zinc-200 truncate" :style="{ paddingLeft: `${folderOption.depth * 10}px` }">{{ folderOption.name }}</span>
+              <span class="block text-[10px] text-zinc-600 truncate">{{ folderOption.pathLabel }}</span>
             </span>
           </button>
         </div>
 
         <div class="flex gap-2">
-          <button
-            @click="closeMoveProjectModal"
-            class="flex-1 h-10 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            @click="confirmMoveProjectModal"
-            :disabled="isMovingProject || isMoveDestinationUnchanged"
-            class="flex-1 h-10 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
-          >
-            {{ isMovingProject ? 'Movendo...' : (isMoveDestinationUnchanged ? 'Destino atual' : 'Mover') }}
+          <button @click="closeMoveProjectModal" class="dash-modal-btn-cancel flex-1">Cancelar</button>
+          <button @click="confirmMoveProjectModal" :disabled="isMovingProject || isMoveDestinationUnchanged" class="dash-modal-btn-confirm flex-1">
+            {{ isMovingProject ? 'Movendo…' : (isMoveDestinationUnchanged ? 'Destino atual' : 'Mover') }}
           </button>
         </div>
       </div>
@@ -2205,113 +1997,49 @@ const handleDropOnRoot = async (event: DragEvent) => {
       @cancel="handleCancelConfirm"
     />
 
-    <!-- Notifications Modal (Figma Style) -->
+    <!-- Notifications Modal -->
     <teleport to="body">
-      <!-- Backdrop -->
-      <Transition
-        enter-active-class="transition-opacity duration-200"
-        enter-from-class="opacity-0"
-        enter-to-class="opacity-100"
-        leave-active-class="transition-opacity duration-150"
-        leave-from-class="opacity-100"
-        leave-to-class="opacity-0"
-      >
-        <div
-          v-if="showNotifications"
-          class="fixed inset-0 z-[199] bg-black/20"
-          @click="showNotifications = false"
-        ></div>
+      <Transition enter-active-class="transition-opacity duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition-opacity duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
+        <div v-if="showNotifications" class="fixed inset-0 z-[199] bg-black/20" @click="showNotifications = false"></div>
       </Transition>
-
-      <!-- Modal -->
-      <Transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="opacity-0 scale-95 translate-y-[-8px]"
-        enter-to-class="opacity-100 scale-100 translate-y-0"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="opacity-100 scale-100 translate-y-0"
-        leave-to-class="opacity-0 scale-95 translate-y-[-8px]"
-      >
-        <div
-          v-if="showNotifications && notificationButtonRef"
-          class="notifications-modal fixed z-[200]"
-          :style="{
-            top: `${notificationButtonRef.getBoundingClientRect().bottom + 8}px`,
-            left: `${notificationButtonRef.getBoundingClientRect().right + 8}px`
-          }"
-          @click.stop
-        >
-          <div class="w-80 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-125">
-            <!-- Header -->
-            <div class="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-              <h3 class="text-sm font-semibold text-white">Notificações</h3>
-              <button
-                v-if="unreadCount > 0"
-                @click="markAllAsRead"
-                class="text-xs text-violet-400 hover:text-violet-300 transition-colors"
-              >
-                Marcar todas como lidas
-              </button>
+      <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0 scale-95 translate-y-[-8px]" enter-to-class="opacity-100 scale-100 translate-y-0" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100 scale-100 translate-y-0" leave-to-class="opacity-0 scale-95 translate-y-[-8px]">
+        <div v-if="showNotifications && notificationButtonRef" class="notifications-modal fixed z-[200]" :style="{ top: `${notificationButtonRef.getBoundingClientRect().bottom + 8}px`, left: `${notificationButtonRef.getBoundingClientRect().right + 8}px` }" @click.stop>
+          <div class="w-80 bg-[#161618] border border-white/[0.09] rounded-2xl shadow-2xl shadow-black/60 overflow-hidden flex flex-col max-h-[500px]">
+            <div class="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
+              <h3 class="text-[13px] font-semibold text-white">Notificações</h3>
+              <button v-if="unreadCount > 0" @click="markAllAsRead" class="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors">Marcar todas</button>
             </div>
-
-            <!-- Notifications List -->
             <div class="flex-1 overflow-y-auto">
               <div v-if="notifications.length === 0" class="p-8 text-center">
-                <Bell class="w-8 h-8 text-zinc-600 mx-auto mb-2 opacity-50" />
-                <p class="text-xs text-zinc-500">Nenhuma notificação</p>
+                <Bell class="w-7 h-7 text-zinc-700 mx-auto mb-2" />
+                <p class="text-[12px] text-zinc-600">Nenhuma notificação</p>
               </div>
-              
-              <div v-else class="divide-y divide-white/5">
-                <div
-                  v-for="notification in notifications"
-                  :key="notification.id"
-                  @click="markAsRead(notification.id)"
-                  :class="[
-                    'px-4 py-3 cursor-pointer transition-colors hover:bg-white/5',
-                    !notification.read ? 'bg-white/5' : ''
-                  ]"
-                >
+              <div v-else class="divide-y divide-white/[0.05]">
+                <div v-for="notification in notifications" :key="notification.id" @click="markAsRead(notification.id)" :class="['px-4 py-3 cursor-pointer transition-colors hover:bg-white/4', !notification.read ? 'bg-white/[0.03]' : '']">
                   <div class="flex items-start gap-3">
-                    <!-- Icon -->
-                    <div :class="[
-                      'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
-                      notification.type === 'success' ? 'bg-green-500/20 text-green-400' :
-                      notification.type === 'share' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-violet-500/20 text-violet-400'
-                    ]">
-                      <Bell v-if="notification.type === 'share'" class="w-4 h-4" />
-                      <Sparkles v-else class="w-4 h-4" />
+                    <div :class="['w-7 h-7 rounded-lg flex items-center justify-center shrink-0', notification.type === 'success' ? 'bg-green-500/15 text-green-400' : notification.type === 'share' ? 'bg-blue-500/15 text-blue-400' : 'bg-indigo-500/15 text-indigo-400']">
+                      <Bell v-if="notification.type === 'share'" class="w-3.5 h-3.5" />
+                      <Sparkles v-else class="w-3.5 h-3.5" />
                     </div>
-                    
-                    <!-- Content -->
                     <div class="flex-1 min-w-0">
-                      <p class="text-xs font-medium text-white mb-0.5">{{ notification.title }}</p>
-                      <p class="text-[11px] text-zinc-400 line-clamp-2">{{ notification.message }}</p>
-                      <p class="text-[10px] text-zinc-500 mt-1">{{ formatDistanceToNow(notification.created_at) }}</p>
+                      <p class="text-[12px] font-semibold text-white mb-0.5">{{ notification.title }}</p>
+                      <p class="text-[11px] text-zinc-500 line-clamp-2">{{ notification.message }}</p>
+                      <p class="text-[10px] text-zinc-700 mt-1">{{ formatDistanceToNow(notification.created_at) }}</p>
                     </div>
-
-                    <!-- Unread Indicator -->
-                    <div v-if="!notification.read" class="w-2 h-2 bg-violet-500 rounded-full shrink-0 mt-1"></div>
+                    <div v-if="!notification.read" class="w-1.5 h-1.5 bg-indigo-400 rounded-full shrink-0 mt-1.5"></div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <!-- Footer -->
-            <div class="px-4 py-3 border-t border-white/5">
-              <button
-                @click="showNotifications = false"
-                class="w-full text-xs text-zinc-400 hover:text-white transition-colors text-center"
-              >
-                Fechar
-              </button>
+            <div class="px-4 py-3 border-t border-white/[0.06]">
+              <button @click="showNotifications = false" class="w-full text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors text-center">Fechar</button>
             </div>
           </div>
         </div>
       </Transition>
     </teleport>
 
-    </div> <!-- End of Floating Glassmorphism Window -->
+    </div>
   </div>
 
   <!-- Toast Notifications -->
@@ -2322,10 +2050,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
           v-for="toast in toasts"
           :key="toast.id"
           :class="[
-            'px-4 py-3 rounded-xl text-sm font-medium shadow-2xl border pointer-events-auto max-w-xs',
-            toast.type === 'error' ? 'bg-red-950/90 border-red-500/30 text-red-200' :
-            toast.type === 'success' ? 'bg-green-950/90 border-green-500/30 text-green-200' :
-            'bg-[#1c1c24]/90 border-white/10 text-white/80'
+            'px-4 py-3 rounded-xl text-[13px] font-medium shadow-2xl border pointer-events-auto max-w-xs backdrop-blur-xl',
+            toast.type === 'error' ? 'bg-red-950/90 border-red-500/25 text-red-200' :
+            toast.type === 'success' ? 'bg-green-950/90 border-green-500/25 text-green-200' :
+            'bg-[#161618]/95 border-white/[0.09] text-white/80'
           ]"
         >
           {{ toast.message }}
@@ -2336,70 +2064,338 @@ const handleDropOnRoot = async (event: DragEvent) => {
 </template>
 
 <style scoped>
-.dashboard-root {
-  background: 
-    radial-gradient(circle at 16% 8%, rgba(168, 85, 247, 0.09), transparent 38%),
-    radial-gradient(circle at 82% 14%, rgba(129, 140, 248, 0.06), transparent 36%),
-    #09090b;
+/* ─── Root ───────────────────────────────────────────── */
+.dash-root {
+  background: #0c0c10;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 15% 0%, rgba(99,102,241,0.07) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 85% 10%, rgba(139,92,246,0.04) 0%, transparent 50%);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
 }
 
-.dashboard-root::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(130deg, rgba(255, 255, 255, 0.02) 0.5px, transparent 0.5px) 0 0 / 48px 48px,
-    linear-gradient(240deg, rgba(255, 255, 255, 0.015) 0.5px, transparent 0.5px) 0 0 / 96px 96px;
-  opacity: 0.35;
+/* ─── Top Bar ─────────────────────────────────────────── */
+.dash-topbar {
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  background: rgba(12,12,16,0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
+/* ─── Layout ──────────────────────────────────────────── */
+.dash-layout {
+  /* nothing extra needed */
+}
+
+/* ─── Sidebar ─────────────────────────────────────────── */
+.dash-sidebar {
+  border-right: 1px solid rgba(255,255,255,0.05);
+  background: rgba(10,10,14,0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.sidebar-section-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(113,113,122,0.7);
+  display: block;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.05);
+}
+
+/* ─── Nav Items ───────────────────────────────────────── */
+.dash-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(161,161,170,0.7);
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  margin-bottom: 1px;
+  background: transparent;
+}
+
+.dash-nav-item:hover {
+  color: rgba(255,255,255,0.85);
+  background: rgba(255,255,255,0.05);
+}
+
+.dash-nav-item.active {
+  color: rgba(255,255,255,0.92);
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.1);
+}
+
+.dash-nav-item.active.starred {
+  color: #fbbf24;
+  background: rgba(251,191,36,0.08);
+  border-color: rgba(251,191,36,0.15);
+}
+
+.dash-nav-item.signout {
+  color: rgba(113,113,122,0.6);
+}
+
+.dash-nav-item.signout:hover {
+  color: #f87171;
+  background: rgba(239,68,68,0.07);
+}
+
+.nav-count {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(113,113,122,0.5);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  min-width: 14px;
+  text-align: right;
+}
+
+/* ─── Main ────────────────────────────────────────────── */
+.dash-main {
+  background: rgba(12,12,16,0.4);
+}
+
+/* ─── Page Title ──────────────────────────────────────── */
+.dash-page-title {
+  letter-spacing: -0.025em;
+}
+
+/* ─── CTA Button ──────────────────────────────────────── */
+.dash-cta {
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  color: white;
+  border: 1px solid rgba(99,102,241,0.3);
+  box-shadow: 0 4px 14px rgba(99,102,241,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.dash-cta:hover {
+  background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+  box-shadow: 0 6px 20px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+  transform: translateY(-1px);
+}
+
+/* ─── Tabs ────────────────────────────────────────────── */
+.dash-tabs {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+.dash-tab {
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(113,113,122,0.8);
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.dash-tab:hover {
+  color: rgba(255,255,255,0.8);
+}
+
+.dash-tab.active {
+  background: rgba(255,255,255,0.09);
+  color: white;
+  border-color: rgba(255,255,255,0.1);
+}
+
+/* ─── Section Labels ──────────────────────────────────── */
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(113,113,122,0.6);
+}
+
+/* ─── Folder Cards ────────────────────────────────────── */
+.dash-folder-card {
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.025);
+  padding: 12px 14px;
+  transition: all 0.15s ease;
+}
+
+.dash-folder-card:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.1);
+}
+
+.dash-folder-card.active {
+  border-color: rgba(99,102,241,0.4);
+  background: rgba(99,102,241,0.07);
+}
+
+/* ─── Project Cards ───────────────────────────────────── */
+.dash-project-card {
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.025);
+}
+
+.dash-project-card:hover {
+  border-color: rgba(255,255,255,0.11);
+  background: rgba(255,255,255,0.04);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+}
+
+.dash-card-info {
+  border-top: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.015);
+  border-radius: 0 0 10px 10px;
+}
+
+.dash-project-list-item {
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.02);
+}
+
+.dash-project-list-item:hover {
+  border-color: rgba(255,255,255,0.09);
+  background: rgba(255,255,255,0.04);
+}
+
+/* ─── Context Menus ───────────────────────────────────── */
+.ctx-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(228,228,231,0.85);
+  transition: all 0.1s ease;
+  text-align: left;
+}
+
+.ctx-menu-item:hover {
+  background: rgba(255,255,255,0.07);
+  color: white;
+}
+
+.ctx-menu-item.danger {
+  color: rgba(248,113,113,0.85);
+}
+
+.ctx-menu-item.danger:hover {
+  background: rgba(239,68,68,0.1);
+  color: #fca5a5;
+}
+
+/* ─── Modals ──────────────────────────────────────────── */
+.dash-modal {
+  background: #161618;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+.dash-modal-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 8px;
+  font-size: 13px;
+  color: white;
+  outline: none;
+  transition: all 0.15s ease;
+  display: block;
+}
+
+.dash-modal-input:focus {
+  border-color: rgba(99,102,241,0.5);
+  background: rgba(255,255,255,0.07);
+}
+
+.dash-modal-input::placeholder {
+  color: rgba(113,113,122,0.6);
+}
+
+.dash-modal-btn-cancel {
+  height: 38px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(228,228,231,0.7);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.dash-modal-btn-cancel:hover {
+  background: rgba(255,255,255,0.09);
+  color: white;
+}
+
+.dash-modal-btn-confirm {
+  height: 38px;
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  border: 1px solid rgba(99,102,241,0.3);
+  color: white;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 12px rgba(99,102,241,0.2);
+}
+
+.dash-modal-btn-confirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+  box-shadow: 0 6px 16px rgba(99,102,241,0.3);
+}
+
+.dash-modal-btn-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Folder Tree ─────────────────────────────────────── */
 .folder-tree {
   user-select: none;
 }
 
-.dashboard-header,
-.project-card-shell,
-.folder-tree-item {
-  position: relative;
-}
+/* ─── Scrollbar ───────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
 
+/* ─── Focus ───────────────────────────────────────────── */
 button:focus-visible,
-input:focus-visible,
-.project-card-shell:focus-within {
-  outline: 2px solid rgba(167, 139, 250, 0.6);
+input:focus-visible {
+  outline: 2px solid rgba(99,102,241,0.6);
   outline-offset: 2px;
 }
 
-/* Custom scrollbar for dark theme */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ─── Toast ───────────────────────────────────────────── */
+.toast-enter-active { animation: toast-in 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
+.toast-leave-active { animation: toast-out 0.2s ease forwards; }
+.toast-move { transition: transform 0.2s ease; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.3s ease;
-}
-.toast-enter-from {
-  opacity: 0;
-  transform: translateY(12px) scale(0.95);
-}
-.toast-leave-to {
-  opacity: 0;
-  transform: translateY(-4px) scale(0.95);
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(6px) scale(0.97); }
 }
 </style>
