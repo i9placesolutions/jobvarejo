@@ -16,6 +16,7 @@ definePageMeta({
 const auth = useAuth()
 const { getApiAuthHeaders } = useApiAuth()
 const { folders, loadFolders, createFolder, updateFolder, deleteFolder, toggleFolder, activeFolderId, setActiveFolder, expandedFolders, getChildren } = useFolder()
+const { status: regenStatus, progress: regenProgress, total: regenTotal, regenerateAll } = useThumbRegen()
 
 // State
 const searchQuery = ref('')
@@ -313,6 +314,17 @@ watch(() => auth.user.value?.id || null, async (userId) => {
     try {
       await Promise.all([loadData(), loadNotifications()])
       lastBootstrappedUserId.value = userId
+      // Auto-regen thumbnails once per user session if not done yet
+      if (process.client && !localStorage.getItem(`thumbRegenV2:${userId}`)) {
+        nextTick(() => {
+          const ids = (projects.value || []).map((p: any) => p.id).filter(Boolean)
+          if (ids.length) {
+            regenerateAll(ids).then(() => {
+              localStorage.setItem(`thumbRegenV2:${userId}`, '1')
+            })
+          }
+        })
+      }
     } finally {
       isDashboardBootstrapping.value = false
     }
@@ -1326,6 +1338,27 @@ const hasUsableProjectPreview = (project: any): boolean => {
   return isUsableThumbnailUrl(project?.preview_url)
 }
 
+const getEnhancedThumbUrl = (rawUrl: string): string => {
+  if (!rawUrl) return rawUrl
+  try {
+    // 1. Proxy URL: /api/storage/p?key=...
+    const proxyMatch = rawUrl.match(/[?&]key=([^&]+)/)
+    if (proxyMatch) {
+      return `/api/storage/thumb?key=${proxyMatch[1]}&w=400`
+    }
+    // 2. Presigned Wasabi URL: https://s3.wasabisys.com/BUCKET/key?X-Amz-...
+    const wasabiMatch = rawUrl.match(/wasabisys\.com\/[^/]+\/([^?]+)/)
+    if (wasabiMatch) {
+      return `/api/storage/thumb?key=${encodeURIComponent(wasabiMatch[1])}&w=400`
+    }
+    // 3. Relative path stored directly (legacy)
+    if (!rawUrl.startsWith('http') && !rawUrl.startsWith('/api/')) {
+      return `/api/storage/thumb?key=${encodeURIComponent(rawUrl)}&w=400`
+    }
+  } catch { /* ignore */ }
+  return rawUrl
+}
+
 const {
   rootEl: progressiveProjectPreviewRootEl,
   visibleIds: visibleProjectPreviewIds,
@@ -1337,14 +1370,14 @@ const {
 } = useProgressivePreviewLoader<any>({
   getItems: () => filteredProjects.value,
   getId: (project: any) => String(project?.id || ''),
-  getSrc: (project: any) => hasUsableProjectPreview(project) ? String(project?.preview_url || '').trim() : '',
+  getSrc: (project: any) => hasUsableProjectPreview(project) ? getEnhancedThumbUrl(String(project?.preview_url || '').trim()) : '',
   enabled: () => !isLoadingProjects.value,
-  immediateCount: () => viewMode.value === 'list' ? 2 : 4,
-  batchSize: () => viewMode.value === 'list' ? 1 : 2,
-  rootMargin: () => viewMode.value === 'list' ? '32px' : '72px',
-  threshold: () => viewMode.value === 'list' ? 0.4 : 0.28,
-  hydrateVisibleOnly: true,
-  maxVisibleHydrated: () => viewMode.value === 'list' ? 2 : 4
+  immediateCount: () => viewMode.value === 'list' ? 4 : 18,
+  batchSize: () => viewMode.value === 'list' ? 2 : 6,
+  rootMargin: () => viewMode.value === 'list' ? '64px' : '200px',
+  threshold: () => viewMode.value === 'list' ? 0.2 : 0.1,
+  hydrateVisibleOnly: false,
+  maxVisibleHydrated: null
 })
 
 watch(projectGridViewportEl, (value) => {
@@ -1705,7 +1738,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   </h2>
                   <span class="text-[10px] text-zinc-700">{{ visibleFoldersOnDashboard.length }}</span>
                 </div>
-                <div class="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                <div class="grid gap-4 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
                   <button
                     v-for="folder in visibleFoldersOnDashboard"
                     :key="folder.id"
@@ -1728,14 +1761,28 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
               <div v-if="activeView === 'all' && visibleFoldersOnDashboard.length > 0 && filteredProjects.length > 0" class="flex items-center justify-between mb-3">
                 <h2 class="section-label">Projetos</h2>
-                <span class="text-[10px] text-zinc-700">{{ filteredProjects.length }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] text-zinc-700">{{ filteredProjects.length }}</span>
+                  <button
+                    v-if="regenStatus !== 'running'"
+                    @click="regenerateAll(safeProjects.map(p => p.id))"
+                    class="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors flex items-center gap-1 border border-white/[0.06] rounded px-1.5 py-0.5"
+                    title="Regenerar todos os thumbnails em alta qualidade"
+                  >
+                    <span>↑ HD</span>
+                  </button>
+                  <span v-if="regenStatus === 'running'" class="text-[10px] text-indigo-400 flex items-center gap-1">
+                    <span class="animate-spin">⟳</span> {{ regenProgress }}/{{ regenTotal }}
+                  </span>
+                  <span v-if="regenStatus === 'done'" class="text-[10px] text-green-500">✓ OK</span>
+                </div>
               </div>
 
               <!-- Project Cards -->
               <div
                 v-if="filteredProjects.length > 0"
-                class="grid gap-3"
-                :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-1'"
+                class="grid gap-4"
+                :class="viewMode === 'grid' ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8' : 'grid-cols-1'"
               >
                 <div
                   v-for="(project, projectIndex) in filteredProjects"
@@ -1752,52 +1799,54 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 >
                   <!-- Grid mode -->
                   <template v-if="viewMode === 'grid'">
-                    <div class="aspect-[16/10] bg-[#0d0d12] relative overflow-hidden">
-                      <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 p-2 flex items-center justify-center">
-                        <img
-                          :src="getProjectPreviewSrc(project, projectIndex)"
-                          class="project-thumb-media max-w-full max-h-full object-contain rounded-lg"
-                          :alt="project.name"
-                          draggable="false"
-                          :loading="projectIndex < 8 ? 'eager' : 'lazy'"
-                          decoding="async"
-                          :fetchpriority="projectIndex < 4 ? 'high' : (visibleProjectPreviewIds[String(project.id || '')] ? 'auto' : 'low')"
-                          @dragstart.prevent
-                          @load="handleProjectThumbLoad(project, $event)"
-                          @error="project._thumbError = true"
-                        />
+                    <!-- Thumbnail area -->
+                    <div class="dash-thumb-area relative overflow-hidden">
+                      <img
+                        v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)"
+                        :src="getProjectPreviewSrc(project, projectIndex)"
+                        class="project-thumb-media"
+                        :alt="project.name"
+                        draggable="false"
+                        :loading="projectIndex < 8 ? 'eager' : 'lazy'"
+                        decoding="async"
+                        :fetchpriority="projectIndex < 4 ? 'high' : (visibleProjectPreviewIds[String(project.id || '')] ? 'auto' : 'low')"
+                        @dragstart.prevent
+                        @load="handleProjectThumbLoad(project, $event)"
+                        @error="project._thumbError = true"
+                      />
+                      <!-- Fallback sem thumbnail -->
+                      <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="absolute inset-0 flex flex-col justify-end p-4" :style="getProjectThumbStyle(project)">
+                        <div class="absolute inset-0 opacity-10 pointer-events-none" style="background:radial-gradient(circle at 30% 20%,rgba(255,255,255,0.6) 0%,transparent 50%)"></div>
+                        <div class="relative z-[1] text-white font-black text-3xl leading-none tracking-tighter drop-shadow-xl">{{ getProjectInitials(project) }}</div>
                       </div>
-                      <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="absolute inset-0 p-2">
-                        <div class="w-full h-full rounded-lg border border-white/12 relative overflow-hidden flex flex-col justify-end p-3" :style="getProjectThumbStyle(project)">
-                          <div class="absolute inset-0 opacity-12 pointer-events-none" style="background:radial-gradient(circle at 25% 25%,rgba(255,255,255,0.5) 0%,transparent 45%)"></div>
-                          <div class="relative z-[1] text-white font-black text-3xl leading-none tracking-tighter drop-shadow-lg">{{ getProjectInitials(project) }}</div>
-                        </div>
-                      </div>
+                      <!-- Hover overlay -->
+                      <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-t-[15px]" style="background:linear-gradient(160deg,rgba(0,0,0,0.3) 0%,transparent 50%)" />
+                      <!-- Star button (top-right, always visible if starred) -->
                       <button
                         @pointerdown.stop @mousedown.stop @touchstart.stop
                         @click.stop="toggleStarred(project.id)"
-                        :class="['absolute top-2 left-2 w-7 h-7 rounded-lg backdrop-blur-sm flex items-center justify-center border transition-all', project.is_starred ? 'bg-amber-500/25 text-amber-400 border-amber-400/30 opacity-100' : 'bg-black/50 text-white/50 border-white/8 opacity-0 group-hover:opacity-100 hover:text-white']"
+                        :class="['absolute top-2.5 right-2.5 w-7 h-7 rounded-lg flex items-center justify-center border transition-all duration-150', project.is_starred ? 'bg-amber-500/25 text-amber-400 border-amber-400/30 opacity-100' : 'bg-black/40 text-white/80 border-white/10 opacity-0 group-hover:opacity-100 hover:text-amber-300 hover:bg-black/60']"
                         title="Favoritar"
                       ><Star class="w-3.5 h-3.5" :class="{ 'fill-current': project.is_starred }" /></button>
+                      <!-- More button (top-left on hover) -->
                       <button
                         @pointerdown.stop @mousedown.stop @touchstart.stop
                         @click.stop="showProjectContextMenu(project.id, $event)"
-                        class="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/50 backdrop-blur-sm border border-white/8 text-white/50 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                        class="absolute top-2.5 left-2.5 w-7 h-7 rounded-lg bg-black/40 border border-white/10 text-white/80 hover:text-white hover:bg-black/60 flex items-center justify-center transition-all duration-150 opacity-0 group-hover:opacity-100"
                         title="Ações"
                       ><MoreVertical class="w-3.5 h-3.5" /></button>
                     </div>
-                    <div class="px-3 pt-2.5 pb-3 flex flex-col gap-1.5 dash-card-info">
+                    <!-- Info do card -->
+                    <div class="dash-card-info">
                       <div v-if="renamingProjectId === project.id" @click.stop>
-                        <input v-model="editingProjectName" type="text" class="w-full px-2 py-1 text-[12px] bg-white/8 border border-indigo-500/50 rounded-md focus:outline-none text-white" @keyup.enter="saveProjectName(project.id)" @keyup.esc="cancelRenameProject" @blur="saveProjectName(project.id)" ref="renameInput" />
+                        <input v-model="editingProjectName" type="text" class="w-full px-2 py-0.5 text-[11px] bg-white/8 border border-indigo-500/50 rounded-md focus:outline-none text-white" @keyup.enter="saveProjectName(project.id)" @keyup.esc="cancelRenameProject" @blur="saveProjectName(project.id)" ref="renameInput" />
                       </div>
-                      <h3 v-else class="font-semibold text-[13px] text-zinc-300 truncate tracking-tight transition-colors group-hover:text-white leading-tight">{{ project.name || 'Sem título' }}</h3>
-                      <div class="flex items-center justify-between gap-2">
-                        <p class="text-[10px] text-zinc-600 truncate flex items-center gap-1 font-medium">
-                          <Clock class="w-2.5 h-2.5 shrink-0" />
+                      <template v-else>
+                        <h3 class="font-semibold text-[11px] text-zinc-100 truncate tracking-tight leading-snug group-hover:text-white transition-colors">{{ project.name || 'Sem título' }}</h3>
+                        <p class="text-[10px] text-zinc-500 truncate mt-0.5">
                           {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
                         </p>
-                        <span v-if="!String(project.folder_id || '').trim()" class="text-[9px] font-semibold uppercase tracking-wider text-zinc-700 border border-white/[0.06] rounded-full px-1.5 py-0.5 shrink-0">Raiz</span>
-                      </div>
+                      </template>
                     </div>
                   </template>
 
@@ -2242,21 +2291,44 @@ const handleDropOnRoot = async (event: DragEvent) => {
 /* ─── Project Cards ───────────────────────────────────── */
 .dash-project-card {
   border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.07);
+  background: #1e1e20;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
 }
 
 .dash-project-card:hover {
-  border-color: rgba(255,255,255,0.11);
-  background: rgba(255,255,255,0.04);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  border-color: rgba(255,255,255,0.14);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 48px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+.dash-thumb-area {
+  background: #13131a;
+  border-radius: 10px 10px 0 0;
+  overflow: hidden;
+  aspect-ratio: 4/3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
 }
 
 .dash-card-info {
-  border-top: 1px solid rgba(255,255,255,0.05);
-  background: rgba(255,255,255,0.015);
+  border-top: 1px solid rgba(255,255,255,0.06);
   border-radius: 0 0 10px 10px;
+  padding: 6px 8px 8px;
+}
+
+.project-thumb-media {
+  image-rendering: auto;
+  -webkit-image-rendering: auto;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  border-radius: 3px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5);
 }
 
 .dash-project-list-item {

@@ -52,8 +52,8 @@ export const generateThumbnailFromCanvasJson = async (
     sc.renderAll()
     return sc.toDataURL({
       format: 'jpeg',
-      quality: 0.5,
-      multiplier: 0.1
+      quality: 0.82,
+      multiplier: 0.35
     })
   } catch (err) {
     console.warn('[Thumbnail] Falha ao gerar thumbnail em canvas offscreen:', err)

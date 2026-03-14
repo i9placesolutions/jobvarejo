@@ -212,6 +212,20 @@ const clearPendingLocalDraftFlushSchedule = () => {
     }
 }
 
+const evictOldDrafts = (excludeKey?: string) => {
+    // Collect all draft keys first (snapshot), then remove to avoid index shifting
+    const allKeys: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k) allKeys.push(k)
+    }
+    for (const k of allKeys) {
+        if ((k.startsWith(DRAFT_KEY_PREFIX) || k.startsWith(DRAFT_PROJECT_KEY_PREFIX)) && k !== excludeKey) {
+            localStorage.removeItem(k)
+        }
+    }
+}
+
 const flushPendingLocalDrafts = () => {
     if (import.meta.server) return
     clearPendingLocalDraftFlushSchedule()
@@ -226,20 +240,22 @@ const flushPendingLocalDrafts = () => {
             } else {
                 localStorage.removeItem(key)
             }
-            // If we previously had a quota warning and this succeeded, clear it
             if (localDraftQuotaWarning.value) localDraftQuotaWarning.value = false
         } catch (err: any) {
             const isQuota = err?.name === 'QuotaExceededError' ||
                 String(err?.message || '').toLowerCase().includes('quota')
             if (isQuota) {
-                // Re-queue the failed operation so it can be retried on the next flush
-                if (!pendingLocalDraftOperations.has(key)) {
-                    pendingLocalDraftOperations.set(key, operation)
+                // Evict old drafts and retry once
+                try {
+                    evictOldDrafts(key)
+                    if (operation.type === 'set') {
+                        localStorage.setItem(key, JSON.stringify(operation.value))
+                    }
+                    if (localDraftQuotaWarning.value) localDraftQuotaWarning.value = false
+                } catch {
+                    localDraftQuotaWarning.value = true
                 }
-                localDraftQuotaWarning.value = true
-                console.warn('⚠️ localStorage cheio — rascunho local não salvo. Salve o projeto para não perder dados.')
             }
-            // Non-quota errors (serialization) are ignored
         }
     }
 }

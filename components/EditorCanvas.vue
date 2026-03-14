@@ -10009,7 +10009,10 @@ onMounted(async () => {
                       };
 
                       if (deferHeavyPostLoad) {
-                          scheduleIdleWork(runHeavyPostLoadPasses, 2800);
+                          scheduleIdleWork(() => {
+                              isHistoryProcessing.value = true;
+                              try { runHeavyPostLoadPasses(); } finally { isHistoryProcessing.value = false; }
+                          }, 2800);
                       } else {
                           runHeavyPostLoadPasses();
                       }
