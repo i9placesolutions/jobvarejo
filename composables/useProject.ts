@@ -232,6 +232,28 @@ const flushPendingLocalDrafts = () => {
             const isQuota = err?.name === 'QuotaExceededError' ||
                 String(err?.message || '').toLowerCase().includes('quota')
             if (isQuota) {
+                // Tenta liberar espaço removendo drafts de páginas antigas (não do projeto atual)
+                try {
+                    const keysToRemove: string[] = []
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const k = localStorage.key(i)
+                        if (k && k.startsWith(DRAFT_KEY_PREFIX) && k !== key) {
+                            keysToRemove.push(k)
+                        }
+                    }
+                    // Remove até metade dos drafts antigos para liberar espaço
+                    const toRemove = keysToRemove.slice(0, Math.max(1, Math.floor(keysToRemove.length / 2)))
+                    for (const k of toRemove) localStorage.removeItem(k)
+                    if (toRemove.length > 0) {
+                        // Tenta salvar novamente após liberar espaço
+                        if (operation.type === 'set') {
+                            localStorage.setItem(key, JSON.stringify(operation.value))
+                        }
+                        return
+                    }
+                } catch {
+                    // ignora erro na limpeza
+                }
                 // Re-queue the failed operation so it can be retried on the next flush
                 if (!pendingLocalDraftOperations.has(key)) {
                     pendingLocalDraftOperations.set(key, operation)
