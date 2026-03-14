@@ -1000,6 +1000,18 @@ export const useProject = () => {
 	        let saveSucceeded = false
 	        let changedDuringSave = false
 	        let saveAbortedByContextSwitch = false
+
+	        // Watchdog: se a operação travar (await preso), força reset após 90s
+	        let _saveWatchdog: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+	            _saveWatchdog = null
+	            if (isSaving.value) {
+	                console.error('[saveProjectDB] Watchdog: save travado por 90s, forçando reset de estado.')
+	                saveLastError.value = 'Salvamento demorou demais. Clique em "Tentar novamente".'
+	                saveStatus.value = 'error'
+	                isSaving.value = false
+	                queuedSaveAfterCurrent.value = false
+	            }
+	        }, 90_000)
 	        const abortIfStaleSaveContext = (): boolean => {
 	            if (saveLoadSessionAtStart === projectLoadSession.value) return false
 	            saveAbortedByContextSwitch = true
@@ -1044,6 +1056,9 @@ export const useProject = () => {
             // 1. Salvar cada página no Storage
             const storagePaths: string[] = []
             const thumbnailUrls: string[] = []
+            // Track uploads para não apagar rascunho local quando o upload falhar
+            const uploadAttemptedPageIds = new Set<string>()
+            const uploadSucceededPageIds = new Set<string>()
 
 	            for (const [i, page] of project.pages.entries()) {
 	                if (abortIfStaleSaveContext()) return
@@ -1058,13 +1073,15 @@ export const useProject = () => {
 	                            console.warn(`🛡️ Skip upload vazio para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
 	                            continue
 	                        }
+                        uploadAttemptedPageIds.add(page.id)
                         // Tentar salvar na Contabo (com retry interno)
-	                        const path = await saveCanvasData(project.id, page.id, page.canvasData, 3)
+	                        const path = await saveCanvasData(project.id, page.id, page.canvasData, 2)
 	                        if (abortIfStaleSaveContext()) return
 	                        if (path) {
                             storagePaths[i] = path
                             page.canvasDataPath = path
                             page.lastPersistedObjectCount = currentCount
+                            uploadSucceededPageIds.add(page.id)
                             console.log('✅ Canvas salvo na Contabo:', path)
                         } else {
                             // Se falhou após todas as tentativas, o draft local já está salvo
@@ -1073,6 +1090,7 @@ export const useProject = () => {
                             // Não lançar erro aqui - continuar salvando outras páginas
                         }
                     } catch (err: any) {
+                        uploadAttemptedPageIds.add(page.id)
                         console.error('❌ Erro crítico ao salvar canvas na Contabo:', err)
                         console.error('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
                         // Não lançar erro - continuar com outras páginas
@@ -1166,7 +1184,8 @@ export const useProject = () => {
                         const response = await $fetch<any>('/api/projects', {
                             method: 'POST',
                             headers: saveHeaders,
-                            body: bodyPayload
+                            body: bodyPayload,
+                            timeout: 30_000
                         })
 
                         const created = response?.project || null
@@ -1182,7 +1201,8 @@ export const useProject = () => {
                         body: {
                             id: normalizedProjectId,
                             ...bodyPayload
-                        }
+                        },
+                        timeout: 30_000
                     })
                     const updatedProject = response?.project || null
                     if (!updatedProject) {
@@ -1217,21 +1237,36 @@ export const useProject = () => {
 		            changedDuringSave = unsavedRevision.value !== saveRevisionAtStart
 		            lastSavedAt.value = new Date()
 	            if (!changedDuringSave) {
-	                hasUnsavedChanges.value = false
-	                saveStatus.value = 'saved'
+	                // Páginas onde upload falhou precisam manter o rascunho para retentar depois
+	                const uploadFailedPageIds = new Set(
+	                    [...uploadAttemptedPageIds].filter(id => !uploadSucceededPageIds.has(id))
+	                )
+	                const allPagesFullySynced = uploadFailedPageIds.size === 0
+
 	                project.pages.forEach((page) => {
-	                    page.dirty = false
-	                    page.lastPersistedObjectCount = getCanvasObjectCount(page.canvasData)
-	                    if (page.canvasData) {
-	                        page.lastSavedFingerprint = computeCanvasFingerprint(page.canvasData)
+	                    if (!uploadFailedPageIds.has(page.id)) {
+	                        page.dirty = false
+	                        page.lastPersistedObjectCount = getCanvasObjectCount(page.canvasData)
+	                        if (page.canvasData) {
+	                            page.lastSavedFingerprint = computeCanvasFingerprint(page.canvasData)
+	                        }
 	                    }
 	                })
 
-	                // Clear local drafts only when nothing changed during this save.
+	                // Limpar rascunhos apenas para páginas que foram salvas com sucesso
 	                for (const p of project.pages) {
-	                    if (p?.id) clearDraft(project.id, p.id)
+	                    if (p?.id && !uploadFailedPageIds.has(p.id)) clearDraft(project.id, p.id)
 	                }
-	                clearProjectDraft(project.id)
+
+	                if (allPagesFullySynced) {
+	                    hasUnsavedChanges.value = false
+	                    saveStatus.value = 'saved'
+	                    clearProjectDraft(project.id)
+	                } else {
+	                    hasUnsavedChanges.value = true
+	                    saveStatus.value = 'idle'
+	                    console.warn(`[saveProjectDB] ${uploadFailedPageIds.size} página(s) não puderam ser salvas no Storage; rascunho local preservado para retentar.`)
+	                }
 	            } else {
 	                hasUnsavedChanges.value = true
 	                saveStatus.value = 'idle'
@@ -1269,6 +1304,7 @@ export const useProject = () => {
 		                    saveStatus.value = 'error'
 		                }
 		            } finally {
+		            if (_saveWatchdog) { clearTimeout(_saveWatchdog); _saveWatchdog = null }
 		            isSaving.value = false
 		            const shouldRunFollowUpSave = !saveAbortedByContextSwitch && saveSucceeded && (changedDuringSave || queuedSaveAfterCurrent.value)
 		            queuedSaveAfterCurrent.value = false
@@ -1514,10 +1550,12 @@ export const useProject = () => {
                 console.warn('📝 Projeto restaurado com rascunho local mais novo; agendando re-sync remoto.', {
                     pages: recoveredDraftPages
                 })
+                // Salvar direto em 3s (sem o delay de 15s do triggerAutoSave)
+                // para garantir que o rascunho seja persistido rapidamente
                 setTimeout(() => {
                     if (currentSession !== projectLoadSession.value) return
-                    triggerAutoSave()
-                }, 400)
+                    if (!isSaving.value) void saveProjectDB()
+                }, 3000)
             }
 
             scheduleCanvasDataPrefetch(project.pages[project.activePageIndex]?.id || null)

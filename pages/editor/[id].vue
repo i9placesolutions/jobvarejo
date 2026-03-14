@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, defineAsyncComponent, watch } from 'vue'
 import { useProject } from '~/composables/useProject'
+import { useApiAuth } from '~/composables/useApiAuth'
 
 const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanvas.vue'))
 
@@ -21,7 +22,9 @@ const {
   project,
   activePage,
   loadProjectDB,
+  saveProjectDB,
   saveStatus,
+  saveLastError,
   lastSavedAt,
   hasUnsavedChanges,
   triggerAutoSave,
@@ -239,6 +242,7 @@ onUnmounted(() => {
     document.removeEventListener('visibilitychange', visibilityHandler)
     visibilityHandler = null
   }
+  if (_savingTimer) { clearInterval(_savingTimer); _savingTimer = null }
   closeProjectRealtime()
   cancelAutoSave()
 })
@@ -260,6 +264,30 @@ const savedClock = computed(() => {
   if (!lastSavedAt.value) return ''
   return lastSavedAt.value.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 })
+
+// Elapsed seconds counter while saving
+const savingSeconds = ref(0)
+let _savingTimer: ReturnType<typeof setInterval> | null = null
+
+watch(saveStatus, (status) => {
+  if (status === 'saving') {
+    savingSeconds.value = 0
+    if (!_savingTimer) {
+      _savingTimer = setInterval(() => { savingSeconds.value++ }, 1000)
+    }
+  } else {
+    if (_savingTimer) { clearInterval(_savingTimer); _savingTimer = null }
+    savingSeconds.value = 0
+  }
+})
+
+const retryingSave = ref(false)
+const retrySave = async () => {
+  if (retryingSave.value) return
+  retryingSave.value = true
+  saveLastError.value = null
+  try { await saveProjectDB() } finally { retryingSave.value = false }
+}
 
 // Save status icon
 const saveIcon = computed(() => {
@@ -285,25 +313,30 @@ const saveIcon = computed(() => {
 // Save status text
 const saveText = computed(() => {
   switch (saveStatus.value) {
-    case 'saving': return 'Salvando...'
+    case 'saving':
+      return savingSeconds.value >= 8 ? `Salvando... ${savingSeconds.value}s` : 'Salvando...'
     case 'saved': return 'Salvo'
     case 'error': return 'Falha ao salvar'
-    default: return hasUnsavedChanges.value ? 'Alterações pendentes' : ''
+    default: return hasUnsavedChanges.value ? 'Não salvo' : ''
   }
 })
 
 const saveSubtext = computed(() => {
   if (saveStatus.value !== 'saved') return ''
-  return savedClock.value ? `as ${savedClock.value}` : ''
+  return savedClock.value ? `às ${savedClock.value}` : ''
 })
+
+const showRetryButton = computed(() =>
+  saveStatus.value === 'error' || (saveStatus.value === 'saving' && savingSeconds.value >= 45)
+)
 
 // Save status color
 const saveColor = computed(() => {
   switch (saveStatus.value) {
-    case 'saving': return 'text-blue-400'
-    case 'saved': return 'text-green-400'
+    case 'saving': return savingSeconds.value >= 20 ? 'text-amber-400' : 'text-blue-400'
+    case 'saved': return 'text-emerald-400'
     case 'error': return 'text-red-400'
-    default: return hasUnsavedChanges.value ? 'text-yellow-400' : 'text-zinc-500'
+    default: return hasUnsavedChanges.value ? 'text-amber-400' : 'text-zinc-500'
   }
 })
 
@@ -331,28 +364,55 @@ const openPageHistory = () => {
       </div>
 
       <!-- Save Status Indicator -->
-      <div class="flex items-center gap-2">
-        <div :class="['flex items-center gap-1.5 text-[10px]', saveColor]">
-          <span v-html="saveIcon"></span>
+      <div class="flex items-center gap-1.5">
+
+        <!-- Status pill -->
+        <div :class="['save-pill flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-300', saveColor,
+          saveStatus === 'saving' ? 'bg-blue-500/8' : '',
+          saveStatus === 'saved' ? 'bg-emerald-500/8' : '',
+          saveStatus === 'error' ? 'bg-red-500/8' : '',
+          (saveStatus === 'idle' && hasUnsavedChanges) ? 'bg-amber-500/8' : '',
+        ]">
+          <span v-html="saveIcon" class="shrink-0"></span>
           <span>{{ saveText }}</span>
-          <span v-if="saveSubtext" class="text-zinc-400">{{ saveSubtext }}</span>
+          <span v-if="saveSubtext" class="text-zinc-500 font-normal">{{ saveSubtext }}</span>
         </div>
+
+        <!-- Retry button — aparece em erro ou saving travado (>45s) -->
+        <button
+          v-if="showRetryButton"
+          type="button"
+          :disabled="retryingSave"
+          class="save-retry-btn flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-zinc-300 hover:text-white hover:border-white/20 hover:bg-white/5 active:scale-95 transition-all duration-150 disabled:opacity-40"
+          :title="saveLastError || 'Tentar salvar novamente'"
+          @click="retrySave"
+        >
+          <svg class="w-2.5 h-2.5 shrink-0" :class="retryingSave ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Tentar novamente
+        </button>
+
+        <!-- Remote update pending -->
         <button
           v-if="remoteUpdatePending"
           type="button"
-          class="text-[10px] px-2 py-0.5 rounded-md border border-amber-500/30 text-amber-300 hover:text-amber-200 hover:border-amber-400/40 hover:bg-amber-500/10 transition-colors"
+          class="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/25 text-amber-300 hover:text-amber-200 hover:border-amber-400/40 hover:bg-amber-500/8 transition-all duration-150"
           @click="applyRemoteUpdate"
         >
-          Atualização remota
+          Atualização disponível
         </button>
+
+        <div class="w-px h-3 bg-white/8 mx-0.5"></div>
+
         <button
           type="button"
-          class="text-[10px] px-2 py-0.5 rounded-md border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 hover:bg-white/5 transition-colors"
+          class="text-[10px] px-2 py-0.5 rounded-full border border-white/8 text-zinc-500 hover:text-zinc-300 hover:border-white/15 hover:bg-white/4 transition-all duration-150"
           @click="openPageHistory"
         >
           Histórico
         </button>
-        <span class="text-[10px] text-zinc-500">Studio PRO Editor</span>
+        <span class="text-[10px] text-zinc-600 pl-0.5">Studio PRO</span>
       </div>
     </div>
 
@@ -371,5 +431,18 @@ const openPageHistory = () => {
 </template>
 
 <style scoped>
-/* Editor page styles */
+/* Save pill — subtle fade between states */
+.save-pill {
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+
+/* Retry button — pop in */
+.save-retry-btn {
+  animation: save-btn-pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes save-btn-pop {
+  from { opacity: 0; transform: scale(0.85) translateX(4px); }
+  to   { opacity: 1; transform: scale(1) translateX(0); }
+}
 </style>

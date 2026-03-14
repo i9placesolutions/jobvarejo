@@ -84,7 +84,7 @@ async function getPresignedUrl(
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 6000) // 6s timeout
 
       try {
         const data = await $fetch('/api/storage/presigned', {
@@ -326,7 +326,7 @@ export const useStorage = () => {
 
         // Upload para Wasabi com timeout
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
 
         try {
           const response = await fetch(presignedUrl, {
@@ -369,7 +369,7 @@ export const useStorage = () => {
           clearTimeout(timeoutId)
           if (fetchError.name === 'AbortError') {
             if (attempt === retries) {
-              throw new Error('Upload timeout após 30 segundos')
+              throw new Error('Upload timeout após 15 segundos')
             }
             console.warn(`⚠️ Timeout na tentativa ${attempt}, tentando novamente...`)
             await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
