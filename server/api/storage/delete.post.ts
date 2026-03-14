@@ -12,7 +12,7 @@ import { getUserProjectsPrefix, isValidStoragePath, normalizeStoragePath } from 
 export default defineEventHandler(async (event) => {
   try {
     const user = await requireAuthenticatedUser(event)
-    enforceRateLimit(event, `storage-delete:${user.id}`, 20, 60_000)
+    await enforceRateLimit(event, `storage-delete:${user.id}`, 20, 60_000)
     const body = await readBody(event)
     const prefix = normalizeStoragePath(body?.prefix)
 

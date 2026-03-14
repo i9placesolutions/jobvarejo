@@ -32,7 +32,7 @@ const normalizeSearchTerm = (term: string): string => {
 
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event);
-    enforceRateLimit(event, `cache-product-image:${user.id}`, 120, 60_000)
+    await enforceRateLimit(event, `cache-product-image:${user.id}`, 120, 60_000)
     const body = await readBody(event);
     const payload = (body && typeof body === 'object') ? body as Record<string, any> : null
     const searchTerm = String(payload?.searchTerm || '').trim()

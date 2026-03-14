@@ -7,7 +7,7 @@ const isUuid = (value: string): boolean =>
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `folders-delete:${user.id}`, 120, 60_000)
+  await enforceRateLimit(event, `folders-delete:${user.id}`, 120, 60_000)
 
   const query = getQuery(event)
   const queryId = String(query.id || '').trim()

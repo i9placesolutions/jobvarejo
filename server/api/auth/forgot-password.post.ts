@@ -29,7 +29,7 @@ const resolveAppOrigin = (event: any): string => {
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
-  enforceRateLimit(event, `auth-forgot-password:${ip}`, 15, 60_000)
+  await enforceRateLimit(event, `auth-forgot-password:${ip}`, 15, 60_000)
   const ttlMinutes = getResetTokenTtlMinutes()
   const smtpConfigured = isSmtpConfigured()
   const isProduction = process.env.NODE_ENV === 'production'

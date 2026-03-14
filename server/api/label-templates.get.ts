@@ -8,7 +8,7 @@ const isMissingTableError = (err: any): boolean =>
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `label-templates-get:${user.id}`, 180, 60_000)
+  await enforceRateLimit(event, `label-templates-get:${user.id}`, 180, 60_000)
 
   try {
     const { rows } = await pgQuery<any>(

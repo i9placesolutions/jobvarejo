@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
       getRequestIP(event, { xForwardedFor: true }) ||
       event.node.req.socket?.remoteAddress ||
       'unknown'
-    enforceRateLimit(event, `storage-proxy:${String(requesterIp)}`, 1800, 60_000)
+    await enforceRateLimit(event, `storage-proxy:${String(requesterIp)}`, 1800, 60_000)
 
     const query = getQuery(event)
     const rawKey = String(query.key || '').trim()

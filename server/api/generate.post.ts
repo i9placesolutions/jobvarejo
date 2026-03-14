@@ -14,7 +14,7 @@ const getTimeoutSignal = (timeoutMs: number): AbortSignal | undefined => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `generate:${user.id}`, 20, 60_000)
+  await enforceRateLimit(event, `generate:${user.id}`, 20, 60_000)
 
   const config = useRuntimeConfig()
   const apiKey = config.openaiApiKey

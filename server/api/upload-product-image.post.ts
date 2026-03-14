@@ -47,7 +47,7 @@ const getAbortSignal = (timeoutMs: number): AbortSignal | undefined => {
 
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event);
-    enforceRateLimit(event, `upload-product-image:${user.id}`, 40, 60_000)
+    await enforceRateLimit(event, `upload-product-image:${user.id}`, 40, 60_000)
     const form = await readMultipartFormData(event);
     if (!form) {
         throw createError({ statusCode: 400, statusMessage: "Form data required" });

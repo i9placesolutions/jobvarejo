@@ -17,7 +17,7 @@ const isMissingTableError = (err: any): boolean =>
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `label-templates-post:${user.id}`, 90, 60_000)
+  await enforceRateLimit(event, `label-templates-post:${user.id}`, 90, 60_000)
   const body = (await readBody(event)) as Body
 
   const templateId = String(body?.id || '').trim()

@@ -8,7 +8,7 @@ const isUuid = (value: string): boolean =>
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `projects-realtime:${user.id}`, 60, 60_000)
+  await enforceRateLimit(event, `projects-realtime:${user.id}`, 60, 60_000)
 
   const query = getQuery(event)
   const projectId = String(query.id || '').trim()

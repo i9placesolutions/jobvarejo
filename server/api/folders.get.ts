@@ -13,7 +13,7 @@ const isMissingTableError = (error: any, tableName: string): boolean => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `folders-get:${user.id}`, 240, 60_000)
+  await enforceRateLimit(event, `folders-get:${user.id}`, 240, 60_000)
 
   const query = getQuery(event)
   const id = String(query.id || '').trim()

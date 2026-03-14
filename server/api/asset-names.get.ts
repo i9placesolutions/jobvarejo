@@ -10,7 +10,7 @@ const isMissingTableError = (error: any, tableName: string): boolean => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `asset-names-get:${user.id}`, 240, 60_000)
+  await enforceRateLimit(event, `asset-names-get:${user.id}`, 240, 60_000)
 
   try {
     const { rows } = await pgQuery<{ asset_key: string; display_name: string }>(

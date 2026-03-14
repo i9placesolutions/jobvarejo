@@ -77,7 +77,7 @@ const scanPrefix = async (opts: {
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireAdminUser(event)
-  enforceRateLimit(event, `storage-stats:${user.id}`, 10, 60_000)
+  await enforceRateLimit(event, `storage-stats:${user.id}`, 10, 60_000)
 
   const config = useRuntimeConfig()
   const bucket = String(config.wasabiBucket || '').trim()

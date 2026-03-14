@@ -8,7 +8,7 @@ const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(ma
 
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event);
-    enforceRateLimit(event, `uploads-list:${user.id}`, 120, 60_000)
+    await enforceRateLimit(event, `uploads-list:${user.id}`, 120, 60_000)
     const config = useRuntimeConfig();
     const bucketName = config.wasabiBucket;
     if (!bucketName) {

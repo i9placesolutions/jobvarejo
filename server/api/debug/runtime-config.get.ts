@@ -3,7 +3,7 @@ import { enforceRateLimit } from '../../utils/rate-limit'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireAdminUser(event)
-  enforceRateLimit(event, `debug-runtime-config:${user.id}`, 20, 60_000)
+  await enforceRateLimit(event, `debug-runtime-config:${user.id}`, 20, 60_000)
 
   const nodeEnv = process.env.NODE_ENV
 

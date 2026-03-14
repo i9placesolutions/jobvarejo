@@ -39,7 +39,7 @@ const inferImageMimeFromExt = (ext: string): string => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event);
-  enforceRateLimit(event, `upload:${user.id}`, 40, 60_000);
+  await enforceRateLimit(event, `upload:${user.id}`, 40, 60_000);
 
   // Check for configuration - Wasabi
   const config = useRuntimeConfig();

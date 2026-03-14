@@ -292,7 +292,7 @@ const buildHeuristicVariants = (opts: {
 
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event);
-    enforceRateLimit(event, `assets-list:${user.id}`, 120, 60_000)
+    await enforceRateLimit(event, `assets-list:${user.id}`, 120, 60_000)
     const config = useRuntimeConfig();
     const bucketName = String(config.wasabiBucket || "");
     const endpoint = String(config.wasabiEndpoint || "").toLowerCase();

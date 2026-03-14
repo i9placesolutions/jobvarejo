@@ -2,6 +2,7 @@ import { getS3Client, getPublicUrl } from "../utils/s3";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { pgQuery } from "../utils/postgres";
 import { enforceRateLimit } from "../utils/rate-limit";
+import { redisGet, redisSetex } from "../utils/redis";
 import { validateProductImageCandidatesWithAI } from "../utils/product-image-ai";
 import { searchSerperImageCandidates } from "../utils/product-image-serper";
 import {
@@ -557,7 +558,7 @@ const rankExternalCandidatesByMetadata = (
 export default defineEventHandler(async (event) => {
     try {
         const user = await requireAuthenticatedUser(event);
-        enforceRateLimit(event, `process-product-image:${user.id}`, 30, 60_000);
+        await enforceRateLimit(event, `process-product-image:${user.id}`, 30, 60_000);
 
         const body = await readBody(event);
         const term = String(body?.term || '').trim();
@@ -867,6 +868,29 @@ export default defineEventHandler(async (event) => {
             console.log(`🧭 [Search Variants] ${candidateNormalizedTerms.length} variantes:`, candidateNormalizedTerms.slice(0, 8));
         }
 
+        const redisCacheKey = `img:${normalizedTerm}`
+
+        // Redis cache — evita pipeline completo para o mesmo produto
+        if (!selectedCandidateInput) {
+            const cachedS3Key = await redisGet(redisCacheKey)
+            if (cachedS3Key) {
+                const exists = await s3KeyExists(s3, bucketName, cachedS3Key)
+                if (exists) {
+                    console.log(`⚡ [Redis] Cache hit: "${normalizedTerm}" → "${cachedS3Key}"`)
+                    return {
+                        source: 'redis-cache',
+                        url: await resolveStorageReadUrl(cachedS3Key, user.id),
+                        key: cachedS3Key,
+                        provider: 'internal',
+                        confidence: 0.99,
+                        candidateCount: 0,
+                        attempts: 0,
+                        reviewPending: false
+                    }
+                }
+            }
+        }
+
         const selectedCandidateResult = await processSelectedCandidate();
         if (selectedCandidateResult) {
             return selectedCandidateResult;
@@ -930,6 +954,7 @@ export default defineEventHandler(async (event) => {
             status: 'approved'
         });
 
+        void redisSetex(redisCacheKey, 86400, candidateKey)
         return {
             source: 'cache-s3',
             url: await resolveStorageReadUrl(candidateKey, user.id),
@@ -1010,6 +1035,7 @@ export default defineEventHandler(async (event) => {
                     status: 'approved'
                 });
 
+                void redisSetex(redisCacheKey, 86400, exactAssetNameKey)
                 return {
                     source: 'internal',
                     url: await resolveStorageReadUrl(exactAssetNameKey, user.id),
@@ -1097,6 +1123,7 @@ export default defineEventHandler(async (event) => {
                 status: 'approved'
             });
 
+            void redisSetex(redisCacheKey, 86400, found)
             return {
                 source: 'internal',
                 url: await resolveStorageReadUrl(found, user.id),
@@ -1197,6 +1224,7 @@ export default defineEventHandler(async (event) => {
                     validatedBy: user.id,
                     status: 'approved'
                 });
+                void redisSetex(redisCacheKey, 86400, cacheResolvedKey)
                 return {
                     source: 'cache',
                     url: await resolveStorageReadUrl(cacheResolvedKey, user.id),

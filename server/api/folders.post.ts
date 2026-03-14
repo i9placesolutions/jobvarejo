@@ -13,7 +13,7 @@ const toIntOrNull = (value: unknown): number | null => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `folders-post:${user.id}`, 120, 60_000)
+  await enforceRateLimit(event, `folders-post:${user.id}`, 120, 60_000)
 
   const body = await readBody<Record<string, any>>(event)
   const name = String(body?.name || '').trim()

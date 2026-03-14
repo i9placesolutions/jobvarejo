@@ -9,7 +9,7 @@ const toBool = (value: unknown): boolean => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `notifications-get:${user.id}`, 240, 60_000)
+  await enforceRateLimit(event, `notifications-get:${user.id}`, 240, 60_000)
 
   const query = getQuery(event)
   const limitRaw = Number.parseInt(String(query.limit || ''), 10)

@@ -85,7 +85,7 @@ const parseListField = (raw: string | undefined, maxItems = 10, maxItemLength = 
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `ai:image:generate:${user.id}`, 20, 60_000)
+  await enforceRateLimit(event, `ai:image:generate:${user.id}`, 20, 60_000)
 
   const config = useRuntimeConfig()
   if (!config.openaiApiKey) {

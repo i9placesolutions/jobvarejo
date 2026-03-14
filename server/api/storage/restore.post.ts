@@ -29,7 +29,7 @@ const getCanvasObjectCount = (json: any): number => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `storage-restore:${user.id}`, 30, 60_000)
+  await enforceRateLimit(event, `storage-restore:${user.id}`, 30, 60_000)
   const body = await readBody<RestoreBody>(event)
   const projectId = String(body?.projectId || '').trim()
   const pageId = String(body?.pageId || '').trim()

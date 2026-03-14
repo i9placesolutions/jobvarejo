@@ -395,7 +395,7 @@ const removeLightEdgeBackgroundFallback = async (rawBuffer: Buffer, outputFormat
 
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event);
-    enforceRateLimit(event, `remove-image-bg:${user.id}`, 20, 60_000);
+    await enforceRateLimit(event, `remove-image-bg:${user.id}`, 20, 60_000);
 
     try {
         const contentType = getHeader(event, "content-type") || "";

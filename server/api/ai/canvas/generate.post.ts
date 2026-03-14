@@ -44,7 +44,7 @@ const normalizeReferenceImageDataUrl = (value: unknown): string | null => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `ai-canvas:${user.id}`, 8, 60_000)
+  await enforceRateLimit(event, `ai-canvas:${user.id}`, 8, 60_000)
 
   const config = useRuntimeConfig()
   if (!config.openaiApiKey) {

@@ -9,7 +9,7 @@ const toBool = (value: unknown): boolean => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `profiles-get:${user.id}`, 180, 60_000)
+  await enforceRateLimit(event, `profiles-get:${user.id}`, 180, 60_000)
 
   const query = getQuery(event)
   const limitRaw = Number.parseInt(String(query.limit || ''), 10)

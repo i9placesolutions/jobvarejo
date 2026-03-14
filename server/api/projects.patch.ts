@@ -42,7 +42,7 @@ const ensureCanvasDataNotEmpty = (value: unknown) => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `projects-patch:${user.id}`, 180, 60_000)
+  await enforceRateLimit(event, `projects-patch:${user.id}`, 180, 60_000)
   const actorClientId = String(getHeader(event, 'x-client-id') || '').trim() || null
 
   const body = await readBody<Record<string, any>>(event)

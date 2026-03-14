@@ -8,7 +8,7 @@ const normalizeName = (value: unknown): string => String(value || '').trim().rep
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
-  enforceRateLimit(event, `auth-register:${ip}`, 20, 60_000)
+  await enforceRateLimit(event, `auth-register:${ip}`, 20, 60_000)
 
   const body = await readBody<Record<string, any>>(event)
   const name = normalizeName(body?.name)

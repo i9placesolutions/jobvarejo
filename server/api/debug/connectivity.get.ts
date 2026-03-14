@@ -1,6 +1,7 @@
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3'
+import { pingRedis } from '../../utils/redis'
 
 /**
  * Diagnostic endpoint — tests Postgres + Wasabi connectivity from the server.
@@ -10,7 +11,7 @@ import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3'
  */
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `debug-connectivity:${user.id}`, 10, 60_000)
+  await enforceRateLimit(event, `debug-connectivity:${user.id}`, 10, 60_000)
 
   const config = useRuntimeConfig()
   const results: Record<string, any> = {
@@ -18,6 +19,7 @@ export default defineEventHandler(async (event) => {
     userId: user.id,
     postgres: { ok: false, latencyMs: null as number | null, error: null as string | null },
     wasabi: { ok: false, latencyMs: null as number | null, error: null as string | null },
+    redis: { ok: false, latencyMs: null as number | null, error: null as string | null },
     env: {
       postgresUrlPresent: !!String((config as any).postgresDatabaseUrl || '').trim(),
       postgresUrlLength: String((config as any).postgresDatabaseUrl || '').trim().length,
@@ -25,6 +27,7 @@ export default defineEventHandler(async (event) => {
       wasabiBucket: String((config as any).wasabiBucket || ''),
       wasabiAccessKeyPresent: !!String((config as any).wasabiAccessKey || '').trim(),
       wasabiSecretKeyPresent: !!String((config as any).wasabiSecretKey || '').trim(),
+      redisUrlPresent: !!String((config as any).redisUrl || process.env.REDIS_URL || '').trim(),
     }
   }
 
@@ -71,6 +74,10 @@ export default defineEventHandler(async (event) => {
       results.wasabi.error = null
     }
   }
+
+  // --- Test Redis ---
+  const redisPing = await pingRedis()
+  results.redis = redisPing
 
   return results
 })

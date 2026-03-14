@@ -13,7 +13,7 @@ import { resolveStorageReadUrl } from "../utils/project-storage-refs";
 
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event);
-    enforceRateLimit(event, `brands-list:${user.id}`, 120, 60_000)
+    await enforceRateLimit(event, `brands-list:${user.id}`, 120, 60_000)
     const config = useRuntimeConfig();
     const bucketName = config.wasabiBucket;
 

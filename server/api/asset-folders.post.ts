@@ -13,7 +13,7 @@ const isMissingTableError = (error: any, tableName: string): boolean => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `asset-folders-post:${user.id}`, 180, 60_000)
+  await enforceRateLimit(event, `asset-folders-post:${user.id}`, 180, 60_000)
 
   const body = await readBody<Record<string, any>>(event)
   const assetKey = String(body?.asset_key || '').trim()

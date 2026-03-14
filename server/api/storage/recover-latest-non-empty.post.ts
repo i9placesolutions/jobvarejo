@@ -161,7 +161,7 @@ const findLatestNonEmptyByHistoryPrefix = async (
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `storage-recover:${user.id}`, 30, 60_000)
+  await enforceRateLimit(event, `storage-recover:${user.id}`, 30, 60_000)
   const body = await readBody<RecoverBody>(event)
   const projectId = String(body?.projectId || '').trim()
   const pageId = String(body?.pageId || '').trim()

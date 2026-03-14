@@ -66,6 +66,7 @@ export default defineNuxtConfig({
     wasabiBucket: process.env.WASABI_BUCKET || process.env.NUXT_WASABI_BUCKET || 'jobvarejo',
     wasabiAccessKey: process.env.WASABI_ACCESS_KEY || process.env.NUXT_WASABI_ACCESS_KEY || '',
     wasabiSecretKey: process.env.WASABI_SECRET_KEY || process.env.NUXT_WASABI_SECRET_KEY || '',
+    redisUrl: process.env.REDIS_URL || process.env.NUXT_REDIS_URL || '',
 
     openaiApiKey: process.env.NUXT_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
     parseProductsTimeoutMs:

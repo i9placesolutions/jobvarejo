@@ -3,7 +3,7 @@ import { enforceRateLimit } from '../../utils/rate-limit'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `auth-session:${user.id}`, 300, 60_000)
+  await enforceRateLimit(event, `auth-session:${user.id}`, 300, 60_000)
 
   return {
     success: true,

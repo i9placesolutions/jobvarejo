@@ -4,7 +4,7 @@ import { pgOneOrNull } from '../utils/postgres'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `profile-get:${user.id}`, 240, 60_000)
+  await enforceRateLimit(event, `profile-get:${user.id}`, 240, 60_000)
 
   try {
     const row = await pgOneOrNull<any>(

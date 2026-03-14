@@ -13,7 +13,7 @@ const toIntOrNull = (value: unknown): number | null => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `folders-patch:${user.id}`, 180, 60_000)
+  await enforceRateLimit(event, `folders-patch:${user.id}`, 180, 60_000)
 
   const body = await readBody<Record<string, any>>(event)
   const folderId = String(body?.id || '').trim()

@@ -40,7 +40,7 @@ const isValidIdentifier = (value: string, maxLen: number): boolean =>
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `storage-history:${user.id}`, 60, 60_000)
+  await enforceRateLimit(event, `storage-history:${user.id}`, 60, 60_000)
   const query = getQuery(event)
   const projectId = String(query.projectId || '').trim()
   const pageId = String(query.pageId || '').trim()

@@ -152,7 +152,7 @@ const optimizeImageForVision = async (buf: Buffer, mime: string): Promise<{ buff
 
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event)
-    enforceRateLimit(event, `parse-products:${user.id}`, 20, 60_000)
+    await enforceRateLimit(event, `parse-products:${user.id}`, 20, 60_000)
 
     const contentType = String(getHeader(event, 'content-type') || '');
 

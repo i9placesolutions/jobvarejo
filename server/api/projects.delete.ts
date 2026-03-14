@@ -8,7 +8,7 @@ const isUuid = (value: string): boolean =>
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `projects-delete:${user.id}`, 90, 60_000)
+  await enforceRateLimit(event, `projects-delete:${user.id}`, 90, 60_000)
   const actorClientId = String(getHeader(event, 'x-client-id') || '').trim() || null
 
   const query = getQuery(event)

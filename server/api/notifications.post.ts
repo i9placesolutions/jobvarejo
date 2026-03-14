@@ -6,7 +6,7 @@ const VALID_TYPES = new Set(['info', 'success', 'warning', 'error', 'share', 'pr
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `notifications-post:${user.id}`, 90, 60_000)
+  await enforceRateLimit(event, `notifications-post:${user.id}`, 90, 60_000)
 
   const body = await readBody<Record<string, any>>(event)
   const title = String(body?.title || '').trim()

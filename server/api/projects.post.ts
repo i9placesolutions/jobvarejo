@@ -28,7 +28,7 @@ const ensureCanvasDataNotEmpty = (value: unknown) => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `projects-post:${user.id}`, 90, 60_000)
+  await enforceRateLimit(event, `projects-post:${user.id}`, 90, 60_000)
 
   const body = await readBody(event)
   const payload = (body && typeof body === 'object') ? body as Record<string, any> : null

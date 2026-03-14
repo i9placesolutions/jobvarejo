@@ -5,7 +5,7 @@ import { createSessionToken, hashOpaqueToken } from '../../utils/session-token'
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
-  enforceRateLimit(event, `auth-reset-password:${ip}`, 20, 60_000)
+  await enforceRateLimit(event, `auth-reset-password:${ip}`, 20, 60_000)
 
   const body = await readBody<Record<string, any>>(event)
   const token = String(body?.token || '').trim()

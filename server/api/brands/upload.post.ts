@@ -29,7 +29,7 @@ const sanitizeBrandFileName = (value: string): string => {
 
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event);
-    enforceRateLimit(event, `brands-upload:${user.id}`, 30, 60_000)
+    await enforceRateLimit(event, `brands-upload:${user.id}`, 30, 60_000)
     const config = useRuntimeConfig();
     const endpoint = config.wasabiEndpoint;
     const region = config.wasabiRegion || "us-east-1";

@@ -3,7 +3,7 @@ import { enforceRateLimit } from '../../utils/rate-limit'
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
-  enforceRateLimit(event, `auth-first-user:${ip}`, 120, 60_000)
+  await enforceRateLimit(event, `auth-first-user:${ip}`, 120, 60_000)
 
   await ensureAuthColumns()
   const total = await countProfiles()

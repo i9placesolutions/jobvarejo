@@ -8,7 +8,7 @@ const isMissingTableError = (err: any): boolean =>
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `label-templates-delete:${user.id}`, 90, 60_000)
+  await enforceRateLimit(event, `label-templates-delete:${user.id}`, 90, 60_000)
   const query = getQuery(event)
   const id = String(query.id || '').trim()
 

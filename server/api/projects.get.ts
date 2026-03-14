@@ -11,7 +11,7 @@ const isUuid = (value: string): boolean =>
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `projects-get:${user.id}`, 180, 60_000)
+  await enforceRateLimit(event, `projects-get:${user.id}`, 180, 60_000)
 
   const query = getQuery(event)
   const id = String(query.id || '').trim()

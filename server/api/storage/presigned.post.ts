@@ -27,7 +27,7 @@ import {
 export default defineEventHandler(async (event) => {
   try {
     const user = await requireAuthenticatedUser(event)
-    enforceRateLimit(event, `storage-presigned:${user.id}`, 360, 60_000)
+    await enforceRateLimit(event, `storage-presigned:${user.id}`, 360, 60_000)
     const body = await readBody(event)
     const rawOperation = String(body?.operation || 'put').trim().toLowerCase()
     if (rawOperation !== 'put' && rawOperation !== 'get') {

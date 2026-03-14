@@ -5,7 +5,7 @@ import { createSessionToken } from '../../utils/session-token'
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
-  enforceRateLimit(event, `auth-login:${ip}`, 30, 60_000)
+  await enforceRateLimit(event, `auth-login:${ip}`, 30, 60_000)
 
   const body = await readBody<Record<string, any>>(event)
   const email = normalizeEmail(body?.email)

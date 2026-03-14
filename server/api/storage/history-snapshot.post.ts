@@ -44,7 +44,7 @@ const toCopySource = (bucket: string, key: string): string => {
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
-  enforceRateLimit(event, `storage-history-snapshot:${user.id}`, 120, 60_000)
+  await enforceRateLimit(event, `storage-history-snapshot:${user.id}`, 120, 60_000)
   const body = await readBody<HistorySnapshotBody>(event)
   const projectId = String(body?.projectId || '').trim()
   const pageId = String(body?.pageId || '').trim()

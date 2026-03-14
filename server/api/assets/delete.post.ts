@@ -12,7 +12,7 @@ import { isStorageKeyAllowedForUser, isValidStoragePath, normalizeStoragePath } 
 export default defineEventHandler(async (event) => {
   try {
     const user = await requireAuthenticatedUser(event)
-    enforceRateLimit(event, `assets-delete:${user.id}`, 60, 60_000)
+    await enforceRateLimit(event, `assets-delete:${user.id}`, 60, 60_000)
     const body = await readBody(event)
     const key = normalizeStoragePath(body?.key)
 
