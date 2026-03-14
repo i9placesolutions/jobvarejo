@@ -110,6 +110,7 @@ const emit = defineEmits<{
   (e: 'update:pastedImage', value: string | null): void
   (e: 'update:isAnalyzingImage', value: boolean): void
   (e: 'submit-paste-list'): void
+  (e: 'submit-paste-file', file: File): void
   (e: 'update:showDeletePageModal', value: boolean): void
   (e: 'confirm-delete-page'): void
   (e: 'update:showProductReviewModal', value: boolean): void
@@ -190,6 +191,7 @@ const emit = defineEmits<{
     @update:pasted-image="emit('update:pastedImage', $event)"
     @update:is-analyzing-image="emit('update:isAnalyzingImage', $event)"
     @submit="emit('submit-paste-list')"
+    @submit-file="(file: File) => emit('submit-paste-file', file)"
   />
 
   <DeletePageDialog

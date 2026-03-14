@@ -57,6 +57,8 @@ const isLikelyTimeoutError = (err: any): boolean => {
     )
 }
 
+const PDF_PARSE_TIMEOUT_MS = 28_000
+
 const parsePdfBufferToText = async (buf: Buffer): Promise<string> => {
     process.env.PDF2JSON_DISABLE_LOGS = process.env.PDF2JSON_DISABLE_LOGS || '1'
     const mod: any = await import('pdf2json')
@@ -69,6 +71,7 @@ const parsePdfBufferToText = async (buf: Buffer): Promise<string> => {
         const done = (cb: () => void) => {
             if (settled) return
             settled = true
+            clearTimeout(timeoutId)
             try {
                 parser.removeAllListeners?.()
             } catch {
@@ -76,6 +79,11 @@ const parsePdfBufferToText = async (buf: Buffer): Promise<string> => {
             }
             cb()
         }
+
+        // Timeout: evita que PDFs corrompidos ou muito grandes travem o servidor
+        const timeoutId = setTimeout(() => {
+            done(() => reject(new Error(`PDF parse timeout após ${PDF_PARSE_TIMEOUT_MS / 1000}s`)))
+        }, PDF_PARSE_TIMEOUT_MS)
 
         parser.on('pdfParser_dataError', (errData: any) => {
             done(() => reject(errData?.parserError || errData || new Error('Failed to parse PDF')))
@@ -190,11 +198,17 @@ export default defineEventHandler(async (event) => {
                     // @ts-expect-error subpath import is intentional to avoid heavier CJS bundle.
                     const mod: any = await import('xlsx/xlsx.mjs');
                     const XLSX = mod?.default || mod;
-                    const wb = XLSX.read(buf, { type: 'buffer' });
-                    const sheetName = wb.SheetNames?.[0];
-                    const sheet = sheetName ? wb.Sheets?.[sheetName] : null;
-                    if (!sheet) text = '';
-                    else text = clampText(XLSX.utils.sheet_to_csv(sheet) || '');
+                    try {
+                        const wb = XLSX.read(buf, { type: 'buffer' });
+                        const sheetName = wb.SheetNames?.[0];
+                        const sheet = sheetName ? wb.Sheets?.[sheetName] : null;
+                        if (!sheet) text = '';
+                        else text = clampText(XLSX.utils.sheet_to_csv(sheet) || '');
+                    } catch (xlsxErr: any) {
+                        console.warn('⚠️ Falha ao ler Excel, tentando fallback texto:', xlsxErr?.message)
+                        // Fallback: tenta extrair texto puro do buffer (CSVs com extensão .xls)
+                        try { text = clampText(buf.toString('utf8')) } catch { text = '' }
+                    }
                 } else {
                     // CSV / TSV / TXT fallback
                     text = clampText(buf.toString('utf8'));

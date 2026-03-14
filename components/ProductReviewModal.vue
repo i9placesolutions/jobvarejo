@@ -721,8 +721,9 @@ const compressImageInBrowser = async (file: File): Promise<Blob> => {
     try {
         const img = await new Promise<HTMLImageElement>((resolve, reject) => {
             const image = new Image()
-            image.onload = () => resolve(image)
-            image.onerror = reject
+            const timer = setTimeout(() => reject(new Error('Timeout ao carregar imagem')), 8000)
+            image.onload = () => { clearTimeout(timer); resolve(image) }
+            image.onerror = (e) => { clearTimeout(timer); reject(e) }
             image.src = objectUrl
         })
         const maxSide = 1200

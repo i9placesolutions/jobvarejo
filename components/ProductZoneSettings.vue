@@ -63,7 +63,7 @@ const emit = defineEmits<{
   (e: 'update:global-styles', prop: string, value: any): void;
   (e: 'apply-preset', presetId: string): void;
   (e: 'sync-gaps', padding: number): void;
-  (e: 'recalculate'): void;
+  (e: 'recalculate-layout'): void;
   (e: 'manage-label-templates'): void;
   (e: 'apply-template-to-zone'): void;
   (e: 'open-review'): void;
@@ -153,7 +153,7 @@ const isSpacingSynced = () => {
   const pad = Number(props.zone.padding ?? 15);
   const gapH = Number(props.zone.gapHorizontal ?? pad);
   const gapV = Number(props.zone.gapVertical ?? pad);
-  return Math.abs(gapH - pad) < 0.001 && Math.abs(gapV - pad) < 0.001;
+  return Math.abs(gapH - pad) < 1 && Math.abs(gapV - pad) < 1;
 };
 
 const syncGaps = ref(isSpacingSynced());
@@ -412,7 +412,10 @@ const customPreviewPreset = computed<LayoutPreset>(() => {
 
 const activePreviewPreset = computed(() => matchedPreset.value ?? customPreviewPreset.value);
 const activePreviewStyle = computed(() => getPreviewGridStyle(activePreviewPreset.value));
-const activePreviewCells = computed(() => createPreviewCells(activePreviewPreset.value));
+// Reuse precomputed cells for standard presets; only call createPreviewCells for the custom preview
+const activePreviewCells = computed(() =>
+  previewCellsByPreset.value[activePreviewPreset.value.id] ?? createPreviewCells(activePreviewPreset.value)
+);
 
 const zoneColumnsLabel = computed(() =>
   normalizedZoneState.value.columns > 0
@@ -625,6 +628,21 @@ const applyPreset = (presetId: string) => {
   emit('apply-preset', presetId);
 };
 
+// ── Debounce helper ──────────────────────────────────────────────────────────
+// Used for numeric text inputs so rapid keystrokes don't flood the reactive
+// update pipeline. Range sliders keep using the direct (non-debounced) versions
+// because they need immediate visual feedback while dragging.
+function _debounce<A extends unknown[]>(fn: (...args: A) => void, ms: number): (...args: A) => void {
+  let t: ReturnType<typeof setTimeout> | null = null;
+  return (...args: A) => { if (t) clearTimeout(t); t = setTimeout(() => { t = null; fn(...args); }, ms); };
+}
+const _dUpdateZoneInt = _debounce(updateZoneInt, 180);
+const _dUpdateZoneFloat = _debounce(updateZoneFloat, 180);
+const _dUpdateGlobalInt = _debounce(updateGlobalInt, 180);
+const _dUpdateGlobalFloat = _debounce(updateGlobalFloat, 180);
+const _dHandlePadding = _debounce(handlePaddingChange, 180);
+const _dUpdateZoneName = _debounce((v: string) => updateZone('name', v), 300);
+
 const toggleSection = (section: keyof typeof expandedSections.value) => {
   expandedSections.value[section] = !expandedSections.value[section];
 };
@@ -745,7 +763,7 @@ onBeforeUnmount(() => {
               type="text"
               class="field-select"
               :value="zone.name ?? 'Zona de Produtos'"
-              @input="updateZone('name', ($event.target as HTMLInputElement).value)"
+              @input="_dUpdateZoneName(($event.target as HTMLInputElement).value)"
             />
           </div>
 
@@ -953,7 +971,7 @@ onBeforeUnmount(() => {
                   aria-describedby="product-zone-columns-hint"
                   aria-label="Colunas da grade"
                   title="0 = autoajuste"
-                  @input="updateZoneInt('columns', ($event.target as HTMLInputElement).valueAsNumber, zone.columns ?? 0, 0, 8)"
+                  @input="_dUpdateZoneInt('columns', ($event.target as HTMLInputElement).valueAsNumber, zone.columns ?? 0, 0, 8)"
                 />
                 <span class="value-suffix">{{ zone.columns === 0 ? 'Auto' : 'col' }}</span>
               </div>
@@ -998,7 +1016,7 @@ onBeforeUnmount(() => {
                   aria-describedby="product-zone-rows-hint"
                   aria-label="Linhas da grade"
                   title="0 = altura livre"
-                  @input="updateZoneInt('rows', ($event.target as HTMLInputElement).valueAsNumber, zone.rows ?? 0, 0, 8)"
+                  @input="_dUpdateZoneInt('rows', ($event.target as HTMLInputElement).valueAsNumber, zone.rows ?? 0, 0, 8)"
                 />
                 <span class="value-suffix">{{ zone.rows === 0 ? 'Auto' : 'lin' }}</span>
               </div>
@@ -1146,7 +1164,7 @@ onBeforeUnmount(() => {
                   class="value-input"
                   :value="Math.round(zone.padding ?? 15)"
                   aria-label="Padding externo"
-                  @input="handlePaddingChange(($event.target as HTMLInputElement).valueAsNumber)"
+                  @input="_dHandlePadding(($event.target as HTMLInputElement).valueAsNumber)"
                 />
                 <span class="value-suffix">px</span>
               </div>
@@ -1178,7 +1196,7 @@ onBeforeUnmount(() => {
                     class="value-input"
                     :value="Math.round(zone.gapHorizontal ?? zone.padding ?? 15)"
                     aria-label="Gap horizontal"
-                    @input="updateZoneInt('gapHorizontal', ($event.target as HTMLInputElement).valueAsNumber, zone.gapHorizontal ?? zone.padding ?? 15, 0, 60)"
+                    @input="_dUpdateZoneInt('gapHorizontal', ($event.target as HTMLInputElement).valueAsNumber, zone.gapHorizontal ?? zone.padding ?? 15, 0, 60)"
                   />
                   <span class="value-suffix">px</span>
                 </div>
@@ -1209,7 +1227,7 @@ onBeforeUnmount(() => {
                     class="value-input"
                     :value="Math.round(zone.gapVertical ?? zone.padding ?? 15)"
                     aria-label="Gap vertical"
-                    @input="updateZoneInt('gapVertical', ($event.target as HTMLInputElement).valueAsNumber, zone.gapVertical ?? zone.padding ?? 15, 0, 60)"
+                    @input="_dUpdateZoneInt('gapVertical', ($event.target as HTMLInputElement).valueAsNumber, zone.gapVertical ?? zone.padding ?? 15, 0, 60)"
                   />
                   <span class="value-suffix">px</span>
                 </div>
@@ -1300,7 +1318,7 @@ onBeforeUnmount(() => {
                     class="value-input"
                     :value="(zone.highlightHeight ?? 1.5).toFixed(1)"
                     aria-label="Altura do hero"
-                    @input="updateZoneFloat('highlightHeight', ($event.target as HTMLInputElement).valueAsNumber, zone.highlightHeight ?? 1.5, 1, 2.5)"
+                    @input="_dUpdateZoneFloat('highlightHeight', ($event.target as HTMLInputElement).valueAsNumber, zone.highlightHeight ?? 1.5, 1, 2.5)"
                   />
                   <span class="value-suffix">x</span>
                 </div>
@@ -1428,7 +1446,7 @@ onBeforeUnmount(() => {
                     class="value-input"
                     :value="Math.round(globalStyles?.cardBorderRadius ?? 8)"
                     aria-label="Raio dos cantos"
-                    @input="updateGlobalInt('cardBorderRadius', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.cardBorderRadius ?? 8, 0, 40)"
+                    @input="_dUpdateGlobalInt('cardBorderRadius', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.cardBorderRadius ?? 8, 0, 40)"
                   />
                   <span class="value-suffix">px</span>
                 </div>
@@ -1459,7 +1477,7 @@ onBeforeUnmount(() => {
                     class="value-input"
                     :value="Math.round(globalStyles?.cardBorderWidth ?? 0)"
                     aria-label="Espessura da borda"
-                    @input="updateGlobalInt('cardBorderWidth', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.cardBorderWidth ?? 0, 0, 12)"
+                    @input="_dUpdateGlobalInt('cardBorderWidth', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.cardBorderWidth ?? 0, 0, 12)"
                   />
                   <span class="value-suffix">px</span>
                 </div>
@@ -1594,7 +1612,7 @@ onBeforeUnmount(() => {
                   class="value-input"
                   :value="Math.round((globalStyles?.prodNameScale ?? 1) * 100)"
                   aria-label="Escala do texto"
-                  @input="updateGlobalFloat('prodNameScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.prodNameScale ?? 1, 0.6, 1.7, 2)"
+                  @input="_dUpdateGlobalFloat('prodNameScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.prodNameScale ?? 1, 0.6, 1.7, 2)"
                 />
                 <span class="value-suffix">%</span>
               </div>
@@ -1625,7 +1643,7 @@ onBeforeUnmount(() => {
                   class="value-input"
                   :value="(globalStyles?.prodNameLineHeight ?? 1.05).toFixed(2)"
                   aria-label="Altura de linha"
-                  @input="updateGlobalFloat('prodNameLineHeight', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.prodNameLineHeight ?? 1.05, 0.8, 1.8, 2)"
+                  @input="_dUpdateGlobalFloat('prodNameLineHeight', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.prodNameLineHeight ?? 1.05, 0.8, 1.8, 2)"
                 />
                 <span class="value-suffix">lh</span>
               </div>
@@ -1656,7 +1674,7 @@ onBeforeUnmount(() => {
                   class="value-input"
                   :value="Math.round(globalStyles?.prodNameOffsetY ?? 0)"
                   aria-label="Deslocamento Y do nome do produto"
-                  @input="updateGlobalInt('prodNameOffsetY', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.prodNameOffsetY ?? 0, -160, 160)"
+                  @input="_dUpdateGlobalInt('prodNameOffsetY', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.prodNameOffsetY ?? 0, -160, 160)"
                 />
                 <span class="value-suffix">px</span>
               </div>
@@ -1917,7 +1935,7 @@ onBeforeUnmount(() => {
                   class="value-input"
                   :value="Math.round((globalStyles?.splashTextScale ?? 1) * 100)"
                   aria-label="Escala dos textos da etiqueta"
-                  @input="updateGlobalFloat('splashTextScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashTextScale ?? 1, 0.6, 2.2, 2)"
+                  @input="_dUpdateGlobalFloat('splashTextScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashTextScale ?? 1, 0.6, 2.2, 2)"
                 />
                 <span class="value-suffix">%</span>
               </div>
@@ -2006,7 +2024,7 @@ onBeforeUnmount(() => {
                   class="value-input"
                   :value="Math.round((globalStyles?.splashScale ?? 1) * 100)"
                   aria-label="Escala da etiqueta"
-                  @input="updateGlobalFloat('splashScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashScale ?? 1, 0.6, 20, 2)"
+                  @input="_dUpdateGlobalFloat('splashScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashScale ?? 1, 0.6, 20, 2)"
                 />
                 <span class="value-suffix">%</span>
               </div>
@@ -2037,7 +2055,7 @@ onBeforeUnmount(() => {
                   class="value-input"
                   :value="Math.round(globalStyles?.splashOffsetY ?? 0)"
                   aria-label="Deslocamento Y da etiqueta"
-                  @input="updateGlobalInt('splashOffsetY', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.splashOffsetY ?? 0, -120, 120)"
+                  @input="_dUpdateGlobalInt('splashOffsetY', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.splashOffsetY ?? 0, -120, 120)"
                 />
                 <span class="value-suffix">px</span>
               </div>
@@ -2114,7 +2132,7 @@ onBeforeUnmount(() => {
         <span>{{ zoneLockLabel }}</span>
       </button>
 
-      <button type="button" class="dock-button dock-button--primary" @click="emit('recalculate')">
+      <button type="button" class="dock-button dock-button--primary" @click="emit('recalculate-layout')">
         <Settings2 class="h-4 w-4" />
         <span>Recalcular grade</span>
       </button>

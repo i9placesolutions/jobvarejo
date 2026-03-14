@@ -32,6 +32,10 @@ import {
   calculateOptimalImageSize
 } from '~/utils/product-zone-helpers';
 
+// Throttle state for saveToHistory (module-level so it persists across composable calls)
+let _lastHistorySaveMs = 0
+const HISTORY_THROTTLE_MS = 400
+
 // Estado global singleton
 const products = ref<Product[]>([]);
 const splashes = ref<Splash[]>([]);
@@ -460,7 +464,12 @@ export const useProductZone = () => {
   
   const saveToHistory = () => {
     if (isHistoryAction.value) return;
-    
+
+    // Throttle: skip if called too soon after the last save (e.g. slider drag or rapid typing)
+    const now = Date.now();
+    if (now - _lastHistorySaveMs < HISTORY_THROTTLE_MS) return;
+    _lastHistorySaveMs = now;
+
     const state = JSON.stringify({
       products: products.value,
       splashes: splashes.value,

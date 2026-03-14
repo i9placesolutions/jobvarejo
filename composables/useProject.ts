@@ -38,6 +38,7 @@ const project = reactive<Project>({
 
 const isSaving = ref(false)
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+const localDraftQuotaWarning = ref(false) // true quando localStorage está cheio
 const lastSavedAt = ref<Date | null>(null)
 const hasUnsavedChanges = ref(false)
 const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi carregado do banco
@@ -224,8 +225,20 @@ const flushPendingLocalDrafts = () => {
             } else {
                 localStorage.removeItem(key)
             }
-        } catch {
-            // ignore quota / serialization issues
+            // If we previously had a quota warning and this succeeded, clear it
+            if (localDraftQuotaWarning.value) localDraftQuotaWarning.value = false
+        } catch (err: any) {
+            const isQuota = err?.name === 'QuotaExceededError' ||
+                String(err?.message || '').toLowerCase().includes('quota')
+            if (isQuota) {
+                // Re-queue the failed operation so it can be retried on the next flush
+                if (!pendingLocalDraftOperations.has(key)) {
+                    pendingLocalDraftOperations.set(key, operation)
+                }
+                localDraftQuotaWarning.value = true
+                console.warn('⚠️ localStorage cheio — rascunho local não salvo. Salve o projeto para não perder dados.')
+            }
+            // Non-quota errors (serialization) are ignored
         }
     }
 }
@@ -1576,6 +1589,7 @@ export const useProject = () => {
 	        lastSavedAt,
 	        hasUnsavedChanges,
 	        isProjectLoaded,
+	        localDraftQuotaWarning,
 	        projectServerUpdatedAt,
 	        realtimeClientId
 	    }

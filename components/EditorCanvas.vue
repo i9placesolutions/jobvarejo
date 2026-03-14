@@ -4675,8 +4675,21 @@ const {
   saveStatus,
   lastSavedAt,
   isProjectLoaded,
-  hasUnsavedChanges
+  hasUnsavedChanges,
+  localDraftQuotaWarning
 } = useProject()
+
+// Notifica o usuário quando o save remoto falha ou o localStorage está cheio
+watch(saveStatus, (status, prev) => {
+    if (status === 'error' && prev !== 'error') {
+        pushAiToast('error', 'Falha ao salvar o projeto. Seu rascunho local foi mantido.')
+    }
+})
+watch(localDraftQuotaWarning, (warn) => {
+    if (warn) {
+        pushAiToast('error', 'Armazenamento local cheio. Salve o projeto agora para não perder alterações.')
+    }
+})
 const auth = useAuth()
 const { getApiAuthHeaders } = useApiAuth()
 
@@ -4886,6 +4899,40 @@ const collectTrackableImageSrcCounts = (canvasData: any): Map<string, number> =>
 
     walk(canvasData)
     return counts
+}
+
+/**
+ * Pré-aquece o cache do browser para as imagens do canvas antes de loadFromJSON.
+ * Carrega as URLs em lotes de CONCURRENCY para respeitar o pool HTTP/2 (6 conn/host).
+ * Tem timeout de TIMEOUT_MS para não atrasar o carregamento do canvas.
+ */
+const prewarmCanvasImages = (canvasData: any, concurrency = 6, timeoutMs = 4000): Promise<void> => {
+    const urls = [...collectTrackableImageSrcCounts(canvasData).keys()]
+    if (!urls.length) return Promise.resolve()
+
+    return new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, timeoutMs)
+        let pending = urls.length
+        let cursor = 0
+
+        const done = () => {
+            if (--pending <= 0) { clearTimeout(timer); resolve() }
+        }
+
+        // Each call to next() starts exactly ONE image.
+        // When it finishes it calls next() again → sliding window of `concurrency` images.
+        const next = () => {
+            if (cursor >= urls.length) return
+            const url = urls[cursor++]!
+            const img = new Image()
+            img.onload = img.onerror = () => { done(); next() }
+            img.src = url
+        }
+
+        // Seed the initial batch (up to concurrency)
+        const initial = Math.min(concurrency, urls.length)
+        for (let i = 0; i < initial; i++) next()
+    })
 }
 
 const startImageLoadTracking = (sessionId: number, canvasData: any) => {
@@ -5397,6 +5444,9 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     scheduleImageProgressFlush()
     try {
         sanitizeCanvasJsonBeforeLoad(json)
+        // Pré-aquecer cache de imagens com concorrência limitada (6 simultâneas).
+        // O timeout de 4s garante que o canvas nunca espera indefinidamente.
+        await prewarmCanvasImages(json, 6, 4000)
         await canvas.value.loadFromJSON(json)
     } finally {
         // Ensure the UI shows the final numbers for this attempt before we clear tracker.
@@ -11658,6 +11708,36 @@ const removeImageObjectsDeep = (node: any): any => {
 }
 
 // --- Sync Logic (Herd Effect) ---
+function syncCardProductDataNameFromTitleTarget(
+    target: any,
+    opts: { normalizeDisplayedText?: boolean } = {}
+): boolean {
+    const { card, titleObj } = resolveCardTitleStateFromTarget(target);
+    if (!card || !titleObj) return false;
+
+    const nextName = buildPersistedCardTitleText(titleObj);
+    const currentText = String((titleObj as any).text ?? '').replace(/\r\n?/g, '\n');
+    if (opts.normalizeDisplayedText && !((titleObj as any).isEditing) && nextName && nextName !== currentText) {
+        titleObj.set('text', nextName);
+        if (typeof titleObj.initDimensions === 'function') titleObj.initDimensions();
+        titleObj.dirty = true;
+        titleObj.setCoords?.();
+    }
+    (titleObj as any).__rawText = nextName;
+
+    const currentName = String((card as any)?._productData?.name ?? '');
+    if (currentName === nextName) return false;
+
+    const baseProductData = ((card as any)?._productData && typeof (card as any)._productData === 'object')
+        ? (card as any)._productData
+        : {};
+    (card as any)._productData = {
+        ...baseProductData,
+        name: nextName
+    };
+    return true;
+}
+
 const handleObjectModified = (e: any) => {
     const obj = e.target;
     if (!obj) return;
@@ -18270,38 +18350,6 @@ const setupReactivity = () => {
         return t === 'text' || t === 'i-text' || t === 'textbox';
     };
 
-    // Keep `_productData.name` aligned with the visible title text so manual line breaks survive
-    // all persistence/rebuild paths (reload, re-import review modal, relayout side-effects).
-    const syncCardProductDataNameFromTitleTarget = (
-        target: any,
-        opts: { normalizeDisplayedText?: boolean } = {}
-    ): boolean => {
-        const { card, titleObj } = resolveCardTitleStateFromTarget(target);
-        if (!card || !titleObj) return false;
-
-        const nextName = buildPersistedCardTitleText(titleObj);
-        const currentText = String((titleObj as any).text ?? '').replace(/\r\n?/g, '\n');
-        if (opts.normalizeDisplayedText && !((titleObj as any).isEditing) && nextName && nextName !== currentText) {
-            titleObj.set('text', nextName);
-            if (typeof titleObj.initDimensions === 'function') titleObj.initDimensions();
-            titleObj.dirty = true;
-            titleObj.setCoords?.();
-        }
-        (titleObj as any).__rawText = nextName;
-
-        const currentName = String((card as any)?._productData?.name ?? '');
-        if (currentName === nextName) return false;
-
-        const baseProductData = ((card as any)?._productData && typeof (card as any)._productData === 'object')
-            ? (card as any)._productData
-            : {};
-        (card as any)._productData = {
-            ...baseProductData,
-            name: nextName
-        };
-        return true;
-    };
-
     const handleTextChanged = (e: any) => {
         syncTextSelectionSnapshot(e);
         const target = e?.target;
@@ -23978,154 +24026,55 @@ const uniqueImageSearchHints = (variants: string[]): string[] => {
     return out;
 };
 
-// Paste List Handlers
-const handlePasteList = async () => {
-    showPasteListModal.value = false;
-    
-    // Parse the list
-    let data: any[] = [];
-    if (activePasteTab.value === 'text') {
-        data = parseProductList(pasteListText.value);
-    } else {
-        data = [];
+// Paste List Handlers — shared helpers
+const getPasteHttpStatus = (err: any): number => {
+    const status = Number(
+        err?.statusCode ??
+        err?.status ??
+        err?.response?.status ??
+        err?.data?.statusCode
+    );
+    return Number.isFinite(status) ? status : 0;
+};
+const getPasteRetryAfterMs = (err: any): number => {
+    const headers = err?.response?.headers;
+    let raw: any = undefined;
+    try {
+        if (headers && typeof headers.get === 'function') {
+            raw = headers.get('Retry-After') ?? headers.get('retry-after');
+        } else if (headers && typeof headers === 'object') {
+            raw = (headers as any)['retry-after'] ?? (headers as any)['Retry-After'];
+        }
+    } catch {
+        raw = undefined;
     }
-
-    if (data.length === 0) {
-        pasteListText.value = '';
-        pastedImage.value = null;
-        return;
-    }
-
-    const matchMode: ImageMatchMode = data.length >= 120 ? 'fast' : DEFAULT_PASTE_IMAGE_MATCH_MODE;
-    const pasteImageConcurrency = data.length >= 180 ? 8 : data.length >= 80 ? 6 : 4;
-    const getPasteHttpStatus = (err: any): number => {
-        const status = Number(
-            err?.statusCode ??
-            err?.status ??
-            err?.response?.status ??
-            err?.data?.statusCode
+    const seconds = Number(String(raw ?? '').trim());
+    if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+    return Math.max(500, Math.round(seconds * 1000));
+};
+const isPasteRateLimitError = (err: any): boolean => getPasteHttpStatus(err) === 429;
+const isTransientPasteError = (err: any): boolean => {
+    const status = getPasteHttpStatus(err);
+    if (status === 0) {
+        const msg = String(
+            err?.message ||
+            err?.statusMessage ||
+            err?.data?.message ||
+            err?.cause?.message ||
+            ''
+        ).toLowerCase();
+        return (
+            msg.includes('failed to fetch') ||
+            msg.includes('network changed') ||
+            msg.includes('networkerror') ||
+            msg.includes('<no response>') ||
+            msg.includes('load failed')
         );
-        return Number.isFinite(status) ? status : 0;
-    };
-    const getPasteRetryAfterMs = (err: any): number => {
-        const headers = err?.response?.headers;
-        let raw: any = undefined;
-        try {
-            if (headers && typeof headers.get === 'function') {
-                raw = headers.get('Retry-After') ?? headers.get('retry-after');
-            } else if (headers && typeof headers === 'object') {
-                raw = (headers as any)['retry-after'] ?? (headers as any)['Retry-After'];
-            }
-        } catch {
-            raw = undefined;
-        }
-        const seconds = Number(String(raw ?? '').trim());
-        if (!Number.isFinite(seconds) || seconds <= 0) return 0;
-        return Math.max(500, Math.round(seconds * 1000));
-    };
-    const isRateLimitError = (err: any): boolean => getPasteHttpStatus(err) === 429;
-    const isTransientPasteError = (err: any): boolean => {
-        const status = getPasteHttpStatus(err);
-        if (status === 0) {
-            const msg = String(
-                err?.message ||
-                err?.statusMessage ||
-                err?.data?.message ||
-                err?.cause?.message ||
-                ''
-            ).toLowerCase();
-            return (
-                msg.includes('failed to fetch') ||
-                msg.includes('network changed') ||
-                msg.includes('networkerror') ||
-                msg.includes('<no response>') ||
-                msg.includes('load failed')
-            );
-        }
-        return status === 502 || status === 503 || status === 504;
-    };
+    }
+    return status === 502 || status === 503 || status === 504;
+};
 
-    // Show processing state
-    isProcessing.value = true;
-
-    const fetchProductImageForPaste = async (product: any, index: number) => {
-        let lastErr: any = null;
-
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-            try {
-                // Build search term
-                const searchTerm = dedupeImageSearchTokens(
-                    `${product.name || ''} ${product.brand || ''} ${product.weight || ''}`
-                );
-                const searchHints = uniqueImageSearchHints([
-                    `${product.name || ''} ${product.brand || ''} ${product.flavor || ''} ${product.weight || ''}`,
-                    `${product.name || ''} ${product.brand || ''} ${product.weight || ''}`,
-                    `${product.name || ''} ${product.brand || ''}`,
-                    String(product?.name || '').trim()
-                ]);
-                const headers = await getApiAuthHeaders();
-
-                const result = await $fetch<{ url?: string }>('/api/process-product-image', {
-                    method: 'POST',
-                    headers,
-                    // When importing products, default to bg-removed variants (cached) for better card visuals.
-                    body: {
-                        term: String(searchHints[0] || product?.name || searchTerm || '').trim(),
-                        searchHints,
-                        ...(product?.brand ? { brand: String(product.brand).trim() } : {}),
-                        ...(product?.flavor ? { flavor: String(product.flavor).trim() } : {}),
-                        ...(product?.weight ? { weight: String(product.weight).trim() } : {}),
-                        ...(product?.productCode ? { productCode: String(product.productCode).trim() } : {}),
-                        bgPolicy: 'always',
-                        matchMode,
-                        strictMode: matchMode === 'precise'
-                    }
-                });
-
-                return {
-                    ...product,
-                    id: `prod_${Date.now()}_${index}`,
-                    imageUrl: result?.url || null,
-                    image: result?.url || null,
-                    status: result?.url ? 'done' : 'error'
-                }
-            } catch (err) {
-                lastErr = err;
-                if (attempt < 3 && (isRateLimitError(err) || isTransientPasteError(err))) {
-                    const retryAfterMs = isRateLimitError(err) ? getPasteRetryAfterMs(err) : 500;
-                    await new Promise((resolve) => setTimeout(resolve, retryAfterMs || (350 * (attempt + 1))));
-                    continue;
-                }
-                break;
-            }
-        }
-        console.warn('Failed to fetch image for:', product?.name, lastErr);
-        return {
-            ...product,
-            id: `prod_${Date.now()}_${index}`,
-            imageUrl: null,
-            image: null,
-            status: 'error'
-        };
-    };
-
-    const productsWithImages: any[] = [];
-    let pasteCursor = 0;
-    const totalPasteProducts = data.length;
-    const runPasteWorker = async () => {
-        while (pasteCursor < totalPasteProducts) {
-            const currentIndex = pasteCursor++;
-            const product = data[currentIndex];
-            if (!product) continue;
-            productsWithImages[currentIndex] = await fetchProductImageForPaste(product, currentIndex);
-        }
-    };
-    const pasteWorkers = Array.from({ length: Math.min(pasteImageConcurrency, totalPasteProducts) }, () => runPasteWorker());
-    await Promise.all(pasteWorkers);
-
-    isProcessing.value = false;
-    
-    // Store in review state and open review modal
+const openReviewModalWithProducts = (productsWithImages: any[]) => {
     reviewProducts.value = productsWithImages;
     try {
         const zone = targetGridZone.value;
@@ -24134,11 +24083,145 @@ const handlePasteList = async () => {
         productImportExistingCount.value = 0;
     }
     showProductReviewModal.value = true;
-    
-    // Reset paste input (but keep data for review)
+};
+
+const parseTextWithAI = async (text: string): Promise<any[]> => {
+    const headers = await getApiAuthHeaders();
+    const result = await $fetch<{ products?: any[] }>('/api/parse-products', {
+        method: 'POST',
+        headers,
+        body: { text }
+    });
+    if (!result?.products || !Array.isArray(result.products)) return [];
+    return result.products.map((p: any, i: number) => ({
+        id: `prod_${Date.now()}_${i}`,
+        name: p.name || 'Produto sem nome',
+        brand: p.brand || '',
+        productCode: p.productCode || null,
+        weight: p.weight || '',
+        price: p.price || '',
+        pricePack: p.pricePack ?? '',
+        priceUnit: p.priceUnit ?? '',
+        priceSpecial: p.priceSpecial ?? '',
+        priceSpecialUnit: p.priceSpecialUnit ?? '',
+        specialCondition: p.specialCondition ?? '',
+        priceWholesale: p.priceWholesale ?? '',
+        wholesaleTrigger: p.wholesaleTrigger ?? null,
+        wholesaleTriggerUnit: p.wholesaleTriggerUnit ?? '',
+        packQuantity: p.packQuantity ?? null,
+        packUnit: p.packUnit ?? '',
+        packageLabel: p.packageLabel ?? '',
+        price_mode: p.price_mode || 'retail',
+        limit: p.limit || '',
+        flavor: p.flavor || '',
+        imageUrl: null,
+        image: null,
+        status: 'pending',
+        unit: 'UN',
+        color: '#ffffff'
+    }));
+};
+
+const parseFileWithAI = async (file: File): Promise<any[]> => {
+    const headers = await getApiAuthHeaders();
+    const form = new FormData();
+    form.append('file', file);
+    const result = await $fetch<{ products?: any[] }>('/api/parse-products', {
+        method: 'POST',
+        headers,
+        body: form
+    });
+    if (!result?.products || !Array.isArray(result.products)) return [];
+    return result.products.map((p: any, i: number) => ({
+        id: `prod_${Date.now()}_${i}`,
+        name: p.name || 'Produto sem nome',
+        brand: p.brand || '',
+        productCode: p.productCode || null,
+        weight: p.weight || '',
+        price: p.price || '',
+        pricePack: p.pricePack ?? '',
+        priceUnit: p.priceUnit ?? '',
+        priceSpecial: p.priceSpecial ?? '',
+        priceSpecialUnit: p.priceSpecialUnit ?? '',
+        specialCondition: p.specialCondition ?? '',
+        priceWholesale: p.priceWholesale ?? '',
+        wholesaleTrigger: p.wholesaleTrigger ?? null,
+        wholesaleTriggerUnit: p.wholesaleTriggerUnit ?? '',
+        packQuantity: p.packQuantity ?? null,
+        packUnit: p.packUnit ?? '',
+        packageLabel: p.packageLabel ?? '',
+        price_mode: p.price_mode || 'retail',
+        limit: p.limit || '',
+        flavor: p.flavor || '',
+        imageUrl: null,
+        image: null,
+        status: 'pending',
+        unit: 'UN',
+        color: '#ffffff'
+    }));
+};
+
+const handlePasteList = async () => {
+    showPasteListModal.value = false;
+
+    if (!pasteListText.value && activePasteTab.value === 'text') {
+        return;
+    }
+
+    isProcessing.value = true;
+
+    let data: any[] = [];
+    try {
+        if (activePasteTab.value === 'text' && pasteListText.value) {
+            // Use AI parser for richer product extraction (brand, weight, flavor, etc.)
+            data = await parseTextWithAI(pasteListText.value);
+            // Fallback to basic parser if AI returns nothing
+            if (data.length === 0) {
+                data = parseProductList(pasteListText.value);
+            }
+        }
+    } catch (err: any) {
+        console.warn('[handlePasteList] AI parse failed, falling back to basic parser:', err?.message);
+        data = parseProductList(pasteListText.value);
+    }
+
+    isProcessing.value = false;
+
+    if (data.length === 0) {
+        pasteListText.value = '';
+        pastedImage.value = null;
+        return;
+    }
+
+    // Open review modal directly — image processing happens inside ProductReviewModal
+    openReviewModalWithProducts(data);
+
+    // Reset paste input
     pasteListText.value = '';
     pastedImage.value = null;
-}
+};
+
+const handlePasteFile = async (file: File) => {
+    showPasteListModal.value = false;
+    isProcessing.value = true;
+
+    let data: any[] = [];
+    try {
+        data = await parseFileWithAI(file);
+    } catch (err: any) {
+        console.error('[handlePasteFile] File parse failed:', err);
+        isProcessing.value = false;
+        return;
+    }
+
+    isProcessing.value = false;
+
+    if (data.length === 0) return;
+
+    openReviewModalWithProducts(data);
+    pasteListText.value = '';
+    pastedImage.value = null;
+};
 
 const resolveOrCreateZoneForFrame = (frame: any): any | null => {
     if (!canvas.value || !fabric || !frame) return null
@@ -36495,6 +36578,7 @@ const handleRecalculateLayout = () => {
         @update:pasted-image="pastedImage = $event"
         @update:is-analyzing-image="isAnalyzingImage = $event"
         @submit-paste-list="handlePasteList"
+        @submit-paste-file="handlePasteFile"
         @update:show-delete-page-modal="showDeletePageModal = $event"
         @confirm-delete-page="confirmDeletePage"
         @update:show-product-review-modal="handleProductReviewModalVisibility"

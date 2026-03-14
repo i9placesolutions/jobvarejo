@@ -143,34 +143,34 @@ const findExactAssetNameKey = (
 
 const sanitizeReviewCandidates = (input: unknown): ReviewCandidate[] => {
     if (!Array.isArray(input)) return [];
-    return input
-        .map((entry: any, index: number) => {
-            const url = String(entry?.url || '').trim();
-            const previewUrl = String(entry?.previewUrl || entry?.url || '').trim();
-            const key = String(entry?.key || '').trim();
-            if (!url && !previewUrl && !key) return null;
-            const sourceRaw = String(entry?.source || '').trim().toLowerCase();
-            const source: 'external' | 's3' = sourceRaw === 's3' ? 's3' : 'external';
-            const provider = String(entry?.provider || sourceRaw || source || 'external').trim() || 'external';
-            const score = Number(entry?.score);
-            const confidence = Number(entry?.confidence);
-            return {
-                id: String(entry?.id || key || url || previewUrl || `candidate-${index + 1}`),
-                url: url || previewUrl,
-                previewUrl: previewUrl || url,
-                key: key || undefined,
-                title: String(entry?.title || '').trim() || undefined,
-                source,
-                provider,
-                domain: String(entry?.domain || '').trim() || undefined,
-                score: Number.isFinite(score) ? Number(score.toFixed(3)) : undefined,
-                confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : undefined,
-                reason: String(entry?.reason || '').trim() || undefined,
-                recommended: !!entry?.recommended
-            } satisfies ReviewCandidate;
-        })
-        .filter((entry): entry is ReviewCandidate => !!entry)
-        .slice(0, 6);
+    const out: ReviewCandidate[] = [];
+    for (let index = 0; index < input.length && out.length < 6; index++) {
+        const entry = input[index] as any;
+        const url = String(entry?.url || '').trim();
+        const previewUrl = String(entry?.previewUrl || entry?.url || '').trim();
+        const key = String(entry?.key || '').trim();
+        if (!url && !previewUrl && !key) continue;
+        const sourceRaw = String(entry?.source || '').trim().toLowerCase();
+        const source: 'external' | 's3' = sourceRaw === 's3' ? 's3' : 'external';
+        const provider = String(entry?.provider || sourceRaw || source || 'external').trim() || 'external';
+        const score = Number(entry?.score);
+        const confidence = Number(entry?.confidence);
+        out.push({
+            id: String(entry?.id || key || url || previewUrl || `candidate-${index + 1}`),
+            url: url || previewUrl,
+            previewUrl: previewUrl || url,
+            key: key || undefined,
+            title: String(entry?.title || '').trim() || undefined,
+            source,
+            provider,
+            domain: String(entry?.domain || '').trim() || undefined,
+            score: Number.isFinite(score) ? Number(score.toFixed(3)) : undefined,
+            confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : undefined,
+            reason: String(entry?.reason || '').trim() || undefined,
+            recommended: !!entry?.recommended
+        });
+    }
+    return out;
 };
 
 const buildExternalReviewCandidates = (
@@ -215,10 +215,12 @@ const buildInternalReviewCandidates = async (
 ): Promise<ReviewCandidate[]> => {
     const normalizedUserId = String(userId || '').trim();
     const limited = Array.isArray(list) ? list.slice(0, 6) : [];
-    const out = await Promise.all(limited.map(async (entry, index) => {
+    const results: ReviewCandidate[] = [];
+    await Promise.all(limited.map(async (entry, index) => {
         const key = String(entry?.key || '').trim();
-        if (!key) return null;
+        if (!key) return;
         const resolvedUrl = await resolveStorageReadUrl(key, normalizedUserId);
+        if (!resolvedUrl) return;
         const confidence = entry.kind === 'exact'
             ? 0.96
             : entry.kind === 'strict'
@@ -226,7 +228,7 @@ const buildInternalReviewCandidates = async (
                 : entry.kind === 'relaxed'
                     ? 0.68
                     : 0.54;
-        return {
+        results.push({
             id: `s3-${Buffer.from(key).toString('base64').slice(0, 12)}`,
             key,
             url: resolvedUrl,
@@ -238,9 +240,9 @@ const buildInternalReviewCandidates = async (
             confidence,
             reason: String(entry.reason || '').trim() || undefined,
             recommended: index === 0
-        } satisfies ReviewCandidate;
+        });
     }));
-    return out.filter((entry): entry is ReviewCandidate => !!entry);
+    return results;
 };
 
 const mergeReviewCandidates = (...lists: Array<ReviewCandidate[] | undefined | null>): ReviewCandidate[] => {
@@ -1026,7 +1028,7 @@ export default defineEventHandler(async (event) => {
         const found = await findBestS3Match({
             s3,
             bucketName,
-            prefixes: ['uploads/', 'imagens/'],
+            prefixes: ['uploads/', 'imagens/', 'logo/'],
             normalizedCandidates: candidateNormalizedTerms,
             brand,
             flavor,
@@ -1110,7 +1112,7 @@ export default defineEventHandler(async (event) => {
         const rankedInternalMatches = await findTopS3Matches({
             s3,
             bucketName,
-            prefixes: ['uploads/', 'imagens/'],
+            prefixes: ['uploads/', 'imagens/', 'logo/'],
             normalizedCandidates: candidateNormalizedTerms,
             brand,
             flavor,

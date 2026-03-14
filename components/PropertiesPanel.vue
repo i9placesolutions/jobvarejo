@@ -2105,7 +2105,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             @update:global-styles="(prop, val) => $emit('update-global-styles', prop, val)"
             @apply-preset="presetId => $emit('apply-preset', presetId)"
             @sync-gaps="padding => $emit('sync-gaps', padding)"
-            @recalculate="$emit('recalculate-layout')"
+            @recalculate-layout="$emit('recalculate-layout')"
             @manage-label-templates="$emit('manage-label-templates')"
             @apply-template-to-zone="$emit('apply-template-to-zone')"
           />

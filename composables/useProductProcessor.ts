@@ -121,14 +121,9 @@ const normalizeForDedup = (term: string): string => {
         .split(' ')
         .filter(w => !stopWords.has(w) && w.length > 0)
         .map(w => unitMap[w] || w);
-    // Deduplicar preservando ordem (evita colidir termos distintos com mesmos tokens em ordem diferente)
-    const seen = new Set<string>();
-    const ordered = words.filter((w) => {
-        if (seen.has(w)) return false;
-        seen.add(w);
-        return true;
-    });
-    return ordered.join(' ');
+    // Deduplicar e ordenar alfabeticamente (consistente com normalizeSearchTerm do backend)
+    const set = new Set(words);
+    return [...set].sort().join(' ');
 };
 
 const normalizeWeightNumber = (value: string): string => {

@@ -206,11 +206,24 @@ export const toWasabiDirectUrl = (
 
   const fallbackProxyUrl = toWasabiProxyUrl(trimmed, { bucket })
 
+  // Presigned URLs contain X-Amz-* parameters and expire after a short time.
+  // Extract the S3 key and convert to a persistent proxy URL instead.
   if (
     trimmed.includes('X-Amz-Algorithm=') ||
     trimmed.includes('X-Amz-Signature=') ||
     trimmed.includes('X-Amz-Credential=')
   ) {
+    const presignedKey = extractStorageKeyFromRef(trimmed, { bucket, endpoint })
+    if (presignedKey) {
+      const isPublicKey =
+        presignedKey.startsWith('imagens/') ||
+        presignedKey.startsWith('uploads/') ||
+        presignedKey.startsWith('logo/')
+      if (isPublicKey) {
+        return buildProxyUrl(presignedKey, null, bucket)
+      }
+    }
+    // Non-public keys: return presigned URL as-is (private project files need signed access)
     return trimmed
   }
 

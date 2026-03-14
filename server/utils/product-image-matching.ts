@@ -657,7 +657,7 @@ export const findBestS3Match = async (opts: {
 
     if (!normalizedKey) continue
     const keyTokens = tokenSet(normalizedKey)
-    if (keyTokens.size < 2) continue
+    if (keyTokens.size < 1) continue
     const aliasTokens = tokenSet(aliasNormalized)
 
     const hasQueryVariantSignal = requiredWeightTokens.length > 0 || requiredFlavorTokens.length > 0
@@ -939,7 +939,7 @@ export const findTopS3Matches = async (opts: {
     }
 
     if (!normalizedKey) continue
-    if (keyTokens.size < 2) continue
+    if (keyTokens.size < 1) continue
 
     if (requiredBrandTokens.length > 0 && !hasAnyToken(requiredBrandTokens, keyTokens)) {
       continue

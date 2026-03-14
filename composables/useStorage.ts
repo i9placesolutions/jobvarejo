@@ -1,6 +1,30 @@
 import { ref } from 'vue'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
+// ── Gzip helpers (browser CompressionStream API) ─────────────────────────────
+// Using Response wrapper to avoid ArrayBufferLike / SharedArrayBuffer TS issues.
+
+const compressGzip = async (text: string): Promise<ArrayBuffer> => {
+  const stream = new CompressionStream('gzip')
+  const writer = stream.writable.getWriter()
+  const encoded = new TextEncoder().encode(text)
+  // slice() produces a plain ArrayBuffer (not SharedArrayBuffer) — required by the type
+  await writer.write(encoded.buffer.slice(0) as ArrayBuffer)
+  await writer.close()
+  return new Response(stream.readable).arrayBuffer()
+}
+
+const decompressGzip = async (data: ArrayBuffer): Promise<string> => {
+  const stream = new DecompressionStream('gzip')
+  const writer = stream.writable.getWriter()
+  await writer.write(data)
+  await writer.close()
+  return new Response(stream.readable).text()
+}
+
+const isGzipBuffer = (buf: Uint8Array): boolean =>
+  buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b
+
 /**
  * Wasabi Storage Composable
  *
@@ -128,7 +152,14 @@ const fetchJsonWithRetry = async (
           throw new Error(`Falha ao carregar JSON (${response.status})`)
         }
       } else {
-        return await response.json()
+        // Detect gzip (magic bytes 0x1f 0x8b) and decompress before parsing
+        const arrayBuf = await response.arrayBuffer()
+        const header = new Uint8Array(arrayBuf, 0, Math.min(2, arrayBuf.byteLength))
+        if (isGzipBuffer(header)) {
+          const text = await decompressGzip(arrayBuf)
+          return JSON.parse(text)
+        }
+        return JSON.parse(new TextDecoder().decode(arrayBuf))
       }
     } catch (error: any) {
       const msg = String(error?.message || '')
@@ -194,6 +225,11 @@ export const useStorage = () => {
     lastHistorySnapshotAtByPage.set(pageScope, now)
 
     const run = (async () => {
+      // Safety timeout: garante que a entrada do Map é sempre limpa,
+      // mesmo que $fetch nunca responda (ex.: servidor travado).
+      const safetyTimer = setTimeout(() => {
+        historySnapshotInFlightByPage.delete(pageScope)
+      }, 60_000)
       try {
         const headers = await tryGetApiAuthHeaders()
         if (!headers) return
@@ -215,6 +251,7 @@ export const useStorage = () => {
           error?.message || error
         )
       } finally {
+        clearTimeout(safetyTimer)
         historySnapshotInFlightByPage.delete(pageScope)
       }
     })()
@@ -256,15 +293,26 @@ export const useStorage = () => {
     // Caminho do arquivo: projects/{userId}/{projectId}/page_{pageId}.json
     const key = `projects/${userId}/${projectId}/page_${pageId}.json`
 
-    // Converter JSON para Blob
+    // Comprimir JSON com gzip antes de fazer upload (reduz ~80% do tamanho)
     const jsonString = JSON.stringify(canvasJson)
-    const blob = new Blob([jsonString], { type: 'application/json' })
+    let blob: Blob
+    let contentType: string
+    try {
+      const compressedBuf = await compressGzip(jsonString)
+      blob = new Blob([compressedBuf], { type: 'application/octet-stream' })
+      contentType = 'application/octet-stream'
+      console.log(`🗜️ Canvas comprimido: ${(jsonString.length / 1024).toFixed(0)}KB → ${(compressedBuf.byteLength / 1024).toFixed(0)}KB`)
+    } catch {
+      // Fallback para JSON puro caso CompressionStream não esteja disponível
+      blob = new Blob([jsonString], { type: 'application/json' })
+      contentType = 'application/json'
+    }
 
     // Retry logic: tenta até N vezes com backoff exponencial
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         // Obter presigned URL para upload (com retry interno)
-        const presignedUrl = await getPresignedUrl(key, 'application/json', 'put', 2, authHeaders)
+        const presignedUrl = await getPresignedUrl(key, contentType, 'put', 2, authHeaders)
         if (!presignedUrl) {
           if (attempt === retries) {
             const errorMsg = 'Failed to get upload URL from Wasabi after multiple attempts.'
@@ -285,7 +333,7 @@ export const useStorage = () => {
             method: 'PUT',
             body: blob,
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': contentType
             },
             signal: controller.signal
           })
