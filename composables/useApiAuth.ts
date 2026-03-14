@@ -43,6 +43,11 @@ const readTokenFromCookie = (): string | null => {
 
 export const useApiAuth = () => {
   const getApiAuthHeaders = async (): Promise<Record<string, string>> => {
+    if (process.client) {
+      // Browser sends httpOnly cookies automatically on same-origin requests — no header needed
+      return {}
+    }
+    // Server-side (SSR): forward the access-token from the incoming request cookie header
     const token = readTokenFromCookie()
     if (!token) {
       throw new Error('Sessao expirada. Faca login novamente.')

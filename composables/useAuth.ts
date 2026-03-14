@@ -1,45 +1,17 @@
 import type { UserWithProfile, AuthState } from '~/types/auth'
 
 const AUTH_COOKIE = 'authenticated'
-const ACCESS_TOKEN_COOKIE = 'access-token'
-const LEGACY_ACCESS_TOKEN_COOKIE = 'sb-access-token'
 
-const updateAuthCookie = (authenticated: boolean, accessToken?: string | null) => {
-  if (!process.client) return
-
-  if (authenticated) {
-    document.cookie = `${AUTH_COOKIE}=true; path=/; max-age=604800; samesite=lax`
-  } else {
-    document.cookie = `${AUTH_COOKIE}=; path=/; max-age=0; samesite=lax`
-  }
-
-  const normalizedToken = String(accessToken || '').trim()
-  if (authenticated && normalizedToken) {
-    document.cookie = `${ACCESS_TOKEN_COOKIE}=${encodeURIComponent(normalizedToken)}; path=/; max-age=604800; samesite=lax`
-    // Keep legacy cookie for backward compatibility during cutover.
-    document.cookie = `${LEGACY_ACCESS_TOKEN_COOKIE}=${encodeURIComponent(normalizedToken)}; path=/; max-age=604800; samesite=lax`
-  } else if (!authenticated) {
-    document.cookie = `${ACCESS_TOKEN_COOKIE}=; path=/; max-age=0; samesite=lax`
-    document.cookie = `${LEGACY_ACCESS_TOKEN_COOKIE}=; path=/; max-age=0; samesite=lax`
-  }
+// The access-token cookie is httpOnly — only the server can read/write it.
+// We use the non-httpOnly `authenticated` flag to check presence client-side.
+const isAuthFlagSet = (): boolean => {
+  if (!process.client) return false
+  return document.cookie.split(';').some(c => c.trim() === `${AUTH_COOKIE}=true`)
 }
 
-const readTokenFromCookie = (): string | null => {
-  if (!process.client) return null
-  const cookieEntries = document.cookie
-    .split(';')
-    .map((entry) => entry.trim())
-  const currentCookie = cookieEntries.find((entry) => entry.startsWith(`${ACCESS_TOKEN_COOKIE}=`))
-  const legacyCookie = cookieEntries.find((entry) => entry.startsWith(`${LEGACY_ACCESS_TOKEN_COOKIE}=`))
-  const match = currentCookie || legacyCookie
-  if (!match) return null
-  const prefix = currentCookie ? `${ACCESS_TOKEN_COOKIE}=` : `${LEGACY_ACCESS_TOKEN_COOKIE}=`
-  const raw = match.slice(prefix.length)
-  try {
-    return decodeURIComponent(raw).trim() || null
-  } catch {
-    return raw.trim() || null
-  }
+const clearAuthFlag = () => {
+  if (!process.client) return
+  document.cookie = `${AUTH_COOKIE}=; path=/; max-age=0; samesite=lax`
 }
 
 const toUser = (user: any): UserWithProfile | null => {
@@ -69,11 +41,10 @@ export const useAuth = () => {
   const getSession = async () => {
     state.value.isLoading = true
     try {
-      const token = readTokenFromCookie()
-      if (!token) {
+      // Check the non-httpOnly flag cookie before making an API call
+      if (!isAuthFlagSet()) {
         state.value.user = null
         state.value.isAuthenticated = false
-        updateAuthCookie(false)
         return null
       }
 
@@ -82,18 +53,17 @@ export const useAuth = () => {
       if (!user) {
         state.value.user = null
         state.value.isAuthenticated = false
-        updateAuthCookie(false)
+        clearAuthFlag()
         return null
       }
 
       state.value.user = user
       state.value.isAuthenticated = true
-      updateAuthCookie(true, readTokenFromCookie())
       return { user }
     } catch {
       state.value.user = null
       state.value.isAuthenticated = false
-      updateAuthCookie(false)
+      clearAuthFlag()
       return null
     } finally {
       state.value.isLoading = false
@@ -118,7 +88,7 @@ export const useAuth = () => {
       if (!user) throw new Error('Nao foi possivel iniciar sessao.')
       state.value.user = user
       state.value.isAuthenticated = true
-      updateAuthCookie(true, String(data?.session?.access_token || readTokenFromCookie() || ''))
+      // Server already set the httpOnly access-token cookie; nothing to write client-side
       return data
     } catch (error: any) {
       const statusCode = Number(error?.statusCode || error?.response?.status || 0)
@@ -160,7 +130,8 @@ export const useAuth = () => {
     }
     state.value.user = null
     state.value.isAuthenticated = false
-    updateAuthCookie(false)
+    // Server clears httpOnly token cookie; we just clear the flag cookie
+    clearAuthFlag()
     await navigateTo('/auth/login')
   }
 

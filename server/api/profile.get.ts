@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const row = await pgOneOrNull<any>(
-      `select *
+      `select id, email, name, avatar_url, role, plan, created_at, updated_at
        from public.profiles
        where id = $1
        limit 1`,

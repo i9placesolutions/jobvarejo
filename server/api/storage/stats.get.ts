@@ -101,10 +101,9 @@ export default defineEventHandler(async (event) => {
 
   const s3 = getS3Client()
 
-  const results: PrefixStats[] = []
-  for (const prefix of prefixes) {
-    results.push(await scanPrefix({ s3, bucket, prefix, maxKeysTotal: maxKeys }))
-  }
+  const results = await Promise.all(
+    prefixes.map(prefix => scanPrefix({ s3, bucket, prefix, maxKeysTotal: maxKeys }))
+  )
 
   const totalObjects = results.reduce((sum, r) => sum + r.objects, 0)
   const totalBytes = results.reduce((sum, r) => sum + r.bytes, 0)

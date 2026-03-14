@@ -65,28 +65,10 @@ export default defineEventHandler(async (event) => {
       role
     })
 
-    setCookie(event, 'access-token', token, {
-      path: '/',
-      maxAge: expiresIn,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: false
-    })
-    // Keep legacy cookie for backward compatibility during cutover.
-    setCookie(event, 'sb-access-token', token, {
-      path: '/',
-      maxAge: expiresIn,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: false
-    })
-    setCookie(event, 'authenticated', 'true', {
-      path: '/',
-      maxAge: expiresIn,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: false
-    })
+    const isProduction = process.env.NODE_ENV === 'production'
+    setCookie(event, 'access-token', token, { path: '/', maxAge: expiresIn, sameSite: 'lax', secure: isProduction, httpOnly: true })
+    setCookie(event, 'sb-access-token', token, { path: '/', maxAge: expiresIn, sameSite: 'lax', secure: isProduction, httpOnly: true })
+    setCookie(event, 'authenticated', 'true', { path: '/', maxAge: expiresIn, sameSite: 'lax', secure: isProduction, httpOnly: false })
 
     response.session = {
       access_token: token,

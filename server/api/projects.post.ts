@@ -77,38 +77,40 @@ export default defineEventHandler(async (event) => {
 
   try {
     if (projectId) {
-      result = await pgOneOrNull<any>(
-        `update public.projects
-         set name = $1,
-             canvas_data = $2::jsonb,
-             preview_url = $3,
-             user_id = $4,
-             updated_at = $5
-         where id = $6
-           and user_id = $7
-           and (
-             name is distinct from $1
-             or canvas_data is distinct from $2::jsonb
-             or preview_url is distinct from $3
-           )
-         returning *`,
+      // Single CTE: either returns the updated row or the existing unchanged row
+      // _was_mutated flag indicates if an actual write occurred
+      const row = await pgOneOrNull<any>(
+        `with upd as (
+           update public.projects
+           set name = $1,
+               canvas_data = $2::jsonb,
+               preview_url = $3,
+               user_id = $4,
+               updated_at = $5
+           where id = $6
+             and user_id = $7
+             and (
+               name is distinct from $1
+               or canvas_data is distinct from $2::jsonb
+               or preview_url is distinct from $3
+             )
+           returning *, true as _was_mutated
+         )
+         select * from upd
+         union all
+         select p.*, false as _was_mutated
+         from public.projects p
+         where p.id = $6
+           and p.user_id = $7
+           and not exists (select 1 from upd)
+         limit 1`,
         [name, canvasDataJson, previewUrl, user.id, updatedAt, projectId, user.id]
       )
 
-      if (!result) {
-        const existing = await pgOneOrNull<any>(
-          `select *
-             from public.projects
-            where id = $1
-              and user_id = $2
-            limit 1`,
-          [projectId, user.id]
-        )
-        if (!existing) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
-        result = existing
-      } else {
-        didPersistMutation = true
-      }
+      if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+      didPersistMutation = row._was_mutated === true
+      const { _was_mutated: _, ...rowWithoutFlag } = row
+      result = rowWithoutFlag
     } else {
       const { rows } = await pgQuery<any>(
         `insert into public.projects

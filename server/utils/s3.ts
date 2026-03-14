@@ -1,6 +1,10 @@
 import { S3Client } from "@aws-sdk/client-s3";
 
+let _s3ClientInstance: S3Client | null = null;
+
 export const getS3Client = () => {
+    if (_s3ClientInstance) return _s3ClientInstance;
+
     const config = useRuntimeConfig();
 
     // Wasabi Configuration (primary)
@@ -21,7 +25,7 @@ export const getS3Client = () => {
         });
     }
 
-    return new S3Client({
+    _s3ClientInstance = new S3Client({
         region: region,
         endpoint: `https://${endpoint}`,
         credentials: {
@@ -30,6 +34,8 @@ export const getS3Client = () => {
         },
         forcePathStyle: true
     });
+
+    return _s3ClientInstance;
 };
 
 export const getPublicUrl = (key: string) => {

@@ -87,6 +87,15 @@ const showDeleteConfirm = ref(false)
 const projectToDelete = ref<string | null>(null)
 const projectToDeleteName = ref('')
 
+// Toast notification system
+let _toastId = 0
+const toasts = ref<{ id: number; message: string; type: 'error' | 'success' | 'info' }[]>([])
+const showToast = (message: string, type: 'error' | 'success' | 'info' = 'error') => {
+  const id = ++_toastId
+  toasts.value.push({ id, message, type })
+  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 4500)
+}
+
 // Projects data - initialize with empty arrays for SSR
 const projects = ref<any[]>([])
 const user = ref<any>(null)
@@ -134,20 +143,25 @@ const loadData = async () => {
       return
     }
 
-    // Get user profile
     const headers = await getApiAuthHeaders()
-    const profile = await $fetch('/api/profile', { headers }).catch(() => null)
-    if (profile) user.value = profile
 
-    // Load folders
-    await loadFolders({ scope: 'project' })
+    // Fire all three requests in parallel
+    const [profile, , projectsData] = await Promise.all([
+      $fetch('/api/profile', { headers }).catch(() => null),
+      loadFolders({ scope: 'project' }),
+      $fetch('/api/projects', { headers })
+    ])
 
-    const projectsData = await $fetch('/api/projects', {
-      headers
-    })
+    if (profile) user.value = profile as any
     projects.value = (Array.isArray(projectsData) ? projectsData : []).map((p: any) => {
-      // reset image error state if we previously failed with a non-proxied URL
-      if (p && typeof p === 'object') p._thumbError = false
+      if (p && typeof p === 'object') {
+        // reset image error state if we previously failed with a non-proxied URL
+        p._thumbError = false
+        // Pre-parse dates once to avoid repeated new Date() calls in computed properties
+        p._lastViewedMs = p.last_viewed ? new Date(p.last_viewed).getTime() : 0
+        p._updatedAtMs = p.updated_at ? new Date(p.updated_at).getTime() : 0
+        p._createdAtMs = p.created_at ? new Date(p.created_at).getTime() : 0
+      }
       return p
     })
 	  } catch (error) {
@@ -171,7 +185,9 @@ const updateLastViewed = async (projectId: string) => {
     // Update local state
     const project = projects.value.find(p => p.id === projectId)
     if (project) {
-      project.last_viewed = new Date().toISOString()
+      const nowIso = new Date().toISOString()
+      project.last_viewed = nowIso
+      project._lastViewedMs = new Date(nowIso).getTime()
     }
   } catch (error) {
     console.error('Error updating last_viewed:', error)
@@ -197,7 +213,7 @@ const toggleStarred = async (projectId: string) => {
     project.is_starred = newStarredValue
   } catch (error) {
     console.error('Error toggling starred:', error)
-    alert('Erro ao atualizar favorito.')
+    showToast('Erro ao atualizar favorito.')
   }
 }
 
@@ -395,18 +411,18 @@ const getFolderProjectCount = (folderId: string): number => {
   return walk(startId)
 }
 
+const getFolderTreeIds = (folderId: string): string[] => {
+  const ids = [folderId]
+  const children = getChildren(folderId)
+  children.forEach(child => {
+    ids.push(...getFolderTreeIds(child.id))
+  })
+  return ids
+}
+
 // Computed: Projects in active folder (or all if no folder selected)
 const activeFolderProjects = computed(() => {
   if (!activeFolderId.value) return []
-
-  const getFolderTreeIds = (folderId: string): string[] => {
-    const ids = [folderId]
-    const children = getChildren(folderId)
-    children.forEach(child => {
-      ids.push(...getFolderTreeIds(child.id))
-    })
-    return ids
-  }
 
   const folderIds = getFolderTreeIds(activeFolderId.value)
   return safeProjects.value.filter(p => p.folder_id && folderIds.includes(p.folder_id))
@@ -432,40 +448,22 @@ const visibleFoldersOnDashboard = computed(() => {
 const activeFolderName = computed(() => safeFolders.value.find(f => f.id === activeFolderId.value)?.name || 'Pasta sem nome')
 
 const dashboardTitle = computed(() => {
-  if (searchQuery.value) {
-    return 'Resultados da busca'
-  }
-  if (activeFolderId.value) {
-    return activeFolderName.value
-  }
-  if (activeView.value === 'recent') {
-    return 'Vistos recentemente'
-  }
-  if (activeView.value === 'shared') {
-    return 'Compartilhados'
-  }
-  if (activeView.value === 'starred') {
-    return 'Favoritos'
-  }
+  if (searchQuery.value) return 'Resultados da busca'
+  if (activeFolderId.value) return activeFolderName.value
+  if (isNoFolderView.value) return 'Sem pasta'
+  if (activeView.value === 'recent') return 'Vistos recentemente'
+  if (activeView.value === 'shared') return 'Compartilhados'
+  if (activeView.value === 'starred') return 'Favoritos'
   return 'Todos os Projetos'
 })
 
 const dashboardContextHint = computed(() => {
-  if (searchQuery.value) {
-    return 'Filtrando por palavra-chave.'
-  }
-  if (activeView.value === 'all' && activeFolderId.value) {
-    return 'Mostrando só esta pasta e conteúdos aninhados.'
-  }
-  if (activeView.value === 'recent') {
-    return 'Acesse seus arquivos mais recentes.'
-  }
-  if (activeView.value === 'shared') {
-    return 'Arquivos compartilhados com você.'
-  }
-  if (activeView.value === 'starred') {
-    return 'Itens marcados como favoritos.'
-  }
+  if (searchQuery.value) return 'Filtrando por palavra-chave.'
+  if (activeView.value === 'all' && activeFolderId.value) return 'Mostrando só esta pasta e conteúdos aninhados.'
+  if (isNoFolderView.value) return 'Projetos que ainda não estão em nenhuma pasta.'
+  if (activeView.value === 'recent') return 'Últimos 10 projetos acessados.'
+  if (activeView.value === 'shared') return 'Arquivos compartilhados com você.'
+  if (activeView.value === 'starred') return 'Itens marcados como favoritos.'
   return 'Visão completa do seu workspace.'
 })
 
@@ -484,12 +482,14 @@ const viewProjects = computed(() => {
   let result: any[] = []
 
   if (activeView.value === 'recent') {
-    // Recently viewed - order by last_viewed, fallback to updated_at
-    result = [...safeProjects.value].sort((a, b) => {
-      const aTime = a.last_viewed ? new Date(a.last_viewed).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at).getTime())
-      const bTime = b.last_viewed ? new Date(b.last_viewed).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at).getTime())
-      return bTime - aTime
-    })
+    // Recently viewed — top 10 only, ordered by last_viewed → updated_at → created_at
+    result = [...safeProjects.value]
+      .sort((a, b) => {
+        const aTime = (a._lastViewedMs || a._updatedAtMs || a._createdAtMs) ?? 0
+        const bTime = (b._lastViewedMs || b._updatedAtMs || b._createdAtMs) ?? 0
+        return bTime - aTime
+      })
+      .slice(0, 10)
   } else if (activeView.value === 'shared') {
     // Shared files - projects marked as shared
     result = safeProjects.value.filter(p => p.is_shared === true)
@@ -512,15 +512,6 @@ const filteredProjects = computed(() => {
   // Start with view-based filtering
   if (activeFolderId.value && activeView.value === 'all' && String(filterFolderId.value || 'all') === 'all') {
     // Filter by folder
-    const folderIds = [activeFolderId.value]
-    const getFolderTreeIds = (folderId: string): string[] => {
-      const ids = [folderId]
-      const children = getChildren(folderId)
-      children.forEach(child => {
-        ids.push(...getFolderTreeIds(child.id))
-      })
-      return ids
-    }
     const allFolderIds = getFolderTreeIds(activeFolderId.value)
     result = viewProjects.value.filter(p => p.folder_id && allFolderIds.includes(p.folder_id))
   } else {
@@ -542,14 +533,6 @@ const filteredProjects = computed(() => {
   if (selectedFolderFilter === 'root') {
     result = result.filter((p) => !p.folder_id)
   } else if (selectedFolderFilter !== 'all') {
-    const getFolderTreeIds = (folderId: string): string[] => {
-      const ids = [folderId]
-      const children = getChildren(folderId)
-      children.forEach((child) => {
-        ids.push(...getFolderTreeIds(child.id))
-      })
-      return ids
-    }
     const scopedIds = getFolderTreeIds(selectedFolderFilter)
     result = result.filter((p) => p.folder_id && scopedIds.includes(String(p.folder_id)))
   }
@@ -562,38 +545,29 @@ const filteredProjects = computed(() => {
     result = result
   }
 
-  // Apply time filter
-  const now = new Date()
+  // Apply time filter using pre-parsed timestamps
+  const nowMs = Date.now()
   if (filterTime.value === 'today') {
-    const todayStart = new Date(now.setHours(0, 0, 0, 0))
-    result = result.filter(p => {
-      const viewTime = p.last_viewed ? new Date(p.last_viewed) : (p.updated_at ? new Date(p.updated_at) : new Date(p.created_at))
-      return viewTime >= todayStart
-    })
+    const todayStartMs = new Date().setHours(0, 0, 0, 0)
+    result = result.filter(p => (p._lastViewedMs || p._updatedAtMs || p._createdAtMs) >= todayStartMs)
   } else if (filterTime.value === 'week') {
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    result = result.filter(p => {
-      const viewTime = p.last_viewed ? new Date(p.last_viewed) : (p.updated_at ? new Date(p.updated_at) : new Date(p.created_at))
-      return viewTime >= weekAgo
-    })
+    const weekAgoMs = nowMs - 7 * 24 * 60 * 60 * 1000
+    result = result.filter(p => (p._lastViewedMs || p._updatedAtMs || p._createdAtMs) >= weekAgoMs)
   } else if (filterTime.value === 'month') {
-    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-    result = result.filter(p => {
-      const viewTime = p.last_viewed ? new Date(p.last_viewed) : (p.updated_at ? new Date(p.updated_at) : new Date(p.created_at))
-      return viewTime >= monthAgo
-    })
+    const monthAgoMs = nowMs - 30 * 24 * 60 * 60 * 1000
+    result = result.filter(p => (p._lastViewedMs || p._updatedAtMs || p._createdAtMs) >= monthAgoMs)
   }
 
-  // Sort
+  // Sort using pre-parsed timestamps
   result = [...result].sort((a, b) => {
     if (sortBy.value === 'recent') {
-      const aTime = a.last_viewed ? new Date(a.last_viewed).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at).getTime())
-      const bTime = b.last_viewed ? new Date(b.last_viewed).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at).getTime())
+      const aTime = (a._lastViewedMs || a._updatedAtMs || a._createdAtMs) ?? 0
+      const bTime = (b._lastViewedMs || b._updatedAtMs || b._createdAtMs) ?? 0
       return bTime - aTime
     } else if (sortBy.value === 'name') {
       return (a.name || '').localeCompare(b.name || '')
     } else if (sortBy.value === 'date') {
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      return (b._createdAtMs ?? 0) - (a._createdAtMs ?? 0)
     }
     return 0
   })
@@ -835,6 +809,39 @@ const openFolderFromSidebar = (folderId: string | null) => {
   filterFolderId.value = normalized
 }
 
+// "Sem pasta" quick filter
+const isNoFolderView = computed(() =>
+  filterFolderId.value === 'root' && activeView.value === 'all' && !activeFolderId.value
+)
+
+const goToNoFolder = () => {
+  activeView.value = 'all'
+  setActiveFolder(null)
+  filterFolderId.value = 'root'
+}
+
+// Active filter chips
+const activeFilterChips = computed(() => {
+  const chips: { key: string; label: string; clear: () => void }[] = []
+  if (filterOrganization.value !== 'all') {
+    const opt = [{ value: 'personal', label: 'Pessoal' }, { value: 'team', label: 'Equipe' }].find(o => o.value === filterOrganization.value)
+    chips.push({ key: 'org', label: opt?.label ?? filterOrganization.value, clear: () => { filterOrganization.value = 'all' } })
+  }
+  if (filterType.value !== 'all') {
+    const opt = typeFilterOptions.find(o => o.value === filterType.value)
+    chips.push({ key: 'type', label: opt?.label ?? filterType.value, clear: () => { filterType.value = 'all' } })
+  }
+  if (filterTime.value !== 'all') {
+    const opt = timeFilterOptions.find(o => o.value === filterTime.value)
+    chips.push({ key: 'time', label: opt?.label ?? filterTime.value, clear: () => { filterTime.value = 'all' } })
+  }
+  if (filterFolderId.value !== 'all') {
+    const opt = folderFilterDropdownOptions.value.find(o => o.value === filterFolderId.value)
+    chips.push({ key: 'folder', label: opt?.label ?? 'Pasta', clear: () => { filterFolderId.value = 'all'; setActiveFolder(null) } })
+  }
+  return chips
+})
+
 const currentMoveProject = computed(() => {
   const id = normalizeFolderId(projectToMoveId.value)
   if (!id) return null
@@ -874,7 +881,7 @@ const isValidFolderName = computed(() => {
 // Create project
 const createProject = async () => {
   if (!isValidProjectName.value) {
-    alert('Nome do projeto inválido. Use entre 1 e 120 caracteres.')
+    showToast('Nome do projeto inválido. Use entre 1 e 120 caracteres.')
     return
   }
 
@@ -939,7 +946,7 @@ const createProject = async () => {
     }
   } catch (error: any) {
     console.error('Error creating project:', error)
-    alert('Erro ao criar projeto. Tente novamente.')
+    showToast('Erro ao criar projeto. Tente novamente.')
   } finally {
     isLoading.value = false
   }
@@ -963,7 +970,7 @@ const deleteProject = async (projectId: string) => {
         showProjectMenu.value = null
       } catch (error) {
         console.error('Error deleting project:', error)
-        alert('Erro ao excluir projeto.')
+        showToast('Erro ao excluir projeto.')
       }
     }
   }
@@ -975,7 +982,7 @@ const duplicateProject = async (projectId: string) => {
   try {
     const userId = auth.user.value?.id
     if (!userId) {
-      alert('Usuário não autenticado.')
+      showToast('Usuário não autenticado.')
       return
     }
 
@@ -1022,7 +1029,7 @@ const duplicateProject = async (projectId: string) => {
       message: error?.message ?? null,
       data: error?.data ?? null
     })
-    alert('Erro ao duplicar projeto.')
+    showToast('Erro ao duplicar projeto.')
   }
 }
 
@@ -1042,7 +1049,7 @@ const moveProjectToFolder = async (projectId: string, folderId: string | null) =
     }
   } catch (error) {
     console.error('Error moving project:', error)
-    alert('Erro ao mover projeto.')
+    showToast('Erro ao mover projeto.')
   }
 }
 
@@ -1106,7 +1113,7 @@ const saveProjectName = async (projectId: string) => {
     editingProjectName.value = ''
   } catch (error) {
     console.error('Error renaming project:', error)
-    alert('Erro ao renomear projeto.')
+    showToast('Erro ao renomear projeto.')
   }
 }
 
@@ -1139,11 +1146,15 @@ const handleProjectCardClick = (projectId: string, event: MouseEvent) => {
 }
 
 // Handle confirm dialog
-const handleConfirm = () => {
-  if (confirmDialogData.value.action) {
-    confirmDialogData.value.action()
-  }
+const handleConfirm = async () => {
   showConfirmDialog.value = false
+  if (confirmDialogData.value.action) {
+    try {
+      await confirmDialogData.value.action()
+    } catch (error) {
+      console.error('Erro ao executar ação confirmada:', error)
+    }
+  }
 }
 
 const handleCancelConfirm = () => {
@@ -1151,9 +1162,9 @@ const handleCancelConfirm = () => {
 }
 
 // Open project
-const openProject = async (projectId: string) => {
-  // Update last_viewed before navigating
-  await updateLastViewed(projectId)
+const openProject = (projectId: string) => {
+  // Fire-and-forget: don't block navigation waiting for the PATCH
+  updateLastViewed(projectId)
   navigateTo(`/editor/${projectId}`)
 }
 
@@ -1166,7 +1177,7 @@ const handleCreateFolder = async () => {
     newFolderName.value = ''
     showCreateFolder.value = false
   } catch (error) {
-    alert('Erro ao criar pasta.')
+    showToast('Erro ao criar pasta.')
   }
 }
 
@@ -1186,7 +1197,7 @@ const saveFolderName = async () => {
     editingFolderId.value = null
     editingFolderName.value = ''
   } catch (error) {
-    alert('Erro ao renomear pasta.')
+    showToast('Erro ao renomear pasta.')
   }
 }
 
@@ -1221,7 +1232,7 @@ const handleDeleteFolder = async (folderId: string) => {
           activeFolderId.value = null
         }
       } catch (error) {
-        alert('Erro ao excluir pasta.')
+        showToast('Erro ao excluir pasta.')
       }
     }
   }
@@ -1568,7 +1579,24 @@ const handleDropOnRoot = async (event: DragEvent) => {
             >
               <FolderOpen class="w-4 h-4 opacity-70" />
               <span class="text-xs font-medium truncate flex-1">Todos os Projetos</span>
-              <span class="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">{{ rootProjects.length }}</span>
+              <span class="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">{{ safeProjects.length }}</span>
+            </div>
+
+            <!-- Sem pasta quick filter -->
+            <div
+              :class="[
+                'flex items-center gap-2 h-8 px-3 ml-2 rounded-lg cursor-pointer transition-all border border-transparent text-[11px] font-medium',
+                isNoFolderView ? 'bg-amber-500/15 text-amber-300 border-amber-500/20' : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/5'
+              ]"
+              @click="goToNoFolder"
+              title="Projetos sem pasta"
+            >
+              <svg class="w-3.5 h-3.5 shrink-0 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                <line x1="9" y1="12" x2="15" y2="12" />
+              </svg>
+              <span class="truncate flex-1">Sem pasta</span>
+              <span v-if="rootProjects.length > 0" class="text-[10px] px-1.5 py-0.5 rounded bg-white/5">{{ rootProjects.length }}</span>
             </div>
           </div>
 
@@ -1725,6 +1753,29 @@ const handleDropOnRoot = async (event: DragEvent) => {
             </button>
 
           </div>
+        </div>
+
+        <!-- Active Filter Chips -->
+        <div v-if="activeFilterChips.length > 0" class="px-6 pb-3 flex items-center gap-2 flex-wrap">
+          <span class="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">Filtros:</span>
+          <button
+            v-for="chip in activeFilterChips"
+            :key="chip.key"
+            @click="chip.clear()"
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-violet-500/15 text-violet-300 border border-violet-500/25 hover:bg-violet-500/25 hover:text-white transition-all"
+          >
+            {{ chip.label }}
+            <svg class="w-3 h-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <button
+            v-if="activeFilterChips.length > 1"
+            @click="filterOrganization = 'all'; filterType = 'all'; filterTime = 'all'; filterFolderId = 'all'; setActiveFolder(null)"
+            class="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2"
+          >
+            Limpar tudo
+          </button>
         </div>
 
         <!-- Projects Grid/List -->
@@ -2262,6 +2313,26 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
     </div> <!-- End of Floating Glassmorphism Window -->
   </div>
+
+  <!-- Toast Notifications -->
+  <teleport to="body">
+    <div class="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none">
+      <TransitionGroup name="toast">
+        <div
+          v-for="toast in toasts"
+          :key="toast.id"
+          :class="[
+            'px-4 py-3 rounded-xl text-sm font-medium shadow-2xl border pointer-events-auto max-w-xs',
+            toast.type === 'error' ? 'bg-red-950/90 border-red-500/30 text-red-200' :
+            toast.type === 'success' ? 'bg-green-950/90 border-green-500/30 text-green-200' :
+            'bg-[#1c1c24]/90 border-white/10 text-white/80'
+          ]"
+        >
+          {{ toast.message }}
+        </div>
+      </TransitionGroup>
+    </div>
+  </teleport>
 </template>
 
 <style scoped>
@@ -2317,5 +2388,18 @@ input:focus-visible,
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(12px) scale(0.95);
+}
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.95);
 }
 </style>

@@ -3,6 +3,29 @@ import type { UserRole } from '~/types/auth'
 import { getProfileById } from './auth-db'
 import { verifySessionToken } from './session-token'
 
+const _profileCache = new Map<string, { id: string; email: string; role: string; name: string | null; avatar_url: string | null; expiresAt: number }>()
+const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
+
+const getCachedProfile = async (id: string) => {
+  const now = Date.now()
+  const cached = _profileCache.get(id)
+  if (cached && cached.expiresAt > now) return cached
+  _profileCache.delete(id)
+  const profile = await getProfileById(id)
+  if (profile?.id) {
+    _profileCache.set(profile.id, {
+      id: profile.id,
+      email: String(profile.email),
+      role: String(profile.role || 'user'),
+      name: profile.name ?? null,
+      avatar_url: profile.avatar_url ?? null,
+      expiresAt: now + PROFILE_CACHE_TTL_MS
+    })
+    return _profileCache.get(profile.id)!
+  }
+  return null
+}
+
 export interface AuthenticatedUser {
   id: string
   email: string
@@ -55,7 +78,7 @@ export const requireAuthenticatedUser = async (event: H3Event): Promise<Authenti
     })
   }
 
-  const profile = await getProfileById(payload.sub)
+  const profile = await getCachedProfile(payload.sub)
   if (!profile?.id || !profile?.email) {
     throw createError({
       statusCode: 401,

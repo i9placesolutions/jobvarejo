@@ -20,7 +20,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   const auth = useAuth()
-  await auth.getSession()
+
+  // Skip the round-trip if we already have a valid authenticated session in memory
+  if (!auth.isAuthenticated.value || !auth.user.value) {
+    await auth.getSession()
+  }
+
   if (!auth.isAuthenticated.value) {
     return navigateTo('/auth/login')
   }
