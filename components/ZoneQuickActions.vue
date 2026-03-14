@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { LayoutGrid, Plus, RefreshCcw, Copy, Wand2 } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
+import { LayoutGrid, Plus, RefreshCcw, Copy, Wand2, Ellipsis } from 'lucide-vue-next';
 
 const props = defineProps<{
   visible: boolean;
@@ -24,18 +24,21 @@ const emit = defineEmits<{
   (e: 'duplicate'): void;
 }>();
 
-const zoneCenterX = computed(() => props.left + (props.width / 2));
+const expanded = ref(false);
 
-const toolbarStyle = computed(() => {
-  const anchoredTop = props.top - 78;
-  const fallbackTop = props.top + 10;
+// Anchor compact badge to top-right corner of zone (inside bounds, 8px inset)
+const badgeStyle = computed(() => ({
+  top: `${props.top + 8}px`,
+  left: `${props.left + props.width - 8}px`,
+  transform: 'translateX(-100%)',
+}));
 
-  return {
-    top: `${anchoredTop >= 12 ? anchoredTop : fallbackTop}px`,
-    left: `${Math.max(16, zoneCenterX.value)}px`,
-    transform: 'translateX(-50%)'
-  };
-});
+// Show horizontal action row just below the badge when expanded
+const actionsStyle = computed(() => ({
+  top: `${props.top + 44}px`,
+  left: `${props.left + props.width - 8}px`,
+  transform: 'translateX(-100%)',
+}));
 
 const isCompactZone = computed(() => props.width < 300 || props.height < 180);
 
@@ -45,60 +48,91 @@ const emptyStateStyle = computed(() => {
   const targetHeight = isCompactZone.value ? availableHeight * 0.34 : availableHeight * 0.28;
   const placeholderHeight = Math.max(72, Math.min(targetHeight, isCompactZone.value ? 96 : 132));
   const topInset = Math.max(14, (props.height - placeholderHeight) / 2);
-
   return {
     left: `${props.left + inset}px`,
     top: `${props.top + topInset}px`,
-    width: `${Math.max(props.width - (inset * 2), 120)}px`
+    width: `${Math.max(props.width - inset * 2, 120)}px`,
   };
 });
 </script>
 
 <template>
   <div v-if="visible" class="pointer-events-none absolute inset-0 z-[115]">
-    <div
-      class="pointer-events-auto absolute flex max-w-[min(92vw,960px)] flex-wrap items-center justify-center gap-2 rounded-[24px] border border-white/12 bg-[linear-gradient(135deg,rgba(10,10,10,0.94),rgba(22,22,22,0.9))] px-3 py-2 shadow-[0_20px_50px_rgba(0,0,0,0.34)] backdrop-blur-xl"
-      :style="toolbarStyle"
-    >
-      <div class="flex min-w-0 items-center gap-2 rounded-2xl border border-white/8 bg-white/[0.035] px-2.5 py-2">
-        <div class="flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-500/12 text-emerald-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-          <LayoutGrid class="h-4 w-4" />
+
+    <!-- Compact corner badge (always shown, top-right of zone) -->
+    <div class="pointer-events-auto absolute" :style="badgeStyle">
+      <div class="flex items-center gap-1 rounded-[13px] border border-white/12 bg-[rgba(10,10,10,0.88)] px-2 py-1.5 shadow-[0_6px_20px_rgba(0,0,0,0.36)] backdrop-blur-xl">
+        <!-- Zone icon -->
+        <div class="flex h-6 w-6 items-center justify-center rounded-lg border border-emerald-400/20 bg-emerald-500/12 text-emerald-300">
+          <LayoutGrid class="h-3 w-3" />
         </div>
-        <div class="min-w-0">
-          <div class="truncate text-[11px] font-semibold text-white">{{ name }}</div>
-          <div class="flex items-center gap-1.5 text-[10px] text-zinc-400">
-            <span>{{ roleLabel }}</span>
-            <span>•</span>
-            <span>{{ statusLabel }}</span>
-            <span>•</span>
-            <span>{{ productCount }} itens</span>
-            <span v-if="frameLabel">•</span>
-            <span v-if="frameLabel" class="max-w-[130px] truncate">{{ frameLabel }}</span>
+        <!-- Primary action (Preencher / Substituir) -->
+        <button
+          type="button"
+          class="rounded-[10px] bg-[linear-gradient(135deg,rgba(16,185,129,0.24),rgba(5,150,105,0.18))] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.04em] text-emerald-100 transition-colors hover:bg-[linear-gradient(135deg,rgba(16,185,129,0.36),rgba(5,150,105,0.28))] border border-emerald-400/25 hover:border-emerald-300/40"
+          @click.stop="emit('fill')"
+        >
+          {{ isEmpty ? 'Preencher' : 'Substituir' }}
+        </button>
+        <!-- Expand toggle -->
+        <button
+          type="button"
+          class="flex h-6 w-6 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/8 hover:text-zinc-200"
+          :class="expanded ? 'bg-white/8 text-zinc-200' : ''"
+          @click.stop="expanded = !expanded"
+        >
+          <Ellipsis class="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Expanded secondary actions (shown below badge) -->
+    <Transition name="zone-actions">
+      <div v-if="expanded" class="pointer-events-auto absolute" :style="actionsStyle">
+        <div class="flex flex-col gap-1 rounded-[14px] border border-white/10 bg-[rgba(10,10,10,0.92)] p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.38)] backdrop-blur-xl">
+          <!-- Zone info -->
+          <div class="flex items-center gap-2 border-b border-white/8 px-2 pb-1.5 pt-0.5">
+            <span class="text-[11px] font-semibold text-white/90">{{ name }}</span>
+            <span class="text-[10px] text-zinc-500">{{ roleLabel }} · {{ statusLabel }} · {{ productCount }} itens</span>
+          </div>
+          <!-- Secondary actions row -->
+          <div class="flex items-center gap-1 pt-0.5">
+            <button
+              v-if="!isEmpty"
+              type="button"
+              class="zone-pill"
+              @click.stop="emit('append')"
+            >
+              <Plus class="h-3 w-3" /> Adicionar
+            </button>
+            <button
+              v-if="!isEmpty"
+              type="button"
+              class="zone-pill"
+              @click.stop="emit('replace')"
+            >
+              <RefreshCcw class="h-3 w-3" /> Substituir
+            </button>
+            <button
+              type="button"
+              class="zone-pill"
+              @click.stop="emit('preset')"
+            >
+              <Wand2 class="h-3 w-3" /> Preset
+            </button>
+            <button
+              type="button"
+              class="zone-pill"
+              @click.stop="emit('duplicate')"
+            >
+              <Copy class="h-3 w-3" /> Duplicar
+            </button>
           </div>
         </div>
       </div>
+    </Transition>
 
-      <button type="button" class="zone-action-button zone-action-button--primary" @click="emit('fill')">
-        Preencher
-      </button>
-      <button v-if="!isEmpty" type="button" class="zone-action-button" @click="emit('append')">
-        <Plus class="h-3.5 w-3.5" />
-        Adicionar
-      </button>
-      <button v-if="!isEmpty" type="button" class="zone-action-button" @click="emit('replace')">
-        <RefreshCcw class="h-3.5 w-3.5" />
-        Substituir
-      </button>
-      <button type="button" class="zone-action-button" @click="emit('preset')">
-        <Wand2 class="h-3.5 w-3.5" />
-        Preset
-      </button>
-      <button type="button" class="zone-action-button" @click="emit('duplicate')">
-        <Copy class="h-3.5 w-3.5" />
-        Duplicar
-      </button>
-    </div>
-
+    <!-- Empty zone CTA (inside zone area) -->
     <button
       v-if="isEmpty"
       type="button"
@@ -118,38 +152,37 @@ const emptyStateStyle = computed(() => {
 </template>
 
 <style scoped>
-.zone-action-button {
+.zone-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  height: 2.15rem;
+  gap: 0.3rem;
+  height: 1.875rem;
+  padding: 0 0.7rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.035);
-  padding: 0 0.9rem;
-  color: rgba(244, 244, 245, 0.88);
-  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(228, 228, 231, 0.9);
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+  white-space: nowrap;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
 }
-
-.zone-action-button:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.14);
+.zone-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
   color: #ffffff;
-  transform: translateY(-1px);
 }
 
-.zone-action-button--primary {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(5, 150, 105, 0.16));
-  border-color: rgba(52, 211, 153, 0.3);
-  color: #ecfdf5;
+/* Expand animation */
+.zone-actions-enter-active,
+.zone-actions-leave-active {
+  transition: opacity 150ms ease, transform 150ms ease;
 }
-
-.zone-action-button--primary:hover {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.32), rgba(5, 150, 105, 0.22));
-  border-color: rgba(52, 211, 153, 0.4);
+.zone-actions-enter-from,
+.zone-actions-leave-to {
+  opacity: 0;
+  transform: translateX(-100%) translateY(-6px);
 }
 </style>

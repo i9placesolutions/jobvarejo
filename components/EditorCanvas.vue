@@ -4673,6 +4673,7 @@ const {
   scheduleCanvasDataPrefetch,
   isSaving,
   saveStatus,
+  saveLastError,
   lastSavedAt,
   isProjectLoaded,
   hasUnsavedChanges,
@@ -4682,7 +4683,10 @@ const {
 // Notifica o usuário quando o save remoto falha ou o localStorage está cheio
 watch(saveStatus, (status, prev) => {
     if (status === 'error' && prev !== 'error') {
-        pushAiToast('error', 'Falha ao salvar o projeto. Seu rascunho local foi mantido.')
+        const msg = saveLastError.value
+            ? `Falha ao salvar: ${saveLastError.value}`
+            : 'Falha ao salvar o projeto. Verifique sua conexão.'
+        pushAiToast('error', msg)
     }
 })
 watch(localDraftQuotaWarning, (warn) => {
@@ -22099,20 +22103,19 @@ const saveProject = async () => {
     if (hasActiveTextEditingForPersist()) {
         finalizeActiveTextEditingForPersist();
     }
-    const didPersistCurrentState = await Promise.resolve(saveCurrentState({
+    // Tenta consolidar o estado atual do canvas no histórico local.
+    // Mesmo que falhe (ex.: canvas vazio durante carregamento), o save remoto
+    // NÃO deve ser bloqueado — salvar no servidor é sempre o objetivo principal.
+    await Promise.resolve(saveCurrentState({
         reason: 'manual-project-save',
         source: 'user',
         skipCoalesce: true,
         skipIfUnchanged: false
-    }));
-    if (didPersistCurrentState === false) {
-        console.warn('[saveProject] Salvamento remoto abortado: nao foi possivel consolidar o estado atual do canvas.');
-        return;
-    }
-    
-    // Persist to DB
-    await saveProjectDB();
-    
+    })).catch(() => {/* ignore - o save remoto prossegue de qualquer forma */})
+
+    // Persist to DB + Wasabi (nunca abortar por falha do estado local)
+    await saveProjectDB({ forceEmptyOverwrite: false });
+
     showSaveModal.value = false;
     console.log('Project saved to database');
 }

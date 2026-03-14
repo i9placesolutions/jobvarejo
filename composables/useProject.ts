@@ -38,6 +38,7 @@ const project = reactive<Project>({
 
 const isSaving = ref(false)
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+const saveLastError = ref<string | null>(null) // Mensagem da última falha de save
 const localDraftQuotaWarning = ref(false) // true quando localStorage está cheio
 const lastSavedAt = ref<Date | null>(null)
 const hasUnsavedChanges = ref(false)
@@ -1016,6 +1017,9 @@ export const useProject = () => {
             }
 	            if (abortIfStaleSaveContext()) return
 	                const isUnsafeEmptyOverwrite = (page: Page): boolean => {
+                    // Se canvasData é null/undefined, a página ainda não foi carregada do Wasabi.
+                    // NÃO bloquear: apenas pular o upload desta página e manter o path existente.
+                    if (page?.canvasData == null) return false
                     const currentCount = getCanvasObjectCount(page?.canvasData)
                     const persistedCount = Number(page?.lastPersistedObjectCount || 0)
                     // Só bloqueia vazio quando NÃO há edição pendente na página.
@@ -1026,14 +1030,15 @@ export const useProject = () => {
 	                return isUnsafeEmptyOverwrite(page as Page)
 	            })
 	            if (unsafeEmptyPages.length > 0 && !opts.forceEmptyOverwrite) {
-	                saveStatus.value = 'error'
-	                console.error('🛑 Bloqueando save remoto para evitar overwrite vazio em páginas persistidas:', unsafeEmptyPages.map((p) => ({
+                    // Não bloquear o save inteiro — apenas logar aviso. As páginas problemáticas
+                    // serão ignoradas no upload individual (veja guarda abaixo), enquanto páginas
+                    // válidas (ativas e com dados) são salvas normalmente.
+	                console.warn('⚠️ Páginas com canvas aparentemente vazio serão ignoradas no upload (dados existentes mantidos):', unsafeEmptyPages.map((p) => ({
 	                    pageId: p.id,
 	                    persistedCount: p.lastPersistedObjectCount || 0,
 	                    currentCount: getCanvasObjectCount(p.canvasData),
                         dirty: !!p.dirty
 	                })))
-	                return
 	            }
 
             // 1. Salvar cada página no Storage
@@ -1243,12 +1248,24 @@ export const useProject = () => {
 		                if (saveAbortedByContextSwitch) {
 		                    saveStatus.value = 'idle'
 		                } else {
-		                    console.error('Save Failed:', {
-		                        statusCode: (e as any)?.statusCode ?? (e as any)?.response?.status ?? null,
-		                        statusMessage: (e as any)?.statusMessage ?? (e as any)?.data?.statusMessage ?? null,
-		                        message: (e as any)?.message ?? null,
-		                        data: (e as any)?.data ?? null
-		                    })
+		                    const statusCode = (e as any)?.statusCode ?? (e as any)?.response?.status ?? 0
+		                    const statusMessage = (e as any)?.statusMessage ?? (e as any)?.data?.statusMessage ?? null
+		                    const rawMessage = (e as any)?.message ?? null
+		                    console.error('Save Failed:', { statusCode, statusMessage, message: rawMessage, data: (e as any)?.data ?? null })
+		                    // Monta mensagem amigável para exibir no toast
+		                    if (Number(statusCode) === 401) {
+		                        saveLastError.value = 'Sessão expirada. Faça login novamente.'
+		                    } else if (Number(statusCode) === 429) {
+		                        saveLastError.value = 'Muitas tentativas de salvar. Aguarde alguns segundos.'
+		                    } else if (Number(statusCode) === 413) {
+		                        saveLastError.value = 'Projeto muito grande para salvar. Tente reduzir o número de páginas.'
+		                    } else if (statusMessage) {
+		                        saveLastError.value = String(statusMessage).substring(0, 120)
+		                    } else if (rawMessage) {
+		                        saveLastError.value = String(rawMessage).substring(0, 120)
+		                    } else {
+		                        saveLastError.value = 'Falha ao salvar. Verifique sua conexão.'
+		                    }
 		                    saveStatus.value = 'error'
 		                }
 		            } finally {
@@ -1586,6 +1603,7 @@ export const useProject = () => {
         deleteProjectDB,
         isSaving,
 	        saveStatus,
+	        saveLastError,
 	        lastSavedAt,
 	        hasUnsavedChanges,
 	        isProjectLoaded,
