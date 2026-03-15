@@ -13,6 +13,8 @@ export interface Page {
     thumbnail?: string; // DataURL da miniatura (em memória)
     thumbnailUrl?: string; // URL pública no Storage
     thumbnailDirty?: boolean;
+    lastSerializedCanvasJson?: string;
+    lastSerializedCanvasBytes?: number;
     lastLoadedFingerprint?: string;
     lastSavedFingerprint?: string;
     lastPersistedObjectCount?: number;
@@ -48,6 +50,8 @@ const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi car
 const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
 const SAVE_WATCHDOG_MS = 45_000
+const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 12_000
+const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 8_000
 let lastSaveChangedDuringRunLogAt = 0
 
 const createRealtimeClientId = (): string => {
@@ -145,7 +149,25 @@ const getCanvasObjectCount = (canvasData: any): number => {
     return Number.isFinite(n) ? n : 0
 }
 
-const MAX_PROJECT_DB_PAYLOAD_BYTES = 900_000
+const withSoftTimeout = async <T>(
+    work: Promise<T>,
+    timeoutMs: number,
+    label: string
+): Promise<T | null> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    try {
+        const timeoutPromise = new Promise<null>((resolve) => {
+            timeoutId = setTimeout(() => {
+                console.warn(`[saveProjectDB] Timeout suave em ${label} após ${Math.round(timeoutMs / 1000)}s; continuando com fallback.`)
+                resolve(null)
+            }, timeoutMs)
+        })
+        return await Promise.race([work, timeoutPromise])
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId)
+    }
+}
+
 const MAX_PAGE_DB_CANVAS_BACKUP_BYTES = 240_000
 
 const estimateJsonBytes = (value: unknown): number => {
@@ -1095,7 +1117,8 @@ export const useProject = () => {
             // 1. Salvar cada página no Storage
             const storagePaths: string[] = []
             const thumbnailUrls: string[] = []
-            const failedStorageSyncPageIds = new Set<string>()
+            const failedCanvasSyncPageIds = new Set<string>()
+            const failedThumbnailSyncPageIds = new Set<string>()
 
 	            for (const [i, page] of project.pages.entries()) {
 	                if (abortIfStaleSaveContext()) return
@@ -1112,7 +1135,19 @@ export const useProject = () => {
 	                            continue
 	                        }
                         // Tentar salvar na Wasabi (com retry interno)
-	                        const path = await saveCanvasData(project.id, page.id, page.canvasData, 2)
+	                        const path = await withSoftTimeout(
+                                saveCanvasData(
+                                    project.id,
+                                    page.id,
+                                    page.canvasData,
+                                    1,
+                                    typeof page?.lastSerializedCanvasJson === 'string'
+                                        ? page.lastSerializedCanvasJson
+                                        : null
+                                ),
+                                CANVAS_UPLOAD_SOFT_TIMEOUT_MS,
+                                `upload-canvas:${page.id}`
+                            )
 	                        if (abortIfStaleSaveContext()) return
 	                        if (path) {
                             storagePaths[i] = path
@@ -1121,13 +1156,13 @@ export const useProject = () => {
                             console.log('✅ Canvas salvo na Wasabi:', path)
                         } else {
                             // Se falhou após todas as tentativas, o draft local já está salvo
-                            failedStorageSyncPageIds.add(page.id)
+                            failedCanvasSyncPageIds.add(page.id)
                             console.warn(`⚠️ Falha ao salvar canvas na Wasabi após múltiplas tentativas (página ${page.id})`)
                             console.warn('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
                             // Não lançar erro aqui - continuar salvando outras páginas
                         }
                     } catch (err: any) {
-                        failedStorageSyncPageIds.add(page.id)
+                        failedCanvasSyncPageIds.add(page.id)
                         console.error('❌ Erro crítico ao salvar canvas na Wasabi:', err)
                         console.error('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
                         // Não lançar erro - continuar com outras páginas
@@ -1141,14 +1176,18 @@ export const useProject = () => {
 		                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.dirty || !!page?.thumbnailDirty || !page?.thumbnailUrl)
 		                if (shouldUploadThumbnail && page?.thumbnail) {
                             setSaveStage(`upload-thumbnail:${page.id}`)
-		                    const url = await saveThumbnail(project.id, page.id, page.thumbnail)
+		                    const url = await withSoftTimeout(
+                                saveThumbnail(project.id, page.id, page.thumbnail),
+                                THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS,
+                                `upload-thumbnail:${page.id}`
+                            )
 		                    if (abortIfStaleSaveContext()) return
 		                    if (url) {
                         thumbnailUrls[i] = url
                         page.thumbnailUrl = url
                         page.thumbnailDirty = false
                     } else {
-                        failedStorageSyncPageIds.add(page.id)
+                        failedThumbnailSyncPageIds.add(page.id)
                         console.warn(`⚠️ Falha ao salvar thumbnail na Wasabi (página ${page.id})`)
                     }
                 }
@@ -1159,6 +1198,7 @@ export const useProject = () => {
 
             // 2. Preparar payload mínimo para o banco (apenas metadados)
                 setSaveStage('prepare-db-payload')
+                const dbBackedUpCanvasPageIds = new Set<string>()
 	            const pageMetadata = project.pages.map((page, index) => {
                 const metadata: any = {
                     id: page.id,
@@ -1178,11 +1218,14 @@ export const useProject = () => {
 		                    if (shouldBlockEmptyBackup) {
 		                        console.warn(`🛡️ Bloqueando backup vazio no DB para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
 		                    } else {
-                        const backupBytes = estimateJsonBytes(page.canvasData)
+                        const backupBytes = Number.isFinite(Number(page?.lastSerializedCanvasBytes))
+                            ? Number(page.lastSerializedCanvasBytes)
+                            : estimateJsonBytes(page.canvasData)
                         if (backupBytes > MAX_PAGE_DB_CANVAS_BACKUP_BYTES) {
                             console.warn(`[saveProjectDB] Backup canvasData omitido no DB para página ${page.id}: ${backupBytes} bytes`)
                         } else {
                             metadata.canvasData = page.canvasData
+                            dbBackedUpCanvasPageIds.add(page.id)
                             console.log(`💾 Incluindo canvasData no banco para página ${page.id} (${currentCount} objetos)`)
                         }
                     }
@@ -1202,16 +1245,6 @@ export const useProject = () => {
                     console.warn('[saveProjectDB] Save pulado: payload sem páginas válidas.')
                     return
                 }
-                const payloadBytes = estimateJsonBytes(payload)
-                if (payloadBytes > MAX_PROJECT_DB_PAYLOAD_BYTES) {
-                    const payloadWithoutBackup = {
-                        ...payload,
-                        canvas_data: stripCanvasBackupsFromPageMetadata(pageMetadata)
-                    }
-                    const reducedBytes = estimateJsonBytes(payloadWithoutBackup)
-                    console.warn(`[saveProjectDB] Payload /api/projects muito grande (${payloadBytes} bytes); removendo backup canvasData (${reducedBytes} bytes).`)
-                    payload = payloadWithoutBackup
-	                }
 		            if (abortIfStaleSaveContext()) return
 
                     setSaveStage('prepare-request')
@@ -1283,14 +1316,13 @@ export const useProject = () => {
 		            changedDuringSave = unsavedRevision.value !== saveRevisionAtStart
 		            lastSavedAt.value = new Date()
 	            if (!changedDuringSave) {
-                    const pagesWithNewLocalChangesDuringSave = new Set(
-                        project.pages
-                            .filter((page) => !!page?.thumbnailDirty && !failedStorageSyncPageIds.has(page.id))
-                            .map((page) => page.id)
+                    const pagesWithNewLocalChangesDuringSave = new Set<string>()
+                    saveNeedsFollowUpForLocalChanges = false
+                    const failedCanvasWithoutDbBackupPageIds = new Set(
+                        [...failedCanvasSyncPageIds].filter((pageId) => !dbBackedUpCanvasPageIds.has(pageId))
                     )
-                    saveNeedsFollowUpForLocalChanges = pagesWithNewLocalChangesDuringSave.size > 0
                     const unsyncedPageIds = new Set([
-                        ...failedStorageSyncPageIds,
+                        ...failedCanvasWithoutDbBackupPageIds,
                         ...pagesWithNewLocalChangesDuringSave
                     ])
 	                const allPagesFullySynced = unsyncedPageIds.size === 0
@@ -1298,6 +1330,9 @@ export const useProject = () => {
 	                project.pages.forEach((page) => {
 	                    if (!unsyncedPageIds.has(page.id)) {
 	                        page.dirty = false
+                            if (!failedThumbnailSyncPageIds.has(page.id)) {
+                                page.thumbnailDirty = false
+                            }
 	                        page.lastPersistedObjectCount = getCanvasObjectCount(page.canvasData)
 	                        if (page.canvasData) {
 	                            page.lastSavedFingerprint = computeCanvasFingerprint(page.canvasData)
@@ -1314,6 +1349,9 @@ export const useProject = () => {
 	                    hasUnsavedChanges.value = false
 	                    saveStatus.value = 'saved'
 	                    clearProjectDraft(project.id)
+                        if (failedThumbnailSyncPageIds.size > 0) {
+                            console.warn(`[saveProjectDB] ${failedThumbnailSyncPageIds.size} thumbnail(s) não foram enviadas para a Wasabi; conteúdo do projeto foi salvo no banco.`)
+                        }
 	                } else {
 	                    hasUnsavedChanges.value = true
 	                    saveStatus.value = 'idle'

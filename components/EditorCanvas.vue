@@ -11615,9 +11615,14 @@ const removeImageObjectsDeep = (node: any): any => {
         }
 
         const reason = String(opts.reason || '')
+        const serializedBytes = typeof TextEncoder !== 'undefined'
+            ? new TextEncoder().encode(jsonStr).length
+            : jsonStr.length
         const persistence = persistSerializedPageState({
             targetPageId,
             json,
+            serializedJson: jsonStr,
+            serializedBytes,
             source,
             reason,
             currentFingerprint,

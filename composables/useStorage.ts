@@ -269,7 +269,8 @@ export const useStorage = () => {
     projectId: string,
     pageId: string,
     canvasJson: any,
-    retries = 3
+    retries = 3,
+    preSerializedJson?: string | null
   ): Promise<string | null> => {
     // Não executar no servidor (SSR)
     if (import.meta.server) {
@@ -296,7 +297,9 @@ export const useStorage = () => {
     const key = `projects/${userId}/${projectId}/page_${pageId}.json`
 
     // Comprimir JSON com gzip antes de fazer upload (reduz ~80% do tamanho)
-    const jsonString = JSON.stringify(canvasJson)
+    const jsonString = typeof preSerializedJson === 'string'
+      ? preSerializedJson
+      : JSON.stringify(canvasJson)
     let blob: Blob
     let contentType: string
     try {

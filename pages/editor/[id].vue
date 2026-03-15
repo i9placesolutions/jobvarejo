@@ -368,6 +368,7 @@ const openPageHistory = () => {
 </script>
 
 <template>
+  <ClientOnly>
   <div class="h-screen flex flex-col bg-[#0f0f0f]">
     <!-- Project Name Header -->
     <div class="h-8 border-b border-white/5 flex items-center justify-between px-3 bg-[#1e1e1e] shrink-0">
@@ -449,6 +450,10 @@ const openPageHistory = () => {
       </ClientOnly>
     </div>
   </div>
+  <template #fallback>
+    <div class="h-screen bg-[#0f0f0f]"></div>
+  </template>
+  </ClientOnly>
 </template>
 
 <style scoped>

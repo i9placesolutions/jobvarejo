@@ -3,6 +3,8 @@ import type { SaveSource } from './editorSavePolicy'
 type PersistSerializedPageStateOptions = {
   targetPageId: string
   json: any
+  serializedJson?: string | null
+  serializedBytes?: number | null
   source: SaveSource
   reason: string
   currentFingerprint: string
@@ -46,6 +48,12 @@ export const persistSerializedPageState = (
   const activePageRef = opts.pages[targetPageIndex]
   if (activePageRef) {
     activePageRef.lastSavedFingerprint = opts.currentFingerprint
+    activePageRef.lastSerializedCanvasJson = typeof opts.serializedJson === 'string'
+      ? opts.serializedJson
+      : undefined
+    activePageRef.lastSerializedCanvasBytes = Number.isFinite(Number(opts.serializedBytes))
+      ? Number(opts.serializedBytes)
+      : undefined
   }
 
   if (!opts.shouldSkipAutoSave(opts.source, opts.reason)) {
