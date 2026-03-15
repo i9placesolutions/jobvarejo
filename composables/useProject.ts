@@ -12,6 +12,7 @@ export interface Page {
     canvasDataPath?: string; // Caminho no Storage (salvo no banco)
     thumbnail?: string; // DataURL da miniatura (em memória)
     thumbnailUrl?: string; // URL pública no Storage
+    thumbnailDirty?: boolean;
     lastLoadedFingerprint?: string;
     lastSavedFingerprint?: string;
     lastPersistedObjectCount?: number;
@@ -39,12 +40,14 @@ const project = reactive<Project>({
 const isSaving = ref(false)
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const saveLastError = ref<string | null>(null) // Mensagem da última falha de save
+const saveDebugStage = ref('idle')
 const localDraftQuotaWarning = ref(false) // true quando localStorage está cheio
 const lastSavedAt = ref<Date | null>(null)
 const hasUnsavedChanges = ref(false)
 const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi carregado do banco
 const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
+const SAVE_WATCHDOG_MS = 45_000
 let lastSaveChangedDuringRunLogAt = 0
 
 const createRealtimeClientId = (): string => {
@@ -417,6 +420,7 @@ const serializeProjectDraftPages = (pages: Page[]): ProjectDraftPagePayload[] =>
         thumbnailUrl: typeof page?.thumbnailUrl === 'string'
             ? (page.thumbnailUrl.trim() || undefined)
             : undefined,
+        thumbnailDirty: !!page?.thumbnailDirty,
         lastLoadedFingerprint: typeof page?.lastLoadedFingerprint === 'string'
             ? page.lastLoadedFingerprint
             : undefined,
@@ -462,6 +466,7 @@ const hydratePagesFromProjectDraft = (projectId: string, pages: ProjectDraftPage
             thumbnailUrl: typeof page?.thumbnailUrl === 'string'
                 ? (page.thumbnailUrl.trim() || undefined)
                 : undefined,
+            thumbnailDirty: !!page?.thumbnailDirty,
             lastLoadedFingerprint: hasCanvasData
                 ? fingerprint
                 : (typeof page?.lastLoadedFingerprint === 'string' ? page.lastLoadedFingerprint : fingerprint),
@@ -832,7 +837,10 @@ export const useProject = () => {
         if (!page) return
         if (page.thumbnail === dataUrl) return
         page.thumbnail = dataUrl
-        markAsUnsaved()
+        page.thumbnailDirty = true
+        if (!page.dirty && !hasUnsavedChanges.value) {
+            markAsUnsaved()
+        }
         writeProjectDraft()
     }
 
@@ -949,6 +957,7 @@ export const useProject = () => {
             type: sourcePage.type,
             canvasData: clonedJson,
             thumbnail: sourcePage.thumbnail,
+            thumbnailDirty: !!sourcePage.thumbnail,
             lastLoadedFingerprint: computeCanvasFingerprint(clonedJson),
             lastSavedFingerprint: computeCanvasFingerprint(clonedJson),
             lastPersistedObjectCount: getCanvasObjectCount(clonedJson),
@@ -999,7 +1008,7 @@ export const useProject = () => {
 		            return
 		        }
 
-		        const hasDirtyPages = Array.isArray(project.pages) && project.pages.some((page) => !!page?.dirty)
+	        const hasDirtyPages = Array.isArray(project.pages) && project.pages.some((page) => !!page?.dirty || !!page?.thumbnailDirty)
 		        const requiresInitialPersist = !project.id || project.id.startsWith('proj_')
 		        if (!hasUnsavedChanges.value && !hasDirtyPages && !requiresInitialPersist) {
 		            return
@@ -1022,22 +1031,25 @@ export const useProject = () => {
 	        let saveSucceeded = false
 	        let changedDuringSave = false
 	        let saveAbortedByContextSwitch = false
+            let saveNeedsFollowUpForLocalChanges = false
             let currentSaveStage = 'preflight'
             const setSaveStage = (stage: string) => {
                 currentSaveStage = stage
+                saveDebugStage.value = stage
             }
 
-	        // Watchdog: se a operação travar (await preso), força reset após 90s
+	        // Watchdog: se a operação travar (await preso), força reset cedo o
+            // bastante para o usuário não ficar preso olhando "Salvando..." por muito tempo.
 	        let _saveWatchdog: ReturnType<typeof setTimeout> | null = setTimeout(() => {
 	            _saveWatchdog = null
 	            if (isSaving.value) {
-	                console.error(`[saveProjectDB] Watchdog: save travado por 90s na etapa "${currentSaveStage}", forçando reset de estado.`)
+	                console.error(`[saveProjectDB] Watchdog: save travado por ${Math.round(SAVE_WATCHDOG_MS / 1000)}s na etapa "${currentSaveStage}", forçando reset de estado.`)
 	                saveLastError.value = `Salvamento travou em "${currentSaveStage}". Clique em "Tentar novamente".`
 	                saveStatus.value = 'error'
 	                isSaving.value = false
 	                queuedSaveAfterCurrent.value = false
 	            }
-	        }, 90_000)
+	        }, SAVE_WATCHDOG_MS)
 	        const abortIfStaleSaveContext = (): boolean => {
 	            if (saveLoadSessionAtStart === projectLoadSession.value) return false
 	            saveAbortedByContextSwitch = true
@@ -1126,7 +1138,7 @@ export const useProject = () => {
                 }
 
                 // Salvar thumbnail no Storage
-		                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.dirty || !page?.thumbnailUrl)
+		                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.dirty || !!page?.thumbnailDirty || !page?.thumbnailUrl)
 		                if (shouldUploadThumbnail && page?.thumbnail) {
                             setSaveStage(`upload-thumbnail:${page.id}`)
 		                    const url = await saveThumbnail(project.id, page.id, page.thumbnail)
@@ -1134,6 +1146,7 @@ export const useProject = () => {
 		                    if (url) {
                         thumbnailUrls[i] = url
                         page.thumbnailUrl = url
+                        page.thumbnailDirty = false
                     } else {
                         failedStorageSyncPageIds.add(page.id)
                         console.warn(`⚠️ Falha ao salvar thumbnail na Wasabi (página ${page.id})`)
@@ -1270,10 +1283,20 @@ export const useProject = () => {
 		            changedDuringSave = unsavedRevision.value !== saveRevisionAtStart
 		            lastSavedAt.value = new Date()
 	            if (!changedDuringSave) {
-	                const allPagesFullySynced = failedStorageSyncPageIds.size === 0
+                    const pagesWithNewLocalChangesDuringSave = new Set(
+                        project.pages
+                            .filter((page) => !!page?.thumbnailDirty && !failedStorageSyncPageIds.has(page.id))
+                            .map((page) => page.id)
+                    )
+                    saveNeedsFollowUpForLocalChanges = pagesWithNewLocalChangesDuringSave.size > 0
+                    const unsyncedPageIds = new Set([
+                        ...failedStorageSyncPageIds,
+                        ...pagesWithNewLocalChangesDuringSave
+                    ])
+	                const allPagesFullySynced = unsyncedPageIds.size === 0
 
 	                project.pages.forEach((page) => {
-	                    if (!failedStorageSyncPageIds.has(page.id)) {
+	                    if (!unsyncedPageIds.has(page.id)) {
 	                        page.dirty = false
 	                        page.lastPersistedObjectCount = getCanvasObjectCount(page.canvasData)
 	                        if (page.canvasData) {
@@ -1284,7 +1307,7 @@ export const useProject = () => {
 
 	                // Limpar rascunhos apenas para páginas que foram salvas com sucesso
 	                for (const p of project.pages) {
-	                    if (p?.id && !failedStorageSyncPageIds.has(p.id)) clearDraft(project.id, p.id)
+	                    if (p?.id && !unsyncedPageIds.has(p.id)) clearDraft(project.id, p.id)
 	                }
 
 	                if (allPagesFullySynced) {
@@ -1294,7 +1317,7 @@ export const useProject = () => {
 	                } else {
 	                    hasUnsavedChanges.value = true
 	                    saveStatus.value = 'idle'
-	                    console.warn(`[saveProjectDB] ${failedStorageSyncPageIds.size} página(s) não puderam ser sincronizadas com a Wasabi; estado pendente preservado para retentar.`)
+	                    console.warn(`[saveProjectDB] ${unsyncedPageIds.size} página(s) seguem pendentes; estado preservado para novo sync.`)
 	                }
 	            } else {
 	                hasUnsavedChanges.value = true
@@ -1336,7 +1359,7 @@ export const useProject = () => {
                     setSaveStage('idle')
 		            if (_saveWatchdog) { clearTimeout(_saveWatchdog); _saveWatchdog = null }
 		            isSaving.value = false
-		            const shouldRunFollowUpSave = !saveAbortedByContextSwitch && saveSucceeded && (changedDuringSave || queuedSaveAfterCurrent.value)
+		            const shouldRunFollowUpSave = !saveAbortedByContextSwitch && saveSucceeded && (changedDuringSave || queuedSaveAfterCurrent.value || saveNeedsFollowUpForLocalChanges)
 		            queuedSaveAfterCurrent.value = false
 		            if (shouldRunFollowUpSave) {
 	                setTimeout(() => {
@@ -1670,11 +1693,12 @@ export const useProject = () => {
         loadProjectDB,
         deleteProjectDB,
         isSaving,
-	        saveStatus,
-	        saveLastError,
-	        lastSavedAt,
-	        hasUnsavedChanges,
-	        isProjectLoaded,
+		        saveStatus,
+		        saveLastError,
+                saveDebugStage,
+		        lastSavedAt,
+		        hasUnsavedChanges,
+		        isProjectLoaded,
 	        localDraftQuotaWarning,
 	        projectServerUpdatedAt,
 	        realtimeClientId

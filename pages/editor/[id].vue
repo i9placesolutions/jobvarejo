@@ -25,6 +25,7 @@ const {
   saveProjectDB,
   saveStatus,
   saveLastError,
+  saveDebugStage,
   lastSavedAt,
   hasUnsavedChanges,
   triggerAutoSave,
@@ -314,11 +315,31 @@ const saveIcon = computed(() => {
 const saveText = computed(() => {
   switch (saveStatus.value) {
     case 'saving':
-      return savingSeconds.value >= 8 ? `Salvando... ${savingSeconds.value}s` : 'Salvando...'
+      if (savingSeconds.value >= 8) {
+        return saveStageLabel.value && savingSeconds.value >= 12
+          ? `Salvando... ${savingSeconds.value}s · ${saveStageLabel.value}`
+          : `Salvando... ${savingSeconds.value}s`
+      }
+      return saveStageLabel.value && savingSeconds.value >= 4
+        ? `Salvando... ${saveStageLabel.value}`
+        : 'Salvando...'
     case 'saved': return 'Salvo'
     case 'error': return 'Falha ao salvar'
     default: return hasUnsavedChanges.value ? 'Não salvo' : ''
   }
+})
+
+const saveStageLabel = computed(() => {
+  const raw = String(saveDebugStage.value || '').trim()
+  if (!raw || raw === 'idle') return ''
+  if (raw.startsWith('upload-thumbnail:')) return 'miniatura'
+  if (raw.startsWith('upload-canvas:')) return 'canvas'
+  if (raw.startsWith('persist-project:')) return 'banco'
+  if (raw === 'prepare-db-payload') return 'preparando'
+  if (raw === 'prepare-request') return 'autenticando'
+  if (raw === 'finalize') return 'finalizando'
+  if (raw === 'preflight') return 'iniciando'
+  return raw
 })
 
 const saveSubtext = computed(() => {
