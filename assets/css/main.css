@@ -95,3 +95,47 @@
   background: radial-gradient(circle at 2px 2px, hsl(var(--border)) 1px, transparent 0);
   background-size: 24px 24px;
 }
+
+/* ── Mobile / Tablet utilities ── */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Bottom sheet animation */
+.bottom-sheet-enter-active,
+.bottom-sheet-leave-active {
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.bottom-sheet-enter-from,
+.bottom-sheet-leave-to {
+  transform: translateY(100%);
+}
+
+/* Slide-left drawer */
+.drawer-left-enter-active,
+.drawer-left-leave-active {
+  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.drawer-left-enter-from,
+.drawer-left-leave-to {
+  transform: translateX(-100%);
+}
+
+/* Backdrop fade */
+.backdrop-enter-active,
+.backdrop-leave-active {
+  transition: opacity 0.2s ease;
+}
+.backdrop-enter-from,
+.backdrop-leave-to {
+  opacity: 0;
+}
+
+/* Touch-friendly targets */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}

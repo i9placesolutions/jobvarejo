@@ -1,8 +1,25 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
+import { useResponsive } from '~/composables/useResponsive'
 
 const PropertiesPanel = defineAsyncComponent(() => import('./PropertiesPanel.vue'))
 const EditorTopControls = defineAsyncComponent(() => import('./EditorTopControls.vue'))
+
+const { isTablet } = useResponsive()
+const rightExpanded = ref(true)
+
+// No tablet, esconde por padrão e mostra quando necessário
+if (import.meta.client) {
+  watch(isTablet, (val) => {
+    if (val) rightExpanded.value = false
+  }, { immediate: true })
+}
+
+defineExpose({
+  expand: () => { rightExpanded.value = true },
+  collapse: () => { rightExpanded.value = false },
+  toggle: () => { rightExpanded.value = !rightExpanded.value }
+})
 
 defineProps<{
   collaborators: any[]
@@ -65,7 +82,13 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <aside class="w-[360px] border-l border-white/5 h-full bg-[#18181b] text-white flex flex-col shrink-0 z-10 overflow-hidden shadow-[inset_1px_0_0_rgba(255,255,255,0.02)]">
+  <aside
+    :class="[
+      'border-l border-white/5 h-full bg-[#18181b] text-white flex flex-col z-10 overflow-hidden shadow-[inset_1px_0_0_rgba(255,255,255,0.02)] transition-transform duration-200',
+      isTablet ? 'absolute right-0 inset-y-0 w-[320px] z-50 shadow-2xl' : 'w-[360px] shrink-0',
+      isTablet && !rightExpanded ? 'translate-x-full' : 'translate-x-0'
+    ]"
+  >
     <div class="h-14 px-4 flex items-center justify-end border-b border-white/5 shrink-0 min-w-0 bg-[#18181b] z-20">
       <EditorTopControls
         :collaborators="collaborators"
@@ -130,5 +153,14 @@ const emit = defineEmits<{
         @change-mode="(mode: 'design' | 'prototype') => emit('change-mode', mode)"
       />
     </div>
+
+    <!-- Tablet: click-outside overlay to collapse -->
+    <Teleport to="body">
+      <div
+        v-if="isTablet && rightExpanded"
+        class="fixed inset-0 z-40"
+        @click="rightExpanded = false"
+      />
+    </Teleport>
   </aside>
 </template>

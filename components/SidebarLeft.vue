@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { ref, nextTick, defineAsyncComponent } from 'vue'
 import { useProject } from '~/composables/useProject'
-import { Search, Plus, FileText, Copy, Trash2, Box, ChevronDown, Menu } from 'lucide-vue-next'
+import { useResponsive } from '~/composables/useResponsive'
+import { Search, Plus, FileText, Copy, Trash2, Box, ChevronDown, Menu, Layers, Image } from 'lucide-vue-next'
+
+const { isTablet } = useResponsive()
+const leftExpanded = ref(false)
 
 const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
 const ElementsPanel = defineAsyncComponent(() => import('./ElementsPanel.vue'))
@@ -60,7 +64,27 @@ const commitPageRename = (index: number) => {
 </script>
 
 <template>
-  <aside class="w-60 border-r border-white/5 bg-[#18181b] flex flex-col shrink-0 z-10 text-white h-full select-none">
+  <aside
+    :class="[
+      'border-r border-white/5 bg-[#18181b] flex flex-col z-10 text-white h-full select-none transition-all duration-200',
+      isTablet && !leftExpanded ? 'w-12 shrink-0' : isTablet && leftExpanded ? 'w-60 absolute inset-y-0 left-0 z-50 shadow-2xl' : 'w-60 shrink-0'
+    ]"
+  >
+    <!-- Tablet collapsed: icon-only strip -->
+    <div v-if="isTablet && !leftExpanded" class="flex flex-col items-center py-3 gap-4">
+      <button class="touch-target flex items-center justify-center text-zinc-400 hover:text-white" title="Menu" @click="$emit('open-menu')">
+        <Menu :size="18" />
+      </button>
+      <button class="touch-target flex items-center justify-center" :class="activeTab === 'layers' ? 'text-violet-400' : 'text-zinc-400 hover:text-white'" title="Arquivo" @click="activeTab = 'layers'; leftExpanded = true">
+        <Layers :size="18" />
+      </button>
+      <button class="touch-target flex items-center justify-center" :class="activeTab === 'assets' ? 'text-violet-400' : 'text-zinc-400 hover:text-white'" title="Recursos" @click="activeTab = 'assets'; leftExpanded = true">
+        <Image :size="18" />
+      </button>
+    </div>
+
+    <!-- Full sidebar content (desktop + tablet expanded) -->
+    <template v-if="!isTablet || leftExpanded">
        <!-- Top: Menu, File Name & Tabs -->
        <div class="border-b border-white/5 shrink-0 bg-[#18181b]/50 backdrop-blur-md">
          <!-- Menu & File Name -->
@@ -200,5 +224,15 @@ const commitPageRename = (index: number) => {
            </div>
 
        </div>
+    </template>
+
+    <!-- Tablet expanded: click-outside overlay to collapse -->
+    <Teleport to="body">
+      <div
+        v-if="isTablet && leftExpanded"
+        class="fixed inset-0 z-40"
+        @click="leftExpanded = false"
+      />
+    </Teleport>
   </aside>
 </template>

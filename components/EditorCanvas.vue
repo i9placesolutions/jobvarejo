@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef
 import { useRuntimeConfig } from '#imports'
 import ContextMenu from './ui/ContextMenu.vue'
 import CanvasRulers from './ui/CanvasRulers.vue'
+import { useResponsive } from '~/composables/useResponsive'
 import { useFigmaCrop } from '~/composables/useFigmaCrop'
 import { useProductZone } from '~/composables/useProductZone'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
@@ -4807,6 +4808,10 @@ watch(() => currentUser.value, () => {
     loadCollaborators()
   }
 }, { immediate: true })
+
+const { isMobile, isTablet } = useResponsive()
+const mobilePanel = ref<string | null>(null)
+const mobileNavRef = ref<InstanceType<typeof import('./EditorMobileNav.vue').default> | null>(null)
 
 const canvas = shallowRef<any>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
@@ -11948,24 +11953,36 @@ const handleObjectModified = (e: any) => {
                     const toCard = ordered[toIndex];
                     const fromSlot = (fromCard as any)?._zoneSlot;
                     const toSlot = (toCard as any)?._zoneSlot;
+                    // Force relayout on both cards so they adopt the visual style of their new slot
+                    if (fromCard) (fromCard as any).__forceCardRelayout = true;
+                    if (toCard) (toCard as any).__forceCardRelayout = true;
 	                    if (
 	                        applyCardToSlot(fromCard, toSlot, toIndex) &&
 	                        applyCardToSlot(toCard, fromSlot, fromIndex)
 	                    ) {
 	                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
 	                        recalculateZoneLayout(zone, ordered, { save: false });
+	                        saveCurrentState({ reason: 'card-swap' });
 	                        return;
 	                    }
 	                }
 
                 if (fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
-                    // Swap apenas os dois cards - troca completa de posição
+                    // Swap: troca completa de posição — force relayout nos dois cards
+                    const fromCard = ordered[fromIndex];
+                    const toCard = ordered[toIndex];
+                    if (fromCard) (fromCard as any).__forceCardRelayout = true;
+                    if (toCard) (toCard as any).__forceCardRelayout = true;
                     [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
                     ordered.forEach((c: any, i: number) => ((c as any)._zoneOrder = i));
                 }
 
                 // Snap everything back into the grid after drop.
                 recalculateZoneLayout(zone, ordered, { save: false });
+                // Persist swap state so undo/redo works correctly
+                if (fromIndex !== toIndex) {
+                    saveCurrentState({ reason: 'card-swap' });
+                }
             }
         }
         return;
@@ -33521,7 +33538,7 @@ const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: P
         : {};
     const s = (styles && typeof styles === 'object') ? styles : ({} as Partial<GlobalStyles>);
 
-    // Keep only layout-relevant values so auto-save noise does not retrigger relayout.
+    // Include ALL visual style values so resizeSmartObject re-applies when any style changes.
     const styleSig = {
         splashTemplateId: txt((s as any).splashTemplateId),
         splashScale: num((s as any).splashScale),
@@ -33539,7 +33556,18 @@ const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: P
         prodNameTransform: txt((s as any).prodNameTransform),
         prodNameLineHeight: num((s as any).prodNameLineHeight),
         prodNameOffsetY: num((s as any).prodNameOffsetY),
-        cardBorderRadius: num((s as any).cardBorderRadius)
+        cardBorderRadius: num((s as any).cardBorderRadius),
+        // Visual props — invalidate cache when colors/fonts change
+        cardColor: txt((s as any).cardColor),
+        isProdBgTransparent: !!(s as any).isProdBgTransparent,
+        cardBorderColor: txt((s as any).cardBorderColor),
+        cardBorderWidth: num((s as any).cardBorderWidth),
+        prodNameColor: txt((s as any).prodNameColor),
+        prodNameFont: txt((s as any).prodNameFont),
+        prodNameWeight: txt((s as any).prodNameWeight),
+        prodNameAlign: txt((s as any).prodNameAlign),
+        limitColor: txt((s as any).limitColor),
+        limitFont: txt((s as any).limitFont)
     };
 
     const pricingSig = {
@@ -36282,7 +36310,7 @@ const handleRecalculateLayout = () => {
       <!-- Central Workspace -->
       <div class="flex flex-1 min-h-0 min-w-0 overflow-hidden relative bg-[#1a1a1a]">
           <!-- Left Sidebar (New Component) -->
-          <SidebarLeft @insert-asset="insertAssetToCanvas" @insert-element="insertElementToCanvas" @open-menu="showProjectManager = true">
+          <SidebarLeft v-show="!isMobile" @insert-asset="insertAssetToCanvas" @insert-element="insertElementToCanvas" @open-menu="showProjectManager = true">
               <template #layers-panel>
                   <LayersPanel 
                       class="flex-1"
@@ -36303,7 +36331,7 @@ const handleRecalculateLayout = () => {
           </SidebarLeft>
 
           <!-- Canvas Stage -->
-          <main class="flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing">
+          <main class="flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing" :style="isMobile ? 'padding-bottom: 56px' : ''">
               <!-- Infinite Canvas Effect (Wrapper) -->
                   <div ref="wrapperEl" class="w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
@@ -36445,6 +36473,7 @@ const handleRecalculateLayout = () => {
 
               <!-- Floating Toolbar (Figma Style) - Bottom Center -->
               <CanvasFloatingToolbar
+                v-show="!isMobile"
                 :is-drawing="isDrawing"
                 :is-pen-mode="isPenMode"
                 @select-tool="setTool('select')"
@@ -36457,9 +36486,37 @@ const handleRecalculateLayout = () => {
                 @add-grid-zone="addGridZone"
                 @open-label-templates="showLabelTemplatesModal = true"
               />
+
+              <!-- Mobile Quick Actions Bar (appears when object is selected) -->
+              <div
+                v-if="isMobile && selectedObjectRef"
+                class="absolute bottom-16 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-1 px-2 py-1.5 rounded-xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-xl"
+              >
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Duplicar" @click="handleAction('duplicate')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                </button>
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Deletar" @click="deleteActiveSelectionFromCanvas()">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                </button>
+                <div class="w-px h-5 bg-white/10 mx-0.5"></div>
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Trazer para frente" @click="arrangeActiveObjects('bring-to-front')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/></svg>
+                </button>
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Enviar para trás" @click="arrangeActiveObjects('send-to-back')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 6 5 5 5-5"/><path d="m7 13 5 5 5-5"/></svg>
+                </button>
+                <div class="w-px h-5 bg-white/10 mx-0.5"></div>
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Agrupar" @click="groupSelection()">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>
+                </button>
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Propriedades" @click="mobilePanel = 'properties'">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>
+                </button>
+              </div>
           </main>
 
           <EditorRightSidebar
+            v-show="!isMobile"
             :collaborators="collaborators || []"
             :current-user="currentUser"
             :show-zoom-menu="showZoomMenu"
@@ -36515,6 +36572,164 @@ const handleRecalculateLayout = () => {
             @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
           />
       </div>
+
+      <!-- Mobile Bottom Nav -->
+      <EditorMobileNav
+        v-if="isMobile"
+        ref="mobileNavRef"
+        @open-panel="mobilePanel = $event"
+      />
+
+      <!-- Mobile Bottom Sheet -->
+      <EditorMobileBottomSheet
+        v-if="isMobile && mobilePanel"
+        :title="mobilePanel === 'tools' ? 'Ferramentas' : mobilePanel === 'layers' ? 'Camadas' : mobilePanel === 'properties' ? 'Propriedades' : mobilePanel === 'pages' ? 'Páginas' : 'Mais'"
+        @close="mobilePanel = null; mobileNavRef?.clearActive()"
+      >
+        <!-- Tools panel -->
+        <div v-if="mobilePanel === 'tools'" class="grid grid-cols-4 gap-3">
+          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addFrame(); mobilePanel = null; mobileNavRef?.clearActive()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            <span class="text-[11px]">Frame</span>
+          </button>
+          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('rect'); mobilePanel = null; mobileNavRef?.clearActive()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>
+            <span class="text-[11px]">Retângulo</span>
+          </button>
+          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('circle'); mobilePanel = null; mobileNavRef?.clearActive()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/></svg>
+            <span class="text-[11px]">Círculo</span>
+          </button>
+          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addText(); mobilePanel = null; mobileNavRef?.clearActive()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 7V4h16v3"/><path d="M12 4v16"/><path d="M8 20h8"/></svg>
+            <span class="text-[11px]">Texto</span>
+          </button>
+          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="togglePenMode(); mobilePanel = null; mobileNavRef?.clearActive()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+            <span class="text-[11px]">Caneta</span>
+          </button>
+          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addGridZone(); mobilePanel = null; mobileNavRef?.clearActive()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            <span class="text-[11px]">Grid Zone</span>
+          </button>
+          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="toggleDrawing(); mobilePanel = null; mobileNavRef?.clearActive()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
+            <span class="text-[11px]">Desenho</span>
+          </button>
+          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="showLabelTemplatesModal = true; mobilePanel = null; mobileNavRef?.clearActive()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
+            <span class="text-[11px]">Etiquetas</span>
+          </button>
+        </div>
+
+        <!-- Layers panel -->
+        <template v-if="mobilePanel === 'layers'">
+          <LayersPanel
+            class="flex-1 min-h-0"
+            :objects="canvasObjects"
+            :selectedId="selectedObjectId"
+            :selectedIds="selectedObjectIds"
+            @select="selectObject"
+            @toggle-visible="toggleVisible"
+            @toggle-lock="toggleLock"
+            @delete="deleteObject"
+            @move-up="id => moveLayer(id, 'up')"
+            @move-down="id => moveLayer(id, 'down')"
+            @rename="renameLayer"
+            @reorder="reorderLayerByDrag"
+          />
+        </template>
+
+        <!-- Properties panel (right sidebar content) -->
+        <template v-if="mobilePanel === 'properties'">
+          <EditorRightSidebar
+            :collaborators="[]"
+            :current-user="currentUser"
+            :show-zoom-menu="false"
+            :current-zoom="currentZoom"
+            :get-color-from-string="getColorFromString"
+            :get-initial="getInitial"
+            :selected-object="selectedObjectRef"
+            :active-mode="activeMode"
+            :page-settings="pageSettings"
+            :color-styles="project.colorStyles || []"
+            :product-zone="productZoneState.productZone.value"
+            :product-zone-inspector="selectedZoneInspectorData"
+            :product-global-styles="productZoneState.globalStyles.value"
+            :label-templates="labelTemplates"
+            :view-show-grid="viewShowGrid"
+            :view-show-rulers="viewShowRulers"
+            :view-show-guides="viewShowGuides"
+            :snap-to-objects="snapToObjects"
+            :snap-to-guides="snapToGuides"
+            :snap-to-grid="snapToGrid"
+            :grid-size="gridSize"
+            class="!relative !w-full !shadow-none !border-0"
+            @update-property="updateObjectProperty"
+            @update-smart-group="updateSmartGroup"
+            @update-page-settings="updatePageSettings"
+            @action="handleAction"
+            @add-color-style="addColorStyle"
+            @apply-color-style="applyColorStyle"
+            @update-zone="handleUpdateZone"
+            @update-global-styles="handleUpdateGlobalStyles"
+            @apply-template-to-zone="handleApplyTemplateToZone"
+            @apply-preset="handleApplyZonePreset"
+            @sync-gaps="handleSyncZoneGaps"
+            @recalculate-layout="handleRecalculateLayout"
+            @manage-label-templates="showLabelTemplatesModal = true"
+            @open-zone-review="handleZoneQuickActionFill"
+            @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
+          />
+        </template>
+
+        <!-- Pages panel -->
+        <template v-if="mobilePanel === 'pages'">
+          <PageNavigator
+            :pages="project.pages || []"
+            :active-page-id="currentPageId"
+            :canvas-format="pageSettings.format"
+            @select-page="switchToPage"
+            @add-page="addNewPage"
+            @duplicate-page="duplicatePage"
+            @delete-page="deletePage"
+            @reorder-pages="reorderPages"
+          />
+        </template>
+
+        <!-- More panel -->
+        <div v-if="mobilePanel === 'more'" class="space-y-3">
+          <div class="grid grid-cols-3 gap-3">
+            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="zoomToFit(); mobilePanel = null; mobileNavRef?.clearActive()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></svg>
+              <span class="text-[11px]">Ajustar</span>
+            </button>
+            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="handleZoom100(); mobilePanel = null; mobileNavRef?.clearActive()">
+              <span class="text-sm font-semibold">100%</span>
+              <span class="text-[11px]">Zoom</span>
+            </button>
+            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="startPresentation(); mobilePanel = null; mobileNavRef?.clearActive()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span class="text-[11px]">Apresentar</span>
+            </button>
+            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="openAiGenerationModal(); mobilePanel = null; mobileNavRef?.clearActive()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+              <span class="text-[11px]">IA</span>
+            </button>
+            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="shareDesign(); mobilePanel = null; mobileNavRef?.clearActive()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+              <span class="text-[11px]">Compartilhar</span>
+            </button>
+            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="toggleGrid(); mobilePanel = null; mobileNavRef?.clearActive()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" :class="viewShowGrid ? 'text-violet-400' : ''"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+              <span class="text-[11px]">Grid</span>
+            </button>
+          </div>
+          <div class="text-[11px] text-white/40 text-center pt-2">
+            Zoom: {{ Math.round(currentZoom) }}%
+          </div>
+        </div>
+      </EditorMobileBottomSheet>
 
       <!-- MODALS SYSTEM (Internal Dialogs) -->
       <EditorModalsHost

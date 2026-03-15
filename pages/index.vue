@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Check, User } from 'lucide-vue-next'
+import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Check, User, Menu as MenuIcon } from 'lucide-vue-next'
 	import FolderTreeItem from '~/components/FolderTreeItem.vue'
 	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
 	import FilterDropdown from '~/components/ui/FilterDropdown.vue'
 import type { Folder as FolderModel } from '~/types/folder'
+import { useResponsive } from '~/composables/useResponsive'
+
+const { isMobile: dashMobile, isTablet: dashTablet } = useResponsive()
+const showMobileDrawer = ref(false)
 
 // Page config - middleware handles auth check
 definePageMeta({
@@ -1448,12 +1452,20 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <div class="flex-1 w-full h-full max-w-[1920px] mx-auto overflow-hidden flex flex-col relative">
 
       <!-- Top Bar -->
-      <header class="dash-topbar h-12 px-5 flex items-center justify-between shrink-0 relative z-30">
+      <header class="dash-topbar h-12 px-5 flex items-center justify-between shrink-0 relative z-30 safe-top">
         <div class="flex items-center gap-2.5">
+          <!-- Mobile hamburger -->
+          <button
+            v-if="dashMobile"
+            class="w-8 h-8 flex items-center justify-center hover:bg-white/6 rounded-lg transition-all text-zinc-400 hover:text-white -ml-1"
+            @click="showMobileDrawer = true"
+          >
+            <MenuIcon class="w-5 h-5" />
+          </button>
           <div class="w-7 h-7 rounded-lg flex items-center justify-center bg-indigo-500/20 border border-indigo-400/25 shadow-[0_0_12px_rgba(99,102,241,0.2)]">
             <Sparkles class="w-3.5 h-3.5 text-indigo-300" />
           </div>
-          <span class="text-[13px] font-semibold tracking-tight text-white/90">Studio <span class="text-white/30 font-normal">PRO</span></span>
+          <span v-if="!dashMobile" class="text-[13px] font-semibold tracking-tight text-white/90">Studio <span class="text-white/30 font-normal">PRO</span></span>
         </div>
         <div class="flex items-center gap-1">
           <button
@@ -1478,8 +1490,53 @@ const handleDropOnRoot = async (event: DragEvent) => {
       <!-- Layout -->
       <div class="dash-layout relative flex-1 flex overflow-hidden min-h-0">
 
-        <!-- Sidebar -->
-        <aside class="dash-sidebar w-[220px] h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
+        <!-- Mobile Drawer (contains same sidebar content) -->
+        <DashboardMobileDrawer v-if="dashMobile" v-model:open="showMobileDrawer">
+          <div class="flex flex-col h-full">
+            <!-- Search -->
+            <div class="px-3 pt-3 pb-2.5 shrink-0">
+              <div class="relative">
+                <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  placeholder="Buscar projetos…"
+                  class="w-full h-8 bg-white/[0.04] border border-white/[0.07] rounded-lg text-[12px] text-white pl-8 pr-3 focus:outline-none focus:border-indigo-400/40 placeholder:text-zinc-600 transition-all"
+                />
+              </div>
+            </div>
+            <!-- Nav -->
+            <div class="px-2 pb-1 shrink-0">
+              <p class="sidebar-section-label px-2 mb-1">Explorar</p>
+              <button @click="activeView = 'recent'; showMobileDrawer = false" :class="['dash-nav-item w-full', activeView === 'recent' ? 'active' : '']">
+                <Clock class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Recentes</span>
+              </button>
+              <button @click="activeView = 'all'; setActiveFolder(null); filterFolderId = 'all'; showMobileDrawer = false" :class="['dash-nav-item w-full', activeView === 'all' && !activeFolderId ? 'active' : '']">
+                <FolderOpen class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Todos</span>
+              </button>
+              <button @click="activeView = 'starred'; showMobileDrawer = false" :class="['dash-nav-item w-full', activeView === 'starred' ? 'active starred' : '']">
+                <Star class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Favoritos</span>
+              </button>
+              <button @click="activeView = 'shared'; showMobileDrawer = false" :class="['dash-nav-item w-full', activeView === 'shared' ? 'active' : '']">
+                <Users class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Compartilhados</span>
+              </button>
+            </div>
+            <div class="sidebar-divider mx-3 my-1"></div>
+            <!-- Bottom -->
+            <div class="px-2 pb-3 mt-auto shrink-0">
+              <div class="sidebar-divider mx-1 mb-2"></div>
+              <button @click="navigateTo('/profile'); showMobileDrawer = false" class="dash-nav-item w-full">
+                <User class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Meu Perfil</span>
+              </button>
+              <button @click="handleSignOut" class="dash-nav-item signout w-full">
+                <LogOut class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Sair</span>
+              </button>
+            </div>
+          </div>
+        </DashboardMobileDrawer>
+
+        <!-- Sidebar (hidden on mobile) -->
+        <aside v-show="!dashMobile" class="dash-sidebar w-[220px] h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
 
           <!-- Search -->
           <div class="px-3 pt-3 pb-2.5 shrink-0">
@@ -1622,9 +1679,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
         <main class="dash-main flex-1 flex flex-col overflow-hidden relative z-10">
 
           <!-- Page Header -->
-          <div class="px-7 pt-6 pb-4 flex items-start justify-between gap-4 shrink-0">
+          <div :class="['flex items-start justify-between gap-4 shrink-0', dashMobile ? 'px-4 pt-4 pb-3' : 'px-7 pt-6 pb-4']">
             <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-1.5 mb-1">
+              <div v-if="!dashMobile" class="flex items-center gap-1.5 mb-1">
                 <span class="text-[10px] uppercase tracking-[0.2em] text-zinc-600 font-semibold">
                   {{ activeView === 'recent' ? 'Recentes' : activeView === 'starred' ? 'Favoritos' : activeView === 'shared' ? 'Compartilhados' : activeFolderId ? 'Pasta' : 'Workspace' }}
                 </span>
@@ -1633,15 +1690,17 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   <span class="text-[10px] text-zinc-500 truncate max-w-[200px]">{{ folders.find(f => f.id === activeFolderId)?.name }}</span>
                 </template>
               </div>
-              <h1 class="dash-page-title text-[20px] font-semibold leading-tight text-white tracking-tight truncate">{{ dashboardTitle }}</h1>
+              <h1 :class="['dash-page-title font-semibold leading-tight text-white tracking-tight truncate', dashMobile ? 'text-[17px]' : 'text-[20px]']">{{ dashboardTitle }}</h1>
               <p class="text-[11px] text-zinc-600 mt-0.5">
                 <span class="text-zinc-500 font-medium">{{ filteredProjects.length }}</span>
                 {{ filteredProjects.length === 1 ? ' projeto' : ' projetos' }}
-                <span class="mx-1.5 text-zinc-700">·</span>
-                {{ dashboardContextHint }}
+                <span v-if="!dashMobile" class="mx-1.5 text-zinc-700">·</span>
+                <span v-if="!dashMobile">{{ dashboardContextHint }}</span>
               </p>
             </div>
+            <!-- Desktop: inline button / Mobile: FAB -->
             <button
+              v-if="!dashMobile"
               @click="showCreateProject = true"
               class="dash-cta shrink-0 h-9 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all mt-1"
             >
@@ -1651,22 +1710,33 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
 
           <!-- Toolbar -->
-          <div class="px-7 pb-3 flex items-center gap-2.5 shrink-0">
+          <div :class="['pb-3 flex items-center gap-2.5 shrink-0', dashMobile ? 'px-4 overflow-x-auto' : 'px-7']">
             <div class="dash-tabs flex items-center gap-0.5 p-0.5 rounded-lg shrink-0">
               <button @click="activeView = 'recent'" :class="['dash-tab', activeView === 'recent' ? 'active' : '']">Recentes</button>
               <button @click="activeView = 'all'" :class="['dash-tab', activeView === 'all' ? 'active' : '']">Todos</button>
               <button @click="activeView = 'shared'" :class="['dash-tab', activeView === 'shared' ? 'active' : '']">Compartilhados</button>
             </div>
             <div class="flex-1 min-w-0"></div>
-            <FilterDropdown v-model="filterOrganization" label="Equipe" :options="organizationFilterOptions" min-width-class="min-w-[170px]" />
-            <FilterDropdown v-model="filterType" label="Tipo" :options="typeFilterOptions" min-width-class="min-w-[170px]" />
-            <FilterDropdown v-model="filterTime" label="Período" :options="timeFilterOptions" min-width-class="min-w-[175px]" />
-            <FilterDropdown v-model="filterFolderId" label="Pasta" :options="folderFilterDropdownOptions" min-width-class="min-w-[240px]" />
+            <template v-if="!dashMobile">
+              <FilterDropdown v-model="filterOrganization" label="Equipe" :options="organizationFilterOptions" min-width-class="min-w-[170px]" />
+              <FilterDropdown v-model="filterType" label="Tipo" :options="typeFilterOptions" min-width-class="min-w-[170px]" />
+              <FilterDropdown v-model="filterTime" label="Período" :options="timeFilterOptions" min-width-class="min-w-[175px]" />
+              <FilterDropdown v-model="filterFolderId" label="Pasta" :options="folderFilterDropdownOptions" min-width-class="min-w-[240px]" />
+            </template>
             <div class="flex items-center bg-white/[0.04] rounded-lg p-0.5 border border-white/[0.07] shrink-0">
               <button @click="viewMode = 'grid'" :class="['p-1.5 rounded-md transition-all', viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-300']" title="Grade"><Grid class="w-3.5 h-3.5" /></button>
               <button @click="viewMode = 'list'" :class="['p-1.5 rounded-md transition-all', viewMode === 'list' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-300']" title="Lista"><List class="w-3.5 h-3.5" /></button>
             </div>
           </div>
+
+          <!-- Mobile FAB -->
+          <button
+            v-if="dashMobile"
+            @click="showCreateProject = true"
+            class="fixed bottom-6 right-5 z-[100] w-14 h-14 rounded-full bg-indigo-500 hover:bg-indigo-400 shadow-xl shadow-indigo-500/30 flex items-center justify-center text-white transition-all active:scale-95 safe-bottom"
+          >
+            <Plus class="w-6 h-6" />
+          </button>
 
           <!-- Active Filter Chips -->
           <div v-if="activeFilterChips.length > 0" class="px-7 pb-3 flex items-center gap-2 flex-wrap shrink-0">

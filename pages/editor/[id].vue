@@ -2,8 +2,10 @@
 import { onMounted, onUnmounted, ref, computed, defineAsyncComponent, watch } from 'vue'
 import { useProject } from '~/composables/useProject'
 import { useApiAuth } from '~/composables/useApiAuth'
+import { useResponsive } from '~/composables/useResponsive'
 
 const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanvas.vue'))
+const { isMobile } = useResponsive()
 
 // Get project ID from route
 const route = useRoute()
@@ -371,22 +373,22 @@ const openPageHistory = () => {
   <ClientOnly>
   <div class="h-screen flex flex-col bg-[#0f0f0f]">
     <!-- Project Name Header -->
-    <div class="h-8 border-b border-white/5 flex items-center justify-between px-3 bg-[#1e1e1e] shrink-0">
-      <div class="flex items-center gap-2">
+    <div class="h-8 border-b border-white/5 flex items-center justify-between px-3 bg-[#1e1e1e] shrink-0 safe-top">
+      <div class="flex items-center gap-2 min-w-0">
         <button
           @click="navigateTo('/')"
-          class="p-1 hover:bg-white/5 rounded transition-colors text-zinc-400 hover:text-white"
+          class="p-1 hover:bg-white/5 rounded transition-colors text-zinc-400 hover:text-white shrink-0"
           title="Voltar"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <span class="text-xs font-medium text-white">{{ activePage?.name || 'Sem título' }}</span>
+        <span class="text-xs font-medium text-white truncate">{{ activePage?.name || 'Sem título' }}</span>
       </div>
 
       <!-- Save Status Indicator -->
-      <div class="flex items-center gap-1.5">
+      <div class="flex items-center gap-1.5 shrink-0">
 
         <!-- Status pill -->
         <div :class="['save-pill flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-300', saveColor,
@@ -397,7 +399,7 @@ const openPageHistory = () => {
         ]">
           <span v-html="saveIcon" class="shrink-0"></span>
           <span>{{ saveText }}</span>
-          <span v-if="saveSubtext" class="text-zinc-500 font-normal">{{ saveSubtext }}</span>
+          <span v-if="saveSubtext && !isMobile" class="text-zinc-500 font-normal">{{ saveSubtext }}</span>
         </div>
 
         <!-- Retry button — aparece em erro ou saving travado (>45s) -->
@@ -412,7 +414,7 @@ const openPageHistory = () => {
           <svg class="w-2.5 h-2.5 shrink-0" :class="retryingSave ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          Tentar novamente
+          <span v-if="!isMobile">Tentar novamente</span>
         </button>
 
         <!-- Remote update pending -->
@@ -422,19 +424,22 @@ const openPageHistory = () => {
           class="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/25 text-amber-300 hover:text-amber-200 hover:border-amber-400/40 hover:bg-amber-500/8 transition-all duration-150"
           @click="applyRemoteUpdate"
         >
-          Atualização disponível
+          <span v-if="isMobile">Atualizar</span>
+          <span v-else>Atualização disponível</span>
         </button>
 
-        <div class="w-px h-3 bg-white/8 mx-0.5"></div>
+        <template v-if="!isMobile">
+          <div class="w-px h-3 bg-white/8 mx-0.5"></div>
 
-        <button
-          type="button"
-          class="text-[10px] px-2 py-0.5 rounded-full border border-white/8 text-zinc-500 hover:text-zinc-300 hover:border-white/15 hover:bg-white/4 transition-all duration-150"
-          @click="openPageHistory"
-        >
-          Histórico
-        </button>
-        <span class="text-[10px] text-zinc-600 pl-0.5">Studio PRO</span>
+          <button
+            type="button"
+            class="text-[10px] px-2 py-0.5 rounded-full border border-white/8 text-zinc-500 hover:text-zinc-300 hover:border-white/15 hover:bg-white/4 transition-all duration-150"
+            @click="openPageHistory"
+          >
+            Histórico
+          </button>
+          <span class="text-[10px] text-zinc-600 pl-0.5">Studio PRO</span>
+        </template>
       </div>
     </div>
 
