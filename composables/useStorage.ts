@@ -117,9 +117,20 @@ async function getPresignedUrl(
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
           continue
         }
+        // Se for 401, não adianta fazer retry — sessão expirada
+        const statusCode = Number(fetchError?.statusCode ?? fetchError?.response?.status ?? 0)
+        if (statusCode === 401) {
+          console.error('❌ Sessão expirada (401) ao obter presigned URL — não será feito retry.')
+          return null
+        }
         throw fetchError
       }
     } catch (error: any) {
+      const statusCode = Number(error?.statusCode ?? error?.response?.status ?? 0)
+      if (statusCode === 401) {
+        console.error('❌ Sessão expirada (401) ao obter presigned URL.')
+        return null
+      }
       if (attempt === retries) {
         console.error('❌ Erro ao obter presigned URL da Wasabi:', error)
         console.error('   Verifique se as variáveis de ambiente WASABI_* estão configuradas no servidor')

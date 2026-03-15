@@ -49,10 +49,10 @@ const hasUnsavedChanges = ref(false)
 const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi carregado do banco
 const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
-const SAVE_WATCHDOG_MS = 45_000
-const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 12_000
+const SAVE_WATCHDOG_MS = 60_000
+const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 30_000
 const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 8_000
-const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 2_500_000
+const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 5_000_000
 let lastSaveChangedDuringRunLogAt = 0
 
 const createRealtimeClientId = (): string => {
@@ -1145,7 +1145,7 @@ export const useProject = () => {
                                     project.id,
                                     page.id,
                                     page.canvasData,
-                                    1,
+                                    3,
                                     typeof page?.lastSerializedCanvasJson === 'string'
                                         ? page.lastSerializedCanvasJson
                                         : null
