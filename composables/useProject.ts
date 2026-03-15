@@ -1022,13 +1022,17 @@ export const useProject = () => {
 	        let saveSucceeded = false
 	        let changedDuringSave = false
 	        let saveAbortedByContextSwitch = false
+            let currentSaveStage = 'preflight'
+            const setSaveStage = (stage: string) => {
+                currentSaveStage = stage
+            }
 
 	        // Watchdog: se a operação travar (await preso), força reset após 90s
 	        let _saveWatchdog: ReturnType<typeof setTimeout> | null = setTimeout(() => {
 	            _saveWatchdog = null
 	            if (isSaving.value) {
-	                console.error('[saveProjectDB] Watchdog: save travado por 90s, forçando reset de estado.')
-	                saveLastError.value = 'Salvamento demorou demais. Clique em "Tentar novamente".'
+	                console.error(`[saveProjectDB] Watchdog: save travado por 90s na etapa "${currentSaveStage}", forçando reset de estado.`)
+	                saveLastError.value = `Salvamento travou em "${currentSaveStage}". Clique em "Tentar novamente".`
 	                saveStatus.value = 'error'
 	                isSaving.value = false
 	                queuedSaveAfterCurrent.value = false
@@ -1043,6 +1047,7 @@ export const useProject = () => {
 	        }
 
 	        try {
+                setSaveStage('preflight')
 	            normalizeProjectPageIds(project.pages as any[], 'saveProjectDB:preflight')
             if (!Array.isArray(project.pages) || project.pages.length === 0) {
                 saveStatus.value = 'idle'
@@ -1078,9 +1083,7 @@ export const useProject = () => {
             // 1. Salvar cada página no Storage
             const storagePaths: string[] = []
             const thumbnailUrls: string[] = []
-            // Track uploads para não apagar rascunho local quando o upload falhar
-            const uploadAttemptedPageIds = new Set<string>()
-            const uploadSucceededPageIds = new Set<string>()
+            const failedStorageSyncPageIds = new Set<string>()
 
 	            for (const [i, page] of project.pages.entries()) {
 	                if (abortIfStaleSaveContext()) return
@@ -1089,31 +1092,31 @@ export const useProject = () => {
 		                const shouldUploadCanvas = !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
 		                if (shouldUploadCanvas && page?.canvasData) {
 	                    try {
+                            setSaveStage(`upload-canvas:${page.id}`)
 	                        const currentCount = getCanvasObjectCount(page.canvasData)
 	                        const persistedCount = Number(page?.lastPersistedObjectCount || 0)
 	                        if (isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite) {
 	                            console.warn(`🛡️ Skip upload vazio para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
 	                            continue
 	                        }
-                        uploadAttemptedPageIds.add(page.id)
-                        // Tentar salvar na Contabo (com retry interno)
+                        // Tentar salvar na Wasabi (com retry interno)
 	                        const path = await saveCanvasData(project.id, page.id, page.canvasData, 2)
 	                        if (abortIfStaleSaveContext()) return
 	                        if (path) {
                             storagePaths[i] = path
                             page.canvasDataPath = path
                             page.lastPersistedObjectCount = currentCount
-                            uploadSucceededPageIds.add(page.id)
-                            console.log('✅ Canvas salvo na Contabo:', path)
+                            console.log('✅ Canvas salvo na Wasabi:', path)
                         } else {
                             // Se falhou após todas as tentativas, o draft local já está salvo
-                            console.warn(`⚠️ Falha ao salvar canvas na Contabo após múltiplas tentativas (página ${page.id})`)
+                            failedStorageSyncPageIds.add(page.id)
+                            console.warn(`⚠️ Falha ao salvar canvas na Wasabi após múltiplas tentativas (página ${page.id})`)
                             console.warn('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
                             // Não lançar erro aqui - continuar salvando outras páginas
                         }
                     } catch (err: any) {
-                        uploadAttemptedPageIds.add(page.id)
-                        console.error('❌ Erro crítico ao salvar canvas na Contabo:', err)
+                        failedStorageSyncPageIds.add(page.id)
+                        console.error('❌ Erro crítico ao salvar canvas na Wasabi:', err)
                         console.error('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
                         // Não lançar erro - continuar com outras páginas
                     }
@@ -1123,13 +1126,17 @@ export const useProject = () => {
                 }
 
                 // Salvar thumbnail no Storage
-	                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.dirty || !page?.thumbnailUrl)
-	                if (shouldUploadThumbnail && page?.thumbnail) {
-	                    const url = await saveThumbnail(project.id, page.id, page.thumbnail)
-	                    if (abortIfStaleSaveContext()) return
-	                    if (url) {
+		                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.dirty || !page?.thumbnailUrl)
+		                if (shouldUploadThumbnail && page?.thumbnail) {
+                            setSaveStage(`upload-thumbnail:${page.id}`)
+		                    const url = await saveThumbnail(project.id, page.id, page.thumbnail)
+		                    if (abortIfStaleSaveContext()) return
+		                    if (url) {
                         thumbnailUrls[i] = url
                         page.thumbnailUrl = url
+                    } else {
+                        failedStorageSyncPageIds.add(page.id)
+                        console.warn(`⚠️ Falha ao salvar thumbnail na Wasabi (página ${page.id})`)
                     }
                 }
                 if (!thumbnailUrls[i] && page?.thumbnailUrl) {
@@ -1138,6 +1145,7 @@ export const useProject = () => {
             }
 
             // 2. Preparar payload mínimo para o banco (apenas metadados)
+                setSaveStage('prepare-db-payload')
 	            const pageMetadata = project.pages.map((page, index) => {
                 const metadata: any = {
                     id: page.id,
@@ -1190,9 +1198,10 @@ export const useProject = () => {
                     const reducedBytes = estimateJsonBytes(payloadWithoutBackup)
                     console.warn(`[saveProjectDB] Payload /api/projects muito grande (${payloadBytes} bytes); removendo backup canvasData (${reducedBytes} bytes).`)
                     payload = payloadWithoutBackup
-                }
-	            if (abortIfStaleSaveContext()) return
+	                }
+		            if (abortIfStaleSaveContext()) return
 
+                    setSaveStage('prepare-request')
 		            const headers = await getApiAuthHeaders()
                     const saveHeaders = {
                         ...headers,
@@ -1202,6 +1211,7 @@ export const useProject = () => {
                 const normalizedProjectId = String(project.id || '').trim()
                 const shouldCreateProject = normalizedProjectId.startsWith('proj_') || !isUuid(normalizedProjectId)
                 const persistProject = async (bodyPayload: any) => {
+                    setSaveStage(shouldCreateProject ? 'persist-project:create' : 'persist-project:update')
                     if (shouldCreateProject) {
                         const response = await $fetch<any>('/api/projects', {
                             method: 'POST',
@@ -1255,18 +1265,15 @@ export const useProject = () => {
                     await persistProject(payload)
                 }
 
-                if (abortIfStaleSaveContext()) return
+	                if (abortIfStaleSaveContext()) return
+                    setSaveStage('finalize')
 		            changedDuringSave = unsavedRevision.value !== saveRevisionAtStart
 		            lastSavedAt.value = new Date()
 	            if (!changedDuringSave) {
-	                // Páginas onde upload falhou precisam manter o rascunho para retentar depois
-	                const uploadFailedPageIds = new Set(
-	                    [...uploadAttemptedPageIds].filter(id => !uploadSucceededPageIds.has(id))
-	                )
-	                const allPagesFullySynced = uploadFailedPageIds.size === 0
+	                const allPagesFullySynced = failedStorageSyncPageIds.size === 0
 
 	                project.pages.forEach((page) => {
-	                    if (!uploadFailedPageIds.has(page.id)) {
+	                    if (!failedStorageSyncPageIds.has(page.id)) {
 	                        page.dirty = false
 	                        page.lastPersistedObjectCount = getCanvasObjectCount(page.canvasData)
 	                        if (page.canvasData) {
@@ -1277,7 +1284,7 @@ export const useProject = () => {
 
 	                // Limpar rascunhos apenas para páginas que foram salvas com sucesso
 	                for (const p of project.pages) {
-	                    if (p?.id && !uploadFailedPageIds.has(p.id)) clearDraft(project.id, p.id)
+	                    if (p?.id && !failedStorageSyncPageIds.has(p.id)) clearDraft(project.id, p.id)
 	                }
 
 	                if (allPagesFullySynced) {
@@ -1287,7 +1294,7 @@ export const useProject = () => {
 	                } else {
 	                    hasUnsavedChanges.value = true
 	                    saveStatus.value = 'idle'
-	                    console.warn(`[saveProjectDB] ${uploadFailedPageIds.size} página(s) não puderam ser salvas no Storage; rascunho local preservado para retentar.`)
+	                    console.warn(`[saveProjectDB] ${failedStorageSyncPageIds.size} página(s) não puderam ser sincronizadas com a Wasabi; estado pendente preservado para retentar.`)
 	                }
 	            } else {
 	                hasUnsavedChanges.value = true
@@ -1308,7 +1315,7 @@ export const useProject = () => {
 		                    const statusCode = (e as any)?.statusCode ?? (e as any)?.response?.status ?? 0
 		                    const statusMessage = (e as any)?.statusMessage ?? (e as any)?.data?.statusMessage ?? null
 		                    const rawMessage = (e as any)?.message ?? null
-		                    console.error('Save Failed:', { statusCode, statusMessage, message: rawMessage, data: (e as any)?.data ?? null })
+		                    console.error('Save Failed:', { stage: currentSaveStage, statusCode, statusMessage, message: rawMessage, data: (e as any)?.data ?? null })
 		                    // Monta mensagem amigável para exibir no toast
 		                    if (Number(statusCode) === 401) {
 		                        saveLastError.value = 'Sessão expirada. Faça login novamente.'
@@ -1326,6 +1333,7 @@ export const useProject = () => {
 		                    saveStatus.value = 'error'
 		                }
 		            } finally {
+                    setSaveStage('idle')
 		            if (_saveWatchdog) { clearTimeout(_saveWatchdog); _saveWatchdog = null }
 		            isSaving.value = false
 		            const shouldRunFollowUpSave = !saveAbortedByContextSwitch && saveSucceeded && (changedDuringSave || queuedSaveAfterCurrent.value)

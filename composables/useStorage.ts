@@ -67,6 +67,8 @@ const saveStatus = ref<SaveStatus>('idle')
 const lastSavedAt = ref<Date | null>(null)
 const saveError = ref<string | null>(null)
 const HISTORY_SNAPSHOT_INTERVAL_MS = 30_000
+const THUMBNAIL_UPLOAD_TIMEOUT_MS = 15_000
+const THUMBNAIL_UPLOAD_RETRIES = 2
 const lastHistorySnapshotAtByPage = new Map<string, number>()
 const historySnapshotInFlightByPage = new Map<string, Promise<void>>()
 
@@ -542,25 +544,52 @@ export const useStorage = () => {
         throw new Error('Failed to get upload URL')
       }
 
-      // Upload
-      const uploadResponse = await fetch(presignedUrl, {
-        method: 'PUT',
-        body: blob,
-        headers: {
-          'Content-Type': 'image/png'
+      for (let attempt = 1; attempt <= THUMBNAIL_UPLOAD_RETRIES; attempt++) {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), THUMBNAIL_UPLOAD_TIMEOUT_MS)
+
+        try {
+          const uploadResponse = await fetch(presignedUrl, {
+            method: 'PUT',
+            body: blob,
+            headers: {
+              'Content-Type': 'image/png'
+            },
+            signal: controller.signal
+          })
+
+          clearTimeout(timeoutId)
+
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text().catch(() => uploadResponse.statusText)
+            if (attempt === THUMBNAIL_UPLOAD_RETRIES) {
+              throw new Error(`Thumbnail upload failed (${uploadResponse.status}): ${errorText}`)
+            }
+            await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000))
+            continue
+          }
+
+          const readUrl = await getPresignedUrl(key, undefined, 'get', 2, authHeaders)
+          if (readUrl) {
+            return readUrl
+          }
+
+          return `/api/storage/p?key=${encodeURIComponent(key)}`
+        } catch (uploadError: any) {
+          clearTimeout(timeoutId)
+          if (uploadError?.name === 'AbortError') {
+            if (attempt === THUMBNAIL_UPLOAD_RETRIES) {
+              throw new Error(`Thumbnail upload timeout após ${Math.round(THUMBNAIL_UPLOAD_TIMEOUT_MS / 1000)} segundos`)
+            }
+            console.warn(`⚠️ Timeout ao salvar thumbnail (${pageId}) na tentativa ${attempt}; tentando novamente...`)
+            await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000))
+            continue
+          }
+          throw uploadError
         }
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error(`Upload failed: ${uploadResponse.statusText}`)
       }
 
-      const readUrl = await getPresignedUrl(key, undefined, 'get', 2, authHeaders)
-      if (readUrl) {
-        return readUrl
-      }
-
-      return `/api/storage/p?key=${encodeURIComponent(key)}`
+      return null
     } catch (error: any) {
       console.error('Erro ao salvar thumbnail:', error)
       return null
