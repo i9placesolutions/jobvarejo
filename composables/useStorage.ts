@@ -324,54 +324,31 @@ export const useStorage = () => {
       contentType = 'application/json'
     }
 
-    // Retry logic: tenta até N vezes com backoff exponencial
+    // Upload via servidor (evita CORS) com retry e backoff exponencial
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        // Obter presigned URL para upload (com retry interno)
-        const presignedUrl = await getPresignedUrl(key, contentType, 'put', 2, authHeaders)
-        if (!presignedUrl) {
-          if (attempt === retries) {
-            const errorMsg = 'Failed to get upload URL from Wasabi after multiple attempts.'
-            console.error('❌', errorMsg)
-            throw new Error(errorMsg)
-          }
-          // Aguardar antes de tentar novamente (backoff exponencial)
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
-          continue
-        }
-
-        // Upload para Wasabi com timeout
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 25_000) // 25s timeout
 
         try {
-          const response = await fetch(presignedUrl, {
-            method: 'PUT',
+          const result = await $fetch<{ key: string; size: number }>('/api/storage/upload', {
+            method: 'POST',
+            query: { key, contentType },
             body: blob,
-            headers: {
-              'Content-Type': contentType
-            },
-            signal: controller.signal
+            signal: controller.signal as any,
+            timeout: 25_000
           })
 
           clearTimeout(timeoutId)
 
-          if (!response.ok) {
-            const errorText = await response.text().catch(() => response.statusText)
-            if (attempt === retries) {
-              const errorMsg = `Wasabi upload failed (${response.status}): ${errorText}`
-              console.error('❌', errorMsg)
-              throw new Error(errorMsg)
-            }
-            // Aguardar antes de tentar novamente
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
-            continue
+          if (!result?.key) {
+            throw new Error('Upload retornou resposta inválida')
           }
 
           // Sucesso!
           lastSavedAt.value = new Date()
           saveStatus.value = 'saved'
-          console.log(`✅ Canvas salvo na Wasabi (tentativa ${attempt}/${retries}):`, key)
+          console.log(`✅ Canvas salvo na Wasabi via servidor (tentativa ${attempt}/${retries}):`, result.key)
           // Snapshot histórico assíncrono e com throttle para não impactar a UX.
           void triggerHistorySnapshot({
             userId,
@@ -379,13 +356,20 @@ export const useStorage = () => {
             pageId,
             key
           })
-          return key
+          return result.key
 
         } catch (fetchError: any) {
           clearTimeout(timeoutId)
+          // Se for 401, não adianta retry
+          const statusCode = Number(fetchError?.statusCode ?? fetchError?.response?.status ?? 0)
+          if (statusCode === 401) {
+            saveStatus.value = 'error'
+            saveError.value = 'Sessão expirada. Faça login novamente.'
+            return null
+          }
           if (fetchError.name === 'AbortError') {
             if (attempt === retries) {
-              throw new Error('Upload timeout após 15 segundos')
+              throw new Error('Upload timeout após 25 segundos')
             }
             console.warn(`⚠️ Timeout na tentativa ${attempt}, tentando novamente...`)
             await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
@@ -396,13 +380,11 @@ export const useStorage = () => {
 
       } catch (error: any) {
         if (attempt === retries) {
-          // Última tentativa falhou
           console.error(`❌ Erro ao salvar na Wasabi após ${retries} tentativas:`, error)
           saveStatus.value = 'error'
           saveError.value = error?.message || 'Erro desconhecido'
           return null
         }
-        // Aguardar antes de tentar novamente
         console.warn(`⚠️ Tentativa ${attempt} falhou, tentando novamente em ${Math.pow(2, attempt)}s...`)
         await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
       }
@@ -552,54 +534,29 @@ export const useStorage = () => {
       const response = await fetch(dataUrl)
       const blob = await response.blob()
 
-      // Obter presigned URL
-      const presignedUrl = await getPresignedUrl(key, 'image/png', 'put', 2, authHeaders)
-      if (!presignedUrl) {
-        throw new Error('Failed to get upload URL')
-      }
-
+      // Upload via servidor (evita CORS)
       for (let attempt = 1; attempt <= THUMBNAIL_UPLOAD_RETRIES; attempt++) {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), THUMBNAIL_UPLOAD_TIMEOUT_MS)
-
         try {
-          const uploadResponse = await fetch(presignedUrl, {
-            method: 'PUT',
+          const result = await $fetch<{ key: string }>('/api/storage/upload', {
+            method: 'POST',
+            query: { key, contentType: 'image/png' },
             body: blob,
-            headers: {
-              'Content-Type': 'image/png'
-            },
-            signal: controller.signal
+            timeout: THUMBNAIL_UPLOAD_TIMEOUT_MS
           })
 
-          clearTimeout(timeoutId)
-
-          if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text().catch(() => uploadResponse.statusText)
-            if (attempt === THUMBNAIL_UPLOAD_RETRIES) {
-              throw new Error(`Thumbnail upload failed (${uploadResponse.status}): ${errorText}`)
-            }
-            await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000))
-            continue
-          }
-
-          const readUrl = await getPresignedUrl(key, undefined, 'get', 2, authHeaders)
-          if (readUrl) {
-            return readUrl
+          if (!result?.key) {
+            throw new Error('Thumbnail upload retornou resposta inválida')
           }
 
           return `/api/storage/p?key=${encodeURIComponent(key)}`
         } catch (uploadError: any) {
-          clearTimeout(timeoutId)
-          if (uploadError?.name === 'AbortError') {
-            if (attempt === THUMBNAIL_UPLOAD_RETRIES) {
-              throw new Error(`Thumbnail upload timeout após ${Math.round(THUMBNAIL_UPLOAD_TIMEOUT_MS / 1000)} segundos`)
-            }
-            console.warn(`⚠️ Timeout ao salvar thumbnail (${pageId}) na tentativa ${attempt}; tentando novamente...`)
-            await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000))
-            continue
+          const statusCode = Number(uploadError?.statusCode ?? uploadError?.response?.status ?? 0)
+          if (statusCode === 401) return null
+          if (attempt === THUMBNAIL_UPLOAD_RETRIES) {
+            throw uploadError
           }
-          throw uploadError
+          console.warn(`⚠️ Falha ao salvar thumbnail (${pageId}) na tentativa ${attempt}; tentando novamente...`)
+          await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000))
         }
       }
 
