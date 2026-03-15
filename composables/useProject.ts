@@ -52,7 +52,7 @@ const queuedSaveAfterCurrent = ref(false)
 const SAVE_WATCHDOG_MS = 60_000
 const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 30_000
 const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 8_000
-const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 5_000_000
+const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 12_000_000
 let lastSaveChangedDuringRunLogAt = 0
 
 const createRealtimeClientId = (): string => {
@@ -169,7 +169,7 @@ const withSoftTimeout = async <T>(
     }
 }
 
-const MAX_PAGE_DB_CANVAS_BACKUP_BYTES = 240_000
+const MAX_PAGE_DB_CANVAS_BACKUP_BYTES = 8_000_000
 
 const estimateJsonBytes = (value: unknown): number => {
     try {
@@ -1432,7 +1432,7 @@ export const useProject = () => {
     let saveTimeout: any = null
     let scheduledAutoSaveRevision = -1
     let scheduledAutoSaveProjectId = ''
-    const AUTO_SAVE_DELAY = 15_000 // 15 segundos: reduz I/O sem abrir mão de segurança
+    const AUTO_SAVE_DELAY = 5_000 // 5 segundos: salva mais frequente para evitar perda de dados
 
     const triggerAutoSave = () => {
         if (!project.id || project.id.startsWith('proj_')) {

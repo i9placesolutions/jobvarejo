@@ -7016,12 +7016,71 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
     }
 };
 
+/**
+ * Envia os dados do projeto via navigator.sendBeacon como último recurso.
+ * O sendBeacon é síncrono e sobrevive ao fechamento da página — diferente
+ * de fetch/XHR que são cancelados quando a aba fecha.
+ */
+const emergencyBeaconSave = () => {
+    try {
+        if (!project.id || project.id.startsWith('proj_')) return;
+        if (!hasUnsavedChanges.value && !project.pages.some((p: any) => !!p?.dirty)) return;
+        if (!navigator?.sendBeacon) return;
+
+        const pageMetadata = project.pages.map((page: any) => {
+            const meta: any = {
+                id: page.id,
+                name: page.name,
+                width: page.width,
+                height: page.height,
+                type: page.type,
+                canvasDataPath: page.canvasDataPath,
+                thumbnailUrl: page.thumbnailUrl,
+            };
+            // Incluir canvasData inline para páginas dirty — é o único jeito de não perder dados
+            if (page.canvasData && (page.dirty || !page.canvasDataPath)) {
+                meta.canvasData = page.canvasData;
+            }
+            return meta;
+        });
+
+        const payload = JSON.stringify({
+            id: project.id,
+            canvas_data: pageMetadata,
+        });
+
+        // sendBeacon tem limite de ~64KB em alguns browsers.
+        // Se o payload for muito grande, tentar sem canvasData (só metadados).
+        const blob = new Blob([payload], { type: 'application/json' });
+        const sent = navigator.sendBeacon('/api/projects/beacon-save', blob);
+        if (sent) {
+            console.log(`🚨 [beacon] Dados enviados de emergência (${Math.round(blob.size / 1024)}KB)`);
+        } else {
+            console.warn('⚠️ [beacon] sendBeacon rejeitado (payload muito grande?)');
+            // Tentar payload reduzido sem canvasData
+            const reducedPayload = JSON.stringify({
+                id: project.id,
+                canvas_data: pageMetadata.map((p: any) => {
+                    const { canvasData: _, ...rest } = p;
+                    return rest;
+                }),
+            });
+            const reducedBlob = new Blob([reducedPayload], { type: 'application/json' });
+            navigator.sendBeacon('/api/projects/beacon-save', reducedBlob);
+        }
+    } catch (err) {
+        console.warn('[beacon] Erro no emergency save:', err);
+    }
+};
+
 const handleEditorBeforeUnload = () => {
     flushPersistenceNow('beforeunload');
+    emergencyBeaconSave();
 };
 
 const handleEditorPageHide = () => {
     flushPersistenceNow('pagehide');
+    emergencyBeaconSave();
 };
 
 const handleEditorVisibilityChange = () => {

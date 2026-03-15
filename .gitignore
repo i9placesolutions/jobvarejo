@@ -5,6 +5,8 @@ node_modules
 .DS_Store
 dist
 *.log
+_check_*.mjs
+_test_*.mjs
 
 # Auto-generated entries
 # Dependencies

@@ -38,7 +38,13 @@ export default defineEventHandler(async (event) => {
   }
 
   // Ler body binário do request
-  const body = await readRawBody(event, false)
+  let body: Buffer | string | null = null
+  try {
+    body = (await readRawBody(event, false)) ?? null
+  } catch (readErr: any) {
+    console.error('❌ Erro ao ler body do upload:', readErr?.message)
+    throw createError({ statusCode: 400, statusMessage: `Failed to read request body: ${readErr?.message || 'unknown'}` })
+  }
   if (!body || (Buffer.isBuffer(body) && body.length === 0)) {
     throw createError({ statusCode: 400, statusMessage: 'Empty body' })
   }
@@ -70,13 +76,23 @@ export default defineEventHandler(async (event) => {
   })
 
   const bodyBuffer = Buffer.isBuffer(body) ? body : Buffer.from(body as any)
+  console.log(`📤 Upload: key=${key.substring(0, 60)}... size=${bodyBuffer.length} bytes contentType=${contentType}`)
 
-  await s3Client.send(new PutObjectCommand({
-    Bucket: bucket,
-    Key: key,
-    Body: bodyBuffer,
-    ContentType: contentType
-  }))
+  try {
+    await s3Client.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: bodyBuffer,
+      ContentType: contentType
+    }))
+  } catch (s3Err: any) {
+    console.error('❌ Wasabi S3 PutObject failed:', s3Err?.message, s3Err?.Code, s3Err?.$metadata?.httpStatusCode)
+    throw createError({
+      statusCode: 502,
+      statusMessage: `Wasabi upload failed: ${s3Err?.message || 'unknown S3 error'}`
+    })
+  }
 
+  console.log(`✅ Upload OK: key=${key.substring(0, 60)}... size=${bodyBuffer.length}`)
   return { key, size: bodyBuffer.length }
 })
