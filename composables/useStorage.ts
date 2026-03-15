@@ -75,6 +75,10 @@ const THUMBNAIL_UPLOAD_RETRIES = 2
 const lastHistorySnapshotAtByPage = new Map<string, number>()
 const historySnapshotInFlightByPage = new Map<string, Promise<void>>()
 
+// Cache de presigned URLs de leitura (GET) — válidas por ~55min no servidor, cache por 30min
+const _presignedGetCache = new Map<string, { url: string; expiresAt: number }>()
+const PRESIGNED_CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutos
+
 /**
  * Obtém presigned URL do backend para upload/download
  * Isso evita expor credenciais S3 no frontend
@@ -86,6 +90,15 @@ async function getPresignedUrl(
   retries = 2,
   headers?: Record<string, string> | null
 ): Promise<string | null> {
+  // Cache hit para GET (leitura): evita roundtrip extra ao servidor
+  if (operation === 'get') {
+    const cached = _presignedGetCache.get(key)
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.url
+    }
+    _presignedGetCache.delete(key)
+  }
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController()
@@ -108,6 +121,10 @@ async function getPresignedUrl(
           }
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
           continue
+        }
+        // Cachear URLs de GET
+        if (operation === 'get') {
+          _presignedGetCache.set(key, { url: data.url, expiresAt: Date.now() + PRESIGNED_CACHE_TTL_MS })
         }
         return data.url
       } catch (fetchError: any) {

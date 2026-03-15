@@ -1125,22 +1125,21 @@ export const useProject = () => {
             const failedCanvasSyncPageIds = new Set<string>()
             const failedThumbnailSyncPageIds = new Set<string>()
 
-	            for (const [i, page] of project.pages.entries()) {
-	                if (abortIfStaleSaveContext()) return
+            // Upload de todas as páginas em paralelo (canvas + thumbnail por página)
+            setSaveStage('upload-pages')
+            const pageUploadPromises = project.pages.map(async (page, i) => {
+                if (abortIfStaleSaveContext()) return
 
-	                // Salvar canvas JSON no Storage (com retry automático)
-		                const shouldUploadCanvas = !opts.skipCanvasUpload && !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
-		                if (shouldUploadCanvas && page?.canvasData) {
-	                    try {
-                            setSaveStage(`upload-canvas:${page.id}`)
-	                        const currentCount = getCanvasObjectCount(page.canvasData)
-	                        const persistedCount = Number(page?.lastPersistedObjectCount || 0)
-	                        if (isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite) {
-	                            console.warn(`🛡️ Skip upload vazio para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
-	                            continue
-	                        }
-                        // Tentar salvar na Wasabi (com retry interno)
-	                        const path = await withSoftTimeout(
+                // Salvar canvas JSON no Storage (com retry automático)
+                const shouldUploadCanvas = !opts.skipCanvasUpload && !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
+                if (shouldUploadCanvas && page?.canvasData) {
+                    try {
+                        const currentCount = getCanvasObjectCount(page.canvasData)
+                        const persistedCount = Number(page?.lastPersistedObjectCount || 0)
+                        if (isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite) {
+                            console.warn(`🛡️ Skip upload vazio para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
+                        } else {
+                            const path = await withSoftTimeout(
                                 saveCanvasData(
                                     project.id,
                                     page.id,
@@ -1153,24 +1152,19 @@ export const useProject = () => {
                                 CANVAS_UPLOAD_SOFT_TIMEOUT_MS,
                                 `upload-canvas:${page.id}`
                             )
-	                        if (abortIfStaleSaveContext()) return
-	                        if (path) {
-                            storagePaths[i] = path
-                            page.canvasDataPath = path
-                            page.lastPersistedObjectCount = currentCount
-                            console.log('✅ Canvas salvo na Wasabi:', path)
-                        } else {
-                            // Se falhou após todas as tentativas, o draft local já está salvo
-                            failedCanvasSyncPageIds.add(page.id)
-                            console.warn(`⚠️ Falha ao salvar canvas na Wasabi após múltiplas tentativas (página ${page.id})`)
-                            console.warn('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
-                            // Não lançar erro aqui - continuar salvando outras páginas
+                            if (path) {
+                                storagePaths[i] = path
+                                page.canvasDataPath = path
+                                page.lastPersistedObjectCount = currentCount
+                                console.log('✅ Canvas salvo na Wasabi:', path)
+                            } else {
+                                failedCanvasSyncPageIds.add(page.id)
+                                console.warn(`⚠️ Falha ao salvar canvas na Wasabi após múltiplas tentativas (página ${page.id})`)
+                            }
                         }
                     } catch (err: any) {
                         failedCanvasSyncPageIds.add(page.id)
                         console.error('❌ Erro crítico ao salvar canvas na Wasabi:', err)
-                        console.error('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
-                        // Não lançar erro - continuar com outras páginas
                     }
                 } else if (opts.skipCanvasUpload && page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)) {
                     failedCanvasSyncPageIds.add(page.id)
@@ -1180,17 +1174,15 @@ export const useProject = () => {
                     storagePaths[i] = page.canvasDataPath
                 }
 
-                // Salvar thumbnail no Storage
-		                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.dirty || !!page?.thumbnailDirty || !page?.thumbnailUrl)
-		                if (shouldUploadThumbnail && page?.thumbnail) {
-                            setSaveStage(`upload-thumbnail:${page.id}`)
-		                    const url = await withSoftTimeout(
-                                saveThumbnail(project.id, page.id, page.thumbnail),
-                                THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS,
-                                `upload-thumbnail:${page.id}`
-                            )
-		                    if (abortIfStaleSaveContext()) return
-		                    if (url) {
+                // Salvar thumbnail no Storage (em paralelo com canvas)
+                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.dirty || !!page?.thumbnailDirty || !page?.thumbnailUrl)
+                if (shouldUploadThumbnail && page?.thumbnail) {
+                    const url = await withSoftTimeout(
+                        saveThumbnail(project.id, page.id, page.thumbnail),
+                        THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS,
+                        `upload-thumbnail:${page.id}`
+                    )
+                    if (url) {
                         thumbnailUrls[i] = url
                         page.thumbnailUrl = url
                         page.thumbnailDirty = false
@@ -1202,7 +1194,9 @@ export const useProject = () => {
                 if (!thumbnailUrls[i] && page?.thumbnailUrl) {
                     thumbnailUrls[i] = page.thumbnailUrl
                 }
-            }
+            })
+            await Promise.all(pageUploadPromises)
+            if (abortIfStaleSaveContext()) return
 
             // 2. Preparar payload mínimo para o banco (apenas metadados)
                 setSaveStage('prepare-db-payload')
@@ -1582,18 +1576,28 @@ export const useProject = () => {
 
             console.log('📄 Páginas armazenadas:', storedPages.length)
 
-            // Carregar a página ativa imediatamente e deixar as demais para hidratação sob demanda/idle.
+            // Carregar páginas: página ativa imediata, demais em paralelo ou sob demanda.
             project.pages = []
             let recoveredFromNewerDraft = false
             const recoveredDraftPages: string[] = []
 
             const loadedPageIds = new Set<string>()
+
+            // Fase 1: Preparar todas as páginas (sync) e identificar quais precisam de hidratação
+            interface PageLoadTask {
+                page: Page
+                pageMeta: any
+                draft: DraftPayload | null
+                shouldHydrateNow: boolean
+                pageIndex: number
+            }
+            const pageLoadTasks: PageLoadTask[] = []
+
             for (const [pageIndex, pageMeta] of storedPages.entries()) {
                 if (currentSession !== projectLoadSession.value) {
                     console.warn('⏭️ Carregamento de páginas interrompido por sessão mais nova')
                     return false
                 }
-                // Pular se pageMeta não for um objeto válido
                 if (!pageMeta || typeof pageMeta !== 'object') continue
                 const rawPageId = String((pageMeta as any).id || '').trim()
                 const pageId = ensureUniquePageId(rawPageId, loadedPageIds)
@@ -1623,22 +1627,59 @@ export const useProject = () => {
                     pageIndex === 0 ||
                     !!draft?.canvasData ||
                     !String(pageMeta?.canvasDataPath || '').trim()
-                if (shouldHydrateNow) {
-                    const resolved = await resolvePageCanvasState({
-                        projectId: data.id,
-                        pageId,
-                        pageMeta,
-                        draft
-                    })
-                    applyResolvedPageCanvasState(page, resolved)
-                    if (resolved.needsRemoteSync) {
-                        recoveredFromNewerDraft = true
-                        recoveredDraftPages.push(pageId)
-                    }
-                }
 
-                project.pages.push(page)
-                console.log('✅ Página adicionada:', { id: page.id, name: page.name, hasCanvasData: !!page.canvasData })
+                pageLoadTasks.push({ page, pageMeta, draft, shouldHydrateNow, pageIndex })
+            }
+
+            // Fase 2: Hidratar página ativa (index 0) primeiro, demais em paralelo
+            const activeTask = pageLoadTasks.find(t => t.pageIndex === 0 && t.shouldHydrateNow)
+            const otherHydrateTasks = pageLoadTasks.filter(t => t.shouldHydrateNow && t.pageIndex !== 0)
+
+            // Página ativa: carregar imediatamente
+            if (activeTask) {
+                const resolved = await resolvePageCanvasState({
+                    projectId: data.id,
+                    pageId: activeTask.page.id,
+                    pageMeta: activeTask.pageMeta,
+                    draft: activeTask.draft
+                })
+                applyResolvedPageCanvasState(activeTask.page, resolved)
+                if (resolved.needsRemoteSync) {
+                    recoveredFromNewerDraft = true
+                    recoveredDraftPages.push(activeTask.page.id)
+                }
+            }
+
+            // Adicionar TODAS as páginas na ordem correta (antes de hidratar as demais)
+            for (const task of pageLoadTasks) {
+                project.pages.push(task.page)
+            }
+
+            // Demais páginas que precisam hidratação: carregar em paralelo (não bloquear a UI)
+            if (otherHydrateTasks.length > 0) {
+                const hydrationPromises = otherHydrateTasks.map(async (task) => {
+                    try {
+                        const resolved = await resolvePageCanvasState({
+                            projectId: data.id,
+                            pageId: task.page.id,
+                            pageMeta: task.pageMeta,
+                            draft: task.draft
+                        })
+                        applyResolvedPageCanvasState(task.page, resolved)
+                        if (resolved.needsRemoteSync) {
+                            recoveredFromNewerDraft = true
+                            recoveredDraftPages.push(task.page.id)
+                        }
+                    } catch (err) {
+                        console.warn(`⚠️ Falha ao hidratar página ${task.page.id}:`, err)
+                    }
+                })
+                // Não bloquear: executar em background
+                void Promise.all(hydrationPromises)
+            }
+
+            for (const task of pageLoadTasks) {
+                console.log('✅ Página adicionada:', { id: task.page.id, name: task.page.name, hasCanvasData: !!task.page.canvasData })
             }
 
             // Se não tem páginas, inicializar

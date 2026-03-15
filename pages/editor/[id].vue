@@ -23,6 +23,7 @@ definePageMeta({
 const {
   project,
   activePage,
+  isProjectLoaded,
   loadProjectDB,
   saveProjectDB,
   saveStatus,
@@ -446,17 +447,28 @@ const openPageHistory = () => {
     <!-- Editor Canvas -->
     <div class="flex-1 min-h-0 overflow-hidden">
       <ClientOnly>
-        <EditorCanvas @auto-save="triggerAutoSave" />
+        <template v-if="isProjectLoaded">
+          <EditorCanvas @auto-save="triggerAutoSave" />
+        </template>
+        <template v-else>
+          <div class="flex flex-col items-center justify-center h-full gap-3">
+            <div class="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+            <span class="text-sm text-zinc-400">Carregando projeto...</span>
+          </div>
+        </template>
         <template #fallback>
-          <div class="flex items-center justify-center h-full text-zinc-500">
-            Carregando editor...
+          <div class="flex flex-col items-center justify-center h-full gap-3">
+            <div class="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+            <span class="text-sm text-zinc-400">Carregando editor...</span>
           </div>
         </template>
       </ClientOnly>
     </div>
   </div>
   <template #fallback>
-    <div class="h-screen bg-[#0f0f0f]"></div>
+    <div class="h-screen bg-[#0f0f0f] flex flex-col items-center justify-center gap-3">
+      <div class="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+    </div>
   </template>
   </ClientOnly>
 </template>
