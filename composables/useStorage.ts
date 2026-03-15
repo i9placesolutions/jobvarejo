@@ -373,16 +373,19 @@ export const useStorage = () => {
           }
         }
 
-        // ── Tentativa 2 (ou única se CORS bloqueado): Proxy servidor ──
+        // ── Tentativa 2 (ou única se CORS bloqueado): Proxy servidor via FormData ──
         const proxyController = new AbortController()
         const proxyTimeoutId = setTimeout(() => proxyController.abort(), 25_000)
 
         try {
+          // FormData é mais compatível com Vite proxy e Nitro readMultipartFormData
+          const formData = new FormData()
+          formData.append('file', blob, 'canvas.json.gz')
+
           const result = await $fetch<{ key: string; size: number }>('/api/storage/upload', {
             method: 'POST',
             query: { key, contentType },
-            body: blob,
-            headers: { 'Content-Type': contentType },
+            body: formData,
             signal: proxyController.signal as any
           })
 
@@ -566,14 +569,16 @@ export const useStorage = () => {
       const response = await fetch(dataUrl)
       const blob = await response.blob()
 
-      // Upload via servidor (evita CORS)
+      // Upload via servidor (evita CORS) usando FormData
       for (let attempt = 1; attempt <= THUMBNAIL_UPLOAD_RETRIES; attempt++) {
         try {
+          const formData = new FormData()
+          formData.append('file', blob, 'thumb.png')
+
           const result = await $fetch<{ key: string }>('/api/storage/upload', {
             method: 'POST',
             query: { key, contentType: 'image/png' },
-            body: blob,
-            timeout: THUMBNAIL_UPLOAD_TIMEOUT_MS
+            body: formData,
           })
 
           if (!result?.key) {
