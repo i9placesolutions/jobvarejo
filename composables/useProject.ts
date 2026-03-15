@@ -1657,14 +1657,30 @@ export const useProject = () => {
                 console.warn('📝 Projeto restaurado com rascunho local mais novo; agendando persistência remota DB-first.', {
                     pages: recoveredDraftPages
                 })
-                // Salvar direto em 3s (sem o delay de 15s do triggerAutoSave)
-                // para garantir que o rascunho seja persistido rapidamente
+                // 1) Salvar direto no DB em 3s (sem upload Wasabi para ser rápido)
                 setTimeout(() => {
                     if (currentSession !== projectLoadSession.value) return
                     if (!isSaving.value) {
                         void saveProjectDB({
                             preferDbBackup: true,
                             skipCanvasUpload: true
+                        }).then(() => {
+                            // 2) Após o DB-first, agendar um save completo COM upload Wasabi
+                            if (currentSession !== projectLoadSession.value) return
+                            setTimeout(() => {
+                                if (currentSession !== projectLoadSession.value) return
+                                if (!isSaving.value) {
+                                    // Marcar páginas dirty para forçar o upload
+                                    for (const page of project.pages) {
+                                        if (page?.canvasData && !page?.canvasDataPath) {
+                                            page.dirty = true
+                                        }
+                                    }
+                                    hasUnsavedChanges.value = true
+                                    console.log('📤 Agendando upload Wasabi após DB-first recovery')
+                                    void saveProjectDB()
+                                }
+                            }, 5000)
                         })
                     }
                 }, 3000)

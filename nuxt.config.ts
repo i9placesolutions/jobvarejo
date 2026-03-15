@@ -191,6 +191,12 @@ export default defineNuxtConfig({
         'Cross-Origin-Embedder-Policy': 'credentialless',
       },
     },
+    '/api/storage/upload': {
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+        'Cross-Origin-Embedder-Policy': 'credentialless',
+      },
+    },
     '/api/projects/**': {
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',

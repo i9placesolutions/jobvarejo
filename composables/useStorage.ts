@@ -25,6 +25,9 @@ const decompressGzip = async (data: ArrayBuffer): Promise<string> => {
 const isGzipBuffer = (buf: Uint8Array): boolean =>
   buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b
 
+// Cache: se presigned URL falhar por CORS, pular nas próximas tentativas
+let _presignedCorsBlocked = false
+
 /**
  * Wasabi Storage Composable
  *
@@ -324,58 +327,86 @@ export const useStorage = () => {
       contentType = 'application/json'
     }
 
-    // Upload via servidor (evita CORS) com retry e backoff exponencial
+    // Estratégia: presigned URL direto (rápido, pula se CORS bloqueou antes) → fallback proxy servidor
     for (let attempt = 1; attempt <= retries; attempt++) {
+      const uploadStart = Date.now()
       try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 25_000) // 25s timeout
+        // ── Tentativa 1: Presigned URL direto (browser → Wasabi) ──
+        if (!_presignedCorsBlocked) {
+          try {
+            const presignedUrl = await getPresignedUrl(key, contentType, 'put', 1, authHeaders)
+            if (presignedUrl) {
+              const presignedController = new AbortController()
+              const presignedTimeout = setTimeout(() => presignedController.abort(), 15_000)
+              try {
+                const response = await fetch(presignedUrl, {
+                  method: 'PUT',
+                  body: blob,
+                  headers: { 'Content-Type': contentType },
+                  signal: presignedController.signal
+                })
+                clearTimeout(presignedTimeout)
+
+                if (response.ok) {
+                  lastSavedAt.value = new Date()
+                  saveStatus.value = 'saved'
+                  console.log(`✅ Canvas salvo via presigned URL (tentativa ${attempt}/${retries}, ${Date.now() - uploadStart}ms):`, key)
+                  void triggerHistorySnapshot({ userId, projectId, pageId, key })
+                  return key
+                }
+                console.warn(`⚠️ Presigned upload HTTP ${response.status}, fallback para proxy...`)
+              } catch (fetchErr: any) {
+                clearTimeout(presignedTimeout)
+                // CORS ou TypeError = browser bloqueou cross-origin PUT → cachear e pular
+                if (fetchErr?.name === 'TypeError' || fetchErr?.message?.includes('CORS') || fetchErr?.message?.includes('Failed to fetch')) {
+                  _presignedCorsBlocked = true
+                  console.warn('⚠️ CORS bloqueou presigned upload, usando proxy para esta sessão.')
+                } else if (fetchErr?.name === 'AbortError') {
+                  console.warn('⚠️ Presigned upload timeout (15s), fallback para proxy...')
+                } else {
+                  console.warn(`⚠️ Presigned upload erro (${fetchErr?.message}), fallback para proxy...`)
+                }
+              }
+            }
+          } catch (presignedSetupErr: any) {
+            console.warn(`⚠️ Não conseguiu obter presigned URL (${presignedSetupErr?.message}), usando proxy...`)
+          }
+        }
+
+        // ── Tentativa 2 (ou única se CORS bloqueado): Proxy servidor ──
+        const proxyController = new AbortController()
+        const proxyTimeoutId = setTimeout(() => proxyController.abort(), 25_000)
 
         try {
           const result = await $fetch<{ key: string; size: number }>('/api/storage/upload', {
             method: 'POST',
             query: { key, contentType },
             body: blob,
-            signal: controller.signal as any,
-            timeout: 25_000
+            headers: { 'Content-Type': contentType },
+            signal: proxyController.signal as any
           })
 
-          clearTimeout(timeoutId)
+          clearTimeout(proxyTimeoutId)
 
           if (!result?.key) {
-            throw new Error('Upload retornou resposta inválida')
+            throw new Error('Upload proxy retornou resposta inválida')
           }
 
-          // Sucesso!
           lastSavedAt.value = new Date()
           saveStatus.value = 'saved'
-          console.log(`✅ Canvas salvo na Wasabi via servidor (tentativa ${attempt}/${retries}):`, result.key)
-          // Snapshot histórico assíncrono e com throttle para não impactar a UX.
-          void triggerHistorySnapshot({
-            userId,
-            projectId,
-            pageId,
-            key
-          })
+          console.log(`✅ Canvas salvo via proxy (tentativa ${attempt}/${retries}, ${Date.now() - uploadStart}ms):`, result.key)
+          void triggerHistorySnapshot({ userId, projectId, pageId, key })
           return result.key
 
-        } catch (fetchError: any) {
-          clearTimeout(timeoutId)
-          // Se for 401, não adianta retry
-          const statusCode = Number(fetchError?.statusCode ?? fetchError?.response?.status ?? 0)
+        } catch (proxyErr: any) {
+          clearTimeout(proxyTimeoutId)
+          const statusCode = Number(proxyErr?.statusCode ?? proxyErr?.response?.status ?? 0)
           if (statusCode === 401) {
             saveStatus.value = 'error'
             saveError.value = 'Sessão expirada. Faça login novamente.'
             return null
           }
-          if (fetchError.name === 'AbortError') {
-            if (attempt === retries) {
-              throw new Error('Upload timeout após 25 segundos')
-            }
-            console.warn(`⚠️ Timeout na tentativa ${attempt}, tentando novamente...`)
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
-            continue
-          }
-          throw fetchError
+          throw proxyErr
         }
 
       } catch (error: any) {
@@ -385,8 +416,9 @@ export const useStorage = () => {
           saveError.value = error?.message || 'Erro desconhecido'
           return null
         }
-        console.warn(`⚠️ Tentativa ${attempt} falhou, tentando novamente em ${Math.pow(2, attempt)}s...`)
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000))
+        const backoffMs = Math.min(Math.pow(2, attempt) * 1000, 8000)
+        console.warn(`⚠️ Tentativa ${attempt} falhou (${error?.message}), retry em ${backoffMs / 1000}s...`)
+        await new Promise(resolve => setTimeout(resolve, backoffMs))
       }
     }
 

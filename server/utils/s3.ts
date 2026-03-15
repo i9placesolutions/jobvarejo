@@ -32,10 +32,21 @@ export const getS3Client = () => {
             accessKeyId,
             secretAccessKey
         },
-        forcePathStyle: true
+        forcePathStyle: true,
+        maxAttempts: 2,
     });
 
     return _s3ClientInstance;
+};
+
+/**
+ * Reseta o singleton do S3 client (útil se credenciais mudarem).
+ */
+export const resetS3Client = () => {
+    if (_s3ClientInstance) {
+        _s3ClientInstance.destroy();
+        _s3ClientInstance = null;
+    }
 };
 
 const resolveWasabiEndpoint = () => {
