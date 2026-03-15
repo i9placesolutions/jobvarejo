@@ -52,6 +52,7 @@ const queuedSaveAfterCurrent = ref(false)
 const SAVE_WATCHDOG_MS = 45_000
 const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 12_000
 const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 8_000
+const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 2_500_000
 let lastSaveChangedDuringRunLogAt = 0
 
 const createRealtimeClientId = (): string => {
@@ -1024,7 +1025,11 @@ export const useProject = () => {
      * Salva o projeto usando Storage S3-compatível (Wasabi/Contabo) para os dados pesados.
      * O banco armazena apenas metadados e caminhos para os arquivos.
      */
-		    const saveProjectDB = async (opts: { forceEmptyOverwrite?: boolean } = {}) => {
+		    const saveProjectDB = async (opts: {
+                forceEmptyOverwrite?: boolean
+                preferDbBackup?: boolean
+                skipCanvasUpload?: boolean
+            } = {}) => {
 		        // Não executar no servidor (SSR)
 		        if (import.meta.server) {
 		            return
@@ -1124,7 +1129,7 @@ export const useProject = () => {
 	                if (abortIfStaleSaveContext()) return
 
 	                // Salvar canvas JSON no Storage (com retry automático)
-		                const shouldUploadCanvas = !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
+		                const shouldUploadCanvas = !opts.skipCanvasUpload && !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
 		                if (shouldUploadCanvas && page?.canvasData) {
 	                    try {
                             setSaveStage(`upload-canvas:${page.id}`)
@@ -1167,6 +1172,9 @@ export const useProject = () => {
                         console.error('   ✅ Draft local foi salvo automaticamente - dados não foram perdidos')
                         // Não lançar erro - continuar com outras páginas
                     }
+                } else if (opts.skipCanvasUpload && page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)) {
+                    failedCanvasSyncPageIds.add(page.id)
+                    console.warn(`[saveProjectDB] Upload do canvas adiado para página ${page.id}; usando persistência DB-first.`)
                 }
                 if (!storagePaths[i] && page?.canvasDataPath) {
                     storagePaths[i] = page.canvasDataPath
@@ -1210,7 +1218,12 @@ export const useProject = () => {
                     thumbnailUrl: thumbnailUrls[index] || page.thumbnailUrl // URL do thumbnail
                 }
 
-		                const shouldAttachCanvasBackup = !!page.canvasData && (!!page?.dirty || !page?.canvasDataPath)
+		                const shouldAttachCanvasBackup = !!page.canvasData && (
+                            !!opts.preferDbBackup ||
+                            !!page?.dirty ||
+                            !page?.canvasDataPath ||
+                            failedCanvasSyncPageIds.has(page.id)
+                        )
 		                if (shouldAttachCanvasBackup) {
 		                    const currentCount = getCanvasObjectCount(page.canvasData)
 		                    const persistedCount = Number(page?.lastPersistedObjectCount || 0)
@@ -1221,7 +1234,10 @@ export const useProject = () => {
                         const backupBytes = Number.isFinite(Number(page?.lastSerializedCanvasBytes))
                             ? Number(page.lastSerializedCanvasBytes)
                             : estimateJsonBytes(page.canvasData)
-                        if (backupBytes > MAX_PAGE_DB_CANVAS_BACKUP_BYTES) {
+                        const maxBackupBytes = (opts.preferDbBackup || failedCanvasSyncPageIds.has(page.id))
+                            ? MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE
+                            : MAX_PAGE_DB_CANVAS_BACKUP_BYTES
+                        if (backupBytes > maxBackupBytes) {
                             console.warn(`[saveProjectDB] Backup canvasData omitido no DB para página ${page.id}: ${backupBytes} bytes`)
                         } else {
                             metadata.canvasData = page.canvasData
@@ -1638,14 +1654,19 @@ export const useProject = () => {
 	            isProjectLoaded.value = true // Marca que o projeto foi carregado
 
             if (recoveredFromNewerDraft && !project.id.startsWith('proj_')) {
-                console.warn('📝 Projeto restaurado com rascunho local mais novo; agendando re-sync remoto.', {
+                console.warn('📝 Projeto restaurado com rascunho local mais novo; agendando persistência remota DB-first.', {
                     pages: recoveredDraftPages
                 })
                 // Salvar direto em 3s (sem o delay de 15s do triggerAutoSave)
                 // para garantir que o rascunho seja persistido rapidamente
                 setTimeout(() => {
                     if (currentSession !== projectLoadSession.value) return
-                    if (!isSaving.value) void saveProjectDB()
+                    if (!isSaving.value) {
+                        void saveProjectDB({
+                            preferDbBackup: true,
+                            skipCanvasUpload: true
+                        })
+                    }
                 }, 3000)
             }
 
