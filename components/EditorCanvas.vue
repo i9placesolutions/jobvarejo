@@ -36546,31 +36546,102 @@ const handleRecalculateLayout = () => {
                 @open-label-templates="showLabelTemplatesModal = true"
               />
 
+              <!-- Mobile Undo/Redo Bar (always visible on mobile) -->
+              <div
+                v-if="isMobile"
+                class="absolute top-2 left-2 z-[200] flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#18181b]/90 backdrop-blur-md border border-white/10 shadow-lg"
+              >
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Desfazer" @click="undo()">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+                </button>
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Refazer" @click="redo()">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>
+                </button>
+              </div>
+
+              <!-- Mobile Zoom Display (top right) -->
+              <div
+                v-if="isMobile"
+                class="absolute top-2 right-2 z-[200] flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#18181b]/90 backdrop-blur-md border border-white/10 shadow-lg"
+              >
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Zoom -" @click="handleZoomOut()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
+                </button>
+                <span class="text-[11px] text-white/50 min-w-[36px] text-center tabular-nums">{{ Math.round(currentZoom) }}%</span>
+                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Zoom +" @click="handleZoomIn()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
+                </button>
+              </div>
+
               <!-- Mobile Quick Actions Bar (appears when object is selected) -->
               <div
                 v-if="isMobile && selectedObjectRef"
-                class="absolute bottom-16 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-1 px-2 py-1.5 rounded-xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-xl"
+                class="absolute bottom-16 left-0 right-0 z-[200] flex items-center justify-center px-2"
               >
-                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Duplicar" @click="handleAction('duplicate')">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                </button>
-                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Deletar" @click="deleteActiveSelectionFromCanvas()">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                </button>
-                <div class="w-px h-5 bg-white/10 mx-0.5"></div>
-                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Trazer para frente" @click="arrangeActiveObjects('bring-to-front')">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/></svg>
-                </button>
-                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Enviar para trás" @click="arrangeActiveObjects('send-to-back')">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 6 5 5 5-5"/><path d="m7 13 5 5 5-5"/></svg>
-                </button>
-                <div class="w-px h-5 bg-white/10 mx-0.5"></div>
-                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Agrupar" @click="groupSelection()">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>
-                </button>
-                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2" title="Propriedades" @click="mobilePanel = 'properties'">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>
-                </button>
+                <div class="flex items-center gap-0.5 px-2 py-1.5 rounded-xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-xl overflow-x-auto max-w-full scrollbar-hide">
+                  <!-- Copy -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Copiar" @click="document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true }))">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  </button>
+                  <!-- Paste -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Colar" @click="document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true }))">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H9a1 1 0 0 0-1 1v2c0 .6.4 1 1 1h6c.6 0 1-.4 1-1V3c0-.6-.4-1-1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2M16 4h2a2 2 0 0 1 2 2v2"/><path d="M12 12h4"/><path d="M12 16h4"/></svg>
+                  </button>
+                  <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
+                  <!-- Duplicate -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Duplicar" @click="handleAction('duplicate')">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  </button>
+                  <!-- Delete -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-red-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Deletar" @click="deleteActiveSelectionFromCanvas()">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  </button>
+                  <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
+                  <!-- Flip H -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Flip Horizontal" @click="handleAction('flip-h')">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><line x1="12" x2="12" y1="20" y2="4"/></svg>
+                  </button>
+                  <!-- Flip V -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Flip Vertical" @click="handleAction('flip-v')">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h14c1.1 0 2 .9 2 2v3"/><path d="M3 16v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/><line x1="4" x2="20" y1="12" y2="12"/></svg>
+                  </button>
+                  <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
+                  <!-- Bring to Front -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Trazer para frente" @click="arrangeActiveObjects('bring-to-front')">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/></svg>
+                  </button>
+                  <!-- Send to Back -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Enviar para trás" @click="arrangeActiveObjects('send-to-back')">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 6 5 5 5-5"/><path d="m7 13 5 5 5-5"/></svg>
+                  </button>
+                  <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
+                  <!-- Group -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Agrupar" @click="groupSelection()">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>
+                  </button>
+                  <!-- Ungroup -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Desagrupar" @click="handleAction('ungroup')">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2" stroke-dasharray="3 3"/><path d="M2 2h5v5H2z" fill="currentColor" opacity="0.3"/><path d="M17 2h5v5h-5z" fill="currentColor" opacity="0.3"/><path d="M2 17h5v5H2z" fill="currentColor" opacity="0.3"/><path d="M17 17h5v5h-5z" fill="currentColor" opacity="0.3"/></svg>
+                  </button>
+                  <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
+                  <!-- Align Left -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Alinhar Esquerda" @click="alignSelectionHorizontally('left')">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="4" x2="4" y1="2" y2="22"/><rect x="8" y="4" width="12" height="5" rx="1"/><rect x="8" y="15" width="8" height="5" rx="1"/></svg>
+                  </button>
+                  <!-- Align Center H -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Centralizar H" @click="alignSelectionHorizontally('center')">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" x2="12" y1="2" y2="22"/><rect x="5" y="4" width="14" height="5" rx="1"/><rect x="7" y="15" width="10" height="5" rx="1"/></svg>
+                  </button>
+                  <!-- Align Right -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Alinhar Direita" @click="alignSelectionHorizontally('right')">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="20" x2="20" y1="2" y2="22"/><rect x="4" y="4" width="12" height="5" rx="1"/><rect x="8" y="15" width="8" height="5" rx="1"/></svg>
+                  </button>
+                  <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
+                  <!-- Properties -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Propriedades" @click="mobilePanel = 'properties'">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>
+                  </button>
+                </div>
               </div>
           </main>
 
@@ -36646,39 +36717,89 @@ const handleRecalculateLayout = () => {
         @close="mobilePanel = null; mobileNavRef?.clearActive()"
       >
         <!-- Tools panel -->
-        <div v-if="mobilePanel === 'tools'" class="grid grid-cols-4 gap-3">
-          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addFrame(); mobilePanel = null; mobileNavRef?.clearActive()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-            <span class="text-[11px]">Frame</span>
-          </button>
-          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('rect'); mobilePanel = null; mobileNavRef?.clearActive()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>
-            <span class="text-[11px]">Retângulo</span>
-          </button>
-          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('circle'); mobilePanel = null; mobileNavRef?.clearActive()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/></svg>
-            <span class="text-[11px]">Círculo</span>
-          </button>
-          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addText(); mobilePanel = null; mobileNavRef?.clearActive()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 7V4h16v3"/><path d="M12 4v16"/><path d="M8 20h8"/></svg>
-            <span class="text-[11px]">Texto</span>
-          </button>
-          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="togglePenMode(); mobilePanel = null; mobileNavRef?.clearActive()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
-            <span class="text-[11px]">Caneta</span>
-          </button>
-          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addGridZone(); mobilePanel = null; mobileNavRef?.clearActive()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-            <span class="text-[11px]">Grid Zone</span>
-          </button>
-          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="toggleDrawing(); mobilePanel = null; mobileNavRef?.clearActive()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
-            <span class="text-[11px]">Desenho</span>
-          </button>
-          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="showLabelTemplatesModal = true; mobilePanel = null; mobileNavRef?.clearActive()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
-            <span class="text-[11px]">Etiquetas</span>
-          </button>
+        <div v-if="mobilePanel === 'tools'" class="space-y-4">
+          <!-- Shapes -->
+          <div>
+            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Formas</div>
+            <div class="grid grid-cols-4 gap-2">
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addFrame(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                <span class="text-[11px]">Frame</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('rect'); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>
+                <span class="text-[11px]">Retângulo</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('rect', { rx: 16, ry: 16 }); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="6"/></svg>
+                <span class="text-[11px]">Arredondado</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('circle'); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/></svg>
+                <span class="text-[11px]">Círculo</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('ellipse'); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="12" rx="10" ry="6"/></svg>
+                <span class="text-[11px]">Elipse</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('triangle'); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 4L3 20h18L12 4z"/></svg>
+                <span class="text-[11px]">Triângulo</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('line'); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+                <span class="text-[11px]">Linha</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('star'); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span class="text-[11px]">Estrela</span>
+              </button>
+            </div>
+          </div>
+          <!-- Text & Drawing -->
+          <div>
+            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Texto & Desenho</div>
+            <div class="grid grid-cols-4 gap-2">
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addText(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 7V4h16v3"/><path d="M12 4v16"/><path d="M8 20h8"/></svg>
+                <span class="text-[11px]">Texto</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addText('heading'); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 12h12"/><path d="M6 4v16"/><path d="M18 4v16"/></svg>
+                <span class="text-[11px]">Título</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="togglePenMode(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+                <span class="text-[11px]">Caneta</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="toggleDrawing(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
+                <span class="text-[11px]">Desenho</span>
+              </button>
+            </div>
+          </div>
+          <!-- Product & Templates -->
+          <div>
+            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Produtos & Templates</div>
+            <div class="grid grid-cols-4 gap-2">
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addGridZone(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                <span class="text-[11px]">Grid Zone</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="showLabelTemplatesModal = true; mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
+                <span class="text-[11px]">Etiquetas</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="fileInput?.click(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                <span class="text-[11px]">Imagem</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="openAiGenerationModal(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                <span class="text-[11px]">IA Gerar</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Layers panel -->
@@ -36757,35 +36878,77 @@ const handleRecalculateLayout = () => {
         </template>
 
         <!-- More panel -->
-        <div v-if="mobilePanel === 'more'" class="space-y-3">
-          <div class="grid grid-cols-3 gap-3">
-            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="zoomToFit(); mobilePanel = null; mobileNavRef?.clearActive()">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></svg>
-              <span class="text-[11px]">Ajustar</span>
-            </button>
-            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="handleZoom100(); mobilePanel = null; mobileNavRef?.clearActive()">
-              <span class="text-sm font-semibold">100%</span>
-              <span class="text-[11px]">Zoom</span>
-            </button>
-            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="startPresentation(); mobilePanel = null; mobileNavRef?.clearActive()">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              <span class="text-[11px]">Apresentar</span>
-            </button>
-            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="openAiGenerationModal(); mobilePanel = null; mobileNavRef?.clearActive()">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-              <span class="text-[11px]">IA</span>
-            </button>
-            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="shareDesign(); mobilePanel = null; mobileNavRef?.clearActive()">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
-              <span class="text-[11px]">Compartilhar</span>
-            </button>
-            <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70" @click="toggleGrid(); mobilePanel = null; mobileNavRef?.clearActive()">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" :class="viewShowGrid ? 'text-violet-400' : ''"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
-              <span class="text-[11px]">Grid</span>
-            </button>
+        <div v-if="mobilePanel === 'more'" class="space-y-4">
+          <!-- Zoom -->
+          <div>
+            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Zoom ({{ Math.round(currentZoom) }}%)</div>
+            <div class="grid grid-cols-4 gap-2">
+              <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleZoom50()">
+                <span class="text-sm font-semibold">50%</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleZoom100()">
+                <span class="text-sm font-semibold">100%</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleZoom200()">
+                <span class="text-sm font-semibold">200%</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="zoomToFit(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></svg>
+                <span class="text-[10px]">Ajustar</span>
+              </button>
+            </div>
           </div>
-          <div class="text-[11px] text-white/40 text-center pt-2">
-            Zoom: {{ Math.round(currentZoom) }}%
+          <!-- Actions -->
+          <div>
+            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Ações</div>
+            <div class="grid grid-cols-4 gap-2">
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="startPresentation(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span class="text-[11px]">Apresentar</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleAction('export-png'); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                <span class="text-[11px]">Export PNG</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleAction('export-jpg'); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                <span class="text-[11px]">Export JPG</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="shareDesign(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+                <span class="text-[11px]">Compartilhar</span>
+              </button>
+            </div>
+          </div>
+          <!-- View Settings -->
+          <div>
+            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Visualização</div>
+            <div class="grid grid-cols-3 gap-2">
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="viewShowGrid ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleGrid()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+                <span class="text-[11px]">Grid</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="viewShowRulers ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleRulers()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5v14"/><path d="M3 5h4"/><path d="M3 9h2"/><path d="M3 13h4"/><path d="M3 17h2"/><path d="M3 19h18V5"/><path d="M21 5h-4"/><path d="M17 5v2"/><path d="M13 5v4"/><path d="M9 5v2"/></svg>
+                <span class="text-[11px]">Réguas</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="viewShowGuides ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleGuides()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" x2="12" y1="2" y2="22" stroke-dasharray="4 2"/><line x1="2" x2="22" y1="12" y2="12" stroke-dasharray="4 2"/></svg>
+                <span class="text-[11px]">Guias</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="snapToObjects ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleSnapObjects()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 4.5l3 3"/><path d="M19.5 4.5l-3 3"/><path d="M4.5 19.5l3-3"/><path d="M19.5 19.5l-3-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+                <span class="text-[10px]">Snap Obj</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="snapToGuides ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleSnapGuides()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" x2="12" y1="2" y2="22"/><path d="M8 8l4-4 4 4"/><path d="M8 16l4 4 4-4"/></svg>
+                <span class="text-[10px]">Snap Guia</span>
+              </button>
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="snapToGrid ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleSnapGrid()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg>
+                <span class="text-[10px]">Snap Grid</span>
+              </button>
+            </div>
           </div>
         </div>
       </EditorMobileBottomSheet>
