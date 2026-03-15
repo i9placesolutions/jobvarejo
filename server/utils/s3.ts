@@ -7,11 +7,11 @@ export const getS3Client = () => {
 
     const config = useRuntimeConfig();
 
-    // Wasabi Configuration (primary)
-    const endpoint = config.wasabiEndpoint;
-    const region = config.wasabiRegion || "us-east-1";
-    const accessKeyId = config.wasabiAccessKey;
-    const secretAccessKey = config.wasabiSecretKey;
+    // Wasabi Configuration (primary) — fallback direto em process.env para Docker/Coolify
+    const endpoint = config.wasabiEndpoint || process.env.WASABI_ENDPOINT || process.env.NUXT_WASABI_ENDPOINT || '';
+    const region = config.wasabiRegion || process.env.WASABI_REGION || process.env.NUXT_WASABI_REGION || "us-east-1";
+    const accessKeyId = config.wasabiAccessKey || process.env.WASABI_ACCESS_KEY || process.env.NUXT_WASABI_ACCESS_KEY || '';
+    const secretAccessKey = config.wasabiSecretKey || process.env.WASABI_SECRET_KEY || process.env.NUXT_WASABI_SECRET_KEY || '';
 
     if (!accessKeyId || !secretAccessKey || !endpoint) {
         const missing: string[] = []
@@ -38,14 +38,21 @@ export const getS3Client = () => {
     return _s3ClientInstance;
 };
 
-export const getPublicUrl = (key: string) => {
+const resolveWasabiEndpoint = () => {
     const config = useRuntimeConfig();
-    return `https://${config.wasabiEndpoint}/${config.wasabiBucket}/${key}`;
+    return config.wasabiEndpoint || process.env.WASABI_ENDPOINT || process.env.NUXT_WASABI_ENDPOINT || 's3.wasabisys.com';
+}
+const resolveWasabiBucket = () => {
+    const config = useRuntimeConfig();
+    return config.wasabiBucket || process.env.WASABI_BUCKET || process.env.NUXT_WASABI_BUCKET || 'jobvarejo';
+}
+
+export const getPublicUrl = (key: string) => {
+    return `https://${resolveWasabiEndpoint()}/${resolveWasabiBucket()}/${key}`;
 }
 
 export const getBrandsPublicUrl = (key: string) => {
-    const config = useRuntimeConfig();
-    return `https://${config.wasabiEndpoint}/${config.wasabiBucket}/logo/${key}`;
+    return `https://${resolveWasabiEndpoint()}/${resolveWasabiBucket()}/logo/${key}`;
 }
 
 /**
@@ -53,8 +60,7 @@ export const getBrandsPublicUrl = (key: string) => {
  * Wasabi usa path style: https://s3.wasabisys.com/bucket/imagens/key
  */
 export const getImagesPublicUrl = (key: string) => {
-    const config = useRuntimeConfig();
-    return `https://${config.wasabiEndpoint}/${config.wasabiBucket}/imagens/${key}`;
+    return `https://${resolveWasabiEndpoint()}/${resolveWasabiBucket()}/imagens/${key}`;
 }
 
 /**

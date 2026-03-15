@@ -79,11 +79,11 @@ export default defineEventHandler(async (event) => {
     }
 
     const config = useRuntimeConfig()
-    const endpoint = String(config.wasabiEndpoint || '').trim()
-    const region = String(config.wasabiRegion || 'us-east-1').trim() || 'us-east-1'
-    const bucket = String(config.wasabiBucket || '').trim()
-    const accessKey = String(config.wasabiAccessKey || '').trim()
-    const secretKey = String(config.wasabiSecretKey || '').trim()
+    const endpoint = String(config.wasabiEndpoint || process.env.WASABI_ENDPOINT || process.env.NUXT_WASABI_ENDPOINT || '').trim()
+    const region = String(config.wasabiRegion || process.env.WASABI_REGION || process.env.NUXT_WASABI_REGION || 'us-east-1').trim() || 'us-east-1'
+    const bucket = String(config.wasabiBucket || process.env.WASABI_BUCKET || process.env.NUXT_WASABI_BUCKET || '').trim()
+    const accessKey = String(config.wasabiAccessKey || process.env.WASABI_ACCESS_KEY || process.env.NUXT_WASABI_ACCESS_KEY || '').trim()
+    const secretKey = String(config.wasabiSecretKey || process.env.WASABI_SECRET_KEY || process.env.NUXT_WASABI_SECRET_KEY || '').trim()
 
     const missing: string[] = []
     if (!endpoint) missing.push('WASABI_ENDPOINT')
