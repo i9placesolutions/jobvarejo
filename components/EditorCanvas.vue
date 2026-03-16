@@ -17481,6 +17481,19 @@ const setupReactivity = () => {
         const primary = evtPayload?.target || null;
         const subTargets = Array.isArray(evtPayload?.subTargets) ? evtPayload.subTargets.filter(Boolean) : [];
         const preferCardImages = shiftSelectionBaselineMembers.some((member: any) => isProductCardImageSelectionCandidate(member));
+
+        // Trust Fabric's direct target first — if it's valid and not already selected, use it.
+        // This prevents product-specific pickers from hijacking non-product clicks (e.g. coins, logos).
+        if (primary && !isActiveSelectionObject(primary)) {
+            const resolved = resolveShiftSelectionRootObject(primary);
+            if (resolved) {
+                const alreadyInBaseline = shiftSelectionBaselineMembers.some(
+                    (m: any) => m === resolved || resolveShiftSelectionRootObject(m) === resolved
+                );
+                if (!alreadyInBaseline) return primary;
+            }
+        }
+
         if (!preferCardImages) {
             const pointerGenericFirst = pickGenericShiftTargetAtPointer(evtPayload?.e, {
                 exclude: shiftSelectionBaselineMembers
@@ -18085,12 +18098,15 @@ const setupReactivity = () => {
     let zoneChildrenCache: any[] = [];
     let lastZoneState = { left: 0, top: 0 };
 
+    let previousShiftSelectionAtMousedown: any[] | null = null;
     canvas.value.on('mouse:down:before', (e: any) => {
         if (e?.e?.shiftKey) {
             refreshShiftSelectionBaseline(canvas.value.getActiveObject?.());
+            previousShiftSelectionAtMousedown = shiftSelectionBaselineMembers.slice();
             return;
         }
         shiftSelectionBaselineMembers = [];
+        previousShiftSelectionAtMousedown = null;
     });
 
     canvas.value.on('mouse:down', (e: any) => {
@@ -18131,97 +18147,64 @@ const setupReactivity = () => {
             evt.preventDefault?.();
             evt.stopPropagation?.();
 
-            // Resolve which object the user wants to add to the selection.
-            // pickShiftSelectionTarget → pickGenericShiftTargetAtPointer now uses
-            // Fabric's findTarget with excluded objects hidden, drilling through
-            // z-order layers to find the correct object below the selected one.
-            const shiftTarget = pickShiftSelectionTarget(e) || target;
+            let rawTarget = target;
+            if (e?.subTargets && e.subTargets.length > 0) {
+                // Get most precise sub-target if hitting a group/activeSelection
+                rawTarget = e.subTargets[e.subTargets.length - 1]; 
+            }
+            if (rawTarget && isActiveSelectionObject(rawTarget)) {
+                rawTarget = null;
+            }
+            // Trust exactly what the user clicked. If null, fallback to the smart picker.
+            const shiftTarget = rawTarget || pickShiftSelectionTarget(e);
             let normalizedTarget = resolveShiftSelectionRootObject(shiftTarget);
 
-            const isAlreadyInBaseline = (obj: any): boolean => {
-                if (!obj) return false;
-                return shiftSelectionBaselineMembers.some(
-                    (m: any) => m === obj || resolveShiftSelectionRootObject(m) === obj
-                );
-            };
-
-            // If the resolved target is already selected, use generic picker as fallback
-            if (!normalizedTarget || isActiveSelectionObject(normalizedTarget) || isAlreadyInBaseline(normalizedTarget)) {
-                const pointerGeneric = pickGenericShiftTargetAtPointer(e?.e, {
-                    exclude: shiftSelectionBaselineMembers
-                });
-                if (pointerGeneric) {
-                    normalizedTarget = pointerGeneric;
-                }
-            }
             if (normalizedTarget) {
-                const currentMembersRaw = shiftSelectionBaselineMembers.length
-                    ? shiftSelectionBaselineMembers
-                    : collectShiftSelectionMembers(canvas.value.getActiveObject());
+                const currentMembersRaw = previousShiftSelectionAtMousedown || shiftSelectionBaselineMembers;
+                
                 const currentMembers = currentMembersRaw
                     .map((member: any) => resolveShiftSelectionRootObject(member))
                     .filter((member: any) => !!member)
                     .filter((member: any, idx: number, arr: any[]) => arr.indexOf(member) === idx);
-                let finalTarget = normalizedTarget;
-                let isAlreadySelected = currentMembers.includes(finalTarget);
+                
+                const finalTarget = normalizedTarget;
+                const isAlreadySelected = currentMembers.includes(finalTarget);
+                let nextMembers = [...currentMembers];
+
                 if (isAlreadySelected) {
-                    const pointerImage = findTopProductImageAtPointer(e?.e, {
-                        exclude: currentMembers
-                    });
-                    if (pointerImage && !currentMembers.includes(pointerImage)) {
-                        finalTarget = pointerImage;
-                        isAlreadySelected = false;
-                    } else {
-                        const pointerCard = findTopProductCardAtPointer(e?.e);
-                        if (pointerCard) {
-                            const pointerPreferred =
-                                pickPreferredProductImageFromCard(pointerCard) ||
-                                getDeepSelectedProductImageFromCard(pointerCard) ||
-                                pointerCard;
-                            if (pointerPreferred && !currentMembers.includes(pointerPreferred)) {
-                                finalTarget = pointerPreferred;
-                                isAlreadySelected = false;
-                            }
-                        }
-                    }
-                    if (isAlreadySelected) {
-                        const pointerGeneric = pickGenericShiftTargetAtPointer(e?.e, {
-                            exclude: currentMembers
-                        });
-                        if (pointerGeneric && !currentMembers.includes(pointerGeneric)) {
-                            finalTarget = pointerGeneric;
-                            isAlreadySelected = false;
-                        }
-                    }
+                    // TOGGLE OFF: User clicked an already selected item
+                    nextMembers = nextMembers.filter((m: any) => m !== finalTarget);
+                } else {
+                    // TOGGLE ON: User clicked a new item
+                    nextMembers.push(finalTarget);
                 }
-                if (!isAlreadySelected) {
-                    const nextMembers = [...currentMembers, finalTarget];
-                    nextMembers.forEach((member: any) => {
-                        if (!member || String(member?.type || '').toLowerCase() !== 'image') return;
-                        try {
-                            member.set?.({
-                                selectable: true,
-                                evented: true,
-                                hasControls: true,
-                                hasBorders: true
-                            });
-                            member.setCoords?.();
-                        } catch {
-                            // ignore
-                        }
-                    });
+
+                // Enforce safe objects
+                nextMembers.forEach((member: any) => {
+                    if (!member) return;
+                    try {
+                        member.set?.({ selectable: true, evented: true, hasControls: true, hasBorders: true });
+                        member.setCoords?.();
+                    } catch { /* ignore */ }
+                });
+
+                // Apply new selection gracefully
+                isNormalizingShiftSelection = true;
+                try {
                     canvas.value.discardActiveObject();
                     if (nextMembers.length === 1) {
                         canvas.value.setActiveObject(nextMembers[0]);
-                    } else if (fabric?.ActiveSelection) {
-                        const nextSelection = new fabric.ActiveSelection(nextMembers, { canvas: canvas.value });
-                        canvas.value.setActiveObject(nextSelection);
+                    } else if (nextMembers.length > 1 && fabric?.ActiveSelection) {
+                        const sel = new fabric.ActiveSelection(nextMembers, { canvas: canvas.value });
+                        canvas.value.setActiveObject(sel);
                     }
-                    updateSelection();
-                    canvas.value.requestRenderAll();
+                } finally {
+                    isNormalizingShiftSelection = false;
                 }
+                
+                updateSelection();
+                canvas.value.requestRenderAll();
                 refreshShiftSelectionBaseline(canvas.value.getActiveObject?.());
-                // Intercept Shift behavior in this mode to avoid Fabric default toggle/deselect.
                 return;
             }
         }
