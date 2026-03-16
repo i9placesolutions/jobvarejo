@@ -91,6 +91,24 @@ const restoreFramePropsAndFilterInvalid = (
     }
   })
 
+  // Strip objects with invalid/missing type before saving — prevents
+  // "No class registered for undefined" on reload
+  const INVALID_SERIALIZE_TYPES = new Set(['', 'undefined', 'null', 'unknown'])
+  const stripInvalidTypes = (objects: any[]): any[] => {
+    return objects.filter((obj: any) => {
+      if (!obj || typeof obj !== 'object') return false
+      const rawType = obj.type
+      const t = (rawType == null ? '' : String(rawType)).trim().toLowerCase()
+      if (INVALID_SERIALIZE_TYPES.has(t)) return false
+      // Recursively clean children
+      if (Array.isArray(obj.objects)) {
+        obj.objects = stripInvalidTypes(obj.objects)
+      }
+      return true
+    })
+  }
+  json.objects = stripInvalidTypes(json.objects)
+
   const beforeCount = json.objects.length
   const validObjects = json.objects.filter((obj: any) => {
     const id = String(obj?.id || '')

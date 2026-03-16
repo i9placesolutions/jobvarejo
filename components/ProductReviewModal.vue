@@ -2305,169 +2305,91 @@ const getAssetDisplayName = (asset: any): string => {
 </script>
 
 <template>
-    <Dialog 
-        :model-value="modelValue" 
-        @update:model-value="$emit('update:modelValue', $event)" 
+    <Dialog
+        :model-value="modelValue"
+        @update:model-value="$emit('update:modelValue', $event)"
         title="Importação Inteligente"
-        width="1160px"
+        width="1120px"
     >
-        <div class="flex flex-col gap-4 min-h-[640px] max-h-[82vh]">
-            
+        <div class="flex flex-col gap-3 min-h-[580px] max-h-[84vh]">
+
             <!-- STEP 1: INPUT -->
-            <div v-if="step === 'input'" class="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_320px] flex-1">
-                <div class="rounded-[28px] border border-white/10 bg-[linear-gradient(145deg,rgba(17,24,39,0.96),rgba(9,9,11,0.96))] shadow-[0_24px_80px_rgba(0,0,0,0.32)] p-5 lg:p-6 flex flex-col gap-5">
-                    <div
-                        v-if="appendBaseProducts"
-                        class="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 flex items-center justify-between gap-3 text-emerald-100 text-xs"
-                    >
-                        <p>
-                            Adicionando itens na revisão atual ({{ appendBaseProducts.length }} existentes).
-                        </p>
-                        <Button variant="ghost" size="sm" @click="backToReviewWithoutAppending">
-                            Voltar para revisão
-                        </Button>
+            <div v-if="step === 'input'" class="flex flex-col gap-4 flex-1">
+                <div
+                    v-if="appendBaseProducts"
+                    class="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 flex items-center justify-between gap-3 text-emerald-100 text-xs"
+                >
+                    <p>Adicionando itens na revisão atual ({{ appendBaseProducts.length }} existentes).</p>
+                    <Button variant="ghost" size="sm" @click="backToReviewWithoutAppending">Voltar para revisão</Button>
+                </div>
+
+                <!-- Hero compacto -->
+                <div class="text-center pt-1 pb-2">
+                    <div class="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-200 mb-3">
+                        <Sparkles class="h-3.5 w-3.5" />
+                        Entrada Inteligente
                     </div>
-
-                    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                        <div class="min-w-0">
-                            <div class="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-200">
-                                <Sparkles class="h-3.5 w-3.5" />
-                                Entrada Inteligente
-                            </div>
-                            <h2 class="mt-3 text-[26px] leading-tight font-semibold text-white tracking-[-0.03em]">
-                                Importe a oferta do jeito que ela chegar.
-                            </h2>
-                            <p class="mt-2 max-w-2xl text-[12px] leading-relaxed text-zinc-400">
-                                Cole sua lista, envie PDF/Excel ou suba uma imagem da sua máquina. O modal organiza o lote,
-                                reconhece preços e deixa a revisão pronta para você fechar a importação com menos atrito.
-                            </p>
-                        </div>
-                        <div class="grid grid-cols-3 gap-2 text-[10px] text-zinc-300 shrink-0">
-                            <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
-                                <div class="text-zinc-500 uppercase tracking-[0.18em]">Fontes</div>
-                                <div class="mt-1 font-semibold text-white">Lista, PDF, XLSX</div>
-                            </div>
-                            <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
-                                <div class="text-zinc-500 uppercase tracking-[0.18em]">Imagem</div>
-                                <div class="mt-1 font-semibold text-white">Storage ou máquina</div>
-                            </div>
-                            <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
-                                <div class="text-zinc-500 uppercase tracking-[0.18em]">Saída</div>
-                                <div class="mt-1 font-semibold text-white">Lote revisável</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-                        <div
-                            class="rounded-[24px] border border-dashed border-sky-400/25 bg-[linear-gradient(180deg,rgba(14,25,45,0.78),rgba(10,10,14,0.92))] p-5 transition-colors hover:border-sky-300/40 hover:bg-[linear-gradient(180deg,rgba(18,32,57,0.88),rgba(12,12,18,0.96))]"
-                            @dragover.prevent
-                            @drop.prevent="handleDropFile"
-                        >
-                            <input
-                                ref="listFileInput"
-                                type="file"
-                                class="hidden"
-                                :accept="LIST_FILE_ACCEPT"
-                                @change="handleFileSelected"
-                            />
-                            <div class="flex items-start justify-between gap-4">
-                                <div class="min-w-0">
-                                    <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-200">Arquivo ou imagem</div>
-                                    <div class="mt-2 text-xl font-semibold text-white">Arraste aqui ou escolha um arquivo</div>
-                                    <div class="mt-2 text-[11px] leading-relaxed text-zinc-400">
-                                        Aceita imagem, CSV, Excel, PDF e TXT. Se a oferta só existe numa foto, esse é o caminho mais rápido.
-                                    </div>
-                                </div>
-                                <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-sky-400/20 bg-sky-500/10 text-sky-200">
-                                    <Upload class="h-5 w-5" />
-                                </div>
-                            </div>
-                            <div class="mt-5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-400">
-                                <span class="rounded-full border border-white/10 bg-black/20 px-2.5 py-1">CSV</span>
-                                <span class="rounded-full border border-white/10 bg-black/20 px-2.5 py-1">XLSX</span>
-                                <span class="rounded-full border border-white/10 bg-black/20 px-2.5 py-1">PDF</span>
-                                <span class="rounded-full border border-white/10 bg-black/20 px-2.5 py-1">Imagem</span>
-                                <span class="rounded-full border border-white/10 bg-black/20 px-2.5 py-1">TXT</span>
-                            </div>
-                            <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div class="text-[10px] text-zinc-500">
-                                    Upload manual de imagem continua aceitando arquivo novo mesmo quando ele ainda não existe no storage.
-                                </div>
-                                <Button type="button" variant="ghost" size="sm" class="shrink-0 border border-white/10 bg-white/[0.04] hover:bg-white/[0.08]" @click="triggerFilePicker" :disabled="isParsing">
-                                    <Upload class="w-3.5 h-3.5 mr-2" />
-                                    Escolher arquivo
-                                </Button>
-                            </div>
-                        </div>
-
-                        <div class="rounded-[24px] border border-white/10 bg-black/25 p-5 flex flex-col min-h-[320px]">
-                            <div class="flex items-center justify-between gap-3">
-                                <div>
-                                    <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-300">Colar lista</div>
-                                    <div class="mt-1 text-[11px] text-zinc-500">Quando você já tem os produtos em texto bruto.</div>
-                                </div>
-                                <div class="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
-                                    Manual
-                                </div>
-                            </div>
-                            <textarea 
-                                v-model="textInput"
-                                placeholder="Ex: Arroz Tio João 5kg R$ 29,90, Feijão Camil 1kg 8,90..."
-                                class="mt-4 flex-1 min-h-[240px] w-full rounded-2xl border border-white/10 bg-zinc-950/70 px-4 py-4 text-sm text-white resize-none placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/50"
-                            ></textarea>
-                            <div class="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                <div class="text-[10px] leading-relaxed text-zinc-500">
-                                    Dica: pode misturar nome, marca, gramatura e preço na mesma linha. A revisão posterior serve para acertar exceções.
-                                </div>
-                                <Button @click="handleParse" :disabled="isParsing || !textInput.trim()" class="shrink-0 bg-sky-600 hover:bg-sky-500 text-white">
-                                    <template v-if="isParsing">
-                                        <Loader2 class="w-4 h-4 mr-2 animate-spin" />
-                                        Analisando...
-                                    </template>
-                                    <template v-else>
-                                        Processar Lista
-                                    </template>
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <p v-if="parsingError" class="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-[11px] text-rose-200">
-                        {{ parsingError }}
+                    <h2 class="text-2xl font-semibold text-white tracking-[-0.03em]">
+                        Importe a oferta do jeito que ela chegar
+                    </h2>
+                    <p class="mt-1.5 text-[12px] text-zinc-400 max-w-lg mx-auto">
+                        Cole uma lista, envie arquivo ou arraste uma imagem. O sistema organiza tudo automaticamente para revisão.
                     </p>
                 </div>
 
-                <aside class="space-y-4">
-                    <div class="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.94),rgba(12,12,14,0.96))] p-5 shadow-[0_20px_48px_rgba(0,0,0,0.24)]">
-                        <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-300">Fluxo</div>
-                        <div class="mt-4 space-y-3">
-                            <div class="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                                <div class="text-[10px] uppercase tracking-[0.18em] text-sky-300">01</div>
-                                <div class="mt-1 text-sm font-semibold text-white">Entrar com a oferta</div>
-                                <div class="mt-1 text-[11px] leading-relaxed text-zinc-500">Arquivo, foto ou texto bruto.</div>
-                            </div>
-                            <div class="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                                <div class="text-[10px] uppercase tracking-[0.18em] text-amber-300">02</div>
-                                <div class="mt-1 text-sm font-semibold text-white">Revisar exceções</div>
-                                <div class="mt-1 text-[11px] leading-relaxed text-zinc-500">Escolher imagem, ajustar preços e validar suspeitos.</div>
-                            </div>
-                            <div class="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                                <div class="text-[10px] uppercase tracking-[0.18em] text-emerald-300">03</div>
-                                <div class="mt-1 text-sm font-semibold text-white">Importar com segurança</div>
-                                <div class="mt-1 text-[11px] leading-relaxed text-zinc-500">Aplicar lote, template e destino sem perder o contexto.</div>
-                            </div>
+                <!-- Dois métodos de input lado a lado -->
+                <div class="grid gap-4 md:grid-cols-2 flex-1">
+                    <!-- Upload de arquivo -->
+                    <div
+                        class="group rounded-2xl border-2 border-dashed border-zinc-700/60 bg-zinc-900/30 p-6 flex flex-col items-center justify-center text-center transition-all hover:border-sky-400/40 hover:bg-sky-500/[0.04] cursor-pointer min-h-[280px]"
+                        @dragover.prevent
+                        @drop.prevent="handleDropFile"
+                        @click="triggerFilePicker"
+                    >
+                        <input ref="listFileInput" type="file" class="hidden" :accept="LIST_FILE_ACCEPT" @change="handleFileSelected" />
+                        <div class="w-14 h-14 rounded-2xl border border-sky-400/20 bg-sky-500/10 flex items-center justify-center mb-4 transition-transform group-hover:scale-105">
+                            <Upload class="h-6 w-6 text-sky-300" />
                         </div>
+                        <div class="text-lg font-semibold text-white mb-1">Arquivo ou Imagem</div>
+                        <div class="text-[12px] text-zinc-400 mb-4 max-w-[280px]">
+                            Arraste aqui ou clique para enviar. Aceita CSV, Excel, PDF, TXT e imagem.
+                        </div>
+                        <div class="flex flex-wrap justify-center gap-1.5">
+                            <span v-for="fmt in ['CSV', 'XLSX', 'PDF', 'Imagem', 'TXT']" :key="fmt" class="rounded-full border border-zinc-700/80 bg-zinc-800/50 px-2.5 py-0.5 text-[10px] text-zinc-400">{{ fmt }}</span>
+                        </div>
+                        <Loader2 v-if="isParsing" class="w-5 h-5 mt-4 animate-spin text-sky-300" />
                     </div>
 
-                    <div class="rounded-[24px] border border-amber-500/15 bg-amber-500/10 p-5">
-                        <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-200">Upload manual de imagem</div>
-                        <div class="mt-2 text-[11px] leading-relaxed text-amber-50/85">
-                            Se a imagem ainda não estiver no storage, você pode enviar da máquina durante a revisão.
-                            Quando o envio remoto falhar, o modal aplica fallback local para não travar o lote.
+                    <!-- Colar lista -->
+                    <div class="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-5 flex flex-col min-h-[280px]">
+                        <div class="flex items-center justify-between gap-3 mb-3">
+                            <div>
+                                <div class="text-sm font-semibold text-white">Colar Lista</div>
+                                <div class="text-[11px] text-zinc-500">Quando você já tem os produtos em texto.</div>
+                            </div>
+                            <span class="rounded-full border border-zinc-700/80 bg-zinc-800/50 px-2.5 py-0.5 text-[10px] text-zinc-400">Manual</span>
+                        </div>
+                        <textarea
+                            v-model="textInput"
+                            placeholder="Ex: Arroz Tio João 5kg R$ 29,90&#10;Feijão Camil 1kg 8,90&#10;Óleo Soya 900ml 6,49..."
+                            class="flex-1 min-h-[180px] w-full rounded-xl border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-sm text-white resize-none placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40 transition-colors"
+                        ></textarea>
+                        <div class="mt-3 flex items-center justify-between gap-3">
+                            <div class="text-[10px] text-zinc-500 leading-relaxed">
+                                Pode misturar nome, marca, peso e preço na mesma linha.
+                            </div>
+                            <Button @click="handleParse" :disabled="isParsing || !textInput.trim()" class="shrink-0 bg-sky-600 hover:bg-sky-500 text-white">
+                                <Loader2 v-if="isParsing" class="w-4 h-4 mr-2 animate-spin" />
+                                <template v-if="isParsing">Analisando...</template>
+                                <template v-else>Processar Lista</template>
+                            </Button>
                         </div>
                     </div>
-                </aside>
+                </div>
+
+                <p v-if="parsingError" class="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2.5 text-[11px] text-rose-200">
+                    {{ parsingError }}
+                </p>
             </div>
 
             <!-- STEP 2: REVIEW -->
@@ -2486,301 +2408,147 @@ const getAssetDisplayName = (asset: any): string => {
                     multiple
                     @change="handleReviewImageUploadSelected"
                 />
-                <!-- Review Header / Controls -->
-                <div class="shrink-0 rounded-[28px] border border-white/10 bg-[linear-gradient(145deg,rgba(14,14,18,0.96),rgba(9,9,12,0.98))] p-4 lg:p-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)] space-y-4">
-                    <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
-                        <div class="min-w-0 space-y-3">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-zinc-200">
-                                    {{ getImageQueueModeLabel(imageMatchMode) }}
+                <!-- Review Header Compacto -->
+                <div class="shrink-0 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 space-y-2.5">
+                    <!-- Linha 1: Título + Stats inline + Ações -->
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <h2 class="text-lg font-semibold text-white shrink-0">Revisão</h2>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                                    <Check class="w-3 h-3" /> {{ imageStatusCounters.approved }}
                                 </span>
-                                <span class="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-zinc-200">
-                                    {{ imageBgPolicyLabel }}
+                                <span class="inline-flex items-center gap-1 rounded-lg bg-sky-500/15 border border-sky-500/25 px-2 py-0.5 text-[10px] font-semibold text-sky-300">
+                                    {{ imageStatusCounters.pending }} fila
                                 </span>
-                                <span class="rounded-full border border-sky-500/25 bg-sky-500/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-sky-200">
+                                <span v-if="imageStatusCounters.ambiguous" class="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 border border-amber-500/25 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                                    <AlertCircle class="w-3 h-3" /> {{ imageStatusCounters.ambiguous }}
+                                </span>
+                                <span v-if="imageStatusCounters.blocked" class="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 border border-rose-500/25 px-2 py-0.5 text-[10px] font-semibold text-rose-300">
+                                    {{ imageStatusCounters.blocked }} bloq.
+                                </span>
+                                <span class="rounded-lg bg-zinc-800/80 px-2 py-0.5 text-[10px] text-zinc-500">
                                     {{ reviewOperationLabel }}
                                 </span>
                             </div>
-                            <div>
-                                <h2 class="text-[24px] leading-tight font-semibold tracking-[-0.03em] text-white">Revisão e Ajustes</h2>
-                                <p class="mt-2 max-w-2xl text-[12px] leading-relaxed text-zinc-400">
-                                    Priorize alertas, valide preços, escolha a melhor imagem e só então importe. O objetivo aqui
-                                    é fechar o lote com clareza operacional, sem esconder exceções.
-                                </p>
-                            </div>
-                            <div class="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/25 px-3 py-1.5 text-[10px] font-mono text-zinc-500">
-                                ↑/↓ navega • Espaço próxima ação • S busca • R reprocessa
-                            </div>
                         </div>
-
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3">
-                                <div class="text-[9px] uppercase tracking-[0.18em] text-emerald-300">Prontas</div>
-                                <div class="mt-2 text-3xl font-light leading-none text-emerald-200">{{ imageStatusCounters.approved }}</div>
-                            </div>
-                            <div class="rounded-2xl border border-sky-500/20 bg-sky-500/10 p-3">
-                                <div class="text-[9px] uppercase tracking-[0.18em] text-sky-300">Fila</div>
-                                <div class="mt-2 text-3xl font-light leading-none text-sky-200">{{ imageStatusCounters.pending }}</div>
-                            </div>
-                            <div class="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3">
-                                <div class="text-[9px] uppercase tracking-[0.18em] text-amber-300">Alertas</div>
-                                <div class="mt-2 text-3xl font-light leading-none text-amber-100">{{ imageStatusCounters.ambiguous }}</div>
-                            </div>
-                            <div class="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-3">
-                                <div class="text-[9px] uppercase tracking-[0.18em] text-rose-300">Bloqueios</div>
-                                <div class="mt-2 text-3xl font-light leading-none text-rose-100">{{ imageStatusCounters.blocked }}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
-                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] p-2.5 space-y-3">
-                            <div class="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1">
-                                <button
-                                    v-for="option in reviewFilterOptions"
-                                    :key="option.value"
-                                    type="button"
-                                    class="shrink-0 h-9 rounded-xl px-4 text-[10px] font-bold uppercase tracking-[0.16em] transition-all relative overflow-hidden"
-                                    :class="reviewFilter === option.value ? 'text-white bg-white/10 shadow-sm border border-white/10' : 'text-zinc-500 border border-transparent hover:text-zinc-300 hover:bg-white/5'"
-                                    @click="reviewFilter = option.value"
-                                >
-                                    <span class="flex items-center gap-1.5">
-                                        {{ option.label }}
-                                        <span 
-                                            class="px-1.5 py-0.5 rounded-md text-[9px] bg-black/40"
-                                            :class="reviewFilter === option.value ? 'text-emerald-400' : 'text-zinc-600'"
-                                        >
-                                            {{ option.count }}
-                                        </span>
-                                    </span>
-                                </button>
-                            </div>
-                            <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
-                                <div class="w-full lg:flex-1">
-                                    <Input v-model="reviewSearch" placeholder="Buscar por nome, marca, preço ou condição..." class="h-10 text-xs bg-black/40 border-white/5" />
-                                </div>
-                                <div class="rounded-2xl border border-white/8 bg-black/25 px-3 py-2.5 text-[10px] leading-relaxed text-zinc-400 lg:max-w-[320px]">
-                                    {{ importImpactSummary }}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] p-3 space-y-3">
-                            <div class="rounded-2xl border p-3 text-[11px] leading-relaxed flex items-start gap-2.5" :class="importReadinessToneClass">
-                                <div class="shrink-0 mt-0.5">
-                                    <AlertCircle class="w-4 h-4" v-if="imageStatusCounters.blocked > 0 || imageStatusCounters.ambiguous > 0" />
-                                    <Loader2 class="w-4 h-4 animate-spin" v-else-if="imageStatusCounters.pending > 0" />
-                                    <Check class="w-4 h-4" v-else />
-                                </div>
-                                <span class="font-medium pt-0.5">{{ importReadinessText }}</span>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <Button
-                                    class="h-10"
-                                    variant="ghost"
-                                    :disabled="isSubmittingImport || !canRunImageQueue"
-                                    @click="toggleImageQueueProcessing"
-                                >
-                                    <Loader2 v-if="isImageQueueRunning && !isQueuePaused" class="w-3.5 h-3.5 mr-2 animate-spin" />
-                                    <Play v-else-if="isImageQueueRunning && isQueuePaused" class="w-3.5 h-3.5 mr-2" />
-                                    <Play v-else class="w-3.5 h-3.5 mr-2" />
-                                    <span class="text-[10px] font-bold uppercase tracking-widest">
-                                        {{ imageQueueActionLabel }}
-                                    </span>
-                                </Button>
-                                <Button
-                                    class="h-10"
-                                    variant="ghost"
-                                    :disabled="!imageQueueState.running"
-                                    @click="stopImageQueue"
-                                >
-                                    <RefreshCw class="w-3.5 h-3.5 mr-2" />
-                                    <span class="text-[10px] font-bold uppercase tracking-widest">Interromper</span>
-                                </Button>
-                            </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <Button variant="ghost" size="sm" class="h-7 px-2.5" :disabled="isSubmittingImport || !canRunImageQueue" @click="toggleImageQueueProcessing">
+                                <Loader2 v-if="isImageQueueRunning && !isQueuePaused" class="w-3 h-3 mr-1 animate-spin" />
+                                <Play v-else class="w-3 h-3 mr-1" />
+                                <span class="text-[10px]">{{ imageQueueActionLabel }}</span>
+                            </Button>
+                            <Button v-if="imageQueueState.running" variant="ghost" size="sm" class="h-7 px-2.5" @click="stopImageQueue">
+                                <X class="w-3 h-3 mr-1" />
+                                <span class="text-[10px]">Parar</span>
+                            </Button>
                             <Button
                                 v-if="targetMode !== 'multi-frame'"
-                                class="h-10 w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                size="sm"
+                                class="h-7 px-3 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
                                 :disabled="importButtonDisabled"
                                 @click="handleImport"
                             >
-                                <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                                <span class="text-[11px] font-bold uppercase tracking-widest">Importar Agora</span>
+                                <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="w-3 h-3 mr-1 animate-spin" />
+                                <Check v-else class="w-3 h-3 mr-1" />
+                                <span class="text-[10px] font-bold">Importar {{ products.length }}</span>
                             </Button>
                         </div>
                     </div>
 
-                    <div v-if="showImageQueueControls" class="rounded-2xl border border-white/8 bg-black/20 p-3 space-y-3">
-                        <div class="flex items-center justify-between gap-3">
-                            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Progresso de busca automática</div>
-                            <div class="text-[11px] text-zinc-400">
-                                {{ imageQueueProgress.status || 'Pronta' }} • {{ imageQueueProgress.done }}/{{ imageQueueProgress.total }}
-                                <span v-if="imageQueueProgress.active"> • {{ imageQueueProgress.active }} em andamento</span>
-                                <span v-if="imageQueueProgress.retrying"> • {{ imageQueueProgress.retrying }} retries em espera</span>
-                            </div>
+                    <!-- Progress bar inline -->
+                    <div v-if="showImageQueueControls && imageQueueProgress.total > 0" class="space-y-1">
+                        <div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                            <div class="h-full bg-emerald-500 transition-all duration-300" :style="{ width: `${imageQueueProgress.percent}%` }"></div>
                         </div>
-                        <div class="h-2 rounded-full bg-zinc-800 overflow-hidden">
-                            <div class="h-full bg-emerald-500 transition-all" :style="{ width: `${imageQueueProgress.percent}%` }"></div>
+                        <div class="flex items-center justify-between text-[9px] text-zinc-500">
+                            <span>{{ imageQueueProgress.status }} • {{ imageQueueProgress.done }}/{{ imageQueueProgress.total }}<span v-if="imageQueueProgress.active"> • {{ imageQueueProgress.active }} ativas</span></span>
+                            <span v-if="imageQueueProgress.failed">{{ imageQueueProgress.failed }} falhas</span>
                         </div>
-                        <div class="flex flex-wrap items-center justify-between gap-2 text-[10px] text-zinc-500">
-                            <span>Falhas: {{ imageQueueProgress.failed }}</span>
-                            <span v-if="isImageQueueLocked">Configurações de busca ficam travadas enquanto a fila estiver rodando.</span>
+                    </div>
+
+                    <!-- Linha 2: Filtros + Busca -->
+                    <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+                        <div class="flex items-center gap-1 overflow-x-auto custom-scrollbar shrink-0">
+                            <button
+                                v-for="option in reviewFilterOptions"
+                                :key="option.value"
+                                type="button"
+                                class="shrink-0 h-7 rounded-lg px-3 text-[10px] font-medium transition-all"
+                                :class="reviewFilter === option.value ? 'text-white bg-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'"
+                                @click="reviewFilter = option.value"
+                            >
+                                {{ option.label }} <span class="ml-0.5 opacity-60">{{ option.count }}</span>
+                            </button>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <Input v-model="reviewSearch" placeholder="Buscar por nome, marca, preço..." class="h-7 text-xs bg-zinc-950/50 border-zinc-800" />
                         </div>
                     </div>
                 </div>
 
-                    <details class="group rounded-2xl border border-white/5 bg-[linear-gradient(180deg,rgba(0,0,0,0.15),rgba(0,0,0,0.3))] shadow-sm [&_summary::-webkit-details-marker]:hidden">
-                        <summary class="flex items-center justify-between p-4 cursor-pointer select-none hover:bg-white/5 transition-colors rounded-2xl outline-none">
-                            <div class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-zinc-300">
-                                <Settings2 class="w-4 h-4 text-zinc-400" />
-                                Configurações Opcionais de Importação
+                <!-- Configurações compactas -->
+                <details class="group shrink-0 rounded-xl border border-zinc-800 bg-zinc-900/30 [&_summary::-webkit-details-marker]:hidden">
+                    <summary class="flex items-center justify-between px-3 py-2 cursor-pointer select-none hover:bg-zinc-800/40 transition-colors rounded-xl outline-none">
+                        <div class="flex items-center gap-2 text-[10px] font-medium text-zinc-400">
+                            <Settings2 class="w-3.5 h-3.5" />
+                            Configurações
+                            <span class="text-zinc-600 group-open:hidden">{{ selectedImportModeLabel }} • {{ selectedTargetModeLabel }} • {{ selectedLabelTemplateSummary }}</span>
+                        </div>
+                        <ChevronDown class="w-3.5 h-3.5 text-zinc-600 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div class="px-3 pb-3 pt-1 border-t border-zinc-800/60">
+                        <div
+                            class="grid gap-2"
+                            :class="props.showImportMode ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-5' : 'grid-cols-2 xl:grid-cols-4'"
+                        >
+                            <div v-if="props.showImportMode" class="space-y-1.5">
+                                <div class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Modo <span class="text-zinc-600 font-normal">({{ Math.max(0, Number(props.existingCount || 0)) }} itens)</span></div>
+                                <div class="grid grid-cols-2 gap-0.5 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800">
+                                    <button type="button" class="h-7 rounded text-[9px] font-bold uppercase tracking-widest transition-all" :class="importMode === 'replace' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'" @click="importMode = 'replace'">Substituir</button>
+                                    <button type="button" class="h-7 rounded text-[9px] font-bold uppercase tracking-widest transition-all" :class="importMode === 'append' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'" @click="importMode = 'append'">Adicionar</button>
+                                </div>
                             </div>
-                            <div class="flex items-center gap-3">
-                                <span class="text-[10px] text-zinc-500 font-medium tracking-wide group-open:hidden uppercase px-2 py-0.5 rounded border border-white/5 bg-black/20">
-                                    {{ selectedImportModeLabel }} • {{ selectedTargetModeLabel }}
-                                </span>
-                                <ChevronDown class="w-4 h-4 text-zinc-500 transition-transform group-open:rotate-180" />
-                            </div>
-                        </summary>
-                        <div class="p-4 border-t border-white/5">
-                            <div
-                                class="grid gap-3"
-                                :class="props.showImportMode ? 'grid-cols-1 md:grid-cols-2 2xl:grid-cols-5' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'"
-                            >
-                                <div v-if="props.showImportMode" class="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-3">
-                                    <div>
-                                        <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Modo</div>
-                                        <div class="text-[11px] text-zinc-500">
-                                            Zona tem <span class="text-zinc-300 font-semibold">{{ Math.max(0, Number(props.existingCount || 0)) }}</span> itens
-                                        </div>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                                        <button
-                                            type="button"
-                                            class="h-8 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all"
-                                            :class="importMode === 'replace' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'"
-                                            @click="importMode = 'replace'"
-                                            title="Remove os produtos atuais da zona e recria a grade"
-                                        >
-                                            Substituir
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="h-8 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all"
-                                            :class="importMode === 'append' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'"
-                                            @click="importMode = 'append'"
-                                            title="Adiciona ao que já existe e reorganiza a grade"
-                                        >
-                                            Adicionar
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-3">
-                                    <div>
-                                        <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Etiqueta</div>
-                                        <div class="text-[11px] text-zinc-500">Modelo aplicado aos cards</div>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <img
-                                            v-if="selectedLabelTemplate?.previewDataUrl"
-                                            :src="selectedLabelTemplate.previewDataUrl"
-                                            alt="preview"
-                                            class="w-18 h-8 object-contain rounded bg-zinc-800/60 border border-zinc-700 cursor-pointer hover:border-zinc-500 transition-colors"
-                                            @click="showLabelPreview = true"
-                                        />
-                                        <select
-                                            class="h-9 flex-1 bg-black/40 border border-white/10 rounded-lg px-2 text-xs text-zinc-200 focus:outline-none focus:border-white/20 min-w-0"
-                                            :value="selectedLabelTemplateId"
-                                            @change="selectedLabelTemplateId = String(($event.target as HTMLSelectElement).value || '')"
-                                        >
-                                            <option value="">(usar padrão da zona)</option>
-                                            <option v-for="tpl in labelTemplateList" :key="tpl.id" :value="tpl.id">
-                                                {{ tpl.name }}
-                                            </option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-3">
-                                    <div>
-                                        <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Destino</div>
-                                        <div class="text-[11px] text-zinc-500">Onde cards serão inseridos</div>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                                        <button
-                                            type="button"
-                                            class="h-8 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all"
-                                            :class="targetMode === 'zone' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'"
-                                            @click="targetMode = 'zone'"
-                                        >
-                                            Zona atual
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="h-8 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                            :class="targetMode === 'multi-frame' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'"
-                                            :disabled="!canUseMultiFrame"
-                                            @click="targetMode = 'multi-frame'"
-                                        >
-                                            Multi-frame
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-3">
-                                    <div class="flex items-center justify-between">
-                                        <div>
-                                            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Tratar Fundos</div>
-                                            <div class="text-[11px] text-zinc-500">Recortar automático</div>
-                                        </div>
-                                    </div>
-                                    <select
-                                        v-model="imageBgPolicy"
-                                        class="h-9 w-full bg-black/40 border border-white/10 rounded-lg px-2 text-xs text-zinc-200 focus:outline-none focus:border-white/20"
-                                        :disabled="isImageQueueLocked"
-                                    >
-                                        <option value="auto">Auto (recomendado)</option>
-                                        <option value="never">Nunca remover</option>
-                                        <option value="always">Sempre remover</option>
+                            <div class="space-y-1.5">
+                                <div class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Etiqueta</div>
+                                <div class="flex items-center gap-1.5">
+                                    <img v-if="selectedLabelTemplate?.previewDataUrl" :src="selectedLabelTemplate.previewDataUrl" alt="preview" class="w-12 h-7 object-contain rounded bg-zinc-800/60 border border-zinc-700 cursor-pointer hover:border-zinc-500 transition-colors shrink-0" @click="showLabelPreview = true" />
+                                    <select class="h-7 flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2 text-[10px] text-zinc-200 focus:outline-none focus:border-zinc-600 min-w-0" :value="selectedLabelTemplateId" @change="selectedLabelTemplateId = String(($event.target as HTMLSelectElement).value || '')">
+                                        <option value="">(padrão da zona)</option>
+                                        <option v-for="tpl in labelTemplateList" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
                                     </select>
                                 </div>
-                                <div class="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-2">
-                                    <div>
-                                        <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Busca e Fila</div>
-                                        <div class="text-[11px] text-zinc-500">{{ getImageQueueModeLabel(imageMatchMode) }} na nuvem</div>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                                        <button
-                                            v-for="option in imageMatchModeOptions"
-                                            :key="option.value"
-                                            type="button"
-                                            class="h-8 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-45 disabled:cursor-not-allowed"
-                                            :class="imageMatchMode === option.value ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'"
-                                            :disabled="isImageQueueLocked"
-                                            @click="imageMatchMode = option.value"
-                                        >
-                                            {{ option.label }}
-                                        </button>
-                                    </div>
-                                    <label class="text-[10px] text-zinc-400 flex items-center justify-between px-1 pt-1">
-                                        <span>Threads:</span>
-                                        <select
-                                            v-model.number="imageConcurrency"
-                                            class="h-7 bg-black/40 border border-white/10 rounded-lg px-2 text-xs text-zinc-200 focus:outline-none focus:border-white/20"
-                                            :disabled="isImageQueueLocked"
-                                        >
-                                            <option :value="3">3</option>
-                                            <option :value="4">4</option>
-                                            <option :value="5">5</option>
-                                            <option :value="6">6</option>
-                                            <option :value="8">8</option>
-                                        </select>
-                                    </label>
+                            </div>
+                            <div class="space-y-1.5">
+                                <div class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Destino</div>
+                                <div class="grid grid-cols-2 gap-0.5 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800">
+                                    <button type="button" class="h-7 rounded text-[9px] font-bold uppercase tracking-widest transition-all" :class="targetMode === 'zone' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'" @click="targetMode = 'zone'">Zona</button>
+                                    <button type="button" class="h-7 rounded text-[9px] font-bold uppercase tracking-widest transition-all disabled:opacity-50" :class="targetMode === 'multi-frame' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'" :disabled="!canUseMultiFrame" @click="targetMode = 'multi-frame'">Multi-frame</button>
                                 </div>
                             </div>
+                            <div class="space-y-1.5">
+                                <div class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Fundo</div>
+                                <select v-model="imageBgPolicy" class="h-7 w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 text-[10px] text-zinc-200 focus:outline-none focus:border-zinc-600" :disabled="isImageQueueLocked">
+                                    <option value="auto">Auto</option>
+                                    <option value="never">Nunca remover</option>
+                                    <option value="always">Sempre remover</option>
+                                </select>
+                            </div>
+                            <div class="space-y-1.5">
+                                <div class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Busca</div>
+                                <div class="grid grid-cols-2 gap-0.5 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800">
+                                    <button v-for="option in imageMatchModeOptions" :key="option.value" type="button" class="h-7 rounded text-[9px] font-bold uppercase tracking-widest transition-all disabled:opacity-45" :class="imageMatchMode === option.value ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'" :disabled="isImageQueueLocked" @click="imageMatchMode = option.value">{{ option.label }}</button>
+                                </div>
+                                <label class="text-[9px] text-zinc-500 flex items-center justify-between">
+                                    <span>Threads</span>
+                                    <select v-model.number="imageConcurrency" class="h-6 bg-zinc-900 border border-zinc-800 rounded px-1.5 text-[10px] text-zinc-300 focus:outline-none" :disabled="isImageQueueLocked">
+                                        <option :value="3">3</option><option :value="4">4</option><option :value="5">5</option><option :value="6">6</option><option :value="8">8</option>
+                                    </select>
+                                </label>
+                            </div>
                         </div>
-                    </details>
+                    </div>
+                </details>
 
                     <div
                         v-if="targetMode === 'multi-frame'"
@@ -2877,55 +2645,42 @@ const getAssetDisplayName = (asset: any): string => {
 
                 <div
                     v-if="activeReviewRowMeta"
-                    class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]"
+                    class="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)] flex-1 min-h-0"
                 >
-                    <aside class="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(14,14,18,0.98),rgba(9,9,12,0.98))] p-4 lg:p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Fila de revisão</div>
-                                <h3 class="mt-2 text-lg font-semibold leading-tight text-white">Escolha o item e feche a decisão no mesmo painel.</h3>
-                                <p class="mt-2 text-[11px] leading-relaxed text-zinc-500">
-                                    A seleção saiu do topo e virou uma fila lateral fixa, com status, alerta e contexto visual para cada produto.
-                                </p>
-                            </div>
-                            <div class="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-right">
-                                <div class="text-[9px] font-bold uppercase tracking-[0.16em] text-sky-200">Ativo</div>
-                                <div class="mt-1 text-lg font-semibold leading-none text-white">
-                                    {{ activeReviewRowVisibleIndex + 1 }}/{{ Math.max(filteredProductRows.length, 1) }}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="mt-4 grid grid-cols-2 gap-2">
-                            <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Página</div>
-                                <div class="mt-1 text-sm font-semibold text-white">{{ reviewPage }}/{{ reviewPageCount }}</div>
-                            </div>
-                            <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Exibidos</div>
-                                <div class="mt-1 text-sm font-semibold text-white">{{ filteredProductRowsPage.length }} itens</div>
+                    <!-- Sidebar compacta -->
+                    <aside class="rounded-xl border border-zinc-800 bg-zinc-900/40 flex flex-col min-h-0 max-h-[72vh]">
+                        <!-- Header da sidebar -->
+                        <div class="px-3 py-2 border-b border-zinc-800 flex items-center justify-between shrink-0">
+                            <span class="text-[10px] font-medium text-zinc-400">
+                                {{ activeReviewRowVisibleIndex + 1 }}/{{ filteredProductRows.length }} produtos
+                            </span>
+                            <div class="flex items-center gap-1">
+                                <button type="button" class="w-6 h-6 rounded flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-30" @click="gotoReviewPage(reviewPage - 1)" :disabled="reviewPage <= 1">
+                                    <ChevronDown class="h-3.5 w-3.5 rotate-90" />
+                                </button>
+                                <span class="text-[9px] text-zinc-500 tabular-nums">{{ reviewPage }}/{{ reviewPageCount }}</span>
+                                <button type="button" class="w-6 h-6 rounded flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-30" @click="gotoReviewPage(reviewPage + 1)" :disabled="reviewPage >= reviewPageCount">
+                                    <ChevronDown class="h-3.5 w-3.5 -rotate-90" />
+                                </button>
                             </div>
                         </div>
 
-                        <div class="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3 text-[11px] leading-relaxed text-zinc-400">
-                            {{ importImpactSummary }}
-                        </div>
-
-                        <div class="mt-4 max-h-[52vh] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                        <!-- Lista de produtos -->
+                        <div class="flex-1 overflow-y-auto custom-scrollbar p-1.5 space-y-1">
                             <button
                                 v-for="row in reviewRowsWithMeta"
                                 :key="row.productId"
                                 type="button"
-                                class="w-full rounded-[22px] border px-3 py-3 text-left transition-all"
+                                class="w-full rounded-xl border px-2 py-2 text-left transition-all"
                                 :class="activeReviewRowIndex === row.index
-                                    ? 'border-sky-400/35 bg-[linear-gradient(135deg,rgba(14,116,144,0.18),rgba(24,24,27,0.92))] shadow-[0_16px_40px_rgba(14,165,233,0.12)]'
-                                    : 'border-white/8 bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.05]'"
+                                    ? 'border-sky-500/30 bg-sky-500/[0.08] shadow-sm'
+                                    : 'border-transparent hover:border-zinc-700 hover:bg-zinc-800/40'"
                                 @click="activeReviewRowIndex = row.index"
                             >
-                                <div class="flex items-start gap-3">
+                                <div class="flex items-center gap-2.5">
                                     <div
                                         :class="[
-                                            'h-16 w-16 shrink-0 overflow-hidden rounded-2xl border bg-zinc-950/80',
+                                            'h-11 w-11 shrink-0 overflow-hidden rounded-lg border bg-zinc-950/80',
                                             thumbnailUiStateClass(row.product)
                                         ]"
                                     >
@@ -2933,61 +2688,30 @@ const getAssetDisplayName = (asset: any): string => {
                                             v-if="row.product?.imageUrl"
                                             :src="resolveProductImageUrl(row.product.imageUrl)"
                                             class="h-full w-full object-contain"
-                                            alt="Preview do produto"
+                                            alt=""
                                         />
-                                        <div v-else class="flex h-full w-full items-center justify-center px-2 text-center text-[9px] text-zinc-500">
-                                            {{ thumbnailStatusText(row.product) }}
+                                        <div v-else class="flex h-full w-full items-center justify-center text-[8px] text-zinc-600">
+                                            {{ row.product?.status === 'processing' ? '...' : '?' }}
                                         </div>
                                     </div>
-
                                     <div class="min-w-0 flex-1">
-                                        <div class="flex items-start justify-between gap-2">
-                                            <div class="min-w-0">
-                                                <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                                    Produto {{ row.index + 1 }}
-                                                </div>
-                                                <div class="mt-1 line-clamp-2 text-sm font-semibold leading-tight text-white">
-                                                    {{ row.product.name || `Produto ${row.index + 1}` }}
-                                                </div>
-                                                <div class="mt-1 text-[11px] text-zinc-500">
-                                                    {{ row.product.brand || 'Sem marca' }}
-                                                    <span v-if="row.product.weight"> • {{ row.product.weight }}</span>
-                                                </div>
+                                        <div class="flex items-center justify-between gap-1">
+                                            <div class="line-clamp-1 text-[11px] font-medium leading-tight text-white">
+                                                {{ row.product.name || `Produto ${row.index + 1}` }}
                                             </div>
                                             <span
-                                                class="shrink-0 rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]"
-                                                :class="row.imageStatusMeta.toneClass"
-                                            >
-                                                {{ row.imageStatusMeta.state }}
-                                            </span>
+                                                class="shrink-0 w-2 h-2 rounded-full"
+                                                :class="{
+                                                    'bg-emerald-500': row.imageStatusMeta.stateTone === 'high',
+                                                    'bg-amber-500': row.imageStatusMeta.stateTone === 'medium' || row.imageStatusMeta.stateTone === 'low',
+                                                    'bg-rose-500': row.imageStatusMeta.stateTone === 'critical',
+                                                    'bg-zinc-600': row.imageStatusMeta.stateTone === 'unknown'
+                                                }"
+                                            ></span>
                                         </div>
-
-                                        <div class="mt-2 flex flex-wrap gap-1.5">
-                                            <span
-                                                class="rounded-full border px-2 py-1 text-[9px] font-medium uppercase tracking-[0.14em]"
-                                                :class="row.imageStatusMeta.toneClass"
-                                            >
-                                                Conf. {{ row.imageStatusMeta.confidence }}
-                                            </span>
-                                            <span class="rounded-full border border-white/10 bg-black/25 px-2 py-1 text-[9px] font-medium uppercase tracking-[0.14em] text-zinc-400">
-                                                {{ row.imageStatusMeta.source }}
-                                            </span>
-                                            <span class="rounded-full border border-white/10 bg-black/25 px-2 py-1 text-[9px] font-medium uppercase tracking-[0.14em] text-zinc-500">
-                                                {{ row.imageStatusMeta.candidatesText }}
-                                            </span>
-                                        </div>
-
-                                        <div
-                                            v-if="row.imageNextAction || row.product?.imageReviewReason || row.product?.imageDecisionReason"
-                                            class="mt-2 rounded-2xl border border-white/8 bg-black/25 px-2.5 py-2 text-[10px] leading-relaxed"
-                                            :class="row.imageNextAction ? 'text-amber-200' : 'text-zinc-500'"
-                                        >
-                                            <span class="font-semibold uppercase tracking-[0.14em]">
-                                                {{ row.imageNextAction ? row.imageNextAction.label : 'Observação' }}
-                                            </span>
-                                            <span class="ml-1">
-                                                {{ row.imageNextAction?.helper || row.product.imageReviewReason || row.product.imageDecisionReason }}
-                                            </span>
+                                        <div class="text-[10px] text-zinc-500 line-clamp-1">
+                                            {{ row.product.brand || '' }}<span v-if="row.product.weight"> {{ row.product.weight }}</span>
+                                            <span class="ml-1 opacity-60">{{ row.imageStatusMeta.state }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -2995,475 +2719,253 @@ const getAssetDisplayName = (asset: any): string => {
 
                             <div
                                 v-if="!reviewRowsWithMeta.length"
-                                class="rounded-[22px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center text-[11px] leading-relaxed text-zinc-500"
+                                class="rounded-xl border border-dashed border-zinc-800 px-3 py-6 text-center text-[10px] text-zinc-500"
                             >
-                                Nenhum produto encontrado para "{{ reviewSearch }}".
+                                Nenhum produto para "{{ reviewSearch }}".
                             </div>
                         </div>
 
-                        <div class="mt-4 border-t border-white/8 pt-4">
-                            <div class="flex gap-2">
-                                <Button variant="ghost" size="sm" class="flex-1" @click="gotoReviewPage(reviewPage - 1)" :disabled="reviewPage <= 1">
-                                    <ChevronDown class="mr-2 h-3.5 w-3.5 rotate-90" />
-                                    Anterior
-                                </Button>
-                                <Button variant="ghost" size="sm" class="flex-1" @click="gotoReviewPage(reviewPage + 1)" :disabled="reviewPage >= reviewPageCount">
-                                    <ChevronDown class="mr-2 h-3.5 w-3.5 -rotate-90" />
-                                    Próximo
-                                </Button>
-                            </div>
+                        <!-- Footer sidebar -->
+                        <div class="px-2 py-2 border-t border-zinc-800 shrink-0">
                             <button
                                 @click="startAppendFromReview"
-                                class="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-200 transition-colors hover:bg-white/[0.08]"
+                                class="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 text-[10px] font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
                             >
-                                <Plus class="h-3.5 w-3.5" />
-                                Adicionar via lista ou arquivo
+                                <Plus class="h-3 w-3" />
+                                Adicionar mais
                             </button>
                         </div>
                     </aside>
 
-                    <div class="space-y-4">
-                        <section class="rounded-[28px] border border-white/10 bg-[linear-gradient(145deg,rgba(14,14,18,0.96),rgba(9,9,12,0.98))] p-4 lg:p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
-                            <div class="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
-                                <div class="space-y-3">
+                    <!-- Conteúdo principal scrollável -->
+                    <div class="overflow-y-auto custom-scrollbar space-y-3 pr-1">
+                        <!-- Produto em foco: imagem + info + ações -->
+                        <section class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                            <div class="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)]">
+                                <!-- Imagem do produto -->
+                                <div class="space-y-2">
                                     <div
                                         :class="[
-                                            'relative flex aspect-square items-center justify-center overflow-hidden rounded-[26px] border bg-zinc-950/80',
+                                            'relative flex aspect-square items-center justify-center overflow-hidden rounded-xl border bg-zinc-950/80',
                                             thumbnailUiStateClass(activeReviewRowMeta.product)
                                         ]"
                                     >
                                         <template v-if="activeReviewRowMeta.product?.imageUrl">
-                                            <div class="absolute inset-0 bg-zinc-700/35" />
                                             <img
                                                 :src="resolveProductImageUrl(activeReviewRowMeta.product.imageUrl)"
-                                                class="relative z-10 h-full w-full object-contain p-4"
+                                                class="h-full w-full object-contain p-3"
                                                 :class="activeReviewRowMeta.product?.status === 'processing' ? 'opacity-30' : ''"
                                                 alt="Imagem do produto ativo"
                                             />
-                                            <div
-                                                v-if="activeReviewRowMeta.product?.status === 'processing'"
-                                                class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/45"
-                                            >
+                                            <div v-if="activeReviewRowMeta.product?.status === 'processing'" class="absolute inset-0 z-20 flex items-center justify-center bg-black/45">
                                                 <Loader2 class="h-5 w-5 animate-spin text-sky-300" />
-                                                <span class="text-[10px] uppercase tracking-[0.14em] text-zinc-100">processando</span>
                                             </div>
                                         </template>
                                         <template v-else-if="activeReviewRowMeta.product?.status === 'processing'">
                                             <Loader2 class="h-5 w-5 animate-spin text-sky-300" />
                                         </template>
                                         <template v-else>
-                                            <div class="px-4 text-center text-[11px] leading-relaxed text-zinc-500">
-                                                {{ thumbnailStatusText(activeReviewRowMeta.product) }}
-                                            </div>
+                                            <div class="text-[10px] text-zinc-500">{{ thumbnailStatusText(activeReviewRowMeta.product) }}</div>
                                         </template>
-
-                                        <div class="absolute left-3 top-3 rounded-full border border-black/10 bg-black/45 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-white">
+                                        <div class="absolute left-2 top-2 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">
                                             {{ activeReviewRowMeta.imageStatusMeta.source }}
                                         </div>
                                     </div>
-
-                                    <div class="grid grid-cols-2 gap-2">
-                                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                            <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Confiança</div>
-                                            <div class="mt-1 text-sm font-semibold text-white">{{ activeReviewRowMeta.imageStatusMeta.confidence }}</div>
-                                        </div>
-                                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                            <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Tentativas</div>
-                                            <div class="mt-1 text-sm font-semibold text-white">{{ activeReviewRowMeta.imageStatusMeta.attemptsText }}</div>
-                                        </div>
+                                    <div class="flex gap-1.5 text-[9px] text-zinc-500">
+                                        <span>Conf. {{ activeReviewRowMeta.imageStatusMeta.confidence }}</span>
+                                        <span>•</span>
+                                        <span>{{ activeReviewRowMeta.imageStatusMeta.attemptsText }}</span>
                                     </div>
                                 </div>
 
-                                <div class="min-w-0 space-y-4">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em]" :class="activeDecisionToneClass">
-                                            {{ activeDecisionLabel }}
-                                        </span>
-                                        <span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
-                                            Item {{ activeReviewRowMeta.index + 1 }}
-                                        </span>
-                                        <span v-if="activeReviewCandidates.length" class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
-                                            {{ activeReviewCandidates.length }} sugest{{ activeReviewCandidates.length > 1 ? 'oes' : 'ao' }}
-                                        </span>
-                                        <span class="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
-                                            {{ selectedLabelTemplateSummary }}
-                                        </span>
-                                    </div>
-
-                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <!-- Info + Ações -->
+                                <div class="min-w-0 space-y-3">
+                                    <div class="flex items-start justify-between gap-2">
                                         <div class="min-w-0">
-                                            <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">Produto em foco</div>
-                                            <h3 class="mt-2 text-[24px] font-semibold leading-tight tracking-[-0.03em] text-white">
+                                            <div class="flex items-center gap-2 mb-1">
+                                                <span class="rounded-md border px-2 py-0.5 text-[9px] font-semibold uppercase" :class="activeDecisionToneClass">{{ activeDecisionLabel }}</span>
+                                                <span class="text-[10px] text-zinc-500">Item {{ activeReviewRowMeta.index + 1 }}</span>
+                                            </div>
+                                            <h3 class="text-lg font-semibold leading-tight text-white">
                                                 {{ activeReviewRowMeta.product.name || `Produto ${activeReviewRowMeta.index + 1}` }}
                                             </h3>
-                                            <div class="mt-2 text-[12px] text-zinc-400">
+                                            <div class="mt-1 text-[11px] text-zinc-400">
                                                 {{ activeReviewRowMeta.product.brand || 'Sem marca' }}
                                                 <span v-if="activeReviewRowMeta.product.weight"> • {{ activeReviewRowMeta.product.weight }}</span>
                                                 <span v-if="activeReviewRowMeta.product.productCode"> • {{ activeReviewRowMeta.product.productCode }}</span>
                                             </div>
-                                            <p class="mt-3 max-w-3xl text-[12px] leading-relaxed text-zinc-500">
-                                                {{ activeReviewRowMeta.product.imageReviewReason || activeReviewRowMeta.product.imageDecisionReason || 'Analise a melhor imagem, ajuste os dados comerciais e avance para o próximo item com tudo validado.' }}
-                                            </p>
                                         </div>
-
-                                        <button
-                                            type="button"
-                                            class="inline-flex h-10 items-center justify-center rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-rose-100 transition-colors hover:bg-rose-500/20"
-                                            @click="removeProduct(activeReviewRowMeta.index)"
-                                        >
-                                            <X class="mr-2 h-3.5 w-3.5" />
-                                            Remover item
+                                        <button type="button" class="shrink-0 h-7 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 text-[9px] font-bold uppercase text-rose-200 hover:bg-rose-500/20 transition-colors" @click="removeProduct(activeReviewRowMeta.index)">
+                                            <X class="h-3 w-3 inline mr-1" />Remover
                                         </button>
                                     </div>
 
-                                    <div class="grid gap-3 md:grid-cols-3">
-                                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                            <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Modo</div>
-                                            <div class="mt-1 text-sm font-semibold text-white">{{ selectedImportModeLabel }}</div>
-                                        </div>
-                                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                            <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Destino</div>
-                                            <div class="mt-1 text-sm font-semibold text-white">{{ selectedTargetModeLabel }}</div>
-                                        </div>
-                                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                            <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Status</div>
-                                            <div class="mt-1 text-sm font-semibold text-white">{{ activeReviewRowMeta.imageStatusMeta.state }}</div>
-                                        </div>
+                                    <!-- Ações rápidas -->
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button type="button" class="h-8 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 text-[10px] font-bold uppercase text-sky-100 hover:bg-sky-500/20 transition-colors" @click="runImageQuickAction(activeReviewRowMeta, 'search')">Buscar</button>
+                                        <button type="button" class="h-8 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-[10px] font-bold uppercase text-zinc-200 hover:bg-zinc-700/60 transition-colors" @click="reprocessProductImage(activeReviewRowMeta.index, true)">Reprocessar</button>
+                                        <button type="button" class="h-8 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-[10px] font-bold uppercase text-zinc-200 hover:bg-zinc-700/60 transition-colors" @click="openAssetPicker(activeReviewRowMeta.index)">Storage</button>
+                                        <button type="button" class="h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 text-[10px] font-bold uppercase text-emerald-100 hover:bg-emerald-500/20 transition-colors" @click="openReviewImageUpload(activeReviewRowMeta.index)">
+                                            <Upload class="h-3 w-3 inline mr-1" />Upload
+                                        </button>
                                     </div>
 
-                                    <div class="rounded-[24px] border border-white/10 bg-white/[0.03] p-3">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <div>
-                                                <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-300">Ações do item</div>
-                                                <div class="mt-1 text-[11px] text-zinc-500">Busque, reprocese, carregue do storage ou envie manualmente.</div>
-                                            </div>
-                                            <span class="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
-                                                {{ activeReviewRowMeta.imageStatusMeta.providerLabel }}
-                                            </span>
+                                    <!-- Próxima ação sugerida -->
+                                    <div v-if="activeReviewRowMeta.imageNextAction" class="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] text-amber-100 flex items-center justify-between gap-2">
+                                        <div>
+                                            <span class="font-semibold text-amber-200">{{ activeReviewRowMeta.imageNextAction.label }}:</span>
+                                            <span class="ml-1 text-amber-50/80">{{ activeReviewRowMeta.imageNextAction.helper }}</span>
                                         </div>
-
-                                        <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                                            <button
-                                                type="button"
-                                                class="h-11 rounded-2xl border border-sky-500/35 bg-sky-500/10 text-[10px] font-bold uppercase tracking-[0.14em] text-sky-100 transition-colors hover:bg-sky-500/20"
-                                                @click="runImageQuickAction(activeReviewRowMeta, 'search')"
-                                            >
-                                                Buscar
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="h-11 rounded-2xl border border-white/10 bg-white/5 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-100 transition-colors hover:bg-white/10"
-                                                @click="reprocessProductImage(activeReviewRowMeta.index, true)"
-                                            >
-                                                Reprocessar
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="h-11 rounded-2xl border border-white/10 bg-white/5 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-100 transition-colors hover:bg-white/10"
-                                                @click="openAssetPicker(activeReviewRowMeta.index)"
-                                            >
-                                                Storage
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="inline-flex h-11 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-100 transition-colors hover:bg-emerald-500/20"
-                                                @click="openReviewImageUpload(activeReviewRowMeta.index)"
-                                            >
-                                                <Upload class="mr-2 h-3.5 w-3.5" />
-                                                Upload manual
-                                            </button>
-                                        </div>
-
-                                        <div
-                                            v-if="activeReviewRowMeta.imageNextAction"
-                                            class="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-[11px] leading-relaxed text-amber-100"
-                                        >
-                                            <div class="font-semibold uppercase tracking-[0.16em] text-amber-200">
-                                                Próxima ação: {{ activeReviewRowMeta.imageNextAction.label }}
-                                            </div>
-                                            <div class="mt-1 text-amber-50/85">
-                                                {{ activeReviewRowMeta.imageNextAction.helper }}
-                                            </div>
-                                            <button
-                                                type="button"
-                                                class="mt-3 inline-flex h-9 items-center justify-center rounded-xl border border-amber-400/25 bg-amber-500/15 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100 transition-colors hover:bg-amber-500/20"
-                                                @click="runImageNextAction(activeReviewRowMeta)"
-                                            >
-                                                Executar agora
-                                            </button>
-                                        </div>
+                                        <button type="button" class="shrink-0 h-7 rounded-md border border-amber-400/25 bg-amber-500/15 px-2.5 text-[9px] font-bold uppercase text-amber-100 hover:bg-amber-500/25 transition-colors" @click="runImageNextAction(activeReviewRowMeta)">Executar</button>
                                     </div>
+
+                                    <!-- Motivo -->
+                                    <p v-if="activeReviewRowMeta.product.imageReviewReason || activeReviewRowMeta.product.imageDecisionReason" class="text-[10px] text-zinc-500 leading-relaxed">
+                                        {{ activeReviewRowMeta.product.imageReviewReason || activeReviewRowMeta.product.imageDecisionReason }}
+                                    </p>
                                 </div>
                             </div>
                         </section>
 
-                        <section class="rounded-[28px] border border-white/10 bg-[linear-gradient(145deg,rgba(14,14,18,0.96),rgba(9,9,12,0.98))] p-4 lg:p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
-                            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div>
-                                    <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Sugestões de imagem</div>
-                                    <div class="mt-1 text-[12px] text-zinc-500">
-                                        Compare a imagem atual com as candidatas antes de fechar a revisão.
-                                    </div>
+                        <!-- Sugestões de imagem -->
+                        <section class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                            <div class="flex items-center justify-between gap-3 mb-3">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                                    Sugestões de imagem
+                                    <span v-if="activeReviewCandidates.length" class="text-zinc-500 font-normal ml-1">({{ activeReviewCandidates.length }})</span>
                                 </div>
-                                <button
-                                    type="button"
-                                    class="h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
-                                    :disabled="isActiveReviewSuggestionLoading"
-                                    @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })"
-                                >
-                                    <Loader2 v-if="isActiveReviewSuggestionLoading" class="h-3.5 w-3.5 animate-spin" />
-                                    <span v-else>Atualizar sugestões</span>
+                                <button type="button" class="h-7 rounded-lg border border-zinc-700 bg-zinc-800/50 px-2.5 text-[9px] font-bold uppercase text-zinc-300 hover:bg-zinc-700/60 transition-colors disabled:opacity-50" :disabled="isActiveReviewSuggestionLoading" @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })">
+                                    <Loader2 v-if="isActiveReviewSuggestionLoading" class="h-3 w-3 animate-spin inline" />
+                                    <span v-else>Atualizar</span>
                                 </button>
                             </div>
 
-                            <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="mt-4 rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-8 text-[11px] leading-relaxed text-zinc-400">
-                                Buscando imagens no Wasabi e no histórico interno para este produto.
+                            <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-center text-[10px] text-zinc-500">
+                                Buscando imagens...
                             </div>
-                            <div v-else-if="activeReviewCandidates.length" class="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                            <div v-else-if="activeReviewCandidates.length" class="grid gap-2 grid-cols-2 xl:grid-cols-3">
                                 <button
                                     v-for="candidate in activeReviewCandidates"
                                     :key="candidate.id"
                                     type="button"
-                                    class="group overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.03] text-left transition-all hover:border-emerald-400/45 hover:bg-emerald-500/5"
+                                    class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/[0.04]"
                                     @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
                                 >
-                                    <div class="relative aspect-[4/3] bg-zinc-900/70">
-                                        <img
-                                            :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)"
-                                            class="h-full w-full object-contain p-3"
-                                            alt="Candidata de imagem"
-                                        />
-                                        <div v-if="candidate.recommended" class="absolute left-2 top-2 rounded-full bg-emerald-500/90 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
-                                            Recomendada
-                                        </div>
-                                        <div class="absolute right-2 top-2 rounded-full border border-black/20 bg-black/45 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
-                                            {{ candidate.source === 's3' ? 'Storage' : 'Busca' }}
-                                        </div>
+                                    <div class="relative aspect-[4/3] bg-zinc-900/60">
+                                        <img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" />
+                                        <div v-if="candidate.recommended" class="absolute left-1.5 top-1.5 rounded-md bg-emerald-500/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">Recomendada</div>
+                                        <div class="absolute right-1.5 top-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">{{ candidate.source === 's3' ? 'Storage' : 'Busca' }}</div>
                                     </div>
-                                    <div class="space-y-2 p-3">
-                                        <div class="flex items-start justify-between gap-2">
-                                            <div class="min-w-0">
-                                                <div class="line-clamp-2 text-[11px] font-semibold text-white">
-                                                    {{ candidate.title || candidate.domain || 'Imagem sugerida' }}
-                                                </div>
-                                                <div class="text-[10px] text-zinc-500">
-                                                    {{ candidate.source === 's3' ? 'Wasabi/Storage' : (candidate.provider || candidate.domain || 'Busca externa') }}
-                                                </div>
-                                            </div>
-                                            <div class="shrink-0 text-right">
-                                                <div class="text-[10px] font-semibold text-zinc-200">
-                                                    {{ formatCandidateConfidence(candidate) }}
-                                                </div>
-                                                <div class="text-[9px] uppercase tracking-[0.14em] text-zinc-500">
-                                                    {{ candidate.confidence != null ? 'Conf.' : 'Score' }}
-                                                </div>
-                                            </div>
+                                    <div class="p-2">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <div class="line-clamp-1 text-[10px] font-medium text-white">{{ candidate.title || candidate.domain || 'Imagem' }}</div>
+                                            <span class="text-[9px] font-semibold text-zinc-300 shrink-0">{{ formatCandidateConfidence(candidate) }}</span>
                                         </div>
-                                        <div v-if="candidate.reason" class="line-clamp-2 text-[10px] leading-relaxed text-zinc-500">
-                                            {{ candidate.reason }}
-                                        </div>
-                                        <div class="pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-200 transition-colors group-hover:text-emerald-100">
-                                            Usar esta imagem
-                                        </div>
+                                        <div class="text-[9px] text-emerald-300 font-medium mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">Usar esta</div>
                                     </div>
                                 </button>
                             </div>
-                            <div v-else class="mt-4 rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-[11px] leading-relaxed text-zinc-500">
-                                {{ activeReviewSuggestionError || 'Ainda não há candidatas prontas para este item. Use Storage, Upload ou Reprocessar para fechar a decisão.' }}
+                            <div v-else class="rounded-lg border border-dashed border-zinc-800 px-4 py-5 text-center text-[10px] text-zinc-500">
+                                {{ activeReviewSuggestionError || 'Sem candidatas. Use Storage, Upload ou Reprocessar.' }}
                             </div>
-
-                            <div v-if="activeReviewSuggestionError" class="mt-3 text-[10px] leading-relaxed text-rose-200/80">
-                                {{ activeReviewSuggestionError }}
-                            </div>
+                            <div v-if="activeReviewSuggestionError" class="mt-2 text-[9px] text-rose-300/80">{{ activeReviewSuggestionError }}</div>
                         </section>
 
-                        <section class="rounded-[28px] border border-white/10 bg-[linear-gradient(145deg,rgba(14,14,18,0.96),rgba(9,9,12,0.98))] p-4 lg:p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
-                            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div>
-                                    <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Dados comerciais</div>
-                                    <div class="mt-1 text-[12px] text-zinc-500">
-                                        Edite o item ativo com foco total, sem disputar espaço com a lista inteira.
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    class="inline-flex h-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-200 transition-colors hover:bg-white/[0.08]"
-                                    @click="toggleAdvancedFields(activeReviewRowMeta.productId)"
-                                >
-                                    <SlidersHorizontal class="mr-2 h-3.5 w-3.5" />
-                                    {{ isAdvancedFieldsExpanded(activeReviewRowMeta.productId) ? 'Ocultar avançado' : 'Mostrar avançado' }}
+                        <!-- Dados comerciais -->
+                        <section class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                            <div class="flex items-center justify-between gap-3 mb-3">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Dados comerciais</div>
+                                <button type="button" class="h-7 rounded-lg border border-zinc-700 bg-zinc-800/50 px-2.5 text-[9px] font-bold uppercase text-zinc-300 hover:bg-zinc-700/60 transition-colors" @click="toggleAdvancedFields(activeReviewRowMeta.productId)">
+                                    <SlidersHorizontal class="h-3 w-3 inline mr-1" />
+                                    {{ isAdvancedFieldsExpanded(activeReviewRowMeta.productId) ? 'Ocultar' : 'Avançado' }}
                                 </button>
                             </div>
 
-                            <div class="mt-4 grid gap-4 2xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
-                                <div class="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
-                                    <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Identidade do produto</div>
-                                    <div class="mt-4 space-y-3">
-                                        <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                            Nome
-                                            <input
-                                                v-model="activeReviewRowMeta.product.name"
-                                                class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm font-semibold text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                placeholder="Nome do produto"
-                                            />
+                            <div class="grid gap-3 xl:grid-cols-2">
+                                <!-- Identidade -->
+                                <div class="space-y-2">
+                                    <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                        Nome
+                                        <input v-model="activeReviewRowMeta.product.name" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm font-semibold text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="Nome do produto" />
+                                    </label>
+                                    <div class="grid gap-2 grid-cols-2">
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                            Marca
+                                            <input v-model="activeReviewRowMeta.product.brand" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="Marca" />
                                         </label>
-                                        <div class="grid gap-3 md:grid-cols-2">
-                                            <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                                Marca
-                                                <input
-                                                    v-model="activeReviewRowMeta.product.brand"
-                                                    class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                    placeholder="Marca (opcional)"
-                                                />
-                                            </label>
-                                            <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                                Peso
-                                                <input
-                                                    v-model="activeReviewRowMeta.product.weight"
-                                                    class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                    placeholder="Ex: 500G, 1L"
-                                                />
-                                            </label>
-                                        </div>
-                                        <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                            Peso
+                                            <input v-model="activeReviewRowMeta.product.weight" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="500G, 1L" />
+                                        </label>
+                                    </div>
+                                    <div class="grid gap-2 grid-cols-2">
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
                                             EAN / Código
-                                            <input
-                                                v-model="activeReviewRowMeta.product.productCode"
-                                                class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                placeholder="Código opcional"
-                                            />
+                                            <input v-model="activeReviewRowMeta.product.productCode" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="Código" />
                                         </label>
-                                        <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                            Condição comercial
-                                            <input
-                                                :value="activeReviewRowMeta.product.specialCondition ?? ''"
-                                                @input="setActiveReviewStringField('specialCondition', String(($event.target as any).value || ''))"
-                                                class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                placeholder="ACIMA DE 36 UN."
-                                            />
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                            Condição
+                                            <input :value="activeReviewRowMeta.product.specialCondition ?? ''" @input="setActiveReviewStringField('specialCondition', String(($event.target as any).value || ''))" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="ACIMA DE 36 UN." />
                                         </label>
                                     </div>
                                 </div>
 
-                                <div class="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
-                                    <div class="grid gap-3 xl:grid-cols-2">
-                                        <div class="rounded-[20px] border border-zinc-800 bg-zinc-950/45 p-3">
-                                            <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Preço base</div>
-                                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                                                <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                                    Unidade
-                                                    <input
-                                                        v-model="activeReviewRowMeta.product.priceUnit"
-                                                        class="mt-2 h-11 w-full rounded-xl border border-zinc-800 bg-black/30 px-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                        placeholder="0,00"
-                                                    />
-                                                </label>
-                                                <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                                    Embalagem
-                                                    <input
-                                                        v-model="activeReviewRowMeta.product.pricePack"
-                                                        class="mt-2 h-11 w-full rounded-xl border border-zinc-800 bg-black/30 px-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                        placeholder="0,00"
-                                                    />
-                                                </label>
-                                            </div>
-                                        </div>
-
-                                        <div class="rounded-[20px] border border-emerald-900/40 bg-emerald-950/15 p-3">
-                                            <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">Preço especial</div>
-                                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                                                <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
-                                                    +Esp
-                                                    <input
-                                                        v-model="activeReviewRowMeta.product.priceSpecialUnit"
-                                                        class="mt-2 h-11 w-full rounded-xl border border-emerald-900/50 bg-black/20 px-3 text-sm text-emerald-100 placeholder:text-emerald-200/40 focus:outline-none focus:border-emerald-500"
-                                                        placeholder="0,00"
-                                                    />
-                                                </label>
-                                                <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
-                                                    Especial
-                                                    <input
-                                                        v-model="activeReviewRowMeta.product.priceSpecial"
-                                                        class="mt-2 h-11 w-full rounded-xl border border-emerald-900/50 bg-black/20 px-3 text-sm text-emerald-100 placeholder:text-emerald-200/40 focus:outline-none focus:border-emerald-500"
-                                                        placeholder="0,00"
-                                                    />
-                                                </label>
-                                            </div>
-                                        </div>
+                                <!-- Preços -->
+                                <div class="space-y-2">
+                                    <div class="grid gap-2 grid-cols-2">
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                            R$ Unidade
+                                            <input v-model="activeReviewRowMeta.product.priceUnit" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="0,00" />
+                                        </label>
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                            R$ Embalagem
+                                            <input v-model="activeReviewRowMeta.product.pricePack" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="0,00" />
+                                        </label>
                                     </div>
-
-                                    <div class="mt-4 grid gap-3 md:grid-cols-3">
-                                        <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                            Embalagem
-                                            <input
-                                                :value="activeReviewRowMeta.product.packageLabel ?? ''"
-                                                @input="setActiveReviewUppercaseField('packageLabel', String(($event.target as any).value || ''))"
-                                                class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                placeholder="FD"
-                                            />
+                                    <div class="grid gap-2 grid-cols-2">
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-emerald-400">
+                                            R$ Especial Un
+                                            <input v-model="activeReviewRowMeta.product.priceSpecialUnit" class="mt-1 h-9 w-full rounded-lg border border-emerald-900/50 bg-emerald-950/20 px-3 text-sm text-emerald-100 placeholder:text-emerald-300/30 focus:outline-none focus:border-emerald-500" placeholder="0,00" />
                                         </label>
-                                        <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                            Quantidade
-                                            <input
-                                                type="number"
-                                                :value="activeReviewRowMeta.product.packQuantity ?? ''"
-                                                @input="setActiveReviewPositiveNumberField('packQuantity', ($event.target as any).value)"
-                                                class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                placeholder="12"
-                                            />
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-emerald-400">
+                                            R$ Especial
+                                            <input v-model="activeReviewRowMeta.product.priceSpecial" class="mt-1 h-9 w-full rounded-lg border border-emerald-900/50 bg-emerald-950/20 px-3 text-sm text-emerald-100 placeholder:text-emerald-300/30 focus:outline-none focus:border-emerald-500" placeholder="0,00" />
                                         </label>
-                                        <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                            Unidade
-                                            <input
-                                                :value="activeReviewRowMeta.product.packUnit ?? ''"
-                                                @input="setActiveReviewUppercaseField('packUnit', String(($event.target as any).value || ''))"
-                                                class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                placeholder="UN"
-                                            />
+                                    </div>
+                                    <div class="grid gap-2 grid-cols-3">
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                            Embal.
+                                            <input :value="activeReviewRowMeta.product.packageLabel ?? ''" @input="setActiveReviewUppercaseField('packageLabel', String(($event.target as any).value || ''))" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="FD" />
+                                        </label>
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                            Qtd
+                                            <input type="number" :value="activeReviewRowMeta.product.packQuantity ?? ''" @input="setActiveReviewPositiveNumberField('packQuantity', ($event.target as any).value)" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="12" />
+                                        </label>
+                                        <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                            Un
+                                            <input :value="activeReviewRowMeta.product.packUnit ?? ''" @input="setActiveReviewUppercaseField('packUnit', String(($event.target as any).value || ''))" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="UN" />
                                         </label>
                                     </div>
 
-                                    <details class="mt-4 rounded-[20px] border border-white/8 bg-black/20 p-3" :open="isAdvancedFieldsExpanded(activeReviewRowMeta.productId)">
-                                        <summary class="cursor-pointer text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400 hover:text-zinc-200">
-                                            Campos avançados
-                                        </summary>
-                                        <div class="mt-4 grid gap-3 xl:grid-cols-2">
-                                            <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+                                    <!-- Avançados -->
+                                    <details class="rounded-lg border border-zinc-800 bg-zinc-950/30 p-2.5 [&_summary::-webkit-details-marker]:hidden" :open="isAdvancedFieldsExpanded(activeReviewRowMeta.productId)">
+                                        <summary class="cursor-pointer text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300">Campos avançados</summary>
+                                        <div class="mt-2 grid gap-2 grid-cols-2">
+                                            <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
                                                 Preço
-                                                <input
-                                                    :value="activeReviewRowMeta.product.price ?? ''"
-                                                    @input="setActiveReviewStringField('price', String(($event.target as any).value || ''))"
-                                                    class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                    placeholder="0,00"
-                                                />
+                                                <input :value="activeReviewRowMeta.product.price ?? ''" @input="setActiveReviewStringField('price', String(($event.target as any).value || ''))" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="0,00" />
                                             </label>
-                                            <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+                                            <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
                                                 R$ Atacado
-                                                <input
-                                                    :value="activeReviewRowMeta.product.priceWholesale ?? ''"
-                                                    @input="setActiveReviewStringField('priceWholesale', String(($event.target as any).value || ''))"
-                                                    class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                    placeholder="0,00"
-                                                />
+                                                <input :value="activeReviewRowMeta.product.priceWholesale ?? ''" @input="setActiveReviewStringField('priceWholesale', String(($event.target as any).value || ''))" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="0,00" />
                                             </label>
-                                            <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+                                            <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
                                                 Trigger
-                                                <input
-                                                    type="number"
-                                                    :value="activeReviewRowMeta.product.wholesaleTrigger ?? ''"
-                                                    @input="setActiveReviewPositiveNumberField('wholesaleTrigger', ($event.target as any).value)"
-                                                    class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                    placeholder="10"
-                                                />
+                                                <input type="number" :value="activeReviewRowMeta.product.wholesaleTrigger ?? ''" @input="setActiveReviewPositiveNumberField('wholesaleTrigger', ($event.target as any).value)" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="10" />
                                             </label>
-                                            <label class="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                                                Unidade trigger
-                                                <input
-                                                    :value="activeReviewRowMeta.product.wholesaleTriggerUnit ?? ''"
-                                                    @input="setActiveReviewUppercaseField('wholesaleTriggerUnit', String(($event.target as any).value || ''))"
-                                                    class="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40"
-                                                    placeholder="FD"
-                                                />
+                                            <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                                Un Trigger
+                                                <input :value="activeReviewRowMeta.product.wholesaleTriggerUnit ?? ''" @input="setActiveReviewUppercaseField('wholesaleTriggerUnit', String(($event.target as any).value || ''))" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="FD" />
                                             </label>
                                         </div>
                                     </details>
@@ -3471,54 +2973,30 @@ const getAssetDisplayName = (asset: any): string => {
                             </div>
                         </section>
 
-                        <section class="rounded-[28px] border border-white/10 bg-[linear-gradient(145deg,rgba(14,14,18,0.96),rgba(9,9,12,0.98))] p-4 lg:p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
-                            <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-                                <div class="space-y-3">
-                                    <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Fechamento do lote</div>
-                                    <div class="rounded-2xl border p-3.5 text-[11px] leading-relaxed flex items-start gap-2.5" :class="importReadinessToneClass">
-                                        <div class="shrink-0 mt-0.5">
-                                            <AlertCircle class="h-4 w-4" v-if="imageStatusCounters.blocked > 0 || imageStatusCounters.ambiguous > 0" />
-                                            <Loader2 class="h-4 w-4 animate-spin" v-else-if="imageStatusCounters.pending > 0" />
-                                            <Check class="h-4 w-4" v-else />
-                                        </div>
-                                        <span class="font-medium pt-0.5">{{ importReadinessText }}</span>
-                                    </div>
-                                    <div class="grid gap-2 md:grid-cols-3">
-                                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                            <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Modo</div>
-                                            <div class="mt-1 text-sm font-semibold text-white">{{ selectedImportModeLabel }}</div>
-                                        </div>
-                                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                            <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Destino</div>
-                                            <div class="mt-1 text-sm font-semibold text-white">{{ selectedTargetModeLabel }}</div>
-                                        </div>
-                                        <div class="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                            <div class="text-[9px] uppercase tracking-[0.16em] text-zinc-500">Etiqueta</div>
-                                            <div class="mt-1 text-sm font-semibold text-white">{{ selectedLabelTemplateSummary }}</div>
-                                        </div>
-                                    </div>
+                        <!-- Fechamento compacto -->
+                        <section class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="flex items-center gap-2 text-[10px]" :class="importReadinessToneClass.replace('border-', 'text-').split(' ').filter((c: string) => c.startsWith('text-'))[0]">
+                                    <AlertCircle class="h-3.5 w-3.5 shrink-0" v-if="imageStatusCounters.blocked > 0 || imageStatusCounters.ambiguous > 0" />
+                                    <Loader2 class="h-3.5 w-3.5 animate-spin shrink-0" v-else-if="imageStatusCounters.pending > 0" />
+                                    <Check class="h-3.5 w-3.5 shrink-0" v-else />
+                                    <span class="font-medium">{{ importReadinessText }}</span>
                                 </div>
-
-                                <div class="flex flex-wrap gap-2 xl:justify-end">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        @click="startImageProcessing(true)"
-                                        :disabled="isImageQueueRunning || isSubmittingImport"
-                                    >
-                                        <RefreshCw class="mr-2 h-3.5 w-3.5" />
-                                        Forçar reprocessar imagens
+                                <div class="flex items-center gap-1.5 shrink-0">
+                                    <Button variant="ghost" size="sm" class="h-7 px-2" @click="startImageProcessing(true)" :disabled="isImageQueueRunning || isSubmittingImport">
+                                        <RefreshCw class="h-3 w-3 mr-1" />
+                                        <span class="text-[9px]">Reprocessar</span>
                                     </Button>
                                     <Button
                                         v-if="targetMode !== 'multi-frame'"
                                         size="sm"
-                                        @click="handleImport"
-                                        class="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                        class="h-7 px-3 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
                                         :disabled="importButtonDisabled"
+                                        @click="handleImport"
                                     >
-                                        <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="mr-2 h-3.5 w-3.5 animate-spin" />
-                                        <Check v-else class="mr-2 h-3.5 w-3.5" />
-                                        Importar {{ products.length }} Produtos
+                                        <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="h-3 w-3 mr-1 animate-spin" />
+                                        <Check v-else class="h-3 w-3 mr-1" />
+                                        <span class="text-[10px] font-bold">Importar {{ products.length }}</span>
                                     </Button>
                                 </div>
                             </div>

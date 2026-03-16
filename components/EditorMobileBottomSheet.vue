@@ -27,14 +27,14 @@ const dragOffset = ref(0)
 
 const onDragStart = (e: TouchEvent) => {
   isDragging.value = true
-  startY = e.touches[0].clientY
+  startY = e.touches[0]?.clientY ?? 0
   startHeight = heights[level.value]
   dragOffset.value = 0
 }
 
 const onDragMove = (e: TouchEvent) => {
   if (!isDragging.value) return
-  const deltaY = e.touches[0].clientY - startY
+  const deltaY = (e.touches[0]?.clientY ?? 0) - startY
   const deltaPct = (deltaY / window.innerHeight) * 100
   dragOffset.value = deltaPct
 }

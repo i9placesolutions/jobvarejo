@@ -3871,7 +3871,7 @@ const setupAltDragDuplicate = () => {
         if (obj.excludeFromExport) return false;
         if (isPenMode.value || isNodeEditing.value || isDrawing.value) return false;
         if (isLikelyProductZone(obj)) return false;
-        if (String(obj.type || '').toLowerCase() === 'activeselection') return false;
+        // ActiveSelection is allowed — Alt+drag duplicates all selected objects
         return true;
     };
 
@@ -4064,13 +4064,14 @@ const setupAltDragDuplicate = () => {
 
         // For interactive groups (product cards with subTargetCheck=true), Fabric may report
         // transform target as either the child or its parent group depending on hit-test timing.
-        if (!isTransformRelatedToSource(state.original, transformTarget)) {
+        // When transform is not yet available or target is null, trust the mousedown source.
+        if (tr && transformTarget && !isTransformRelatedToSource(state.original, transformTarget)) {
             const sourceGroup = state.original?.group;
             const inInteractiveGroup = !!(
                 sourceGroup &&
                 (sourceGroup.interactive || sourceGroup.subTargetCheck)
             );
-            if (!inInteractiveGroup || !tr) return;
+            if (!inInteractiveGroup) return;
         }
 
         // Start cloning (runs once)
@@ -4114,23 +4115,22 @@ const setupAltDragDuplicate = () => {
             '__atacValueVariants', '__atacVariantGroups'
         ];
 
-        const doClone = async () => {
+        const cloneSingleObject = async (src: any): Promise<any> => {
             let cloned: any = null;
+            const srcType = String(src.type || '').toLowerCase();
+            const isSrcGroup = srcType === 'group';
 
             // For groups, prefer serialize+enliven — fabric.clone() on groups sometimes
             // produces children that lose critical methods (getRelativeCenterPoint etc.)
-            // because prototypes don't survive a shallow copy.
-            const isGroup = original.type === 'group';
-            
-            if (isGroup) {
+            if (isSrcGroup) {
                 try {
-                    const json = typeof original.toObject === 'function' ? original.toObject(CLONE_PROPS) : null;
+                    const json = typeof src.toObject === 'function' ? src.toObject(CLONE_PROPS) : null;
                     if (json && fabric?.util?.enlivenObjects) {
                         const objs = await fabric.util.enlivenObjects([json]);
                         cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
                     }
                 } catch (e) {
-                    console.warn('[alt-drag-duplicate] serialize+enliven fallback for group failed', e);
+                    console.warn('[alt-drag-duplicate] serialize+enliven for group failed', e);
                     cloned = null;
                 }
             }
@@ -4138,8 +4138,8 @@ const setupAltDragDuplicate = () => {
             // For non-groups (or if serialize failed), try native clone
             if (!isValidFabricObject(cloned)) {
                 try {
-                    if (typeof original.clone === 'function') {
-                        const result = original.clone(CLONE_PROPS);
+                    if (typeof src.clone === 'function') {
+                        const result = src.clone(CLONE_PROPS);
                         if (result && typeof result.then === 'function') {
                             cloned = await result;
                         }
@@ -4147,10 +4147,10 @@ const setupAltDragDuplicate = () => {
                 } catch { /* ignore */ }
             }
 
-            // Final fallback: serialize + enliven (for non-groups that failed native clone)
-            if (!isValidFabricObject(cloned) && !isGroup) {
+            // Final fallback: serialize + enliven
+            if (!isValidFabricObject(cloned) && !isSrcGroup) {
                 try {
-                    const json = typeof original.toObject === 'function' ? original.toObject(CLONE_PROPS) : null;
+                    const json = typeof src.toObject === 'function' ? src.toObject(CLONE_PROPS) : null;
                     if (json && fabric?.util?.enlivenObjects) {
                         const objs = await fabric.util.enlivenObjects([json]);
                         cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
@@ -4158,15 +4158,14 @@ const setupAltDragDuplicate = () => {
                 } catch { /* ignore */ }
             }
 
-            // Validate group children have proper methods before proceeding
+            // Validate group children have proper methods
             if (isValidFabricObject(cloned) && cloned.type === 'group' && typeof cloned.getObjects === 'function') {
                 const children = cloned.getObjects();
                 const allValid = children.every((c: any) => c && typeof c === 'object' && typeof c.getRelativeCenterPoint === 'function');
                 if (!allValid) {
-                    console.warn('[alt-drag-duplicate] Cloned group has invalid children, retrying via serialize');
                     cloned = null;
                     try {
-                        const json = typeof original.toObject === 'function' ? original.toObject(CLONE_PROPS) : null;
+                        const json = typeof src.toObject === 'function' ? src.toObject(CLONE_PROPS) : null;
                         if (json && fabric?.util?.enlivenObjects) {
                             const objs = await fabric.util.enlivenObjects([json]);
                             cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
@@ -4174,6 +4173,96 @@ const setupAltDragDuplicate = () => {
                     } catch { /* ignore */ }
                 }
             }
+
+            return cloned;
+        };
+
+        const doClone = async () => {
+            const isActiveSelection = String(original.type || '').toLowerCase() === 'activeselection';
+
+            // ── ActiveSelection: clone each member individually ──
+            if (isActiveSelection) {
+                const members = typeof original.getObjects === 'function' ? original.getObjects() : [];
+                if (members.length === 0) {
+                    state.activeCloneRequestId = 0;
+                    state.armed = false;
+                    restoreOriginalLocks(original);
+                    state.cloning = false;
+                    return;
+                }
+
+                const clones: any[] = [];
+                for (const member of members) {
+                    const c = await cloneSingleObject(member);
+                    if (!isValidFabricObject(c)) continue;
+                    assignNewIdsDeep(c);
+                    // Compute absolute position from the ActiveSelection's transform matrix
+                    const mat = member.calcTransformMatrix?.();
+                    if (mat) {
+                        const decomposed = fabric.util.qrDecompose?.(mat) || {} as any;
+                        c.set({
+                            left: decomposed.translateX ?? Number(member.left || 0),
+                            top: decomposed.translateY ?? Number(member.top || 0),
+                            scaleX: decomposed.scaleX ?? member.scaleX ?? 1,
+                            scaleY: decomposed.scaleY ?? member.scaleY ?? 1,
+                            angle: decomposed.angle ?? member.angle ?? 0,
+                        });
+                    }
+                    c.set({ selectable: true, evented: true, hasControls: true, hasBorders: true, objectCaching: false, dirty: true });
+                    // Copy parentFrameId
+                    if ((member as any).parentFrameId != null) (c as any).parentFrameId = (member as any).parentFrameId;
+                    c.setCoords?.();
+                    canvas.value.add(c);
+                    clones.push(c);
+                }
+
+                if (clones.length === 0 || !canvas.value) {
+                    state.activeCloneRequestId = 0;
+                    state.armed = false;
+                    restoreOriginalLocks(original);
+                    state.cloning = false;
+                    return;
+                }
+
+                // Create new ActiveSelection from clones
+                const newAS = new (fabric as any).ActiveSelection(clones, { canvas: canvas.value });
+                canvas.value.setActiveObject(newAS);
+
+                // Swap Fabric transform to the new ActiveSelection
+                const tr: any = (canvas.value as any)._currentTransform;
+                let didSwapTransform = false;
+                if (tr && (tr.target === original || isTransformRelatedToSource(original, tr.target))) {
+                    tr.target = newAS;
+                    if (tr.original && typeof tr.original === 'object') {
+                        tr.original.left = newAS.left;
+                        tr.original.top = newAS.top;
+                    }
+                    didSwapTransform = true;
+                }
+
+                // Pin originals in place
+                original.set({ left: origLeft, top: origTop });
+                original.setCoords?.();
+
+                state.clone = newAS;
+                state.didDuplicate = true;
+                state.manualFollowClone = !didSwapTransform;
+                syncCloneToPointerDelta();
+
+                if (didSwapTransform) {
+                    const tr2: any = (canvas.value as any)?._currentTransform;
+                    if (tr2?.original && typeof tr2.original === 'object') {
+                        tr2.original.left = newAS.left;
+                        tr2.original.top = newAS.top;
+                    }
+                }
+                state.cloning = false;
+                canvas.value.requestRenderAll();
+                return;
+            }
+
+            // ── Single object clone ──
+            let cloned = await cloneSingleObject(original);
 
             const cloneWasCancelled = cloneRequestId !== state.activeCloneRequestId || !state.armed;
             if (cloneWasCancelled || !isValidFabricObject(cloned) || !canvas.value) {
@@ -4224,7 +4313,6 @@ const setupAltDragDuplicate = () => {
             // ── Position & insert the clone ──
             if (isInsideGroup && parentGroup) {
                 // INSIDE GROUP: insert clone directly into parent group at same local coords.
-                // This keeps the clone logically inside the product card/zone.
                 cloned.set({
                     left: origLeft,
                     top: origTop,
@@ -4305,13 +4393,13 @@ const setupAltDragDuplicate = () => {
             const tr: any = (canvas.value as any)._currentTransform;
             let didSwapTransform = false;
             if (tr) {
-                const parentGroup = (original as any)?.group;
+                const parentGroup2 = (original as any)?.group;
                 const shouldSwap = isTransformRelatedToSource(original, tr.target)
-                    || (isInsideGroup && parentGroup && tr.target === parentGroup);
+                    || (isInsideGroup && parentGroup2 && tr.target === parentGroup2)
+                    || tr.target === original;
 
                 if (shouldSwap) {
                     tr.target = cloned;
-                    // offsetX/Y: keep original offsets since clone has same coords & origin
                     if (tr.original && typeof tr.original === 'object') {
                         tr.original.left = cloned.left;
                         tr.original.top = cloned.top;
@@ -4326,17 +4414,14 @@ const setupAltDragDuplicate = () => {
 
             // Select the clone (it follows the mouse)
             canvas.value.setActiveObject(cloned);
-            
+
             state.clone = cloned;
             state.didDuplicate = true;
             state.manualFollowClone = !didSwapTransform;
 
             // Always align clone to the current pointer delta on the first frame.
-            // This avoids the visual "jump" when async clone creation finishes.
             syncCloneToPointerDelta();
 
-            // If Fabric transform was swapped, keep transform origin in sync with
-            // the corrected clone coordinates to avoid a follow-up snap.
             if (didSwapTransform) {
                 const tr2: any = (canvas.value as any)?._currentTransform;
                 if (tr2?.original && typeof tr2.original === 'object') {
@@ -4812,6 +4897,56 @@ watch(() => currentUser.value, () => {
 const { isMobile, isTablet } = useResponsive()
 const mobilePanel = ref<string | null>(null)
 const mobileNavRef = ref<InstanceType<typeof import('./EditorMobileNav.vue').default> | null>(null)
+
+// ── Mobile template helpers (avoids Volar TS errors in large file) ──
+const triggerCopyShortcut = () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true }))
+}
+const triggerPasteShortcut = () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true }))
+}
+const currentPageId = computed(() => project.pages?.[project.activePageIndex]?.id || '')
+const switchToPage = (pageId: string) => {
+    const idx = project.pages?.findIndex((p: any) => p.id === pageId)
+    if (idx >= 0 && idx !== project.activePageIndex) {
+        project.activePageIndex = idx
+    }
+}
+const addNewPage = () => {
+    const newPage: any = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: `Página ${(project.pages?.length || 0) + 1}`,
+        width: 1080,
+        height: 1080,
+        type: 'FREE_DESIGN',
+        canvasData: null,
+        dirty: true
+    }
+    if (!project.pages) project.pages = []
+    project.pages.push(newPage)
+    project.activePageIndex = project.pages.length - 1
+}
+const duplicatePage = (pageId: string) => {
+    const idx = project.pages?.findIndex((p: any) => p.id === pageId)
+    if (idx == null || idx < 0) return
+    const src = project.pages[idx]
+    if (!src) return
+    const dup = {
+        ...JSON.parse(JSON.stringify(src)),
+        id: Math.random().toString(36).substr(2, 9),
+        name: `${src.name || 'Página'} (cópia)`,
+        dirty: true
+    }
+    project.pages.splice(idx + 1, 0, dup)
+    project.activePageIndex = idx + 1
+}
+const reorderPages = (orderedIds: string[]) => {
+    if (!orderedIds || !project.pages) return
+    const map = new Map(project.pages.map((p: any) => [p.id, p]))
+    const reordered = orderedIds.map((id: string) => map.get(id)).filter(Boolean) as any[]
+    const remaining = project.pages.filter((p: any) => !orderedIds.includes(p.id))
+    project.pages = [...reordered, ...remaining]
+}
 
 const canvas = shallowRef<any>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
@@ -5365,6 +5500,8 @@ function sanitizeFabricJsonTreeForLoad(
         const children = Array.isArray((container as any).objects) ? (container as any).objects : null;
         if (!children) return;
 
+        const INVALID_TYPES = new Set(['', 'undefined', 'null', 'unknown']);
+
         const nextChildren: any[] = [];
         for (const child of children) {
             if (!child || typeof child !== 'object') {
@@ -5372,8 +5509,9 @@ function sanitizeFabricJsonTreeForLoad(
                 continue;
             }
             ensureGroupType(child);
-            const childType = String((child as any).type || '').trim().toLowerCase();
-            if (!childType) {
+            const rawType = (child as any).type;
+            const childType = (rawType == null ? '' : String(rawType)).trim().toLowerCase();
+            if (!childType || INVALID_TYPES.has(childType)) {
                 removed += 1;
                 continue;
             }
@@ -17018,6 +17156,20 @@ const setupReactivity = () => {
             if (!root) return;
             if (!unique.includes(root)) unique.push(root);
         });
+
+        // When drag-selecting, if frames/backgrounds are included alongside non-frame objects,
+        // remove the frames — the user wants the objects ON the frame, not the frame itself.
+        if (unique.length > 1) {
+            const frames = unique.filter((o: any) => o.isFrame || isFrameLikeObject(o));
+            const zones = unique.filter((o: any) => isLikelyProductZone(o));
+            const nonFrameNonZone = unique.filter((o: any) => !o.isFrame && !isFrameLikeObject(o) && !isLikelyProductZone(o));
+
+            if (nonFrameNonZone.length > 0 && (frames.length > 0 || zones.length > 0)) {
+                // Keep only objects that are NOT frames/zones encompassing the selection
+                return nonFrameNonZone;
+            }
+        }
+
         return unique;
     };
 
@@ -17230,51 +17382,98 @@ const setupReactivity = () => {
 
     const pickGenericShiftTargetAtPointer = (nativeEvt: any, opts: { exclude?: any[] } = {}) => {
         if (!canvas.value || !nativeEvt) return null;
+        const excludeList = opts.exclude || [];
         const excludedRoots = new Set(
-            (opts.exclude || [])
+            excludeList
                 .map((entry: any) => resolveShiftSelectionRootObject(entry))
                 .filter(Boolean)
         );
-        const pickRoot = (candidate: any) => {
-            if (!isShiftSelectableTarget(candidate)) return null;
+        // Also add the raw objects themselves to excludedRoots
+        for (const entry of excludeList) {
+            if (entry) excludedRoots.add(entry);
+        }
+
+        const isValidPick = (candidate: any): any | null => {
+            if (!candidate || !isShiftSelectableTarget(candidate)) return null;
+            if (String(candidate?.id || '') === 'artboard-bg') return null;
+            if (excludedRoots.has(candidate)) return null;
             const root = resolveShiftSelectionRootObject(candidate);
             if (!root || !isShiftSelectableTarget(root)) return null;
+            if (String(root?.id || '') === 'artboard-bg') return null;
             if (excludedRoots.has(root)) return null;
             return root;
         };
 
-        const hitInfo = getFabricHitInfoAtPointer(nativeEvt);
-        const hitCandidates = [
-            ...(Array.isArray(hitInfo.subTargets) ? hitInfo.subTargets : []),
-            hitInfo.target
-        ];
-        for (const candidate of hitCandidates) {
-            const picked = pickRoot(candidate);
-            if (picked) return picked;
+        const canvasAny = canvas.value as any;
+        const scenePoint = getScenePointFromNativeEvent(nativeEvt);
+        // Also get viewport-space pointer (for getBoundingRect comparison)
+        let viewportPoint: { x: number; y: number } | null = null;
+        try {
+            viewportPoint = canvasAny.getViewportPoint?.(nativeEvt) || canvasAny.getPointer?.(nativeEvt, false);
+        } catch { /* ignore */ }
+
+        if (!scenePoint && !viewportPoint) return null;
+
+        const objContainsPoint = (obj: any): boolean => {
+            // Method 1: Fabric's containsPoint with scene coordinates
+            if (scenePoint) {
+                try {
+                    if (typeof obj.containsPoint === 'function' && obj.containsPoint(scenePoint)) {
+                        return true;
+                    }
+                } catch { /* ignore */ }
+            }
+            // Method 2: bounding rect comparison (viewport coordinates)
+            try {
+                const br = obj.getBoundingRect?.() || obj.getBoundingRect?.(true);
+                const pt = viewportPoint || scenePoint;
+                if (br && pt && pt.x >= br.left && pt.x <= (br.left + br.width) && pt.y >= br.top && pt.y <= (br.top + br.height)) {
+                    return true;
+                }
+            } catch { /* ignore */ }
+            // Method 3: manual bounds check using object position (scene coordinates)
+            if (scenePoint) {
+                try {
+                    const oLeft = Number(obj.left ?? 0);
+                    const oTop = Number(obj.top ?? 0);
+                    const oW = Number(obj.width ?? 0) * Number(obj.scaleX ?? 1);
+                    const oH = Number(obj.height ?? 0) * Number(obj.scaleY ?? 1);
+                    if (oW > 0 && oH > 0 && scenePoint.x >= oLeft && scenePoint.x <= oLeft + oW && scenePoint.y >= oTop && scenePoint.y <= oTop + oH) {
+                        return true;
+                    }
+                } catch { /* ignore */ }
+            }
+            return false;
+        };
+
+        // Iterate canvas objects in z-order (top to bottom = reverse array order).
+        // Collect ALL valid hits at this point, then let the caller pick the best.
+        // This handles the case where the user wants an object below the topmost hit.
+        const allObjects = canvas.value.getObjects() || [];
+        const hits: any[] = [];
+        for (let i = allObjects.length - 1; i >= 0; i--) {
+            const obj = allObjects[i];
+            if (!obj) continue;
+            const picked = isValidPick(obj);
+            if (picked && objContainsPoint(picked)) {
+                hits.push(picked);
+            }
+            // Also check children of groups/frames
+            if (typeof obj.getObjects === 'function') {
+                const children = obj.getObjects() || [];
+                for (let c = children.length - 1; c >= 0; c--) {
+                    const child = children[c];
+                    if (!child) continue;
+                    const childPicked = isValidPick(child);
+                    if (childPicked && objContainsPoint(childPicked)) {
+                        hits.push(childPicked);
+                    }
+                }
+            }
         }
 
-        const scenePoint = getScenePointFromNativeEvent(nativeEvt);
-        if (!scenePoint) return null;
-        const stack = (canvas.value.getObjects() || []).slice().reverse();
-        for (const obj of stack) {
-            const picked = pickRoot(obj);
-            if (!picked) continue;
-            try {
-                if (typeof picked.containsPoint === 'function' && picked.containsPoint(scenePoint, undefined, true)) {
-                    return picked;
-                }
-            } catch {
-                // ignore
-            }
-            try {
-                const br = picked.getBoundingRect?.(true, true) || picked.getBoundingRect?.(true);
-                if (br && scenePoint.x >= br.left && scenePoint.x <= (br.left + br.width) && scenePoint.y >= br.top && scenePoint.y <= (br.top + br.height)) {
-                    return picked;
-                }
-            } catch {
-                // ignore
-            }
-        }
+        // Return the first valid hit (topmost in z-order)
+        if (hits.length > 0) return hits[0];
         return null;
     };
 
@@ -17931,30 +18130,29 @@ const setupReactivity = () => {
         if (evt?.shiftKey && !isNormalizingShiftSelection) {
             evt.preventDefault?.();
             evt.stopPropagation?.();
+
+            // Resolve which object the user wants to add to the selection.
+            // pickShiftSelectionTarget → pickGenericShiftTargetAtPointer now uses
+            // Fabric's findTarget with excluded objects hidden, drilling through
+            // z-order layers to find the correct object below the selected one.
             const shiftTarget = pickShiftSelectionTarget(e) || target;
             let normalizedTarget = resolveShiftSelectionRootObject(shiftTarget);
-            if (!normalizedTarget || isActiveSelectionObject(normalizedTarget)) {
+
+            const isAlreadyInBaseline = (obj: any): boolean => {
+                if (!obj) return false;
+                return shiftSelectionBaselineMembers.some(
+                    (m: any) => m === obj || resolveShiftSelectionRootObject(m) === obj
+                );
+            };
+
+            // If the resolved target is already selected, use generic picker as fallback
+            if (!normalizedTarget || isActiveSelectionObject(normalizedTarget) || isAlreadyInBaseline(normalizedTarget)) {
                 const pointerGeneric = pickGenericShiftTargetAtPointer(e?.e, {
                     exclude: shiftSelectionBaselineMembers
                 });
                 if (pointerGeneric) {
                     normalizedTarget = pointerGeneric;
                 }
-            }
-            if (import.meta.dev) {
-                console.log('[shift-product-multi] resolve', {
-                    rawTargetType: String(target?.type || ''),
-                    rawTargetName: String(target?.name || ''),
-                    rawTargetId: String((target as any)?._customId || ''),
-                    shiftTargetType: String((shiftTarget as any)?.type || ''),
-                    shiftTargetName: String((shiftTarget as any)?.name || ''),
-                    shiftTargetId: String((shiftTarget as any)?._customId || ''),
-                    normalizedType: String((normalizedTarget as any)?.type || ''),
-                    normalizedName: String((normalizedTarget as any)?.name || ''),
-                    normalizedId: String((normalizedTarget as any)?._customId || ''),
-                    normalizedIsImage: String((normalizedTarget as any)?.type || '').toLowerCase() === 'image',
-                    normalizedParentCard: !!findProductCardParentGroup(normalizedTarget),
-                });
             }
             if (normalizedTarget) {
                 const currentMembersRaw = shiftSelectionBaselineMembers.length
@@ -17996,28 +18194,8 @@ const setupReactivity = () => {
                         }
                     }
                 }
-                if (import.meta.dev) {
-                    console.log('[shift-product-multi] baseline', {
-                        baselineCount: currentMembers.length,
-                        isAlreadySelected,
-                        currentMemberIds: currentMembers.map((member: any) => String((member as any)?._customId || '')),
-                        finalTargetId: String((finalTarget as any)?._customId || ''),
-                        finalTargetType: String((finalTarget as any)?.type || ''),
-                        finalTargetName: String((finalTarget as any)?.name || '')
-                    });
-                }
                 if (!isAlreadySelected) {
                     const nextMembers = [...currentMembers, finalTarget];
-                    if (import.meta.dev) {
-                        console.log('[shift-product-multi] nextMembers', nextMembers.map((member: any) => ({
-                            type: String(member?.type || ''),
-                            name: String(member?.name || ''),
-                            isImage: String(member?.type || '').toLowerCase() === 'image',
-                            hasCardParent: !!findProductCardParentGroup(member),
-                            selectable: member?.selectable,
-                            evented: member?.evented
-                        })));
-                    }
                     nextMembers.forEach((member: any) => {
                         if (!member || String(member?.type || '').toLowerCase() !== 'image') return;
                         try {
@@ -18038,23 +18216,6 @@ const setupReactivity = () => {
                     } else if (fabric?.ActiveSelection) {
                         const nextSelection = new fabric.ActiveSelection(nextMembers, { canvas: canvas.value });
                         canvas.value.setActiveObject(nextSelection);
-                    }
-                    if (import.meta.dev) {
-                        const activeAfter = canvas.value.getActiveObject?.();
-                        const activeType = String(activeAfter?.type || '').toLowerCase();
-                        const activeMembers = activeType === 'activeselection' && typeof activeAfter?.getObjects === 'function'
-                            ? (activeAfter.getObjects() || []).map((member: any) => ({
-                                type: String(member?.type || ''),
-                                name: String(member?.name || ''),
-                                isImage: String(member?.type || '').toLowerCase() === 'image',
-                                hasCardParent: !!findProductCardParentGroup(member)
-                            }))
-                            : [];
-                        console.log('[shift-product-multi] activeAfter', {
-                            activeType,
-                            activeName: String(activeAfter?.name || ''),
-                            activeMembers
-                        });
                     }
                     updateSelection();
                     canvas.value.requestRenderAll();
@@ -36580,11 +36741,11 @@ const handleRecalculateLayout = () => {
               >
                 <div class="flex items-center gap-0.5 px-2 py-1.5 rounded-xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-xl overflow-x-auto max-w-full scrollbar-hide">
                   <!-- Copy -->
-                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Copiar" @click="document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true }))">
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Copiar" @click="triggerCopyShortcut">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                   </button>
                   <!-- Paste -->
-                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Colar" @click="document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true }))">
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Colar" @click="triggerPasteShortcut">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H9a1 1 0 0 0-1 1v2c0 .6.4 1 1 1h6c.6 0 1-.4 1-1V3c0-.6-.4-1-1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2M16 4h2a2 2 0 0 1 2 2v2"/><path d="M12 12h4"/><path d="M12 16h4"/></svg>
                   </button>
                   <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
@@ -36868,7 +37029,6 @@ const handleRecalculateLayout = () => {
           <PageNavigator
             :pages="project.pages || []"
             :active-page-id="currentPageId"
-            :canvas-format="pageSettings.format"
             @select-page="switchToPage"
             @add-page="addNewPage"
             @duplicate-page="duplicatePage"

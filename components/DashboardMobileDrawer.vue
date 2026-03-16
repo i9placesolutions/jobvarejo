@@ -16,9 +16,9 @@ const close = () => emit('update:open', false)
 
 // Swipe-to-close
 let startX = 0
-const onTouchStart = (e: TouchEvent) => { startX = e.touches[0].clientX }
+const onTouchStart = (e: TouchEvent) => { startX = e.touches[0]?.clientX ?? 0 }
 const onTouchEnd = (e: TouchEvent) => {
-  const deltaX = e.changedTouches[0].clientX - startX
+  const deltaX = (e.changedTouches[0]?.clientX ?? 0) - startX
   if (deltaX < -60) close()
 }
 </script>

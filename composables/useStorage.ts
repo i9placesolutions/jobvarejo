@@ -28,6 +28,42 @@ const isGzipBuffer = (buf: Uint8Array): boolean =>
 // Cache: se presigned URL falhar por CORS, pular nas próximas tentativas
 let _presignedCorsBlocked = false
 
+// ── Circuit breaker para Wasabi uploads ──────────────────────────────────────
+// Após N falhas consecutivas, pula Wasabi por um período (saves via DB-only).
+const WASABI_CB_MAX_FAILURES = 2
+const WASABI_CB_COOLDOWN_MS = 5 * 60_000 // 5 minutos
+let _wasabiConsecutiveFailures = 0
+let _wasabiCircuitOpenUntil = 0 // timestamp até quando o circuit está aberto
+
+const isWasabiCircuitOpen = (): boolean => {
+  if (_wasabiConsecutiveFailures < WASABI_CB_MAX_FAILURES) return false
+  if (Date.now() >= _wasabiCircuitOpenUntil) {
+    // Cooldown expirou — permitir 1 tentativa (half-open)
+    console.log('🔄 Wasabi circuit breaker half-open: tentando 1 upload...')
+    return false
+  }
+  return true
+}
+
+const recordWasabiSuccess = () => {
+  if (_wasabiConsecutiveFailures > 0) {
+    console.log('✅ Wasabi circuit breaker reset (upload bem-sucedido)')
+  }
+  _wasabiConsecutiveFailures = 0
+  _wasabiCircuitOpenUntil = 0
+}
+
+const recordWasabiFailure = () => {
+  _wasabiConsecutiveFailures++
+  if (_wasabiConsecutiveFailures >= WASABI_CB_MAX_FAILURES) {
+    _wasabiCircuitOpenUntil = Date.now() + WASABI_CB_COOLDOWN_MS
+    console.warn(
+      `🔴 Wasabi circuit breaker ABERTO: ${_wasabiConsecutiveFailures} falhas consecutivas. ` +
+      `Pulando Wasabi por ${WASABI_CB_COOLDOWN_MS / 60_000}min (saves via DB-only).`
+    )
+  }
+}
+
 /**
  * Wasabi Storage Composable
  *
@@ -308,6 +344,12 @@ export const useStorage = () => {
       return null
     }
 
+    // Circuit breaker: pular Wasabi se muitas falhas consecutivas
+    if (isWasabiCircuitOpen()) {
+      console.warn(`⚡ Wasabi circuit breaker ABERTO — pulando upload, save via DB-only (retry em ${Math.ceil((_wasabiCircuitOpenUntil - Date.now()) / 60_000)}min)`)
+      return null
+    }
+
     const userId = auth.user.value?.id
     if (!userId) {
       saveStatus.value = 'error'
@@ -344,8 +386,12 @@ export const useStorage = () => {
       contentType = 'application/json'
     }
 
+    // Half-open: se já teve falhas anteriores, usar apenas 1 tentativa rápida
+    const isHalfOpen = _wasabiConsecutiveFailures >= WASABI_CB_MAX_FAILURES
+    const effectiveRetries = isHalfOpen ? 1 : retries
+
     // Estratégia: presigned URL direto (rápido, pula se CORS bloqueou antes) → fallback proxy servidor
-    for (let attempt = 1; attempt <= retries; attempt++) {
+    for (let attempt = 1; attempt <= effectiveRetries; attempt++) {
       const uploadStart = Date.now()
       try {
         // ── Tentativa 1: Presigned URL direto (browser → Wasabi) ──
@@ -354,7 +400,7 @@ export const useStorage = () => {
             const presignedUrl = await getPresignedUrl(key, contentType, 'put', 1, authHeaders)
             if (presignedUrl) {
               const presignedController = new AbortController()
-              const presignedTimeout = setTimeout(() => presignedController.abort(), 15_000)
+              const presignedTimeout = setTimeout(() => presignedController.abort(), 20_000)
               try {
                 const response = await fetch(presignedUrl, {
                   method: 'PUT',
@@ -367,7 +413,8 @@ export const useStorage = () => {
                 if (response.ok) {
                   lastSavedAt.value = new Date()
                   saveStatus.value = 'saved'
-                  console.log(`✅ Canvas salvo via presigned URL (tentativa ${attempt}/${retries}, ${Date.now() - uploadStart}ms):`, key)
+                  recordWasabiSuccess()
+                  console.log(`✅ Canvas salvo via presigned URL (tentativa ${attempt}/${effectiveRetries}, ${Date.now() - uploadStart}ms):`, key)
                   void triggerHistorySnapshot({ userId, projectId, pageId, key })
                   return key
                 }
@@ -414,7 +461,8 @@ export const useStorage = () => {
 
           lastSavedAt.value = new Date()
           saveStatus.value = 'saved'
-          console.log(`✅ Canvas salvo via proxy (tentativa ${attempt}/${retries}, ${Date.now() - uploadStart}ms):`, result.key)
+          recordWasabiSuccess()
+          console.log(`✅ Canvas salvo via proxy (tentativa ${attempt}/${effectiveRetries}, ${Date.now() - uploadStart}ms):`, result.key)
           void triggerHistorySnapshot({ userId, projectId, pageId, key })
           return result.key
 
@@ -430,8 +478,9 @@ export const useStorage = () => {
         }
 
       } catch (error: any) {
-        if (attempt === retries) {
-          console.error(`❌ Erro ao salvar na Wasabi após ${retries} tentativas:`, error)
+        if (attempt === effectiveRetries) {
+          recordWasabiFailure()
+          console.error(`❌ Erro ao salvar na Wasabi após ${effectiveRetries} tentativas:`, error)
           saveStatus.value = 'error'
           saveError.value = error?.message || 'Erro desconhecido'
           return null

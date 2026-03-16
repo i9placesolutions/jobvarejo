@@ -1212,12 +1212,8 @@ export const useProject = () => {
                     thumbnailUrl: thumbnailUrls[index] || page.thumbnailUrl // URL do thumbnail
                 }
 
-		                const shouldAttachCanvasBackup = !!page.canvasData && (
-                            !!opts.preferDbBackup ||
-                            !!page?.dirty ||
-                            !page?.canvasDataPath ||
-                            failedCanvasSyncPageIds.has(page.id)
-                        )
+		                // ALWAYS backup canvas data in DB as insurance — Wasabi may fail silently
+		                const shouldAttachCanvasBackup = !!page.canvasData
 		                if (shouldAttachCanvasBackup) {
 		                    const currentCount = getCanvasObjectCount(page.canvasData)
 		                    const persistedCount = Number(page?.lastPersistedObjectCount || 0)
@@ -1228,9 +1224,7 @@ export const useProject = () => {
                         const backupBytes = Number.isFinite(Number(page?.lastSerializedCanvasBytes))
                             ? Number(page.lastSerializedCanvasBytes)
                             : estimateJsonBytes(page.canvasData)
-                        const maxBackupBytes = (opts.preferDbBackup || failedCanvasSyncPageIds.has(page.id))
-                            ? MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE
-                            : MAX_PAGE_DB_CANVAS_BACKUP_BYTES
+                        const maxBackupBytes = MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE
                         if (backupBytes > maxBackupBytes) {
                             console.warn(`[saveProjectDB] Backup canvasData omitido no DB para página ${page.id}: ${backupBytes} bytes`)
                         } else {
