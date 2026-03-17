@@ -95,8 +95,8 @@ type PendingLocalDraftOperation =
 const pendingLocalDraftOperations = new Map<string, PendingLocalDraftOperation>()
 let pendingLocalDraftFlushTimer: ReturnType<typeof setTimeout> | null = null
 let pendingLocalDraftFlushIdleId: number | null = null
-const LOCAL_DRAFT_FLUSH_DELAY_MS = 180
-const LOCAL_DRAFT_FLUSH_IDLE_TIMEOUT_MS = 1200
+const LOCAL_DRAFT_FLUSH_DELAY_MS = 600
+const LOCAL_DRAFT_FLUSH_IDLE_TIMEOUT_MS = 2000
 
 const makePageId = (): string => Math.random().toString(36).substr(2, 9)
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -1508,7 +1508,7 @@ export const useProject = () => {
     let saveTimeout: any = null
     let scheduledAutoSaveRevision = -1
     let scheduledAutoSaveProjectId = ''
-    const AUTO_SAVE_DELAY = 5_000 // 5 segundos: salva mais frequente para evitar perda de dados
+    const AUTO_SAVE_DELAY = 6_000 // 6 segundos: debounce para ações explícitas (painel de propriedades, etc.)
 
     const triggerAutoSave = () => {
         if (!project.id || project.id.startsWith('proj_')) {

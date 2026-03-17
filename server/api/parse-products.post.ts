@@ -24,7 +24,7 @@ const getTimeoutSignal = (timeoutMs: number): AbortSignal | undefined => {
 }
 
 const getMaxOpenAiTimeoutMs = (): number =>
-    process.env.VERCEL ? DEFAULT_OPENAI_TIMEOUT_MS : MAX_OPENAI_TIMEOUT_MS
+    process.env.VERCEL ? DEFAULT_OPENAI_TIMEOUT_MS : 22_000
 
 const resolveOpenAiTimeoutMs = (value: unknown): number => {
     const numericValue = Number.parseInt(String(value ?? '').trim(), 10)
@@ -617,7 +617,7 @@ ${text ? `"${String(text).slice(0, MAX_PROMPT_SOURCE_CHARS)}"` : '(image attache
                 model: 'gpt-4o-mini',
                 response_format: { type: 'json_object' },
                 temperature: 0.1,
-                max_tokens: 3200
+                max_tokens: 2000
             })
         });
 

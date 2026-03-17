@@ -4963,6 +4963,7 @@ const canvas = shallowRef<any>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const wrapperEl = ref<HTMLDivElement | null>(null)
 const isProcessing = ref(false)
+const isParsingProducts = ref(false)
 // Separate from isHistoryProcessing: we only want a UX loader during (initial) design/page load,
 // not during undo/redo or other history operations.
 const isDesignLoading = ref(false)
@@ -5315,7 +5316,7 @@ const recoverLatestNonEmptyForActivePage = async () => {
 }
 
 type PageHistoryItem = {
-    source: 'version' | 'history'
+    source: 'version' | 'history' | 'current'
     key: string
     versionId?: string | null
     lastModified: string
@@ -6846,6 +6847,25 @@ onUnmounted(() => {
     if (zoomMenuOutsideClickHandler) {
         document.removeEventListener('click', zoomMenuOutsideClickHandler)
         zoomMenuOutsideClickHandler = null
+    }
+})
+
+// Periodic save: upload to Wasabi every 45s if there are unsaved changes.
+// Canvas events only update in-memory state + undo history (no upload).
+const PERIODIC_SAVE_INTERVAL_MS = 45_000
+let periodicSaveIntervalId: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+    periodicSaveIntervalId = setInterval(() => {
+        if (isCanvasDestroyed.value) return
+        if (!project.id || project.id.startsWith('proj_')) return
+        if (!hasUnsavedChanges.value && !project.pages.some((p: any) => !!p?.dirty)) return
+        void flushAutoSave().catch(() => { /* ignore periodic save errors */ })
+    }, PERIODIC_SAVE_INTERVAL_MS)
+})
+onUnmounted(() => {
+    if (periodicSaveIntervalId) {
+        clearInterval(periodicSaveIntervalId)
+        periodicSaveIntervalId = null
     }
 })
 
@@ -11713,7 +11733,7 @@ const removeImageObjectsDeep = (node: any): any => {
             sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}`);
             stabilizePriceGroupsForPersistence(canvasInstance, `saveState:${saveReason}`);
             lastHotSaveSanitizeAt = Date.now();
-        } else if ((Date.now() - lastHotSaveSanitizeAt) > 1200) {
+        } else if ((Date.now() - lastHotSaveSanitizeAt) > 3000) {
             sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}:throttled`);
             lastHotSaveSanitizeAt = Date.now();
         }
@@ -24532,7 +24552,9 @@ const handlePasteList = async () => {
     if (!pasteListText.value && activePasteTab.value === 'text') {
         return;
     }
+    if (isParsingProducts.value) return;
 
+    isParsingProducts.value = true;
     isProcessing.value = true;
 
     let data: any[] = [];
@@ -24546,8 +24568,17 @@ const handlePasteList = async () => {
             }
         }
     } catch (err: any) {
-        console.warn('[handlePasteList] AI parse failed, falling back to basic parser:', err?.message);
+        const msg = String(err?.data?.statusMessage || err?.statusMessage || err?.message || '').toLowerCase();
+        const isTimeout = msg.includes('timeout') || msg.includes('504') || msg.includes('gateway') || String(err?.status || err?.statusCode || '') === '504';
+        if (isTimeout) {
+            console.warn('[handlePasteList] AI parse timeout (504), falling back to basic parser');
+            notifyEditorInfo('A IA demorou demais. Usando parser básico. Tente uma lista menor se necessário.');
+        } else {
+            console.warn('[handlePasteList] AI parse failed, falling back to basic parser:', err?.message);
+        }
         data = parseProductList(pasteListText.value);
+    } finally {
+        isParsingProducts.value = false;
     }
 
     isProcessing.value = false;
@@ -24568,15 +24599,28 @@ const handlePasteList = async () => {
 
 const handlePasteFile = async (file: File) => {
     showPasteListModal.value = false;
+    if (isParsingProducts.value) return;
+
+    isParsingProducts.value = true;
     isProcessing.value = true;
 
     let data: any[] = [];
     try {
         data = await parseFileWithAI(file);
     } catch (err: any) {
-        console.error('[handlePasteFile] File parse failed:', err);
+        const msg = String(err?.data?.statusMessage || err?.statusMessage || err?.message || '').toLowerCase();
+        const isTimeout = msg.includes('timeout') || msg.includes('504') || msg.includes('gateway') || String(err?.status || err?.statusCode || '') === '504';
+        if (isTimeout) {
+            notifyEditorInfo('A IA demorou demais ao processar o arquivo. Tente um arquivo menor.');
+        } else {
+            console.error('[handlePasteFile] File parse failed:', err);
+            notifyEditorError('Erro ao processar o arquivo. Tente novamente.');
+        }
+        isParsingProducts.value = false;
         isProcessing.value = false;
         return;
+    } finally {
+        isParsingProducts.value = false;
     }
 
     isProcessing.value = false;
@@ -37451,7 +37495,11 @@ const handleRecalculateLayout = () => {
                           {{ formatHistoryDateTime(it.lastModified) }}
                         </p>
                         <span
-                          v-if="historyItemIsLatest(idx)"
+                          v-if="(it as any).source === 'current'"
+                          class="inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium bg-emerald-500/20 text-emerald-300 leading-relaxed"
+                        >Versao atual</span>
+                        <span
+                          v-else-if="historyItemIsLatest(idx)"
                           class="inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium bg-violet-500/20 text-violet-300 leading-relaxed"
                         >Mais recente</span>
                       </div>

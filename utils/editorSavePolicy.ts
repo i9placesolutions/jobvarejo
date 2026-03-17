@@ -8,10 +8,11 @@ export type SaveStatePolicyInput = {
 
 export const getAdaptiveCoalesceDelayMs = (reason: string, objectCount: number): number => {
   if (!String(reason || '').startsWith('object:')) return 0
-  if (objectCount >= 1200) return 420
-  if (objectCount >= 700) return 300
-  if (objectCount >= 300) return 180
-  return 0
+  if (objectCount >= 1200) return 600
+  if (objectCount >= 700) return 450
+  if (objectCount >= 300) return 280
+  if (objectCount >= 100) return 150
+  return 80
 }
 
 export const shouldSkipLifecycleSave = (
@@ -41,6 +42,7 @@ export const shouldSkipAutoSave = (source: SaveSource, reason: string): boolean 
     || reason === 'post-load-cleanup'
     || reason.startsWith('lifecycle:')
     || reason.startsWith('viewport:')
+    || reason.startsWith('object:')  // canvas events: only undo history, upload via periodic timer
 }
 
 export const shouldSkipThumbnailForReason = (source: SaveSource, reason: string): boolean => {
@@ -49,11 +51,12 @@ export const shouldSkipThumbnailForReason = (source: SaveSource, reason: string)
     || reason === 'post-load-cleanup'
     || reason.startsWith('lifecycle:')
     || reason.startsWith('viewport:')
+    || reason.startsWith('object:')  // thumbnails generated only on explicit saves / periodic timer
 }
 
 export const getThumbnailMinIntervalMs = (reason: string): number => {
   const isModifiedReason = reason === 'object:modified' || reason === 'object:modified(zone)'
-  return isModifiedReason ? 3000 : 600
+  return isModifiedReason ? 8000 : 3000
 }
 
 export const canGenerateThumbnailNow = (opts: {

@@ -1,25 +1,38 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { gunzip } from 'node:zlib'
+import { promisify } from 'node:util'
 import { Readable } from 'node:stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { isUserProjectKey, isValidStoragePath } from '../../utils/storage-scope'
 import { getOwnedProjectStorageRow, updateOwnedProjectCanvasData } from '../../utils/project-repository'
 
+const gunzipAsync = promisify(gunzip)
+
 type RestoreBody = {
   projectId?: string
   pageId?: string
   source?: {
-    kind?: 'version' | 'history'
+    kind?: 'version' | 'history' | 'current'
     key?: string
     versionId?: string | null
   }
 }
 
-const streamToString = async (body: any): Promise<string> => {
+const streamToBuffer = async (body: any): Promise<Buffer> => {
   const stream = body as Readable
   const chunks: Buffer[] = []
   for await (const chunk of stream) chunks.push(Buffer.from(chunk))
-  return Buffer.concat(chunks).toString('utf-8')
+  return Buffer.concat(chunks)
+}
+
+const parseCanvasBuffer = async (buf: Buffer): Promise<any> => {
+  try {
+    const decompressed = await gunzipAsync(buf)
+    return JSON.parse(decompressed.toString('utf-8'))
+  } catch {
+    return JSON.parse(buf.toString('utf-8'))
+  }
 }
 
 const getCanvasObjectCount = (json: any): number => {
@@ -33,7 +46,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<RestoreBody>(event)
   const projectId = String(body?.projectId || '').trim()
   const pageId = String(body?.pageId || '').trim()
-  const kind = (body?.source?.kind || 'history') as 'version' | 'history'
+  const kind = (body?.source?.kind || 'history') as 'version' | 'history' | 'current'
   const sourceKey = String(body?.source?.key || '').trim()
   const versionId = body?.source?.versionId ? String(body.source.versionId).trim() : null
 
@@ -46,6 +59,7 @@ export default defineEventHandler(async (event) => {
   if (kind === 'version' && !versionId) {
     throw createError({ statusCode: 400, statusMessage: 'source.versionId is required for kind=version' })
   }
+  // 'current' kind: restoring the current file onto itself — validate key as usual but skip empty check
   const allowedProjectPrefix = `projects/${user.id}/${projectId}/`
   if (
     !isValidStoragePath(sourceKey) ||
@@ -104,22 +118,29 @@ export default defineEventHandler(async (event) => {
   if (!obj.Body) {
     throw createError({ statusCode: 404, statusMessage: 'Source object not found' })
   }
-  const text = await streamToString(obj.Body)
-  const json = JSON.parse(text)
+  const buf = await streamToBuffer(obj.Body)
+  const json = await parseCanvasBuffer(buf)
+  if (!json) {
+    throw createError({ statusCode: 422, statusMessage: 'Failed to parse source canvas data' })
+  }
   const objectCount = getCanvasObjectCount(json)
   if (objectCount <= 0) {
     throw createError({ statusCode: 409, statusMessage: 'Selected version is empty, restore skipped' })
   }
 
-  // Persist back as current page (S3 + DB mirror)
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: targetKey,
-      Body: JSON.stringify(json),
-      ContentType: 'application/json'
-    })
-  )
+  // If restoring the current file onto itself, skip the S3 write (no-op)
+  const isCurrentOntoItself = kind === 'current' && sourceKey === targetKey
+  if (!isCurrentOntoItself) {
+    // Persist back as current page (S3 + DB mirror)
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: targetKey,
+        Body: JSON.stringify(json),
+        ContentType: 'application/json'
+      })
+    )
+  }
 
   const nextPageMeta = {
     ...(pageMeta || { id: pageId, name: 'Página', width: 1080, height: 1920, type: 'RETAIL_OFFER' }),

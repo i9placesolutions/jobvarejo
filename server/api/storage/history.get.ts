@@ -1,11 +1,15 @@
-import { GetObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
+import { GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
+import { gunzip } from 'node:zlib'
+import { promisify } from 'node:util'
 import { Readable } from 'node:stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { getOwnedProjectStorageRow } from '../../utils/project-repository'
 
+const gunzipAsync = promisify(gunzip)
+
 type HistoryItem = {
-  source: 'history'
+  source: 'current' | 'history'
   key: string
   versionId?: string | null
   lastModified: string
@@ -23,11 +27,26 @@ const extractHistorySlot = (key: string): number | null => {
   return n
 }
 
-const streamToString = async (body: any): Promise<string> => {
+const streamToBuffer = async (body: any): Promise<Buffer> => {
   const stream = body as Readable
   const chunks: Buffer[] = []
   for await (const chunk of stream) chunks.push(Buffer.from(chunk))
-  return Buffer.concat(chunks).toString('utf-8')
+  return Buffer.concat(chunks)
+}
+
+const parseCanvasBuffer = async (buf: Buffer): Promise<any> => {
+  // Try gzip decompression first (files are stored gzip-compressed)
+  try {
+    const decompressed = await gunzipAsync(buf)
+    return JSON.parse(decompressed.toString('utf-8'))
+  } catch {
+    // Fallback: try parsing raw (uncompressed)
+    try {
+      return JSON.parse(buf.toString('utf-8'))
+    } catch {
+      return null
+    }
+  }
 }
 
 const getCanvasObjectCount = (json: any): number => {
@@ -67,9 +86,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Project not found' })
   }
 
-  const pages = Array.isArray(projectRow.canvas_data) ? projectRow.canvas_data : []
-  const pageMeta = pages.find((p: any) => String(p?.id || '') === pageId) || null
   const historyPrefix = `projects/${projectRow.user_id}/${projectId}/history/page_${pageId}/`
+  const currentKey = `projects/${projectRow.user_id}/${projectId}/page_${pageId}.json`
 
   const s3 = new S3Client({
     endpoint: `https://${endpoint}`,
@@ -80,7 +98,23 @@ export default defineEventHandler(async (event) => {
 
   const items: HistoryItem[] = []
 
-  // History snapshots (ring buffer: v1..v3)
+  // --- Current save: always include the main canvas file as the newest entry ---
+  try {
+    const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: currentKey }))
+    if (head.LastModified) {
+      items.push({
+        source: 'current',
+        key: currentKey,
+        versionId: null,
+        lastModified: new Date(head.LastModified).toISOString(),
+        size: Number(head.ContentLength || 0) || null
+      })
+    }
+  } catch {
+    // Current file doesn't exist yet — ignore
+  }
+
+  // --- History snapshots (ring buffer: v1..v3) ---
   try {
     const objectsRaw: any[] = []
     let continuationToken: string | undefined
@@ -123,25 +157,19 @@ export default defineEventHandler(async (event) => {
     // ignore history list failures
   }
 
-  // Enrich all entries with objectCount so the UI can compare versions safely.
-  const toEnrich = items
-    .slice()
-    .sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime())
-
-  for (const entry of toEnrich) {
+  // --- Enrich all entries with objectCount (handles gzip-compressed files) ---
+  for (const entry of items) {
     try {
-      const getCmd = new GetObjectCommand({
-        Bucket: bucket,
-        Key: entry.key,
-      })
-      const object = await s3.send(getCmd)
+      const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: entry.key }))
       if (!object.Body) continue
-      const text = await streamToString(object.Body)
-      const json = JSON.parse(text)
-      const count = getCanvasObjectCount(json)
-      entry.objectCount = Number.isFinite(count) ? count : null
+      const buf = await streamToBuffer(object.Body)
+      const json = await parseCanvasBuffer(buf)
+      if (json) {
+        const count = getCanvasObjectCount(json)
+        entry.objectCount = Number.isFinite(count) ? count : null
+      }
     } catch {
-      // ignore
+      // ignore enrichment failures
     }
   }
 
