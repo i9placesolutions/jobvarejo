@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Integration Expert"
+  short_description: "Opera sobre integracoes OpenAI e IA"
+  default_prompt: "Use $ai-integration-expert para criar ou modificar integrações AI, prompts, parsing e pipeline de imagem no JobVarejo."

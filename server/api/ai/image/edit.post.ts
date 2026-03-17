@@ -1,14 +1,16 @@
 import { describeSiteStyle } from '~/server/utils/ai-site-style'
 import { uploadBufferToStorage } from '~/server/utils/contabo-upload'
-import { buildPromptFromInputs, maybeRemoveBackground, openAiEditImage, resolveReferenceImages } from '~/server/utils/openai-images'
+import { buildPromptFromInputs, maybeRemoveBackground, resolveReferenceImages } from '~/server/utils/openai-images'
+import { geminiEditImage } from '~/server/utils/gemini-images'
 import { downloadImage } from '~/server/utils/image-processor'
 import { requireAuthenticatedUser } from '~/server/utils/auth'
 import { enforceRateLimit } from '~/server/utils/rate-limit'
 import { assertSafeExternalHttpUrl } from '~/server/utils/url-safety'
 import { resolveStorageReadUrl } from '~/server/utils/project-storage-refs'
 
-const ALLOWED_SIZES = new Set(['1024x1024', '1024x1536', '1536x1024'])
-const ALLOWED_BACKGROUNDS = new Set(['white'])
+const ALLOWED_SIZES = new Set(['1080x1080', '1080x1350', '1080x1920', '1920x1080'])
+// FIX #4: include 'transparent' so clients can request it directly
+const ALLOWED_BACKGROUNDS = new Set(['white', 'transparent'])
 const MAX_PROMPT_LENGTH = 2000
 const MAX_NEGATIVE_PROMPT_LENGTH = 900
 const MAX_EXTRA_INSTRUCTIONS_LENGTH = 1200
@@ -134,7 +136,16 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: err?.message || 'Invalid siteUrl' })
     }
   }
-  const siteNotes = siteUrl ? (await describeSiteStyle(siteUrl)).styleNotes : undefined
+  // FIX #7: fail-safe — site style is non-critical enrichment
+  let siteNotes: string | undefined
+  if (siteUrl) {
+    try {
+      const result = await describeSiteStyle(siteUrl)
+      siteNotes = result.styleNotes
+    } catch (err: any) {
+      console.warn('[ai:image:edit] describeSiteStyle falhou, continuando sem style notes:', err?.message)
+    }
+  }
 
   const refUrlsRaw = parseListField(fields.refUrls, MAX_REF_URLS, 2048)
   const refUrls: string[] = []
@@ -159,7 +170,15 @@ export default defineEventHandler(async (event) => {
   const baseFile = files.find((f) => f.name === 'baseFile')
   const maskFile = files.find((f) => f.name === 'maskFile')
   if (baseFile) validateImageUpload(baseFile, 'baseFile')
-  if (maskFile) validateImageUpload(maskFile, 'maskFile')
+  if (maskFile) {
+    validateImageUpload(maskFile, 'maskFile')
+    // FIX #5: OpenAI requires the mask to be a PNG with an alpha channel.
+    // JPEG/WebP masks will cause an opaque error from OpenAI.
+    const maskMime = String(maskFile.mime || '').toLowerCase()
+    if (!maskMime.includes('png')) {
+      throw createError({ statusCode: 400, statusMessage: 'maskFile deve ser PNG com transparencia (canal alfa). JPEG e WebP nao sao aceitos.' })
+    }
+  }
   if (!baseFile && !baseImageUrl) {
     throw createError({ statusCode: 400, statusMessage: 'baseFile or baseImageUrl required' })
   }
@@ -192,16 +211,37 @@ export default defineEventHandler(async (event) => {
     ? { data: maskFile.data, filename: maskFile.filename, mime: maskFile.mime }
     : undefined
 
-  const ed = await openAiEditImage({
-    prompt: promptFinal,
-    size,
-    background: wantNoBackground ? 'transparent' : background,
-    images,
-    mask
-  })
+  // Gemini Nano Banana 2 for image editing
+  let edBuffer: Buffer
+  let edMime: string
+  try {
+    const ed = await geminiEditImage({
+      prompt: promptFinal,
+      size,
+      background: wantNoBackground ? 'transparent' : background,
+      images,
+      mask: mask ? { data: mask.data, mime: mask.mime } : undefined
+    })
+    edBuffer = ed.buffer
+    edMime = ed.mime
+  } catch (err: any) {
+    if (err?.statusCode && err.statusCode >= 400 && err.statusCode < 500) throw err
+    const rawMsg = String(err?.message || '')
+    if (rawMsg.includes('timed out') || rawMsg.includes('timeout') || rawMsg.includes('aborted')) {
+      throw createError({ statusCode: 504, statusMessage: 'A edicao de imagem excedeu o tempo limite. Tente novamente.' })
+    }
+    if (rawMsg.includes('rate limit') || rawMsg.includes('429') || rawMsg.includes('RESOURCE_EXHAUSTED')) {
+      throw createError({ statusCode: 429, statusMessage: 'Limite de requisicoes atingido. Aguarde e tente novamente.' })
+    }
+    if (rawMsg.includes('bloqueou')) {
+      throw createError({ statusCode: 400, statusMessage: rawMsg })
+    }
+    console.error('[ai:image:edit] Gemini error:', rawMsg.slice(0, 300))
+    throw createError({ statusCode: 502, statusMessage: 'Falha ao editar imagem. Tente novamente em alguns instantes.' })
+  }
 
   // Only apply post background removal when explicitly requested.
-  const post = await maybeRemoveBackground(ed.buffer, removeBg)
+  const post = await maybeRemoveBackground(edBuffer, removeBg)
   const filenameBase = sanitizeFileBaseName(fields.filenameBase, 'ai-edit')
   const up = await uploadBufferToStorage({
     buffer: post.buffer,

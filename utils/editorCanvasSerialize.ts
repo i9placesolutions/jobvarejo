@@ -18,23 +18,45 @@ const isZoneLikeObject = (obj: any): boolean => {
   )
 }
 
+// FIX: syncNestedProps now matches by _customId instead of array index.
+// Index-based sync is unreliable because canvas.toObject() and getObjects()
+// may not return objects in the same order (e.g. after async renders or
+// custom toObject() overrides). Matching by _customId prevents custom props
+// such as isFrame, layerName, _customId from being written to the wrong object.
 const syncNestedProps = (canvasObj: any, jsonObj: any, canvasCustomProps: string[]) => {
   if (!canvasObj || !jsonObj) return
 
   for (const prop of canvasCustomProps) {
     const val = canvasObj?.[prop]
-    if (val !== undefined && val !== null && jsonObj[prop] === undefined) {
+    // FIX: use ?? instead of checking only === undefined so that null values
+    // from Fabric serialization (e.g. isFrame serialized as null) are still
+    // overwritten by the live canvas value.
+    if (val !== undefined && val !== null && (jsonObj[prop] === undefined || jsonObj[prop] === null)) {
       jsonObj[prop] = val
     }
   }
 
   if (canvasObj.type === 'group' && typeof canvasObj.getObjects === 'function' && Array.isArray(jsonObj.objects)) {
-    const canvasChildren = canvasObj.getObjects() || []
-    const jsonChildren = jsonObj.objects || []
-    const minLen = Math.min(canvasChildren.length, jsonChildren.length)
-    for (let i = 0; i < minLen; i++) {
-      syncNestedProps(canvasChildren[i], jsonChildren[i], canvasCustomProps)
-    }
+    const canvasChildren: any[] = canvasObj.getObjects() || []
+    const jsonChildren: any[] = jsonObj.objects || []
+
+    // FIX: build lookup map by _customId for O(1) matching instead of O(N²)
+    // index-based sync that silently corrupts data when orders diverge.
+    const jsonChildById = new Map<string, any>()
+    jsonChildren.forEach((jc: any) => {
+      const id = jc?._customId
+      if (id) jsonChildById.set(id, jc)
+    })
+
+    canvasChildren.forEach((cc: any) => {
+      const id = cc?._customId
+      const matchedJson = id ? jsonChildById.get(id) : undefined
+      if (matchedJson) {
+        syncNestedProps(cc, matchedJson, canvasCustomProps)
+      }
+      // Fallback: if no _customId on either side, skip — better to miss than
+      // to corrupt by guessing index alignment.
+    })
   }
 }
 
@@ -45,10 +67,23 @@ const syncCustomPropsTopLevel = (
 ) => {
   if (!json?.objects || !Array.isArray(json.objects)) return
 
-  const minLen = Math.min(canvasObjs.length, json.objects.length)
-  for (let i = 0; i < minLen; i++) {
-    syncNestedProps(canvasObjs[i], json.objects[i], canvasCustomProps)
-  }
+  // FIX: build lookup map by _customId for safe matching.
+  const jsonObjById = new Map<string, any>()
+  json.objects.forEach((jo: any) => {
+    const id = jo?._customId
+    if (id) jsonObjById.set(id, jo)
+  })
+
+  canvasObjs.forEach((co: any) => {
+    const id = co?._customId
+    const matched = id ? jsonObjById.get(id) : undefined
+    if (matched) {
+      syncNestedProps(co, matched, canvasCustomProps)
+    }
+    // Objects without _customId: skip to avoid index-based corruption.
+    // Their props will still be written by restoreFramePropsAndFilterInvalid
+    // for the specific frame/artboard-bg objects that have stable ids.
+  })
 }
 
 const stripZoneClipPaths = (json: any) => {
@@ -66,17 +101,28 @@ const restoreFramePropsAndFilterInvalid = (
 ): number => {
   if (!json?.objects || !Array.isArray(json.objects)) return 0
 
-  json.objects.forEach((jsonObj: any, index: number) => {
-    const canvasObj = canvasObjs[index]
-    if (!canvasObj) return
+  // FIX: build lookup map by _customId — the previous code used index-based
+  // lookup via canvasObjs[index] which silently assigned frame props to the
+  // wrong JSON object when orders diverged.
+  const canvasObjById = new Map<string, any>()
+  canvasObjs.forEach((co: any) => {
+    const id = co?._customId
+    if (id) canvasObjById.set(id, co)
+  })
 
-    if (canvasObj._customId) jsonObj._customId = canvasObj._customId
-    if (canvasObj.layerName) jsonObj.layerName = canvasObj.layerName
-    if (canvasObj.isFrame) jsonObj.isFrame = true
-    if (canvasObj.isFrame) jsonObj.clipContent = canvasObj.clipContent !== false
-    if (canvasObj.clipContent && !canvasObj.isFrame) jsonObj.clipContent = canvasObj.clipContent
-    if (canvasObj.parentFrameId) jsonObj.parentFrameId = canvasObj.parentFrameId
-    if (!jsonObj.name && canvasObj.name) jsonObj.name = canvasObj.name
+  json.objects.forEach((jsonObj: any) => {
+    const canvasObj = canvasObjById.get(jsonObj?._customId) ?? null
+
+    // Restore props from canvas object when matched by id
+    if (canvasObj) {
+      if (canvasObj._customId) jsonObj._customId = canvasObj._customId
+      if (canvasObj.layerName) jsonObj.layerName = canvasObj.layerName
+      if (canvasObj.isFrame) jsonObj.isFrame = true
+      if (canvasObj.isFrame) jsonObj.clipContent = canvasObj.clipContent !== false
+      if (canvasObj.clipContent && !canvasObj.isFrame) jsonObj.clipContent = canvasObj.clipContent
+      if (canvasObj.parentFrameId) jsonObj.parentFrameId = canvasObj.parentFrameId
+      if (!jsonObj.name && canvasObj.name) jsonObj.name = canvasObj.name
+    }
   })
 
   json.objects.forEach((obj: any) => {

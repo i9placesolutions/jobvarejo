@@ -1,0 +1,4 @@
+interface:
+  display_name: "PostgreSQL Database Expert"
+  short_description: "Opera sobre banco PostgreSQL e queries"
+  default_prompt: "Use $postgres-database-expert para criar ou modificar queries, migracoes, caching e realtime no banco do JobVarejo."

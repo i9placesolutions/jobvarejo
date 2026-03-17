@@ -1,14 +1,16 @@
 import { describeSiteStyle } from '~/server/utils/ai-site-style'
 import { uploadBufferToStorage } from '~/server/utils/contabo-upload'
-import { buildPromptFromInputs, maybeRemoveBackground, openAiGenerateImage, openAiEditImage, resolveReferenceImages } from '~/server/utils/openai-images'
-import { createBlankPng, downloadImage } from '~/server/utils/image-processor'
+import { buildPromptFromInputs, maybeRemoveBackground, resolveReferenceImages } from '~/server/utils/openai-images'
+import { geminiGenerateImage, geminiEditImage } from '~/server/utils/gemini-images'
+import { downloadImage } from '~/server/utils/image-processor'
 import { requireAuthenticatedUser } from '~/server/utils/auth'
 import { enforceRateLimit } from '~/server/utils/rate-limit'
 import { assertSafeExternalHttpUrl } from '~/server/utils/url-safety'
 import { resolveStorageReadUrl } from '~/server/utils/project-storage-refs'
 
-const ALLOWED_SIZES = new Set(['1024x1024', '1024x1536', '1536x1024'])
-const ALLOWED_BACKGROUNDS = new Set(['white'])
+const ALLOWED_SIZES = new Set(['1080x1080', '1080x1350', '1080x1920', '1920x1080'])
+// FIX #4: include 'transparent' so clients can request it directly
+const ALLOWED_BACKGROUNDS = new Set(['white', 'transparent'])
 const MAX_PROMPT_LENGTH = 2000
 const MAX_NEGATIVE_PROMPT_LENGTH = 900
 const MAX_EXTRA_INSTRUCTIONS_LENGTH = 1200
@@ -140,7 +142,17 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: err?.message || 'Invalid siteUrl' })
     }
   }
-  const siteNotes = siteUrl ? (await describeSiteStyle(siteUrl)).styleNotes : undefined
+  // FIX #7: fail-safe — site style is a non-critical enrichment.
+  // If the site is unreachable or GPT fails, continue without style notes.
+  let siteNotes: string | undefined
+  if (siteUrl) {
+    try {
+      const result = await describeSiteStyle(siteUrl)
+      siteNotes = result.styleNotes
+    } catch (err: any) {
+      console.warn('[ai:image:generate] describeSiteStyle falhou, continuando sem style notes:', err?.message)
+    }
+  }
 
   const refUrlsRaw = parseListField(fields.refUrls, MAX_REF_URLS, 2048)
   const refUrls: string[] = []
@@ -182,55 +194,69 @@ export default defineEventHandler(async (event) => {
   let resultBuffer: Buffer
   let resultMime = 'image/png'
 
-  if (mode === 'generate') {
-    const refs = await resolveReferenceImages({ uploadedFiles: refFiles, imageUrls: refUrls })
-    if (refs.length > 0) {
-      const [wStr, hStr] = String(size || '1024x1024').split('x')
-      const w = Number.parseInt(wStr || '1024', 10) || 1024
-      const h = Number.parseInt(hStr || '1024', 10) || 1024
-      const blank = await createBlankPng(w, h, { transparent: wantNoBackground })
-      const ed = await openAiEditImage({
+  // Gemini Nano Banana 2 for image generation/editing
+  try {
+    if (mode === 'generate') {
+      const refs = await resolveReferenceImages({ uploadedFiles: refFiles, imageUrls: refUrls })
+      if (refs.length > 0) {
+        // Edit mode with references — send refs + prompt to Gemini
+        const ed = await geminiEditImage({
+          prompt: promptFinal,
+          size,
+          background: wantNoBackground ? 'transparent' : background,
+          images: refs
+        })
+        resultBuffer = ed.buffer
+        resultMime = ed.mime
+      } else {
+        // Pure generation from text prompt
+        const gen = await geminiGenerateImage({
+          prompt: promptFinal,
+          size,
+          background: wantNoBackground ? 'transparent' : background
+        })
+        resultBuffer = gen.buffer
+        resultMime = gen.mime
+      }
+    } else {
+      // mode === 'similar' — edit based on a model image
+      const images: Array<{ data: Buffer; filename: string; mime: string }> = []
+
+      if (modelFile) {
+        images.push({ data: modelFile.data, filename: modelFile.filename, mime: modelFile.mime })
+      } else if (modelImageUrl) {
+        const buf = await downloadImage(modelImageUrl)
+        images.push({ data: buf, filename: 'model.png', mime: 'image/png' })
+      } else {
+        throw createError({ statusCode: 400, statusMessage: 'mode=similar requires a model image (file or URL)' })
+      }
+
+      const extraRefs = await resolveReferenceImages({ uploadedFiles: refFiles, imageUrls: refUrls })
+      images.push(...extraRefs)
+
+      const ed = await geminiEditImage({
         prompt: promptFinal,
         size,
         background: wantNoBackground ? 'transparent' : background,
-        images: [{ data: blank, filename: 'base.png', mime: 'image/png' }, ...refs]
+        images
       })
       resultBuffer = ed.buffer
       resultMime = ed.mime
-    } else {
-      const gen = await openAiGenerateImage({
-        prompt: promptFinal,
-        size,
-        background: wantNoBackground ? 'transparent' : background
-      })
-      resultBuffer = gen.buffer
-      resultMime = gen.mime
     }
-  } else {
-    const images: Array<{ data: Buffer; filename: string; mime: string }> = []
-
-    // Base reference: file or URL
-    if (modelFile) {
-      images.push({ data: modelFile.data, filename: modelFile.filename, mime: modelFile.mime })
-    } else if (modelImageUrl) {
-      const buf = await downloadImage(modelImageUrl)
-      images.push({ data: buf, filename: 'model.png', mime: 'image/png' })
-    } else {
-      throw createError({ statusCode: 400, statusMessage: 'mode=similar requires a model image (file or URL)' })
+  } catch (err: any) {
+    if (err?.statusCode && err.statusCode >= 400 && err.statusCode < 500) throw err
+    const rawMsg = String(err?.message || '')
+    if (rawMsg.includes('timed out') || rawMsg.includes('timeout') || rawMsg.includes('aborted')) {
+      throw createError({ statusCode: 504, statusMessage: 'A geracao de imagem excedeu o tempo limite. Tente novamente.' })
     }
-
-    // Extra references
-    const extraRefs = await resolveReferenceImages({ uploadedFiles: refFiles, imageUrls: refUrls })
-    images.push(...extraRefs)
-
-    const ed = await openAiEditImage({
-      prompt: promptFinal,
-      size,
-      background: wantNoBackground ? 'transparent' : background,
-      images
-    })
-    resultBuffer = ed.buffer
-    resultMime = ed.mime
+    if (rawMsg.includes('rate limit') || rawMsg.includes('429') || rawMsg.includes('RESOURCE_EXHAUSTED')) {
+      throw createError({ statusCode: 429, statusMessage: 'Limite de requisicoes atingido. Aguarde e tente novamente.' })
+    }
+    if (rawMsg.includes('bloqueou')) {
+      throw createError({ statusCode: 400, statusMessage: rawMsg })
+    }
+    console.error('[ai:image:generate] Gemini error:', rawMsg.slice(0, 300))
+    throw createError({ statusCode: 502, statusMessage: 'Falha ao gerar imagem. Tente novamente em alguns instantes.' })
   }
 
   // Only apply post background removal when explicitly requested.

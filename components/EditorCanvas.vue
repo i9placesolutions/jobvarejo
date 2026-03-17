@@ -373,8 +373,11 @@ const releaseDanglingCanvasTransform = (evt?: MouseEvent | PointerEvent | null):
 
 // Hardens Fabric render calls to avoid the editor going black when something
 // unexpected sneaks into internal `_objects` arrays (canvas/group/clipPath).
-const patchCanvasRenderSafety = (c: any): void => {
-    if (!c || (c as any).__patchedSafeRender) return;
+// FIX: returns a cancel function so the caller can cancel any in-flight RAF
+// before canvas.dispose() in onUnmounted, preventing callbacks from firing
+// on an already-destroyed canvas.
+const patchCanvasRenderSafety = (c: any): (() => void) => {
+    if (!c || (c as any).__patchedSafeRender) return () => {};
 
     const isValidRenderable = (o: any) => {
         return !!(o && typeof o === 'object' && typeof o.render === 'function' && typeof o.setCoords === 'function');
@@ -519,6 +522,14 @@ const patchCanvasRenderSafety = (c: any): void => {
     }
 
     (c as any).__patchedSafeRender = true;
+
+    // Return cancel fn so the RAF can be cancelled before canvas.dispose()
+    return () => {
+        if (renderRafId !== null && typeof window !== 'undefined') {
+            cancelAnimationFrame(renderRafId)
+            renderRafId = null
+        }
+    }
 };
 
 const ensureCanvasContextsReady = (fc: any): boolean => {
@@ -9326,22 +9337,27 @@ onMounted(async () => {
   // Run non-critical network warmups in background.
   // Do not block canvas/Fabric boot on auth/templates/uploads.
   void (async () => {
+      // FIX #7: check isCanvasDestroyed between each async step so writes to
+      // reactive refs don't happen after the component has been unmounted.
       try {
           await auth.getSession()
       } catch (err) {
           console.warn('[boot] auth.getSession falhou:', err)
       }
+      if (isCanvasDestroyed.value) return
 
       await Promise.allSettled([
           loadLabelTemplatesFromDb(),
           refreshAiStudioUploads()
       ])
+      if (isCanvasDestroyed.value) return
 
       try {
           await loadCollaborators()
       } catch (err) {
           console.warn('[boot] loadCollaborators falhou:', err)
       }
+      if (isCanvasDestroyed.value) return
 
       // Retry image recovery once auth/session is stabilized.
       scheduleMissingProductImageRecovery(260, 8);
@@ -9484,7 +9500,7 @@ onMounted(async () => {
             }
 
 	        // Prevent black-screen render failures by guarding Fabric rendering.
-	        patchCanvasRenderSafety(canvas.value);
+	        cancelCanvasRenderPatch = patchCanvasRenderSafety(canvas.value);
 
         // PATCH: Improve hit-testing for product cards inside zones.
         // Some interactions (deep select, non-evented children, transparent areas) can make Fabric miss the card and start a group selection rectangle.
@@ -9669,18 +9685,27 @@ onMounted(async () => {
 
       // Initialize Smart Grid
       initProductZone();
-      
+
+      // FIX #8: guard against null refs in case canvas init threw and was caught.
+      // Previously this code ran unconditionally after the try/catch, which would
+      // crash with "Cannot read properties of null" if new fabric.Canvas() failed.
+      if (!canvas.value || !wrapperEl.value) {
+          console.error('❌ Canvas ou wrapper não disponível após inicialização — abortando setup de listeners');
+          return;
+      }
+
       // Force workspace to dark
       wrapperEl.value.style.backgroundColor = '#121212';
       
       // --- Frame Labels: update HTML overlay positions on every render ---
+      // FIX #5: store the anonymous handler so we can call canvas.off() on unmount.
+      // Previously, an anonymous arrow function was passed — impossible to remove.
+      const afterRenderFrameLabels = () => { throttledUpdateFrameLabels() }
       canvas.value.on('after:render', handleAfterRenderPerf);
-      canvas.value.on('after:render', () => {
-          throttledUpdateFrameLabels();
-      });
-
-      // Update scrollbars on render
+      canvas.value.on('after:render', afterRenderFrameLabels);
       canvas.value.on('after:render', throttledUpdateScrollbars);
+      // Store for cleanup
+      ;(canvas.value as any).__afterRenderFrameLabels = afterRenderFrameLabels
 
       // Resize Window Event - Resize Canvas & Re-center
       window.addEventListener('resize', resizeCanvas);
@@ -10289,6 +10314,12 @@ onMounted(async () => {
                   isHistoryProcessing.value = false;
               } finally {
                   isCanvasJsonLoadInProgress = false;
+                  // FIX #6: guarantee isHistoryProcessing is always reset, even if
+                  // an early `return` path inside the try block forgot to reset it,
+                  // leaving the UI permanently blocked with a loading spinner.
+                  if (isHistoryProcessing.value) {
+                      isHistoryProcessing.value = false;
+                  }
               }
           } else {
               console.log('⏳ Aguardando projeto carregar...', { loaded, pagesLen, hasPage: !!page });
@@ -10343,6 +10374,11 @@ onUnmounted(() => {
   if (teardownHistoryListeners) {
     teardownHistoryListeners()
     teardownHistoryListeners = null
+  }
+  // FIX #4: cancel any in-flight RAF from patchCanvasRenderSafety before dispose
+  if (cancelCanvasRenderPatch) {
+    cancelCanvasRenderPatch()
+    cancelCanvasRenderPatch = null
   }
   flushPersistenceNow('unmount', { force: true });
   if (cancelPendingCoalescedSave) {
@@ -10428,6 +10464,14 @@ onUnmounted(() => {
     teardownSnapping = null;
   }
   if (canvas.value) {
+    // FIX #5: explicitly remove Fabric event listeners before dispose() to
+    // prevent memory leaks from handlers that retain Vue reactive refs.
+    try {
+      const c = canvas.value as any
+      c.off('after:render', handleAfterRenderPerf)
+      if (c.__afterRenderFrameLabels) c.off('after:render', c.__afterRenderFrameLabels)
+      c.off('after:render', throttledUpdateScrollbars)
+    } catch { /* ignore */ }
     const canvasToDispose = canvas.value;
     canvas.value = null;
     canvasToDispose.dispose();
@@ -10450,6 +10494,8 @@ type SaveStateOptions = {
 let saveCurrentState: (opts?: SaveStateOptions) => boolean | Promise<boolean> = () => false; 
 let cancelPendingCoalescedSave: (() => void) | null = null;
 let teardownHistoryListeners: (() => void) | null = null;
+// FIX #4: stores the RAF cancel fn returned by patchCanvasRenderSafety
+let cancelCanvasRenderPatch: (() => void) | null = null;
 const applyViewportTransform = (vpt: number[]) => {
     if (!canvas.value) return;
     canvas.value.setViewportTransform([...vpt]);
@@ -19372,7 +19418,11 @@ const updateObjectProperty = (prop: string, value: any) => {
                 }, 10);
 
                 setTimeout(() => {
-                    try { saveCurrentState(); } catch {} 
+                    // FIX #13: log failures instead of silently swallowing them.
+                    // A catch {} here was hiding save failures after clipContent changes.
+                    try { saveCurrentState(); } catch (err) {
+                        console.warn('[clipContent] saveCurrentState falhou:', err)
+                    }
                 }, 0);
                 return;
             }
@@ -22504,6 +22554,75 @@ const generateFlyerWithAI = async (payload: {
     } catch (err: any) {
         console.error('[ai] Falha ao gerar página:', err)
         const message = String(err?.data?.statusMessage || err?.statusMessage || err?.message || 'Erro ao gerar página com IA.')
+        pushAiToast('error', message)
+    } finally {
+        isProcessing.value = false
+    }
+}
+
+// ========================================
+// GENERATE INSTITUTIONAL ART (Gemini + Inspirações)
+// ========================================
+const handleGenerateInstitutional = async (payload: {
+    prompt: string
+    size: string
+    title: string
+    subtitle: string
+    tagFilter: string
+}) => {
+    if (!payload.prompt.trim()) {
+        pushAiToast('error', 'Informe o que deseja criar.')
+        return
+    }
+
+    isProcessing.value = true
+    try {
+        const result = await $fetch<{
+            success: boolean
+            imageUrl: string
+            imageKey: string
+            canvasData: any
+            styleNotesUsed: string | null
+            inspirationsUsed: number
+        }>('/api/ai/institutional/generate', {
+            method: 'POST',
+            body: payload
+        })
+
+        if (!result?.canvasData) {
+            pushAiToast('error', 'A geração não retornou dados válidos.')
+            return
+        }
+
+        // Apply to current page
+        const pageIndex = project.activePageIndex
+        const { updatePageData, saveProjectDB } = useProject()
+
+        updatePageData(pageIndex, result.canvasData, {
+            source: 'user',
+            markUnsaved: true,
+            reason: 'institutional-ai-generate'
+        })
+
+        // Force canvas to reload the new data
+        pageReloadToken.value++
+
+        const inspirationMsg = result.inspirationsUsed > 0
+            ? ` (baseado em ${result.inspirationsUsed} inspiracao(oes))`
+            : ''
+        pushAiToast('success', `Arte institucional gerada com sucesso${inspirationMsg}. Edite textos e elementos a vontade.`)
+
+        // Auto-save
+        try { await saveProjectDB() } catch {}
+
+        console.log('[ai:institutional] Arte gerada:', {
+            imageKey: result.imageKey,
+            styleNotes: result.styleNotesUsed,
+            inspirations: result.inspirationsUsed
+        })
+    } catch (err: any) {
+        console.error('[ai:institutional] Falha:', err)
+        const message = String(err?.data?.statusMessage || err?.statusMessage || err?.message || 'Erro ao gerar arte institucional.')
         pushAiToast('error', message)
     } finally {
         isProcessing.value = false
@@ -28837,17 +28956,9 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     const availablePrices = getAvailablePrices(data);
     const prices = availablePrices.prices;
 
-    // DEBUG: Log para ver os preços disponíveis
-    console.log('🔍 [applyAtacarejoPricing] Produto:', data?.name);
-    console.log('🔍 [applyAtacarejoPricing] Preços disponíveis:', prices.map(p => ({ type: p.type, value: p.value, label: p.label })));
-    console.log('🔍 [applyAtacarejoPricing] Dados brutos:', {
-        priceUnit: data?.priceUnit,
-        pricePack: data?.pricePack,
-        priceSpecial: data?.priceSpecial,
-        priceSpecialUnit: data?.priceSpecialUnit,
-        priceWholesale: data?.priceWholesale,
-        specialCondition: data?.specialCondition
-    });
+    // FIX #18: removed debug console.log calls that ran on every product card
+    // render, leaking pricing data to the browser console in production and
+    // adding noise that makes real errors harder to spot.
 
     // Determinar preço varejo (regular) e atacado (especial)
     let retailPrice = null;
@@ -28873,7 +28984,7 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     }
     condition = availablePrices.condition ?? getSpecialConditionFromProduct(data);
 
-    console.log('🔍 [applyAtacarejoPricing] Resultado:', { retailPrice, wholesalePrice, condition, hasRetail: !!retailPrice, hasWholesale: !!wholesalePrice });
+    // FIX #18: removed debug log (runs per card in production)
 
     // Se retail e wholesale são iguais, é produto simples — não mostrar duas faixas
     if (retailPrice && wholesalePrice && retailPrice === wholesalePrice && !condition) {
@@ -36513,7 +36624,7 @@ const handleRecalculateLayout = () => {
       <!-- Central Workspace -->
       <div class="flex flex-1 min-h-0 min-w-0 overflow-hidden relative bg-[#1a1a1a]">
           <!-- Left Sidebar (New Component) -->
-          <SidebarLeft v-show="!isMobile" @insert-asset="insertAssetToCanvas" @insert-element="insertElementToCanvas" @open-menu="showProjectManager = true">
+          <SidebarLeft v-show="!isMobile" @insert-asset="insertAssetToCanvas" @insert-element="insertElementToCanvas" @open-menu="showProjectManager = true" @generate-institutional="handleGenerateInstitutional">
               <template #layers-panel>
                   <LayersPanel 
                       class="flex-1"

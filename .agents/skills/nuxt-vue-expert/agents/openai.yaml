@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nuxt Vue Expert"
+  short_description: "Opera sobre framework Nuxt 4, Vue 3 e Nitro"
+  default_prompt: "Use $nuxt-vue-expert para criar ou modificar pages, composables, endpoints e resolver problemas de framework no JobVarejo."

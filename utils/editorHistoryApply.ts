@@ -83,11 +83,13 @@ export const applyHistoryStateToCanvas = async (
       opts.updateScrollbars()
     }
 
-    if (
-      !opts.canvas.backgroundColor
-      || opts.canvas.backgroundColor === 'transparent'
-      || String(opts.canvas.backgroundColor) === 'rgba(0,0,0,0)'
-    ) {
+    // FIX: do NOT override the canvas background after undo/redo. The background
+    // colour is part of the serialised state and was already restored by
+    // loadFromJsonSafe. Previously this block silently replaced a user-chosen
+    // transparent/clear background with #1e1e1e on every undo/redo.
+    // We only apply the fallback when the background is truly absent (null/undefined),
+    // never when it is explicitly 'transparent' or a zero-alpha colour.
+    if (!opts.canvas.backgroundColor) {
       opts.canvas.backgroundColor = '#1e1e1e'
     }
 
@@ -97,7 +99,15 @@ export const applyHistoryStateToCanvas = async (
     } catch {
       // ignore
     }
-    opts.canvas.getObjects().forEach(recalcTextDimensionsDeep)
+    // FIX #16: previously iterated ALL canvas objects including groups and non-text
+    // objects, making every undo/redo O(N) on the UI thread. Now only processes
+    // objects that actually need text dimension recalculation.
+    opts.canvas.getObjects()
+      .filter((o: any) => {
+        const t = String(o?.type || '').toLowerCase()
+        return t === 'i-text' || t === 'textbox' || t === 'text' || t === 'group'
+      })
+      .forEach(recalcTextDimensionsDeep)
 
     opts.canvas.discardActiveObject()
     opts.safeRequestRenderAll()

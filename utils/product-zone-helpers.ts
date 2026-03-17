@@ -148,7 +148,11 @@ export const getPackPrice = (unitPrice: number, quantity: number): number => {
  * Calcula preço promocional
  */
 export const getPromoPrice = (originalPrice: number, discountPercent: number): number => {
-  return originalPrice * (1 - discountPercent / 100);
+  // FIX #19: clamp to >= 0 and guard against NaN/Infinity so a discount > 100%
+  // or an invalid input never produces a negative or non-finite price displayed
+  // in the UI or stored in the canvas data.
+  const result = originalPrice * (1 - discountPercent / 100)
+  return isFinite(result) ? Math.max(0, result) : 0
 };
 
 // =============================================================================
@@ -286,19 +290,25 @@ export const calculateGridLayout = (
     cols = bestCols;
   }
 
-  // --- TRAVAS DE SEGURANÇA FORÇADAS ---
-  // O sistema pode insistir em 1 coluna em zonas muito altas; forçamos colunas se houver espaço mínimo.
-  const minForcedCardWidth = 80;
-  const minWidthForCols = (desiredCols: number) => {
-    return (desiredCols * minForcedCardWidth) + ((desiredCols - 1) * gapH);
-  };
-  
-  if (productCount >= 2 && cols < 2 && availableWidth >= minWidthForCols(2)) {
-    cols = 2;
-  }
-  
-  if (productCount >= 5 && cols < 3 && availableWidth >= minWidthForCols(3)) {
-    cols = 3;
+  // --- TRAVAS DE SEGURANÇA (apenas para colunas auto-calculadas) ---
+  // FIX: previously these clamps applied even when zone.columns was explicitly
+  // set by the user (e.g. zone.columns = 1 for a single-column design choice).
+  // Now they only run on the auto-calculated path to prevent the system from
+  // overriding an intentional user layout.
+  const userDefinedColumns = !!(zone.columns && zone.columns > 0);
+  if (!userDefinedColumns) {
+    const minForcedCardWidth = 80;
+    const minWidthForCols = (desiredCols: number) => {
+      return (desiredCols * minForcedCardWidth) + ((desiredCols - 1) * gapH);
+    };
+
+    if (productCount >= 2 && cols < 2 && availableWidth >= minWidthForCols(2)) {
+      cols = 2;
+    }
+
+    if (productCount >= 5 && cols < 3 && availableWidth >= minWidthForCols(3)) {
+      cols = 3;
+    }
   }
 
   // Linhas fixas ou calculadas

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wasabi S3 Storage Expert"
+  short_description: "Opera sobre storage Wasabi S3"
+  default_prompt: "Use $wasabi-s3-storage-expert para criar ou modificar upload, download, proxy, historico e recovery de storage no JobVarejo."

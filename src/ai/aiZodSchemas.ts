@@ -73,12 +73,20 @@ export const validateAiCanvasData = (
     throw new Error(`JSON invalido: frame deve ter tamanho ${width}x${height}.`)
   }
 
+  // FIX #11: also block protocol-relative URLs (//example.com/img.png) and
+  // data: URIs (which could embed arbitrary large payloads from the AI response).
   visitObjects(parsed.objects, (obj) => {
     const type = String(obj?.type || '').toLowerCase()
     if (type !== 'image') return
-    const src = String(obj?.src || '').trim().toLowerCase()
+    const src = String(obj?.src || '').trim()
     if (!src) return
-    if (src.startsWith('http://') || src.startsWith('https://')) {
+    const srcLower = src.toLowerCase()
+    if (
+      srcLower.startsWith('http://') ||
+      srcLower.startsWith('https://') ||
+      srcLower.startsWith('//') ||
+      srcLower.startsWith('data:')
+    ) {
       throw new Error('JSON invalido: imagens externas nao sao permitidas nesta geracao.')
     }
   })

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fabric.js Canvas Expert"
+  short_description: "Opera sobre o editor Fabric.js 7 do canvas"
+  default_prompt: "Use $fabricjs-canvas-expert para criar ou modificar objetos, serializacao, undo/redo e export no editor canvas do JobVarejo."

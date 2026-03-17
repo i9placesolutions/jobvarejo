@@ -1,7 +1,8 @@
 // Nuxt Runtime Config Types
 interface NuxtRuntimeConfig {
   openaiApiKey?: string
-  serperApiKey?: string
+  geminiApiKey?: string
+
   googleCseApiKey?: string
   googleCseCx?: string
   postgresDatabaseUrl?: string

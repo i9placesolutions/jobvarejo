@@ -4,6 +4,9 @@ import { assertSafeExternalHttpUrl } from '~/server/utils/url-safety'
 const OPENAI_IMAGES_GENERATIONS_URL = 'https://api.openai.com/v1/images/generations'
 const OPENAI_IMAGES_EDITS_URL = 'https://api.openai.com/v1/images/edits'
 
+// FIX #1: 90s timeout for image generation (can take 30-60s normally)
+const OPENAI_IMAGE_TIMEOUT_MS = 90_000
+
 export type OpenAiImageResult = {
   buffer: Buffer
   mime: string
@@ -17,6 +20,34 @@ const guessExtFromMime = (mime: string) => {
   if (m.includes('webp')) return 'webp'
   if (m.includes('jpeg') || m.includes('jpg')) return 'jpeg'
   return 'png'
+}
+
+// FIX #9: detect MIME from content-type header or magic bytes
+const detectMimeFromResponse = (response: Response, fallback = 'image/png'): string => {
+  const ct = String(response.headers?.get?.('content-type') || '').toLowerCase()
+  if (ct.includes('image/')) return ct.split(';')[0].trim()
+  return fallback
+}
+
+const detectMimeFromBuffer = (buf: Buffer): string => {
+  if (buf.length < 4) return 'image/png'
+  // PNG magic bytes
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  // JPEG magic bytes
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg'
+  // WebP
+  if (buf.length >= 12 && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return 'image/webp'
+  return 'image/png'
+}
+
+const getTimeoutSignal = (ms: number): AbortSignal => {
+  // AbortSignal.timeout is available in Node 18+
+  const f = (AbortSignal as any)?.timeout
+  if (typeof f === 'function') return f(ms)
+  // Fallback for older runtimes
+  const ac = new AbortController()
+  setTimeout(() => ac.abort(new Error(`OpenAI request timed out after ${ms}ms`)), ms)
+  return ac.signal
 }
 
 const decodeB64Image = (data: any): Buffer => {
@@ -34,6 +65,7 @@ export const openAiGenerateImage = async (opts: {
   const apiKey = config.openaiApiKey
   if (!apiKey) throw new Error('OpenAI API Key not configured')
 
+  // FIX #1: add timeout signal to prevent worker starvation
   const res = await fetch(OPENAI_IMAGES_GENERATIONS_URL, {
     method: 'POST',
     headers: {
@@ -45,7 +77,8 @@ export const openAiGenerateImage = async (opts: {
       prompt: opts.prompt,
       size: opts.size || '1024x1024',
       ...(opts.background ? { background: opts.background } : {})
-    })
+    }),
+    signal: getTimeoutSignal(OPENAI_IMAGE_TIMEOUT_MS)
   })
   const json: any = await res.json()
   if (!res.ok) {
@@ -56,7 +89,8 @@ export const openAiGenerateImage = async (opts: {
   return { buffer, mime: 'image/png' }
 }
 
-const partDataToBlob = (buf: Buffer, mime: string) => new Blob([Uint8Array.from(buf)], { type: mime })
+const partDataToBlob = (buf: Buffer, mime: string) =>
+  new Blob([new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)], { type: mime })
 
 export const openAiEditImage = async (opts: {
   prompt: string
@@ -85,10 +119,12 @@ export const openAiEditImage = async (opts: {
     form.append('mask', partDataToBlob(opts.mask.data, opts.mask.mime), opts.mask.filename)
   }
 
+  // FIX #1: add timeout signal to prevent worker starvation
   const res = await fetch(OPENAI_IMAGES_EDITS_URL, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}` },
-    body: form as any
+    body: form as any,
+    signal: getTimeoutSignal(OPENAI_IMAGE_TIMEOUT_MS)
   })
   const json: any = await res.json()
   if (!res.ok) {
@@ -113,19 +149,23 @@ export const buildPromptFromInputs = (opts: {
 
   const lines: string[] = []
   if (base) lines.push(base)
-  if (site) lines.push(`Referência de estilo (site): ${site}`)
-  if (extra) lines.push(`Instruções extras: ${extra}`)
-  if (opts.wantNoBackground) lines.push('Saída sem fundo (fundo transparente).')
+  if (site) lines.push(`Referencia de estilo (site): ${site}`)
+  if (extra) lines.push(`Instrucoes extras: ${extra}`)
+  if (opts.wantNoBackground) lines.push('Saida sem fundo (fundo transparente).')
   if (negative) lines.push(`Evitar: ${negative}`)
   return lines.filter(Boolean).join('\n')
 }
 
+// FIX #2: pass forceBgRemoval so processImageWithOptions actually runs bg removal
+// even when the image already has alpha (e.g. OpenAI returned background=transparent).
+// Previously this was a no-op because processImageWithOptions detected existing
+// transparency and skipped removal entirely.
 export const maybeRemoveBackground = async (buffer: Buffer, enabled: boolean) => {
-  // NOTE: This should only run when the user explicitly requests post background removal.
-  // If OpenAI already returns a transparent PNG (background=transparent), running another
-  // background-removal pass can punch holes inside the subject (e.g. logos).
   if (!enabled) return { buffer, mime: 'image/png', ext: 'png' }
-  const out = await processImageWithOptions(buffer, { outputFormat: 'png' })
+  const out = await processImageWithOptions(buffer, {
+    outputFormat: 'png',
+    forceBgRemoval: true
+  })
   return { buffer: out, mime: 'image/png', ext: 'png' }
 }
 
@@ -149,10 +189,13 @@ export const resolveReferenceImages = async (opts: {
     if (!url) continue
     const safeUrl = assertSafeExternalHttpUrl(url, { maxLength: 2048 })
     const buf = await downloadImage(safeUrl, { maxBytes: MAX_REFERENCE_IMAGE_BYTES, timeoutMs: 15_000 })
+    // FIX #9: detect actual MIME from buffer instead of hardcoding 'image/png'
+    const detectedMime = detectMimeFromBuffer(buf)
+    const ext = guessExtFromMime(detectedMime)
     out.push({
       data: buf,
-      filename: `ref-${Math.random().toString(36).slice(2)}.${guessExtFromMime('image/png')}`,
-      mime: 'image/png'
+      filename: `ref-${Math.random().toString(36).slice(2)}.${ext}`,
+      mime: detectedMime
     })
   }
   return out

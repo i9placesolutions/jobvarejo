@@ -67,11 +67,12 @@ export default defineNuxtConfig({
     redisUrl: process.env.REDIS_URL || process.env.NUXT_REDIS_URL || '',
 
     openaiApiKey: process.env.NUXT_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
+    geminiApiKey: process.env.NUXT_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '',
     parseProductsTimeoutMs:
       process.env.PARSE_PRODUCTS_TIMEOUT_MS ||
       process.env.NUXT_PARSE_PRODUCTS_TIMEOUT_MS ||
       (process.env.VERCEL ? '28000' : '45000'),
-    serperApiKey: process.env.NUXT_SERPER_API_KEY || process.env.SERPER_API_KEY || '',
+
     googleCseApiKey:
       process.env.NUXT_GOOGLE_CSE_API_KEY ||
       process.env.GOOGLE_CSE_API_KEY ||

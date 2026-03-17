@@ -38,11 +38,13 @@ export default defineEventHandler(async (event) => {
     envPresence: {
       NUXT_OPENAI_API_KEY: Boolean(process.env.NUXT_OPENAI_API_KEY),
       OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY),
+      NUXT_GEMINI_API_KEY: Boolean(process.env.NUXT_GEMINI_API_KEY),
+      GEMINI_API_KEY: Boolean(process.env.GEMINI_API_KEY),
       NUXT_GOOGLE_CSE_API_KEY: Boolean(process.env.NUXT_GOOGLE_CSE_API_KEY),
       GOOGLE_CSE_API_KEY: Boolean(process.env.GOOGLE_CSE_API_KEY),
       NUXT_GOOGLE_CSE_CX: Boolean(process.env.NUXT_GOOGLE_CSE_CX),
       GOOGLE_CSE_CX: Boolean(process.env.GOOGLE_CSE_CX),
-      NUXT_SERPER_API_KEY: Boolean(process.env.NUXT_SERPER_API_KEY),
+
       AUTH_JWT_SECRET: Boolean(process.env.AUTH_JWT_SECRET),
       POSTGRES_DATABASE_URL: Boolean(process.env.POSTGRES_DATABASE_URL),
       DATABASE_URL: Boolean(process.env.DATABASE_URL),

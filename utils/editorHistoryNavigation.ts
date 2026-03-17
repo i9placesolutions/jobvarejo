@@ -40,7 +40,11 @@ export const findPreparedNonEmptyHistoryState = (
       const parsed = parseHistoryStateJson(raw, {
         onParseError: opts.onParseError
       })
-      if (parsed && Array.isArray(parsed.objects) && parsed.objects.length > 0) {
+      // FIX: previously this skipped any state with 0 objects, making it
+      // impossible to undo back to an intentionally empty canvas (e.g. the user
+      // deleted all objects and Ctrl+Z should restore the empty state).
+      // Now we accept any valid parsed state with an objects array, including empty ones.
+      if (parsed && Array.isArray(parsed.objects)) {
         return {
           index: idx,
           state: opts.prepareCanvasDataForLoad(parsed)

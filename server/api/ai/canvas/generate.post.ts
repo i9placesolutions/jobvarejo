@@ -9,13 +9,18 @@ const MAX_COMPILED_PROMPT_LENGTH = 7000
 const MIN_CANVAS_SIDE = 128
 const MAX_CANVAS_SIDE = 4096
 
+// FIX #15: cache client with the API key it was created with.
+// If the key rotates (e.g. new deploy), we create a fresh client.
 let openaiClient: any = null
+let openaiClientKey = ''
 
 const getOpenAI = async () => {
-  if (openaiClient) return openaiClient
   const config = useRuntimeConfig()
+  const currentKey = String(config.openaiApiKey || '')
+  if (openaiClient && openaiClientKey === currentKey) return openaiClient
   const { default: OpenAI } = await import('openai')
-  openaiClient = new OpenAI({ apiKey: config.openaiApiKey || '' })
+  openaiClient = new OpenAI({ apiKey: currentKey })
+  openaiClientKey = currentKey
   return openaiClient
 }
 
@@ -107,7 +112,8 @@ export default defineEventHandler(async (event) => {
     const completion = await openai.chat.completions.create({
       model: referenceImageDataUrl ? 'gpt-4o' : 'gpt-4o-mini',
       temperature: referenceImageDataUrl ? 0.15 : 0.35,
-      max_tokens: 2800,
+      // FIX #14: use max_completion_tokens (recommended for gpt-4o/gpt-4o-mini)
+      max_completion_tokens: 2800,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -127,7 +133,14 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 502, statusMessage: 'A IA retornou resposta vazia.' })
     }
 
-    const parsed = JSON.parse(rawJson)
+    // FIX #10: user-friendly error message instead of raw SyntaxError
+    let parsed: any
+    try {
+      parsed = JSON.parse(rawJson)
+    } catch (parseErr: any) {
+      console.error('[ai:canvas:generate] JSON parse falhou:', parseErr?.message?.slice?.(0, 120))
+      throw createError({ statusCode: 502, statusMessage: 'A IA retornou JSON invalido. Tente gerar novamente.' })
+    }
     const validated = validateAiCanvasData(parsed, { width, height })
     return { canvasData: validated }
   } catch (error: any) {

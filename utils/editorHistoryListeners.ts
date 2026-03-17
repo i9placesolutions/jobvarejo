@@ -27,7 +27,10 @@ export const registerHistorySaveListeners = (
     opts.invalidateScrollbarBounds()
     opts.invalidateContainmentZoneCache()
     if (opts.isBulkProductMutation()) {
-      opts.updateScrollbars()
+      // FIX #15: do NOT call updateScrollbars() here during bulk imports.
+      // With 100+ products being added, this previously called updateScrollbars()
+      // 100 times in rapid succession. Scrollbars are updated once after the
+      // bulk mutation completes via the bulk mutation finaliser.
       return
     }
     if (!opts.isHistoryProcessing()) {

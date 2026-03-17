@@ -69,7 +69,7 @@ Para recuperacao de senha em producao:
 Para busca externa de imagens de produto:
 - `NUXT_GOOGLE_CSE_API_KEY` (ou `GOOGLE_CSE_API_KEY`)
 - `NUXT_GOOGLE_CSE_CX` (ou `GOOGLE_CSE_CX`)
-- opcional fallback web-wide: `NUXT_SERPER_API_KEY` (ou `SERPER_API_KEY`)
+
 
 ## Migracao para PostgreSQL (operacao)
 

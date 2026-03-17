@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auth Security Expert"
+  short_description: "Opera sobre autenticacao e seguranca"
+  default_prompt: "Use $auth-security-expert para criar ou modificar autenticacao, autorizacao, rate limiting e seguranca no JobVarejo."

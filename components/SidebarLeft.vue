@@ -2,13 +2,14 @@
 import { ref, nextTick, defineAsyncComponent } from 'vue'
 import { useProject } from '~/composables/useProject'
 import { useResponsive } from '~/composables/useResponsive'
-import { Search, Plus, FileText, Copy, Trash2, Box, ChevronDown, Menu, Layers, Image } from 'lucide-vue-next'
+import { Search, Plus, FileText, Copy, Trash2, Box, ChevronDown, Menu, Layers, Image, Sparkles } from 'lucide-vue-next'
 
 const { isTablet } = useResponsive()
 const leftExpanded = ref(false)
 
 const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
 const ElementsPanel = defineAsyncComponent(() => import('./ElementsPanel.vue'))
+const InspiracaoPanel = defineAsyncComponent(() => import('./InspiracaoPanel.vue'))
 
 const { project, activePage, switchPage, addPage, duplicatePage, deletePage, renamePage } = useProject()
 
@@ -16,10 +17,11 @@ const emit = defineEmits<{
     (e: 'insert-asset', asset: any): void
     (e: 'insert-element', element: { type: string; data: any }): void
     (e: 'open-menu'): void
+    (e: 'generate-institutional', payload: { prompt: string; size: string; title: string; subtitle: string; tagFilter: string }): void
 }>()
 
 
-type Tab = 'layers' | 'pages' | 'assets';
+type Tab = 'layers' | 'pages' | 'assets' | 'inspiracoes';
 const activeTab = ref<Tab>('layers')
 const sidebarSearch = ref('')
 
@@ -81,6 +83,9 @@ const commitPageRename = (index: number) => {
       <button class="touch-target flex items-center justify-center" :class="activeTab === 'assets' ? 'text-violet-400' : 'text-zinc-400 hover:text-white'" title="Recursos" @click="activeTab = 'assets'; leftExpanded = true">
         <Image :size="18" />
       </button>
+      <button class="touch-target flex items-center justify-center" :class="activeTab === 'inspiracoes' ? 'text-fuchsia-400' : 'text-zinc-400 hover:text-white'" title="IA" @click="activeTab = 'inspiracoes'; leftExpanded = true">
+        <Sparkles :size="18" />
+      </button>
     </div>
 
     <!-- Full sidebar content (desktop + tablet expanded) -->
@@ -119,14 +124,22 @@ const commitPageRename = (index: number) => {
                 Arquivo
                 <div v-if="activeTab === 'layers'" class="absolute bottom-0 left-0 w-full h-[2px] bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
             </button>
-            <button 
+             <button 
                 @click="activeTab = 'assets'"
                 class="flex-1 h-full flex items-center justify-center border-b-2 transition-all relative"
                 :class="activeTab === 'assets' ? 'border-violet-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5'"
             >
                 Recursos
                 <div v-if="activeTab === 'assets'" class="absolute bottom-0 left-0 w-full h-[2px] bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
-            </button>
+             </button>
+             <button 
+                @click="activeTab = 'inspiracoes'"
+                class="flex-1 h-full flex items-center justify-center border-b-2 transition-all relative"
+                :class="activeTab === 'inspiracoes' ? 'border-fuchsia-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5'"
+            >
+                IA
+                <div v-if="activeTab === 'inspiracoes'" class="absolute bottom-0 left-0 w-full h-[2px] bg-fuchsia-400 shadow-[0_0_8px_rgba(217,70,239,0.6)]"></div>
+             </button>
        </div>
        </div>
        
@@ -219,9 +232,14 @@ const commitPageRename = (index: number) => {
                </div>
                <!-- Sub: Elementos -->
                <ElementsPanel v-if="assetsSubTab === 'elements'" :search-query="sidebarSearch" @insert-element="(el) => emit('insert-element', el)" />
-               <!-- Sub: Meus Arquivos -->
-               <AssetsPanel v-else :search-query="sidebarSearch" @insert-asset="(asset) => emit('insert-asset', asset)" />
-           </div>
+                <!-- Sub: Meus Arquivos -->
+                <AssetsPanel v-else :search-query="sidebarSearch" @insert-asset="(asset) => emit('insert-asset', asset)" />
+            </div>
+
+            <!-- TAB: INSPIRACOES (IA) -->
+            <div v-else-if="activeTab === 'inspiracoes'" class="flex flex-col h-full animate-in fade-in duration-200">
+                <InspiracaoPanel @generate="(payload) => emit('generate-institutional', payload)" />
+            </div>
 
        </div>
     </template>

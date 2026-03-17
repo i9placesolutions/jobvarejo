@@ -48,9 +48,11 @@ export const ensureActiveZoneFlagsForSelection = (active: any) => {
       active.isGridZone = true
     } else if (active.name === 'productZoneContainer') {
       active.isProductZone = true
-    } else {
-      active.isGridZone = true
     }
+    // FIX: removed the `else { active.isGridZone = true }` fallback that
+    // permanently mutated ANY object falling through here as a zone, corrupting
+    // serialisation for non-zone objects that happened to pass isLikelyProductZone.
+    // If neither name matches, we leave the object untouched.
   }
 }
 
@@ -237,9 +239,18 @@ export const syncSelectionDomainState = (opts: SyncSelectionDomainStateOptions) 
 
   const parentZoneId = active.parentZoneId
   if (parentZoneId && opts.canvas) {
-    const parentZone = opts.canvas.getObjects().find((o: any) => (
-      opts.isLikelyProductZone(o) && o._customId === parentZoneId
-    ))
+    // FIX #17: build a Map keyed by _customId so zone lookup is O(1) instead
+    // of O(N) linear scan on every product card selection event.
+    // On a canvas with 500+ objects this was running getObjects().find() on
+    // the main thread for every click on a product card.
+    const objects: any[] = opts.canvas.getObjects()
+    const zoneById = new Map<string, any>()
+    for (const o of objects) {
+      if (opts.isLikelyProductZone(o) && o._customId) {
+        zoneById.set(o._customId, o)
+      }
+    }
+    const parentZone = zoneById.get(parentZoneId)
     if (parentZone) {
       opts.productZoneState.updateGlobalStyles(opts.getZoneGlobalStyles(parentZone))
     }

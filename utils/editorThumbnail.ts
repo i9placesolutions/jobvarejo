@@ -32,8 +32,14 @@ export const generateThumbnailFromCanvasJson = async (
 ): Promise<string> => {
   if (!opts.staticCanvasCtor || typeof document === 'undefined') return ''
 
-  const width = Math.max(1, Math.round(Number(opts.pageWidth || opts.defaultWidth || 1080)))
-  const height = Math.max(1, Math.round(Number(opts.pageHeight || opts.defaultHeight || 1920)))
+  const THUMB_MULTIPLIER = 0.1
+  const fullWidth = Math.max(1, Math.round(Number(opts.pageWidth || opts.defaultWidth || 1080)))
+  const fullHeight = Math.max(1, Math.round(Number(opts.pageHeight || opts.defaultHeight || 1920)))
+  // FIX: create the offscreen canvas already at thumbnail resolution instead of
+  // rendering at full size and downscaling via multiplier. This avoids allocating
+  // and rendering a full 1080×1920 canvas only to produce a ~108×192 JPEG.
+  const width = Math.max(1, Math.round(fullWidth * THUMB_MULTIPLIER))
+  const height = Math.max(1, Math.round(fullHeight * THUMB_MULTIPLIER))
   const el = document.createElement('canvas')
   el.width = width
   el.height = height
@@ -50,10 +56,11 @@ export const generateThumbnailFromCanvasJson = async (
     stripClipPathsRecursively(thumbJson)
     await sc.loadFromJSON(thumbJson)
     sc.renderAll()
+    // multiplier: 1 because the canvas is already at thumbnail dimensions
     return sc.toDataURL({
       format: 'jpeg',
       quality: 0.5,
-      multiplier: 0.1
+      multiplier: 1
     })
   } catch (err) {
     console.warn('[Thumbnail] Falha ao gerar thumbnail em canvas offscreen:', err)

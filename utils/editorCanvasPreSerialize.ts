@@ -20,11 +20,13 @@ const isZoneLikeObject = (obj: any): boolean => {
 export const prepareCanvasForSerialization = (
   opts: PrepareCanvasForSerializationOptions
 ): PrepareCanvasForSerializationResult => {
-  const allObjs = opts.canvasInstance
+  // FIX: single snapshot — avoid double getObjects() race where a listener
+  // fires between the two calls and shifts index-based sync in serializer.
+  const allCanvasObjects = opts.canvasInstance
     .getObjects()
     .filter((o: any) => opts.isValidFabricCanvasObject(o))
 
-  allObjs.forEach((obj: any) => {
+  allCanvasObjects.forEach((obj: any) => {
     opts.ensurePersistentContentFlags(obj)
     opts.ensureObjectPersistentId(obj)
 
@@ -40,9 +42,6 @@ export const prepareCanvasForSerialization = (
     }
   })
 
-  const allCanvasObjects = opts.canvasInstance
-    .getObjects()
-    .filter((o: any) => opts.isValidFabricCanvasObject(o))
   const canvasFrames = allCanvasObjects.filter((o: any) => o?.isFrame)
 
   canvasFrames.forEach((frame: any) => {
@@ -51,7 +50,11 @@ export const prepareCanvasForSerialization = (
     frame.set('isFrame', true)
     frame.set('layerName', frame.layerName || 'FRAMER')
     if (!frame._customId) {
-      frame._customId = Math.random().toString(36).substr(2, 9)
+      // FIX: use crypto.randomUUID for guaranteed uniqueness; fall back to
+      // Date.now + random for environments that don't support it yet.
+      frame._customId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
     }
     if (typeof frame.setCoords === 'function') frame.setCoords()
     if (typeof frame.set === 'function') {
@@ -59,14 +62,28 @@ export const prepareCanvasForSerialization = (
     }
   })
 
-  allObjs.forEach((obj: any) => {
+  // FIX: save zone clipPaths before nulling them and restore after serialization
+  // via the returned cleanup function called by the caller.
+  // We null them here so toObject() won't capture runtime-only clip paths,
+  // but we MUST restore them so live canvas objects are not permanently mutated.
+  const savedClipPaths = new Map<any, any>()
+  allCanvasObjects.forEach((obj: any) => {
     if (isZoneLikeObject(obj)) {
+      savedClipPaths.set(obj, obj.clipPath)
       obj.clipPath = null
     }
   })
 
   return {
     allCanvasObjects,
-    canvasFrames
-  }
+    canvasFrames,
+    // Expose restore function so the caller can reinstate clip paths
+    // in a try/finally around canvas.toObject().
+    restoreZoneClipPaths: () => {
+      savedClipPaths.forEach((clipPath, obj) => {
+        obj.clipPath = clipPath
+      })
+      savedClipPaths.clear()
+    },
+  } as PrepareCanvasForSerializationResult & { restoreZoneClipPaths: () => void }
 }

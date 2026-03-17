@@ -21,7 +21,7 @@ const props = defineProps<{
     siteUrl: string
     transparent: boolean
     removeBg: boolean
-    size: '1024x1024' | '1024x1536' | '1536x1024'
+    size: '1080x1080' | '1080x1350' | '1080x1920' | '1920x1080'
     modelImageUrl: string
     baseImageUrl: string
     refUrls: string[]
@@ -64,7 +64,7 @@ const baseFile = ref<File | null>(null)
 
 const transparent = ref(true)
 const removeBg = ref(false)
-const size = ref<'1024x1024' | '1024x1536' | '1536x1024'>('1024x1024')
+const size = ref<'1080x1080' | '1080x1350' | '1080x1920' | '1920x1080'>('1080x1080')
 
 // Edit mask
 const maskEnabled = computed(() => mode.value === 'edit')
@@ -124,7 +124,7 @@ const resetAll = () => {
   baseFile.value = null
   transparent.value = true
   removeBg.value = false
-  size.value = '1024x1024'
+  size.value = '1080x1080'
   revokeImagePreviewObjectUrl()
   imagePreviewUrl.value = ''
   maskReady.value = false
@@ -446,9 +446,10 @@ onUnmounted(() => {
             Remover fundo (pós)
           </label>
           <select v-model="size" class="h-9 bg-zinc-800 border border-white/10 rounded px-2 text-[11px] text-zinc-200">
-            <option value="1024x1024">1024×1024</option>
-            <option value="1536x1024">1536×1024</option>
-            <option value="1024x1536">1024×1536</option>
+            <option value="1080x1080">Post 1:1 (1080×1080)</option>
+            <option value="1080x1350">Feed 4:5 (1080×1350)</option>
+            <option value="1080x1920">Story 9:16 (1080×1920)</option>
+            <option value="1920x1080">Banner 16:9 (1920×1080)</option>
           </select>
         </div>
       </div>
