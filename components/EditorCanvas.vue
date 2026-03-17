@@ -158,6 +158,14 @@ let viewportStateSaveTimer: ReturnType<typeof setTimeout> | null = null
 // Flag to track if canvas is destroyed (prevents errors after unmount)
 const isCanvasDestroyed = ref(false)
 
+/**
+ * Lazy-frame store: filhos (JSON bruto) de frames invisíveis que foram
+ * excluídos do loadFromJSON para melhorar performance.
+ * frameId → array de objetos Fabric serializados.
+ * Limpo a cada loadFromJsonSafe; injetado de volta antes de salvar.
+ */
+const deferredFrameChildren: Map<string, any[]> = new Map()
+
 // === AI Image Studio (global modal) ===
 const aiStudio = useAiImageStudio()
 const aiStudioOpen = aiStudio.open
@@ -556,6 +564,63 @@ const isCanvasContextError = (err: any): boolean => {
     return msg.includes('clearrect') || msg.includes('contextcontainer') || msg.includes('getcontext');
 };
 
+/**
+ * Pré-processa o JSON do canvas antes do loadFromJSON:
+ * retira os filhos de frames invisíveis do array objects e os armazena em
+ * deferredFrameChildren para criação posterior (quando o olho for ligado).
+ * Reduz drasticamente o tempo de carregamento em projetos grandes.
+ */
+const prepareJsonForLoad = (json: any): any => {
+    deferredFrameChildren.clear()
+    const objects: any[] = Array.isArray(json?.objects) ? json.objects : []
+    if (objects.length === 0) return json
+
+    // 1. Identificar frames diretamente invisíveis
+    const invisibleFrameIds = new Set<string>()
+    for (const obj of objects) {
+        if (obj.isFrame && obj.visible === false) {
+            const id = String(obj._customId || obj.customId || '').trim()
+            if (id) invisibleFrameIds.add(id)
+        }
+    }
+    if (invisibleFrameIds.size === 0) return json
+
+    // 2. Expandir para frames filhos de frames invisíveis (BFS)
+    let changed = true
+    while (changed) {
+        changed = false
+        for (const obj of objects) {
+            if (obj.isFrame) {
+                const id = String(obj._customId || obj.customId || '').trim()
+                const parentId = String(obj.parentFrameId || '').trim()
+                if (id && !invisibleFrameIds.has(id) && parentId && invisibleFrameIds.has(parentId)) {
+                    invisibleFrameIds.add(id)
+                    changed = true
+                }
+            }
+        }
+    }
+
+    // 3. Separar: manter frames invisíveis (border rect) mas remover seus filhos
+    const kept: any[] = []
+    for (const obj of objects) {
+        const parentId = String(obj.parentFrameId || '').trim()
+        if (parentId && invisibleFrameIds.has(parentId)) {
+            // Filho de frame invisível → diferir
+            if (!deferredFrameChildren.has(parentId)) deferredFrameChildren.set(parentId, [])
+            deferredFrameChildren.get(parentId)!.push(obj)
+        } else {
+            kept.push(obj)
+        }
+    }
+
+    const totalDeferred = objects.length - kept.length
+    if (totalDeferred > 0) {
+        console.log(`[lazy-frames] ${totalDeferred} objeto(s) diferidos de ${invisibleFrameIds.size} frame(s) invisível(is); carregando ${kept.length} objeto(s).`)
+    }
+    return { ...json, objects: kept }
+}
+
 const loadFromJsonSafe = async (json: any): Promise<void> => {
     const c = canvas.value as any;
     if (!c || isCanvasDestroyed.value) {
@@ -565,14 +630,15 @@ const loadFromJsonSafe = async (json: any): Promise<void> => {
         throw new Error('Contexto do canvas indisponível para loadFromJSON');
     }
 
+    const preparedJson = prepareJsonForLoad(json)
     const prevRenderOnAddRemove = c.renderOnAddRemove;
     c.renderOnAddRemove = false;
     try {
-        await c.loadFromJSON(json);
+        await c.loadFromJSON(preparedJson);
     } catch (err: any) {
         if (!isCanvasContextError(err) || isCanvasDestroyed.value) throw err;
         if (!ensureCanvasContextsReady(c)) throw err;
-        await c.loadFromJSON(json);
+        await c.loadFromJSON(preparedJson);
     } finally {
         c.renderOnAddRemove = prevRenderOnAddRemove;
         // Re-apply runtime-only properties for persistent user guides after any load.
@@ -11837,6 +11903,14 @@ const removeImageObjectsDeep = (node: any): any => {
             canvasFramesForDebug: canvasFrames
         });
 
+        // Injetar filhos de frames invisíveis (diferidos) no JSON antes de salvar.
+        // Eles não estão no canvas mas precisam ser persistidos para não perder dados.
+        if (deferredFrameChildren.size > 0 && Array.isArray(json?.objects)) {
+            const allDeferred: any[] = []
+            for (const children of deferredFrameChildren.values()) allDeferred.push(...children)
+            if (allDeferred.length > 0) json.objects = [...json.objects, ...allDeferred]
+        }
+
         const currentPageAfterSerialize = targetPageIndexStart >= 0 ? project.pages?.[targetPageIndexStart] : null;
         const serializedObjectCount = Number(json?.objects?.length || 0);
         const existingPersistedObjectCount = Number(currentPageAfterSerialize?.canvasData?.objects?.length || 0);
@@ -21424,12 +21498,38 @@ const reorderLayerByDrag = (payload: LayerReorderPayload) => {
     saveCurrentState({ reason: 'layers-drag-reorder', skipCoalesce: true });
 }
 
-const toggleVisible = (id: string) => {
-    if (!canvas.value) return; 
+const toggleVisible = async (id: string) => {
+    if (!canvas.value) return;
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
         const next = !(obj.visible !== false);
         const isFrameTarget = !!obj.isFrame || !!isFrameLikeObject(obj);
+
+        // Ao ligar a visibilidade de um frame com filhos diferidos, carregá-los primeiro.
+        if (isFrameTarget && next && deferredFrameChildren.size > 0) {
+            const frameId = String((obj as any)._customId || '').trim()
+            if (frameId && deferredFrameChildren.has(frameId)) {
+                try {
+                    const childrenJson = deferredFrameChildren.get(frameId)!
+                    deferredFrameChildren.delete(frameId)
+                    const c = canvas.value as any
+                    const prevRender = c.renderOnAddRemove
+                    c.renderOnAddRemove = false
+                    try {
+                        const enlivened = await enlivenObjectsAsync(childrenJson)
+                        for (const child of enlivened) {
+                            if (child && typeof c.add === 'function') c.add(child)
+                        }
+                        console.log(`[lazy-frames] ${enlivened.length} objeto(s) carregados para frame ${frameId}`)
+                    } finally {
+                        c.renderOnAddRemove = prevRender
+                    }
+                } catch (err) {
+                    console.warn('[lazy-frames] Erro ao carregar filhos diferidos:', err)
+                }
+            }
+        }
+
         let targets: any[] = [obj];
 
         if (isFrameTarget) {
@@ -21455,10 +21555,6 @@ const toggleVisible = (id: string) => {
             if (shouldClear) canvas.value.discardActiveObject();
         }
         canvas.value.requestRenderAll();
-        // Trigger update to refresh UI icons
-        // (Fabric doesn't emit 'modified' on property set via code usually, need to force or rely on array ref update might not catch deep prop)
-        // Since canvasObjects is shallow array, deep prop change might not trigger watcher if we had one. 
-        // But our LayersPanel reads directly from the object prop. We might need to force update the array reference to trigger re-render of panel items.
         refreshCanvasObjects();
         updateSelection();
         saveCurrentState({ reason: 'layers-toggle-visible' });
