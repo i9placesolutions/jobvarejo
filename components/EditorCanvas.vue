@@ -5339,6 +5339,25 @@ const formatHistoryDateTime = (value: string) => {
         second: '2-digit'
     })
 }
+const formatHistoryRelative = (value: string) => {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return ''
+    const now = Date.now()
+    const diffMs = now - d.getTime()
+    const diffSec = Math.floor(diffMs / 1000)
+    if (diffSec < 60) return 'agora mesmo'
+    const diffMin = Math.floor(diffSec / 60)
+    if (diffMin < 60) return `${diffMin} min atras`
+    const diffH = Math.floor(diffMin / 60)
+    if (diffH < 24) return `${diffH}h atras`
+    const diffD = Math.floor(diffH / 24)
+    if (diffD === 1) return 'ontem'
+    if (diffD < 30) return `${diffD} dias atras`
+    const diffM = Math.floor(diffD / 30)
+    if (diffM === 1) return '1 mes atras'
+    return `${diffM} meses atras`
+}
+const historyItemIsLatest = (idx: number) => idx === 0
 
 const openHistoryModal = async () => {
     if (!canRecoverLatestNonEmpty.value) return
@@ -5395,6 +5414,22 @@ const restoreFromHistoryItem = async (item: PageHistoryItem) => {
             }
         })
         if (result?.ok) {
+            // Force the page loader to fetch fresh data from S3/DB instead of
+            // reusing the stale in-memory canvasData.
+            const idx = findPageIndexById(project.pages, pageId, project.activePageIndex)
+            if (idx >= 0 && project.pages[idx]) {
+                project.pages[idx].canvasData = null
+                project.pages[idx].lastSavedFingerprint = null
+                project.pages[idx].lastLoadedFingerprint = null
+                project.pages[idx].dirty = false
+                // Update canvasDataPath to the restored target key so the loader
+                // fetches from the correct S3 object.
+                if (result.targetKey) {
+                    project.pages[idx].canvasDataPath = result.targetKey
+                }
+                // Clear local draft so it doesn't override the restored version.
+                try { localStorage.removeItem(`jobvarejo:draft:page:${project.id}:${pageId}`) } catch { /* ignore */ }
+            }
             showHistoryModal.value = false
             retryStorageReload()
         }
@@ -37304,46 +37339,145 @@ const handleRecalculateLayout = () => {
       </div>
 
       <!-- Page History / Restore Modal -->
-      <div v-if="showHistoryModal" class="fixed inset-0 z-9999">
-        <div class="absolute inset-0 bg-black/60" @click="showHistoryModal = false"></div>
-        <div class="absolute left-1/2 top-1/2 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-zinc-950/90 shadow-2xl">
-          <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
-            <div>
-              <p class="text-sm text-white/90">Historico da pagina</p>
-              <p class="text-[11px] text-white/55">Escolha uma versao para restaurar. Total: {{ historyItems.length }}</p>
-            </div>
-            <button type="button" class="text-white/70 hover:text-white text-lg leading-none" @click="showHistoryModal = false">×</button>
-          </div>
-          <div class="px-4 py-3">
-            <div v-if="historyLoading" class="text-sm text-white/70">Carregando...</div>
-            <div v-else-if="historyError" class="text-sm text-red-300">{{ historyError }}</div>
-            <div v-else-if="!historyItems.length" class="text-sm text-white/60">Nenhuma versao encontrada.</div>
-            <div v-else class="max-h-[60vh] overflow-auto divide-y divide-white/10">
-              <div v-for="it in historyItems" :key="`${it.source}:${it.key}:${it.versionId || ''}:${it.lastModified}`" class="py-3 flex items-center justify-between gap-3">
-                <div class="min-w-0">
-                  <p class="text-xs text-white/80 truncate">
-                    <span class="font-medium">{{ it.source === 'version' ? 'Versao' : 'Snapshot' }}</span>
-                    <span class="text-white/40"> · </span>
-                    <span class="text-white/60">{{ formatHistoryDateTime(it.lastModified) }}</span>
-                  </p>
-                  <p class="text-[11px] text-white/50 truncate">
-                    {{ it.objectCount != null ? `${it.objectCount} objetos` : '' }}
-                    <span v-if="it.size != null" class="text-white/40"> · {{ Math.max(1, Math.round((it.size || 0) / 1024)) }} KB</span>
-                  </p>
+      <Teleport to="body">
+        <Transition
+          enter-active-class="transition duration-200 ease-out"
+          enter-from-class="opacity-0"
+          enter-to-class="opacity-100"
+          leave-active-class="transition duration-150 ease-in"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
+        >
+          <div v-if="showHistoryModal" class="fixed inset-0 z-[9999] flex items-center justify-center">
+            <!-- Backdrop -->
+            <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="showHistoryModal = false" />
+
+            <!-- Panel -->
+            <div class="relative w-[min(520px,92vw)] max-h-[85vh] flex flex-col rounded-2xl border border-white/[0.08] bg-zinc-900/95 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.7)] overflow-hidden">
+
+              <!-- Header -->
+              <div class="flex items-center gap-3 px-5 pt-5 pb-4">
+                <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-violet-500/15 shrink-0">
+                  <svg class="w-[18px] h-[18px] text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-[15px] font-semibold text-white/95 leading-tight tracking-[-0.01em]">Historico da pagina</h3>
+                  <p class="text-[12px] text-white/45 mt-0.5">Restaure uma versao anterior</p>
                 </div>
                 <button
                   type="button"
-                  class="shrink-0 text-xs px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-50"
-                  :disabled="!!restoringHistoryKey"
-                  @click="restoreFromHistoryItem(it as any)"
+                  class="flex items-center justify-center w-8 h-8 rounded-lg text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all duration-150"
+                  @click="showHistoryModal = false"
                 >
-                  {{ restoringHistoryKey === getHistoryRestoreKey(it as any) ? 'Restaurando...' : 'Restaurar' }}
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
+
+              <!-- Content -->
+              <div class="flex-1 overflow-y-auto px-5 pb-5 min-h-0">
+
+                <!-- Loading state -->
+                <div v-if="historyLoading" class="flex flex-col items-center justify-center py-12 gap-3">
+                  <div class="w-8 h-8 rounded-full border-2 border-white/10 border-t-violet-400 animate-spin" />
+                  <p class="text-[13px] text-white/50">Carregando versoes...</p>
+                </div>
+
+                <!-- Error state -->
+                <div v-else-if="historyError" class="flex flex-col items-center justify-center py-10 gap-2">
+                  <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-red-500/10">
+                    <svg class="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                    </svg>
+                  </div>
+                  <p class="text-[13px] text-red-300/90 text-center max-w-[280px]">{{ historyError }}</p>
+                </div>
+
+                <!-- Empty state -->
+                <div v-else-if="!historyItems.length" class="flex flex-col items-center justify-center py-10 gap-2">
+                  <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-white/[0.04]">
+                    <svg class="w-5 h-5 text-white/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-2.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                    </svg>
+                  </div>
+                  <p class="text-[13px] text-white/40">Nenhuma versao salva ainda</p>
+                  <p class="text-[11px] text-white/25 max-w-[240px] text-center">Versoes sao salvas automaticamente quando voce edita o projeto.</p>
+                </div>
+
+                <!-- History items -->
+                <div v-else class="flex flex-col gap-2">
+                  <div
+                    v-for="(it, idx) in historyItems"
+                    :key="`${it.source}:${it.key}:${it.versionId || ''}:${it.lastModified}`"
+                    class="group relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl border transition-all duration-150"
+                    :class="historyItemIsLatest(idx) ? 'bg-violet-500/[0.07] border-violet-500/20 hover:border-violet-500/35' : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04] hover:border-white/[0.12]'"
+                  >
+                    <!-- Timeline dot -->
+                    <div class="flex flex-col items-center self-stretch shrink-0">
+                      <div
+                        class="w-2.5 h-2.5 rounded-full mt-0.5 ring-[3px] shrink-0"
+                        :class="historyItemIsLatest(idx) ? 'bg-violet-400 ring-violet-400/20' : 'bg-white/20 ring-white/[0.06]'"
+                      />
+                      <div v-if="idx < historyItems.length - 1" class="w-px flex-1 mt-1 bg-white/[0.06]" />
+                    </div>
+
+                    <!-- Info -->
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2">
+                        <p class="text-[13px] font-medium text-white/90 leading-tight">
+                          {{ formatHistoryDateTime(it.lastModified) }}
+                        </p>
+                        <span
+                          v-if="historyItemIsLatest(idx)"
+                          class="inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium bg-violet-500/20 text-violet-300 leading-relaxed"
+                        >Mais recente</span>
+                      </div>
+                      <div class="flex items-center gap-1.5 mt-1">
+                        <span class="text-[11px] text-white/35">{{ formatHistoryRelative(it.lastModified) }}</span>
+                        <span v-if="it.objectCount != null" class="text-[11px] text-white/20">&#183;</span>
+                        <span v-if="it.objectCount != null" class="text-[11px] text-white/35">{{ it.objectCount }} objetos</span>
+                        <span v-if="it.size != null" class="text-[11px] text-white/20">&#183;</span>
+                        <span v-if="it.size != null" class="text-[11px] text-white/35">{{ Math.max(1, Math.round((it.size || 0) / 1024)) }} KB</span>
+                      </div>
+                    </div>
+
+                    <!-- Restore button -->
+                    <button
+                      type="button"
+                      class="shrink-0 flex items-center gap-1.5 text-[12px] font-medium px-3.5 py-2 rounded-lg transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                      :class="restoringHistoryKey === getHistoryRestoreKey(it as any)
+                        ? 'bg-violet-500/20 text-violet-300 cursor-wait'
+                        : 'bg-white/[0.06] text-white/70 hover:bg-violet-500/15 hover:text-violet-200 active:scale-[0.97]'"
+                      :disabled="!!restoringHistoryKey"
+                      @click="restoreFromHistoryItem(it as any)"
+                    >
+                      <svg v-if="restoringHistoryKey === getHistoryRestoreKey(it as any)" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {{ restoringHistoryKey === getHistoryRestoreKey(it as any) ? 'Restaurando...' : 'Restaurar' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Footer hint -->
+              <div v-if="!historyLoading && !historyError && historyItems.length" class="px-5 py-3 border-t border-white/[0.06] bg-white/[0.02]">
+                <p class="text-[11px] text-white/30 text-center">
+                  Ate {{ 3 }} versoes salvas automaticamente por pagina
+                </p>
+              </div>
+
             </div>
           </div>
-        </div>
-      </div>
+        </Transition>
+      </Teleport>
 
   </div>
 </template>
