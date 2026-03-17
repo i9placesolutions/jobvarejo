@@ -238,6 +238,42 @@ const clearPendingLocalDraftFlushSchedule = () => {
     }
 }
 
+// Maximum bytes for a single draft entry in localStorage (~2 MB).
+// Entries larger than this are silently skipped — the data lives in memory
+// and will be persisted via the normal Storage/DB save pipeline.
+const LOCAL_DRAFT_MAX_ENTRY_BYTES = 2_000_000
+
+/**
+ * Aggressively free localStorage space occupied by draft keys that do NOT
+ * belong to the current project.  Returns the number of keys removed.
+ */
+const purgeStaleLocalDrafts = (currentProjectId: string): number => {
+    let removed = 0
+    try {
+        const allDraftKeys: string[] = []
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i)
+            if (k && (k.startsWith(DRAFT_KEY_PREFIX) || k.startsWith(DRAFT_PROJECT_KEY_PREFIX))) {
+                allDraftKeys.push(k)
+            }
+        }
+        const currentSuffix = `${currentProjectId}:`
+        const currentExact = currentProjectId
+        for (const k of allDraftKeys) {
+            // Keep keys that belong to the active project
+            const afterPrefix = k.startsWith(DRAFT_KEY_PREFIX)
+                ? k.slice(DRAFT_KEY_PREFIX.length)
+                : k.slice(DRAFT_PROJECT_KEY_PREFIX.length)
+            if (afterPrefix.startsWith(currentSuffix) || afterPrefix === currentExact) continue
+            localStorage.removeItem(k)
+            removed++
+        }
+    } catch {
+        // ignore errors during cleanup
+    }
+    return removed
+}
+
 const flushPendingLocalDrafts = () => {
     if (import.meta.server) return
     clearPendingLocalDraftFlushSchedule()
@@ -245,10 +281,20 @@ const flushPendingLocalDrafts = () => {
 
     const operations = Array.from(pendingLocalDraftOperations.entries())
     pendingLocalDraftOperations.clear()
+    let quotaHitThisFlush = false
     for (const [key, operation] of operations) {
         try {
             if (operation.type === 'set') {
-                localStorage.setItem(key, JSON.stringify(operation.value))
+                const json = JSON.stringify(operation.value)
+                // Skip entries that are too large for localStorage; they will
+                // be persisted through the normal server save pipeline.
+                if (json.length > LOCAL_DRAFT_MAX_ENTRY_BYTES) {
+                    if (import.meta.dev) {
+                        console.warn(`[draft] Skipping oversized draft (${(json.length / 1024).toFixed(0)} KB) for key: ${key}`)
+                    }
+                    continue
+                }
+                localStorage.setItem(key, json)
             } else {
                 localStorage.removeItem(key)
             }
@@ -258,34 +304,52 @@ const flushPendingLocalDrafts = () => {
             const isQuota = err?.name === 'QuotaExceededError' ||
                 String(err?.message || '').toLowerCase().includes('quota')
             if (isQuota) {
-                // Tenta liberar espaço removendo drafts de páginas antigas (não do projeto atual)
+                // --- Stage 1: purge ALL drafts from other projects ---
+                const currentProjectId = project.id || ''
+                const purged = purgeStaleLocalDrafts(currentProjectId)
+
+                if (purged > 0 && operation.type === 'set') {
+                    // Retry once after purge
+                    try {
+                        const json = JSON.stringify(operation.value)
+                        if (json.length <= LOCAL_DRAFT_MAX_ENTRY_BYTES) {
+                            localStorage.setItem(key, json)
+                            if (localDraftQuotaWarning.value) localDraftQuotaWarning.value = false
+                            continue // success — move to next operation
+                        }
+                    } catch {
+                        // still full — fall through to stage 2
+                    }
+                }
+
+                // --- Stage 2: purge ALL draft keys (including current project) and retry ---
                 try {
-                    const keysToRemove: string[] = []
+                    const allKeys: string[] = []
                     for (let i = 0; i < localStorage.length; i++) {
                         const k = localStorage.key(i)
-                        if (k && k.startsWith(DRAFT_KEY_PREFIX) && k !== key) {
-                            keysToRemove.push(k)
+                        if (k && (k.startsWith(DRAFT_KEY_PREFIX) || k.startsWith(DRAFT_PROJECT_KEY_PREFIX))) {
+                            allKeys.push(k)
                         }
                     }
-                    // Remove até metade dos drafts antigos para liberar espaço
-                    const toRemove = keysToRemove.slice(0, Math.max(1, Math.floor(keysToRemove.length / 2)))
-                    for (const k of toRemove) localStorage.removeItem(k)
-                    if (toRemove.length > 0) {
-                        // Tenta salvar novamente após liberar espaço
-                        if (operation.type === 'set') {
-                            localStorage.setItem(key, JSON.stringify(operation.value))
-                        }
-                        return
-                    }
+                    for (const k of allKeys) localStorage.removeItem(k)
                 } catch {
-                    // ignora erro na limpeza
+                    // ignore cleanup errors
                 }
-                // Re-queue the failed operation so it can be retried on the next flush
-                if (!pendingLocalDraftOperations.has(key)) {
-                    pendingLocalDraftOperations.set(key, operation)
+
+                if (operation.type === 'set') {
+                    try {
+                        const json = JSON.stringify(operation.value)
+                        if (json.length <= LOCAL_DRAFT_MAX_ENTRY_BYTES) {
+                            localStorage.setItem(key, json)
+                            if (localDraftQuotaWarning.value) localDraftQuotaWarning.value = false
+                            continue // success after full purge
+                        }
+                    } catch {
+                        // still full — silently skip, data is safe in memory/server pipeline
+                    }
                 }
-                localDraftQuotaWarning.value = true
-                console.warn('⚠️ localStorage cheio — rascunho local não salvo. Salve o projeto para não perder dados.')
+                // Data is safe in memory and will be persisted via the server save pipeline.
+                // No need to warn the user — this is a silent local cache miss.
             }
             // Non-quota errors (serialization) are ignored
         }
@@ -338,6 +402,15 @@ const writeDraft = (
 ) => {
     if (import.meta.server) return
     try {
+        // Quick size estimate to avoid queueing payloads that will never fit
+        // in localStorage (~5 MB total). estimateJsonBytes is already available.
+        const estimatedSize = estimateJsonBytes(canvasData)
+        if (estimatedSize > LOCAL_DRAFT_MAX_ENTRY_BYTES) {
+            if (import.meta.dev) {
+                console.warn(`[draft] Canvas too large for local draft (${(estimatedSize / 1024).toFixed(0)} KB), skipping page ${pageId}`)
+            }
+            return
+        }
         const key = getDraftKey(projectId, pageId)
         const payload: DraftPayload = { updatedAt: Date.now(), canvasData }
         pendingLocalDraftOperations.set(key, { type: 'set', value: payload })
@@ -439,7 +512,9 @@ const serializeProjectDraftPages = (pages: Page[]): ProjectDraftPagePayload[] =>
         canvasDataPath: typeof page?.canvasDataPath === 'string'
             ? (page.canvasDataPath.trim() || undefined)
             : undefined,
-        thumbnail: typeof page?.thumbnail === 'string' ? page.thumbnail : undefined,
+        // NOTE: thumbnail (base64 data URL) is intentionally excluded from
+        // localStorage drafts to avoid blowing the ~5 MB quota.  The
+        // thumbnailUrl (S3 URL) is preserved for restoration.
         thumbnailUrl: typeof page?.thumbnailUrl === 'string'
             ? (page.thumbnailUrl.trim() || undefined)
             : undefined,

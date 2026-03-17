@@ -25150,6 +25150,8 @@ const simulateSmartGrid = async (
     }
 
     if (targetZone) {
+        // Always refresh coords before computing bounds to prevent stale state
+        if (typeof targetZone.setCoords === 'function') targetZone.setCoords();
         // Prefer persisted zone metrics to avoid drift after reload/scaling.
         let boundingRect = getZoneMetrics(targetZone) ?? targetZone.getBoundingRect(true);
         const zoneCenterX = boundingRect.left + (boundingRect.width / 2);
@@ -34991,12 +34993,39 @@ const ensureZoneSanity = (zone: any) => {
 
 const getZoneMetrics = (zone: any) => {
     if (!zone) return null;
-    
-    // CRITICAL: Prefer _zoneWidth/_zoneHeight when available (persisted dimensions)
-    // This ensures correct layout after reload even if Fabric bounds are not yet updated
+
+    // Ground-truth: bounding rect always reflects current position and scale
+    const liveBounds = zone.getBoundingRect ? zone.getBoundingRect(true) : null;
+    const liveW = liveBounds ? Math.abs(liveBounds.width) : 0;
+    const liveH = liveBounds ? Math.abs(liveBounds.height) : 0;
+
+    // When live bounds are valid (zone is rendered), use them directly.
+    // This prevents stale _zoneWidth/_zoneHeight from placing cards outside the zone.
+    if (liveBounds && liveW > 0 && liveH > 0) {
+        // Keep stored dims in sync so future saves are accurate
+        if (zone._zoneWidth !== liveW || zone._zoneHeight !== liveH) {
+            const wRatio = Math.max(zone._zoneWidth || 0, liveW) / Math.min(zone._zoneWidth || liveW, liveW);
+            const hRatio = Math.max(zone._zoneHeight || 0, liveH) / Math.min(zone._zoneHeight || liveH, liveH);
+            // Only auto-sync when the discrepancy is significant (>10%) to avoid float noise
+            if (!zone._zoneWidth || !zone._zoneHeight || wRatio > 1.1 || hRatio > 1.1) {
+                zone._zoneWidth = liveW;
+                zone._zoneHeight = liveH;
+            }
+        }
+        return {
+            left: liveBounds.left,
+            top: liveBounds.top,
+            width: liveW,
+            height: liveH,
+            centerX: liveBounds.left + liveW / 2,
+            centerY: liveBounds.top + liveH / 2
+        };
+    }
+
+    // Fallback for early-load scenarios where getBoundingRect isn't ready yet
     let width = 0;
     let height = 0;
-    
+
     if (typeof zone._zoneWidth === 'number' && zone._zoneWidth > 0 &&
         typeof zone._zoneHeight === 'number' && zone._zoneHeight > 0) {
         width = zone._zoneWidth;
@@ -35012,18 +35041,9 @@ const getZoneMetrics = (zone: any) => {
         width = baseWidth ? baseWidth * scaleX : zone.getScaledWidth?.() ?? 0;
         height = baseHeight ? baseHeight * scaleY : zone.getScaledHeight?.() ?? 0;
     }
-    
-    if (!width || !height) {
-        const fallback = zone.getBoundingRect ? zone.getBoundingRect(true) : { left: zone.left ?? 0, top: zone.top ?? 0, width: 0, height: 0 };
-        return {
-            left: fallback.left,
-            top: fallback.top,
-            width: fallback.width,
-            height: fallback.height,
-            centerX: fallback.left + (fallback.width / 2),
-            centerY: fallback.top + (fallback.height / 2)
-        };
-    }
+
+    if (!width || !height) return null;
+
     const center = zone.getCenterPoint ? zone.getCenterPoint() : { x: zone.left ?? 0, y: zone.top ?? 0 };
     return {
         left: center.x - (width / 2),
