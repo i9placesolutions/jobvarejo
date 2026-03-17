@@ -8,7 +8,7 @@
  * Docs: https://ai.google.dev/gemini-api/docs/image-generation
  */
 
-const GEMINI_MODEL = 'gemini-3.1-flash-image-preview'
+const GEMINI_MODEL = 'nano-banana-pro-preview'
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const GEMINI_TIMEOUT_MS = 90_000
 
@@ -195,6 +195,7 @@ export const geminiEditImage = async (opts: {
 
   if (!res.ok) {
     const msg = json?.error?.message || `Gemini error (${res.status})`
+    console.error('[gemini:edit] API error:', res.status, msg, JSON.stringify(json?.error?.details || []).slice(0, 200))
     throw new Error(msg)
   }
 

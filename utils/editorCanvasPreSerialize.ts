@@ -8,6 +8,7 @@ type PrepareCanvasForSerializationOptions = {
 type PrepareCanvasForSerializationResult = {
   allCanvasObjects: any[]
   canvasFrames: any[]
+  restoreZoneClipPaths: () => void
 }
 
 const isZoneLikeObject = (obj: any): boolean => {
@@ -85,5 +86,5 @@ export const prepareCanvasForSerialization = (
       })
       savedClipPaths.clear()
     },
-  } as PrepareCanvasForSerializationResult & { restoreZoneClipPaths: () => void }
+  }
 }

@@ -110,10 +110,47 @@ const restoreFramePropsAndFilterInvalid = (
     if (id) canvasObjById.set(id, co)
   })
 
-  json.objects.forEach((jsonObj: any) => {
-    const canvasObj = canvasObjById.get(jsonObj?._customId) ?? null
+  // Build list of canvas frames for fallback matching when _customId is missing
+  // from the serialized JSON (happens after loadFromJSON with AI-generated data).
+  const canvasFramesList = canvasObjs.filter((co: any) => co?.isFrame)
 
-    // Restore props from canvas object when matched by id
+  json.objects.forEach((jsonObj: any) => {
+    let canvasObj = canvasObjById.get(jsonObj?._customId) ?? null
+
+    // Fallback 1: match by _customId stored in a non-standard location
+    if (!canvasObj && jsonObj?.id) {
+      canvasObj = canvasObjById.get(jsonObj.id) ?? null
+    }
+
+    // Fallback 2: for each unmatched JSON Rect, try to find the corresponding
+    // canvas frame by checking if the live canvas object IS a frame.
+    // This handles the case where _customId was not serialized by toObject().
+    if (!canvasObj && canvasFramesList.length > 0) {
+      const jsonType = String(jsonObj?.type || '').toLowerCase()
+
+      // Check if this JSON object looks like it could be a frame:
+      // - explicitly marked as frame (isFrame, layerName)
+      // - OR is a Rect with frame-like name
+      // - OR is the first Rect in the JSON (frames are always first)
+      const isLikelyFrame =
+        jsonObj?.isFrame ||
+        jsonObj?.layerName === 'FRAMER' ||
+        (jsonType === 'rect' && String(jsonObj?.name || '').toLowerCase().includes('frame')) ||
+        (jsonType === 'rect' && String(jsonObj?.stroke || '').toLowerCase() === '#0d99ff')
+
+      if (isLikelyFrame) {
+        // Find the matching canvas frame by index order
+        const idx = json.objects.filter((o: any) => {
+          const t = String(o?.type || '').toLowerCase()
+          return t === 'rect' && (o?.isFrame || o?.layerName === 'FRAMER' || String(o?.name || '').toLowerCase().includes('frame') || String(o?.stroke || '').toLowerCase() === '#0d99ff')
+        }).indexOf(jsonObj)
+        if (idx >= 0 && idx < canvasFramesList.length) {
+          canvasObj = canvasFramesList[idx]
+        }
+      }
+    }
+
+    // Restore props from canvas object when matched
     if (canvasObj) {
       if (canvasObj._customId) jsonObj._customId = canvasObj._customId
       if (canvasObj.layerName) jsonObj.layerName = canvasObj.layerName

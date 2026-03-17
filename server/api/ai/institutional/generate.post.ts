@@ -1,18 +1,33 @@
 import { requireAuthenticatedUser } from '~/server/utils/auth'
 import { enforceRateLimit } from '~/server/utils/rate-limit'
-import { geminiGenerateImage, geminiEditImage } from '~/server/utils/gemini-images'
+import { geminiEditImage, geminiGenerateImage } from '~/server/utils/gemini-images'
 import { uploadBufferToStorage } from '~/server/utils/contabo-upload'
 import { resolveStorageReadUrl } from '~/server/utils/project-storage-refs'
+import { getS3Client } from '~/server/utils/s3'
+import { GetObjectCommand } from '@aws-sdk/client-s3'
 
 const MAX_PROMPT_LENGTH = 2000
 
-/**
- * Gera arte institucional:
- * 1. Busca inspirações do usuário (style_references)
- * 2. Monta prompt enriquecido com estilo aprendido
- * 3. Gera imagem de fundo via Gemini Nano Banana 2
- * 4. Retorna: URL da imagem + JSON Fabric.js com background + textos editáveis
- */
+const SIZE_TO_ASPECT: Record<string, string> = {
+  '1080x1080': '1:1',
+  '1080x1350': '4:5',
+  '1080x1920': '9:16',
+  '1920x1080': '16:9',
+}
+
+const downloadS3Image = async (s3Key: string): Promise<{ buffer: Buffer; mime: string } | null> => {
+  try {
+    const config = useRuntimeConfig()
+    const s3 = getS3Client()
+    const cmd = new GetObjectCommand({ Bucket: config.wasabiBucket, Key: s3Key })
+    const res = await s3.send(cmd)
+    if (!res.Body) return null
+    const chunks: Uint8Array[] = []
+    for await (const chunk of res.Body as any) chunks.push(chunk)
+    return { buffer: Buffer.concat(chunks), mime: String(res.ContentType || 'image/png') }
+  } catch { return null }
+}
+
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   await enforceRateLimit(event, `ai:institutional:${user.id}`, 10, 60_000)
@@ -24,11 +39,8 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody(event)
   const prompt = String(body?.prompt || '').trim()
-  if (!prompt) {
-    throw createError({ statusCode: 400, statusMessage: 'Prompt obrigatorio. Ex: "Arte de Natal para supermercado"' })
-  }
-  if (prompt.length > MAX_PROMPT_LENGTH) {
-    throw createError({ statusCode: 400, statusMessage: `Prompt muito longo (max ${MAX_PROMPT_LENGTH}).` })
+  if (!prompt || prompt.length > MAX_PROMPT_LENGTH) {
+    throw createError({ statusCode: 400, statusMessage: 'Prompt obrigatorio (max 2000 chars).' })
   }
 
   const sizeRaw = String(body?.size || '1080x1920').trim()
@@ -36,104 +48,166 @@ export default defineEventHandler(async (event) => {
   const width = Math.max(128, Math.min(4096, Number(wStr) || 1080))
   const height = Math.max(128, Math.min(4096, Number(hStr) || 1920))
   const size = `${width}x${height}`
+  const aspectRatio = SIZE_TO_ASPECT[size] || '9:16'
 
   const title = String(body?.title || '').trim().slice(0, 200)
   const subtitle = String(body?.subtitle || '').trim().slice(0, 300)
   const tagFilter = String(body?.tagFilter || '').trim().toLowerCase()
 
-  // 1. Buscar inspirações do usuário
-  let styleNotes = ''
+  // ========================================
+  // 1. Buscar inspirações + baixar imagens
+  // ========================================
   const refsQuery = tagFilter
-    ? `SELECT id, style_analysis, tags FROM public.style_references
-       WHERE user_id = $1 AND $2 = ANY(tags)
-       ORDER BY usage_count DESC, created_at DESC LIMIT 5`
-    : `SELECT id, style_analysis, tags FROM public.style_references
-       WHERE user_id = $1
-       ORDER BY usage_count DESC, created_at DESC LIMIT 5`
+    ? `SELECT id, s3_key, style_analysis FROM public.style_references
+       WHERE user_id = $1 AND $2 = ANY(tags) ORDER BY usage_count DESC, created_at DESC LIMIT 3`
+    : `SELECT id, s3_key, style_analysis FROM public.style_references
+       WHERE user_id = $1 ORDER BY usage_count DESC, created_at DESC LIMIT 3`
 
-  const refsParams = tagFilter ? [user.id, tagFilter] : [user.id]
-  const refs = await pgQuery<{ id: string; style_analysis: any; tags: string[] }>(refsQuery, refsParams)
+  const refs = await pgQuery<{ id: string; s3_key: string; style_analysis: any }>(
+    refsQuery, tagFilter ? [user.id, tagFilter] : [user.id]
+  )
+
+  let styleNotes = ''
+  const referenceImages: Array<{ data: Buffer; mime: string }> = []
 
   if (refs.rows.length > 0) {
-    // Compilar estilo a partir das inspirações
-    const palettes = new Set<string>()
-    const styles = new Set<string>()
-    const elements = new Set<string>()
-    const layouts = new Set<string>()
-    const moods = new Set<string>()
-
-    for (const r of refs.rows) {
-      const sa = r.style_analysis || {}
-      if (Array.isArray(sa.palette)) sa.palette.forEach((c: string) => palettes.add(c))
-      if (sa.style) styles.add(sa.style)
-      if (Array.isArray(sa.elements)) sa.elements.forEach((e: string) => elements.add(e))
-      if (sa.layout) layouts.add(sa.layout)
-      if (sa.mood) moods.add(sa.mood)
-    }
-
+    // Compilar estilo
+    const sa = refs.rows.map(r => r.style_analysis || {})
     const parts: string[] = []
-    if (palettes.size > 0) parts.push(`Cores preferidas: ${[...palettes].slice(0, 8).join(', ')}`)
-    if (styles.size > 0) parts.push(`Estilo visual: ${[...styles].join(', ')}`)
-    if (elements.size > 0) parts.push(`Elementos visuais: ${[...elements].join(', ')}`)
-    if (layouts.size > 0) parts.push(`Layout: ${[...layouts].join(', ')}`)
-    if (moods.size > 0) parts.push(`Mood: ${[...moods].join(', ')}`)
+    const palettes = sa.flatMap(s => s.palette || []).filter(Boolean).slice(0, 6)
+    if (palettes.length) parts.push(`Cores: ${palettes.join(', ')}`)
+    const styles = [...new Set(sa.map(s => s.style).filter(Boolean))]
+    if (styles.length) parts.push(`Estilo: ${styles.join(', ')}`)
+    const moods = [...new Set(sa.map(s => s.mood).filter(Boolean))]
+    if (moods.length) parts.push(`Mood: ${moods.join(', ')}`)
     styleNotes = parts.join('. ')
 
-    // Incrementar usage_count
-    const refIds = refs.rows.map(r => r.id)
+    // Baixar e redimensionar imagens de referência (max 1024px para não estourar o request)
+    const downloads = await Promise.all(refs.rows.slice(0, 2).map(r => downloadS3Image(r.s3_key)))
+    for (const dl of downloads) {
+      if (!dl || dl.buffer.length === 0) continue
+      try {
+        const sharp = (await import('sharp')).default
+        const resized = await sharp(dl.buffer)
+          .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toBuffer()
+        referenceImages.push({ buffer: resized, mime: 'image/jpeg' })
+      } catch {
+        // Se sharp falhar, usa o original se for < 2MB
+        if (dl.buffer.length < 2 * 1024 * 1024) {
+          referenceImages.push(dl)
+        }
+      }
+    }
+
+    // Incrementar usage
     await pgQuery(
-      `UPDATE public.style_references SET usage_count = usage_count + 1 WHERE id = ANY($1::uuid[])`,
-      [refIds]
+      'UPDATE public.style_references SET usage_count = usage_count + 1 WHERE id = ANY($1::uuid[])',
+      [refs.rows.map(r => r.id)]
     ).catch(() => {})
   }
 
-  // 2. Montar prompt enriquecido para Gemini
-  const promptLines: string[] = [
-    `Crie uma arte visual profissional para: ${prompt}`,
+  // ========================================
+  // 2. Gerar título/subtítulo se não preenchidos
+  // ========================================
+  let finalTitle = title
+  let finalSubtitle = subtitle
+
+  if (!finalTitle) {
+    try {
+      const aiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: `Gere titulo e subtitulo para arte institucional de supermercado sobre: "${prompt}". JSON: {"title":"MAX 4 PALAVRAS MAIUSCULO","subtitle":"frase complementar curta"}` }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.5, maxOutputTokens: 80 }
+          }),
+          signal: AbortSignal.timeout(8_000)
+        }
+      )
+      if (aiRes.ok) {
+        const json: any = await aiRes.json()
+        const parsed = JSON.parse(json?.candidates?.[0]?.content?.parts?.[0]?.text || '{}')
+        finalTitle = String(parsed.title || '').trim().slice(0, 200)
+        finalSubtitle = finalSubtitle || String(parsed.subtitle || '').trim().slice(0, 300)
+      }
+    } catch {}
+    if (!finalTitle) finalTitle = prompt.toUpperCase().slice(0, 40)
+  }
+
+  // ========================================
+  // 3. Gerar imagem COM textos via Nano Banana Pro
+  // ========================================
+  const imagePrompt = [
+    `Crie uma arte visual COMPLETA e PROFISSIONAL para: ${prompt}`,
     '',
-    'REGRAS:',
-    '- Arte para uso em encarte/post/banner de supermercado ou loja de varejo',
-    '- Resolucao alta, cores vibrantes, visual impactante',
-    '- NAO inclua texto na imagem — os textos serao adicionados depois como camada editavel',
-    '- Deixe espaco livre (area de respiro) no centro e no topo para texto ser adicionado depois',
-    '- Fundo completo sem areas brancas ou transparentes',
-  ]
+    `Formato: proporcao exata ${aspectRatio}, preencher completamente sem bordas brancas.`,
+    '',
+    'OBRIGATORIO incluir estes textos NA imagem com tipografia profissional:',
+    `- Texto principal grande e impactante: "${finalTitle}"`,
+    finalSubtitle ? `- Texto secundario menor: "${finalSubtitle}"` : '',
+    '',
+    'REGRAS DE DESIGN:',
+    '- Arte de design grafico profissional para supermercado/varejo',
+    '- Tipografia grande, bold, legivel e estilizada (nao fonte simples)',
+    '- Os textos devem ser PARTE do design, integrados visualmente',
+    '- Cores vibrantes, visual impactante, alta qualidade',
+    '- Incluir elementos decorativos relacionados ao tema',
+    '- Fundo completo preenchido, sem areas em branco',
+    '- Deixar espaco para logo no rodape (area pequena sem elementos)',
+    referenceImages.length > 0
+      ? '\nREFERENCIA: Crie no MESMO ESTILO VISUAL das imagens anexadas. Mesmas cores, composicao, qualidade e mood. NAO copie os textos da referencia, use os textos informados acima.'
+      : '',
+    styleNotes ? `\nESTILO PREFERIDO: ${styleNotes}` : '',
+  ].filter(Boolean).join('\n')
 
-  if (styleNotes) {
-    promptLines.push('', 'ESTILO BASEADO NAS PREFERENCIAS DO USUARIO:', styleNotes)
-  }
-
-  if (title) {
-    promptLines.push('', `A arte sera usada com o titulo "${title}" — deixe espaco visual adequado para esse texto`)
-  }
-
-  const finalPrompt = promptLines.join('\n')
-
-  // 3. Gerar imagem via Gemini
   let resultBuffer: Buffer
   let resultMime: string
 
   try {
-    const gen = await geminiGenerateImage({
-      prompt: finalPrompt,
-      size,
-      background: 'white'
-    })
-    resultBuffer = gen.buffer
-    resultMime = gen.mime
+    if (referenceImages.length > 0) {
+      const result = await geminiEditImage({
+        prompt: imagePrompt,
+        size,
+        background: 'white',
+        images: referenceImages.map((img, i) => ({
+          data: img.buffer,
+          filename: `ref-${i}.jpg`,
+          mime: img.mime
+        }))
+      })
+      resultBuffer = result.buffer
+      resultMime = result.mime
+    } else {
+      const result = await geminiGenerateImage({ prompt: imagePrompt, size, background: 'white' })
+      resultBuffer = result.buffer
+      resultMime = result.mime
+    }
   } catch (err: any) {
-    const rawMsg = String(err?.message || '')
-    if (rawMsg.includes('timed out') || rawMsg.includes('timeout')) {
-      throw createError({ statusCode: 504, statusMessage: 'Geracao excedeu o tempo limite. Tente novamente.' })
-    }
-    if (rawMsg.includes('bloqueou')) {
-      throw createError({ statusCode: 400, statusMessage: rawMsg })
-    }
-    console.error('[ai:institutional:generate] Gemini error:', rawMsg.slice(0, 300))
-    throw createError({ statusCode: 502, statusMessage: 'Falha ao gerar arte. Tente novamente.' })
+    const msg = String(err?.message || '')
+    if (msg.includes('timed out')) throw createError({ statusCode: 504, statusMessage: 'Timeout. Tente novamente.' })
+    if (msg.includes('bloqueou')) throw createError({ statusCode: 400, statusMessage: msg })
+    if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) throw createError({ statusCode: 429, statusMessage: 'Limite atingido. Aguarde.' })
+    console.error('[ai:institutional] Gemini error:', msg.slice(0, 500))
+    throw createError({ statusCode: 502, statusMessage: `Falha ao gerar: ${msg.slice(0, 100)}` })
   }
 
-  // 4. Upload para Wasabi
+  // ========================================
+  // 4. Detectar dimensões reais
+  // ========================================
+  let imgW = width, imgH = height
+  try {
+    const sharp = (await import('sharp')).default
+    const meta = await sharp(resultBuffer).metadata()
+    if (meta.width && meta.height) { imgW = meta.width; imgH = meta.height }
+  } catch {}
+
+  // ========================================
+  // 5. Upload
+  // ========================================
   const upload = await uploadBufferToStorage({
     buffer: resultBuffer,
     contentType: resultMime,
@@ -141,153 +215,51 @@ export default defineEventHandler(async (event) => {
     folder: 'imagens',
     ext: resultMime.includes('png') ? 'png' : 'jpeg'
   })
-
   const imageUrl = await resolveStorageReadUrl(upload.key, user.id).catch(() => upload.url)
 
-  // 5. Montar canvas Fabric.js editável
-  const canvasData = buildEditableCanvas({
-    width,
-    height,
-    backgroundImageUrl: imageUrl,
-    backgroundImageKey: upload.key,
-    title: title || 'Seu titulo aqui',
-    subtitle: subtitle || '',
-  })
+  // ========================================
+  // 6. Canvas: Frame + Imagem (cover) — sem elementos soltos
+  // ========================================
+  const id = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+  const frameId = id()
+  const coverScale = Math.max(width / imgW, height / imgH)
+
+  const canvasData = {
+    version: '7.1.0',
+    objects: [
+      {
+        type: 'Rect',
+        left: 0, top: 0, width, height,
+        fill: '#ffffff',
+        originX: 'left', originY: 'top',
+        selectable: true, evented: true,
+        isFrame: true, layerName: 'FRAMER', clipContent: true,
+        name: 'Frame 1', _customId: frameId,
+        stroke: '#0d99ff', strokeWidth: 0,
+      },
+      {
+        type: 'Image',
+        left: width / 2, top: height / 2,
+        originX: 'center', originY: 'center',
+        scaleX: coverScale, scaleY: coverScale,
+        selectable: true, evented: true,
+        src: imageUrl,
+        __originalSrc: upload.key,
+        name: 'Arte Institucional',
+        _customId: id(),
+        parentFrameId: frameId,
+      }
+    ]
+  }
 
   return {
     success: true,
     imageUrl,
     imageKey: upload.key,
     canvasData,
+    title: finalTitle,
+    subtitle: finalSubtitle,
     styleNotesUsed: styleNotes || null,
     inspirationsUsed: refs.rows.length
   }
 })
-
-/**
- * Monta JSON Fabric.js com:
- * - Frame (artboard)
- * - Imagem de fundo (gerada por IA)
- * - Textos editáveis (título, subtítulo)
- */
-function buildEditableCanvas(opts: {
-  width: number
-  height: number
-  backgroundImageUrl: string
-  backgroundImageKey: string
-  title: string
-  subtitle: string
-}) {
-  const { width, height } = opts
-  const objectId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
-
-  const objects: any[] = []
-
-  // 1. Frame (artboard background)
-  objects.push({
-    type: 'Rect',
-    left: width / 2,
-    top: height / 2,
-    width,
-    height,
-    fill: '#ffffff',
-    originX: 'center',
-    originY: 'center',
-    selectable: true,
-    evented: true,
-    isFrame: true,
-    layerName: 'FRAMER',
-    clipContent: true,
-    name: 'Frame 1',
-    _customId: objectId(),
-    stroke: '#0d99ff',
-    strokeWidth: 0,
-  })
-
-  // 2. Background image (gerada pela IA)
-  objects.push({
-    type: 'Image',
-    left: width / 2,
-    top: height / 2,
-    width,
-    height,
-    originX: 'center',
-    originY: 'center',
-    scaleX: 1,
-    scaleY: 1,
-    selectable: true,
-    evented: true,
-    src: opts.backgroundImageUrl,
-    __originalSrc: opts.backgroundImageKey,
-    name: 'Fundo IA',
-    _customId: objectId(),
-    lockMovementX: false,
-    lockMovementY: false,
-    parentFrameId: objects[0]._customId,
-  })
-
-  // 3. Título editável
-  if (opts.title) {
-    const fontSize = Math.round(width * 0.065)
-    objects.push({
-      type: 'Textbox',
-      left: width / 2,
-      top: Math.round(height * 0.15),
-      width: Math.round(width * 0.85),
-      originX: 'center',
-      originY: 'center',
-      text: opts.title,
-      fontSize,
-      fontFamily: 'Inter',
-      fontWeight: 'bold',
-      fill: '#ffffff',
-      textAlign: 'center',
-      shadow: {
-        color: 'rgba(0,0,0,0.6)',
-        blur: 8,
-        offsetX: 2,
-        offsetY: 2,
-      },
-      selectable: true,
-      evented: true,
-      name: 'Titulo',
-      _customId: objectId(),
-      parentFrameId: objects[0]._customId,
-    })
-  }
-
-  // 4. Subtítulo editável
-  if (opts.subtitle) {
-    const fontSize = Math.round(width * 0.04)
-    objects.push({
-      type: 'Textbox',
-      left: width / 2,
-      top: Math.round(height * 0.22),
-      width: Math.round(width * 0.8),
-      originX: 'center',
-      originY: 'center',
-      text: opts.subtitle,
-      fontSize,
-      fontFamily: 'Inter',
-      fontWeight: 'normal',
-      fill: '#ffffff',
-      textAlign: 'center',
-      shadow: {
-        color: 'rgba(0,0,0,0.4)',
-        blur: 6,
-        offsetX: 1,
-        offsetY: 1,
-      },
-      selectable: true,
-      evented: true,
-      name: 'Subtitulo',
-      _customId: objectId(),
-      parentFrameId: objects[0]._customId,
-    })
-  }
-
-  return {
-    version: '7.1.0',
-    objects
-  }
-}

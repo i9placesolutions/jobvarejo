@@ -8529,36 +8529,10 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 });
             }
             
-            // CRITICAL: Remove any non-frame rectangles that might have been incorrectly created
-            // IMPORTANT: Preserve order by removing from end
-            const allObjsAfterDedup = canvas.value.getObjects();
-            const rectsToRemove: any[] = [];
-            // Iterate in reverse to mark for removal from end
-            for (let i = allObjsAfterDedup.length - 1; i >= 0; i--) {
-                const obj = allObjsAfterDedup[i];
-                // If it's a rect but NOT a frame, and doesn't have a specific purpose (like artboard-bg), remove it
-                if (obj.type === 'rect' && 
-                    !obj.isFrame && 
-                    !obj.clipContent && 
-                    obj.id !== 'artboard-bg' &&
-                    obj.selectable !== false && // artboard is not selectable
-                    !obj.excludeFromExport) {
-                    // Check if this looks like a duplicate frame (has similar properties but missing isFrame)
-                    const hasFrameLikeProps = obj.stroke && String(obj.stroke).toLowerCase() === '#0d99ff';
-                    if (hasFrameLikeProps) {
-                        // Mark for removal (remove from end to preserve order)
-                        rectsToRemove.push(obj);
-                    }
-                }
-            }
-            // Remove from end to preserve order
-            rectsToRemove.forEach((obj: any) => {
-                try {
-                    canvas.value.remove(obj);
-                } catch (e) {
-                    // Ignore errors
-                }
-            });
+            // NOTE: Removed problematic code that was deleting frames with blue stroke
+            // before rehydrateCanvasZones could restore their isFrame flag.
+            // This was causing frames to disappear permanently when switching pages.
+            // The rehydrateCanvasZones function below will properly restore isFrame flags.
             
             // CRITICAL: Clear deserialized frame clipPaths before rehydrate.
             // Keep object masks (`objectMaskEnabled`) intact.
@@ -11738,7 +11712,7 @@ const removeImageObjectsDeep = (node: any): any => {
             return;
         }
         
-        const { canvasFrames } = prepareCanvasForSerialization({
+        const { canvasFrames, restoreZoneClipPaths } = prepareCanvasForSerialization({
             canvasInstance,
             isValidFabricCanvasObject,
             ensurePersistentContentFlags,
@@ -11753,7 +11727,10 @@ const removeImageObjectsDeep = (node: any): any => {
         } catch (serializeErr: any) {
             const serializeMsg = String(serializeErr?.message || serializeErr || '').toLowerCase()
             const isRecoverableSerializationError = serializeMsg.includes('toobject is not a function')
-            if (!isRecoverableSerializationError) throw serializeErr
+            if (!isRecoverableSerializationError) {
+                restoreZoneClipPaths?.()
+                throw serializeErr
+            }
 
             console.warn(`[saveState] Falha na serialização (${saveReason}). Tentando recuperação...`, serializeErr)
             const removed = sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}:serialize-retry`)
@@ -11769,7 +11746,10 @@ const removeImageObjectsDeep = (node: any): any => {
             } catch (retryErr: any) {
                 const retryMsg = String(retryErr?.message || retryErr || '').toLowerCase()
                 const isRetryRecoverable = retryMsg.includes('toobject is not a function')
-                if (!isRetryRecoverable) throw retryErr
+                if (!isRetryRecoverable) {
+                    restoreZoneClipPaths?.()
+                    throw retryErr
+                }
 
                 console.warn(`[saveState] Segunda tentativa de serialização falhou (${saveReason}). Aplicando limpeza forte...`, retryErr)
                 const removedSecondPass = sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}:serialize-retry-2`)
@@ -11789,6 +11769,7 @@ const removeImageObjectsDeep = (node: any): any => {
                     console.warn(`[saveState] Serialização recuperada após limpeza forte (${removed + removedSecondPass} item(ns) saneados).`)
                 } catch (finalErr: any) {
                     console.error(`[saveState] Não foi possível serializar estado após recuperação (${saveReason}). Mantendo último estado válido.`, finalErr)
+                    restoreZoneClipPaths?.()
                     return
                 }
             }
@@ -11796,6 +11777,8 @@ const removeImageObjectsDeep = (node: any): any => {
                 console.warn(`[saveState] Serialização recuperada após remover ${removed} item(ns) inválido(s).`)
             }
         }
+        // Restore zone clipPaths on live canvas objects now that serialization is complete
+        restoreZoneClipPaths?.()
         finalizeSerializedCanvasJson({
             json,
             canvasInstance,
