@@ -1,0 +1,248 @@
+{
+  "name": "JobVarejo - Wasabi Storage Cleanup",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 4,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Todo dia 4h da manha",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://jobvarejo.com.br/api/storage/versions-cleanup",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-cron-secret",
+              "value": "={{ $env.JOBVAREJO_CRON_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"dryRun\": true,\n  \"keepLatestN\": 2,\n  \"olderThanDays\": 7,\n  \"maxKeysToScan\": 200000\n}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "analyze-versions",
+      "name": "Analise (dry-run)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "notesInFlow": true,
+      "notes": "Primeiro faz dry-run para analisar o que pode ser apagado"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-deletable",
+              "leftValue": "={{ $json.analysis.deletableVersions }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-deletable",
+      "name": "Tem versoes para apagar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://jobvarejo.com.br/api/storage/versions-cleanup",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-cron-secret",
+              "value": "={{ $env.JOBVAREJO_CRON_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"dryRun\": false,\n  \"keepLatestN\": 2,\n  \"olderThanDays\": 7,\n  \"maxKeysToScan\": 200000,\n  \"maxDeleteBatch\": 1000\n}",
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "execute-cleanup",
+      "name": "Executar limpeza",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, -80],
+      "notesInFlow": true,
+      "notes": "Executa a limpeza real (dryRun: false)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "summary-field",
+              "name": "resumo",
+              "value": "=Limpeza Wasabi executada: {{ $json.deleted?.count || 0 }} versoes deletadas, {{ $json.deleted?.size || '0 B' }} liberados. Erros: {{ $json.deleted?.errors || 0 }}",
+              "type": "string"
+            },
+            {
+              "id": "deleted-count",
+              "name": "deletedCount",
+              "value": "={{ $json.deleted?.count || 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "freed-size",
+              "name": "freedSize",
+              "value": "={{ $json.deleted?.size || '0 B' }}",
+              "type": "string"
+            },
+            {
+              "id": "errors",
+              "name": "errors",
+              "value": "={{ $json.deleted?.errors || 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "format-result",
+      "name": "Formatar resultado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, -80]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "skip-field",
+              "name": "resumo",
+              "value": "=Nenhuma versao antiga para apagar. Current: {{ $json.analysis?.currentVersions || 0 }} objetos ({{ $json.analysis?.currentSize || '0 B' }}), Noncurrent: {{ $json.analysis?.noncurrentVersions || 0 }} ({{ $json.analysis?.noncurrentSize || '0 B' }})",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "nothing-to-clean",
+      "name": "Nada para limpar",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [660, 100]
+    }
+  ],
+  "connections": {
+    "Todo dia 4h da manha": {
+      "main": [
+        [
+          {
+            "node": "Analise (dry-run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analise (dry-run)": {
+      "main": [
+        [
+          {
+            "node": "Tem versoes para apagar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem versoes para apagar?": {
+      "main": [
+        [
+          {
+            "node": "Executar limpeza",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nada para limpar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar limpeza": {
+      "main": [
+        [
+          {
+            "node": "Formatar resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": [
+    {
+      "name": "jobvarejo"
+    },
+    {
+      "name": "maintenance"
+    }
+  ]
+}
