@@ -54,6 +54,15 @@ export default defineNuxtConfig({
         'onnxruntime-node',
         '@onnxruntime/node',
       ]
+    },
+
+    routeRules: {
+      '/api/parse-products': {
+        headers: { 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive' }
+      },
+      '/api/storage/upload': {
+        headers: { 'X-Accel-Buffering': 'no' }
+      }
     }
   },
 

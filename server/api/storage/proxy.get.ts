@@ -103,7 +103,7 @@ export default defineEventHandler(async (event) => {
       },
       forcePathStyle: true,
       requestHandler: {
-        requestTimeout: 12_000,
+        requestTimeout: 20_000,
         connectionTimeout: 5_000
       } as any
     })

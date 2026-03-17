@@ -2,9 +2,9 @@ import { requireAuthenticatedUser } from '../utils/auth'
 import { enforceRateLimit } from '../utils/rate-limit'
 
 const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
-const DEFAULT_OPENAI_TIMEOUT_MS = 28_000
+const DEFAULT_OPENAI_TIMEOUT_MS = 18_000
 const MIN_OPENAI_TIMEOUT_MS = 5_000
-const MAX_OPENAI_TIMEOUT_MS = 55_000
+const MAX_OPENAI_TIMEOUT_MS = 25_000
 const MAX_FILE_BYTES = 12 * 1024 * 1024
 const MAX_TEXT_CHARS = 60_000
 const MAX_PROMPT_SOURCE_CHARS = 20_000
@@ -24,7 +24,7 @@ const getTimeoutSignal = (timeoutMs: number): AbortSignal | undefined => {
 }
 
 const getMaxOpenAiTimeoutMs = (): number =>
-    process.env.VERCEL ? DEFAULT_OPENAI_TIMEOUT_MS : 22_000
+    process.env.VERCEL ? DEFAULT_OPENAI_TIMEOUT_MS : 18_000
 
 const resolveOpenAiTimeoutMs = (value: unknown): number => {
     const numericValue = Number.parseInt(String(value ?? '').trim(), 10)
