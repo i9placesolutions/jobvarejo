@@ -1322,11 +1322,13 @@ export const useProject = () => {
 	            if (!changedDuringSave) {
                     const pagesWithNewLocalChangesDuringSave = new Set<string>()
                     saveNeedsFollowUpForLocalChanges = false
-                    const failedCanvasWithoutDbBackupPageIds = new Set(
-                        [...failedCanvasSyncPageIds].filter((pageId) => !dbBackedUpCanvasPageIds.has(pageId))
-                    )
+                    // Pages that failed Wasabi upload MUST stay dirty so the upload
+                    // (and history snapshot) is retried on the next save cycle, even if
+                    // the canvas was backed up in the DB.  DB backup is insurance, not
+                    // a replacement for Wasabi — history snapshots only fire after a
+                    // successful Wasabi upload.
                     const unsyncedPageIds = new Set([
-                        ...failedCanvasWithoutDbBackupPageIds,
+                        ...failedCanvasSyncPageIds,
                         ...pagesWithNewLocalChangesDuringSave
                     ])
 	                const allPagesFullySynced = unsyncedPageIds.size === 0
