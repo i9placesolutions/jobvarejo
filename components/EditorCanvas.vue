@@ -6852,7 +6852,7 @@ onUnmounted(() => {
 
 // Periodic save: upload to Wasabi every 45s if there are unsaved changes.
 // Canvas events only update in-memory state + undo history (no upload).
-const PERIODIC_SAVE_INTERVAL_MS = 45_000
+const PERIODIC_SAVE_INTERVAL_MS = 20_000
 let periodicSaveIntervalId: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
     periodicSaveIntervalId = setInterval(() => {
@@ -7260,17 +7260,10 @@ const emergencyBeaconSave = () => {
         if (sent) {
             console.log(`🚨 [beacon] Dados enviados de emergência (${Math.round(blob.size / 1024)}KB)`);
         } else {
-            console.warn('⚠️ [beacon] sendBeacon rejeitado (payload muito grande?)');
-            // Tentar payload reduzido sem canvasData
-            const reducedPayload = JSON.stringify({
-                id: project.id,
-                canvas_data: pageMetadata.map((p: any) => {
-                    const { canvasData: _, ...rest } = p;
-                    return rest;
-                }),
-            });
-            const reducedBlob = new Blob([reducedPayload], { type: 'application/json' });
-            navigator.sendBeacon('/api/projects/beacon-save', reducedBlob);
+            // IMPORTANTE: NÃO enviar payload reduzido sem canvasData.
+            // Um payload sem canvasData sobrescreveria o backup existente no banco com apenas
+            // metadados, destruindo a possibilidade de recuperação. Melhor não enviar nada.
+            console.warn(`⚠️ [beacon] sendBeacon rejeitado (payload ${Math.round(blob.size / 1024)}KB muito grande) — backup DB preservado.`);
         }
     } catch (err) {
         console.warn('[beacon] Erro no emergency save:', err);

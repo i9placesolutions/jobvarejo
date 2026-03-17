@@ -93,7 +93,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Criar cliente S3 para Wasabi
+    // Criar cliente S3 para Wasabi (com timeout para evitar 502 no proxy reverso)
     const s3Client = new S3Client({
       endpoint: `https://${endpoint}`,
       region: region,
@@ -101,7 +101,11 @@ export default defineEventHandler(async (event) => {
         accessKeyId: accessKey,
         secretAccessKey: secretKey
       },
-      forcePathStyle: true
+      forcePathStyle: true,
+      requestHandler: {
+        requestTimeout: 12_000,
+        connectionTimeout: 5_000
+      } as any
     })
 
     const baseKeyCandidates = Array.from(new Set([
