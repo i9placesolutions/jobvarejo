@@ -1362,6 +1362,17 @@ export const useProject = () => {
 	                    hasUnsavedChanges.value = true
 	                    saveStatus.value = 'idle'
 	                    console.warn(`[saveProjectDB] ${unsyncedPageIds.size} página(s) seguem pendentes; estado preservado para novo sync.`)
+	                    // Auto-retry unsynced pages after a cooldown so the user doesn't
+	                    // have to manually trigger another save.
+	                    const retryCooldownMs = 15_000
+	                    setTimeout(() => {
+	                        if (!hasUnsavedChanges.value) return
+	                        if (isSaving.value) return
+	                        const hasDirtyPages = project.pages.some((p) => p?.dirty)
+	                        if (!hasDirtyPages) return
+	                        console.log('🔄 Retentando upload de páginas pendentes...')
+	                        void saveProjectDB()
+	                    }, retryCooldownMs)
 	                }
 	            } else {
 	                hasUnsavedChanges.value = true
@@ -1707,9 +1718,9 @@ export const useProject = () => {
                             setTimeout(() => {
                                 if (currentSession !== projectLoadSession.value) return
                                 if (!isSaving.value) {
-                                    // Marcar páginas dirty para forçar o upload
+                                    // Marcar páginas dirty para forçar o upload Wasabi
                                     for (const page of project.pages) {
-                                        if (page?.canvasData && !page?.canvasDataPath) {
+                                        if (page?.canvasData) {
                                             page.dirty = true
                                         }
                                     }
