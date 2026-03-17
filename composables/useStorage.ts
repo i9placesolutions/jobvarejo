@@ -25,13 +25,17 @@ const decompressGzip = async (data: ArrayBuffer): Promise<string> => {
 const isGzipBuffer = (buf: Uint8Array): boolean =>
   buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b
 
-// Cache: se presigned URL falhar por CORS, pular nas próximas tentativas
-let _presignedCorsBlocked = false
+// Cache: se presigned URL falhar por CORS, pular por 10 minutos (não para sempre).
+// Um erro transiente de rede não deve bloquear a sessão inteira.
+let _presignedCorsBlockedUntil = 0
+const _PRESIGNED_CORS_BLOCK_MS = 10 * 60_000 // 10 minutos
+const isPresignedCorsBlocked = () => Date.now() < _presignedCorsBlockedUntil
+const setPresignedCorsBlocked = () => { _presignedCorsBlockedUntil = Date.now() + _PRESIGNED_CORS_BLOCK_MS }
 
 // ── Circuit breaker para Wasabi uploads ──────────────────────────────────────
 // Após N falhas consecutivas, pula Wasabi por um período (saves via DB-only).
-const WASABI_CB_MAX_FAILURES = 2
-const WASABI_CB_COOLDOWN_MS = 5 * 60_000 // 5 minutos
+const WASABI_CB_MAX_FAILURES = 5  // era 2 — muito agressivo para uploads lentos
+const WASABI_CB_COOLDOWN_MS = 3 * 60_000 // 3 minutos (era 5min)
 let _wasabiConsecutiveFailures = 0
 let _wasabiCircuitOpenUntil = 0 // timestamp até quando o circuit está aberto
 
@@ -395,7 +399,7 @@ export const useStorage = () => {
       const uploadStart = Date.now()
       try {
         // ── Tentativa 1: Presigned URL direto (browser → Wasabi) ──
-        if (!_presignedCorsBlocked) {
+        if (!isPresignedCorsBlocked()) {
           try {
             const presignedUrl = await getPresignedUrl(key, contentType, 'put', 1, authHeaders)
             if (presignedUrl) {
@@ -423,8 +427,8 @@ export const useStorage = () => {
                 clearTimeout(presignedTimeout)
                 // CORS ou TypeError = browser bloqueou cross-origin PUT → cachear e pular
                 if (fetchErr?.name === 'TypeError' || fetchErr?.message?.includes('CORS') || fetchErr?.message?.includes('Failed to fetch')) {
-                  _presignedCorsBlocked = true
-                  console.warn('⚠️ CORS bloqueou presigned upload, usando proxy para esta sessão.')
+                  setPresignedCorsBlocked()
+                  console.warn('⚠️ CORS bloqueou presigned upload; usando proxy por 10min.')
                 } else if (fetchErr?.name === 'AbortError') {
                   console.warn('⚠️ Presigned upload timeout (15s), fallback para proxy...')
                 } else {

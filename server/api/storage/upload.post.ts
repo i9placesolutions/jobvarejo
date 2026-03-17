@@ -93,7 +93,11 @@ export default defineEventHandler(async (event) => {
     region,
     credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
     forcePathStyle: true,
-    maxAttempts: 2,
+    maxAttempts: 1,
+    requestHandler: {
+      requestTimeout: 25_000,
+      connectionTimeout: 5_000
+    } as any
   })
 
   try {
