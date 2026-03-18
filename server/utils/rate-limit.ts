@@ -1,8 +1,7 @@
 import type { H3Event } from 'h3'
-import { redisRateLimit } from './redis'
 
 // ---------------------------------------------------------------------------
-// Fallback in-memory (usado quando Redis não está disponível)
+// In-memory rate limit (por instância de servidor)
 // ---------------------------------------------------------------------------
 type Bucket = { count: number; resetAt: number }
 const buckets = new Map<string, Bucket>()
@@ -55,37 +54,14 @@ const setRateLimitHeaders = (
 }
 
 // ---------------------------------------------------------------------------
-// enforceRateLimit — Redis distribuído com fallback para Map local
+// enforceRateLimit — in-memory por instância de servidor
 // ---------------------------------------------------------------------------
-export const enforceRateLimit = async (
+export const enforceRateLimit = (
   event: H3Event,
   key: string,
   limit: number,
   windowMs: number
 ) => {
-  const windowSeconds = Math.ceil(windowMs / 1000)
-  const redisKey = `rl:${key}`
-
-  // Tenta Redis primeiro
-  const redisCount = await redisRateLimit(redisKey, windowSeconds)
-
-  if (redisCount !== null) {
-    // Redis disponível — rate limit distribuído real
-    const remaining = Math.max(0, limit - redisCount)
-    const resetAt = Date.now() + windowMs
-    setRateLimitHeaders(event, { limit, remaining, resetAt })
-
-    if (redisCount > limit) {
-      setResponseHeader(event, 'Retry-After', windowSeconds)
-      throw createError({
-        statusCode: 429,
-        statusMessage: `Rate limit exceeded. Try again in ${windowSeconds}s`
-      })
-    }
-    return
-  }
-
-  // Fallback: Map local (por instância serverless)
   const count = localRateLimit(key, limit, windowMs)
   const resetAt = getLocalResetAt(key, windowMs)
   const remaining = Math.max(0, limit - count)

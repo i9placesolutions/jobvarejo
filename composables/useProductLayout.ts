@@ -382,11 +382,17 @@ export const useProductLayout = () => {
     if (imgObj) objects.push(imgObj);
     objects.push(priceGroup);
 
+    // FIX: use center origin from creation so that the card is immediately
+    // consistent with `placeCard` and `rehydrateCanvasZones`, which both
+    // normalise to center/center.  Previously the card was created with
+    // left/top origin and the visual position "jumped" when the relayout ran
+    // because the same (left, top) value means a different visual position
+    // depending on the origin.
     const group = new fabric.Group(objects, {
-      left: x,
-      top: y,
-      originX: 'left',
-      originY: 'top',
+      left: x + cardWidth / 2,
+      top: y + cardHeight / 2,
+      originX: 'center',
+      originY: 'center',
       subTargetCheck: false, // Disable to move entire card together
       interactive: false, // Disable internal interactions
       isSmartObject: true,

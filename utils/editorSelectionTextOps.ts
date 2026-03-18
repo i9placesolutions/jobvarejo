@@ -8,18 +8,25 @@ type ReplaceObjectInContextOptions = {
 export const replaceObjectInContext = (opts: ReplaceObjectInContextOptions): boolean => {
   if (!opts.canvas || !opts.original || !opts.replacement) return false
 
+  // FIX: capture the z-index BEFORE remove(), because remove() mutates the
+  // internal objects array and the previously captured index becomes stale
+  // (off-by-one for all objects after the removed one).
   const parent = opts.original.group
   if (parent && typeof parent.getObjects === 'function') {
     const siblings = parent.getObjects() || []
     const index = siblings.indexOf(opts.original)
     try { parent.remove?.(opts.original) } catch {}
     if (typeof (parent as any).insertAt === 'function' && index >= 0) {
+      // After remove, the array shifted — but insertAt(index) is correct
+      // because Fabric.js insertAt inserts AT that position (not after).
       (parent as any).insertAt(index, opts.replacement)
     } else {
       parent.add?.(opts.replacement)
     }
     opts.safeAddWithUpdate(parent)
     parent.setCoords?.()
+    // FIX: dispose the old object to free its internal caches (_cacheCanvas, etc.)
+    try { opts.original.dispose?.() } catch {}
     return true
   }
 
@@ -31,6 +38,8 @@ export const replaceObjectInContext = (opts: ReplaceObjectInContextOptions): boo
   } else {
     opts.canvas.add(opts.replacement)
   }
+  // FIX: dispose the old object to free its internal caches
+  try { opts.original.dispose?.() } catch {}
   return true
 }
 
@@ -82,7 +91,20 @@ export const convertStaticTextToIText = (opts: ConvertStaticTextToITextOptions):
     try {
       next.styles = JSON.parse(JSON.stringify(obj.styles))
     } catch {
-      next.styles = obj.styles
+      // FIX: previously the catch fallback assigned the same reference
+      // (`next.styles = obj.styles`), meaning both old and new objects
+      // shared the exact same styles object — mutating one would mutate
+      // the other, corrupting undo/redo history entries.
+      // Instead, create a shallow copy of each line's style map.
+      try {
+        const copy: any = {}
+        for (const lineIdx of Object.keys(obj.styles)) {
+          copy[lineIdx] = { ...obj.styles[lineIdx] }
+        }
+        next.styles = copy
+      } catch {
+        next.styles = {}
+      }
     }
   }
 

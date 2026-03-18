@@ -25,29 +25,52 @@ const cloneCanvasData = (canvasData: any): any => {
     }
     return JSON.parse(JSON.stringify(canvasData))
   } catch {
-    return canvasData
+    // FIX: previously returned the original reference on clone failure, causing
+    // the caller to silently mutate the original data when it expected a clone.
+    // Use a manual shallow-deep copy as a last resort.
+    try {
+      return JSON.parse(JSON.stringify(canvasData))
+    } catch {
+      // If even JSON round-trip fails (circular refs), log and return a new
+      // object so the caller at least does not mutate the original.
+      console.warn('[canvasAssetUrls] Failed to clone canvas data — returning empty wrapper')
+      return { objects: [], version: canvasData?.version }
+    }
   }
 }
 
 const walkCanvasObjects = (root: any, visitor: (obj: any) => void): void => {
   if (!root || typeof root !== 'object') return
   const stack: any[] = Array.isArray(root.objects) ? [...root.objects] : []
+  const visited = new WeakSet<object>()
   while (stack.length > 0) {
     const node = stack.pop()
     if (!node || typeof node !== 'object') continue
+    if (visited.has(node)) continue
+    visited.add(node)
     visitor(node)
     if (Array.isArray(node.objects) && node.objects.length > 0) {
       for (let i = node.objects.length - 1; i >= 0; i--) {
         stack.push(node.objects[i])
       }
     }
+    // FIX: also traverse clipPath sub-objects — image URLs inside clipPaths
+    // were previously not normalized, leaving expired presigned/Contabo URLs
+    // that cause CORS errors and broken renders on reload.
+    if (node.clipPath && typeof node.clipPath === 'object') {
+      stack.push(node.clipPath)
+    }
   }
 }
 
 const extractContaboBucketAndKey = (url: string): { bucket: string | null; key: string | null } => {
   try {
-    const decodedUrl = decodeURIComponent(url)
-    const urlObj = new URL(decodedUrl)
+    // FIX: do NOT double-decode.  Previously the URL was decoded with
+    // decodeURIComponent before being passed to new URL(), which then decoded
+    // the pathname again.  This broke URLs with percent-encoded characters
+    // (e.g. %20 for spaces) because the first decode turned %20 into a literal
+    // space, making the URL invalid for `new URL()`.
+    const urlObj = new URL(url)
     const decodedPathname = decodeURIComponent(urlObj.pathname)
     const pathParts = decodedPathname.split('/').filter(Boolean)
 
@@ -126,6 +149,10 @@ export const normalizeCanvasAssetUrls = (
     }
 
     if (typeof node?.src !== 'string' || !node.src.trim()) return
+    // FIX: only process image objects — previously any object with a `src`
+    // property (e.g. Pattern, custom objects) would get __originalSrc metadata
+    // polluting non-image objects and potentially confusing serialization.
+    if (objType !== 'image') return
     const src = String(node.src || '')
 
     if (!node.__originalSrc) {

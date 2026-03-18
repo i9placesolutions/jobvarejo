@@ -116,12 +116,37 @@ export const getTextSelectionSnapshotMeta = (obj: any): Record<string, any> => {
 
 export const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>) => {
   if (!obj) return obj
-  const snap: any = { ...obj }
+  // FIX: do NOT spread the live Fabric object — it copies internal/circular
+  // properties (canvas, group, _cacheCanvas, etc.) that retain references to
+  // disposed Fabric state, causing crashes and memory leaks.  Build a plain
+  // object with only the properties the properties panel actually needs.
+  const snap: any = {}
   snap.type = obj.type
   snap.name = obj.name
   snap.layerName = obj.layerName
   snap._customId = obj._customId
   snap.id = obj.id
+
+  // Copy basic visual properties needed by the panel
+  const VISUAL_PROPS = [
+    'left', 'top', 'width', 'height', 'scaleX', 'scaleY', 'angle',
+    'fill', 'stroke', 'strokeWidth', 'opacity', 'visible', 'selectable',
+    'rx', 'ry', 'shadow', 'skewX', 'skewY', 'flipX', 'flipY',
+    'originX', 'originY', 'fontSize', 'fontFamily', 'fontWeight',
+    'fontStyle', 'textAlign', 'text', 'underline', 'linethrough',
+    'lineHeight', 'charSpacing', 'textBackgroundColor', 'src',
+    '__originalSrc', 'cropX', 'cropY', 'filters',
+    '__stickerOutlineEnabled', '__stickerOutlineWidth',
+    '__stickerOutlineColor', '__stickerOutlineMode',
+    'isFrame', 'clipContent', 'parentFrameId',
+    'isVectorPath', 'isClosedPath', 'penPathData',
+    'isGridCell', 'gridGroupId', 'excludeFromExport',
+    'objectMaskEnabled', 'objectMaskSourceId',
+    'data', 'borderRadius'
+  ]
+  for (const prop of VISUAL_PROPS) {
+    if (obj[prop] !== undefined) snap[prop] = obj[prop]
+  }
 
   if (obj.isGridZone != null) snap.isGridZone = obj.isGridZone
   if (obj.isProductZone != null) snap.isProductZone = obj.isProductZone
@@ -157,11 +182,22 @@ export const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>
   if (obj.lockScalingY != null) snap.lockScalingY = obj.lockScalingY
   if (obj.objectMaskEnabled != null) snap.objectMaskEnabled = obj.objectMaskEnabled
 
-  if (obj._objects != null) snap._objects = obj._objects
-  if (typeof obj.getObjects === 'function') snap.getObjects = () => obj.getObjects()
+  // FIX: expose a defensive copy of the children list so consumers cannot
+  // accidentally mutate the live Fabric group's internal _objects array.
+  if (typeof obj.getObjects === 'function') {
+    const childrenCopy = [...(obj.getObjects() || [])]
+    snap._objects = childrenCopy
+    snap.getObjects = () => childrenCopy
+  } else if (obj._objects != null) {
+    snap._objects = [...obj._objects]
+  }
 
   Object.assign(snap, getTextSelectionSnapshotMeta(obj))
 
+  // FIX: detect zone-like objects for the properties panel WITHOUT mutating the
+  // live canvas object. Previously `obj.isGridZone = true` permanently tagged
+  // non-zone objects as zones, corrupting serialisation and causing broken
+  // layout on reload.  We now only set the flag on the snapshot copy.
   if (!snap.isGridZone && !snap.isProductZone) {
     const looksLikeZone = obj.name === 'gridZone' || obj.name === 'productZoneContainer'
       || (typeof obj._zonePadding === 'number')
@@ -178,7 +214,8 @@ export const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>
       })())
     if (looksLikeZone) {
       snap.isGridZone = true
-      obj.isGridZone = true
+      // NOTE: intentionally NOT setting obj.isGridZone — the live object must
+      // not be mutated by the snapshot function.
     }
   }
 

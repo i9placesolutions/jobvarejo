@@ -4,21 +4,17 @@
 
 ### Funcao principal
 ```ts
-enforceRateLimit(event: H3Event, key: string, limit: number, windowMs: number): Promise<void>
+enforceRateLimit(event: H3Event, key: string, limit: number, windowMs: number): void
 ```
 
-### Estrategia: Redis-first + in-memory fallback
+> Sincrona — nao retorna Promise. `await` e aceito mas desnecessario.
 
-**Redis (primary):**
-- INCR + EXPIRE NX pipeline
-- Keys: `rl:{key}` com TTL = windowMs / 1000
-- Distribuido (compartilhado entre instancias)
+### Estrategia: in-memory only (por instancia de servidor)
 
-**In-memory (fallback):**
 - `Map<string, { count, resetAt }>`
 - Max 5000 buckets (FIFO eviction em overflow)
 - Auto-prune a cada 30s
-- Per-process (nao compartilhado)
+- Per-process (nao compartilhado entre instancias)
 
 ### Response headers (sempre)
 - `X-RateLimit-Limit`: limite

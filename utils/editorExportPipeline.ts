@@ -177,6 +177,12 @@ const sanitizeZipEntryName = (value: string): string => {
 }
 
 const normalizeUint8ToArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
+  // FIX: avoid an unnecessary copy when the Uint8Array already covers the
+  // entire backing buffer (common case for zipSync/pdfDoc.save output).
+  // This halves peak memory for large exports.
+  if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) {
+    return bytes.buffer as ArrayBuffer
+  }
   const start = bytes.byteOffset
   const end = bytes.byteOffset + bytes.byteLength
   return bytes.buffer.slice(start, end) as ArrayBuffer
@@ -243,9 +249,29 @@ export const buildPdfBlob = async (
   const pdfDoc = await PDFDocument.create()
 
   for (const page of validPages) {
-    const bytes = await page.imageBlob.arrayBuffer()
     const mime = String(page.imageBlob.type || '').toLowerCase()
-    const image = mime.includes('jpeg') || mime.includes('jpg')
+    // FIX: pdf-lib only supports JPEG and PNG embedding.  If the image blob
+    // is WebP, AVIF, or has an unknown/empty MIME type, convert it to PNG via
+    // an offscreen canvas before embedding — otherwise pdfDoc.embedPng would
+    // throw a cryptic error because the bytes are not valid PNG.
+    let imageBlob = page.imageBlob
+    if (!mime.includes('jpeg') && !mime.includes('jpg') && !mime.includes('png')) {
+      try {
+        const bitmap = await createImageBitmap(imageBlob)
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(bitmap, 0, 0)
+          imageBlob = await canvas.convertToBlob({ type: 'image/png' })
+        }
+        bitmap.close()
+      } catch (convErr) {
+        console.warn('[PDF] Failed to convert non-PNG/JPEG image, attempting raw embed:', convErr)
+      }
+    }
+    const bytes = await imageBlob.arrayBuffer()
+    const finalMime = String(imageBlob.type || '').toLowerCase()
+    const image = finalMime.includes('jpeg') || finalMime.includes('jpg')
       ? await pdfDoc.embedJpg(bytes)
       : await pdfDoc.embedPng(bytes)
 

@@ -490,6 +490,7 @@ const patchCanvasRenderSafety = (c: any): (() => void) => {
                 } catch (e) {
                     // Render falhou — invalidar cache, purgar objetos inválidos e tentar novamente
                     contextsValid = false;
+                    console.warn('[patchCanvasRenderSafety] requestRenderAll falhou, tentando recuperação:', e);
                     try {
                         purgeInvalidRecursive(c);
                     } catch {
@@ -497,8 +498,10 @@ const patchCanvasRenderSafety = (c: any): (() => void) => {
                     }
                     try {
                         if (origRender) origRender();
-                    } catch {
-                        // ignore
+                    } catch (retryErr) {
+                        // FIX: Log the final failure instead of silently swallowing it.
+                        // The canvas may be left in a corrupted visual state.
+                        console.error('[patchCanvasRenderSafety] Render recovery failed. Canvas may be in invalid state:', retryErr);
                     }
                 }
             });
@@ -512,9 +515,10 @@ const patchCanvasRenderSafety = (c: any): (() => void) => {
             if (!checkContextsIfNeeded()) return;
             try {
                 return origRender();
-            } catch {
+            } catch (e) {
                 // Render falhou — invalidar cache, purgar e tentar novamente
                 contextsValid = false;
+                console.warn('[patchCanvasRenderSafety] renderAll falhou, tentando recuperação:', e);
                 try {
                     purgeInvalidRecursive(c);
                 } catch {
@@ -522,8 +526,9 @@ const patchCanvasRenderSafety = (c: any): (() => void) => {
                 }
                 try {
                     return origRender();
-                } catch {
-                    // ignore
+                } catch (retryErr) {
+                    // FIX: Log the final failure instead of silently swallowing it.
+                    console.error('[patchCanvasRenderSafety] renderAll recovery failed:', retryErr);
                 }
             }
         };
@@ -5707,6 +5712,12 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
         // Pré-aquecer cache de imagens com concorrência limitada (6 simultâneas).
         // O timeout de 4s garante que o canvas nunca espera indefinidamente.
         await prewarmCanvasImages(json, 6, 4000)
+        // FIX: Check if this load session is still the active one after the prewarm delay.
+        // A page switch during the 4s prewarm could cause stale data to be loaded.
+        if (sessionId !== activePageLoadSessionId || isCanvasDestroyed.value) {
+            throw new Error('Load session became stale during image prewarm')
+        }
+        if (!canvas.value) throw new Error('Canvas indisponível após prewarm')
         await canvas.value.loadFromJSON(json)
     } finally {
         // Ensure the UI shows the final numbers for this attempt before we clear tracker.
@@ -6916,9 +6927,9 @@ onUnmounted(() => {
     }
 })
 
-// Periodic save: upload to Wasabi every 45s if there are unsaved changes.
+// Periodic save: upload to Wasabi every 90s if there are unsaved changes.
 // Canvas events only update in-memory state + undo history (no upload).
-const PERIODIC_SAVE_INTERVAL_MS = 20_000
+const PERIODIC_SAVE_INTERVAL_MS = 90_000
 let periodicSaveIntervalId: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
     periodicSaveIntervalId = setInterval(() => {
@@ -8546,6 +8557,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	                }
 	            } catch (loadErr) {
 	                console.error('❌ Erro ao carregar JSON no canvas:', loadErr);
+	                // FIX: Check stale session between each retry to prevent loading data
+	                // onto the wrong page if the user switched pages during retry cascade.
+	                if (isStaleLoad()) { isHistoryProcessing.value = false; return; }
 	                // Try to clear and retry once - but only if canvas is fully ready
 	                if (canvas.value) {
 	                    try {
@@ -8554,6 +8568,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	                        if (ctx && typeof ctx.clearRect === 'function') {
 	                            canvas.value.clear();
 	                            await new Promise(resolve => setTimeout(resolve, 50));
+	                            if (isStaleLoad()) { isHistoryProcessing.value = false; return; }
 	                            await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
 	                        } else {
 	                            console.warn('⚠️ Contexto do canvas não está disponível, pulando clear()');
@@ -8562,6 +8577,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	                        }
                     } catch (retryErr) {
                         console.error('❌ Erro ao recarregar após clear:', retryErr);
+                        if (isStaleLoad()) { isHistoryProcessing.value = false; return; }
                         // Penúltima tentativa: substituir imagens Contabo por placeholder (mantém layout)
                         try {
                             const dataWithPlaceholders = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
@@ -8571,6 +8587,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                             degradedFailedCount = null
                             console.log('✅ loadFromJSON concluído com placeholder para imagens que falharam');
                         } catch (placeholderErr) {
+                            if (isStaleLoad()) { isHistoryProcessing.value = false; return; }
                             // Last attempt: load without ANY images (never throw due to broken image)
                             try {
                                 const safeData = JSON.parse(JSON.stringify(canvasDataToLoad));
@@ -11767,7 +11784,7 @@ const removeImageObjectsDeep = (node: any): any => {
             pendingCoalescedSaveOpts = { ...opts }
             pendingCoalescedSavePageId = getActiveProjectPageId()
             if (!pendingCoalescedSaveTimer) {
-                pendingCoalescedSaveTimer = setTimeout(() => {
+                pendingCoalescedSaveTimer = setTimeout(async () => {
                     pendingCoalescedSaveTimer = null
                     hasPendingCoalescedSave = false
                     const nextOpts = pendingCoalescedSaveOpts
@@ -11778,7 +11795,13 @@ const removeImageObjectsDeep = (node: any): any => {
                         nextOpts.expectedPageId = pendingCoalescedSavePageId
                     }
                     pendingCoalescedSavePageId = ''
-                    invokeSaveStateSafely(nextOpts)
+                    try {
+                        // FIX: await the save to prevent concurrent saves when the timer fires
+                        // again before the previous save completes.
+                        await invokeSaveStateSafely(nextOpts)
+                    } catch (err) {
+                        console.error('[saveState] Erro no save coalescido:', err)
+                    }
                 }, coalesceDelayMs)
             }
             return
@@ -11831,13 +11854,29 @@ const removeImageObjectsDeep = (node: any): any => {
             return;
         }
         
+        // FIX CRITICAL: restore viewport-culled objects BEFORE serialization.
+        // Viewport culling sets `visible = false` on objects outside the viewport for
+        // rendering performance. Without restoring them first, off-screen objects are
+        // persisted with visible:false, making them permanently invisible on reload.
+        // The __viewportCulled flag is a transient runtime property NOT in
+        // CANVAS_CUSTOM_PROPS, so there is no way to know on reload that the
+        // visible:false was due to culling rather than intentional hiding.
+        const allObjectsForCullRestore = canvasInstance.getObjects?.() || []
+        const culledCount = restoreViewportCulledObjects(allObjectsForCullRestore)
+        if (culledCount > 0 && import.meta.dev) {
+            console.log(`[saveState] Restored ${culledCount} viewport-culled object(s) before serialization`)
+        }
+
         const { canvasFrames, restoreZoneClipPaths } = prepareCanvasForSerialization({
             canvasInstance,
             isValidFabricCanvasObject,
             ensurePersistentContentFlags,
             ensureObjectPersistentId
         })
-        safeRequestRenderAll();
+        // FIX: Removed safeRequestRenderAll() here. Triggering a render mid-serialization
+        // can mutate canvas state (dirty flags, coords, clipPaths) between preparation and
+        // toJSON(), causing inconsistent saved data or serialization failures. The render
+        // will happen naturally after the save completes.
         
         // Serialize with custom props
         let json: any
@@ -11887,8 +11926,13 @@ const removeImageObjectsDeep = (node: any): any => {
                     json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
                     console.warn(`[saveState] Serialização recuperada após limpeza forte (${removed + removedSecondPass} item(ns) saneados).`)
                 } catch (finalErr: any) {
+                    // FIX: Previously this silently returned without notifying the user,
+                    // causing silent data loss. Now we set saveStatus to error and provide
+                    // an actionable message so the user knows their work may not be saved.
                     console.error(`[saveState] Não foi possível serializar estado após recuperação (${saveReason}). Mantendo último estado válido.`, finalErr)
                     restoreZoneClipPaths?.()
+                    saveLastError.value = 'Falha ao serializar canvas. Salve manualmente ou recarregue a página.'
+                    saveStatus.value = 'error'
                     return
                 }
             }
@@ -11898,6 +11942,14 @@ const removeImageObjectsDeep = (node: any): any => {
         }
         // Restore zone clipPaths on live canvas objects now that serialization is complete
         restoreZoneClipPaths?.()
+
+        // Re-apply viewport culling now that serialization is done — we restored
+        // culled objects before toJSON() to ensure they serialize with correct
+        // visibility, but we need to re-hide off-screen objects for render perf.
+        if (culledCount > 0) {
+            applyViewportCulling('post-save-restore')
+        }
+
         finalizeSerializedCanvasJson({
             json,
             canvasInstance,
@@ -12420,32 +12472,16 @@ const repairZoneCardsAfterHistoryRestore = () => {
             card.setCoords?.();
         });
 
-        const zm = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
-        const margin = Math.max(40, Math.min(zm.width, zm.height) * 0.08);
-        const hasAnyCardNearZone = cards.some((card: any) => {
-            const center = typeof card.getCenterPoint === 'function'
-                ? card.getCenterPoint()
-                : { x: Number(card.left || 0), y: Number(card.top || 0) };
-            const nearByCenter =
-                center.x >= (zm.left - margin) &&
-                center.x <= (zm.left + zm.width + margin) &&
-                center.y >= (zm.top - margin) &&
-                center.y <= (zm.top + zm.height + margin);
-            if (nearByCenter) return true;
-            try {
-                return typeof zone.intersectsWithObject === 'function' && zone.intersectsWithObject(card);
-            } catch {
-                return false;
-            }
-        });
-
-        if (!hasAnyCardNearZone) {
-            try {
-                recalculateZoneLayout(zone, cards, { save: false });
-                repairedZones += 1;
-            } catch (err) {
-                console.warn('[history-repair] Failed to relayout zone after undo/redo', err);
-            }
+        // FIX: ALWAYS relayout zones after undo/redo.  Previously we only
+        // relaid out when no card was "near" the zone, but cards could still be
+        // outside the zone grid slots (displaced by normalizeZoneScale shifts or
+        // corrupted saves).  The relayout is cheap and guarantees correct card
+        // placement.  Card order is preserved via _zoneOrder.
+        try {
+            recalculateZoneLayout(zone, cards, { save: false });
+            repairedZones += 1;
+        } catch (err) {
+            console.warn('[history-repair] Failed to relayout zone after undo/redo', err);
         }
     });
 
@@ -19492,9 +19528,12 @@ const updateObjectProperty = (prop: string, value: any) => {
             applyStickerOutlinePatch(active);
             active.setCoords?.();
             active.dirty = true;
-            canvas.value.renderAll();
-            // Second render to guarantee visibility after patch
-            setTimeout(() => { canvas.value?.renderAll?.(); }, 60);
+            // FIX: Use safeRequestRenderAll instead of direct renderAll() to go through
+            // the safety patch (context validation, RAF coalescing, error recovery).
+            // The second render is scheduled via RAF to guarantee visibility after patch
+            // without bypassing safety mechanisms.
+            safeRequestRenderAll();
+            setTimeout(() => { safeRequestRenderAll(); }, 60);
             debouncedSaveCurrentState();
 	            refreshSelectedRef({
 	                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
@@ -19515,8 +19554,8 @@ const updateObjectProperty = (prop: string, value: any) => {
 	            applyStickerOutlinePatch(active);
 	            active.setCoords?.();
 	            active.dirty = true;
-	            canvas.value.renderAll();
-	            setTimeout(() => { canvas.value?.renderAll?.(); }, 60);
+	            safeRequestRenderAll();
+	            setTimeout(() => { safeRequestRenderAll(); }, 60);
 	            debouncedSaveCurrentState();
 	            refreshSelectedRef({
 	                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
@@ -19540,8 +19579,8 @@ const updateObjectProperty = (prop: string, value: any) => {
             applyStickerOutlinePatch(active);
             active.setCoords?.();
             active.dirty = true;
-            canvas.value.renderAll();
-            setTimeout(() => { canvas.value?.renderAll?.(); }, 60);
+            safeRequestRenderAll();
+            setTimeout(() => { safeRequestRenderAll(); }, 60);
             debouncedSaveCurrentState();
 	            refreshSelectedRef({
 	                __stickerOutlineEnabled: !!(active as any).__stickerOutlineEnabled,
@@ -19652,17 +19691,16 @@ const updateObjectProperty = (prop: string, value: any) => {
                 syncFrameClips(active);
                 canvas.value.requestRenderAll();
 
+                // FIX: Consolidate the two setTimeout calls into a single one that
+                // renders first and then saves, ensuring correct execution order.
+                // Previously, save (setTimeout 0ms) could execute before render (setTimeout 10ms),
+                // causing stale state to be serialized.
                 setTimeout(() => {
                     if (canvas.value) canvas.value.requestRenderAll();
-                }, 10);
-
-                setTimeout(() => {
-                    // FIX #13: log failures instead of silently swallowing them.
-                    // A catch {} here was hiding save failures after clipContent changes.
                     try { saveCurrentState(); } catch (err) {
                         console.warn('[clipContent] saveCurrentState falhou:', err)
                     }
-                }, 0);
+                }, 10);
                 return;
             }
         }
@@ -22639,17 +22677,29 @@ const saveProject = async () => {
     if (hasActiveTextEditingForPersist()) {
         finalizeActiveTextEditingForPersist();
     }
-    // Tenta consolidar o estado atual do canvas no histórico local.
-    // Mesmo que falhe (ex.: canvas vazio durante carregamento), o save remoto
-    // NÃO deve ser bloqueado — salvar no servidor é sempre o objetivo principal.
-    await Promise.resolve(saveCurrentState({
-        reason: 'manual-project-save',
-        source: 'user',
-        skipCoalesce: true,
-        skipIfUnchanged: false
-    })).catch(() => {/* ignore - o save remoto prossegue de qualquer forma */})
+    // FIX: Consolidate current canvas state before remote save.
+    // If saveCurrentState fails, we log the error but still proceed with saveProjectDB
+    // because the page may have data from a previous successful save that should be persisted.
+    // However, we now verify the page has canvasData before proceeding, to avoid
+    // persisting stale/empty data to the server.
+    try {
+        await saveCurrentState({
+            reason: 'manual-project-save',
+            source: 'user',
+            skipCoalesce: true,
+            skipIfUnchanged: false
+        })
+    } catch (err) {
+        console.warn('[saveProject] saveCurrentState falhou, verificando dados existentes:', err)
+        // Only proceed if the active page already has canvasData from a previous save
+        const activePg = project.pages?.[project.activePageIndex]
+        if (!activePg?.canvasData || !activePg.canvasData?.objects?.length) {
+            console.error('[saveProject] Sem dados de canvas para salvar. Abortando save remoto.')
+            return
+        }
+    }
 
-    // Persist to DB + Wasabi (nunca abortar por falha do estado local)
+    // Persist to DB + Wasabi
     await saveProjectDB({ forceEmptyOverwrite: false });
 
     showSaveModal.value = false;
@@ -22874,7 +22924,14 @@ const handleGenerateInstitutional = async (payload: {
         pushAiToast('success', `Arte institucional gerada com sucesso${inspirationMsg}. Edite textos e elementos a vontade.`)
 
         // Auto-save
-        try { await saveProjectDB() } catch {}
+        // FIX: Previously swallowed all save errors silently. If saveProjectDB fails here,
+        // the generated art exists only in memory and will be lost on reload.
+        try {
+            await saveProjectDB()
+        } catch (saveErr) {
+            console.error('[ai:institutional] Falha ao salvar projeto após geração de arte:', saveErr)
+            pushAiToast('error', 'Arte gerada mas falha ao salvar. Tente salvar manualmente.')
+        }
 
         console.log('[ai:institutional] Arte gerada:', {
             imageKey: result.imageKey,
@@ -26499,7 +26556,7 @@ const handleUpdateZone = (propOrPayload: string | Record<string, any>, val?: any
     entries.forEach(([prop, value]) => updateZoneOnCanvas(prop, value));
 }
 
-const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?: boolean; saveReason?: string } = {}) => {
+const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: { save?: boolean; saveReason?: string } = {}) => {
     if (!canvas.value || !zone) return;
     ensureZoneSanity(zone);
 
@@ -26619,13 +26676,19 @@ const applyZoneUpdates = (zone: any, updates: Record<string, any>, opts: { save?
         });
     }
     if (opts.save !== false) {
-        // Set flag to prevent object:modified event from also saving state (prevents duplicate entries)
+        // FIX: Set flag to prevent object:modified event from also saving state (prevents duplicate entries).
+        // Previously the flag was reset synchronously after an async saveCurrentState call, meaning
+        // object:modified events during the actual save were NOT suppressed as intended.
+        // Now we use try/finally with await to ensure the flag stays true until the save completes.
         isApplyingZoneUpdate = true;
-        saveCurrentState({
-            allowEmptyOverwrite: true,
-            reason: opts.saveReason || 'object:modified(zone)'
-        });
-        isApplyingZoneUpdate = false;
+        try {
+            await saveCurrentState({
+                allowEmptyOverwrite: true,
+                reason: opts.saveReason || 'object:modified(zone)'
+            });
+        } finally {
+            isApplyingZoneUpdate = false;
+        }
     }
     // Refresh snapshot so PropertiesPanel picks up the new values
     refreshSelectedRef();
@@ -35645,6 +35708,11 @@ const applyZoneScaleToRect = (zone: any, minSize = 60) => {
     const nextHeight = Math.max(minSize, Math.abs(zone.getScaledHeight?.() ?? 0));
     if (!nextWidth || !nextHeight) return null;
 
+    // FIX: capture zone center BEFORE resetting scale, so we can detect if
+    // safeAddWithUpdate shifts the group origin and compensate child cards.
+    const prevLeft = zone.left ?? 0
+    const prevTop = zone.top ?? 0
+
     zoneRect.set({
         width: nextWidth,
         height: nextHeight,
@@ -35661,6 +35729,17 @@ const applyZoneScaleToRect = (zone: any, minSize = 60) => {
 
     safeAddWithUpdate(zone);
     zone.setCoords();
+
+    // FIX: after safeAddWithUpdate, Fabric recalculates the group's bounding box
+    // which can shift zone.left/top.  Product cards are positioned with absolute
+    // canvas coordinates, so they don't follow the zone automatically.  Translate
+    // all bound cards by the delta to keep them aligned with the zone.
+    const dx = (zone.left ?? 0) - prevLeft
+    const dy = (zone.top ?? 0) - prevTop
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+        moveZoneChildren(zone, dx, dy)
+    }
+
     zone._zoneWidth = nextWidth;
     zone._zoneHeight = nextHeight;
     return { width: nextWidth, height: nextHeight };
@@ -36578,8 +36657,13 @@ const rehydrateCanvasZones = (
             }
 
             normalizeZoneScale(z);
-            // Ensure Fabric v7 group bounds match the inner rect (prevents the "outer container" selection bug).
-            safeAddWithUpdate(z);
+            // NOTE: safeAddWithUpdate is already called inside normalizeZoneScale ->
+            // applyZoneScaleToRect.  Calling it again here would recalculate group
+            // bounds a second time, potentially shifting zone.left/top without
+            // compensating child cards (causing them to escape the zone).
+            // If scaleX/Y were already 1 (normalizeZoneScale bailed early), we still
+            // need to ensure coords are fresh for getBoundingRect to work in relayout.
+            z.setCoords?.();
             
             const rawZoneStyles = (z as any)._zoneGlobalStyles;
             const hasPersistedZoneStyles =
@@ -36814,16 +36898,19 @@ const rehydrateCanvasZones = (
                         // Preserve manually-saved placements after reload.
                         // Reflow only when this zone has cards without reliable saved positions.
                         const zoneCards = cards.filter((c: any) => String((c as any).parentZoneId || '').trim() === String(z._customId || '').trim());
-                        const hasAllSavedPositions =
-                            zoneCards.length > 0 &&
-                            zoneCards.every((c: any) =>
-                                cardsWithSavedParentZone.has(c) &&
-                                Number.isFinite(Number(c.left)) &&
-                                Number.isFinite(Number(c.top))
-                            );
-                        if (!hasAllSavedPositions) {
-                            recalculateZoneLayout(z);
-                        }
+                        // FIX: ALWAYS force a full relayout on rehydrate.
+                        // Previously we tried to preserve "saved positions" to avoid
+                        // visual jumps, but this caused cards to stay at stale/corrupted
+                        // positions when:
+                        //   1. The zone was moved/resized and normalizeZoneScale shifted
+                        //      the group origin without updating cards
+                        //   2. Viewport culling persisted visible:false (now fixed)
+                        //   3. The frame/artboard was resized and the zone followed but
+                        //      cards still had old absolute coordinates
+                        // The relayout is fast (just position math, no DOM/render) and
+                        // guarantees cards are always correctly placed inside their zone.
+                        // Card ORDER is preserved via _zoneOrder which was already saved.
+                        recalculateZoneLayout(z, zoneCards);
                     } catch (err) {
                         console.warn('[rehydrateCanvasZones] Failed to relayout zone', err);
                     }

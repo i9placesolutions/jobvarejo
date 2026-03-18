@@ -3,44 +3,67 @@ import Redis from 'ioredis'
 let client: Redis | null = null
 let lastError: string | null = null
 let lastErrorAt = 0
+let consecutiveFailures = 0
 
 /**
  * Retorna o cliente Redis singleton.
  * Se REDIS_URL não estiver configurado, retorna null silenciosamente.
  * Erros de conexão são logados mas não propagam para não quebrar a API.
+ * Auto-recovery: se o cliente morrer (retryStrategy desistiu), ele é recriado na próxima chamada.
  */
 export const getRedis = (): Redis | null => {
   const url = String(process.env.REDIS_URL || useRuntimeConfig?.()?.redisUrl || '').trim()
   if (!url) return null
 
+  // Auto-recovery: se o cliente está em estado terminal, descarta e recria
+  if (client && client.status === 'end') {
+    console.warn('[redis] Cliente em estado terminal, recriando conexão...')
+    try { client.disconnect() } catch { /* ignore */ }
+    client = null
+  }
+
   if (client) return client
 
   client = new Redis(url, {
-    lazyConnect: true,
-    connectTimeout: 4000,
-    commandTimeout: 2000,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
+    connectTimeout: 10_000,
+    commandTimeout: 2_000,  // 2s por comando — rate limit deve falhar rápido
+    maxRetriesPerRequest: 1,  // sem retry — fallback in-memory é imediato
+    enableOfflineQueue: false, // não enfileirar — falha rápido se não conectado
+    maxOfflineQueue: 0,
     retryStrategy: (times) => {
-      // Tenta reconectar até 3 vezes com backoff exponencial, depois desiste
-      if (times > 3) return null
-      return Math.min(times * 500, 2000)
+      // Backoff exponencial: 500ms, 1s, 2s, 4s, 5s (cap), até 10 tentativas
+      if (times > 10) {
+        console.warn('[redis] Desistindo após 10 tentativas de reconexão')
+        return null
+      }
+      return Math.min(times * 500, 5000)
     }
   })
 
+  // Conectar imediatamente em vez de esperar o primeiro comando
+  client.connect().catch(() => {
+    // erro será tratado pelo handler 'error' abaixo
+  })
+
   client.on('error', (err: Error) => {
+    consecutiveFailures++
     const msg = String(err?.message || err || '')
     const now = Date.now()
     if (!lastError || now - lastErrorAt > 30_000) {
-      console.warn('[redis] Erro de conexão:', msg)
+      console.warn(`[redis] Erro de conexão (falhas consecutivas: ${consecutiveFailures}):`, msg)
       lastError = msg
       lastErrorAt = now
     }
   })
 
   client.on('connect', () => {
+    if (consecutiveFailures > 0) {
+      console.log(`[redis] Reconectado com sucesso após ${consecutiveFailures} falha(s)`)
+    } else {
+      console.log('[redis] Conectado com sucesso')
+    }
     lastError = null
-    console.log('[redis] Conectado com sucesso')
+    consecutiveFailures = 0
   })
 
   return client

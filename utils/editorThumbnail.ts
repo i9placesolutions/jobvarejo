@@ -54,7 +54,20 @@ export const generateThumbnailFromCanvasJson = async (
   try {
     const thumbJson = JSON.parse(JSON.stringify(opts.sourceJson || {}))
     stripClipPathsRecursively(thumbJson)
-    await sc.loadFromJSON(thumbJson)
+    // FIX: add a timeout to prevent thumbnail generation from hanging
+    // indefinitely if loadFromJSON tries to fetch external images that never
+    // respond.  10s is generous enough for local rendering.
+    const THUMBNAIL_TIMEOUT_MS = 10_000
+    const loadPromise = sc.loadFromJSON(thumbJson)
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Thumbnail generation timed out')), THUMBNAIL_TIMEOUT_MS)
+    })
+    try {
+      await Promise.race([loadPromise, timeoutPromise])
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId)
+    }
     sc.renderAll()
     // multiplier: 1 because the canvas is already at thumbnail dimensions
     return sc.toDataURL({

@@ -61,13 +61,20 @@ export const applyHistoryStateToCanvas = async (
       const fallbackPageState = opts.getFallbackPageState()
       if (fallbackPageState) {
         console.log('🔄 Recarregando canvasData da página...')
-        await opts.loadFromJsonSafe(fallbackPageState)
-        opts.sanitizeAllClipPaths()
-        opts.rehydrateCanvasZones({ relayout: false, applyZoneStyles: false })
-        opts.repairZoneCardsAfterHistoryRestore()
+        try {
+          await opts.loadFromJsonSafe(fallbackPageState)
+          opts.sanitizeAllClipPaths()
+          opts.rehydrateCanvasZones({ relayout: false, applyZoneStyles: false })
+          opts.repairZoneCardsAfterHistoryRestore()
+        } catch (fallbackErr) {
+          console.error('❌ Fallback page state also failed:', fallbackErr)
+        }
       }
     }
 
+    // FIX: after a fallback recovery, prefer the current viewport or zoom-to-fit
+    // instead of applying the viewport from the failed state (which may not match
+    // the fallback content dimensions).
     if (savedViewport) {
       opts.canvas.setViewportTransform(savedViewport)
       opts.updateZoomState()
@@ -83,13 +90,11 @@ export const applyHistoryStateToCanvas = async (
       opts.updateScrollbars()
     }
 
-    // FIX: do NOT override the canvas background after undo/redo. The background
-    // colour is part of the serialised state and was already restored by
-    // loadFromJsonSafe. Previously this block silently replaced a user-chosen
-    // transparent/clear background with #1e1e1e on every undo/redo.
-    // We only apply the fallback when the background is truly absent (null/undefined),
-    // never when it is explicitly 'transparent' or a zero-alpha colour.
-    if (!opts.canvas.backgroundColor) {
+    // FIX: only apply the dark fallback when backgroundColor is truly absent
+    // (null or undefined).  Previously the falsy check `!backgroundColor` also
+    // matched empty string '' (a valid transparent background) and would
+    // silently overwrite it with #1e1e1e after every undo/redo.
+    if (opts.canvas.backgroundColor == null) {
       opts.canvas.backgroundColor = '#1e1e1e'
     }
 
@@ -126,6 +131,15 @@ export const applyHistoryStateToCanvas = async (
     }
     return false
   } finally {
-    opts.canvas.renderOnAddRemove = prevRenderOnAddRemove
+    // FIX: guard against canvas being disposed during the async loadFromJsonSafe
+    // call.  If the user navigates away while undo/redo is in progress, the
+    // canvas may already be null/disposed by the time this finally block runs.
+    try {
+      if (opts.canvas) {
+        opts.canvas.renderOnAddRemove = prevRenderOnAddRemove
+      }
+    } catch {
+      // canvas already disposed — nothing to restore
+    }
   }
 }

@@ -95,7 +95,7 @@ export default defineEventHandler(async (event) => {
     forcePathStyle: true,
     maxAttempts: 2,
     requestHandler: {
-      requestTimeout: 55_000,
+      requestTimeout: 40_000, // menor que o timeout do proxy no cliente (45s) para falhar limpo
       connectionTimeout: 8_000
     } as any
   })

@@ -25,17 +25,18 @@ const decompressGzip = async (data: ArrayBuffer): Promise<string> => {
 const isGzipBuffer = (buf: Uint8Array): boolean =>
   buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b
 
-// Cache: se presigned URL falhar por CORS, pular por 10 minutos (não para sempre).
-// Um erro transiente de rede não deve bloquear a sessão inteira.
+// Cache: se presigned URL falhar por CORS, pular pelo resto da sessão.
+// CORS é uma configuração do servidor, não um erro transiente — não faz sentido
+// tentar novamente a cada 10 minutos e adicionar falhas desnecessárias ao circuito.
 let _presignedCorsBlockedUntil = 0
-const _PRESIGNED_CORS_BLOCK_MS = 10 * 60_000 // 10 minutos
+const _PRESIGNED_CORS_BLOCK_MS = 24 * 60 * 60_000 // 24h (efetivamente sessão inteira)
 const isPresignedCorsBlocked = () => Date.now() < _presignedCorsBlockedUntil
 const setPresignedCorsBlocked = () => { _presignedCorsBlockedUntil = Date.now() + _PRESIGNED_CORS_BLOCK_MS }
 
 // ── Circuit breaker para Wasabi uploads ──────────────────────────────────────
 // Após N falhas consecutivas, pula Wasabi por um período (saves via DB-only).
-const WASABI_CB_MAX_FAILURES = 5  // era 2 — muito agressivo para uploads lentos
-const WASABI_CB_COOLDOWN_MS = 3 * 60_000 // 3 minutos (era 5min)
+const WASABI_CB_MAX_FAILURES = 8  // tolerância maior — erros transientes não devem abrir o circuito
+const WASABI_CB_COOLDOWN_MS = 60_000 // 60s (era 3min) — recupera mais rápido
 let _wasabiConsecutiveFailures = 0
 let _wasabiCircuitOpenUntil = 0 // timestamp até quando o circuit está aberto
 
@@ -399,6 +400,9 @@ export const useStorage = () => {
     const effectiveRetries = isHalfOpen ? 1 : retries
 
     // Estratégia: presigned URL direto (rápido, pula se CORS bloqueou antes) → fallback proxy servidor
+    // Timeouts reduzidos: presigned 20s, proxy 30s. Se ambos falharem numa tentativa,
+    // o pior caso por tentativa é ~50s (presigned timeout + proxy timeout em sequência),
+    // o que cabe no soft timeout de 75s do saveProjectDB, evitando o loop infinito anterior.
     for (let attempt = 1; attempt <= effectiveRetries; attempt++) {
       const uploadStart = Date.now()
       try {
@@ -408,7 +412,7 @@ export const useStorage = () => {
             const presignedUrl = await getPresignedUrl(key, contentType, 'put', 1, authHeaders)
             if (presignedUrl) {
               const presignedController = new AbortController()
-              const presignedTimeout = setTimeout(() => presignedController.abort(), 40_000)
+              const presignedTimeout = setTimeout(() => presignedController.abort(), 10_000)
               try {
                 const response = await fetch(presignedUrl, {
                   method: 'PUT',
@@ -432,9 +436,9 @@ export const useStorage = () => {
                 // CORS ou TypeError = browser bloqueou cross-origin PUT → cachear e pular
                 if (fetchErr?.name === 'TypeError' || fetchErr?.message?.includes('CORS') || fetchErr?.message?.includes('Failed to fetch')) {
                   setPresignedCorsBlocked()
-                  console.warn('⚠️ CORS bloqueou presigned upload; usando proxy por 10min.')
+                  console.warn('⚠️ CORS bloqueou presigned upload; usando proxy pelo resto da sessão.')
                 } else if (fetchErr?.name === 'AbortError') {
-                  console.warn('⚠️ Presigned upload timeout (40s), fallback para proxy...')
+                  console.warn('⚠️ Presigned upload timeout (10s), fallback para proxy...')
                 } else {
                   console.warn(`⚠️ Presigned upload erro (${fetchErr?.message}), fallback para proxy...`)
                 }
@@ -446,8 +450,9 @@ export const useStorage = () => {
         }
 
         // ── Tentativa 2 (ou única se CORS bloqueado): Proxy servidor via FormData ──
+        // Timeout de 45s: dá margem para o S3 (requestTimeout=55s no servidor) dentro do soft timeout de 60s.
         const proxyController = new AbortController()
-        const proxyTimeoutId = setTimeout(() => proxyController.abort(), 50_000)
+        const proxyTimeoutId = setTimeout(() => proxyController.abort(), 45_000)
 
         try {
           // FormData é mais compatível com Vite proxy e Nitro readMultipartFormData
@@ -810,4 +815,21 @@ export const useStorage = () => {
     getImagesPublicUrl,
     getBrandsPublicUrl
   }
+}
+
+
+// HMR: resetar estado de upload e limpar caches ao substituir o módulo em dev.
+// Sem isso, _wasabiConsecutiveFailures e _presignedCorsBlockedUntil da instância
+// antiga persistem, fazendo a nova instância achar que o circuit breaker está aberto.
+if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+        _wasabiConsecutiveFailures = 0
+        _wasabiCircuitOpenUntil = 0
+        _presignedCorsBlockedUntil = 0
+        lastHistorySnapshotAtByPage.clear()
+        historySnapshotInFlightByPage.clear()
+        _presignedGetCache.clear()
+        saveStatus.value = 'idle'
+        saveError.value = null
+    })
 }

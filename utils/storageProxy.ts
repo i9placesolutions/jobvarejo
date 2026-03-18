@@ -5,6 +5,15 @@ type ProxyUrlOptions = {
   bucket?: string | null
 }
 
+// Guard against useRuntimeConfig not being available (Nitro context / standalone scripts).
+const getWasabiConfig = (): any => {
+  try {
+    return useRuntimeConfig?.()?.public?.wasabi || {}
+  } catch {
+    return {}
+  }
+}
+
 const WASABI_PROXY_CACHE_LIMIT = 2048
 const wasabiProxyUrlCache = new Map<string, string | null>()
 
@@ -105,15 +114,17 @@ const toRelativeStorageProxyUrl = (
         ? new URL(candidate)
         : new URL(candidate, 'http://local')
       const pathname = String(parsed.pathname || '')
+      // FIX: tightened path matching — previously `pathname.endsWith('/p')` was
+      // too broad and would match any URL whose path ended in `/p` (e.g.
+      // `/help`, `/api/something/p`).  Now we only match the exact known
+      // storage proxy paths.
       const isStorageProxyPath =
-        pathname.endsWith('/api/storage/proxy') ||
         pathname === '/api/storage/proxy' ||
-        pathname.endsWith('/api/storage/p') ||
         pathname === '/api/storage/p' ||
-        pathname.endsWith('/proxy') ||
         pathname === '/proxy' ||
-        pathname.endsWith('/p') ||
-        pathname === '/p'
+        pathname === '/p' ||
+        pathname.endsWith('/api/storage/proxy') ||
+        pathname.endsWith('/api/storage/p')
       if (!isStorageProxyPath) continue
 
       const key = parsed.searchParams.get('key')
@@ -156,7 +167,7 @@ export const toWasabiProxyUrl = (input?: string | null, options?: ProxyUrlOption
     return writeWasabiProxyUrlCache(cacheKey, buildProxyUrl(keyLike, version, options?.bucket))
   }
 
-  const cfg = useRuntimeConfig?.()?.public?.wasabi || {}
+  const cfg = getWasabiConfig()
   const endpoint = (cfg.endpoint || 's3.wasabisys.com').toString()
   const bucket = (cfg.bucket || 'jobvarejo').toString()
 
@@ -190,18 +201,19 @@ export const toWasabiDirectUrl = (
   const trimmed = String(input || '').trim()
   if (!trimmed) return null
 
-  if (
-    trimmed.startsWith('blob:') ||
-    trimmed.startsWith('data:') ||
-    trimmed.startsWith('about:') ||
-    trimmed.startsWith('javascript:')
-  ) {
+  // FIX: reject potentially dangerous URLs — `javascript:` and `about:` can
+  // lead to XSS if the returned URL is used in <img src> or <a href>.
+  // blob: and data: are safe for images but should not be converted.
+  if (trimmed.startsWith('javascript:') || trimmed.startsWith('about:')) {
+    return null
+  }
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
     return trimmed
   }
 
-  const cfg = useRuntimeConfig?.()?.public?.wasabi || {}
-  const endpoint = String(options?.endpoint || cfg.endpoint || 's3.wasabisys.com').trim()
-  const bucket = String(options?.bucket || cfg.bucket || 'jobvarejo').trim()
+  const cfg2 = getWasabiConfig()
+  const endpoint = String(options?.endpoint || cfg2.endpoint || 's3.wasabisys.com').trim()
+  const bucket = String(options?.bucket || cfg2.bucket || 'jobvarejo').trim()
   if (!endpoint || !bucket) return trimmed
 
   const fallbackProxyUrl = toWasabiProxyUrl(trimmed, { bucket })

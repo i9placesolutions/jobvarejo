@@ -112,13 +112,23 @@ export const getSelectedObjectFloatingPos = (
   isLikelyProductZone: (obj: any) => boolean
 ): { top: number; left: number; width: number; height: number; visible: boolean } => {
   if (active && isLikelyProductZone(active)) {
-    const boundingRect = active.getBoundingRect()
-    return {
-      top: Number(boundingRect?.top || 0),
-      left: Number(boundingRect?.left || 0),
-      width: Number(boundingRect?.width || 0),
-      height: Number(boundingRect?.height || 0),
-      visible: true
+    // FIX: getBoundingRect() can throw or return undefined if the object has been
+    // disposed, removed from canvas, or has degenerate dimensions (zero-area).
+    // Wrap in try-catch to prevent render crashes.
+    try {
+      const boundingRect = active.getBoundingRect?.()
+      if (!boundingRect) {
+        return { top: 0, left: 0, width: 0, height: 0, visible: false }
+      }
+      return {
+        top: Number(boundingRect.top || 0),
+        left: Number(boundingRect.left || 0),
+        width: Number(boundingRect.width || 0),
+        height: Number(boundingRect.height || 0),
+        visible: true
+      }
+    } catch {
+      return { top: 0, left: 0, width: 0, height: 0, visible: false }
     }
   }
   return {

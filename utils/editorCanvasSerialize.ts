@@ -385,6 +385,50 @@ const stripNestedInlinePayloads = (json: any) => {
   })
 }
 
+/**
+ * Deep-strip heavyweight metadata that bloats canvas JSON.
+ * _zoneTemplateSnapshot alone can be 200-500KB per zone because it stores a
+ * full copy of the template group with all nested objects, images and styles.
+ * We remove the snapshot entirely — the template ID is enough to re-hydrate.
+ */
+const stripHeavyweightMetadata = (json: any) => {
+  if (!json?.objects || !Array.isArray(json.objects)) return
+  let strippedBytes = 0
+
+  walkSerializedCanvasObjects(json, (obj: any) => {
+    // _zoneTemplateSnapshot: full template copy, 200-500KB each.
+    // The template can be re-fetched from the template ID on reload.
+    if (obj?._zoneTemplateSnapshot && typeof obj._zoneTemplateSnapshot === 'object') {
+      const est = JSON.stringify(obj._zoneTemplateSnapshot).length
+      if (est > 1024) {
+        strippedBytes += est
+        obj._zoneTemplateSnapshot = null
+      }
+    }
+    // _templateGroup: duplicate of the template group data
+    if (obj?._templateGroup && typeof obj._templateGroup === 'object') {
+      const est = JSON.stringify(obj._templateGroup).length
+      if (est > 1024) {
+        strippedBytes += est
+        obj._templateGroup = null
+      }
+    }
+    // _productData: strip non-essential fields that can be re-fetched
+    if (obj?._productData && typeof obj._productData === 'object') {
+      const pd = obj._productData
+      // Keep only essential fields for display; raw/imported data is in the DB
+      delete pd._raw
+      delete pd._imported
+      delete pd._parsedVariants
+      delete pd._originalRow
+    }
+  })
+
+  if (strippedBytes > 0) {
+    console.log(`🗜️ [serialize] Stripped ${(strippedBytes / 1024).toFixed(0)}KB of heavyweight metadata`)
+  }
+}
+
 export const finalizeSerializedCanvasJson = (opts: FinalizeSerializedCanvasJsonOptions): void => {
   const canvasObjs = opts.canvasInstance
     .getObjects()
@@ -400,4 +444,5 @@ export const finalizeSerializedCanvasJson = (opts: FinalizeSerializedCanvasJsonO
   )
   normalizePersistedImageUrls(opts.json, opts.convertPresignedToPermanentUrl)
   stripNestedInlinePayloads(opts.json)
+  stripHeavyweightMetadata(opts.json)
 }

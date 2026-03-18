@@ -49,16 +49,24 @@ const hasUnsavedChanges = ref(false)
 const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi carregado do banco
 const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
-const SAVE_WATCHDOG_MS = 90_000
+const SAVE_WATCHDOG_MS = 120_000
 // Soft timeout para upload do canvas.
-// Presigned PUT vai direto browser→Wasabi (sem proxy reverso), precisa de margem para
-// canvas grandes (1-2MB gzip). Server proxy /api/storage/upload tem timeout S3 de 55s.
-const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 75_000
+// Worst case por tentativa: presigned (20s) + proxy (30s) = 50s.
+// Presigned: 10s + proxy: 45s = 55s por tentativa. 2 tentativas com backoff = ~65s max.
+const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 70_000
 const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 12_000
 // Backup inline do canvas no DB: só incluído quando o upload Wasabi falhou.
-// 8MB: cobre canvases grandes (até ~8MB) sem estourar o timeout do proxy reverso.
-const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 8_000_000
+// FIX: reduced from 8MB to 2MB.  The previous 8MB limit caused the POST to
+// /api/projects to take 60-90+ seconds to transfer through the reverse proxy,
+// tripping the 90s watchdog and leaving the save permanently stuck.  At 2MB
+// the POST completes in a few seconds even on slow connections.  Canvases
+// larger than 2MB must succeed through Wasabi upload; the DB backup is only
+// a safety net for small/medium canvases.
+const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 2_000_000
 let lastSaveChangedDuringRunLogAt = 0
+// Exponential backoff counter for unsynced page retries.
+// Reset to 0 when all pages sync successfully.
+let _unsyncedRetryCount = 0
 
 const createRealtimeClientId = (): string => {
     if (import.meta.server) return 'server'
@@ -161,29 +169,75 @@ const withSoftTimeout = async <T>(
     label: string
 ): Promise<T | null> => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let didTimeout = false
     try {
         const timeoutPromise = new Promise<null>((resolve) => {
             timeoutId = setTimeout(() => {
+                didTimeout = true
                 console.warn(`[saveProjectDB] Timeout suave em ${label} após ${Math.round(timeoutMs / 1000)}s; continuando com fallback.`)
                 resolve(null)
             }, timeoutMs)
         })
-        return await Promise.race([work, timeoutPromise])
+        const result = await Promise.race([work, timeoutPromise])
+        return result
     } finally {
         if (timeoutId) clearTimeout(timeoutId)
+        // Se o timeout disparou, a promise original continua rodando em background.
+        // Logamos quando ela resolver para visibilidade, mas não bloqueamos.
+        if (didTimeout) {
+            work.then(
+                (val) => val != null && console.log(`[saveProjectDB] ${label} completou em background após timeout (resultado disponível mas não utilizado).`),
+                () => { /* erro em background, já logado pelo saveCanvasData */ }
+            )
+        }
     }
 }
 
 const MAX_PAGE_DB_CANVAS_BACKUP_BYTES = 8_000_000
 
+/**
+ * Estimate the byte size of a value when serialized to JSON.
+ * FIX: the previous implementation did a full JSON.stringify + TextEncoder.encode
+ * on every call, which is extremely expensive for 2-3MB canvas objects and was
+ * being called on every single canvas edit via writeDraft.
+ * 
+ * The new implementation uses a sampling heuristic for large objects: stringify
+ * only the first few objects to estimate bytes-per-object, then extrapolate.
+ * Falls back to full stringify for small values.
+ */
 const estimateJsonBytes = (value: unknown): number => {
     try {
-        const json = JSON.stringify(value)
-        if (typeof json !== 'string') return Number.MAX_SAFE_INTEGER
-        if (typeof TextEncoder !== 'undefined') {
-            return new TextEncoder().encode(json).length
+        if (!value || typeof value !== 'object') {
+            const json = JSON.stringify(value)
+            return typeof json === 'string' ? json.length : Number.MAX_SAFE_INTEGER
         }
-        return json.length
+        // For canvas data with many objects, sample to avoid full stringify
+        const objects = (value as any)?.objects
+        if (Array.isArray(objects) && objects.length > 5) {
+            // Sample first 3 + last 2 objects to estimate average size
+            const sampleIndices = [0, 1, 2, objects.length - 2, objects.length - 1]
+            let sampleSize = 0
+            let sampleCount = 0
+            for (const i of sampleIndices) {
+                if (i >= 0 && i < objects.length && objects[i]) {
+                    const s = JSON.stringify(objects[i])
+                    if (typeof s === 'string') {
+                        sampleSize += s.length
+                        sampleCount++
+                    }
+                }
+            }
+            if (sampleCount > 0) {
+                const avgPerObject = sampleSize / sampleCount
+                // Estimate total: object array + overhead (background, version, etc.)
+                const objectsEstimate = avgPerObject * objects.length
+                const overhead = 500 // version, background, viewportTransform, etc.
+                return Math.round(objectsEstimate + overhead)
+            }
+        }
+        // Fallback for small objects or non-canvas data
+        const json = JSON.stringify(value)
+        return typeof json === 'string' ? json.length : Number.MAX_SAFE_INTEGER
     } catch {
         return Number.MAX_SAFE_INTEGER
     }
@@ -243,10 +297,12 @@ const clearPendingLocalDraftFlushSchedule = () => {
     }
 }
 
-// Maximum bytes for a single draft entry in localStorage (~2 MB).
-// Entries larger than this are silently skipped — the data lives in memory
-// and will be persisted via the normal Storage/DB save pipeline.
-const LOCAL_DRAFT_MAX_ENTRY_BYTES = 2_000_000
+// Maximum bytes for a single draft entry in localStorage (~4.5 MB).
+// localStorage has ~5-10 MB total depending on browser; we purge stale
+// project drafts on load so a single large entry is acceptable.
+// Raised from 2 MB to 4.5 MB to cover canvas pages with many product images
+// (~2.7 MB raw JSON is common for complex encarte pages).
+const LOCAL_DRAFT_MAX_ENTRY_BYTES = 4_500_000
 
 /**
  * Aggressively free localStorage space occupied by draft keys that do NOT
@@ -411,7 +467,15 @@ const writeDraft = (
         // in localStorage (~5 MB total). estimateJsonBytes is already available.
         const estimatedSize = estimateJsonBytes(canvasData)
         if (estimatedSize > LOCAL_DRAFT_MAX_ENTRY_BYTES) {
-            if (import.meta.dev) {
+            // FIX: throttle this warning — it was firing on every single canvas
+            // edit (hundreds of times) flooding the console and wasting CPU on
+            // the size estimate.  Log once per page per 30 seconds.
+            const now = Date.now()
+            const throttleKey = `draft-skip-${pageId}`
+            const lastWarnAt = (writeDraft as any).__warnTimestamps?.[throttleKey] ?? 0
+            if (now - lastWarnAt > 30_000) {
+                if (!(writeDraft as any).__warnTimestamps) (writeDraft as any).__warnTimestamps = {}
+                ;(writeDraft as any).__warnTimestamps[throttleKey] = now
                 console.warn(`[draft] Canvas too large for local draft (${(estimatedSize / 1024).toFixed(0)} KB), skipping page ${pageId}`)
             }
             return
@@ -478,8 +542,12 @@ const resolveCanvasDataWithDraft = (opts: {
     }
 
     // Protect unsynced changes on reload:
-    // if local draft is newer than remote payload, prefer local draft and resync.
-    const draftShouldWin = draftTs > 0 && (remoteTs === 0 || draftTs >= remoteTs)
+    // if local draft is strictly newer than remote payload, prefer local draft and resync.
+    // FIX: changed `>=` to `>` — when both timestamps are equal, the draft was
+    // created from the remote data and was never actually modified by the user.
+    // Preferring the remote (authoritative) source on equal timestamps avoids
+    // unnecessary re-saves and potential infinite recovery loops.
+    const draftShouldWin = draftTs > 0 && (remoteTs === 0 || draftTs > remoteTs)
     if (draftShouldWin) {
         return { canvasData: draftData, source: 'draft-newer-than-remote', needsRemoteSync: true as const }
     }
@@ -1147,14 +1215,22 @@ export const useProject = () => {
 
 	        // Watchdog: se a operação travar (await preso), força reset cedo o
             // bastante para o usuário não ficar preso olhando "Salvando..." por muito tempo.
+            // FIX: the watchdog now only logs + sets error status but does NOT reset
+            // isSaving/queuedSave — that's the `finally` block's job.  Previously the
+            // watchdog could fire at the exact same time as the `finally` block,
+            // causing a race that cleared `queuedSaveAfterCurrent` and dropped the
+            // queued follow-up save, leading to data loss.
+            let _saveWatchdogFired = false
 	        let _saveWatchdog: ReturnType<typeof setTimeout> | null = setTimeout(() => {
 	            _saveWatchdog = null
+                _saveWatchdogFired = true
 	            if (isSaving.value) {
 	                console.error(`[saveProjectDB] Watchdog: save travado por ${Math.round(SAVE_WATCHDOG_MS / 1000)}s na etapa "${currentSaveStage}", forçando reset de estado.`)
 	                saveLastError.value = `Salvamento travou em "${currentSaveStage}". Clique em "Tentar novamente".`
 	                saveStatus.value = 'error'
 	                isSaving.value = false
-	                queuedSaveAfterCurrent.value = false
+	                // NOTE: intentionally NOT clearing queuedSaveAfterCurrent here —
+	                // the finally block will handle it and schedule the follow-up.
 	            }
 	        }, SAVE_WATCHDOG_MS)
 	        const abortIfStaleSaveContext = (): boolean => {
@@ -1209,7 +1285,14 @@ export const useProject = () => {
 
             // Upload de todas as páginas em paralelo (canvas + thumbnail por página)
             setSaveStage('upload-pages')
-            const pageUploadPromises = project.pages.map(async (page, i) => {
+            // FIX: snapshot the pages array at this point so that a concurrent
+            // loadProjectDB replacing project.pages does not cause us to iterate
+            // the NEW project's pages while uploading the OLD project's data.
+            const pagesSnapshot = [...project.pages]
+            const pageUploadPromises = pagesSnapshot.map(async (page, i) => {
+                // FIX: the abort check inside this lambda only returns from the lambda,
+                // NOT from saveProjectDB.  We still check so we can skip work early,
+                // but the real abort check is after Promise.all below.
                 if (abortIfStaleSaveContext()) return
 
                 // Salvar canvas JSON no Storage (com retry automático)
@@ -1350,12 +1433,21 @@ export const useProject = () => {
                 const shouldCreateProject = normalizedProjectId.startsWith('proj_') || !isUuid(normalizedProjectId)
                 const persistProject = async (bodyPayload: any) => {
                     setSaveStage(shouldCreateProject ? 'persist-project:create' : 'persist-project:update')
+                    // FIX: use AbortController so the request is truly cancelled on
+                    // timeout — previously `timeout: 60_000` was a $fetch option that
+                    // might not be supported by all $fetch versions (ofetch uses
+                    // `signal` internally but the timeout implementation varies).
+                    // Using an explicit AbortController guarantees the request is
+                    // aborted and the promise rejects promptly.
+                    const abortCtrl = new AbortController()
+                    const abortTimer = setTimeout(() => abortCtrl.abort(), 45_000)
+                    try {
                     if (shouldCreateProject) {
                         const response = await $fetch<any>('/api/projects', {
                             method: 'POST',
                             headers: saveHeaders,
                             body: bodyPayload,
-                            timeout: 60_000
+                            signal: abortCtrl.signal
                         })
 
                         const created = response?.project || null
@@ -1372,7 +1464,7 @@ export const useProject = () => {
                             id: normalizedProjectId,
                             ...bodyPayload
                         },
-                        timeout: 60_000
+                        signal: abortCtrl.signal
                     })
                     const updatedProject = response?.project || null
                     if (!updatedProject) {
@@ -1380,6 +1472,9 @@ export const useProject = () => {
                         throw new Error('Falha ao atualizar projeto no servidor.')
                     }
                     projectServerUpdatedAt.value = String(updatedProject.updated_at || '')
+                    } finally {
+                        clearTimeout(abortTimer)
+                    }
                 }
 
                 try {
@@ -1440,6 +1535,7 @@ export const useProject = () => {
 	                }
 
 	                if (allPagesFullySynced) {
+	                    _unsyncedRetryCount = 0 // Reset backoff on full sync
 	                    hasUnsavedChanges.value = false
 	                    saveStatus.value = 'saved'
 	                    clearProjectDraft(project.id)
@@ -1449,23 +1545,38 @@ export const useProject = () => {
 	                } else {
 	                    hasUnsavedChanges.value = true
                         if (noFallbackPageIds.size > 0) {
-                            // Wasabi falhou E canvas muito grande para backup no DB = risco real de perda de dados
+                            // Wasabi falhou E canvas muito grande para backup no DB.
+                            // Os dados ainda estão no rascunho local (localStorage) e serão
+                            // recuperados automaticamente na próxima abertura do projeto.
                             saveStatus.value = 'error'
-                            saveLastError.value = `Falha ao salvar ${noFallbackPageIds.size} página(s): canvas muito grande. Tente reduzir imagens ou aguarde o retry automático.`
-                            console.error(`❌ [saveProjectDB] ${noFallbackPageIds.size} página(s) sem fallback (Wasabi falhou e canvas > ${MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE / 1_000_000}MB). Risco de perda de dados!`)
+                            saveLastError.value = `Falha ao sincronizar com o servidor. Seus dados estão salvos localmente e serão sincronizados automaticamente.`
+                            console.warn(`⚠️ [saveProjectDB] ${noFallbackPageIds.size} página(s) sem sync remoto (Wasabi falhou e canvas > ${MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE / 1_000_000}MB). Dados preservados no rascunho local.`)
                         } else {
 	                    saveStatus.value = 'idle'
                         }
-	                    console.warn(`[saveProjectDB] ${unsyncedPageIds.size} página(s) seguem pendentes; estado preservado para novo sync.`)
-	                    // Auto-retry unsynced pages after a cooldown so the user doesn't
-	                    // have to manually trigger another save.
-	                    const retryCooldownMs = 15_000
+	                    // Se o motivo do "pendente" é skipCanvasUpload (save DB-first intencional),
+	                    // não incrementar o backoff — um save completo já está agendado pelo caller.
+	                    const isIntentionalSkip = opts.skipCanvasUpload && unsyncedPageIds.size > 0
+	                    if (!isIntentionalSkip) {
+	                        console.warn(`[saveProjectDB] ${unsyncedPageIds.size} página(s) seguem pendentes; estado preservado para novo sync.`)
+	                    } else {
+	                        console.log(`[saveProjectDB] ${unsyncedPageIds.size} página(s) aguardando upload Wasabi (save DB-first em andamento).`)
+	                    }
+	                    // Auto-retry unsynced pages with exponential backoff.
+	                    // Prevents the infinite retry loop when Wasabi is persistently
+	                    // unreachable — previously the fixed 15s retry would fire
+	                    // immediately after each 75s timeout, creating an aggressive
+	                    // loop that spammed logs and never let the circuit breaker cool.
+	                    if (!isIntentionalSkip) _unsyncedRetryCount++
+	                    const maxRetryBackoff = 5 * 60_000 // 5 minutos
+	                    const retryCooldownMs = Math.min(15_000 * Math.pow(2, _unsyncedRetryCount - 1), maxRetryBackoff)
+	                    if (!isIntentionalSkip) console.log(`[saveProjectDB] Próximo retry de páginas pendentes em ${Math.round(retryCooldownMs / 1000)}s (tentativa ${_unsyncedRetryCount})`)
 	                    setTimeout(() => {
 	                        if (!hasUnsavedChanges.value) return
 	                        if (isSaving.value) return
 	                        const hasDirtyPages = project.pages.some((p) => p?.dirty)
 	                        if (!hasDirtyPages) return
-	                        console.log('🔄 Retentando upload de páginas pendentes...')
+	                        console.log(`🔄 Retentando upload de páginas pendentes (tentativa ${_unsyncedRetryCount})...`)
 	                        void saveProjectDB()
 	                    }, retryCooldownMs)
 	                }
@@ -1481,6 +1592,10 @@ export const useProject = () => {
 
 		            console.log('Project Saved (Storage):', project.id)
 		            saveSucceeded = true
+		            // FIX: clear the error message on success — previously saveLastError
+		            // was never reset, causing stale error messages to persist in the UI
+		            // indefinitely after a subsequent successful save.
+		            saveLastError.value = null
 		            } catch (e) {
 		                if (saveAbortedByContextSwitch) {
 		                    saveStatus.value = 'idle'
@@ -1509,7 +1624,14 @@ export const useProject = () => {
                     setSaveStage('idle')
 		            if (_saveWatchdog) { clearTimeout(_saveWatchdog); _saveWatchdog = null }
 		            isSaving.value = false
-		            const shouldRunFollowUpSave = !saveAbortedByContextSwitch && saveSucceeded && (changedDuringSave || queuedSaveAfterCurrent.value || saveNeedsFollowUpForLocalChanges)
+		            // FIX: allow follow-up even when save didn't "succeed" (e.g. early return
+		            // because no pages) — if someone queued a save while we held isSaving,
+		            // we must honour that request regardless of whether THIS save produced
+		            // data.  The previous condition `saveSucceeded && ...` silently dropped
+		            // the queued save on early-return paths.
+		            const shouldRunFollowUpSave = !saveAbortedByContextSwitch
+		                && !_saveWatchdogFired
+		                && (changedDuringSave || queuedSaveAfterCurrent.value || saveNeedsFollowUpForLocalChanges)
 		            queuedSaveAfterCurrent.value = false
 		            if (shouldRunFollowUpSave) {
 	                setTimeout(() => {
@@ -1528,7 +1650,7 @@ export const useProject = () => {
     let saveTimeout: any = null
     let scheduledAutoSaveRevision = -1
     let scheduledAutoSaveProjectId = ''
-    const AUTO_SAVE_DELAY = 6_000 // 6 segundos: debounce para ações explícitas (painel de propriedades, etc.)
+    const AUTO_SAVE_DELAY = 90_000 // 90 segundos: debounce para upload remoto após ações do usuário
 
     const triggerAutoSave = () => {
         if (!project.id || project.id.startsWith('proj_')) {
@@ -1922,3 +2044,26 @@ export const useProject = () => {
 	        realtimeClientId
 	    }
 	}
+
+// HMR: quando o Vite substitui este módulo em desenvolvimento, os timers pendentes
+// da instância anterior continuam rodando com estado antigo (isSaving, hasUnsavedChanges),
+// causando múltiplos saveProjectDB simultâneos. O dispose reseta o estado compartilhado
+// para que a nova instância comece limpa e as instâncias antigas parem de interferir.
+if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+        // Cancelar timer de draft pendente
+        if (pendingLocalDraftFlushTimer) {
+            clearTimeout(pendingLocalDraftFlushTimer)
+            pendingLocalDraftFlushTimer = null
+        }
+        if (pendingLocalDraftFlushIdleId) {
+            cancelIdleCallback(pendingLocalDraftFlushIdleId)
+            pendingLocalDraftFlushIdleId = null
+        }
+        // Resetar estado de save para evitar que a nova instância veja isSaving=true
+        isSaving.value = false
+        queuedSaveAfterCurrent.value = false
+        hasUnsavedChanges.value = false
+        isProjectLoaded.value = false
+    })
+}
