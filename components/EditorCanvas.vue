@@ -19132,10 +19132,139 @@ const centerSelectionInContainer = (mode: 'h' | 'v' | 'both') => {
 const updateObjectProperty = (prop: string, value: any) => {
     // Special: Canvas Preset Change
     if (prop === 'canvas-preset') {
-        resizePage(project.activePageIndex, value.w, value.h);
-        if(canvas.value) {
-            canvas.value.setDimensions({ width: value.w, height: value.h });
-            setTimeout(() => { zoomToFit(); saveCurrentState(); }, 50);
+        const newW = value.w;
+        const newH = value.h;
+        const activePage = project.pages[project.activePageIndex];
+        const oldW = activePage?.width || 1080;
+        const oldH = activePage?.height || 1920;
+        
+        resizePage(project.activePageIndex, newW, newH);
+        
+        if (canvas.value) {
+            // 1. Find and resize the frame
+            const frames = getAllFrames();
+            const frame = frames.length === 1 ? frames[0] : frames.find((f: any) => {
+                const fw = Math.round(f.width * (f.scaleX || 1));
+                const fh = Math.round(f.height * (f.scaleY || 1));
+                return Math.abs(fw - oldW) < 10 && Math.abs(fh - oldH) < 10;
+            });
+            
+            if (frame) {
+                const frameCenterBefore = typeof frame.getCenterPoint === 'function'
+                    ? frame.getCenterPoint()
+                    : { x: frame.left || 0, y: frame.top || 0 };
+                
+                const scaleX = newW / oldW;
+                const scaleY = newH / oldH;
+                
+                // Resize the frame itself
+                frame.set({
+                    width: newW,
+                    height: newH,
+                    scaleX: 1,
+                    scaleY: 1
+                });
+                frame.setCoords();
+                
+                // Update frame clipPath if present
+                const frameClip = frame.clipPath;
+                if (frameClip) {
+                    frameClip.set({
+                        width: newW,
+                        height: newH,
+                        scaleX: 1,
+                        scaleY: 1
+                    });
+                }
+                
+                // 2. Rescale and reposition all objects inside the frame
+                const frameBounds = getFrameBounds(frame);
+                if (frameBounds) {
+                    const allObjs = canvas.value.getObjects().filter((o: any) => o !== frame);
+                    for (const obj of allObjs) {
+                        if (!obj || obj.isFrame) continue;
+                        
+                        try {
+                            const objCenter = typeof obj.getCenterPoint === 'function'
+                                ? obj.getCenterPoint()
+                                : { x: obj.left || 0, y: obj.top || 0 };
+                            
+                            // Calculate relative position from frame center
+                            const relX = objCenter.x - frameCenterBefore.x;
+                            const relY = objCenter.y - frameCenterBefore.y;
+                            
+                            // Scale position and size
+                            const newCenterX = frameCenterBefore.x + (relX * scaleX);
+                            const newCenterY = frameCenterBefore.y + (relY * scaleY);
+                            
+                            if (obj.isGridZone || obj.isProductZone) {
+                                // For ProductZones: resize the zone and its inner rect
+                                const zoneRect = typeof obj.getObjects === 'function'
+                                    ? obj.getObjects().find((o: any) => o?.type === 'rect')
+                                    : null;
+                                if (zoneRect) {
+                                    zoneRect.set({
+                                        width: (zoneRect.width || 0) * scaleX,
+                                        height: (zoneRect.height || 0) * scaleY,
+                                        scaleX: 1,
+                                        scaleY: 1
+                                    });
+                                }
+                                obj.set({
+                                    left: newCenterX,
+                                    top: newCenterY,
+                                    scaleX: 1,
+                                    scaleY: 1,
+                                    originX: 'center',
+                                    originY: 'center'
+                                });
+                                obj._zoneWidth = undefined;
+                                obj._zoneHeight = undefined;
+                                safeAddWithUpdate(obj);
+                                ensureZoneSanity(obj);
+                            } else if (obj.isProductCard || obj.isSmartObject) {
+                                // Product cards: will be re-laid out by zone relayout
+                                obj.set({
+                                    left: newCenterX,
+                                    top: newCenterY,
+                                    scaleX: (obj.scaleX || 1) * scaleX,
+                                    scaleY: (obj.scaleY || 1) * scaleY
+                                });
+                            } else {
+                                // General objects: scale position and size
+                                obj.set({
+                                    left: newCenterX,
+                                    top: newCenterY,
+                                    scaleX: (obj.scaleX || 1) * scaleX,
+                                    scaleY: (obj.scaleY || 1) * scaleY
+                                });
+                            }
+                            obj.setCoords();
+                        } catch (e) {
+                            console.warn('[canvas-preset] Failed to rescale object:', e);
+                        }
+                    }
+                    
+                    // 3. Re-layout product zones after resize
+                    const zones = allObjs.filter((o: any) => o.isGridZone || o.isProductZone);
+                    for (const zone of zones) {
+                        try {
+                            const zoneCards = getZoneChildren(zone);
+                            if (zoneCards.length > 0) {
+                                recalculateZoneLayout(zone, zoneCards, { save: false });
+                            }
+                        } catch (e) {
+                            console.warn('[canvas-preset] Failed to relayout zone:', e);
+                        }
+                    }
+                }
+            }
+            
+            canvas.value.setDimensions({
+                width: wrapperEl.value?.clientWidth || newW,
+                height: wrapperEl.value?.clientHeight || newH
+            });
+            setTimeout(() => { zoomToFit(); saveCurrentState(); }, 80);
         }
         return;
     }

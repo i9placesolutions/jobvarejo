@@ -253,21 +253,88 @@ const walkSerializedCanvasObjects = (node: any, visitor: (obj: any) => void) => 
   }
 }
 
+// Inline base64 data URLs larger than this threshold will be aggressively stripped
+// to prevent canvas JSON from ballooning to 6-10MB.
+// 1x1 transparent PNG placeholder (~100 bytes)
+const TINY_IMAGE_PLACEHOLDER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+const MAX_INLINE_DATA_URL_CHARS = 2048
+
 const normalizePersistedImageUrls = (json: any, convertPresignedToPermanentUrl: (url: string) => string) => {
+  let strippedCount = 0
+  let strippedBytes = 0
+
   walkSerializedCanvasObjects(json, (obj) => {
     const objType = String(obj?.type || '').toLowerCase()
     if (objType !== 'image') return
 
     const currentSrc = String(obj?.src || '').trim()
     const originalSrc = String(obj?.__originalSrc || '').trim()
+
+    // Case 1: Has __originalSrc → always prefer it over inline data
     if (currentSrc && originalSrc && SERIALIZED_IMAGE_PLACEHOLDER_PATTERN.test(currentSrc)) {
       obj.src = originalSrc
     }
 
+    // Case 2: blob: URLs should never be persisted (they expire with the page session)
+    if (currentSrc.startsWith('blob:')) {
+      obj.src = originalSrc || TINY_IMAGE_PLACEHOLDER
+      if (!originalSrc) {
+        strippedCount++
+        strippedBytes += currentSrc.length
+      }
+    }
+
+    // Case 3: Large data: URLs without __originalSrc → strip to placeholder
+    // These images are already uploaded to Wasabi/storage and will be resolved
+    // via the proxy on next load. Keeping 200-400KB base64 per image inline
+    // causes the canvas JSON to balloon to 6-10MB and fail Wasabi upload.
+    const afterSrc = String(obj?.src || '').trim()
+    if (
+      afterSrc.length > MAX_INLINE_DATA_URL_CHARS &&
+      SERIALIZED_IMAGE_PLACEHOLDER_PATTERN.test(afterSrc) &&
+      !originalSrc
+    ) {
+      strippedCount++
+      strippedBytes += afterSrc.length
+      obj.src = TINY_IMAGE_PLACEHOLDER
+      // Mark as stripped so the load pipeline knows to look up the image elsewhere
+      obj.__srcStripped = true
+    }
+
+    // Normalize remaining URLs: presigned → permanent
     const nextSrc = String(obj?.src || '').trim()
     if (!nextSrc) return
     const permanentUrl = convertPresignedToPermanentUrl(nextSrc)
     if (permanentUrl !== nextSrc) obj.src = permanentUrl
+  })
+
+  if (strippedCount > 0) {
+    console.warn(`🗜️ [serialize] Stripped ${strippedCount} inline data URL(s) (${(strippedBytes / 1024).toFixed(0)}KB saved)`)
+  }
+}
+
+/**
+ * Strip large inline data URLs from _zoneTemplateSnapshot objects.
+ * These snapshots store a full template clone; images inside them
+ * can be 50-200KB each, adding significant weight to the JSON.
+ */
+const stripSnapshotInlineImages = (json: any) => {
+  if (!json?.objects || !Array.isArray(json.objects)) return
+  json.objects.forEach((obj: any) => {
+    const snapshot = obj?._zoneTemplateSnapshot
+    if (!snapshot || typeof snapshot !== 'object') return
+    // Walk the snapshot tree and strip large data URLs
+    walkSerializedCanvasObjects(snapshot, (node: any) => {
+      const t = String(node?.type || '').toLowerCase()
+      if (t !== 'image') return
+      const src = String(node?.src || '')
+      if (src.length > MAX_INLINE_DATA_URL_CHARS && SERIALIZED_IMAGE_PLACEHOLDER_PATTERN.test(src)) {
+        node.src = node.__originalSrc || TINY_IMAGE_PLACEHOLDER
+      }
+      if (src.startsWith('blob:')) {
+        node.src = node.__originalSrc || TINY_IMAGE_PLACEHOLDER
+      }
+    })
   })
 }
 
@@ -285,4 +352,5 @@ export const finalizeSerializedCanvasJson = (opts: FinalizeSerializedCanvasJsonO
     opts.canvasFramesForDebug || []
   )
   normalizePersistedImageUrls(opts.json, opts.convertPresignedToPermanentUrl)
+  stripSnapshotInlineImages(opts.json)
 }

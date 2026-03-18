@@ -33,11 +33,11 @@ export const getS3Client = () => {
             secretAccessKey
         },
         forcePathStyle: true,
-        maxAttempts: 1,
-        requestHandler: {
-            requestTimeout: 20_000,
-            connectionTimeout: 5_000
-        } as any
+    maxAttempts: 2,
+    requestHandler: {
+        requestTimeout: 30_000,
+        connectionTimeout: 8_000
+    } as any
     });
 
     return _s3ClientInstance;
