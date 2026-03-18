@@ -7336,9 +7336,14 @@ const emergencyBeaconSave = () => {
     }
 };
 
-const handleEditorBeforeUnload = () => {
+const handleEditorBeforeUnload = (e: BeforeUnloadEvent) => {
     flushPersistenceNow('beforeunload');
     emergencyBeaconSave();
+    // Aviso ao usuário se ainda há mudanças não salvas no Wasabi
+    if (hasUnsavedChanges.value || project.pages.some((p: any) => !!p?.dirty)) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
 };
 
 const handleEditorPageHide = () => {

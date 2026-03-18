@@ -55,8 +55,8 @@ const SAVE_WATCHDOG_MS = 60_000
 const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 44_000
 const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 8_000
 // Backup inline do canvas no DB: só incluído quando o upload Wasabi falhou.
-// Limite menor para não estourar o timeout do proxy reverso (Coolify/Traefik).
-const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 3_000_000
+// 5MB: cobre canvases grandes sem estourar o timeout do proxy reverso.
+const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 5_000_000
 let lastSaveChangedDuringRunLogAt = 0
 
 const createRealtimeClientId = (): string => {
@@ -1203,6 +1203,8 @@ export const useProject = () => {
             const thumbnailUrls: string[] = []
             const failedCanvasSyncPageIds = new Set<string>()
             const failedThumbnailSyncPageIds = new Set<string>()
+            // Páginas onde Wasabi falhou E o backup no DB também foi omitido (canvas muito grande)
+            const noFallbackPageIds = new Set<string>()
 
             // Upload de todas as páginas em paralelo (canvas + thumbnail por página)
             setSaveStage('upload-pages')
@@ -1224,9 +1226,12 @@ export const useProject = () => {
                                     page.id,
                                     page.canvasData,
                                     3,
-                                    typeof page?.lastSerializedCanvasJson === 'string'
-                                        ? page.lastSerializedCanvasJson
-                                        : null
+                                    // Não usar lastSerializedCanvasJson: ele não contém __savedAt.
+                                    // page.canvasData já tem __savedAt (adicionado em updatePageData),
+                                    // garantindo que o arquivo no Wasabi tenha timestamp correto
+                                    // para que pickBestRemoteCanvasData e resolveCanvasDataWithDraft
+                                    // funcionem corretamente ao carregar.
+                                    null
                                 ),
                                 CANVAS_UPLOAD_SOFT_TIMEOUT_MS,
                                 `upload-canvas:${page.id}`
@@ -1307,7 +1312,8 @@ export const useProject = () => {
                             : estimateJsonBytes(page.canvasData)
                         const maxBackupBytes = MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE
                         if (backupBytes > maxBackupBytes) {
-                            console.warn(`[saveProjectDB] Backup canvasData omitido no DB para página ${page.id}: ${backupBytes} bytes`)
+                            console.error(`❌ [saveProjectDB] Backup canvasData omitido no DB para página ${page.id}: ${(backupBytes / 1_000_000).toFixed(1)}MB > limite ${(maxBackupBytes / 1_000_000).toFixed(1)}MB. Canvas sem fallback!`)
+                            noFallbackPageIds.add(page.id)
                         } else {
                             metadata.canvasData = page.canvasData
                             dbBackedUpCanvasPageIds.add(page.id)
@@ -1441,7 +1447,14 @@ export const useProject = () => {
                         }
 	                } else {
 	                    hasUnsavedChanges.value = true
+                        if (noFallbackPageIds.size > 0) {
+                            // Wasabi falhou E canvas muito grande para backup no DB = risco real de perda de dados
+                            saveStatus.value = 'error'
+                            saveLastError.value = `Falha ao salvar ${noFallbackPageIds.size} página(s): canvas muito grande. Tente reduzir imagens ou aguarde o retry automático.`
+                            console.error(`❌ [saveProjectDB] ${noFallbackPageIds.size} página(s) sem fallback (Wasabi falhou e canvas > ${MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE / 1_000_000}MB). Risco de perda de dados!`)
+                        } else {
 	                    saveStatus.value = 'idle'
+                        }
 	                    console.warn(`[saveProjectDB] ${unsyncedPageIds.size} página(s) seguem pendentes; estado preservado para novo sync.`)
 	                    // Auto-retry unsynced pages after a cooldown so the user doesn't
 	                    // have to manually trigger another save.
