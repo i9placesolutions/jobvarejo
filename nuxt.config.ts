@@ -64,7 +64,7 @@ export default defineNuxtConfig({
         headers: { 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive' }
       },
       '/api/storage/upload': {
-        headers: { 'X-Accel-Buffering': 'no' }
+        headers: { 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive' }
       }
     }
   },

@@ -50,9 +50,10 @@ const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi car
 const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
 const SAVE_WATCHDOG_MS = 90_000
-// Soft timeout para upload do canvas. O proxy Coolify/Traefik corta ~60s,
-// então este valor precisa ser menor que o timeout do proxy reverso.
-const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 55_000
+// Soft timeout para upload do canvas.
+// Presigned PUT vai direto browser→Wasabi (sem proxy reverso), precisa de margem para
+// canvas grandes (1-2MB gzip). Server proxy /api/storage/upload tem timeout S3 de 55s.
+const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 75_000
 const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 12_000
 // Backup inline do canvas no DB: só incluído quando o upload Wasabi falhou.
 // 8MB: cobre canvases grandes (até ~8MB) sem estourar o timeout do proxy reverso.
@@ -1225,7 +1226,7 @@ export const useProject = () => {
                                     project.id,
                                     page.id,
                                     page.canvasData,
-                                    3,
+                                    2,
                                     // Não usar lastSerializedCanvasJson: ele não contém __savedAt.
                                     // page.canvasData já tem __savedAt (adicionado em updatePageData),
                                     // garantindo que o arquivo no Wasabi tenha timestamp correto

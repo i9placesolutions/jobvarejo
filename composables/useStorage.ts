@@ -340,7 +340,7 @@ export const useStorage = () => {
     projectId: string,
     pageId: string,
     canvasJson: any,
-    retries = 3,
+    retries = 2,
     preSerializedJson?: string | null
   ): Promise<string | null> => {
     // Não executar no servidor (SSR)
@@ -379,15 +379,19 @@ export const useStorage = () => {
       : JSON.stringify(canvasJson)
     let blob: Blob
     let contentType: string
+    const rawSizeKB = (jsonString.length / 1024).toFixed(0)
     try {
       const compressedBuf = await compressGzip(jsonString)
       blob = new Blob([compressedBuf], { type: 'application/octet-stream' })
       contentType = 'application/octet-stream'
-      console.log(`🗜️ Canvas comprimido: ${(jsonString.length / 1024).toFixed(0)}KB → ${(compressedBuf.byteLength / 1024).toFixed(0)}KB`)
-    } catch {
+      const compressedSizeKB = (compressedBuf.byteLength / 1024).toFixed(0)
+      const ratio = ((1 - compressedBuf.byteLength / jsonString.length) * 100).toFixed(0)
+      console.log(`🗜️ Canvas comprimido: ${rawSizeKB}KB → ${compressedSizeKB}KB (${ratio}% redução)`)
+    } catch (gzipErr) {
       // Fallback para JSON puro caso CompressionStream não esteja disponível
       blob = new Blob([jsonString], { type: 'application/json' })
       contentType = 'application/json'
+      console.warn(`⚠️ Gzip falhou, upload como JSON puro (${rawSizeKB}KB):`, gzipErr)
     }
 
     // Half-open: se já teve falhas anteriores, usar apenas 1 tentativa rápida
@@ -404,7 +408,7 @@ export const useStorage = () => {
             const presignedUrl = await getPresignedUrl(key, contentType, 'put', 1, authHeaders)
             if (presignedUrl) {
               const presignedController = new AbortController()
-              const presignedTimeout = setTimeout(() => presignedController.abort(), 20_000)
+              const presignedTimeout = setTimeout(() => presignedController.abort(), 40_000)
               try {
                 const response = await fetch(presignedUrl, {
                   method: 'PUT',
@@ -430,7 +434,7 @@ export const useStorage = () => {
                   setPresignedCorsBlocked()
                   console.warn('⚠️ CORS bloqueou presigned upload; usando proxy por 10min.')
                 } else if (fetchErr?.name === 'AbortError') {
-                  console.warn('⚠️ Presigned upload timeout (15s), fallback para proxy...')
+                  console.warn('⚠️ Presigned upload timeout (40s), fallback para proxy...')
                 } else {
                   console.warn(`⚠️ Presigned upload erro (${fetchErr?.message}), fallback para proxy...`)
                 }
@@ -443,7 +447,7 @@ export const useStorage = () => {
 
         // ── Tentativa 2 (ou única se CORS bloqueado): Proxy servidor via FormData ──
         const proxyController = new AbortController()
-        const proxyTimeoutId = setTimeout(() => proxyController.abort(), 25_000)
+        const proxyTimeoutId = setTimeout(() => proxyController.abort(), 50_000)
 
         try {
           // FormData é mais compatível com Vite proxy e Nitro readMultipartFormData
@@ -482,15 +486,16 @@ export const useStorage = () => {
         }
 
       } catch (error: any) {
+        const elapsed = Date.now() - uploadStart
         if (attempt === effectiveRetries) {
           recordWasabiFailure()
-          console.error(`❌ Erro ao salvar na Wasabi após ${effectiveRetries} tentativas:`, error)
+          console.error(`❌ Wasabi upload falhou após ${effectiveRetries} tentativas (${elapsed}ms, blob=${(blob.size / 1024).toFixed(0)}KB, cors_blocked=${isPresignedCorsBlocked()}):`, error?.message || error)
           saveStatus.value = 'error'
           saveError.value = error?.message || 'Erro desconhecido'
           return null
         }
         const backoffMs = Math.min(Math.pow(2, attempt) * 1000, 8000)
-        console.warn(`⚠️ Tentativa ${attempt} falhou (${error?.message}), retry em ${backoffMs / 1000}s...`)
+        console.warn(`⚠️ Tentativa ${attempt}/${effectiveRetries} falhou após ${elapsed}ms (${error?.message}), retry em ${backoffMs / 1000}s...`)
         await new Promise(resolve => setTimeout(resolve, backoffMs))
       }
     }
