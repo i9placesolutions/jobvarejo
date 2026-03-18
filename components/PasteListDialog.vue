@@ -123,13 +123,26 @@ const analyzeImageWithAI = async () => {
   try {
     const headers = await getApiAuthHeaders()
 
-    const result = await $fetch<{ products?: any[] }>('/api/parse-products', {
-      method: 'POST',
-      headers,
-      body: {
-        image: image.value
+    let result: { products?: any[] } | null = null
+    let lastFetchErr: any = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        result = await $fetch<{ products?: any[] }>('/api/parse-products', {
+          method: 'POST',
+          headers,
+          body: { image: image.value },
+          timeout: 120_000
+        })
+        break
+      } catch (fetchErr: any) {
+        lastFetchErr = fetchErr
+        const status = Number(fetchErr?.status || fetchErr?.statusCode || fetchErr?.data?.statusCode || 0)
+        const isTransient = status === 502 || status === 503 || status === 504 || status === 408
+        if (!isTransient || attempt === 2) throw fetchErr
+        await new Promise(r => setTimeout(r, 800 * (attempt + 1)))
       }
-    })
+    }
+    if (!result) throw lastFetchErr || new Error('Falha ao processar imagem')
 
     if (result?.products && result.products.length > 0) {
       // Convert parsed products to text format for the text tab

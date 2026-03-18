@@ -24564,80 +24564,109 @@ const openReviewModalWithProducts = (productsWithImages: any[]) => {
     showProductReviewModal.value = true;
 };
 
-const parseTextWithAI = async (text: string): Promise<any[]> => {
+const _isTransientParseError = (err: any): boolean => {
+    const status = Number(err?.status || err?.statusCode || err?.data?.statusCode || 0);
+    if (status === 408 || status === 502 || status === 503 || status === 504) return true;
+    const msg = String(err?.message || err?.statusMessage || '').toLowerCase();
+    return msg.includes('timeout') || msg.includes('network') || msg.includes('failed to fetch') || msg.includes('load failed');
+};
+
+const _fetchParseWithRetry = async <T = any>(body: any, maxAttempts = 3): Promise<T> => {
     const headers = await getApiAuthHeaders();
-    const result = await $fetch<{ products?: any[] }>('/api/parse-products', {
-        method: 'POST',
-        headers,
-        body: { text }
-    });
-    if (!result?.products || !Array.isArray(result.products)) return [];
-    return result.products.map((p: any, i: number) => ({
-        id: `prod_${Date.now()}_${i}`,
-        name: p.name || 'Produto sem nome',
-        brand: p.brand || '',
-        productCode: p.productCode || null,
-        weight: p.weight || '',
-        price: p.price || '',
-        pricePack: p.pricePack ?? '',
-        priceUnit: p.priceUnit ?? '',
-        priceSpecial: p.priceSpecial ?? '',
-        priceSpecialUnit: p.priceSpecialUnit ?? '',
-        specialCondition: p.specialCondition ?? '',
-        priceWholesale: p.priceWholesale ?? '',
-        wholesaleTrigger: p.wholesaleTrigger ?? null,
-        wholesaleTriggerUnit: p.wholesaleTriggerUnit ?? '',
-        packQuantity: p.packQuantity ?? null,
-        packUnit: p.packUnit ?? '',
-        packageLabel: p.packageLabel ?? '',
-        price_mode: p.price_mode || 'retail',
-        limit: p.limit || '',
-        flavor: p.flavor || '',
-        imageUrl: null,
-        image: null,
-        status: 'pending',
-        unit: 'UN',
-        color: '#ffffff'
-    }));
+    let lastErr: any = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+            return await $fetch<T>('/api/parse-products', {
+                method: 'POST',
+                headers,
+                body,
+                timeout: 120_000
+            });
+        } catch (err: any) {
+            lastErr = err;
+            if (!_isTransientParseError(err) || attempt === maxAttempts - 1) throw err;
+            await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+        }
+    }
+    throw lastErr || new Error('Falha ao processar produtos');
+};
+
+const _mapParsedProduct = (p: any, i: number) => ({
+    id: `prod_${Date.now()}_${i}`,
+    name: p.name || 'Produto sem nome',
+    brand: p.brand || '',
+    productCode: p.productCode || null,
+    weight: p.weight || '',
+    price: p.price || '',
+    pricePack: p.pricePack ?? '',
+    priceUnit: p.priceUnit ?? '',
+    priceSpecial: p.priceSpecial ?? '',
+    priceSpecialUnit: p.priceSpecialUnit ?? '',
+    specialCondition: p.specialCondition ?? '',
+    priceWholesale: p.priceWholesale ?? '',
+    wholesaleTrigger: p.wholesaleTrigger ?? null,
+    wholesaleTriggerUnit: p.wholesaleTriggerUnit ?? '',
+    packQuantity: p.packQuantity ?? null,
+    packUnit: p.packUnit ?? '',
+    packageLabel: p.packageLabel ?? '',
+    price_mode: p.price_mode || 'retail',
+    limit: p.limit || '',
+    flavor: p.flavor || '',
+    imageUrl: null,
+    image: null,
+    status: 'pending',
+    unit: 'UN',
+    color: '#ffffff'
+});
+
+const CHUNK_CHAR_LIMIT = 15_000;
+
+const _splitTextIntoChunks = (text: string, limit = CHUNK_CHAR_LIMIT): string[] => {
+    const trimmed = text.trim();
+    if (trimmed.length <= limit) return [trimmed];
+    const lines = trimmed.split(/\r?\n/);
+    const chunks: string[] = [];
+    let current = '';
+    for (const line of lines) {
+        if (current.length + line.length + 1 > limit && current.length > 0) {
+            chunks.push(current);
+            current = line;
+        } else {
+            current = current ? current + '\n' + line : line;
+        }
+    }
+    if (current) chunks.push(current);
+    return chunks;
+};
+
+const parseTextWithAI = async (text: string): Promise<any[]> => {
+    const chunks = _splitTextIntoChunks(text);
+    if (chunks.length <= 1) {
+        const result = await _fetchParseWithRetry<{ products?: any[] }>({ text });
+        if (!result?.products || !Array.isArray(result.products)) return [];
+        return result.products.map(_mapParsedProduct);
+    }
+    // Process chunks sequentially to avoid rate limiting
+    const allProducts: any[] = [];
+    for (const chunk of chunks) {
+        try {
+            const result = await _fetchParseWithRetry<{ products?: any[] }>({ text: chunk });
+            if (result?.products && Array.isArray(result.products)) {
+                allProducts.push(...result.products);
+            }
+        } catch (err: any) {
+            console.warn('[parseTextWithAI] Chunk parse failed, continuing with remaining chunks:', err?.message);
+        }
+    }
+    return allProducts.map(_mapParsedProduct);
 };
 
 const parseFileWithAI = async (file: File): Promise<any[]> => {
-    const headers = await getApiAuthHeaders();
     const form = new FormData();
     form.append('file', file);
-    const result = await $fetch<{ products?: any[] }>('/api/parse-products', {
-        method: 'POST',
-        headers,
-        body: form
-    });
+    const result = await _fetchParseWithRetry<{ products?: any[] }>(form);
     if (!result?.products || !Array.isArray(result.products)) return [];
-    return result.products.map((p: any, i: number) => ({
-        id: `prod_${Date.now()}_${i}`,
-        name: p.name || 'Produto sem nome',
-        brand: p.brand || '',
-        productCode: p.productCode || null,
-        weight: p.weight || '',
-        price: p.price || '',
-        pricePack: p.pricePack ?? '',
-        priceUnit: p.priceUnit ?? '',
-        priceSpecial: p.priceSpecial ?? '',
-        priceSpecialUnit: p.priceSpecialUnit ?? '',
-        specialCondition: p.specialCondition ?? '',
-        priceWholesale: p.priceWholesale ?? '',
-        wholesaleTrigger: p.wholesaleTrigger ?? null,
-        wholesaleTriggerUnit: p.wholesaleTriggerUnit ?? '',
-        packQuantity: p.packQuantity ?? null,
-        packUnit: p.packUnit ?? '',
-        packageLabel: p.packageLabel ?? '',
-        price_mode: p.price_mode || 'retail',
-        limit: p.limit || '',
-        flavor: p.flavor || '',
-        imageUrl: null,
-        image: null,
-        status: 'pending',
-        unit: 'UN',
-        color: '#ffffff'
-    }));
+    return result.products.map(_mapParsedProduct);
 };
 
 const handlePasteList = async () => {

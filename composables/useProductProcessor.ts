@@ -472,16 +472,37 @@ export const useProductProcessor = () => {
                 return await $fetch('/api/parse-products', {
                     method: 'POST',
                     headers,
-                    body
+                    body,
+                    timeout: 120_000
                 });
             } catch (err: any) {
                 lastErr = err;
                 if (!isTransientNetworkError(err) || attempt === 2) throw err;
-                const waitMs = 600 * (attempt + 1);
+                const waitMs = 800 * (attempt + 1);
                 await sleep(waitMs);
             }
         }
         throw lastErr || new Error('Falha ao processar produtos');
+    };
+
+    const CHUNK_LIMIT = 15_000;
+
+    const splitTextIntoChunks = (text: string): string[] => {
+        const trimmed = text.trim();
+        if (trimmed.length <= CHUNK_LIMIT) return [trimmed];
+        const lines = trimmed.split(/\r?\n/);
+        const chunks: string[] = [];
+        let current = '';
+        for (const line of lines) {
+            if (current.length + line.length + 1 > CHUNK_LIMIT && current.length > 0) {
+                chunks.push(current);
+                current = line;
+            } else {
+                current = current ? current + '\n' + line : line;
+            }
+        }
+        if (current) chunks.push(current);
+        return chunks;
     };
 
     const parseText = async (text: string) => {
@@ -490,8 +511,23 @@ export const useProductProcessor = () => {
         products.value = [];
 
         try {
-            const data = await fetchParseProducts({ text });
-            products.value = mapParsedProducts(data);
+            const chunks = splitTextIntoChunks(text);
+            if (chunks.length <= 1) {
+                const data = await fetchParseProducts({ text });
+                products.value = mapParsedProducts(data);
+            } else {
+                const allProducts: any[] = [];
+                for (const chunk of chunks) {
+                    try {
+                        const data = await fetchParseProducts({ text: chunk });
+                        const mapped = mapParsedProducts(data);
+                        allProducts.push(...mapped);
+                    } catch (chunkErr: any) {
+                        console.warn('[parseText] Chunk parse failed, continuing:', chunkErr?.message);
+                    }
+                }
+                products.value = allProducts;
+            }
         } catch (err: any) {
             console.error(err);
             parsingError.value = getParseFailureMessage(err, 'text');

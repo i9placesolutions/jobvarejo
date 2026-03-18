@@ -2,12 +2,12 @@ import { requireAuthenticatedUser } from '../utils/auth'
 import { enforceRateLimit } from '../utils/rate-limit'
 
 const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
-const DEFAULT_OPENAI_TIMEOUT_MS = 18_000
-const MIN_OPENAI_TIMEOUT_MS = 5_000
-const MAX_OPENAI_TIMEOUT_MS = 25_000
+const DEFAULT_OPENAI_TIMEOUT_MS = 55_000
+const MIN_OPENAI_TIMEOUT_MS = 10_000
+const MAX_OPENAI_TIMEOUT_MS = 90_000
 const MAX_FILE_BYTES = 12 * 1024 * 1024
 const MAX_TEXT_CHARS = 60_000
-const MAX_PROMPT_SOURCE_CHARS = 20_000
+const MAX_PROMPT_SOURCE_CHARS = 40_000
 const MAX_IMAGE_DATA_URL_LENGTH = 12_000_000
 const MAX_VISION_IMAGE_DIMENSION = 1600
 
@@ -24,7 +24,7 @@ const getTimeoutSignal = (timeoutMs: number): AbortSignal | undefined => {
 }
 
 const getMaxOpenAiTimeoutMs = (): number =>
-    process.env.VERCEL ? DEFAULT_OPENAI_TIMEOUT_MS : 18_000
+    process.env.VERCEL ? 55_000 : MAX_OPENAI_TIMEOUT_MS
 
 const resolveOpenAiTimeoutMs = (value: unknown): number => {
     const numericValue = Number.parseInt(String(value ?? '').trim(), 10)
@@ -218,6 +218,15 @@ export default defineEventHandler(async (event) => {
     } else {
         const body: any = await readBody(event);
         text = clampText(body?.text);
+
+        // Support JSON body with image data URL (used by PasteListDialog image analysis)
+        if (!text && body?.image && typeof body.image === 'string' && body.image.startsWith('data:image/')) {
+            const raw = String(body.image);
+            if (raw.length > MAX_IMAGE_DATA_URL_LENGTH) {
+                throw createError({ statusCode: 400, statusMessage: 'Image payload too large (max 8MB)' });
+            }
+            imageDataUrl = raw;
+        }
     }
 
     if (!text && !imageDataUrl) {
@@ -617,7 +626,7 @@ ${text ? `"${String(text).slice(0, MAX_PROMPT_SOURCE_CHARS)}"` : '(image attache
                 model: 'gpt-4o-mini',
                 response_format: { type: 'json_object' },
                 temperature: 0.1,
-                max_tokens: 2000
+                max_tokens: 4096
             })
         });
 

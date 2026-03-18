@@ -80,7 +80,7 @@ export default defineNuxtConfig({
     parseProductsTimeoutMs:
       process.env.PARSE_PRODUCTS_TIMEOUT_MS ||
       process.env.NUXT_PARSE_PRODUCTS_TIMEOUT_MS ||
-      (process.env.VERCEL ? '28000' : '45000'),
+      (process.env.VERCEL ? '55000' : '90000'),
 
     googleCseApiKey:
       process.env.NUXT_GOOGLE_CSE_API_KEY ||

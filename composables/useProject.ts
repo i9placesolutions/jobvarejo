@@ -52,11 +52,11 @@ const queuedSaveAfterCurrent = ref(false)
 const SAVE_WATCHDOG_MS = 60_000
 // Soft timeout para upload do canvas. O proxy Coolify/Traefik corta ~60s,
 // então este valor precisa ser menor que o timeout do proxy reverso.
-const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 44_000
-const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 8_000
+const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 55_000
+const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 12_000
 // Backup inline do canvas no DB: só incluído quando o upload Wasabi falhou.
-// 5MB: cobre canvases grandes sem estourar o timeout do proxy reverso.
-const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 5_000_000
+// 8MB: cobre canvases grandes (até ~8MB) sem estourar o timeout do proxy reverso.
+const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 8_000_000
 let lastSaveChangedDuringRunLogAt = 0
 
 const createRealtimeClientId = (): string => {
