@@ -49,7 +49,7 @@ const hasUnsavedChanges = ref(false)
 const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi carregado do banco
 const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
-const SAVE_WATCHDOG_MS = 60_000
+const SAVE_WATCHDOG_MS = 90_000
 // Soft timeout para upload do canvas. O proxy Coolify/Traefik corta ~60s,
 // então este valor precisa ser menor que o timeout do proxy reverso.
 const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 55_000
@@ -1354,7 +1354,7 @@ export const useProject = () => {
                             method: 'POST',
                             headers: saveHeaders,
                             body: bodyPayload,
-                            timeout: 30_000
+                            timeout: 60_000
                         })
 
                         const created = response?.project || null
@@ -1371,7 +1371,7 @@ export const useProject = () => {
                             id: normalizedProjectId,
                             ...bodyPayload
                         },
-                        timeout: 30_000
+                        timeout: 60_000
                     })
                     const updatedProject = response?.project || null
                     if (!updatedProject) {

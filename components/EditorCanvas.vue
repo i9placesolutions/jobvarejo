@@ -24571,7 +24571,7 @@ const _isTransientParseError = (err: any): boolean => {
     return msg.includes('timeout') || msg.includes('network') || msg.includes('failed to fetch') || msg.includes('load failed');
 };
 
-const _fetchParseWithRetry = async <T = any>(body: any, maxAttempts = 3): Promise<T> => {
+const _fetchParseWithRetry = async <T = any>(body: any, maxAttempts = 2): Promise<T> => {
     const headers = await getApiAuthHeaders();
     let lastErr: any = null;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -24580,12 +24580,12 @@ const _fetchParseWithRetry = async <T = any>(body: any, maxAttempts = 3): Promis
                 method: 'POST',
                 headers,
                 body,
-                timeout: 120_000
+                timeout: 70_000
             });
         } catch (err: any) {
             lastErr = err;
             if (!_isTransientParseError(err) || attempt === maxAttempts - 1) throw err;
-            await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         }
     }
     throw lastErr || new Error('Falha ao processar produtos');
@@ -24675,7 +24675,13 @@ const handlePasteList = async () => {
     if (!pasteListText.value && activePasteTab.value === 'text') {
         return;
     }
-    if (isParsingProducts.value) return;
+
+    // Reset stuck state from previous attempts
+    if (isParsingProducts.value) {
+        console.warn('[handlePasteList] isParsingProducts was stuck true, resetting');
+        isParsingProducts.value = false;
+        isProcessing.value = false;
+    }
 
     isParsingProducts.value = true;
     isProcessing.value = true;
@@ -24722,7 +24728,13 @@ const handlePasteList = async () => {
 
 const handlePasteFile = async (file: File) => {
     showPasteListModal.value = false;
-    if (isParsingProducts.value) return;
+
+    // Reset stuck state from previous attempts
+    if (isParsingProducts.value) {
+        console.warn('[handlePasteFile] isParsingProducts was stuck true, resetting');
+        isParsingProducts.value = false;
+        isProcessing.value = false;
+    }
 
     isParsingProducts.value = true;
     isProcessing.value = true;
@@ -24748,7 +24760,10 @@ const handlePasteFile = async (file: File) => {
 
     isProcessing.value = false;
 
-    if (data.length === 0) return;
+    if (data.length === 0) {
+        notifyEditorInfo('Nenhum produto encontrado no arquivo. Verifique o formato.');
+        return;
+    }
 
     openReviewModalWithProducts(data);
     pasteListText.value = '';

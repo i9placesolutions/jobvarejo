@@ -77,40 +77,26 @@ export default defineEventHandler(async (event) => {
 
   try {
     if (projectId) {
-      // Single CTE: either returns the updated row or the existing unchanged row
-      // _was_mutated flag indicates if an actual write occurred
+      // Simple UPDATE: always write the new data and return the updated row.
+      // Previous approach used `canvas_data IS DISTINCT FROM $2::jsonb` which
+      // caused PostgreSQL to decompress and compare multi-MB JSONB blobs,
+      // routinely exceeding 60s on large canvas payloads with inline backups.
       const row = await pgOneOrNull<any>(
-        `with upd as (
-           update public.projects
-           set name = $1,
-               canvas_data = $2::jsonb,
-               preview_url = $3,
-               user_id = $4,
-               updated_at = $5
-           where id = $6
-             and user_id = $7
-             and (
-               name is distinct from $1
-               or canvas_data is distinct from $2::jsonb
-               or preview_url is distinct from $3
-             )
-           returning *, true as _was_mutated
-         )
-         select * from upd
-         union all
-         select p.*, false as _was_mutated
-         from public.projects p
-         where p.id = $6
-           and p.user_id = $7
-           and not exists (select 1 from upd)
-         limit 1`,
+        `update public.projects
+         set name = $1,
+             canvas_data = $2::jsonb,
+             preview_url = $3,
+             user_id = $4,
+             updated_at = $5
+         where id = $6
+           and user_id = $7
+         returning *`,
         [name, canvasDataJson, previewUrl, user.id, updatedAt, projectId, user.id]
       )
 
       if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
-      didPersistMutation = row._was_mutated === true
-      const { _was_mutated: _, ...rowWithoutFlag } = row
-      result = rowWithoutFlag
+      didPersistMutation = true
+      result = row
     } else {
       const { rows } = await pgQuery<any>(
         `insert into public.projects

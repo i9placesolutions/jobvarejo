@@ -467,19 +467,18 @@ export const useProductProcessor = () => {
     const fetchParseProducts = async (body: any) => {
         const headers = await getApiAuthHeaders();
         let lastErr: any = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt < 2; attempt++) {
             try {
                 return await $fetch('/api/parse-products', {
                     method: 'POST',
                     headers,
                     body,
-                    timeout: 120_000
+                    timeout: 70_000
                 });
             } catch (err: any) {
                 lastErr = err;
-                if (!isTransientNetworkError(err) || attempt === 2) throw err;
-                const waitMs = 800 * (attempt + 1);
-                await sleep(waitMs);
+                if (!isTransientNetworkError(err) || attempt === 1) throw err;
+                await sleep(1500);
             }
         }
         throw lastErr || new Error('Falha ao processar produtos');

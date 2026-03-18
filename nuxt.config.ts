@@ -60,6 +60,9 @@ export default defineNuxtConfig({
       '/api/parse-products': {
         headers: { 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive' }
       },
+      '/api/projects': {
+        headers: { 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive' }
+      },
       '/api/storage/upload': {
         headers: { 'X-Accel-Buffering': 'no' }
       }

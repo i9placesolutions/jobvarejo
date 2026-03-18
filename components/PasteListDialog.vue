@@ -125,21 +125,21 @@ const analyzeImageWithAI = async () => {
 
     let result: { products?: any[] } | null = null
     let lastFetchErr: any = null
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
         result = await $fetch<{ products?: any[] }>('/api/parse-products', {
           method: 'POST',
           headers,
           body: { image: image.value },
-          timeout: 120_000
+          timeout: 70_000
         })
         break
       } catch (fetchErr: any) {
         lastFetchErr = fetchErr
         const status = Number(fetchErr?.status || fetchErr?.statusCode || fetchErr?.data?.statusCode || 0)
         const isTransient = status === 502 || status === 503 || status === 504 || status === 408
-        if (!isTransient || attempt === 2) throw fetchErr
-        await new Promise(r => setTimeout(r, 800 * (attempt + 1)))
+        if (!isTransient || attempt === 1) throw fetchErr
+        await new Promise(r => setTimeout(r, 1500))
       }
     }
     if (!result) throw lastFetchErr || new Error('Falha ao processar imagem')
