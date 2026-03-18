@@ -164,6 +164,7 @@ export default defineEventHandler(async (event) => {
   )
 
   const row = result.rows[0]
+  if (!row) throw createError({ statusCode: 500, statusMessage: 'Failed to insert style reference' })
   const url = await resolveStorageReadUrl(upload.key, user.id).catch(() => upload.url)
 
   return {

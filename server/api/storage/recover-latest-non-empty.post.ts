@@ -1,9 +1,10 @@
-import { GetObjectCommand, ListObjectVersionsCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { GetObjectCommand, ListObjectVersionsCommand, ListObjectsV2Command, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3'
 import { Readable } from 'node:stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { isUserProjectKey, isValidStoragePath } from '../../utils/storage-scope'
 import { getOwnedProjectStorageRow, updateOwnedProjectCanvasData } from '../../utils/project-repository'
+import { getS3Client } from '../../utils/s3'
 
 type RecoverBody = {
   projectId?: string
@@ -174,13 +175,9 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const endpoint = process.env.WASABI_ENDPOINT || 's3.wasabisys.com'
-  const region = process.env.WASABI_REGION || 'us-east-1'
   const bucket = process.env.WASABI_BUCKET || 'jobvarejo'
-  const accessKey = process.env.WASABI_ACCESS_KEY
-  const secretKey = process.env.WASABI_SECRET_KEY
 
-  if (!accessKey || !secretKey || !bucket) {
+  if (!bucket) {
     throw createError({
       statusCode: 500,
       statusMessage: 'Wasabi credentials are not configured'
@@ -217,15 +214,7 @@ export default defineEventHandler(async (event) => {
   const projectPrefix = `projects/${projectRow.user_id}/${projectId}/page_`
   const historyPrefix = `projects/${projectRow.user_id}/${projectId}/history/page_${pageId}/`
 
-  const s3 = new S3Client({
-    endpoint: `https://${endpoint}`,
-    region,
-    credentials: {
-      accessKeyId: accessKey,
-      secretAccessKey: secretKey
-    },
-    forcePathStyle: true
-  })
+  const s3 = getS3Client()
 
   let recovered = await findLatestNonEmptyByExactKey(s3, bucket, targetKey)
   if (!recovered) {
@@ -255,7 +244,7 @@ export default defineEventHandler(async (event) => {
   const nextPageMeta = {
     ...(pageMeta || { id: pageId, name: 'Página', width: 1080, height: 1920, type: 'RETAIL_OFFER' }),
     canvasDataPath: targetKey,
-    canvasData: recovered.json
+    canvasSavedAt: Number((recovered.json as any)?.__savedAt || (recovered.json as any)?.savedAt || Date.now())
   }
 
   const nextCanvasData = pageIndex >= 0
@@ -266,7 +255,7 @@ export default defineEventHandler(async (event) => {
   if (!didUpdate) {
     throw createError({
       statusCode: 500,
-      statusMessage: 'Recovered S3 version but failed to sync DB backup'
+      statusMessage: 'Recovered S3 version but failed to sync DB metadata'
     })
   }
 

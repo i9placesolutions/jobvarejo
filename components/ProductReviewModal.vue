@@ -385,6 +385,42 @@ const normalizeImageSourceLabel = (value?: string): string => {
     return source.toUpperCase()
 }
 
+const normalizeCommercialPriceValue = (value: unknown): string =>
+    String(value ?? '').replace(/R\$\s*/gi, '').trim()
+
+const getFirstCommercialPrice = (product: Partial<SmartProduct> | null | undefined): string => {
+    const candidates = [
+        product?.priceUnit,
+        product?.pricePack,
+        product?.price,
+        product?.priceSpecialUnit,
+        product?.priceSpecial,
+        product?.priceWholesale
+    ]
+    for (const candidate of candidates) {
+        const normalized = normalizeCommercialPriceValue(candidate)
+        if (normalized) return normalized
+    }
+    return ''
+}
+
+const hasCommercialPrice = (product: Partial<SmartProduct> | null | undefined): boolean =>
+    !!getFirstCommercialPrice(product)
+
+const normalizeProductForImport = (product: SmartProduct): SmartProduct => {
+    const next = { ...product }
+    const primaryPrice = getFirstCommercialPrice(next)
+    if (!normalizeCommercialPriceValue(next.price) && primaryPrice) {
+        next.price = primaryPrice
+    }
+    return next
+}
+
+const getReviewCandidateRenderKey = (candidate: SmartProductImageCandidate, index: number): string => {
+    const stableKey = String(candidate?.key || candidate?.url || candidate?.previewUrl || candidate?.id || '').trim()
+    return stableKey ? `${candidate?.source || 'candidate'}:${stableKey}` : `candidate:${index}`
+}
+
 const startImageProcessing = async (force = false) => {
     await processAllImages({
         bgPolicy: imageBgPolicy.value,
@@ -617,7 +653,9 @@ const handleImport = () => {
         opts.cardsPerFrame = 1
     }
 
-    emit('import', JSON.parse(JSON.stringify(products.value)), opts)
+    const importedProducts = (JSON.parse(JSON.stringify(products.value)) as SmartProduct[])
+        .map((product) => normalizeProductForImport(product))
+    emit('import', importedProducts, opts)
     emit('update:modelValue', false)
 }
 
@@ -982,6 +1020,10 @@ const reviewRowsWithMeta = computed(() =>
         imageNextAction: getImageNextAction(row.product)
     }))
 )
+const productsMissingCommercialPrice = computed(() =>
+    productRows.value.filter((row) => !hasCommercialPrice(row.product))
+)
+const missingCommercialPriceCount = computed(() => productsMissingCommercialPrice.value.length)
 const reviewPageCount = computed(() => Math.max(1, Math.ceil(filteredProductRows.value.length / REVIEW_PAGE_SIZE)))
 const gotoReviewPage = (nextPage: number) => {
     const totalPages = reviewPageCount.value
@@ -1167,6 +1209,9 @@ const importImpactSummary = computed(() => {
 })
 
 const importReadinessText = computed(() => {
+    if (missingCommercialPriceCount.value > 0) {
+        return `Importação travada: ${missingCommercialPriceCount.value} item(ns) seguem sem preço comercial preenchido.`
+    }
     if (imageStatusCounters.value.blocked > 0) return 'Importação travada: existem itens bloqueados que ainda precisam de imagem ou revisão manual.'
     if (imageStatusCounters.value.ambiguous > 0) return 'Importação aguardando sua escolha: existem itens suspeitos com mais de uma imagem possível.'
     if (imageStatusCounters.value.pending > 0) return 'A fila ainda está processando imagens.'
@@ -1174,6 +1219,7 @@ const importReadinessText = computed(() => {
 })
 
 const importReadinessToneClass = computed(() => {
+    if (missingCommercialPriceCount.value > 0) return 'border-rose-500/25 bg-rose-500/10 text-rose-100'
     if (imageStatusCounters.value.blocked > 0) return 'border-rose-500/25 bg-rose-500/10 text-rose-100'
     if (imageStatusCounters.value.ambiguous > 0) return 'border-amber-500/25 bg-amber-500/10 text-amber-100'
     if (imageStatusCounters.value.pending > 0) return 'border-sky-500/25 bg-sky-500/10 text-sky-100'
@@ -1755,6 +1801,7 @@ const importButtonDisabled = computed(() => {
     if (isSubmittingImport.value) return true
     if (isProcessingProducts.value) return true
     if (isImageQueueLocked.value) return true
+    if (missingCommercialPriceCount.value > 0) return true
     if (imageStatusCounters.value.attention > 0) return true
     if (targetMode.value !== 'multi-frame') return false
     if (!canUseMultiFrame.value) return true
@@ -2711,7 +2758,13 @@ const getAssetDisplayName = (asset: any): string => {
                                         </div>
                                         <div class="text-[10px] text-zinc-500 line-clamp-1">
                                             {{ row.product.brand || '' }}<span v-if="row.product.weight"> {{ row.product.weight }}</span>
-                                            <span class="ml-1 opacity-60">{{ row.imageStatusMeta.state }}</span>
+                                        </div>
+                                        <div class="mt-0.5 flex items-center gap-1.5 text-[9px]">
+                                            <span v-if="hasCommercialPrice(row.product)" class="font-semibold text-zinc-300">
+                                                R$ {{ getFirstCommercialPrice(row.product) }}
+                                            </span>
+                                            <span v-else class="font-semibold text-rose-300">Sem preco</span>
+                                            <span class="text-zinc-600">{{ row.imageStatusMeta.state }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -2845,8 +2898,8 @@ const getAssetDisplayName = (asset: any): string => {
                             </div>
                             <div v-else-if="activeReviewCandidates.length" class="grid gap-2 grid-cols-2 xl:grid-cols-3">
                                 <button
-                                    v-for="candidate in activeReviewCandidates"
-                                    :key="candidate.id"
+                                    v-for="(candidate, candidateIndex) in activeReviewCandidates"
+                                    :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
                                     type="button"
                                     class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/[0.04]"
                                     @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
@@ -2912,6 +2965,9 @@ const getAssetDisplayName = (asset: any): string => {
 
                                 <!-- Preços -->
                                 <div class="space-y-2">
+                                    <div v-if="!hasCommercialPrice(activeReviewRowMeta.product)" class="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[10px] text-rose-100">
+                                        Este produto ainda esta sem preco. Preencha pelo menos um campo antes de importar.
+                                    </div>
                                     <div class="grid gap-2 grid-cols-2">
                                         <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
                                             R$ Unidade
@@ -2977,7 +3033,7 @@ const getAssetDisplayName = (asset: any): string => {
                         <section class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
                             <div class="flex items-center justify-between gap-3">
                                 <div class="flex items-center gap-2 text-[10px]" :class="importReadinessToneClass.replace('border-', 'text-').split(' ').filter((c: string) => c.startsWith('text-'))[0]">
-                                    <AlertCircle class="h-3.5 w-3.5 shrink-0" v-if="imageStatusCounters.blocked > 0 || imageStatusCounters.ambiguous > 0" />
+                                    <AlertCircle class="h-3.5 w-3.5 shrink-0" v-if="missingCommercialPriceCount > 0 || imageStatusCounters.blocked > 0 || imageStatusCounters.ambiguous > 0" />
                                     <Loader2 class="h-3.5 w-3.5 animate-spin shrink-0" v-else-if="imageStatusCounters.pending > 0" />
                                     <Check class="h-3.5 w-3.5 shrink-0" v-else />
                                     <span class="font-medium">{{ importReadinessText }}</span>

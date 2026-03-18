@@ -25,7 +25,7 @@ const guessExtFromMime = (mime: string) => {
 // FIX #9: detect MIME from content-type header or magic bytes
 const detectMimeFromResponse = (response: Response, fallback = 'image/png'): string => {
   const ct = String(response.headers?.get?.('content-type') || '').toLowerCase()
-  if (ct.includes('image/')) return ct.split(';')[0].trim()
+  if (ct.includes('image/')) return (ct.split(';')[0] ?? fallback).trim()
   return fallback
 }
 
@@ -90,7 +90,7 @@ export const openAiGenerateImage = async (opts: {
 }
 
 const partDataToBlob = (buf: Buffer, mime: string) =>
-  new Blob([new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)], { type: mime })
+  new Blob([Buffer.from(buf)], { type: mime })
 
 export const openAiEditImage = async (opts: {
   prompt: string

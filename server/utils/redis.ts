@@ -29,7 +29,6 @@ export const getRedis = (): Redis | null => {
     commandTimeout: 2_000,  // 2s por comando — rate limit deve falhar rápido
     maxRetriesPerRequest: 1,  // sem retry — fallback in-memory é imediato
     enableOfflineQueue: false, // não enfileirar — falha rápido se não conectado
-    maxOfflineQueue: 0,
     retryStrategy: (times) => {
       // Backoff exponencial: 500ms, 1s, 2s, 4s, 5s (cap), até 10 tentativas
       if (times > 10) {

@@ -1,5 +1,6 @@
 import { pgOneOrNull } from './postgres'
 import { stringifyJsonbParam } from './jsonb'
+import { stripInlineCanvasDataFromProjectCanvasData } from './project-storage-refs'
 
 export type ProjectStorageRow = {
   id: string
@@ -26,7 +27,8 @@ export const updateOwnedProjectCanvasData = async (
   userId: string,
   canvasData: any
 ): Promise<boolean> => {
-  const canvasDataJson = stringifyJsonbParam(canvasData)
+  const sanitizedCanvasData = stripInlineCanvasDataFromProjectCanvasData(canvasData)
+  const canvasDataJson = stringifyJsonbParam(sanitizedCanvasData)
   const row = await pgOneOrNull<{ id: string }>(
     `update public.projects
      set canvas_data = $1::jsonb,

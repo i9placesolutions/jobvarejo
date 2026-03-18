@@ -63,6 +63,13 @@ export const persistSerializedPageState = (
     activePageRef.lastSerializedCanvasBytes = Number.isFinite(Number(opts.serializedBytes))
       ? Number(opts.serializedBytes)
       : undefined
+    activePageRef.lastSerializedCanvasSavedAt = Number(
+      opts.json?.__savedAt ||
+      opts.json?._savedAt ||
+      opts.json?.savedAt ||
+      opts.json?.updatedAt ||
+      0
+    ) || undefined
   }
 
   const savedPage = opts.pages[targetPageIndex]

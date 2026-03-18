@@ -1,7 +1,8 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { GetObjectCommand } from '@aws-sdk/client-s3'
 import { Readable } from 'stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
+import { getS3Client, resetS3Client } from '../../utils/s3'
 import {
   getProjectOwnerIdFromKey,
   isProjectsKey,
@@ -71,12 +72,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Configurações da Wasabi
-    const endpoint = process.env.WASABI_ENDPOINT || 's3.wasabisys.com'
-    const region = process.env.WASABI_REGION || 'us-east-1'
     const bucket = process.env.WASABI_BUCKET || 'jobvarejo'
-    const accessKey = process.env.WASABI_ACCESS_KEY
-    const secretKey = process.env.WASABI_SECRET_KEY
     const isAllowedRequestedBucket =
       !requestedBucket || requestedBucket === bucket
     if (!isAllowedRequestedBucket) {
@@ -86,27 +82,12 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    if (!bucket || !accessKey || !secretKey) {
+    if (!bucket) {
       throw createError({
         statusCode: 500,
         statusMessage: 'Wasabi Storage not configured'
       })
     }
-
-    // Criar cliente S3 para Wasabi (com timeout para evitar 502 no proxy reverso)
-    const s3Client = new S3Client({
-      endpoint: `https://${endpoint}`,
-      region: region,
-      credentials: {
-        accessKeyId: accessKey,
-        secretAccessKey: secretKey
-      },
-      forcePathStyle: true,
-      requestHandler: {
-        requestTimeout: 20_000,
-        connectionTimeout: 5_000
-      } as any
-    })
 
     const baseKeyCandidates = Array.from(new Set([
       key,
@@ -145,15 +126,20 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    const sendGetObject = async (bucketCandidate: string, keyCandidate: string) => {
+      const s3Client = getS3Client()
+      return s3Client.send(new GetObjectCommand({
+        Bucket: bucketCandidate,
+        Key: keyCandidate
+      }))
+    }
+
     const fetchFromWasabi = async () => {
       let lastNotFoundError: any = null
       for (const bucketCandidate of bucketCandidates) {
         for (const keyCandidate of keyCandidates) {
           try {
-            const response = await s3Client.send(new GetObjectCommand({
-              Bucket: bucketCandidate,
-              Key: keyCandidate
-            }))
+            const response = await sendGetObject(bucketCandidate, keyCandidate)
             if (response?.Body) {
               return { response, bucket: bucketCandidate, key: keyCandidate }
             }
@@ -161,6 +147,25 @@ export default defineEventHandler(async (event) => {
             if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) {
               lastNotFoundError = err
               continue
+            }
+            const errMessage = String(err?.message || '')
+            const shouldResetClient =
+              !Number(err?.$metadata?.httpStatusCode || 0) ||
+              /timeout|socket|econn|reset|network/i.test(errMessage)
+            if (shouldResetClient) {
+              resetS3Client()
+              try {
+                const retryResponse = await sendGetObject(bucketCandidate, keyCandidate)
+                if (retryResponse?.Body) {
+                  console.warn('⚠️ [storage-proxy] GET recuperado apos reset do client', {
+                    bucket: bucketCandidate,
+                    key: keyCandidate
+                  })
+                  return { response: retryResponse, bucket: bucketCandidate, key: keyCandidate }
+                }
+              } catch (retryErr: any) {
+                err = retryErr
+              }
             }
             throw err
           }

@@ -15,6 +15,7 @@ export interface Page {
     thumbnailDirty?: boolean;
     lastSerializedCanvasJson?: string;
     lastSerializedCanvasBytes?: number;
+    lastSerializedCanvasSavedAt?: number;
     lastLoadedFingerprint?: string;
     lastSavedFingerprint?: string;
     lastPersistedObjectCount?: number;
@@ -51,22 +52,23 @@ const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
 const SAVE_WATCHDOG_MS = 120_000
 // Soft timeout para upload do canvas.
-// Worst case por tentativa: presigned (20s) + proxy (30s) = 50s.
-// Presigned: 10s + proxy: 45s = 55s por tentativa. 2 tentativas com backoff = ~65s max.
-const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 70_000
+// Worst case por tentativa: presigned (6s+12s) + proxy (35s) ~= 53s.
+// Com CORS bloqueado, usamos 1 tentativa de proxy; nos demais casos deixamos
+// margem para uma nova tentativa curta sem abortar prematuramente um upload saudável.
+const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 75_000
 const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 12_000
-// Backup inline do canvas no DB: só incluído quando o upload Wasabi falhou.
-// FIX: reduced from 8MB to 2MB.  The previous 8MB limit caused the POST to
-// /api/projects to take 60-90+ seconds to transfer through the reverse proxy,
-// tripping the 90s watchdog and leaving the save permanently stuck.  At 2MB
-// the POST completes in a few seconds even on slow connections.  Canvases
-// larger than 2MB must succeed through Wasabi upload; the DB backup is only
-// a safety net for small/medium canvases.
-const MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE = 2_000_000
 let lastSaveChangedDuringRunLogAt = 0
 // Exponential backoff counter for unsynced page retries.
 // Reset to 0 when all pages sync successfully.
 let _unsyncedRetryCount = 0
+
+// HMR: flag que impede instâncias antigas de continuar salvando após o módulo ser substituído.
+// Todos os timers são rastreados em _pendingSaveTimers para cancelamento no dispose.
+let _moduleDisposed = false
+const _pendingSaveTimers = new Set<ReturnType<typeof setTimeout>>()
+// Timestamp da última edição do usuário. Usado pelo retry para evitar mostrar
+// "Salvando..." enquanto o usuário está editando ativamente.
+let _lastUserEditAt = 0
 
 const createRealtimeClientId = (): string => {
     if (import.meta.server) return 'server'
@@ -163,10 +165,19 @@ const getCanvasObjectCount = (canvasData: any): number => {
     return Number.isFinite(n) ? n : 0
 }
 
+const hasUsableSerializedCanvasSnapshot = (page: Page | null | undefined): boolean => {
+    if (!page?.canvasData) return false
+    if (typeof page.lastSerializedCanvasJson !== 'string' || !page.lastSerializedCanvasJson) return false
+    const liveSavedAt = getCanvasSavedAt(page.canvasData)
+    const cachedSavedAt = Number(page.lastSerializedCanvasSavedAt || 0)
+    return liveSavedAt > 0 && cachedSavedAt > 0 && liveSavedAt === cachedSavedAt
+}
+
 const withSoftTimeout = async <T>(
     work: Promise<T>,
     timeoutMs: number,
-    label: string
+    label: string,
+    onTimeout?: () => void
 ): Promise<T | null> => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null
     let didTimeout = false
@@ -174,6 +185,11 @@ const withSoftTimeout = async <T>(
         const timeoutPromise = new Promise<null>((resolve) => {
             timeoutId = setTimeout(() => {
                 didTimeout = true
+                try {
+                    onTimeout?.()
+                } catch (timeoutAbortErr) {
+                    console.warn(`[saveProjectDB] Falha ao abortar ${label} após timeout suave:`, timeoutAbortErr)
+                }
                 console.warn(`[saveProjectDB] Timeout suave em ${label} após ${Math.round(timeoutMs / 1000)}s; continuando com fallback.`)
                 resolve(null)
             }, timeoutMs)
@@ -182,8 +198,9 @@ const withSoftTimeout = async <T>(
         return result
     } finally {
         if (timeoutId) clearTimeout(timeoutId)
-        // Se o timeout disparou, a promise original continua rodando em background.
-        // Logamos quando ela resolver para visibilidade, mas não bloqueamos.
+        // Se o timeout disparou, tentamos abortar o trabalho. Ainda assim, algumas
+        // promises podem terminar em background se ignorarem o abort; logamos isso
+        // por visibilidade, mas não bloqueamos o fluxo principal.
         if (didTimeout) {
             work.then(
                 (val) => val != null && console.log(`[saveProjectDB] ${label} completou em background após timeout (resultado disponível mas não utilizado).`),
@@ -241,16 +258,6 @@ const estimateJsonBytes = (value: unknown): number => {
     } catch {
         return Number.MAX_SAFE_INTEGER
     }
-}
-
-const stripCanvasBackupsFromPageMetadata = (pages: any[]): any[] => {
-    if (!Array.isArray(pages)) return []
-    return pages.map((page) => {
-        if (!page || typeof page !== 'object') return page
-        const next = { ...(page as Record<string, any>) }
-        delete next.canvasData
-        return next
-    })
 }
 
 const pickBestRemoteCanvasData = (storageCanvasData: any, dbCanvasData: any) => {
@@ -492,10 +499,27 @@ const writeDraft = (
         // ignore quota / serialization issues
     }
 }
-const clearDraft = (projectId: string, pageId: string) => {
+const clearDraft = (projectId: string, pageId: string, savedAt?: number) => {
     if (import.meta.server) return
     try {
         const key = getDraftKey(projectId, pageId)
+        // Proteger contra race condition em navegação SPA: se o draft no localStorage
+        // é mais recente que o save que está tentando limpá-lo, NÃO apagar.
+        // Isso acontece quando flushAutoSave() roda em background após onUnmounted
+        // ter gravado um emergencySnapshot mais recente.
+        if (savedAt && savedAt > 0) {
+            const existing = localStorage.getItem(key)
+            if (existing) {
+                try {
+                    const parsed = JSON.parse(existing)
+                    const draftTs = Number(parsed?.updatedAt || 0)
+                    if (draftTs > savedAt) {
+                        console.log(`[clearDraft] Preservando draft mais recente (draft=${draftTs}, save=${savedAt}) para página ${pageId}`)
+                        return
+                    }
+                } catch { /* ignore parse errors, proceed to clear */ }
+            }
+        }
         pendingLocalDraftOperations.delete(key)
         localStorage.removeItem(key)
     } catch {
@@ -765,12 +789,41 @@ export const useProject = () => {
         const dbCanvasData = opts.pageMeta?.canvasData || null
         const preferredPath = String(opts.pageMeta?.canvasDataPath || '').trim()
 
+        // canvasSavedAt é o timestamp que o save gravou no metadata do DB — representa
+        // o momento exato em que o canvas foi salvo. Se o Wasabi tem dados mais antigos
+        // que este timestamp, significa que um save posterior falhou no upload Wasabi
+        // mas conseguiu gravar os metadados no DB.
+        const expectedCanvasSavedAt = Number(opts.pageMeta?.canvasSavedAt || 0)
+
         if (preferredPath) {
             console.log('📥 Buscando canvasData do Storage:', preferredPath)
             serverCanvasData = await loadCanvasDataFromPath(preferredPath)
             if (serverCanvasData) {
                 const objectCount = getCanvasObjectCount(serverCanvasData)
-                console.log('✅ CanvasData carregado do Storage:', { hasData: true, objectCount })
+                const wasabiTs = getCanvasSavedAt(serverCanvasData)
+                console.log('✅ CanvasData carregado do Storage:', { hasData: true, objectCount, wasabiTs })
+
+                // Detectar dados stale no Wasabi: se o DB registra um timestamp mais recente
+                // que o __savedAt do arquivo no Wasabi, o upload de um save posterior falhou.
+                // Nesse caso, o Wasabi tem dados antigos (ex: de ontem) e devemos preferir
+                // um backup legado do DB ou o draft local.
+                if (expectedCanvasSavedAt > 0 && wasabiTs > 0 && expectedCanvasSavedAt - wasabiTs > 5_000) {
+                    console.warn(
+                        `⚠️ Wasabi stale detectado para página ${opts.pageId}: ` +
+                        `Wasabi __savedAt=${wasabiTs} (${new Date(wasabiTs).toISOString()}), ` +
+                        `DB canvasSavedAt=${expectedCanvasSavedAt} (${new Date(expectedCanvasSavedAt).toISOString()}). ` +
+                        `Diferença: ${Math.round((expectedCanvasSavedAt - wasabiTs) / 1000)}s. ` +
+                        `Preferindo backup legado do DB ou draft local.`
+                    )
+                    // Marcar como stale - pickBestRemoteCanvasData vai preferir um
+                    // backup legado do DB se ele ainda existir, senão o draft local.
+                    if (dbCanvasData && getCanvasObjectCount(dbCanvasData) > 0) {
+                        // Backup legado do DB existe e tem conteúdo - ignorar Wasabi stale.
+                        serverCanvasData = null
+                    }
+                    // Sem backup legado, manter Wasabi como fallback (melhor que nada),
+                    // mas o draft local (se existir) vai ganhar em resolveCanvasDataWithDraft.
+                }
             } else {
                 console.warn('⚠️ CanvasData não encontrado no Storage')
             }
@@ -1024,8 +1077,15 @@ export const useProject = () => {
 
     const updatePageData = (index: number, json: any, opts: UpdatePageDataOptions = {}) => {
         if (project.pages[index]) {
+            const existingSavedAt = Number(
+                (json as any)?.__savedAt ||
+                (json as any)?._savedAt ||
+                (json as any)?.savedAt ||
+                (json as any)?.updatedAt ||
+                0
+            )
             const stampedJson = (json && typeof json === 'object')
-                ? { ...json, __savedAt: Date.now() }
+                ? { ...json, __savedAt: existingSavedAt > 0 ? existingSavedAt : Date.now() }
                 : json
             const fingerprint = computeCanvasFingerprint(stampedJson)
             if (opts.skipIfSameFingerprint && project.pages[index].lastSavedFingerprint === fingerprint) {
@@ -1078,6 +1138,7 @@ export const useProject = () => {
     const markAsUnsaved = () => {
         hasUnsavedChanges.value = true
         unsavedRevision.value += 1
+        _lastUserEditAt = Date.now()
     }
 
     // --- A Regra de Ouro: Smart Duplicate ---
@@ -1175,11 +1236,9 @@ export const useProject = () => {
      */
 		    const saveProjectDB = async (opts: {
                 forceEmptyOverwrite?: boolean
-                preferDbBackup?: boolean
-                skipCanvasUpload?: boolean
             } = {}) => {
-		        // Não executar no servidor (SSR)
-		        if (import.meta.server) {
+		        // Não executar no servidor (SSR) ou se o módulo HMR foi substituído
+		        if (import.meta.server || _moduleDisposed) {
 		            return
 		        }
 
@@ -1280,8 +1339,6 @@ export const useProject = () => {
             const thumbnailUrls: string[] = []
             const failedCanvasSyncPageIds = new Set<string>()
             const failedThumbnailSyncPageIds = new Set<string>()
-            // Páginas onde Wasabi falhou E o backup no DB também foi omitido (canvas muito grande)
-            const noFallbackPageIds = new Set<string>()
 
             // Upload de todas as páginas em paralelo (canvas + thumbnail por página)
             setSaveStage('upload-pages')
@@ -1296,7 +1353,7 @@ export const useProject = () => {
                 if (abortIfStaleSaveContext()) return
 
                 // Salvar canvas JSON no Storage (com retry automático)
-                const shouldUploadCanvas = !opts.skipCanvasUpload && !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
+                const shouldUploadCanvas = !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
                 if (shouldUploadCanvas && page?.canvasData) {
                     try {
                         const currentCount = getCanvasObjectCount(page.canvasData)
@@ -1304,21 +1361,30 @@ export const useProject = () => {
                         if (isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite) {
                             console.warn(`🛡️ Skip upload vazio para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
                         } else {
+                            const canvasUploadAbortController = new AbortController()
                             const path = await withSoftTimeout(
                                 saveCanvasData(
                                     project.id,
                                     page.id,
                                     page.canvasData,
-                                    2,
-                                    // Não usar lastSerializedCanvasJson: ele não contém __savedAt.
-                                    // page.canvasData já tem __savedAt (adicionado em updatePageData),
-                                    // garantindo que o arquivo no Wasabi tenha timestamp correto
-                                    // para que pickBestRemoteCanvasData e resolveCanvasDataWithDraft
-                                    // funcionem corretamente ao carregar.
-                                    null
+                                    // Uma rodada por save: o servidor já faz reset/retry do
+                                    // client S3 e o autosync em background agenda novas tentativas.
+                                    1,
+                                    (() => {
+                                        const serializedJson = typeof page?.lastSerializedCanvasJson === 'string'
+                                            ? page.lastSerializedCanvasJson
+                                            : null
+                                        const serializedSavedAt = Number(page?.lastSerializedCanvasSavedAt || 0)
+                                        const liveSavedAt = getCanvasSavedAt(page?.canvasData)
+                                        return serializedJson && serializedSavedAt > 0 && serializedSavedAt === liveSavedAt
+                                            ? serializedJson
+                                            : null
+                                    })(),
+                                    canvasUploadAbortController.signal
                                 ),
                                 CANVAS_UPLOAD_SOFT_TIMEOUT_MS,
-                                `upload-canvas:${page.id}`
+                                `upload-canvas:${page.id}`,
+                                () => canvasUploadAbortController.abort(`saveProjectDB-soft-timeout:${page.id}`)
                             )
                             if (path) {
                                 storagePaths[i] = path
@@ -1327,16 +1393,13 @@ export const useProject = () => {
                                 console.log('✅ Canvas salvo na Wasabi:', path)
                             } else {
                                 failedCanvasSyncPageIds.add(page.id)
-                                console.warn(`⚠️ Falha ao salvar canvas na Wasabi após múltiplas tentativas (página ${page.id})`)
+                                console.warn(`⚠️ Falha ao salvar canvas na Wasabi sem confirmação remota (página ${page.id})`)
                             }
                         }
                     } catch (err: any) {
                         failedCanvasSyncPageIds.add(page.id)
                         console.error('❌ Erro crítico ao salvar canvas na Wasabi:', err)
                     }
-                } else if (opts.skipCanvasUpload && page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)) {
-                    failedCanvasSyncPageIds.add(page.id)
-                    console.warn(`[saveProjectDB] Upload do canvas adiado para página ${page.id}; usando persistência DB-first.`)
                 }
                 if (!storagePaths[i] && page?.canvasDataPath) {
                     storagePaths[i] = page.canvasDataPath
@@ -1366,9 +1429,44 @@ export const useProject = () => {
             await Promise.all(pageUploadPromises)
             if (abortIfStaleSaveContext()) return
 
+            const hasCanvasSyncFailures = failedCanvasSyncPageIds.size > 0
+            if (hasCanvasSyncFailures) {
+                changedDuringSave = unsavedRevision.value !== saveRevisionAtStart
+                hasUnsavedChanges.value = true
+                saveStatus.value = 'error'
+                saveLastError.value = 'Falha ao salvar na Wasabi. O banco nao foi atualizado; o design segue apenas no rascunho local ate a sincronizacao completar.'
+                console.warn(
+                    `[saveProjectDB] Persistencia no banco adiada: ${failedCanvasSyncPageIds.size} pagina(s) sem upload confirmado na Wasabi.`,
+                    { pageIds: Array.from(failedCanvasSyncPageIds) }
+                )
+
+                if (!changedDuringSave) {
+                    _unsyncedRetryCount++
+                    const maxRetryBackoff = 5 * 60_000
+                    const retryCooldownMs = Math.min(15_000 * Math.pow(2, _unsyncedRetryCount - 1), maxRetryBackoff)
+                    console.log(`[saveProjectDB] Novo retry do upload Wasabi em ${Math.round(retryCooldownMs / 1000)}s (tentativa ${_unsyncedRetryCount})`)
+                    const retryTimer = setTimeout(() => {
+                        _pendingSaveTimers.delete(retryTimer)
+                        if (_moduleDisposed) return
+                        if (!hasUnsavedChanges.value) return
+                        if (isSaving.value) return
+                        const hasDirtyPagesForRetry = project.pages.some((p) => p?.dirty)
+                        if (!hasDirtyPagesForRetry) return
+                        if (Date.now() - _lastUserEditAt < 30_000) {
+                            console.log('[saveProjectDB] Retry do upload Wasabi postergado: usuario editando ativamente.')
+                            return
+                        }
+                        console.log(`🔄 Retentando upload Wasabi das paginas pendentes (${Array.from(failedCanvasSyncPageIds).join(', ')})...`)
+                        void saveProjectDB()
+                    }, retryCooldownMs)
+                    _pendingSaveTimers.add(retryTimer)
+                }
+
+                return
+            }
+
             // 2. Preparar payload mínimo para o banco (apenas metadados)
                 setSaveStage('prepare-db-payload')
-                const dbBackedUpCanvasPageIds = new Set<string>()
 	            const pageMetadata = project.pages.map((page, index) => {
                 const metadata: any = {
                     id: page.id,
@@ -1377,33 +1475,11 @@ export const useProject = () => {
                     height: page.height,
                     type: page.type,
                     canvasDataPath: storagePaths[index] || page.canvasDataPath, // Caminho no Storage
-                    thumbnailUrl: thumbnailUrls[index] || page.thumbnailUrl // URL do thumbnail
-                }
-
-		                // Backup canvas data in DB apenas quando o upload Wasabi falhou para esta página.
-		                // Incluir inline em saves bem-sucedidos tornaria cada requisição enorme (5-12 MB)
-		                // e causaria timeouts no proxy reverso (Coolify/Traefik).
-		                const shouldAttachCanvasBackup = failedCanvasSyncPageIds.has(page.id) && !!page.canvasData
-		                if (shouldAttachCanvasBackup) {
-		                    const currentCount = getCanvasObjectCount(page.canvasData)
-		                    const persistedCount = Number(page?.lastPersistedObjectCount || 0)
-		                    const shouldBlockEmptyBackup = isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite
-		                    if (shouldBlockEmptyBackup) {
-		                        console.warn(`🛡️ Bloqueando backup vazio no DB para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
-		                    } else {
-                        const backupBytes = Number.isFinite(Number(page?.lastSerializedCanvasBytes))
-                            ? Number(page.lastSerializedCanvasBytes)
-                            : estimateJsonBytes(page.canvasData)
-                        const maxBackupBytes = MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE
-                        if (backupBytes > maxBackupBytes) {
-                            console.error(`❌ [saveProjectDB] Backup canvasData omitido no DB para página ${page.id}: ${(backupBytes / 1_000_000).toFixed(1)}MB > limite ${(maxBackupBytes / 1_000_000).toFixed(1)}MB. Canvas sem fallback!`)
-                            noFallbackPageIds.add(page.id)
-                        } else {
-                            metadata.canvasData = page.canvasData
-                            dbBackedUpCanvasPageIds.add(page.id)
-                            console.log(`💾 Incluindo canvasData no banco para página ${page.id} (${currentCount} objetos)`)
-                        }
-                    }
+                    thumbnailUrl: thumbnailUrls[index] || page.thumbnailUrl, // URL do thumbnail
+                    // Timestamp do canvas no momento do save — permite detectar no reload
+                    // se o arquivo Wasabi é mais antigo que o esperado (Wasabi upload falhou
+                    // em um save posterior mas o DB manteve o canvasDataPath antigo).
+                    canvasSavedAt: getCanvasSavedAt(page.canvasData) || Date.now()
                 }
 
                 return metadata
@@ -1477,39 +1553,14 @@ export const useProject = () => {
                     }
                 }
 
-                try {
-                    await persistProject(payload)
-                } catch (persistError: any) {
-                    const statusCode = Number(persistError?.statusCode ?? persistError?.response?.status ?? 0)
-                    const hasBackupInPayload = Array.isArray(payload.canvas_data)
-                        && payload.canvas_data.some((page: any) => page && typeof page === 'object' && 'canvasData' in page)
-
-                    if (statusCode !== 413 || !hasBackupInPayload) {
-                        throw persistError
-                    }
-
-                    const payloadWithoutBackup = {
-                        ...payload,
-                        canvas_data: stripCanvasBackupsFromPageMetadata(payload.canvas_data)
-                    }
-                    const reducedBytes = estimateJsonBytes(payloadWithoutBackup)
-                    console.warn(`[saveProjectDB] /api/projects retornou 413; retry sem canvasData backup (${reducedBytes} bytes).`)
-                    payload = payloadWithoutBackup
-                    await persistProject(payload)
-                }
+                await persistProject(payload)
 
 	                if (abortIfStaleSaveContext()) return
                     setSaveStage('finalize')
 		            changedDuringSave = unsavedRevision.value !== saveRevisionAtStart
-		            lastSavedAt.value = new Date()
 	            if (!changedDuringSave) {
                     const pagesWithNewLocalChangesDuringSave = new Set<string>()
                     saveNeedsFollowUpForLocalChanges = false
-                    // Pages that failed Wasabi upload MUST stay dirty so the upload
-                    // (and history snapshot) is retried on the next save cycle, even if
-                    // the canvas was backed up in the DB.  DB backup is insurance, not
-                    // a replacement for Wasabi — history snapshots only fire after a
-                    // successful Wasabi upload.
                     const unsyncedPageIds = new Set([
                         ...failedCanvasSyncPageIds,
                         ...pagesWithNewLocalChangesDuringSave
@@ -1529,14 +1580,19 @@ export const useProject = () => {
 	                    }
 	                })
 
-	                // Limpar rascunhos apenas para páginas que foram salvas com sucesso
+	                // Limpar rascunhos apenas para páginas que foram salvas com sucesso.
+	                // Passa o timestamp do save para proteger drafts mais recentes que
+	                // possam ter sido escritos por emergencySnapshotDirtyPages durante
+	                // navegação SPA (onUnmounted grava draft, save em background completa depois).
+	                const saveCompletedAt = Date.now()
 	                for (const p of project.pages) {
-	                    if (p?.id && !unsyncedPageIds.has(p.id)) clearDraft(project.id, p.id)
+	                    if (p?.id && !unsyncedPageIds.has(p.id)) clearDraft(project.id, p.id, saveCompletedAt)
 	                }
 
 	                if (allPagesFullySynced) {
 	                    _unsyncedRetryCount = 0 // Reset backoff on full sync
 	                    hasUnsavedChanges.value = false
+                        lastSavedAt.value = new Date()
 	                    saveStatus.value = 'saved'
 	                    clearProjectDraft(project.id)
                         if (failedThumbnailSyncPageIds.size > 0) {
@@ -1544,41 +1600,35 @@ export const useProject = () => {
                         }
 	                } else {
 	                    hasUnsavedChanges.value = true
-                        if (noFallbackPageIds.size > 0) {
-                            // Wasabi falhou E canvas muito grande para backup no DB.
-                            // Os dados ainda estão no rascunho local (localStorage) e serão
-                            // recuperados automaticamente na próxima abertura do projeto.
-                            saveStatus.value = 'error'
-                            saveLastError.value = `Falha ao sincronizar com o servidor. Seus dados estão salvos localmente e serão sincronizados automaticamente.`
-                            console.warn(`⚠️ [saveProjectDB] ${noFallbackPageIds.size} página(s) sem sync remoto (Wasabi falhou e canvas > ${MAX_PAGE_DB_CANVAS_BACKUP_BYTES_ON_STORAGE_FAILURE / 1_000_000}MB). Dados preservados no rascunho local.`)
-                        } else {
 	                    saveStatus.value = 'idle'
-                        }
-	                    // Se o motivo do "pendente" é skipCanvasUpload (save DB-first intencional),
-	                    // não incrementar o backoff — um save completo já está agendado pelo caller.
-	                    const isIntentionalSkip = opts.skipCanvasUpload && unsyncedPageIds.size > 0
-	                    if (!isIntentionalSkip) {
-	                        console.warn(`[saveProjectDB] ${unsyncedPageIds.size} página(s) seguem pendentes; estado preservado para novo sync.`)
-	                    } else {
-	                        console.log(`[saveProjectDB] ${unsyncedPageIds.size} página(s) aguardando upload Wasabi (save DB-first em andamento).`)
-	                    }
+	                    console.warn(`[saveProjectDB] ${unsyncedPageIds.size} página(s) seguem pendentes; estado preservado para novo sync.`)
 	                    // Auto-retry unsynced pages with exponential backoff.
 	                    // Prevents the infinite retry loop when Wasabi is persistently
 	                    // unreachable — previously the fixed 15s retry would fire
 	                    // immediately after each 75s timeout, creating an aggressive
 	                    // loop that spammed logs and never let the circuit breaker cool.
-	                    if (!isIntentionalSkip) _unsyncedRetryCount++
+	                    _unsyncedRetryCount++
 	                    const maxRetryBackoff = 5 * 60_000 // 5 minutos
 	                    const retryCooldownMs = Math.min(15_000 * Math.pow(2, _unsyncedRetryCount - 1), maxRetryBackoff)
-	                    if (!isIntentionalSkip) console.log(`[saveProjectDB] Próximo retry de páginas pendentes em ${Math.round(retryCooldownMs / 1000)}s (tentativa ${_unsyncedRetryCount})`)
-	                    setTimeout(() => {
+	                    console.log(`[saveProjectDB] Próximo retry de páginas pendentes em ${Math.round(retryCooldownMs / 1000)}s (tentativa ${_unsyncedRetryCount})`)
+	                    const retryTimer = setTimeout(() => {
+	                        _pendingSaveTimers.delete(retryTimer)
+	                        if (_moduleDisposed) return
 	                        if (!hasUnsavedChanges.value) return
 	                        if (isSaving.value) return
 	                        const hasDirtyPages = project.pages.some((p) => p?.dirty)
 	                        if (!hasDirtyPages) return
+	                        // Se o usuário está editando ativamente (últimos 30s), adiar o retry.
+	                        // Evita mostrar "Salvando..." enquanto o usuário está trabalhando.
+	                        // O auto-save periódico (90s) cuidará da persistência.
+	                        if (Date.now() - _lastUserEditAt < 30_000) {
+	                            console.log(`[saveProjectDB] Retry postergado: usuário editando ativamente.`)
+	                            return
+	                        }
 	                        console.log(`🔄 Retentando upload de páginas pendentes (tentativa ${_unsyncedRetryCount})...`)
 	                        void saveProjectDB()
 	                    }, retryCooldownMs)
+	                    _pendingSaveTimers.add(retryTimer)
 	                }
 	            } else {
 	                hasUnsavedChanges.value = true
@@ -1634,11 +1684,14 @@ export const useProject = () => {
 		                && (changedDuringSave || queuedSaveAfterCurrent.value || saveNeedsFollowUpForLocalChanges)
 		            queuedSaveAfterCurrent.value = false
 		            if (shouldRunFollowUpSave) {
-	                setTimeout(() => {
+	                const followUpTimer = setTimeout(() => {
+	                    _pendingSaveTimers.delete(followUpTimer)
+	                    if (_moduleDisposed) return
 	                    if (!isSaving.value) {
 	                        void saveProjectDB()
 	                    }
 	                }, 250)
+	                _pendingSaveTimers.add(followUpTimer)
 	            }
 	        }
 	    }
@@ -1647,12 +1700,15 @@ export const useProject = () => {
      * Auto-save com debounce
      * Salva automaticamente após período de inatividade
      */
-    let saveTimeout: any = null
+    // NOTE: saveTimeout is tracked in _pendingSaveTimers for HMR cleanup.
+    // When saveTimeout is cleared, also remove from _pendingSaveTimers.
+    let saveTimeout: ReturnType<typeof setTimeout> | null = null
     let scheduledAutoSaveRevision = -1
     let scheduledAutoSaveProjectId = ''
     const AUTO_SAVE_DELAY = 90_000 // 90 segundos: debounce para upload remoto após ações do usuário
 
     const triggerAutoSave = () => {
+        if (_moduleDisposed) return
         if (!project.id || project.id.startsWith('proj_')) {
             // Não auto-salvar projetos não criados ainda
             return
@@ -1670,22 +1726,25 @@ export const useProject = () => {
             return
         }
 
-        clearTimeout(saveTimeout)
+        if (saveTimeout) { _pendingSaveTimers.delete(saveTimeout); clearTimeout(saveTimeout) }
         hasUnsavedChanges.value = true
         scheduledAutoSaveProjectId = project.id
         scheduledAutoSaveRevision = currentRevision
 
         saveTimeout = setTimeout(() => {
+            if (saveTimeout) _pendingSaveTimers.delete(saveTimeout)
             saveTimeout = null
             scheduledAutoSaveRevision = -1
             scheduledAutoSaveProjectId = ''
+            if (_moduleDisposed) return
             if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) return
             saveProjectDB()
         }, AUTO_SAVE_DELAY)
+        _pendingSaveTimers.add(saveTimeout)
     }
 
     const cancelAutoSave = () => {
-        clearTimeout(saveTimeout)
+        if (saveTimeout) { _pendingSaveTimers.delete(saveTimeout); clearTimeout(saveTimeout) }
         saveTimeout = null
         scheduledAutoSaveRevision = -1
         scheduledAutoSaveProjectId = ''
@@ -1704,7 +1763,7 @@ export const useProject = () => {
      * Útil para eventos de lifecycle (reload/aba em background/fechar página).
      */
     const flushAutoSave = async () => {
-        clearTimeout(saveTimeout)
+        if (saveTimeout) { _pendingSaveTimers.delete(saveTimeout); clearTimeout(saveTimeout) }
         saveTimeout = null
         scheduledAutoSaveRevision = -1
         scheduledAutoSaveProjectId = ''
@@ -1919,36 +1978,40 @@ export const useProject = () => {
 	            isProjectLoaded.value = true // Marca que o projeto foi carregado
 
             if (recoveredFromNewerDraft && !project.id.startsWith('proj_')) {
-                console.warn('📝 Projeto restaurado com rascunho local mais novo; agendando persistência remota DB-first.', {
+                console.warn('📝 Projeto restaurado com rascunho local mais novo; agendando persistência remota Wasabi-first.', {
                     pages: recoveredDraftPages
                 })
-                // 1) Salvar direto no DB em 3s (sem upload Wasabi para ser rápido)
-                setTimeout(() => {
-                    if (currentSession !== projectLoadSession.value) return
-                    if (!isSaving.value) {
-                        void saveProjectDB({
-                            preferDbBackup: true,
-                            skipCanvasUpload: true
-                        }).then(() => {
-                            // 2) Após o DB-first, agendar um save completo COM upload Wasabi
-                            if (currentSession !== projectLoadSession.value) return
-                            setTimeout(() => {
-                                if (currentSession !== projectLoadSession.value) return
-                                if (!isSaving.value) {
-                                    // Marcar páginas dirty para forçar o upload Wasabi
-                                    for (const page of project.pages) {
-                                        if (page?.canvasData) {
-                                            page.dirty = true
-                                        }
-                                    }
-                                    hasUnsavedChanges.value = true
-                                    console.log('📤 Agendando upload Wasabi após DB-first recovery')
-                                    void saveProjectDB()
-                                }
-                            }, 5000)
-                        })
-                    }
-                }, 3000)
+                const scheduleRecoveredDraftRemoteSync = (attempt = 1) => {
+                    const remoteSyncTimer = setTimeout(() => {
+                        _pendingSaveTimers.delete(remoteSyncTimer)
+                        if (_moduleDisposed) return
+                        if (currentSession !== projectLoadSession.value) return
+                        if (isSaving.value) return
+
+                        const pendingRecoveredPages = project.pages.filter((page) =>
+                            recoveredDraftPages.includes(String(page?.id || '')) &&
+                            !!page?.dirty
+                        )
+                        const pagesWaitingForSnapshot = pendingRecoveredPages.filter((page) =>
+                            !!page?.canvasData && !hasUsableSerializedCanvasSnapshot(page)
+                        )
+
+                        if (pagesWaitingForSnapshot.length > 0 && attempt < 10) {
+                            console.log(
+                                `⏳ Aguardando snapshot serializado para sync Wasabi do rascunho recuperado ` +
+                                `(tentativa ${attempt}, páginas=${pagesWaitingForSnapshot.map((p) => p.id).join(', ')})`
+                            )
+                            scheduleRecoveredDraftRemoteSync(attempt + 1)
+                            return
+                        }
+
+                        console.log('📤 Agendando upload Wasabi do rascunho recuperado')
+                        void saveProjectDB()
+                    }, 3000)
+                    _pendingSaveTimers.add(remoteSyncTimer)
+                }
+
+                scheduleRecoveredDraftRemoteSync()
             }
 
             scheduleCanvasDataPrefetch(project.pages[project.activePageIndex]?.id || null)
@@ -2011,6 +2074,38 @@ export const useProject = () => {
         }
     }
 
+    // Snapshot de emergência: grava o canvasData atual de TODAS as páginas dirty
+    // diretamente no localStorage (mesma key do draft normal via getDraftKey).
+    // Chamado no beforeunload/visibilitychange como rede de segurança caso o draft
+    // normal não tenha sido gravado (canvas muito grande para LOCAL_DRAFT_MAX_ENTRY_BYTES,
+    // pending queue já foi flushed, etc.).
+    // Usa um limite mais generoso (~5.2 MB vs 4.5 MB normal) para cobrir canvas grandes.
+    const EMERGENCY_DRAFT_MAX_BYTES = 5_200_000
+    let _lastEmergencySnapshotAt = 0
+    const emergencySnapshotDirtyPages = () => {
+        if (import.meta.server) return
+        if (!project.id || project.id.startsWith('proj_')) return
+        // Debounce: se já rodou nos últimos 500ms (triple-fire em exit), pular.
+        const now = Date.now()
+        if (now - _lastEmergencySnapshotAt < 500) return
+        _lastEmergencySnapshotAt = now
+        try {
+            for (const page of project.pages) {
+                if (!page?.id || !page?.canvasData || !page?.dirty) continue
+                const draftKey = getDraftKey(project.id, page.id)
+                // Se já existe um draft pending, o flushPendingLocalDrafts já vai gravá-lo
+                if (pendingLocalDraftOperations.has(draftKey)) continue
+                const payload: DraftPayload = { updatedAt: now, canvasData: page.canvasData }
+                try {
+                    const json = JSON.stringify(payload)
+                    if (json.length <= EMERGENCY_DRAFT_MAX_BYTES) {
+                        localStorage.setItem(draftKey, json)
+                    }
+                } catch { /* ignore quota errors */ }
+            }
+        } catch { /* ignore */ }
+    }
+
     return {
         project,
         activePage,
@@ -2028,6 +2123,7 @@ export const useProject = () => {
         cancelAutoSave,
         flushAutoSave,
         flushPendingLocalDrafts,
+        emergencySnapshotDirtyPages,
         ensurePageCanvasDataLoaded,
         scheduleCanvasDataPrefetch,
         loadProjectDB,
@@ -2051,6 +2147,14 @@ export const useProject = () => {
 // para que a nova instância comece limpa e as instâncias antigas parem de interferir.
 if (import.meta.hot) {
     import.meta.hot.dispose(() => {
+        // Marcar módulo como descartado — impede TODOS os timers e async pendentes
+        // desta instância de disparar saveProjectDB novamente.
+        _moduleDisposed = true
+
+        // Cancelar TODOS os timers de save (retry, follow-up, recovery remoto)
+        for (const timer of _pendingSaveTimers) clearTimeout(timer)
+        _pendingSaveTimers.clear()
+
         // Cancelar timer de draft pendente
         if (pendingLocalDraftFlushTimer) {
             clearTimeout(pendingLocalDraftFlushTimer)
@@ -2065,5 +2169,6 @@ if (import.meta.hot) {
         queuedSaveAfterCurrent.value = false
         hasUnsavedChanges.value = false
         isProjectLoaded.value = false
+        _unsyncedRetryCount = 0
     })
 }

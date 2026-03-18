@@ -1,10 +1,11 @@
-import { GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
+import { GetObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { gunzip } from 'node:zlib'
 import { promisify } from 'node:util'
 import { Readable } from 'node:stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { getOwnedProjectStorageRow } from '../../utils/project-repository'
+import { getS3Client } from '../../utils/s3'
 
 const gunzipAsync = promisify(gunzip)
 
@@ -71,13 +72,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid projectId/pageId format' })
   }
 
-  const endpoint = process.env.WASABI_ENDPOINT || 's3.wasabisys.com'
-  const region = process.env.WASABI_REGION || 'us-east-1'
   const bucket = process.env.WASABI_BUCKET || 'jobvarejo'
-  const accessKey = process.env.WASABI_ACCESS_KEY
-  const secretKey = process.env.WASABI_SECRET_KEY
 
-  if (!accessKey || !secretKey || !bucket) {
+  if (!bucket) {
     throw createError({ statusCode: 500, statusMessage: 'Wasabi credentials are not configured' })
   }
 
@@ -89,12 +86,7 @@ export default defineEventHandler(async (event) => {
   const historyPrefix = `projects/${projectRow.user_id}/${projectId}/history/page_${pageId}/`
   const currentKey = `projects/${projectRow.user_id}/${projectId}/page_${pageId}.json`
 
-  const s3 = new S3Client({
-    endpoint: `https://${endpoint}`,
-    region,
-    credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
-    forcePathStyle: true
-  })
+  const s3 = getS3Client()
 
   const items: HistoryItem[] = []
 

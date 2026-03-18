@@ -11,7 +11,7 @@ export type AiImageStudioInitial = Partial<{
   siteUrl: string
   transparent: boolean
   removeBg: boolean
-  size: '1080x1080' | '1080x1350' | '1080x1920' | '1920x1080'
+  size: '1080x1080' | '1080x1350' | '1080x1920' | '1920x1080' | '1024x1024' | '1024x1536' | '1536x1024'
   modelImageUrl: string
   baseImageUrl: string
   refUrls: string[]

@@ -301,7 +301,7 @@ export const useProductProcessor = () => {
                 const previewUrl = String(entry?.previewUrl || entry?.url || '').trim();
                 if (!url && !previewUrl) return null;
                 const source = String(entry?.source || '').trim().toLowerCase() || 'external';
-                const id = String(entry?.id || entry?.key || url || previewUrl || `candidate-${index + 1}`).trim();
+                const id = String(entry?.key || url || previewUrl || entry?.id || `candidate-${index + 1}`).trim();
                 const score = Number(entry?.score);
                 const confidence = Number(entry?.confidence);
                 return {

@@ -34,7 +34,7 @@ const isPresignedCorsBlocked = () => Date.now() < _presignedCorsBlockedUntil
 const setPresignedCorsBlocked = () => { _presignedCorsBlockedUntil = Date.now() + _PRESIGNED_CORS_BLOCK_MS }
 
 // ── Circuit breaker para Wasabi uploads ──────────────────────────────────────
-// Após N falhas consecutivas, pula Wasabi por um período (saves via DB-only).
+// Após N falhas consecutivas, pula Wasabi por um período e mantém apenas rascunho local.
 const WASABI_CB_MAX_FAILURES = 8  // tolerância maior — erros transientes não devem abrir o circuito
 const WASABI_CB_COOLDOWN_MS = 60_000 // 60s (era 3min) — recupera mais rápido
 let _wasabiConsecutiveFailures = 0
@@ -64,7 +64,7 @@ const recordWasabiFailure = () => {
     _wasabiCircuitOpenUntil = Date.now() + WASABI_CB_COOLDOWN_MS
     console.warn(
       `🔴 Wasabi circuit breaker ABERTO: ${_wasabiConsecutiveFailures} falhas consecutivas. ` +
-      `Pulando Wasabi por ${WASABI_CB_COOLDOWN_MS / 60_000}min (saves via DB-only).`
+      `Pulando Wasabi por ${WASABI_CB_COOLDOWN_MS / 60_000}min (persistencia remota suspensa).`
     )
   }
 }
@@ -113,12 +113,89 @@ const saveError = ref<string | null>(null)
 const HISTORY_SNAPSHOT_INTERVAL_MS = 30_000
 const THUMBNAIL_UPLOAD_TIMEOUT_MS = 15_000
 const THUMBNAIL_UPLOAD_RETRIES = 2
+const PRESIGNED_API_TIMEOUT_MS = 6_000
+const PRESIGNED_PUT_TIMEOUT_MS = 12_000
+const PROXY_UPLOAD_TIMEOUT_MS = 35_000
+const LARGE_CANVAS_DIRECT_UPLOAD_BYTES = 6 * 1024 * 1024
 const lastHistorySnapshotAtByPage = new Map<string, number>()
 const historySnapshotInFlightByPage = new Map<string, Promise<void>>()
+const CANVAS_UPLOAD_SUCCESS_TTL_MS = 30 * 60 * 1000
+
+type CanvasUploadInFlightEntry = {
+  savedAt: number
+  promise: Promise<string | null>
+  abort: (reason?: string) => void
+}
+
+type CanvasUploadSuccessEntry = {
+  savedAt: number
+  key: string
+  completedAt: number
+}
+
+const canvasUploadInFlightByScope = new Map<string, CanvasUploadInFlightEntry>()
+const canvasUploadSuccessByScope = new Map<string, CanvasUploadSuccessEntry>()
 
 // Cache de presigned URLs de leitura (GET) — válidas por ~55min no servidor, cache por 30min
 const _presignedGetCache = new Map<string, { url: string; expiresAt: number }>()
 const PRESIGNED_CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutos
+
+const getCanvasSnapshotSavedAt = (canvasJson: any): number => {
+  if (!canvasJson || typeof canvasJson !== 'object') return 0
+
+  const candidates = [
+    (canvasJson as any).__savedAt,
+    (canvasJson as any)._savedAt,
+    (canvasJson as any).savedAt,
+    (canvasJson as any).updatedAt,
+    (canvasJson as any)?.meta?.savedAt
+  ]
+
+  for (const value of candidates) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric) && numeric > 0) return numeric
+  }
+
+  return 0
+}
+
+const getRecentCanvasUploadSuccess = (scope: string, savedAt: number): string | null => {
+  if (!scope || savedAt <= 0) return null
+
+  const cached = canvasUploadSuccessByScope.get(scope)
+  if (!cached) return null
+  if ((Date.now() - cached.completedAt) > CANVAS_UPLOAD_SUCCESS_TTL_MS) {
+    canvasUploadSuccessByScope.delete(scope)
+    return null
+  }
+  if (cached.savedAt !== savedAt) return null
+  return cached.key
+}
+
+const rememberCanvasUploadSuccess = (scope: string, savedAt: number, key: string) => {
+  if (!scope || savedAt <= 0 || !key) return
+  canvasUploadSuccessByScope.set(scope, {
+    savedAt,
+    key,
+    completedAt: Date.now()
+  })
+}
+
+const forwardAbortSignal = (
+  sourceSignal: AbortSignal | null | undefined,
+  controller: AbortController
+): (() => void) => {
+  if (!sourceSignal) return () => {}
+
+  if (sourceSignal.aborted) {
+    controller.abort(sourceSignal.reason)
+    return () => {}
+  }
+
+  const onAbort = () => controller.abort(sourceSignal.reason)
+  sourceSignal.addEventListener('abort', onAbort, { once: true })
+  return () => sourceSignal.removeEventListener('abort', onAbort)
+}
 
 /**
  * Obtém presigned URL do backend para upload/download
@@ -143,7 +220,7 @@ async function getPresignedUrl(
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 6000) // 6s timeout
+      const timeoutId = setTimeout(() => controller.abort(), PRESIGNED_API_TIMEOUT_MS)
 
       try {
         const data = await $fetch('/api/storage/presigned', {
@@ -254,6 +331,34 @@ const fetchJsonWithRetry = async (
   return null
 }
 
+const withAbortTimeout = async <T>(
+  work: Promise<T>,
+  controller: AbortController,
+  timeoutMs: number,
+  label: string
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      timeoutId = setTimeout(() => {
+        controller.abort()
+        reject(new Error(`${label} timeout after ${Math.round(timeoutMs / 1000)}s`))
+      }, timeoutMs)
+
+      work.then(resolve, reject)
+    })
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
+const resolvePresignedPutTimeoutMs = (blobSize: number): number => {
+  if (blobSize >= 10 * 1024 * 1024) return 60_000
+  if (blobSize >= LARGE_CANVAS_DIRECT_UPLOAD_BYTES) return 45_000
+  return PRESIGNED_PUT_TIMEOUT_MS
+}
+
 const resolveProxyGetUrl = (keyOrUrl: string): string | null => {
   if (!keyOrUrl || typeof keyOrUrl !== 'string') return null
   const trimmed = keyOrUrl.trim()
@@ -342,170 +447,227 @@ export const useStorage = () => {
     pageId: string,
     canvasJson: any,
     retries = 2,
-    preSerializedJson?: string | null
+    preSerializedJson?: string | null,
+    externalSignal?: AbortSignal | null
   ): Promise<string | null> => {
-    // Não executar no servidor (SSR)
     if (import.meta.server) {
       return null
     }
 
-    // Circuit breaker: pular Wasabi se muitas falhas consecutivas
-    if (isWasabiCircuitOpen()) {
-      console.warn(`⚡ Wasabi circuit breaker ABERTO — pulando upload, save via DB-only (retry em ${Math.ceil((_wasabiCircuitOpenUntil - Date.now()) / 60_000)}min)`)
-      return null
+    const pageScope = `${projectId}:${pageId}`
+    const snapshotSavedAt = getCanvasSnapshotSavedAt(canvasJson)
+    const recentSuccess = getRecentCanvasUploadSuccess(pageScope, snapshotSavedAt)
+    if (recentSuccess) {
+      console.log(`♻️ [saveCanvasData] Reaproveitando upload confirmado recente para ${pageScope} (__savedAt=${snapshotSavedAt}).`)
+      return recentSuccess
     }
 
-    const userId = auth.user.value?.id
-    if (!userId) {
-      saveStatus.value = 'error'
-      saveError.value = 'Usuário não autenticado'
-      return null
-    }
-
-    saveStatus.value = 'saving'
-    saveError.value = null
-    const authHeaders = await tryGetApiAuthHeaders()
-    if (!authHeaders) {
-      saveStatus.value = 'error'
-      saveError.value = 'Sessão expirada. Faça login novamente.'
-      return null
-    }
-
-    // Caminho do arquivo: projects/{userId}/{projectId}/page_{pageId}.json
-    const key = `projects/${userId}/${projectId}/page_${pageId}.json`
-
-    // Comprimir JSON com gzip antes de fazer upload (reduz ~80% do tamanho)
-    const jsonString = typeof preSerializedJson === 'string'
-      ? preSerializedJson
-      : JSON.stringify(canvasJson)
-    let blob: Blob
-    let contentType: string
-    const rawSizeKB = (jsonString.length / 1024).toFixed(0)
-    try {
-      const compressedBuf = await compressGzip(jsonString)
-      blob = new Blob([compressedBuf], { type: 'application/octet-stream' })
-      contentType = 'application/octet-stream'
-      const compressedSizeKB = (compressedBuf.byteLength / 1024).toFixed(0)
-      const ratio = ((1 - compressedBuf.byteLength / jsonString.length) * 100).toFixed(0)
-      console.log(`🗜️ Canvas comprimido: ${rawSizeKB}KB → ${compressedSizeKB}KB (${ratio}% redução)`)
-    } catch (gzipErr) {
-      // Fallback para JSON puro caso CompressionStream não esteja disponível
-      blob = new Blob([jsonString], { type: 'application/json' })
-      contentType = 'application/json'
-      console.warn(`⚠️ Gzip falhou, upload como JSON puro (${rawSizeKB}KB):`, gzipErr)
-    }
-
-    // Half-open: se já teve falhas anteriores, usar apenas 1 tentativa rápida
-    const isHalfOpen = _wasabiConsecutiveFailures >= WASABI_CB_MAX_FAILURES
-    const effectiveRetries = isHalfOpen ? 1 : retries
-
-    // Estratégia: presigned URL direto (rápido, pula se CORS bloqueou antes) → fallback proxy servidor
-    // Timeouts reduzidos: presigned 20s, proxy 30s. Se ambos falharem numa tentativa,
-    // o pior caso por tentativa é ~50s (presigned timeout + proxy timeout em sequência),
-    // o que cabe no soft timeout de 75s do saveProjectDB, evitando o loop infinito anterior.
-    for (let attempt = 1; attempt <= effectiveRetries; attempt++) {
-      const uploadStart = Date.now()
-      try {
-        // ── Tentativa 1: Presigned URL direto (browser → Wasabi) ──
-        if (!isPresignedCorsBlocked()) {
-          try {
-            const presignedUrl = await getPresignedUrl(key, contentType, 'put', 1, authHeaders)
-            if (presignedUrl) {
-              const presignedController = new AbortController()
-              const presignedTimeout = setTimeout(() => presignedController.abort(), 10_000)
-              try {
-                const response = await fetch(presignedUrl, {
-                  method: 'PUT',
-                  body: blob,
-                  headers: { 'Content-Type': contentType },
-                  signal: presignedController.signal
-                })
-                clearTimeout(presignedTimeout)
-
-                if (response.ok) {
-                  lastSavedAt.value = new Date()
-                  saveStatus.value = 'saved'
-                  recordWasabiSuccess()
-                  console.log(`✅ Canvas salvo via presigned URL (tentativa ${attempt}/${effectiveRetries}, ${Date.now() - uploadStart}ms):`, key)
-                  void triggerHistorySnapshot({ userId, projectId, pageId, key })
-                  return key
-                }
-                console.warn(`⚠️ Presigned upload HTTP ${response.status}, fallback para proxy...`)
-              } catch (fetchErr: any) {
-                clearTimeout(presignedTimeout)
-                // CORS ou TypeError = browser bloqueou cross-origin PUT → cachear e pular
-                if (fetchErr?.name === 'TypeError' || fetchErr?.message?.includes('CORS') || fetchErr?.message?.includes('Failed to fetch')) {
-                  setPresignedCorsBlocked()
-                  console.warn('⚠️ CORS bloqueou presigned upload; usando proxy pelo resto da sessão.')
-                } else if (fetchErr?.name === 'AbortError') {
-                  console.warn('⚠️ Presigned upload timeout (10s), fallback para proxy...')
-                } else {
-                  console.warn(`⚠️ Presigned upload erro (${fetchErr?.message}), fallback para proxy...`)
-                }
-              }
-            }
-          } catch (presignedSetupErr: any) {
-            console.warn(`⚠️ Não conseguiu obter presigned URL (${presignedSetupErr?.message}), usando proxy...`)
-          }
-        }
-
-        // ── Tentativa 2 (ou única se CORS bloqueado): Proxy servidor via FormData ──
-        // Timeout de 45s: dá margem para o S3 (requestTimeout=55s no servidor) dentro do soft timeout de 60s.
-        const proxyController = new AbortController()
-        const proxyTimeoutId = setTimeout(() => proxyController.abort(), 45_000)
-
-        try {
-          // FormData é mais compatível com Vite proxy e Nitro readMultipartFormData
-          const formData = new FormData()
-          formData.append('file', blob, 'canvas.json.gz')
-
-          const result = await $fetch<{ key: string; size: number }>('/api/storage/upload', {
-            method: 'POST',
-            query: { key, contentType },
-            body: formData,
-            signal: proxyController.signal as any
-          })
-
-          clearTimeout(proxyTimeoutId)
-
-          if (!result?.key) {
-            throw new Error('Upload proxy retornou resposta inválida')
-          }
-
-          lastSavedAt.value = new Date()
-          saveStatus.value = 'saved'
-          recordWasabiSuccess()
-          console.log(`✅ Canvas salvo via proxy (tentativa ${attempt}/${effectiveRetries}, ${Date.now() - uploadStart}ms):`, result.key)
-          void triggerHistorySnapshot({ userId, projectId, pageId, key })
-          return result.key
-
-        } catch (proxyErr: any) {
-          clearTimeout(proxyTimeoutId)
-          const statusCode = Number(proxyErr?.statusCode ?? proxyErr?.response?.status ?? 0)
-          if (statusCode === 401) {
-            saveStatus.value = 'error'
-            saveError.value = 'Sessão expirada. Faça login novamente.'
-            return null
-          }
-          throw proxyErr
-        }
-
-      } catch (error: any) {
-        const elapsed = Date.now() - uploadStart
-        if (attempt === effectiveRetries) {
-          recordWasabiFailure()
-          console.error(`❌ Wasabi upload falhou após ${effectiveRetries} tentativas (${elapsed}ms, blob=${(blob.size / 1024).toFixed(0)}KB, cors_blocked=${isPresignedCorsBlocked()}):`, error?.message || error)
-          saveStatus.value = 'error'
-          saveError.value = error?.message || 'Erro desconhecido'
-          return null
-        }
-        const backoffMs = Math.min(Math.pow(2, attempt) * 1000, 8000)
-        console.warn(`⚠️ Tentativa ${attempt}/${effectiveRetries} falhou após ${elapsed}ms (${error?.message}), retry em ${backoffMs / 1000}s...`)
-        await new Promise(resolve => setTimeout(resolve, backoffMs))
+    const existingUpload = canvasUploadInFlightByScope.get(pageScope)
+    if (existingUpload) {
+      if (snapshotSavedAt > 0 && existingUpload.savedAt === snapshotSavedAt) {
+        console.log(`⏳ [saveCanvasData] Reaproveitando upload em andamento para ${pageScope} (__savedAt=${snapshotSavedAt}).`)
+        return existingUpload.promise
+      }
+      if (snapshotSavedAt > 0 && existingUpload.savedAt > 0 && existingUpload.savedAt < snapshotSavedAt) {
+        console.warn(`↩️ [saveCanvasData] Cancelando upload antigo de ${pageScope} (${existingUpload.savedAt} -> ${snapshotSavedAt}).`)
+        existingUpload.abort('superseded-by-newer-canvas-snapshot')
+      } else if (snapshotSavedAt > 0 && existingUpload.savedAt > snapshotSavedAt) {
+        console.warn(`⏭️ [saveCanvasData] Upload mais novo já está em andamento para ${pageScope}; ignorando snapshot antigo ${snapshotSavedAt}.`)
+        return existingUpload.promise
       }
     }
 
-    return null
+    const uploadController = new AbortController()
+    const detachExternalAbort = forwardAbortSignal(externalSignal, uploadController)
+    const failIfAborted = () => {
+      if (uploadController.signal.aborted) {
+        throw new Error(String(uploadController.signal.reason || 'Canvas upload abortado'))
+      }
+    }
+
+    const run = (async () => {
+      // Circuit breaker: pular Wasabi se muitas falhas consecutivas
+      if (isWasabiCircuitOpen()) {
+        console.warn(`⚡ Wasabi circuit breaker ABERTO — pulando upload remoto (retry em ${Math.ceil((_wasabiCircuitOpenUntil - Date.now()) / 60_000)}min)`)
+        return null
+      }
+
+      const userId = auth.user.value?.id
+      if (!userId) {
+        saveStatus.value = 'error'
+        saveError.value = 'Usuário não autenticado'
+        return null
+      }
+
+      saveStatus.value = 'saving'
+      saveError.value = null
+      const t0 = Date.now()
+      const authHeaders = await tryGetApiAuthHeaders()
+      if (!authHeaders) {
+        saveStatus.value = 'error'
+        saveError.value = 'Sessão expirada. Faça login novamente.'
+        return null
+      }
+      const authMs = Date.now() - t0
+
+      failIfAborted()
+
+      // Caminho do arquivo: projects/{userId}/{projectId}/page_{pageId}.json
+      const key = `projects/${userId}/${projectId}/page_${pageId}.json`
+
+      // Reaproveitar o JSON já serializado pelo EditorCanvas quando ele corresponder
+      // ao mesmo __savedAt da página atual. Isso elimina um JSON.stringify pesado
+      // no caminho quente do autosave.
+      const serializeStartedAt = Date.now()
+      const jsonString = typeof preSerializedJson === 'string'
+        ? preSerializedJson
+        : JSON.stringify(canvasJson)
+      const serializeMs = Date.now() - serializeStartedAt
+      let blob: Blob
+      let contentType: string
+      const rawSizeKB = (jsonString.length / 1024).toFixed(0)
+      const gzipStartedAt = Date.now()
+      try {
+        const compressedBuf = await compressGzip(jsonString)
+        blob = new Blob([compressedBuf], { type: 'application/octet-stream' })
+        contentType = 'application/octet-stream'
+        const compressedSizeKB = (compressedBuf.byteLength / 1024).toFixed(0)
+        const ratio = ((1 - compressedBuf.byteLength / jsonString.length) * 100).toFixed(0)
+        console.log(`🗜️ Canvas comprimido: ${rawSizeKB}KB → ${compressedSizeKB}KB (${ratio}% redução)`)
+      } catch (gzipErr) {
+        // Fallback para JSON puro caso CompressionStream não esteja disponível
+        blob = new Blob([jsonString], { type: 'application/json' })
+        contentType = 'application/json'
+        console.warn(`⚠️ Gzip falhou, upload como JSON puro (${rawSizeKB}KB):`, gzipErr)
+      }
+      const gzipMs = Date.now() - gzipStartedAt
+
+      console.log(
+        `📤 [saveCanvasData] Prep concluído em ${Date.now() - t0}ms ` +
+        `(auth=${authMs}ms, serialize=${serializeMs}ms, gzip=${gzipMs}ms, ` +
+        `preSerialized=${typeof preSerializedJson === 'string'}, raw=${rawSizeKB}KB, cors_blocked=${isPresignedCorsBlocked()}, snapshot=${snapshotSavedAt || 0})`
+      )
+
+      failIfAborted()
+
+      // Half-open: se já teve falhas anteriores, usar apenas 1 tentativa rápida.
+      // Quando o presigned já está bloqueado por CORS, também limitamos a 1 tentativa:
+      // duas rodadas de proxy longas encostam no soft-timeout do saveProjectDB
+      // e só aumentam a chance de cair em fallback por timeout.
+      const isHalfOpen = _wasabiConsecutiveFailures >= WASABI_CB_MAX_FAILURES
+      const effectiveRetries = (isHalfOpen || isPresignedCorsBlocked()) ? 1 : retries
+      const presignedPutTimeoutMs = resolvePresignedPutTimeoutMs(blob.size)
+      const preferDirectPresignedForLargeCanvas =
+        blob.size >= LARGE_CANVAS_DIRECT_UPLOAD_BYTES &&
+        !isPresignedCorsBlocked()
+
+      // Estratégia: presigned URL direto (rápido, pula se CORS bloqueou antes) -> fallback proxy servidor.
+      // Para canvas grande, preferimos insistir no PUT direto para Wasabi:
+      // no ambiente local ele foi muito mais rápido que o proxy do servidor.
+      // O save do projeto usa uma única rodada por ciclo; retries adicionais ficam no servidor
+      // (reset do S3 client) e no autosync em background.
+      for (let attempt = 1; attempt <= effectiveRetries; attempt++) {
+        const uploadStart = Date.now()
+        
+        try {
+          failIfAborted()
+
+          // ── Tentativa Única/Proxy: Servidor com blob bruto serializado como FormData ──
+          console.log(`📡 [upload ${attempt}/${effectiveRetries}] Tentando proxy servidor para ${key.substring(0, 50)}...`)
+          
+          const proxyController = new AbortController()
+          const detachProxyAbort = forwardAbortSignal(uploadController.signal, proxyController)
+
+          try {
+            const formData = new FormData()
+            formData.append('file', blob, 'canvas.json')
+
+            const result = await withAbortTimeout(
+              $fetch<{ key: string; size?: number; statusMessage?: string }>('/api/storage/upload', {
+                method: 'POST',
+                query: { key, contentType },
+                headers: {
+                  ...authHeaders
+                },
+                body: formData,
+                signal: proxyController.signal as AbortSignal
+              }),
+              proxyController,
+              PROXY_UPLOAD_TIMEOUT_MS,
+              'Upload proxy'
+            )
+
+            failIfAborted()
+
+            if (!result?.key) {
+              throw new Error(String(result?.statusMessage || 'Upload proxy retornou resposta inválida'))
+            }
+
+            lastSavedAt.value = new Date()
+            saveStatus.value = 'saved'
+            recordWasabiSuccess()
+            rememberCanvasUploadSuccess(pageScope, snapshotSavedAt, result.key)
+            console.log(`✅ Canvas salvo via proxy (tentativa ${attempt}/${effectiveRetries}, ${Date.now() - uploadStart}ms):`, result.key)
+            void triggerHistorySnapshot({ userId, projectId, pageId, key })
+            return result.key
+
+          } catch (proxyErr: any) {
+            if (uploadController.signal.aborted) {
+              throw new Error(String(uploadController.signal.reason || 'Canvas upload abortado'))
+            }
+            const proxyErrMessage = String(proxyErr?.message || '')
+            const statusCode = Number(proxyErr?.statusCode ?? proxyErr?.response?.status ?? 0)
+            if (statusCode === 401 || proxyErrMessage.includes('401')) {
+              saveStatus.value = 'error'
+              saveError.value = 'Sessão expirada. Faça login novamente.'
+              return null
+            }
+            throw proxyErr
+          } finally {
+            detachProxyAbort()
+          }
+
+        } catch (error: any) {
+          const elapsed = Date.now() - uploadStart
+          if (uploadController.signal.aborted) {
+            console.warn(`⏹️ Upload Wasabi cancelado para ${pageScope} após ${elapsed}ms (${error?.message || uploadController.signal.reason || 'abortado'}).`)
+            return null
+          }
+          if (attempt === effectiveRetries) {
+            recordWasabiFailure()
+            console.error(`❌ Wasabi upload falhou após ${effectiveRetries} tentativas (${elapsed}ms, blob=${(blob.size / 1024).toFixed(0)}KB):`, error?.message || error)
+            saveStatus.value = 'error'
+            saveError.value = error?.message || 'Erro desconhecido'
+            return null
+          }
+          const backoffMs = Math.min(Math.pow(2, attempt) * 1000, 8000)
+          console.warn(`⚠️ Tentativa ${attempt}/${effectiveRetries} falhou após ${elapsed}ms (${error?.message}), retry em ${backoffMs / 1000}s...`)
+          await new Promise(resolve => setTimeout(resolve, backoffMs))
+        }
+      }
+
+      return null
+    })()
+
+    canvasUploadInFlightByScope.set(pageScope, {
+      savedAt: snapshotSavedAt,
+      promise: run,
+      abort: (reason?: string) => {
+        if (!uploadController.signal.aborted) {
+          uploadController.abort(reason)
+        }
+      }
+    })
+
+    try {
+      return await run
+    } finally {
+      const liveEntry = canvasUploadInFlightByScope.get(pageScope)
+      if (liveEntry?.promise === run) {
+        canvasUploadInFlightByScope.delete(pageScope)
+      }
+      detachExternalAbort()
+    }
   }
 
   /**
@@ -828,6 +990,8 @@ if (import.meta.hot) {
         _presignedCorsBlockedUntil = 0
         lastHistorySnapshotAtByPage.clear()
         historySnapshotInFlightByPage.clear()
+        canvasUploadInFlightByScope.clear()
+        canvasUploadSuccessByScope.clear()
         _presignedGetCache.clear()
         saveStatus.value = 'idle'
         saveError.value = null

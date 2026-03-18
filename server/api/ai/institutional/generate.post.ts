@@ -68,7 +68,7 @@ export default defineEventHandler(async (event) => {
   )
 
   let styleNotes = ''
-  const referenceImages: Array<{ data: Buffer; mime: string }> = []
+  const referenceImages: Array<{ buffer: Buffer; mime: string }> = []
 
   if (refs.rows.length > 0) {
     // Compilar estilo
@@ -175,7 +175,6 @@ export default defineEventHandler(async (event) => {
         background: 'white',
         images: referenceImages.map((img, i) => ({
           data: img.buffer,
-          filename: `ref-${i}.jpg`,
           mime: img.mime
         }))
       })

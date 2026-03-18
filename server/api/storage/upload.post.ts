@@ -1,6 +1,7 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
+import { getS3Client, resetS3Client } from '../../utils/s3'
 import {
   isProjectsKey,
   isStorageKeyAllowedForUser,
@@ -13,8 +14,8 @@ import {
  * API Route para upload direto na Wasabi via servidor (evita CORS).
  *
  * Aceita:
- *   - multipart/form-data com campo "file" (preferido, mais compatível)
- *   - raw body binário (fallback)
+ *   - raw body binário (caminho principal para canvas)
+ *   - multipart/form-data com campo "file" (compatibilidade)
  *
  * Query params: key, contentType
  * Aceita até ~12 MB de payload (canvas JSON comprimido).
@@ -41,31 +42,35 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid key prefix' })
   }
 
-  // Ler body: tentar multipart primeiro (mais compatível), fallback para raw
+  // Ler body: preferir raw para evitar custo do parser multipart em uploads de canvas.
   let bodyBuffer: Buffer | null = null
+  let bodySource: 'raw' | 'multipart' | 'unknown' = 'unknown'
 
   const reqContentType = String(getHeader(event, 'content-type') || '').toLowerCase()
+  const readStartedAt = Date.now()
 
-  if (reqContentType.includes('multipart/form-data')) {
+  if (!reqContentType.includes('multipart/form-data')) {
     try {
-      const files = await readMultipartFormData(event)
-      if (files && files.length > 0 && files[0]?.data) {
-        bodyBuffer = Buffer.from(files[0].data)
+      const rawBody = (await readRawBody(event, false)) ?? null
+      if (rawBody) {
+        bodyBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody as any)
+        bodySource = 'raw'
       }
-    } catch (multipartErr: any) {
-      console.warn('⚠️ multipart read failed, trying raw body:', multipartErr?.message)
+    } catch (readErr: any) {
+      console.warn('⚠️ raw body read failed, trying multipart:', readErr?.message)
     }
   }
 
   if (!bodyBuffer) {
     try {
-      const rawBody = (await readRawBody(event, false)) ?? null
-      if (rawBody) {
-        bodyBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody as any)
+      const files = await readMultipartFormData(event)
+      if (files && files.length > 0 && files[0]?.data) {
+        bodyBuffer = Buffer.from(files[0].data)
+        bodySource = 'multipart'
       }
-    } catch (readErr: any) {
-      console.error('❌ Erro ao ler body do upload:', readErr?.message)
-      throw createError({ statusCode: 400, statusMessage: `Failed to read request body: ${readErr?.message || 'unknown'}` })
+    } catch (multipartErr: any) {
+      console.error('❌ Erro ao ler body do upload:', multipartErr?.message)
+      throw createError({ statusCode: 400, statusMessage: `Failed to read request body: ${multipartErr?.message || 'unknown'}` })
     }
   }
 
@@ -74,56 +79,63 @@ export default defineEventHandler(async (event) => {
   }
 
   const startMs = Date.now()
-  console.log(`📤 Upload: key=${key.substring(0, 80)} size=${bodyBuffer.length} bytes contentType=${contentType}`)
+  console.log(`📤 Upload: key=${key.substring(0, 80)} size=${bodyBuffer.length} bytes contentType=${contentType} body=${bodySource} readMs=${Date.now() - readStartedAt}`)
 
-  // Criar S3 client por request (evita problemas de conexão stale no singleton)
   const config = useRuntimeConfig()
-  const endpoint = String(config.wasabiEndpoint || process.env.WASABI_ENDPOINT || process.env.NUXT_WASABI_ENDPOINT || '').trim()
-  const region = String(config.wasabiRegion || process.env.WASABI_REGION || process.env.NUXT_WASABI_REGION || 'us-east-1').trim() || 'us-east-1'
   const bucket = String(config.wasabiBucket || process.env.WASABI_BUCKET || process.env.NUXT_WASABI_BUCKET || '').trim()
-  const accessKey = String(config.wasabiAccessKey || process.env.WASABI_ACCESS_KEY || process.env.NUXT_WASABI_ACCESS_KEY || '').trim()
-  const secretKey = String(config.wasabiSecretKey || process.env.WASABI_SECRET_KEY || process.env.NUXT_WASABI_SECRET_KEY || '').trim()
-
-  if (!endpoint || !bucket || !accessKey || !secretKey) {
+  if (!bucket) {
     throw createError({ statusCode: 500, statusMessage: 'WASABI_BUCKET not configured' })
   }
-
-  const s3Client = new S3Client({
-    endpoint: `https://${endpoint}`,
-    region,
-    credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
-    forcePathStyle: true,
-    maxAttempts: 2,
-    requestHandler: {
-      requestTimeout: 40_000, // menor que o timeout do proxy no cliente (45s) para falhar limpo
-      connectionTimeout: 8_000
-    } as any
-  })
-
-  try {
+  const sendPutObject = async () => {
+    const s3Client = getS3Client()
     await s3Client.send(new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: bodyBuffer,
       ContentType: contentType
     }))
+  }
+
+  try {
+    await sendPutObject()
   } catch (s3Err: any) {
+    let finalError = s3Err
+    let recoveredAfterReset = false
+    const firstErrMessage = String(s3Err?.message || 'unknown S3 error')
+    const shouldResetClient =
+      !Number(s3Err?.$metadata?.httpStatusCode || 0) ||
+      /timeout|socket|econn|reset|network/i.test(firstErrMessage)
+    if (shouldResetClient) {
+      resetS3Client()
+      try {
+        await sendPutObject()
+        recoveredAfterReset = true
+      } catch (retryErr: any) {
+        finalError = retryErr
+      }
+    }
+    if (recoveredAfterReset) {
+      const elapsedMs = Date.now() - startMs
+      console.warn(`⚠️ Wasabi upload recuperado apos reset do client (${elapsedMs}ms): ${key.substring(0, 80)}`)
+      console.log(`✅ Upload OK: key=${key.substring(0, 80)} size=${bodyBuffer.length} elapsed=${elapsedMs}ms`)
+      return { key, size: bodyBuffer.length }
+    }
     const elapsedMs = Date.now() - startMs
-    const errName = s3Err?.name || s3Err?.constructor?.name || 'Unknown'
+    const errName = finalError?.name || finalError?.constructor?.name || 'Unknown'
+    const errMessage = String(finalError?.message || 'unknown S3 error')
     console.error(`❌ Wasabi S3 PutObject failed after ${elapsedMs}ms:`, {
       name: errName,
-      message: s3Err?.message,
-      code: s3Err?.Code || s3Err?.$metadata?.httpStatusCode || '',
-      statusCode: s3Err?.$metadata?.httpStatusCode,
-      requestId: s3Err?.$metadata?.requestId,
-      attempts: s3Err?.$metadata?.attempts,
+      message: errMessage,
+      code: finalError?.Code || finalError?.$metadata?.httpStatusCode || '',
+      statusCode: finalError?.$metadata?.httpStatusCode,
+      requestId: finalError?.$metadata?.requestId,
+      attempts: finalError?.$metadata?.attempts,
+      resetClient: shouldResetClient,
     })
     throw createError({
       statusCode: 502,
-      statusMessage: `Wasabi upload failed (${errName}): ${s3Err?.message || 'unknown S3 error'}`
+      statusMessage: `Wasabi upload failed (${errName}): ${errMessage}`
     })
-  } finally {
-    s3Client.destroy()
   }
 
   const elapsedMs = Date.now() - startMs

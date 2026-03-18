@@ -33,6 +33,9 @@ const {
   hasUnsavedChanges,
   triggerAutoSave,
   cancelAutoSave,
+  flushAutoSave,
+  flushPendingLocalDrafts,
+  emergencySnapshotDirtyPages,
   projectServerUpdatedAt,
   realtimeClientId
 } = useProject()
@@ -240,28 +243,56 @@ watch(
   { immediate: true }
 )
 
-// Cancel auto-save on unmount
+// Flush save on unmount (user leaving editor page)
 onUnmounted(() => {
   if (visibilityHandler && typeof document !== 'undefined') {
     document.removeEventListener('visibilitychange', visibilityHandler)
     visibilityHandler = null
   }
+  if (_beforeUnloadHandler && typeof window !== 'undefined') {
+    window.removeEventListener('beforeunload', _beforeUnloadHandler)
+    _beforeUnloadHandler = null
+  }
   if (_savingTimer) { clearInterval(_savingTimer); _savingTimer = null }
   closeProjectRealtime()
-  cancelAutoSave()
+  // Snapshot síncrono ANTES do flush async — garante que o draft local
+  // sobreviva mesmo se flushAutoSave não completar (navegação SPA)
+  flushPendingLocalDrafts()
+  emergencySnapshotDirtyPages()
+  // Flush em vez de cancelar — garante que alterações pendentes sejam salvas
+  void flushAutoSave().catch(() => { /* ignore */ })
 })
+
+// beforeunload: salva rascunho local quando o usuário fecha a aba/recarrega
+let _beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null
 
 onMounted(() => {
   visibilityHandler = () => {
     const id = String(route.params.id || '').trim()
     if (!id) return
     if (document.visibilityState === 'hidden') {
+      // Flush drafts e tenta salvar quando a aba vai para background
+      flushPendingLocalDrafts()
+      emergencySnapshotDirtyPages()
+      if (hasUnsavedChanges.value) {
+        void flushAutoSave().catch(() => { /* ignore */ })
+      }
       closeProjectRealtime()
       return
     }
     openProjectRealtime(id)
   }
   document.addEventListener('visibilitychange', visibilityHandler)
+
+  _beforeUnloadHandler = () => {
+    // Salvar rascunho local síncronamente (localStorage é síncrono)
+    flushPendingLocalDrafts()
+    // Rede de segurança: se o draft normal não cobriu alguma página dirty
+    // (canvas grande demais para o limite padrão, pending queue já flushed, etc.),
+    // força um snapshot de emergência com limite mais generoso.
+    emergencySnapshotDirtyPages()
+  }
+  window.addEventListener('beforeunload', _beforeUnloadHandler)
 })
 
 const savedClock = computed(() => {

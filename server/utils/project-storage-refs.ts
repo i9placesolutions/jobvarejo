@@ -98,6 +98,28 @@ export const normalizeProjectCanvasDataStorageRefs = (value: unknown): unknown =
   return value
 }
 
+const stripInlineCanvasDataFromPageMeta = (pageMeta: any): any => {
+  if (!pageMeta || typeof pageMeta !== 'object') return pageMeta
+  const next = { ...(pageMeta as Record<string, any>) }
+  delete next.canvasData
+  return next
+}
+
+export const stripInlineCanvasDataFromProjectCanvasData = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((pageMeta) => stripInlineCanvasDataFromPageMeta(pageMeta))
+  }
+
+  if (value && typeof value === 'object' && Array.isArray((value as any).pages)) {
+    return {
+      ...(value as Record<string, any>),
+      pages: (value as any).pages.map((pageMeta: any) => stripInlineCanvasDataFromPageMeta(pageMeta))
+    }
+  }
+
+  return value
+}
+
 export const resolveStorageReadUrl = async (value: unknown, userId: string): Promise<string | null> => {
   if (value == null) return null
   const raw = String(value || '').trim()

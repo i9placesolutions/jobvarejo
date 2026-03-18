@@ -37,7 +37,7 @@ const handleFileSelect = async (event: Event) => {
 
   for (let i = 0; i < Math.min(files.length, 5); i++) {
     const file = files[i]
-    if (!file.type.startsWith('image/')) continue
+    if (!file || !file.type.startsWith('image/')) continue
     try {
       await uploadReference(file, { displayName: file.name })
     } catch (err) {

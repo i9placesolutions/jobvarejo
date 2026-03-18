@@ -21,7 +21,7 @@ const props = defineProps<{
     siteUrl: string
     transparent: boolean
     removeBg: boolean
-    size: '1080x1080' | '1080x1350' | '1080x1920' | '1920x1080'
+    size: '1080x1080' | '1080x1350' | '1080x1920' | '1920x1080' | '1024x1024' | '1024x1536' | '1536x1024'
     modelImageUrl: string
     baseImageUrl: string
     refUrls: string[]
@@ -64,7 +64,7 @@ const baseFile = ref<File | null>(null)
 
 const transparent = ref(true)
 const removeBg = ref(false)
-const size = ref<'1080x1080' | '1080x1350' | '1080x1920' | '1920x1080'>('1080x1080')
+const size = ref<'1080x1080' | '1080x1350' | '1080x1920' | '1920x1080' | '1024x1024' | '1024x1536' | '1536x1024'>('1080x1080')
 
 // Edit mask
 const maskEnabled = computed(() => mode.value === 'edit')

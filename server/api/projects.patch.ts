@@ -2,7 +2,8 @@ import { requireAuthenticatedUser } from '../utils/auth'
 import { parseAndStringifyJsonbParam } from '../utils/jsonb'
 import {
   normalizeProjectCanvasDataStorageRefs,
-  normalizeStoredStorageRef
+  normalizeStoredStorageRef,
+  stripInlineCanvasDataFromProjectCanvasData
 } from '../utils/project-storage-refs'
 import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
@@ -108,7 +109,9 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'canvas_data cannot be empty' })
     }
     ensureCanvasDataNotEmpty(body.canvas_data)
-    const normalizedCanvasData = normalizeProjectCanvasDataStorageRefs(body.canvas_data)
+    const normalizedCanvasData = stripInlineCanvasDataFromProjectCanvasData(
+      normalizeProjectCanvasDataStorageRefs(body.canvas_data)
+    )
     const canvasDataJson = parseAndStringifyJsonbParam(normalizedCanvasData, 'canvas_data')
     updates.push(`canvas_data = ${pushParam(canvasDataJson)}::jsonb`)
   }
