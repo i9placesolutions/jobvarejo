@@ -55,7 +55,7 @@ const SAVE_WATCHDOG_MS = 120_000
 // Worst case por tentativa: presigned (6s+12s) + proxy (35s) ~= 53s.
 // Com CORS bloqueado, usamos 1 tentativa de proxy; nos demais casos deixamos
 // margem para uma nova tentativa curta sem abortar prematuramente um upload saudável.
-const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 75_000
+const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 120_000
 const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 12_000
 let lastSaveChangedDuringRunLogAt = 0
 // Exponential backoff counter for unsynced page retries.

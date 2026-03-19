@@ -2,9 +2,9 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { Agent as HttpsAgent } from "https";
 
-const WASABI_CONNECTION_TIMEOUT_MS = 8_000;
-const WASABI_REQUEST_TIMEOUT_MS = 30_000;
-const WASABI_SOCKET_TIMEOUT_MS = 30_000;
+const WASABI_CONNECTION_TIMEOUT_MS = 15_000;
+const WASABI_REQUEST_TIMEOUT_MS = 90_000;
+const WASABI_SOCKET_TIMEOUT_MS = 90_000;
 
 let _s3ClientInstance: S3Client | null = null;
 
@@ -39,7 +39,7 @@ export const getS3Client = () => {
             secretAccessKey
         },
         forcePathStyle: true,
-        maxAttempts: 2,
+        maxAttempts: 1,
         requestHandler: new NodeHttpHandler({
             connectionTimeout: WASABI_CONNECTION_TIMEOUT_MS,
             requestTimeout: WASABI_REQUEST_TIMEOUT_MS,

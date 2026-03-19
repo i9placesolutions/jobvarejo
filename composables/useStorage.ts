@@ -115,7 +115,7 @@ const THUMBNAIL_UPLOAD_TIMEOUT_MS = 15_000
 const THUMBNAIL_UPLOAD_RETRIES = 2
 const PRESIGNED_API_TIMEOUT_MS = 6_000
 const PRESIGNED_PUT_TIMEOUT_MS = 12_000
-const PROXY_UPLOAD_TIMEOUT_MS = 35_000
+const PROXY_UPLOAD_TIMEOUT_MS = 90_000
 const LARGE_CANVAS_DIRECT_UPLOAD_BYTES = 6 * 1024 * 1024
 const lastHistorySnapshotAtByPage = new Map<string, number>()
 const historySnapshotInFlightByPage = new Map<string, Promise<void>>()
@@ -612,6 +612,13 @@ export const useStorage = () => {
             return result.key
 
           } catch (proxyErr: any) {
+            const elapsed = Date.now() - uploadStart
+            console.error(`🔴 [upload proxy] ERRO após ${elapsed}ms:`, {
+              message: proxyErr?.message || 'unknown',
+              statusCode: proxyErr?.statusCode || proxyErr?.response?.status || 0,
+              name: proxyErr?.name || 'Error',
+              data: proxyErr?.data || null
+            })
             if (uploadController.signal.aborted) {
               throw new Error(String(uploadController.signal.reason || 'Canvas upload abortado'))
             }

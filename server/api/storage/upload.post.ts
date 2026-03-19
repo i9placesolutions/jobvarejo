@@ -79,7 +79,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const startMs = Date.now()
-  console.log(`📤 Upload: key=${key.substring(0, 80)} size=${bodyBuffer.length} bytes contentType=${contentType} body=${bodySource} readMs=${Date.now() - readStartedAt}`)
+  const sizeKB = (bodyBuffer.length / 1024).toFixed(1)
+  console.log(`📤 Upload START: key=${key.substring(0, 80)} size=${sizeKB}KB body=${bodySource} readMs=${Date.now() - readStartedAt}`)
 
   const config = useRuntimeConfig()
   const bucket = String(config.wasabiBucket || process.env.WASABI_BUCKET || process.env.NUXT_WASABI_BUCKET || '').trim()
@@ -99,38 +100,27 @@ export default defineEventHandler(async (event) => {
   try {
     await sendPutObject()
   } catch (s3Err: any) {
-    let finalError = s3Err
-    let recoveredAfterReset = false
-    const firstErrMessage = String(s3Err?.message || 'unknown S3 error')
-    const shouldResetClient =
-      !Number(s3Err?.$metadata?.httpStatusCode || 0) ||
-      /timeout|socket|econn|reset|network/i.test(firstErrMessage)
-    if (shouldResetClient) {
-      resetS3Client()
-      try {
-        await sendPutObject()
-        recoveredAfterReset = true
-      } catch (retryErr: any) {
-        finalError = retryErr
-      }
-    }
-    if (recoveredAfterReset) {
-      const elapsedMs = Date.now() - startMs
-      console.warn(`⚠️ Wasabi upload recuperado apos reset do client (${elapsedMs}ms): ${key.substring(0, 80)}`)
-      console.log(`✅ Upload OK: key=${key.substring(0, 80)} size=${bodyBuffer.length} elapsed=${elapsedMs}ms`)
-      return { key, size: bodyBuffer.length }
-    }
     const elapsedMs = Date.now() - startMs
-    const errName = finalError?.name || finalError?.constructor?.name || 'Unknown'
-    const errMessage = String(finalError?.message || 'unknown S3 error')
+    const errName = s3Err?.name || s3Err?.constructor?.name || 'Unknown'
+    const errMessage = String(s3Err?.message || 'unknown S3 error')
+    const isNetworkError =
+      !Number(s3Err?.$metadata?.httpStatusCode || 0) ||
+      /timeout|socket|econn|reset|network/i.test(errMessage)
+
+    // Reset S3 client on network errors so the next request uses a fresh connection.
+    // No server-side retry — the client already retries, and a second attempt here
+    // would double the response time (25s+25s=50s), exceeding the client's 35s proxy timeout.
+    if (isNetworkError) {
+      resetS3Client()
+    }
+
     console.error(`❌ Wasabi S3 PutObject failed after ${elapsedMs}ms:`, {
       name: errName,
       message: errMessage,
-      code: finalError?.Code || finalError?.$metadata?.httpStatusCode || '',
-      statusCode: finalError?.$metadata?.httpStatusCode,
-      requestId: finalError?.$metadata?.requestId,
-      attempts: finalError?.$metadata?.attempts,
-      resetClient: shouldResetClient,
+      code: s3Err?.Code || s3Err?.$metadata?.httpStatusCode || '',
+      statusCode: s3Err?.$metadata?.httpStatusCode,
+      requestId: s3Err?.$metadata?.requestId,
+      resetClient: isNetworkError,
     })
     throw createError({
       statusCode: 502,
