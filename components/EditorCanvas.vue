@@ -10637,6 +10637,9 @@ const CANVAS_CUSTOM_PROPS = [
     'imageUrl',
     'subTargetCheck',
     'interactive',
+    // Persisted relayout signature — prevents resizeSmartObject from rebuilding card
+    // internals on reload when the card dimensions and styles haven't changed.
+    '__lastCardRelayoutSignature',
     // When true on a child object, prevents auto-layout from overriding user placement (persisted).
     '__manualTransform',
 	    '__manualTransformCardW',
@@ -11841,8 +11844,31 @@ const removeImageObjectsDeep = (node: any): any => {
         
         // Serialize with custom props
         let json: any
+        const preSerializeObjectCount = canvasInstance?.getObjects?.()?.length || 0
         try {
             json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
+            // FIX: toJSON() can return empty objects even when canvas has objects.
+            // This may happen due to all objects having excludeFromExport=true or
+            // a transient Fabric internal state. Retry once after clearing the flag.
+            if (
+                preSerializeObjectCount > 0 &&
+                (!json?.objects || json.objects.length === 0)
+            ) {
+                console.warn(`[saveState] toJSON() retornou 0 objetos mas canvas tem ${preSerializeObjectCount}. Corrigindo excludeFromExport e re-serializando...`)
+                const liveObjs = canvasInstance.getObjects?.() || []
+                let fixedExclude = 0
+                liveObjs.forEach((obj: any) => {
+                    if (obj?.excludeFromExport === true && !isTransientCanvasObject(obj)) {
+                        obj.excludeFromExport = false
+                        fixedExclude++
+                    }
+                })
+                if (fixedExclude > 0) {
+                    console.warn(`[saveState] Corrigido excludeFromExport em ${fixedExclude} objeto(s).`)
+                }
+                json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
+                console.warn(`[saveState] Re-serialização: ${json?.objects?.length || 0} objetos (antes: 0, canvas: ${preSerializeObjectCount})`)
+            }
         } catch (serializeErr: any) {
             const serializeMsg = String(serializeErr?.message || serializeErr || '').toLowerCase()
             const isRecoverableSerializationError = serializeMsg.includes('toobject is not a function')
@@ -11911,6 +11937,8 @@ const removeImageObjectsDeep = (node: any): any => {
             applyViewportCulling('post-save-restore')
         }
 
+        const postToJsonObjectCount = Number(json?.objects?.length || 0)
+
         finalizeSerializedCanvasJson({
             json,
             canvasInstance,
@@ -11920,6 +11948,8 @@ const removeImageObjectsDeep = (node: any): any => {
             convertPresignedToPermanentUrl,
             canvasFramesForDebug: canvasFrames
         });
+
+        const postFinalizeObjectCount = Number(json?.objects?.length || 0)
 
         // Injetar filhos de frames invisíveis (diferidos) no JSON antes de salvar.
         // Eles não estão no canvas mas precisam ser persistidos para não perder dados.
@@ -11944,7 +11974,16 @@ const removeImageObjectsDeep = (node: any): any => {
         ) {
             console.warn(
                 `⚠️ Pulando salvamento de JSON vazio após serialização: página já tinha ${existingPersistedObjectCount} objetos persistidos`,
-                { pageIndex: targetPageIndexStart, reason: opts.reason || 'unspecified', pageId: targetPageId }
+                {
+                    pageIndex: targetPageIndexStart,
+                    reason: opts.reason || 'unspecified',
+                    pageId: targetPageId,
+                    preSerializeObjectCount,
+                    postToJsonObjectCount,
+                    postFinalizeObjectCount,
+                    jsonVersion: json?.version,
+                    jsonHasObjects: Array.isArray(json?.objects),
+                }
             );
             return;
         }
@@ -35346,23 +35385,50 @@ const getZoneMetrics = (zone: any) => {
     // When live bounds are valid (zone is rendered), use them directly.
     // This prevents stale _zoneWidth/_zoneHeight from placing cards outside the zone.
     if (liveBounds && liveW > 0 && liveH > 0) {
-        // Keep stored dims in sync so future saves are accurate
-        if (zone._zoneWidth !== liveW || zone._zoneHeight !== liveH) {
-            const wRatio = Math.max(zone._zoneWidth || 0, liveW) / Math.min(zone._zoneWidth || liveW, liveW);
-            const hRatio = Math.max(zone._zoneHeight || 0, liveH) / Math.min(zone._zoneHeight || liveH, liveH);
-            // Only auto-sync when the discrepancy is significant (>10%) to avoid float noise
-            if (!zone._zoneWidth || !zone._zoneHeight || wRatio > 1.1 || hRatio > 1.1) {
+        // FIX: Prefer stored _zoneWidth/_zoneHeight over getBoundingRect when they
+        // are available and reasonably close to live bounds (within 15%).
+        // getBoundingRect(true) returns the bounding rect of the ENTIRE group including
+        // text labels ("Zona de Produtos", etc.) which can differ from the actual zone
+        // rect dimensions.  After loadFromJSON, Fabric's LayoutManager can recalculate
+        // group bounds, producing slightly different values each reload.  Using the
+        // stored dimensions ensures consistent card positioning across saves/loads.
+        const hasStoredDims = typeof zone._zoneWidth === 'number' && zone._zoneWidth > 0 &&
+                              typeof zone._zoneHeight === 'number' && zone._zoneHeight > 0;
+
+        let useW = liveW;
+        let useH = liveH;
+
+        if (hasStoredDims) {
+            const wRatio = Math.max(zone._zoneWidth, liveW) / Math.min(zone._zoneWidth, liveW);
+            const hRatio = Math.max(zone._zoneHeight, liveH) / Math.min(zone._zoneHeight, liveH);
+
+            if (wRatio <= 1.15 && hRatio <= 1.15) {
+                // Discrepancy is small — use stored dims for stability
+                useW = zone._zoneWidth;
+                useH = zone._zoneHeight;
+            } else {
+                // Significant discrepancy — zone was resized, sync stored dims
                 zone._zoneWidth = liveW;
                 zone._zoneHeight = liveH;
             }
+        } else {
+            // No stored dims — initialize from live bounds
+            zone._zoneWidth = liveW;
+            zone._zoneHeight = liveH;
         }
+
+        // Position: use zone center point (stable) + stored dimensions
+        const center = typeof zone.getCenterPoint === 'function'
+            ? zone.getCenterPoint()
+            : { x: liveBounds.left + liveW / 2, y: liveBounds.top + liveH / 2 };
+
         return {
-            left: liveBounds.left,
-            top: liveBounds.top,
-            width: liveW,
-            height: liveH,
-            centerX: liveBounds.left + liveW / 2,
-            centerY: liveBounds.top + liveH / 2
+            left: center.x - (useW / 2),
+            top: center.y - (useH / 2),
+            width: useW,
+            height: useH,
+            centerX: center.x,
+            centerY: center.y
         };
     }
 
@@ -36607,8 +36673,9 @@ const rehydrateCanvasZones = (
             // Keep persisted visibility, but never show a zone whose parent frame is hidden.
             const zoneFrameId = String((z as any).parentFrameId || '').trim();
             const hiddenByFrame = !!(zoneFrameId && getFrameById(zoneFrameId)?.visible === false);
-            if (typeof z.visible !== 'boolean') z.visible = true;
-            if (hiddenByFrame) z.visible = false;
+            // FIX: Force zones visible unless hidden by frame (same rationale as cards above).
+            if (!hiddenByFrame) z.visible = true;
+            else z.visible = false;
             if (typeof z.opacity !== 'number') z.opacity = 1;
             if (!hiddenByFrame && z.opacity === 0) z.opacity = 1;
 
@@ -36730,8 +36797,14 @@ const rehydrateCanvasZones = (
                 }
             }
             const cardHiddenByFrame = !!(cardFrameId && getFrameById(cardFrameId)?.visible === false);
-            if (typeof card.visible !== 'boolean') card.visible = true;
-            if (cardHiddenByFrame) card.visible = false;
+            // FIX: ALWAYS force visible:true for cards not hidden by frame.
+            // Previously we only set visible when `typeof visible !== 'boolean'`,
+            // but viewport culling could have saved cards with visible:false.
+            // The __viewportCulled flag is transient (not in CANVAS_CUSTOM_PROPS),
+            // so on reload we cannot distinguish culled-hidden from intentionally-hidden.
+            // Product cards should ALWAYS be visible unless their parent frame is hidden.
+            if (!cardHiddenByFrame) card.visible = true;
+            else card.visible = false;
             if (typeof card.opacity !== 'number') card.opacity = 1;
             if (!cardHiddenByFrame && card.opacity === 0) card.opacity = 1;
 

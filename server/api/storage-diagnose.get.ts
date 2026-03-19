@@ -1,14 +1,16 @@
 import { ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getS3Client } from '../utils/s3'
 
-export default defineEventHandler(async (event) => {const start = Date.now()
+export default defineEventHandler(async (event) => {
+  const start = Date.now()
   const results: any = {
     timestamp: new Date().toISOString(),
     checks: {}
   }
 
   try {
-    const config = useRuntimeConfig()const endpoint = config.wasabiEndpoint || process.env.WASABI_ENDPOINT || 'N/A'
+    const config = useRuntimeConfig()
+    const endpoint = config.wasabiEndpoint || process.env.WASABI_ENDPOINT || 'N/A'
     const bucket = config.wasabiBucket || process.env.WASABI_BUCKET || 'N/A'
     const region = config.wasabiRegion || process.env.WASABI_REGION || 'N/A'
     const hasAccessKey = !!(config.wasabiAccessKey || process.env.WASABI_ACCESS_KEY)
