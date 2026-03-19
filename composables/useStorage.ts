@@ -8,18 +8,24 @@ const compressGzip = async (text: string): Promise<ArrayBuffer> => {
   const stream = new CompressionStream('gzip')
   const writer = stream.writable.getWriter()
   const encoded = new TextEncoder().encode(text)
-  // slice() produces a plain ArrayBuffer (not SharedArrayBuffer) — required by the type
+  // FIX: iniciar leitura do readable ANTES de escrever para evitar deadlock.
+  // Para payloads grandes (>1MB), o buffer interno do CompressionStream enche,
+  // writer.write() bloqueia esperando o readable ser consumido, mas o readable
+  // só era lido DEPOIS do write — causando hang infinito.
+  const outputPromise = new Response(stream.readable).arrayBuffer()
   await writer.write(encoded.buffer.slice(0) as ArrayBuffer)
   await writer.close()
-  return new Response(stream.readable).arrayBuffer()
+  return outputPromise
 }
 
 const decompressGzip = async (data: ArrayBuffer): Promise<string> => {
   const stream = new DecompressionStream('gzip')
   const writer = stream.writable.getWriter()
+  // FIX: mesma correção de deadlock — ler do readable antes de escrever
+  const outputPromise = new Response(stream.readable).text()
   await writer.write(data)
   await writer.close()
-  return new Response(stream.readable).text()
+  return outputPromise
 }
 
 const isGzipBuffer = (buf: Uint8Array): boolean =>
@@ -442,19 +448,23 @@ export const useStorage = () => {
   /**
    * Salva dados JSON na Wasabi Storage com retry automático (3 tentativas)
    */
-  const saveCanvasData = async (
+const saveCanvasData = async (
     projectId: string,
     pageId: string,
     canvasJson: any,
-    retries = 2,
+    retries: number = 1,
     preSerializedJson?: string | null,
     externalSignal?: AbortSignal | null
   ): Promise<string | null> => {
+    const entryTs = Date.now()
+    console.log(`🔵 [saveCanvasData] ENTRY projectId=${projectId} pageId=${pageId} hasPreSerialized=${!!preSerializedJson}`)
+    
     if (import.meta.server) {
       return null
     }
 
     const pageScope = `${projectId}:${pageId}`
+    console.log(`🔵 [saveCanvasData] pageScope=${pageScope} snapshotSavedAt=${getCanvasSnapshotSavedAt(canvasJson)}`)
     const snapshotSavedAt = getCanvasSnapshotSavedAt(canvasJson)
     const recentSuccess = getRecentCanvasUploadSuccess(pageScope, snapshotSavedAt)
     if (recentSuccess) {
@@ -486,6 +496,8 @@ export const useStorage = () => {
     }
 
     const run = (async () => {
+      console.log(`🔵 [saveCanvasData/run] START run promise for ${pageScope}`)
+      
       // Circuit breaker: pular Wasabi se muitas falhas consecutivas
       if (isWasabiCircuitOpen()) {
         console.warn(`⚡ Wasabi circuit breaker ABERTO — pulando upload remoto (retry em ${Math.ceil((_wasabiCircuitOpenUntil - Date.now()) / 60_000)}min)`)
@@ -493,6 +505,7 @@ export const useStorage = () => {
       }
 
       const userId = auth.user.value?.id
+      console.log(`🔵 [saveCanvasData/run] userId=${userId}`)
       if (!userId) {
         saveStatus.value = 'error'
         saveError.value = 'Usuário não autenticado'
@@ -502,7 +515,10 @@ export const useStorage = () => {
       saveStatus.value = 'saving'
       saveError.value = null
       const t0 = Date.now()
+      console.log(`🔵 [saveCanvasData/run] Getting auth headers...`)
       const authHeaders = await tryGetApiAuthHeaders()
+      const authElapsed = Date.now() - t0
+      console.log(`🔵 [saveCanvasData/run] Auth headers obtained in ${authElapsed}ms, hasHeaders=${!!authHeaders}`)
       if (!authHeaders) {
         saveStatus.value = 'error'
         saveError.value = 'Sessão expirada. Faça login novamente.'
@@ -527,8 +543,11 @@ export const useStorage = () => {
       let contentType: string
       const rawSizeKB = (jsonString.length / 1024).toFixed(0)
       const gzipStartedAt = Date.now()
+      console.log(`🔵 [saveCanvasData/run] Starting gzip compression, rawSize=${rawSizeKB}KB`)
       try {
         const compressedBuf = await compressGzip(jsonString)
+        const gzipElapsed = Date.now() - gzipStartedAt
+        console.log(`🔵 [saveCanvasData/run] Gzip done in ${gzipElapsed}ms`)
         blob = new Blob([compressedBuf], { type: 'application/octet-stream' })
         contentType = 'application/octet-stream'
         const compressedSizeKB = (compressedBuf.byteLength / 1024).toFixed(0)
@@ -569,27 +588,36 @@ export const useStorage = () => {
       for (let attempt = 1; attempt <= effectiveRetries; attempt++) {
         const uploadStart = Date.now()
         
+        console.log(`📡 [upload ${attempt}/${effectiveRetries}] Iniciando upload para ${key.substring(0, 50)}...`, {
+          blobSize: blob.size,
+          contentType,
+          isHalfOpen,
+          effectiveRetries,
+          preSerialized: !!preSerializedJson
+        });
+        
         try {
           failIfAborted()
 
-          // ── Tentativa Única/Proxy: Servidor com blob bruto serializado como FormData ──
-          console.log(`📡 [upload ${attempt}/${effectiveRetries}] Tentando proxy servidor para ${key.substring(0, 50)}...`)
-          
+          // ── Upload via proxy servidor (raw body, sem multipart) ──
+          console.log(`📡 [upload ${attempt}/${effectiveRetries}] Tentando proxy servidor...`)
+
           const proxyController = new AbortController()
           const detachProxyAbort = forwardAbortSignal(uploadController.signal, proxyController)
 
           try {
-            const formData = new FormData()
-            formData.append('file', blob, 'canvas.json')
+            console.log(`📤 [upload ${attempt}/${effectiveRetries}] Enviando raw body (${(blob.size / 1024).toFixed(0)}KB)...`);
+            const fetchStart = Date.now()
 
             const result = await withAbortTimeout(
               $fetch<{ key: string; size?: number; statusMessage?: string }>('/api/storage/upload', {
                 method: 'POST',
                 query: { key, contentType },
                 headers: {
-                  ...authHeaders
+                  ...authHeaders,
+                  'Content-Type': contentType
                 },
-                body: formData,
+                body: blob,
                 signal: proxyController.signal as AbortSignal
               }),
               proxyController,
@@ -598,6 +626,9 @@ export const useStorage = () => {
             )
 
             failIfAborted()
+
+            const fetchElapsed = Date.now() - fetchStart
+            console.log(`📤 [upload ${attempt}/${effectiveRetries}] $fetch completed in ${fetchElapsed}ms`)
 
             if (!result?.key) {
               throw new Error(String(result?.statusMessage || 'Upload proxy retornou resposta inválida'))

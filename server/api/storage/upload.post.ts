@@ -22,8 +22,16 @@ import {
  */
 
 export default defineEventHandler(async (event) => {
+  const routeStartMs = Date.now()
+  console.log(`📥 [upload.post] Request START`)
+
   const user = await requireAuthenticatedUser(event)
+  const authMs = Date.now() - routeStartMs
+  console.log(`📥 [upload.post] Auth done: ${authMs}ms`)
+
   await enforceRateLimit(event, `storage-upload:${user.id}`, 120, 60_000)
+  const rateLimitMs = Date.now() - routeStartMs - authMs
+  console.log(`📥 [upload.post] Rate limit done: ${rateLimitMs}ms`)
 
   const query = getQuery(event)
   const key = normalizeStoragePath(String(query.key || '').trim())
@@ -48,10 +56,14 @@ export default defineEventHandler(async (event) => {
 
   const reqContentType = String(getHeader(event, 'content-type') || '').toLowerCase()
   const readStartedAt = Date.now()
+  console.log(`📥 [upload.post] Reading body, contentType=${reqContentType.substring(0, 50)}`)
 
   if (!reqContentType.includes('multipart/form-data')) {
     try {
+      const rawBodyStart = Date.now()
       const rawBody = (await readRawBody(event, false)) ?? null
+      const rawBodyMs = Date.now() - rawBodyStart
+      console.log(`📥 [upload.post] readRawBody took ${rawBodyMs}ms`)
       if (rawBody) {
         bodyBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody as any)
         bodySource = 'raw'
@@ -63,7 +75,10 @@ export default defineEventHandler(async (event) => {
 
   if (!bodyBuffer) {
     try {
+      const multipartStart = Date.now()
       const files = await readMultipartFormData(event)
+      const multipartMs = Date.now() - multipartStart
+      console.log(`📥 [upload.post] readMultipartFormData took ${multipartMs}ms`)
       if (files && files.length > 0 && files[0]?.data) {
         bodyBuffer = Buffer.from(files[0].data)
         bodySource = 'multipart'
@@ -79,56 +94,88 @@ export default defineEventHandler(async (event) => {
   }
 
   const startMs = Date.now()
+  const readTotalMs = Date.now() - readStartedAt
   const sizeKB = (bodyBuffer.length / 1024).toFixed(1)
-  console.log(`📤 Upload START: key=${key.substring(0, 80)} size=${sizeKB}KB body=${bodySource} readMs=${Date.now() - readStartedAt}`)
+  console.log(`📤 Upload START: key=${key.substring(0, 80)} size=${sizeKB}KB body=${bodySource} readTotalMs=${readTotalMs}`)
 
   const config = useRuntimeConfig()
   const bucket = String(config.wasabiBucket || process.env.WASABI_BUCKET || process.env.NUXT_WASABI_BUCKET || '').trim()
   if (!bucket) {
     throw createError({ statusCode: 500, statusMessage: 'WASABI_BUCKET not configured' })
   }
-  const sendPutObject = async () => {
+
+  const UPLOAD_TIMEOUT_MS = 90_000 // 90s — Wasabi é mais lenta que AWS S3
+
+  const sendPutObject = async (attempt: number) => {
     const s3Client = getS3Client()
-    await s3Client.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: bodyBuffer,
-      ContentType: contentType
-    }))
+    const abortController = new AbortController()
+
+    const timeoutId = setTimeout(() => {
+      console.warn(`⏰ [upload.post] S3 timeout after ${UPLOAD_TIMEOUT_MS}ms (attempt ${attempt})`)
+      abortController.abort()
+    }, UPLOAD_TIMEOUT_MS)
+
+    const s3StartMs = Date.now()
+    console.log(`📤 [upload.post] Calling S3 PutObject (attempt ${attempt})...`)
+    try {
+      await s3Client.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: bodyBuffer,
+        ContentType: contentType
+      }), {
+        abortSignal: abortController.signal
+      })
+      const s3Elapsed = Date.now() - s3StartMs
+      console.log(`📤 [upload.post] S3 PutObject DONE in ${s3Elapsed}ms (attempt ${attempt})`)
+    } finally {
+      clearTimeout(timeoutId)
+    }
   }
 
-  try {
-    await sendPutObject()
-  } catch (s3Err: any) {
-    const elapsedMs = Date.now() - startMs
-    const errName = s3Err?.name || s3Err?.constructor?.name || 'Unknown'
-    const errMessage = String(s3Err?.message || 'unknown S3 error')
-    const isNetworkError =
-      !Number(s3Err?.$metadata?.httpStatusCode || 0) ||
-      /timeout|socket|econn|reset|network/i.test(errMessage)
+  // Tenta até 2x: se a primeira falhar por rede (stale socket), reseta o client e tenta de novo.
+  const MAX_ATTEMPTS = 2
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      await sendPutObject(attempt)
+      break // sucesso
+    } catch (s3Err: any) {
+      const elapsedMs = Date.now() - startMs
+      const errName = s3Err?.name || s3Err?.constructor?.name || 'Unknown'
+      const errMessage = String(s3Err?.message || 'unknown S3 error')
+      const isNetworkError =
+        !Number(s3Err?.$metadata?.httpStatusCode || 0) ||
+        /timeout|socket|econn|reset|network/i.test(errMessage) ||
+        errName === 'AbortError'
 
-    // Reset S3 client on network errors so the next request uses a fresh connection.
-    // No server-side retry — the client already retries, and a second attempt here
-    // would double the response time (25s+25s=50s), exceeding the client's 35s proxy timeout.
-    if (isNetworkError) {
-      resetS3Client()
+      if (isNetworkError) {
+        resetS3Client()
+      }
+
+      if (attempt < MAX_ATTEMPTS && isNetworkError) {
+        console.warn(`⚠️ [upload.post] Attempt ${attempt} failed (${errName}: ${errMessage}), retrying with fresh client...`)
+        continue
+      }
+
+      console.error(`❌ Wasabi S3 PutObject failed after ${elapsedMs}ms:`, {
+        name: errName,
+        message: errMessage,
+        code: s3Err?.Code || s3Err?.$metadata?.httpStatusCode || '',
+        statusCode: s3Err?.$metadata?.httpStatusCode,
+        requestId: s3Err?.$metadata?.requestId,
+        resetClient: isNetworkError,
+        attempt,
+        elapsedMs
+      })
+      throw createError({
+        statusCode: 502,
+        statusMessage: `Wasabi upload failed (${errName}): ${errMessage}`
+      })
     }
-
-    console.error(`❌ Wasabi S3 PutObject failed after ${elapsedMs}ms:`, {
-      name: errName,
-      message: errMessage,
-      code: s3Err?.Code || s3Err?.$metadata?.httpStatusCode || '',
-      statusCode: s3Err?.$metadata?.httpStatusCode,
-      requestId: s3Err?.$metadata?.requestId,
-      resetClient: isNetworkError,
-    })
-    throw createError({
-      statusCode: 502,
-      statusMessage: `Wasabi upload failed (${errName}): ${errMessage}`
-    })
   }
 
   const elapsedMs = Date.now() - startMs
-  console.log(`✅ Upload OK: key=${key.substring(0, 80)} size=${bodyBuffer.length} elapsed=${elapsedMs}ms`)
+  const totalMs = Date.now() - routeStartMs
+  console.log(`✅ Upload OK: key=${key.substring(0, 80)} size=${bodyBuffer.length} s3Elapsed=${elapsedMs}ms totalRouteMs=${totalMs}ms`)
   return { key, size: bodyBuffer.length }
 })

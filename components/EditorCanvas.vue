@@ -8374,23 +8374,61 @@ watch(
 )
 watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloadToken], async ([newPage, canvasInstance, loaded, _fabricReady, reloadToken], prev) => {
     const oldPage = (prev?.[0] as any) || null
-    if (!newPage) return;
-    if (!canvasInstance || !fabric || !isFabricReady.value) return;
-    if (!loaded && project.id && !project.id.startsWith('proj_')) return;
+    if (!newPage) {
+        console.log('[activePageWatch] ⚠️ newPage é null/undefined, retornando');
+        return;
+    }
+    if (!canvasInstance || !fabric || !isFabricReady.value) {
+        console.log('[activePageWatch] ⏳ Aguardando canvas/fabric inicializar...', {
+            hasCanvasInstance: !!canvasInstance,
+            hasFabric: !!fabric,
+            isFabricReady: isFabricReady.value
+        });
+        return;
+    }
+    if (!loaded && project.id && !project.id.startsWith('proj_')) {
+        console.log('[activePageWatch] ⏳ Projeto ainda não carregado:', { loaded, projectId: project.id });
+        return;
+    }
 
     const nextPageId = String((newPage as any)?.id || '').trim()
     const projectIdForLoad = String(project.id || '').trim()
     const nextPageLoadKey = `${projectIdForLoad}:${nextPageId}`
     const prevReloadToken = Number((prev as any)?.[4] ?? 0)
     const forceReload = Number(reloadToken ?? 0) !== prevReloadToken
+
+    console.log('[activePageWatch] 🔄 Iniciando carregamento:', {
+        nextPageId,
+        nextPageLoadKey,
+        hasCanvasData: !!(newPage as any)?.canvasData,
+        canvasDataObjectCount: (newPage as any)?.canvasData?.objects?.length || 0,
+        forceReload,
+        lastLoadedPageKey,
+        isSamePage: lastLoadedPageKey === nextPageLoadKey
+    });
  
     if (nextPageId && lastLoadedPageKey === nextPageLoadKey && !forceReload) {
         // If we already loaded this page and it has real objects, don't reload just because canvas/fabric became ready.
         try {
-            const hasRealObjects = (canvas.value?.getObjects?.() || []).some((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg')
-            if (hasRealObjects) return
-        } catch {
-            // ignore
+            const currentObjects = canvas.value?.getObjects?.() || [];
+            const hasRealObjects = currentObjects.some((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg');
+            const allObjectsInfo = currentObjects.map((o: any) => ({
+                type: o?.type,
+                id: o?.id,
+                _customId: o?._customId,
+                isTransient: isTransientCanvasObject(o)
+            }));
+            console.log('[activePageWatch] 📋 Verificando objetos existentes:', {
+                totalObjects: currentObjects.length,
+                hasRealObjects,
+                objects: allObjectsInfo
+            });
+            if (hasRealObjects) {
+                console.log('[activePageWatch] ⏭️ Página já carregada com objetos reais, pulando recarga');
+                return
+            }
+        } catch (e) {
+            console.warn('[activePageWatch] ⚠️ Erro ao verificar objetos existentes:', e);
         }
     }
 
@@ -8398,8 +8436,18 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     const isStaleLoad = () => loadSessionId !== activePageLoadSessionId || isCanvasDestroyed.value;
     scheduleCanvasDataPrefetch(nextPageId, 0)
     if (!newPage.canvasData && nextPageId) {
+        console.log('[activePageWatch] ⏳ Carregando canvasData do servidor para página:', nextPageId);
         await ensurePageCanvasDataLoaded(nextPageId)
-        if (isStaleLoad()) return
+        if (isStaleLoad()) {
+            console.log('[activePageWatch] ⏭️ Sessão de load ficou stale após ensurePageCanvasDataLoaded');
+            return
+        }
+        const loadedPage = project.pages?.find((p: any) => p.id === nextPageId);
+        console.log('[activePageWatch] 📥 Após ensurePageCanvasDataLoaded:', {
+            pageId: nextPageId,
+            hasCanvasData: !!loadedPage?.canvasData,
+            canvasDataObjectCount: loadedPage?.canvasData?.objects?.length || 0
+        });
     }
     const pageToLoad = (project.pages?.[project.activePageIndex] as any) || newPage
 
@@ -8483,10 +8531,39 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	            // Track whether we loaded successfully and whether we had to degrade (missing images)
 	            let didLoadNewPage = false;
 	            let degradedNewPage = false;
+	            
+	            console.log('[activePageWatch] 📦 Preparando loadFromJSON:', {
+	                pageId: nextPageId,
+	                expectedObjects: canvasDataToLoad?.objects?.length || 0,
+	                firstFewObjectTypes: canvasDataToLoad?.objects?.slice(0, 3).map((o: any) => ({ 
+	                    type: o?.type, 
+	                    id: o?.id, 
+	                    _customId: o?._customId,
+	                    name: o?.name 
+	                }))
+	            });
+	            
 	            try {
 	                try {
+	                    console.log('[activePageWatch] 🚀 Iniciando loadFromJSON...');
 	                    await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
 	                    didLoadNewPage = true;
+	                    
+	                    const loadedObjects = canvas.value?.getObjects?.() || [];
+	                    const loadedObjectsInfo = loadedObjects.map((o: any) => ({
+	                        type: o?.type,
+	                        id: o?.id,
+	                        _customId: o?._customId,
+	                        name: o?.name,
+	                        isTransient: isTransientCanvasObject(o)
+	                    }));
+	                    
+	                    console.log('[activePageWatch] ✅ loadFromJSON concluído:', {
+	                        totalLoaded: loadedObjects.length,
+	                        transientCount: loadedObjects.filter((o: any) => isTransientCanvasObject(o)).length,
+	                        realObjectsCount: loadedObjects.filter((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg').length,
+	                        objects: loadedObjectsInfo
+	                    });
 	                } catch (imageLoadErr: any) {
 	                    const errorStr = imageLoadErr?.message || imageLoadErr?.toString?.() || '';
 	                    const isImageError =
@@ -8812,6 +8889,19 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
         scheduleCanvasDataPrefetch(nextPageId)
         schedulePreparedCanvasDataPrewarm(nextPageId)
     }
+    
+    // Log final do estado do carregamento
+    const finalObjects = canvas.value?.getObjects?.() || [];
+    const finalRealObjects = finalObjects.filter((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg');
+    console.log('[activePageWatch] ✅ Carregamento finalizado:', {
+        pageId: nextPageId,
+        loadedOk,
+        totalObjects: finalObjects.length,
+        realObjects: finalRealObjects.length,
+        expectedObjects: expectedLoadObjects,
+        objectTypes: finalObjects.map((o: any) => ({ type: o?.type, id: o?.id, name: o?.name, isTransient: isTransientCanvasObject(o) }))
+    });
+    
     } finally {
         if (!isStaleLoad()) isDesignLoading.value = false
     }
@@ -11857,6 +11947,42 @@ const removeImageObjectsDeep = (node: any): any => {
                 console.warn(`[saveState] toJSON() retornou 0 objetos mas canvas tem ${preSerializeObjectCount}. Corrigindo excludeFromExport e re-serializando...`)
                 const liveObjs = canvasInstance.getObjects?.() || []
                 let fixedExclude = 0
+                const objectDiagnostics = liveObjs.map((obj: any) => {
+                    const hasCustomId = typeof obj?._customId === 'string' && obj._customId.trim().length > 0;
+                    const objName = String(obj?.name || '');
+                    const objId = String(obj?.id || '');
+                    const isControlLike = isControlLikeObject(obj);
+                    const isCircleSmall = obj?.type === 'circle' && obj?.radius && obj?.radius <= 10 && !hasCustomId && !!obj?.excludeFromExport;
+                    const isLineTransient = obj?.type === 'line' && !hasCustomId && !!obj?.excludeFromExport;
+                    const isPathTransient = obj?.type === 'path' && !hasCustomId && !obj?.isVectorPath && !!obj?.excludeFromExport;
+                    const isExcludePersistent = obj?.excludeFromExport === true && (
+                        !!obj?.isFrame || !!obj?.isSmartObject || !!obj?.isProductCard ||
+                        !!obj?.isGridZone || !!obj?.isProductZone || !!obj?.parentZoneId ||
+                        objName === 'gridZone' || objName === 'productZoneContainer' ||
+                        objName === 'priceGroup' || objName.startsWith('product-card') ||
+                        objId === 'artboard-bg'
+                    );
+                    return {
+                        type: obj?.type,
+                        id: objId,
+                        _customId: obj?._customId,
+                        name: objName,
+                        excludeFromExport: obj?.excludeFromExport,
+                        hasCustomId,
+                        isTransient: isTransientCanvasObject(obj),
+                        isControlLike,
+                        isCircleSmall,
+                        isLineTransient,
+                        isPathTransient,
+                        isExcludePersistent,
+                        isFrame: obj?.isFrame,
+                        isProductCard: obj?.isProductCard,
+                        isSmartObject: obj?.isSmartObject,
+                        radius: obj?.radius,
+                        data: obj?.data
+                    };
+                });
+                console.warn(`[saveState] Diagnóstico DETALHADO de ${liveObjs.length} objetos:`, objectDiagnostics);
                 liveObjs.forEach((obj: any) => {
                     if (obj?.excludeFromExport === true && !isTransientCanvasObject(obj)) {
                         obj.excludeFromExport = false
@@ -11865,6 +11991,8 @@ const removeImageObjectsDeep = (node: any): any => {
                 })
                 if (fixedExclude > 0) {
                     console.warn(`[saveState] Corrigido excludeFromExport em ${fixedExclude} objeto(s).`)
+                } else {
+                    console.warn(`[saveState] Nenhum objeto corrigido - todos são transientes ou não têm excludeFromExport=true`)
                 }
                 json = canvasInstance.toJSON([...CANVAS_CUSTOM_PROPS]);
                 console.warn(`[saveState] Re-serialização: ${json?.objects?.length || 0} objetos (antes: 0, canvas: ${preSerializeObjectCount})`)
@@ -12100,16 +12228,33 @@ const removeImageObjectsDeep = (node: any): any => {
     // Export for external use
     saveCurrentState = invokeSaveStateSafely;
 
-    // Capture initial state - only if canvas has objects OR page is new/empty
-    const currentObjectCount = canvas.value.getObjects().length;
+    // Capture initial state - only if canvas has REAL (non-transient) objects OR page is new/empty
+    const allObjects = canvas.value.getObjects();
+    const currentObjectCount = allObjects.length;
+    // Count only non-transient objects (excluding artboard-bg)
+    const realObjectCount = allObjects.filter((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg').length;
     const currentPage = project.pages[project.activePageIndex];
     const pageHasData = currentPage?.canvasData?.objects?.length > 0;
+    const expectedObjectCount = currentPage?.canvasData?.objects?.length || 0;
 
-    // Only save initial state if canvas has objects, or if page is completely new (no existing data)
-    if (currentObjectCount > 0 || !pageHasData) {
+    console.log('[setupHistory] 📊 Verificando estado inicial:', {
+        totalObjects: currentObjectCount,
+        realObjects: realObjectCount,
+        pageHasData,
+        expectedObjectCount,
+        pageId: currentPage?.id,
+        isProjectLoaded: isProjectLoaded.value
+    });
+
+    // Only save initial state if canvas has REAL objects, or if page is completely new (no existing data)
+    if (realObjectCount > 0) {
+        console.log('[setupHistory] ✅ Salvando estado inicial: canvas tem objetos reais');
+        invokeSaveStateSafely({ reason: 'initial-history-capture', source: 'system', skipIfUnchanged: true });
+    } else if (!pageHasData) {
+        console.log('[setupHistory] ✅ Salvando estado inicial: página nova sem dados');
         invokeSaveStateSafely({ reason: 'initial-history-capture', source: 'system', skipIfUnchanged: true });
     } else {
-        console.log('ℹ️ Pullando saveState inicial: canvas vazio mas página já tem dados');
+        console.log('[setupHistory] ⏭️ Pulando saveState inicial: canvas vazio (apenas transientes) mas página espera ' + expectedObjectCount + ' objetos');
     }
 
     const canvasInstanceForHistory = canvas.value

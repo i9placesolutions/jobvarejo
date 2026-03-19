@@ -1,10 +1,27 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
-import { Agent as HttpsAgent } from "https";
+import { HttpsAgent } from "agentkeepalive";
 
 const WASABI_CONNECTION_TIMEOUT_MS = 15_000;
-const WASABI_REQUEST_TIMEOUT_MS = 90_000;
-const WASABI_SOCKET_TIMEOUT_MS = 90_000;
+const WASABI_REQUEST_TIMEOUT_MS = 120_000;
+const WASABI_SOCKET_TIMEOUT_MS = 120_000;
+
+// Singleton do agent HTTPS — sobrevive ao reset do S3Client para evitar
+// recriação desnecessária do pool de sockets em cada retry.
+let _httpsAgent: InstanceType<typeof HttpsAgent> | null = null;
+
+const getHttpsAgent = () => {
+    if (_httpsAgent) return _httpsAgent;
+    _httpsAgent = new HttpsAgent({
+        keepAlive: true,
+        maxSockets: 10,
+        maxFreeSockets: 4,
+        // Fecha sockets ociosos antes da Wasabi fechá-los (evita ECONNRESET / socket hang)
+        freeSocketTimeout: 15_000,
+        timeout: 120_000,
+    });
+    return _httpsAgent;
+};
 
 let _s3ClientInstance: S3Client | null = null;
 
@@ -44,11 +61,7 @@ export const getS3Client = () => {
             connectionTimeout: WASABI_CONNECTION_TIMEOUT_MS,
             requestTimeout: WASABI_REQUEST_TIMEOUT_MS,
             socketTimeout: WASABI_SOCKET_TIMEOUT_MS,
-            throwOnRequestTimeout: true,
-            httpsAgent: new HttpsAgent({
-                keepAlive: true,
-                maxSockets: 50
-            })
+            httpsAgent: getHttpsAgent()
         })
     });
 

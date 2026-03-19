@@ -1237,6 +1237,7 @@ export const useProject = () => {
 		    const saveProjectDB = async (opts: {
                 forceEmptyOverwrite?: boolean
             } = {}) => {
+                console.log(`🟡🟡🟡 [saveProjectDB] ENTRY v2 at ${new Date().toISOString()}`)
 		        // Não executar no servidor (SSR) ou se o módulo HMR foi substituído
 		        if (import.meta.server || _moduleDisposed) {
 		            return
@@ -1342,6 +1343,7 @@ export const useProject = () => {
 
             // Upload de todas as páginas em paralelo (canvas + thumbnail por página)
             setSaveStage('upload-pages')
+            console.log(`🟡 [saveProjectDB] upload-pages stage. pages=${project.pages.length}, pagesWithDirty=${project.pages.filter(p => p.dirty).length}, pagesWithCanvasData=${project.pages.filter(p => !!p.canvasData).length}`)
             // FIX: snapshot the pages array at this point so that a concurrent
             // loadProjectDB replacing project.pages does not cause us to iterate
             // the NEW project's pages while uploading the OLD project's data.
@@ -1354,6 +1356,7 @@ export const useProject = () => {
 
                 // Salvar canvas JSON no Storage (com retry automático)
                 const shouldUploadCanvas = !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
+                console.log(`🟡 [saveProjectDB] page ${page?.id} shouldUploadCanvas=${shouldUploadCanvas} dirty=${!!page?.dirty} canvasDataPath=${!!page?.canvasDataPath} hasCanvasData=${!!page?.canvasData}`)
                 if (shouldUploadCanvas && page?.canvasData) {
                     try {
                         const currentCount = getCanvasObjectCount(page.canvasData)
@@ -1361,6 +1364,7 @@ export const useProject = () => {
                         if (isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite) {
                             console.warn(`🛡️ Skip upload vazio para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
                         } else {
+                            console.log(`🟡 [saveProjectDB] CALLING saveCanvasData for page ${page.id}, objects=${currentCount}`)
                             const canvasUploadAbortController = new AbortController()
                             const path = await withSoftTimeout(
                                 saveCanvasData(
@@ -1430,15 +1434,40 @@ export const useProject = () => {
             if (abortIfStaleSaveContext()) return
 
             const hasCanvasSyncFailures = failedCanvasSyncPageIds.size > 0
+            
+            // Sempre limpar flag de upload, independente de sucesso ou falha
+            const projAny = project as any
+            projAny.__isUploading = false
+            
             if (hasCanvasSyncFailures) {
                 changedDuringSave = unsavedRevision.value !== saveRevisionAtStart
-                hasUnsavedChanges.value = true
                 saveStatus.value = 'error'
                 saveLastError.value = 'Falha ao salvar na Wasabi. O banco nao foi atualizado; o design segue apenas no rascunho local ate a sincronizacao completar.'
+                
+                const failCount = failedCanvasSyncPageIds.size
+                const failPages = Array.from(failedCanvasSyncPageIds)
                 console.warn(
-                    `[saveProjectDB] Persistencia no banco adiada: ${failedCanvasSyncPageIds.size} pagina(s) sem upload confirmado na Wasabi.`,
-                    { pageIds: Array.from(failedCanvasSyncPageIds) }
+                    `[saveProjectDB] Persistencia no banco adiada: ${failCount} pagina(s) sem upload confirmado na Wasabi.`,
+                    { pageIds: failPages }
                 )
+
+                // IMPORTANTE: Marcar upload como falhando para evitar scheduleRecoveredDraftRemoteSync
+                const pAny = project as any
+                pAny.__uploadFailed = true
+                
+                // IMPORTANTE: Limpar dirty das páginas que falharam para evitar loop infinito
+                // O retry será feito pelo timer abaixo, não pelo autoSave
+                project.pages.forEach((page) => {
+                    if (failedCanvasSyncPageIds.has(page.id)) {
+                        // Marcar como needingUploadRetry em vez de manter dirty
+                        (page as any).__needsUploadRetry = true
+                        page.dirty = false  // Limpar dirty para evitar autoSave contínuo
+                    }
+                })
+
+                // Só manter hasUnsavedChanges=true se houver outras páginas dirty
+                const stillHasDirtyPages = project.pages.some(p => p.dirty)
+                hasUnsavedChanges.value = stillHasDirtyPages
 
                 if (!changedDuringSave) {
                     _unsyncedRetryCount++
@@ -1448,22 +1477,47 @@ export const useProject = () => {
                     const retryTimer = setTimeout(() => {
                         _pendingSaveTimers.delete(retryTimer)
                         if (_moduleDisposed) return
-                        if (!hasUnsavedChanges.value) return
                         if (isSaving.value) return
-                        const hasDirtyPagesForRetry = project.pages.some((p) => p?.dirty)
-                        if (!hasDirtyPagesForRetry) return
+                        
+                        // Limpar flag de falha antes do retry
+                        (project as any).__uploadFailed = false;
+                        // Marcar que estamos em modo retry (não draft recuperado)
+                        (project as any).__isRetryMode = true;
+                        
+                        // Restaurar dirty para páginas que precisam de retry
+                        let hasPagesToRetry = false
+                        project.pages.forEach((page) => {
+                            if ((page as any).__needsUploadRetry) {
+                                page.dirty = true
+                                hasUnsavedChanges.value = true
+                                delete (page as any).__needsUploadRetry
+                                hasPagesToRetry = true
+                            }
+                        })
+                        
+                        if (!hasPagesToRetry) {
+                            console.log('[saveProjectDB] Nenhuma página precisa de retry.')
+                            return
+                        }
+                        
                         if (Date.now() - _lastUserEditAt < 30_000) {
                             console.log('[saveProjectDB] Retry do upload Wasabi postergado: usuario editando ativamente.')
                             return
                         }
-                        console.log(`🔄 Retentando upload Wasabi das paginas pendentes (${Array.from(failedCanvasSyncPageIds).join(', ')})...`)
-                        void saveProjectDB()
+                        console.log(`🔄 Retentando upload Wasabi das paginas pendentes...`)
+                        void saveProjectDB().finally(() => {
+                            // Limpar modo retry após conclusão
+                            (project as any).__isRetryMode = false;
+                        });
                     }, retryCooldownMs)
                     _pendingSaveTimers.add(retryTimer)
                 }
 
                 return
             }
+            
+            // Upload bem-sucedido: limpar flag de falha
+            (project as any).__uploadFailed = false;
 
             // 2. Preparar payload mínimo para o banco (apenas metadados)
                 setSaveStage('prepare-db-payload')
@@ -1807,6 +1861,13 @@ export const useProject = () => {
         queuedSaveAfterCurrent.value = false
         unsavedRevision.value = 0
         project.pages = []
+        
+        // Limpar flags de estado do upload/retry para começar fresh
+        ;(project as any).__uploadFailed = false
+        ;(project as any).__isUploading = false
+        ;(project as any).__isRetryMode = false
+        ;(project as any).__lastRecoveredDraftSync = 0
+        _unsyncedRetryCount = 0
         project.activePageIndex = 0
         hasUnsavedChanges.value = false
 
@@ -1981,37 +2042,60 @@ export const useProject = () => {
                 console.warn('📝 Projeto restaurado com rascunho local mais novo; agendando persistência remota Wasabi-first.', {
                     pages: recoveredDraftPages
                 })
-                const scheduleRecoveredDraftRemoteSync = (attempt = 1) => {
-                    const remoteSyncTimer = setTimeout(() => {
-                        _pendingSaveTimers.delete(remoteSyncTimer)
-                        if (_moduleDisposed) return
-                        if (currentSession !== projectLoadSession.value) return
-                        if (isSaving.value) return
-
-                        const pendingRecoveredPages = project.pages.filter((page) =>
-                            recoveredDraftPages.includes(String(page?.id || '')) &&
-                            !!page?.dirty
-                        )
-                        const pagesWaitingForSnapshot = pendingRecoveredPages.filter((page) =>
-                            !!page?.canvasData && !hasUsableSerializedCanvasSnapshot(page)
-                        )
-
-                        if (pagesWaitingForSnapshot.length > 0 && attempt < 10) {
-                            console.log(
-                                `⏳ Aguardando snapshot serializado para sync Wasabi do rascunho recuperado ` +
-                                `(tentativa ${attempt}, páginas=${pagesWaitingForSnapshot.map((p) => p.id).join(', ')})`
-                            )
-                            scheduleRecoveredDraftRemoteSync(attempt + 1)
-                            return
-                        }
-
-                        console.log('📤 Agendando upload Wasabi do rascunho recuperado')
-                        void saveProjectDB()
-                    }, 3000)
-                    _pendingSaveTimers.add(remoteSyncTimer)
+                
+                // CRÍTICO: Se upload já falhou nesta sessão, NUNCA tentar sync de draft recuperado
+                // O retry timer já cuidará do salvamento. Draft sync causaria loop infinito.
+                if ((project as any).__uploadFailed || (project as any).__isRetryMode) {
+                    console.warn('⏭️ DESABILITANDO sync de rascunho recuperado: upload falhou ou em retry. Apenas retry timer ativo.');
+                    // NÃO chamar scheduleRecoveredDraftRemoteSync - deixar o retry timer cuidar
+                } else {
+                    // Proteção contra múltiplas chamadas
+                    const lastSaveAttempt = (project as any).__lastRecoveredDraftSync || 0;
+                    const now = Date.now();
+                    
+                    if (now - lastSaveAttempt < 60000) { // 60 segundos entre tentativas de draft sync
+                        console.warn('⏭️ Pulando sync de rascunho: tentativa muito recente');
+                    } else {
+                        (project as any).__lastRecoveredDraftSync = now;
+                        
+                        // APENAS UMA tentativa de draft sync
+                        const remoteSyncTimer = setTimeout(() => {
+                            _pendingSaveTimers.delete(remoteSyncTimer);
+                            if (_moduleDisposed) return;
+                            if (currentSession !== projectLoadSession.value) return;
+                            if (isSaving.value) return;
+                            
+                            // Verificar se upload falhou desde o agendamento
+                            if ((project as any).__uploadFailed || (project as any).__isRetryMode) {
+                                console.warn('⏹️ Cancelando draft sync: upload falhou desde o agendamento');
+                                return;
+                            }
+                            
+                            const pendingRecoveredPages = project.pages.filter((page) =>
+                                recoveredDraftPages.includes(String(page?.id || '')) &&
+                                !!page?.dirty &&
+                                !(page as any).__needsUploadRetry
+                            );
+                            
+                            const pagesWithObjects = pendingRecoveredPages.filter((page) => {
+                                const objCount = getCanvasObjectCount(page?.canvasData);
+                                return objCount > 0;
+                            });
+                            
+                            if (pagesWithObjects.length === 0) {
+                                console.warn('⏭️ Nenhuma página recuperada tem objetos para salvar');
+                                return;
+                            }
+                            
+                            console.log('📤 Draft sync: tentando upload', {
+                                pages: pagesWithObjects.map(p => ({ id: p.id, objects: getCanvasObjectCount(p?.canvasData) }))
+                            });
+                            void saveProjectDB();
+                        }, 8000); // 8s para garantir que o canvas esteja pronto
+                        
+                        _pendingSaveTimers.add(remoteSyncTimer);
+                    }
                 }
-
-                scheduleRecoveredDraftRemoteSync()
             }
 
             scheduleCanvasDataPrefetch(project.pages[project.activePageIndex]?.id || null)
