@@ -1,4 +1,5 @@
 const PUBLIC_STORAGE_PREFIXES = ['imagens/', 'uploads/', 'logo/'] as const
+const BUILDER_STORAGE_PREFIX = 'builder/'
 const MAX_STORAGE_PATH_LENGTH = 1024
 
 export const normalizeStoragePath = (value: unknown): string =>
@@ -45,5 +46,22 @@ export const getProjectOwnerIdFromKey = (key: string): string | null => {
 export const isStorageKeyAllowedForUser = (key: string, userId: string): boolean => {
   if (!key) return false
   if (isUserProjectKey(key, userId)) return true
+  if (isBuilderTenantKey(key, userId)) return true
   return isPublicStorageKey(key)
+}
+
+// --- Builder storage helpers ---
+
+export const getBuilderTenantPrefix = (tenantId: string): string =>
+  `${BUILDER_STORAGE_PREFIX}${String(tenantId || '').trim()}/`
+
+export const isBuilderKey = (key: string): boolean =>
+  key.startsWith(BUILDER_STORAGE_PREFIX)
+
+export const isBuilderTenantKey = (key: string, tenantId: string): boolean =>
+  key.startsWith(getBuilderTenantPrefix(tenantId))
+
+export const getBuilderTenantIdFromKey = (key: string): string | null => {
+  const match = String(key || '').match(/^builder\/([^/]+)\//)
+  return match?.[1] ? String(match[1]) : null
 }

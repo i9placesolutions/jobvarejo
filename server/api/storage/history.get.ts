@@ -171,9 +171,12 @@ export default defineEventHandler(async (event) => {
     if (!unique.has(k)) unique.set(k, it)
   }
 
-  const finalItems = Array.from(unique.values()).sort(
-    (a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
-  )
+  const finalItems = Array.from(unique.values()).sort((a, b) => {
+    // 'current' always comes first regardless of timestamp
+    if (a.source === 'current' && b.source !== 'current') return -1
+    if (b.source === 'current' && a.source !== 'current') return 1
+    return new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+  })
 
   return {
     historyPrefix,

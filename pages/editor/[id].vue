@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, defineAsyncComponent, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, defineAsyncComponent, watch, inject } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useProject } from '~/composables/useProject'
 import { useApiAuth } from '~/composables/useApiAuth'
 import { useResponsive } from '~/composables/useResponsive'
 
 const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanvas.vue'))
 const { isMobile } = useResponsive()
+
+// FIX: Inject flushPersistenceNow from EditorCanvas to capture canvas state
+// (text edits, debounced property changes) before route navigation.
+const editorFlushPersistence = inject<((reason: string, opts?: { force?: boolean }) => void) | null>('editorFlushPersistence', null)
 
 // Get project ID from route
 const route = useRoute()
@@ -26,6 +31,7 @@ const {
   isProjectLoaded,
   loadProjectDB,
   saveProjectDB,
+  isSaving,
   saveStatus,
   saveLastError,
   saveDebugStage,
@@ -232,6 +238,7 @@ watch(
     const token = ++pageLoadToken
     const loaded = await loadProjectDB(id)
     if (token !== pageLoadToken) return
+    if (loaded === 'superseded') return
     if (!loaded) {
       closeProjectRealtime()
       console.error('Failed to load project')
@@ -242,6 +249,45 @@ watch(
   },
   { immediate: true }
 )
+
+// FIX: Aguardar save completar ANTES de permitir navegação SPA.
+// Sem isso, flushAutoSave era fire-and-forget e a navegação destruía o
+// componente antes do upload Wasabi + DB persist completar, causando
+// perda de dados quando o draft localStorage também era grande demais.
+const ROUTE_LEAVE_SAVE_TIMEOUT_MS = 30_000
+onBeforeRouteLeave(async () => {
+  // FIX CRITICAL: Capturar o estado ATUAL do canvas (edições de texto ativas,
+  // mudanças de propriedades em timers debounced, etc.) ANTES de verificar
+  // hasUnsavedChanges. Sem isso, o guard pode retornar true imediatamente
+  // porque as últimas edições ainda não foram serializadas para page.canvasData.
+  try {
+    if (editorFlushPersistence) {
+      editorFlushPersistence('route-leave', { force: true })
+    }
+  } catch {
+    // ignore — melhor continuar com o fluxo do que travar a navegação
+  }
+
+  // Gravar drafts e snapshot de emergência sincronamente
+  flushPendingLocalDrafts()
+  emergencySnapshotDirtyPages()
+
+  if (!hasUnsavedChanges.value && !isSaving.value && !project.pages.some((p: any) => !!p?.dirty)) {
+    return true
+  }
+
+  // Aguardar save completar (com timeout para não travar a UI)
+  try {
+    const savePromise = flushAutoSave()
+    const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, ROUTE_LEAVE_SAVE_TIMEOUT_MS))
+    await Promise.race([savePromise, timeoutPromise])
+  } catch {
+    // Ignorar — draft local já foi gravado como rede de segurança
+  }
+  // Garantir que drafts escritos durante o save sejam persistidos
+  flushPendingLocalDrafts()
+  return true
+})
 
 // Flush save on unmount (user leaving editor page)
 onUnmounted(() => {
@@ -284,13 +330,19 @@ onMounted(() => {
   }
   document.addEventListener('visibilitychange', visibilityHandler)
 
-  _beforeUnloadHandler = () => {
+  _beforeUnloadHandler = (e: BeforeUnloadEvent) => {
     // Salvar rascunho local síncronamente (localStorage é síncrono)
     flushPendingLocalDrafts()
     // Rede de segurança: se o draft normal não cobriu alguma página dirty
     // (canvas grande demais para o limite padrão, pending queue já flushed, etc.),
     // força um snapshot de emergência com limite mais generoso.
     emergencySnapshotDirtyPages()
+    // Disparar save remoto (fire-and-forget — browser pode cancelar, mas drafts locais já cobrem)
+    if (hasUnsavedChanges.value) {
+      void flushAutoSave().catch(() => {})
+      // Pedir confirmação ao usuário se há mudanças não salvas
+      e.preventDefault()
+    }
   }
   window.addEventListener('beforeunload', _beforeUnloadHandler)
 })

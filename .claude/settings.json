@@ -6,5 +6,8 @@
       "Bash(time PGPASSWORD=\"TmtOYyHbxxLathecYmziTRPta38cCLHYD7aAnplbkD9UcwnF34InIZQIfUXcbjFs\" psql \"postgresql://postgres@147.93.139.212:3000/postgres?sslmode=disable\" -c \"SELECT 1 as ping\")",
       "Bash(node -e \":*)"
     ]
+  },
+  "enabledPlugins": {
+    "context-mode@context-mode": true
   }
 }

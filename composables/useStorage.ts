@@ -599,6 +599,12 @@ const saveCanvasData = async (
         try {
           failIfAborted()
 
+          // Snapshot da versão ANTERIOR antes de sobrescrever no Wasabi.
+          // Assim o histórico preserva versões antigas, não duplicatas da atual.
+          if (attempt === 1) {
+            void triggerHistorySnapshot({ userId, projectId, pageId, key })
+          }
+
           // ── Upload via proxy servidor (raw body, sem multipart) ──
           console.log(`📡 [upload ${attempt}/${effectiveRetries}] Tentando proxy servidor...`)
 
@@ -639,7 +645,6 @@ const saveCanvasData = async (
             recordWasabiSuccess()
             rememberCanvasUploadSuccess(pageScope, snapshotSavedAt, result.key)
             console.log(`✅ Canvas salvo via proxy (tentativa ${attempt}/${effectiveRetries}, ${Date.now() - uploadStart}ms):`, result.key)
-            void triggerHistorySnapshot({ userId, projectId, pageId, key })
             return result.key
 
           } catch (proxyErr: any) {

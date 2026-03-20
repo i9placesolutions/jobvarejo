@@ -1759,7 +1759,7 @@ export const useProject = () => {
     let saveTimeout: ReturnType<typeof setTimeout> | null = null
     let scheduledAutoSaveRevision = -1
     let scheduledAutoSaveProjectId = ''
-    const AUTO_SAVE_DELAY = 90_000 // 90 segundos: debounce para upload remoto após ações do usuário
+    const AUTO_SAVE_DELAY = 12_000 // 12 segundos: debounce para upload remoto após ações do usuário
 
     const triggerAutoSave = () => {
         if (_moduleDisposed) return
@@ -1822,6 +1822,23 @@ export const useProject = () => {
         scheduledAutoSaveRevision = -1
         scheduledAutoSaveProjectId = ''
         flushPendingLocalDrafts()
+
+        // FIX: Restaurar dirty para páginas com upload pendente (retry) antes de verificar.
+        // Quando o upload Wasabi falha, dirty é limpo para evitar loop, mas durante
+        // flush de navegação (onBeforeRouteLeave) essas páginas PRECISAM ser incluídas.
+        let restoredRetryPages = false
+        project.pages.forEach((page) => {
+            if ((page as any).__needsUploadRetry && page.canvasData) {
+                page.dirty = true
+                restoredRetryPages = true
+                delete (page as any).__needsUploadRetry
+            }
+        })
+        if (restoredRetryPages) {
+            hasUnsavedChanges.value = true
+            ;(project as any).__uploadFailed = false
+        }
+
         if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) return
         if (!project.id || project.id.startsWith('proj_')) return
 
@@ -1882,7 +1899,7 @@ export const useProject = () => {
 
             if (currentSession !== projectLoadSession.value) {
                 console.warn('⏭️ loadProjectDB descartado por sessão mais nova')
-                return false
+                return 'superseded'
             }
 
             if (!data) {
@@ -2175,7 +2192,7 @@ export const useProject = () => {
         _lastEmergencySnapshotAt = now
         try {
             for (const page of project.pages) {
-                if (!page?.id || !page?.canvasData || !page?.dirty) continue
+                if (!page?.id || !page?.canvasData || (!page?.dirty && !(page as any).__needsUploadRetry)) continue
                 const draftKey = getDraftKey(project.id, page.id)
                 // Se já existe um draft pending, o flushPendingLocalDrafts já vai gravá-lo
                 if (pendingLocalDraftOperations.has(draftKey)) continue

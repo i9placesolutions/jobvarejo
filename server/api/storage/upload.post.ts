@@ -3,6 +3,7 @@ import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { getS3Client, resetS3Client } from '../../utils/s3'
 import {
+  isBuilderKey,
   isProjectsKey,
   isStorageKeyAllowedForUser,
   isUserProjectKey,
@@ -42,6 +43,9 @@ export default defineEventHandler(async (event) => {
   }
   if (!isValidStoragePath(key)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid key format' })
+  }
+  if (isBuilderKey(key)) {
+    throw createError({ statusCode: 400, statusMessage: 'Builder keys must use /api/builder/storage/upload' })
   }
   if (isProjectsKey(key) && !isUserProjectKey(key, user.id)) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden key scope' })

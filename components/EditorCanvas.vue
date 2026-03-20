@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed, nextTick, defineAsyncComponent } from 'vue'
+import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed, nextTick, defineAsyncComponent, provide } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import ContextMenu from './ui/ContextMenu.vue'
 import CanvasRulers from './ui/CanvasRulers.vue'
@@ -5430,7 +5430,12 @@ const formatHistoryRelative = (value: string) => {
     if (diffM === 1) return '1 mes atras'
     return `${diffM} meses atras`
 }
-const historyItemIsLatest = (idx: number) => idx === 0
+const historyItemIsLatest = (idx: number) => {
+    if (idx !== 0) return false
+    const item = historyItems.value[0]
+    // 'current' already shows "Versao atual" badge — don't also show "Mais recente"
+    return item && (item as any).source !== 'current'
+}
 
 const openHistoryModal = async () => {
     if (!canRecoverLatestNonEmpty.value) return
@@ -7297,6 +7302,13 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
         isLifecycleFlushInProgress = false;
     }
 };
+
+// FIX: Expose flushPersistenceNow to parent (pages/editor/[id].vue) via provide/inject.
+// This allows onBeforeRouteLeave to capture the current canvas state (text edits,
+// debounced property changes, etc.) BEFORE checking hasUnsavedChanges.
+// Without this, the route guard may skip saving because the canvas state
+// hasn't been serialized to page.canvasData yet.
+provide('editorFlushPersistence', flushPersistenceNow);
 
 const emergencyBeaconSave = () => {
     try {
@@ -10805,6 +10817,20 @@ const CANVAS_CUSTOM_PROPS = [
     'packQuantity',
     'packUnit',
     'packageLabel',
+
+    // Product card pricing / metadata (must survive serialization)
+    'price',
+    'pricePack',
+    'priceUnit',
+    'priceSpecial',
+    'priceSpecialUnit',
+    'specialCondition',
+    'unit',
+    'unitLabel',
+    'limit',
+
+    // Zone slot positioning (card ↔ zone binding)
+    '_zoneSlot',
 
     // Shape utilities (Figma-like)
     '__fillEnabled',
@@ -26737,6 +26763,14 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
 
     let shouldRelayout = false;
 
+    // FIX: Suppress Fabric v7 LayoutManager during property updates.
+    // zone.set() for layout-related props can trigger performLayout() which
+    // recalculates group bounds from children at old positions, corrupting the layout.
+    const zoneLm = (zone as any).layoutManager;
+    const zoneOrigPerformLayout = zoneLm?.performLayout;
+    if (zoneLm) zoneLm.performLayout = () => {};
+
+    try {
     Object.entries(updates).forEach(([prop, val]) => {
         if (prop === 'padding') {
             zone._zonePadding = Number(val);
@@ -26789,15 +26823,31 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
         zone.set(prop, val);
         if (relayoutProps.has(prop)) shouldRelayout = true;
     });
+    } finally {
+        // Restore LayoutManager after all props are set
+        if (zoneLm && zoneOrigPerformLayout) zoneLm.performLayout = zoneOrigPerformLayout;
+    }
 
     // FIX Fabric v7: Avoid triggerLayout() for non-structural changes.
     // triggerLayout() can deselect the zone group, breaking the UI loop.
     // Only recalculate group bounds when children/structure actually changed.
     let restoredViewportObjects = 0;
     if (shouldRelayout) {
-        // Zone preset/layout changes can move cards that were previously culled back into view.
-        // If we relayout while they stay `visible=false`, the zone appears to blink/empty for a frame.
-        restoredViewportObjects = restoreViewportCulledObjects(canvas.value.getObjects?.() || []);
+        // FIX: Only restore viewport-culled objects that belong to this zone (by parentZoneId
+        // or _zoneSlot), not ALL canvas objects. Restoring everything causes a visible flash
+        // of unrelated objects before re-culling kicks in.
+        const zoneChildIds = new Set<any>();
+        const allObjs = canvas.value.getObjects?.() || [];
+        for (const obj of allObjs) {
+            if (!obj) continue;
+            const boundId = String((obj as any)?.parentZoneId || '').trim();
+            const slotId = String((obj as any)?._zoneSlot?.zoneId || '').trim();
+            if ((zoneId && boundId === zoneId) || (zoneId && slotId === zoneId) || obj === zone) {
+                zoneChildIds.add(obj);
+            }
+        }
+        const zoneRelatedObjs = allObjs.filter((o: any) => zoneChildIds.has(o));
+        restoredViewportObjects = restoreViewportCulledObjects(zoneRelatedObjs);
         if (restoredViewportObjects > 0) {
             lastViewportCullSignature = '';
         }
@@ -26807,7 +26857,28 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
         zone.setCoords();
         // Cache children before relayout to prevent losing them
         const cachedChildren = getZoneChildren(zone);
-        recalculateZoneLayout(zone, cachedChildren, { save: false });
+        recalculateZoneLayout(zone, cachedChildren, { save: false, requestRender: false });
+
+        // FIX: Force dirty flags on ALL cards and their children after relayout.
+        // Fabric v7 caches group renders; without explicit dirty flags, cards may
+        // display stale cached content after a preset change resizes them.
+        // Reuse cachedChildren — relayout repositions cards in-place, doesn't add/remove them.
+        for (const card of cachedChildren) {
+            if (!card) continue;
+            card.dirty = true;
+            if (typeof card.getObjects === 'function') {
+                for (const child of (card.getObjects() || [])) {
+                    if (child) child.dirty = true;
+                    // Also invalidate nested groups (e.g., priceGroup children)
+                    if (child && typeof child.getObjects === 'function') {
+                        for (const nested of (child.getObjects() || [])) {
+                            if (nested) nested.dirty = true;
+                        }
+                    }
+                }
+            }
+            card.setCoords();
+        }
     } else {
         // For non-relayout property changes, just update coords and mark dirty
         zone.dirty = true;
@@ -26823,10 +26894,19 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
         } catch { /* ignore */ }
     }
 
+    // Single render after all changes are applied
     canvas.value.requestRenderAll();
     if (shouldRelayout || restoredViewportObjects > 0) {
-        nextTick(() => {
-            scheduleViewportCulling('zone-relayout');
+        // FIX: Use requestAnimationFrame instead of queueMicrotask so that viewport
+        // culling runs AFTER the first render completes. queueMicrotask runs before
+        // the render frame, which can hide freshly-repositioned cards before they are
+        // ever painted — causing the canvas to appear broken after preset changes.
+        requestAnimationFrame(() => {
+            applyViewportCulling('zone-relayout');
+            // FIX: Second render pass after culling to ensure cards are properly displayed.
+            // After a preset change (dramatic size change), Fabric v7 may cache stale group
+            // renders from the first frame. This forces a clean second render.
+            if (canvas.value) canvas.value.requestRenderAll();
         });
     }
     if (opts.save !== false) {
@@ -27490,13 +27570,13 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
     return summary;
 };
 
-const handleApplyZonePreset = (presetId: string) => {
+const handleApplyZonePreset = async (presetId: string) => {
     productZoneState.applyPreset(presetId);
     if (!canvas.value) return;
     const active = getCurrentZoneObject();
     if (!active) return;
     const z = productZoneState.productZone.value;
-    applyZoneUpdates(active, {
+    await applyZoneUpdates(active, {
         role: z.role ?? 'grid',
         padding: z.padding ?? 15,
         gapHorizontal: z.gapHorizontal ?? z.padding ?? 15,
@@ -27510,7 +27590,7 @@ const handleApplyZonePreset = (presetId: string) => {
         highlightCount: z.highlightCount ?? 0,
         highlightPos: z.highlightPos ?? 'first',
         highlightHeight: z.highlightHeight ?? 1.5
-    });
+    }, { saveReason: 'preset-change' });
 };
 
 const handleSyncZoneGaps = (padding: number) => {
@@ -34402,6 +34482,8 @@ const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: P
 
     // Include ALL visual style values so resizeSmartObject re-applies when any style changes.
     const styleSig = {
+        __refCellW: num((s as any).__refCellW),
+        __refCellH: num((s as any).__refCellH),
         splashTemplateId: txt((s as any).splashTemplateId),
         splashScale: num((s as any).splashScale),
         splashOffsetY: num((s as any).splashOffsetY),
@@ -34478,6 +34560,13 @@ const resolvePriceGroupBaseScale = (priceGroup: any, axis: 'x' | 'y', zoneScale:
 };
 
 const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
+    // FIX: Suppress Fabric v7 LayoutManager during card resize.
+    // group.set({ width, height }) triggers performLayout() which recalculates
+    // bounds from children at old positions, corrupting the card layout.
+    const cardLm = (group as any).layoutManager;
+    const cardOrigPerformLayout = cardLm?.performLayout;
+    if (cardLm) cardLm.performLayout = () => {};
+
     // Reset Group Scale/Skew to ensure clean internal layout
     group.scale(1);
     group.set({ width: w, height: h });
@@ -34489,6 +34578,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         (group as any)._cardHeight = h;
         group.dirty = true;
         group.setCoords?.();
+        if (cardLm && cardOrigPerformLayout) cardLm.performLayout = cardOrigPerformLayout;
         return;
     }
     (group as any).__lastCardRelayoutSignature = relayoutSignature;
@@ -34496,6 +34586,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     
     const halfW = w / 2;
     const halfH = h / 2;
+    const _refH = Number((styles as any)?.__refCellH) || h;
     const baseSize = Math.min(w, h);
     const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const objects = group.getObjects();
@@ -34695,7 +34786,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         }
         // Margin Top: 5% of height
         const marginTop = h * 0.05;
-        const titleOffsetY = typeof styles?.prodNameOffsetY === 'number' ? styles.prodNameOffsetY : 0;
+        const _rawNameOffY = typeof styles?.prodNameOffsetY === 'number' ? styles.prodNameOffsetY : 0;
+        const titleOffsetY = _rawNameOffY * (h / _refH);
         if (!isManual(title)) {
             title.set({
                 originX: 'center',
@@ -34768,7 +34860,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         if (limit && String(limit.type || '').includes('text')) {
             const marginTop = h * 0.05;
             const gap = Math.max(4, h * 0.008);
-            const titleOffsetY = typeof styles?.prodNameOffsetY === 'number' ? styles.prodNameOffsetY : 0;
+            const _rawLimitNameOffY = typeof styles?.prodNameOffsetY === 'number' ? styles.prodNameOffsetY : 0;
+            const titleOffsetY = _rawLimitNameOffY * (h / _refH);
 
             const titleHeight = title ? (title.getScaledHeight?.() ?? title.height ?? 0) : 0;
             if (!isManual(limit)) {
@@ -34963,7 +35056,11 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 }
             }
 
-            const layout = layoutPriceGroup(splash, w, h);
+            // Use reference cell dimensions (from zone layout) so that pill size
+            // is uniform across highlight and normal cards.
+            const _refW = Number((styles as any)?.__refCellW) || w;
+            // _refH already declared in outer scope with same value — reuse it
+            const layout = layoutPriceGroup(splash, _refW, _refH);
 
             if (layout) {
                 const { pillH } = layout;
@@ -34972,7 +35069,9 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 const rawScale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
                 const rawOffsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
                 const scale = rawScale;
-                const offsetY = rawOffsetY;
+                // Scale offsetY proportionally so the displacement looks the same
+                // on highlight (taller) and normal cards.
+                const offsetY = rawOffsetY * (h / _refH);
 
                 // Update shadow color to match accent (after we have pillH for proper blur calculation)
                 const accent = styles?.splashColor ?? styles?.accentColor;
@@ -35026,7 +35125,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 // Fallback to generic scaling for older cards without named parts
                 // Apply global styles even in fallback mode
                 const globalScale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
-                const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+                const _rawOffY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+                const offsetY = _rawOffY * (h / _refH);
 
                 // Armazenar o scale ORIGINAL (na criação), não o scale atual
                 // Isso garante que o redimensionamento funcione corretamente em ambas direções
@@ -35038,7 +35138,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
 
                 // Calcular scale baseado no tamanho do cartão relativo ao tamanho original
                 const originalW = (splash as any).__originalCardWidth || splash.width || 100;
-                const sizeRatio = w / originalW;
+                const sizeRatio = _refW / originalW;
 
                 // Aplicar: scale_original × ratio × globalScale
                 const origScaleX = (splash as any).__originalScaleX || 1;
@@ -35047,7 +35147,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 let sScaleY = origScaleY * sizeRatio * globalScale;
 
                 // Armazenar largura original do cartão para próximos redimensionamentos
-                (splash as any).__originalCardWidth = w;
+                (splash as any).__originalCardWidth = _refW;
 
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
@@ -35073,7 +35173,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
             }
         } else {
             const globalScale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
-            const offsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+            const _rawOffY2 = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
+            const offsetY = _rawOffY2 * (h / _refH);
 
             if (typeof (splash as any).__originalScaleX !== 'number') {
                 (splash as any).__originalScaleX = splash.scaleX || 1;
@@ -35234,6 +35335,24 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     });
     group.dirty = true;
     if (typeof group.setCoords === 'function') group.setCoords();
+
+    // FIX: Store intended dimensions on the group so the frozen LayoutManager wrapper
+    // always reads the latest values — NOT closure-captured w/h that go stale when
+    // resizeSmartObject is called again with different dimensions.
+    (group as any).__frozenW = w;
+    (group as any).__frozenH = h;
+    if (cardLm && cardOrigPerformLayout) {
+        // Only install the wrapper once; subsequent calls just update __frozenW/H above.
+        if (!(cardLm as any).__frozenWrapper) {
+            cardLm.performLayout = function(this: any, ...args: any[]) {
+                cardOrigPerformLayout.apply(this, args);
+                const fw = (group as any).__frozenW;
+                const fh = (group as any).__frozenH;
+                if (fw != null && fh != null) group.set({ width: fw, height: fh });
+            };
+            (cardLm as any).__frozenWrapper = true;
+        }
+    }
 }
 
 const getZoneRect = (zone: any) => {
@@ -36063,6 +36182,9 @@ type RecalculateZoneLayoutOptions = {
     save?: boolean;
     requestRender?: boolean;
     trustCachedChildren?: boolean;
+    /** When true, skip resizeSmartObject if card dimensions match saved _cardWidth/_cardHeight.
+     *  Used on rehydrate to preserve text formatting after reload. */
+    preserveCardInternals?: boolean;
 };
 
 const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: RecalculateZoneLayoutOptions = {}) => {
@@ -36193,6 +36315,16 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
     const maxSlotX = zoneRect.left + zoneRect.width - padding;
     const maxSlotY = zoneRect.top + zoneRect.height - padding;
 
+    // Compute standard (non-highlight) cell dimensions as reference so that
+    // price tags, Y offsets and label sizing are uniform across all cards
+    // — including highlight (featured) cards that get larger slots.
+    const _refCellW = (usableW - (cols - 1) * gapX) / Math.max(1, cols);
+    const _refCellH = (usableH - (effectiveRows - 1) * gapY) / Math.max(1, effectiveRows);
+    if (Number.isFinite(_refCellW) && _refCellW > 2 && Number.isFinite(_refCellH) && _refCellH > 2) {
+        (stylesToApply as any).__refCellW = _refCellW;
+        (stylesToApply as any).__refCellH = _refCellH;
+    }
+
     // Helper: resize & position a single card in its slot
     const placeCard = (card: any, x: number, y: number, w: number, h: number, order: number) => {
         const slotW = Math.max(2, w);
@@ -36205,13 +36337,41 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         (card as any)._zoneSlot = { zoneId: zone._customId, left: boundedX, top: boundedY, width: slotW, height: slotH };
         const cx = boundedX + slotW / 2;
         const cy = boundedY + slotH / 2;
-        if (card.isSmartObject || card.name?.startsWith('product-card')) {
-            resizeSmartObject(card, slotW, slotH, stylesToApply);
-            card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
-        } else {
-            card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: slotW / (card.width || 1), scaleY: slotH / (card.height || 1) });
+        // FIX: Suppress LayoutManager on card group during placement to prevent
+        // Fabric v7 from recalculating bounds and corrupting positions.
+        const pcLm = (card as any).layoutManager;
+        const pcOrigPL = pcLm?.performLayout;
+        if (pcLm) pcLm.performLayout = () => {};
+        try {
+            if (card.isSmartObject || card.name?.startsWith('product-card')) {
+                // On rehydrate (preserveCardInternals), skip resizeSmartObject when card
+                // dimensions haven't changed — this preserves text formatting (fontSize,
+                // textWidth) that would otherwise be recalculated with different wrapping.
+                // On interactive changes (styles, gaps, etc.) always run resize.
+                let shouldResize = true;
+                if (opts.preserveCardInternals) {
+                    const prevW = Number((card as any)._cardWidth) || 0;
+                    const prevH = Number((card as any)._cardHeight) || 0;
+                    if (prevW > 0 && prevH > 0 &&
+                        Math.abs(prevW - slotW) < 2 && Math.abs(prevH - slotH) < 2) {
+                        shouldResize = false;
+                    }
+                }
+                if (shouldResize) {
+                    try {
+                        resizeSmartObject(card, slotW, slotH, stylesToApply);
+                    } catch (resizeErr) {
+                        console.warn('[placeCard] resizeSmartObject failed, positioning card at slot:', resizeErr);
+                    }
+                }
+                card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
+            } else {
+                card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: slotW / (card.width || 1), scaleY: slotH / (card.height || 1) });
+            }
+            card.setCoords();
+        } finally {
+            if (pcLm && pcOrigPL) pcLm.performLayout = pcOrigPL;
         }
-        card.setCoords();
     };
 
     // Highlight detection
@@ -36439,6 +36599,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
     }
 
     cards.forEach((card: any, index: number) => {
+      try {
         const col = layoutDirection === 'vertical'
             ? Math.floor(index / Math.max(1, effectiveRows))
             : (index % cols);
@@ -36486,8 +36647,8 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         // - fill: keep card size, expand gaps to occupy full width (preserves label/card proportions)
         // - stretch: stretch card width to occupy full width
         // - left: keep card size, align left
-                        let rowItemW = itemW;
-                        let rowGapX = gapX;
+        let rowItemW = itemW;
+        let rowGapX = gapX;
         let rowStartX = startX;
 
         if (isLastRow && itemsInRow < cols) {
@@ -36510,6 +36671,9 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         x = clamp(x, startX, Math.max(startX, maxSlotX - rowItemW));
         y = clamp(y, startY, Math.max(startY, maxSlotY - itemH));
         placeCard(card, x, y, rowItemW, itemH, index);
+      } catch (err) {
+        console.warn(`[recalculateZoneLayout] Failed to place card ${index}:`, err);
+      }
     });
 
     if (shouldRender) canvas.value.requestRenderAll();
@@ -37098,7 +37262,7 @@ const rehydrateCanvasZones = (
                         // The relayout is fast (just position math, no DOM/render) and
                         // guarantees cards are always correctly placed inside their zone.
                         // Card ORDER is preserved via _zoneOrder which was already saved.
-                        recalculateZoneLayout(z, zoneCards);
+                        recalculateZoneLayout(z, zoneCards, { preserveCardInternals: true });
                     } catch (err) {
                         console.warn('[rehydrateCanvasZones] Failed to relayout zone', err);
                     }
@@ -37428,7 +37592,7 @@ const handleRecalculateLayout = () => {
               <!-- Mobile Undo/Redo Bar (always visible on mobile) -->
               <div
                 v-if="isMobile"
-                class="absolute top-2 left-2 z-[200] flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#18181b]/90 backdrop-blur-md border border-white/10 shadow-lg"
+                class="absolute top-2 left-2 z-200 flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#18181b]/90 backdrop-blur-md border border-white/10 shadow-lg"
               >
                 <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Desfazer" @click="undo()">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
@@ -37441,12 +37605,12 @@ const handleRecalculateLayout = () => {
               <!-- Mobile Zoom Display (top right) -->
               <div
                 v-if="isMobile"
-                class="absolute top-2 right-2 z-[200] flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#18181b]/90 backdrop-blur-md border border-white/10 shadow-lg"
+                class="absolute top-2 right-2 z-200 flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#18181b]/90 backdrop-blur-md border border-white/10 shadow-lg"
               >
                 <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Zoom -" @click="handleZoomOut()">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
                 </button>
-                <span class="text-[11px] text-white/50 min-w-[36px] text-center tabular-nums">{{ Math.round(currentZoom) }}%</span>
+                <span class="text-[11px] text-white/50 min-w-9 text-center tabular-nums">{{ Math.round(currentZoom) }}%</span>
                 <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Zoom +" @click="handleZoomIn()">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
                 </button>
@@ -37455,7 +37619,7 @@ const handleRecalculateLayout = () => {
               <!-- Mobile Quick Actions Bar (appears when object is selected) -->
               <div
                 v-if="isMobile && selectedObjectRef"
-                class="absolute bottom-16 left-0 right-0 z-[200] flex items-center justify-center px-2"
+                class="absolute bottom-16 left-0 right-0 z-200 flex items-center justify-center px-2"
               >
                 <div class="flex items-center gap-0.5 px-2 py-1.5 rounded-xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-xl overflow-x-auto max-w-full scrollbar-hide">
                   <!-- Copy -->
@@ -37723,7 +37887,7 @@ const handleRecalculateLayout = () => {
             :snap-to-guides="snapToGuides"
             :snap-to-grid="snapToGrid"
             :grid-size="gridSize"
-            class="!relative !w-full !shadow-none !border-0"
+            class="relative! w-full! shadow-none! border-0!"
             @update-property="updateObjectProperty"
             @update-smart-group="updateSmartGroup"
             @update-page-settings="updatePageSettings"
@@ -37954,17 +38118,17 @@ const handleRecalculateLayout = () => {
           leave-from-class="opacity-100"
           leave-to-class="opacity-0"
         >
-          <div v-if="showHistoryModal" class="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div v-if="showHistoryModal" class="fixed inset-0 z-9999 flex items-center justify-center">
             <!-- Backdrop -->
             <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="showHistoryModal = false" />
 
             <!-- Panel -->
-            <div class="relative w-[min(520px,92vw)] max-h-[85vh] flex flex-col rounded-2xl border border-white/[0.08] bg-zinc-900/95 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.7)] overflow-hidden">
+            <div class="relative w-[min(520px,92vw)] max-h-[85vh] flex flex-col rounded-2xl border border-white/8 bg-zinc-900/95 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.7)] overflow-hidden">
 
               <!-- Header -->
               <div class="flex items-center gap-3 px-5 pt-5 pb-4">
                 <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-violet-500/15 shrink-0">
-                  <svg class="w-[18px] h-[18px] text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                  <svg class="w-4.5 h-4.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
@@ -37974,7 +38138,7 @@ const handleRecalculateLayout = () => {
                 </div>
                 <button
                   type="button"
-                  class="flex items-center justify-center w-8 h-8 rounded-lg text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-all duration-150"
+                  class="flex items-center justify-center w-8 h-8 rounded-lg text-white/40 hover:text-white/80 hover:bg-white/6 transition-all duration-150"
                   @click="showHistoryModal = false"
                 >
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -37999,18 +38163,18 @@ const handleRecalculateLayout = () => {
                       <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                     </svg>
                   </div>
-                  <p class="text-[13px] text-red-300/90 text-center max-w-[280px]">{{ historyError }}</p>
+                  <p class="text-[13px] text-red-300/90 text-center max-w-70">{{ historyError }}</p>
                 </div>
 
                 <!-- Empty state -->
                 <div v-else-if="!historyItems.length" class="flex flex-col items-center justify-center py-10 gap-2">
-                  <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-white/[0.04]">
+                  <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-white/4">
                     <svg class="w-5 h-5 text-white/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-2.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                     </svg>
                   </div>
                   <p class="text-[13px] text-white/40">Nenhuma versao salva ainda</p>
-                  <p class="text-[11px] text-white/25 max-w-[240px] text-center">Versoes sao salvas automaticamente quando voce edita o projeto.</p>
+                  <p class="text-[11px] text-white/25 max-w-60 text-center">Versoes sao salvas automaticamente quando voce edita o projeto.</p>
                 </div>
 
                 <!-- History items -->
@@ -38019,15 +38183,15 @@ const handleRecalculateLayout = () => {
                     v-for="(it, idx) in historyItems"
                     :key="`${it.source}:${it.key}:${it.versionId || ''}:${it.lastModified}`"
                     class="group relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl border transition-all duration-150"
-                    :class="historyItemIsLatest(idx) ? 'bg-violet-500/[0.07] border-violet-500/20 hover:border-violet-500/35' : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04] hover:border-white/[0.12]'"
+                    :class="((it as any).source === 'current' || historyItemIsLatest(idx)) ? 'bg-violet-500/[0.07] border-violet-500/20 hover:border-violet-500/35' : 'bg-white/2 border-white/6 hover:bg-white/4 hover:border-white/12'"
                   >
                     <!-- Timeline dot -->
                     <div class="flex flex-col items-center self-stretch shrink-0">
                       <div
                         class="w-2.5 h-2.5 rounded-full mt-0.5 ring-[3px] shrink-0"
-                        :class="historyItemIsLatest(idx) ? 'bg-violet-400 ring-violet-400/20' : 'bg-white/20 ring-white/[0.06]'"
+                        :class="((it as any).source === 'current' || historyItemIsLatest(idx)) ? 'bg-violet-400 ring-violet-400/20' : 'bg-white/20 ring-white/6'"
                       />
-                      <div v-if="idx < historyItems.length - 1" class="w-px flex-1 mt-1 bg-white/[0.06]" />
+                      <div v-if="idx < historyItems.length - 1" class="w-px flex-1 mt-1 bg-white/6" />
                     </div>
 
                     <!-- Info -->
@@ -38060,7 +38224,7 @@ const handleRecalculateLayout = () => {
                       class="shrink-0 flex items-center gap-1.5 text-[12px] font-medium px-3.5 py-2 rounded-lg transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                       :class="restoringHistoryKey === getHistoryRestoreKey(it as any)
                         ? 'bg-violet-500/20 text-violet-300 cursor-wait'
-                        : 'bg-white/[0.06] text-white/70 hover:bg-violet-500/15 hover:text-violet-200 active:scale-[0.97]'"
+                        : 'bg-white/6 text-white/70 hover:bg-violet-500/15 hover:text-violet-200 active:scale-[0.97]'"
                       :disabled="!!restoringHistoryKey"
                       @click="restoreFromHistoryItem(it as any)"
                     >
@@ -38078,7 +38242,7 @@ const handleRecalculateLayout = () => {
               </div>
 
               <!-- Footer hint -->
-              <div v-if="!historyLoading && !historyError && historyItems.length" class="px-5 py-3 border-t border-white/[0.06] bg-white/[0.02]">
+              <div v-if="!historyLoading && !historyError && historyItems.length" class="px-5 py-3 border-t border-white/6 bg-white/2">
                 <p class="text-[11px] text-white/30 text-center">
                   Ate {{ 3 }} versoes salvas automaticamente por pagina
                 </p>

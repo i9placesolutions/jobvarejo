@@ -65,6 +65,9 @@ export default defineNuxtConfig({
       },
       '/api/storage/upload': {
         headers: { 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive' }
+      },
+      '/api/builder/storage/upload': {
+        headers: { 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive' }
       }
     }
   },
@@ -203,6 +206,9 @@ export default defineNuxtConfig({
         'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
         'Cross-Origin-Embedder-Policy': 'credentialless',
       },
+    },
+    '/builder/**': {
+      ssr: false,
     },
     '/api/storage/upload': {
       headers: {
