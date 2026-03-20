@@ -122,6 +122,10 @@ import {
 
 const isDrawing = ref(false)
 const isNodeEditing = ref(false)
+// Flag to suppress handleUpdateGlobalStyles during page load / composable sync.
+// When true, style updates from child components (ProductZoneSettings) are ignored
+// because they are just echoing back the values we synced from the zone during rehydrate.
+let _suppressGlobalStyleUpdates = false
 const isPenMode = ref(false) // Pen Tool mode (vector path creation)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingImageReplaceTargetId = ref<string | null>(null)
@@ -8731,6 +8735,12 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 }
             });
             
+            // CRITICAL: Suppress global style updates during rehydrate.
+            // rehydrateCanvasZones syncs composable state from the zone, which triggers
+            // ProductZoneSettings watchers that emit update-global-styles back. Without
+            // suppression, this causes full relayout of all cards, destroying saved layout.
+            _suppressGlobalStyleUpdates = true;
+
             // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
             rehydrateCanvasZones({
                 legacyImageRepairMode: legacyProductCardImageRepairMode,
@@ -8738,7 +8748,15 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 // Reapplying zone styles here can relayout price groups and resurrect broken labels.
                 applyZoneStyles: false
             });
-            
+
+            // Clear suppression after a tick to allow Vue's reactive system to settle.
+            // Use requestAnimationFrame + nextTick to ensure all watchers have fired.
+            requestAnimationFrame(() => {
+                nextTick(() => {
+                    _suppressGlobalStyleUpdates = false;
+                });
+            });
+
             // Ensure all frames have layerName set to "FRAMER" if missing (for LayersPanel display)
             const allObjs = canvas.value.getObjects();
             allObjs.forEach((obj: any) => {
@@ -10236,11 +10254,13 @@ onMounted(async () => {
                       });
                       
                        // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
+                      _suppressGlobalStyleUpdates = true;
                       rehydrateCanvasZones({
                           legacyImageRepairMode: legacyProductCardImageRepairMode,
                           // Same safeguard for the legacy loader path: trust persisted canvas visuals on reload.
                           applyZoneStyles: false
                       });
+                      requestAnimationFrame(() => { nextTick(() => { _suppressGlobalStyleUpdates = false; }); });
                       
                       // CRITICAL FIX: Restore lost object names in product cards after JSON load
                       // When canvas is loaded from JSON, nested object names inside groups are lost
@@ -11958,6 +11978,20 @@ const removeImageObjectsDeep = (node: any): any => {
         // toJSON(), causing inconsistent saved data or serialization failures. The render
         // will happen naturally after the save completes.
         
+        // DEBUG: Log zone dimensions right before serialization
+        try {
+            const _dbgAllObjs = canvasInstance.getObjects?.() || [];
+            _dbgAllObjs.filter((o: any) => o?.type === 'group' && (o?.isGridZone || o?.isProductZone)).forEach((z: any) => {
+                const _dbgR = getZoneRect(z);
+                const _dbgCards = canvasInstance.getObjects?.().filter((o: any) => o?.parentZoneId === z._customId) || [];
+                const _dbgFC = _dbgCards[0];
+                console.log(`[DEBUG-ZONE] PRE-SAVE zone=${z._customId} _zW=${z._zoneWidth?.toFixed?.(1)} _zH=${z._zoneHeight?.toFixed?.(1)} sx=${z.scaleX} sy=${z.scaleY} w=${z.width?.toFixed?.(1)} h=${z.height?.toFixed?.(1)} rect=${_dbgR ? `${_dbgR.width?.toFixed?.(1)}x${_dbgR.height?.toFixed?.(1)} sx=${_dbgR.scaleX} sy=${_dbgR.scaleY}` : 'null'} card0=${_dbgFC ? `w=${_dbgFC.width?.toFixed?.(1)} h=${_dbgFC.height?.toFixed?.(1)} _cW=${_dbgFC._cardWidth} _cH=${_dbgFC._cardHeight}` : 'none'}`);
+                console.log('[DEBUG-ZONE] PRE-SAVE details:', {
+                    zoneId: z._customId
+                });
+            });
+        } catch (_e) { /* debug only */ }
+
         // Serialize with custom props
         let json: any
         const preSerializeObjectCount = canvasInstance?.getObjects?.()?.length || 0
@@ -18865,8 +18899,17 @@ const setupReactivity = () => {
 
             ensureZoneSanity(obj);
             obj.setCoords();
-            obj._zoneWidth = Math.abs(obj.getScaledWidth?.() ?? obj._zoneWidth ?? 0);
-            obj._zoneHeight = Math.abs(obj.getScaledHeight?.() ?? obj._zoneHeight ?? 0);
+            // Use inner rect dimensions * scale instead of group bounds to avoid inflation
+            const zr = getZoneRect(obj);
+            if (zr) {
+                const sx = Math.abs(obj.scaleX ?? 1);
+                const sy = Math.abs(obj.scaleY ?? 1);
+                obj._zoneWidth = Math.abs((zr.width ?? 0) * (zr.scaleX ?? 1)) * sx;
+                obj._zoneHeight = Math.abs((zr.height ?? 0) * (zr.scaleY ?? 1)) * sy;
+            } else {
+                obj._zoneWidth = Math.abs(obj.getScaledWidth?.() ?? obj._zoneWidth ?? 0);
+                obj._zoneHeight = Math.abs(obj.getScaledHeight?.() ?? obj._zoneHeight ?? 0);
+            }
 
             // Use cached children to ensure they stay bound to zone during resize
             recalculateZoneLayout(obj, cachedChildren, { save: false });
@@ -27575,6 +27618,34 @@ const handleApplyZonePreset = async (presetId: string) => {
     if (!canvas.value) return;
     const active = getCurrentZoneObject();
     if (!active) return;
+
+    // CRITICAL FIX: Clear cached signatures and manual transform flags on ALL cards
+    // before applying the new preset. Without this:
+    // 1. __lastCardRelayoutSignature may match (if only grid changed but styles didn't),
+    //    causing resizeSmartObject to skip child repositioning entirely
+    // 2. __manualTransform / __preserveManualLayout on children prevents resizeSmartObject
+    //    from moving price/splash elements to new positions for the new slot dimensions
+    // 3. __priceLayoutSnapshot captures positions from the OLD card size, corrupting layout
+    try {
+        const presetCards = getZoneChildren(active);
+        presetCards.forEach((card: any) => {
+            card.__forceCardRelayout = true;
+            card.__lastCardRelayoutSignature = null;
+            if (typeof card.getObjects === 'function') {
+                card.getObjects().forEach((child: any) => {
+                    if (child) {
+                        child.__manualTransform = false;
+                        child.__preserveManualLayout = false;
+                        child.__priceLayoutSnapshot = null;
+                        child.__priceLayoutSnapshotAt = null;
+                    }
+                });
+            }
+        });
+    } catch (e) {
+        console.warn('[handleApplyZonePreset] Failed to clear card flags:', e);
+    }
+
     const z = productZoneState.productZone.value;
     await applyZoneUpdates(active, {
         role: z.role ?? 'grid',
@@ -27632,6 +27703,13 @@ const resolveGlobalStyleUpdatePayload = (propOrPayload: any, val: any): { prop: 
 
 const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, any>, val?: any) => {
     if (!canvas.value) return;
+    // CRITICAL FIX: Suppress style updates during page load / composable sync.
+    // When rehydrateCanvasZones syncs composable state, ProductZoneSettings emits
+    // update-global-styles back, which triggers applyGlobalStylesToCards with __forceCardRelayout=true.
+    // This forces full relayout of all cards, destroying the saved internal layout (text sizes, positions).
+    if (_suppressGlobalStyleUpdates) {
+        return;
+    }
     const parsed = resolveGlobalStyleUpdatePayload(propOrPayload, val);
     if (!parsed) {
         console.warn('⚠️ [handleUpdateGlobalStyles] Invalid payload received:', propOrPayload);
@@ -34560,12 +34638,12 @@ const resolvePriceGroupBaseScale = (priceGroup: any, axis: 'x' | 'y', zoneScale:
 };
 
 const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
-    // FIX: Suppress Fabric v7 LayoutManager during card resize.
-    // group.set({ width, height }) triggers performLayout() which recalculates
-    // bounds from children at old positions, corrupting the card layout.
+    // FIX: Permanently disable Fabric v7 LayoutManager on product card groups.
+    // Card layout is fully managed by resizeSmartObject — Fabric's auto-layout
+    // only causes corruption by recalculating bounds from children at stale positions.
+    // A permanent no-op is simpler and eliminates recursion/wrapper-chain bugs.
     const cardLm = (group as any).layoutManager;
-    const cardOrigPerformLayout = cardLm?.performLayout;
-    if (cardLm) cardLm.performLayout = () => {};
+    if (cardLm && cardLm.performLayout) cardLm.performLayout = () => {};
 
     // Reset Group Scale/Skew to ensure clean internal layout
     group.scale(1);
@@ -34574,13 +34652,15 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     const relayoutSignature = buildCardRelayoutSignature(group, w, h, styles);
     const forceRelayout = (group as any).__forceCardRelayout === true;
     if (!forceRelayout && (group as any).__lastCardRelayoutSignature === relayoutSignature) {
+        console.log(`[DEBUG-ZONE] resizeSmartObject SKIP (signature match) card=${group._customId || group.name} w=${w.toFixed(1)} h=${h.toFixed(1)} savedW=${(group as any)._cardWidth} savedH=${(group as any)._cardHeight}`);
         (group as any)._cardWidth = w;
         (group as any)._cardHeight = h;
         group.dirty = true;
         group.setCoords?.();
-        if (cardLm && cardOrigPerformLayout) cardLm.performLayout = cardOrigPerformLayout;
+        // LayoutManager is permanently disabled (no-op) — nothing to restore.
         return;
     }
+    console.log(`[DEBUG-ZONE] resizeSmartObject FULL RELAYOUT card=${group._customId || group.name} w=${w.toFixed(1)} h=${h.toFixed(1)} prevW=${(group as any)._cardWidth} prevH=${(group as any)._cardHeight} forced=${forceRelayout} sigMatch=${(group as any).__lastCardRelayoutSignature === relayoutSignature}`);
     (group as any).__lastCardRelayoutSignature = relayoutSignature;
     (group as any).__forceCardRelayout = false;
     
@@ -35336,23 +35416,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     group.dirty = true;
     if (typeof group.setCoords === 'function') group.setCoords();
 
-    // FIX: Store intended dimensions on the group so the frozen LayoutManager wrapper
-    // always reads the latest values — NOT closure-captured w/h that go stale when
-    // resizeSmartObject is called again with different dimensions.
-    (group as any).__frozenW = w;
-    (group as any).__frozenH = h;
-    if (cardLm && cardOrigPerformLayout) {
-        // Only install the wrapper once; subsequent calls just update __frozenW/H above.
-        if (!(cardLm as any).__frozenWrapper) {
-            cardLm.performLayout = function(this: any, ...args: any[]) {
-                cardOrigPerformLayout.apply(this, args);
-                const fw = (group as any).__frozenW;
-                const fh = (group as any).__frozenH;
-                if (fw != null && fh != null) group.set({ width: fw, height: fh });
-            };
-            (cardLm as any).__frozenWrapper = true;
-        }
-    }
+    // LayoutManager is permanently disabled (no-op) at the top of this function.
+    // No wrapper needed — dimensions are explicitly set by resizeSmartObject.
 }
 
 const getZoneRect = (zone: any) => {
@@ -35641,47 +35706,76 @@ const ensureZoneSanity = (zone: any) => {
 const getZoneMetrics = (zone: any) => {
     if (!zone) return null;
 
-    // Ground-truth: bounding rect always reflects current position and scale
+    // CRITICAL FIX: Always derive zone size from the INNER RECT, not the group bounding box.
+    // getBoundingRect(true) includes text labels and other non-rect children, which inflates
+    // the reported zone size.  This causes cards to grow larger each save/reload cycle because
+    // recalculateZoneLayout computes slotW/slotH from inflated zone dimensions.
+    const rect = getZoneRect(zone);
+    if (rect) {
+        const rectW = Math.abs((rect.width ?? 0) * (rect.scaleX ?? 1));
+        const rectH = Math.abs((rect.height ?? 0) * (rect.scaleY ?? 1));
+        console.log('[DEBUG-ZONE] getZoneMetrics RECT path:', {
+            rectRawW: rect.width, rectRawH: rect.height,
+            rectScaleX: rect.scaleX, rectScaleY: rect.scaleY,
+            rectW, rectH, zoneId: zone._customId
+        });
+        if (rectW > 0 && rectH > 0) {
+            // Use the zone's center point for positioning (most stable reference)
+            const center = typeof zone.getCenterPoint === 'function'
+                ? zone.getCenterPoint()
+                : null;
+
+            if (center) {
+                // Sync stored dims from the actual rect (not group bounds)
+                zone._zoneWidth = rectW;
+                zone._zoneHeight = rectH;
+                const result = {
+                    left: center.x - (rectW / 2),
+                    top: center.y - (rectH / 2),
+                    width: rectW,
+                    height: rectH,
+                    centerX: center.x,
+                    centerY: center.y
+                };
+                console.log('[DEBUG-ZONE] getZoneMetrics RECT+center result:', result);
+                return result;
+            }
+
+            // No center point — use rect's absolute position
+            const liveBounds = zone.getBoundingRect ? zone.getBoundingRect(true) : null;
+            const cx = liveBounds ? liveBounds.left + (liveBounds.width / 2) : (zone.left ?? 0);
+            const cy = liveBounds ? liveBounds.top + (liveBounds.height / 2) : (zone.top ?? 0);
+            zone._zoneWidth = rectW;
+            zone._zoneHeight = rectH;
+            return {
+                left: cx - (rectW / 2),
+                top: cy - (rectH / 2),
+                width: rectW,
+                height: rectH,
+                centerX: cx,
+                centerY: cy
+            };
+        }
+    }
+
+    // Fallback: use stored dims or group bounding rect when inner rect is unavailable
+    console.log('[DEBUG-ZONE] getZoneMetrics FALLBACK path (no rect or zero dims)', { hasRect: !!rect, zoneId: zone._customId });
     const liveBounds = zone.getBoundingRect ? zone.getBoundingRect(true) : null;
     const liveW = liveBounds ? Math.abs(liveBounds.width) : 0;
     const liveH = liveBounds ? Math.abs(liveBounds.height) : 0;
 
-    // When live bounds are valid (zone is rendered), use them directly.
-    // This prevents stale _zoneWidth/_zoneHeight from placing cards outside the zone.
     if (liveBounds && liveW > 0 && liveH > 0) {
-        // FIX: Prefer stored _zoneWidth/_zoneHeight over getBoundingRect when they
-        // are available and reasonably close to live bounds (within 15%).
-        // getBoundingRect(true) returns the bounding rect of the ENTIRE group including
-        // text labels ("Zona de Produtos", etc.) which can differ from the actual zone
-        // rect dimensions.  After loadFromJSON, Fabric's LayoutManager can recalculate
-        // group bounds, producing slightly different values each reload.  Using the
-        // stored dimensions ensures consistent card positioning across saves/loads.
         const hasStoredDims = typeof zone._zoneWidth === 'number' && zone._zoneWidth > 0 &&
                               typeof zone._zoneHeight === 'number' && zone._zoneHeight > 0;
 
-        let useW = liveW;
-        let useH = liveH;
+        const useW = hasStoredDims ? zone._zoneWidth : liveW;
+        const useH = hasStoredDims ? zone._zoneHeight : liveH;
 
-        if (hasStoredDims) {
-            const wRatio = Math.max(zone._zoneWidth, liveW) / Math.min(zone._zoneWidth, liveW);
-            const hRatio = Math.max(zone._zoneHeight, liveH) / Math.min(zone._zoneHeight, liveH);
-
-            if (wRatio <= 1.15 && hRatio <= 1.15) {
-                // Discrepancy is small — use stored dims for stability
-                useW = zone._zoneWidth;
-                useH = zone._zoneHeight;
-            } else {
-                // Significant discrepancy — zone was resized, sync stored dims
-                zone._zoneWidth = liveW;
-                zone._zoneHeight = liveH;
-            }
-        } else {
-            // No stored dims — initialize from live bounds
+        if (!hasStoredDims) {
             zone._zoneWidth = liveW;
             zone._zoneHeight = liveH;
         }
 
-        // Position: use zone center point (stable) + stored dimensions
         const center = typeof zone.getCenterPoint === 'function'
             ? zone.getCenterPoint()
             : { x: liveBounds.left + liveW / 2, y: liveBounds.top + liveH / 2 };
@@ -36004,8 +36098,16 @@ const applyZoneScaleToRect = (zone: any, minSize = 60) => {
     const zoneRect = zone.getObjects().find((o: any) => o.type === 'rect');
     if (!zoneRect) return null;
 
-    const nextWidth = Math.max(minSize, Math.abs(zone.getScaledWidth?.() ?? 0));
-    const nextHeight = Math.max(minSize, Math.abs(zone.getScaledHeight?.() ?? 0));
+    // CRITICAL FIX: Use the inner RECT dimensions * zone scale, NOT zone.getScaledWidth().
+    // zone.getScaledWidth() returns the GROUP bounding box (which includes text labels
+    // and other non-rect children), inflating _zoneWidth each time normalizeZoneScale runs.
+    // The rect is the actual zone area where cards are placed.
+    const rectW = Math.abs((zoneRect.width ?? 0) * (zoneRect.scaleX ?? 1));
+    const rectH = Math.abs((zoneRect.height ?? 0) * (zoneRect.scaleY ?? 1));
+    const zoneScaleX = Math.abs(zone.scaleX ?? 1);
+    const zoneScaleY = Math.abs(zone.scaleY ?? 1);
+    const nextWidth = Math.max(minSize, rectW * zoneScaleX);
+    const nextHeight = Math.max(minSize, rectH * zoneScaleY);
     if (!nextWidth || !nextHeight) return null;
 
     // FIX: capture zone center BEFORE resetting scale, so we can detect if
@@ -36182,9 +36284,11 @@ type RecalculateZoneLayoutOptions = {
     save?: boolean;
     requestRender?: boolean;
     trustCachedChildren?: boolean;
-    /** When true, skip resizeSmartObject if card dimensions match saved _cardWidth/_cardHeight.
-     *  Used on rehydrate to preserve text formatting after reload. */
+    /** @deprecated No longer used — resizeSmartObject always runs to fix Fabric v7 group center shifts */
     preserveCardInternals?: boolean;
+    /** When true, only reposition cards (set left/top) without calling resizeSmartObject.
+     *  Used on rehydrate to preserve card internal layout (text sizes, positions) from JSON. */
+    skipResize?: boolean;
 };
 
 const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: RecalculateZoneLayoutOptions = {}) => {
@@ -36320,6 +36424,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
     // — including highlight (featured) cards that get larger slots.
     const _refCellW = (usableW - (cols - 1) * gapX) / Math.max(1, cols);
     const _refCellH = (usableH - (effectiveRows - 1) * gapY) / Math.max(1, effectiveRows);
+    console.log(`[DEBUG-ZONE] recalculateZoneLayout: zone=${zone._customId} rect=${zoneRect.width.toFixed(1)}x${zoneRect.height.toFixed(1)} pad=${rawPadding} gapX=${rawGapX} gapY=${rawGapY} cols=${cols} rows=${effectiveRows} slotW=${_refCellW.toFixed(1)} slotH=${_refCellH.toFixed(1)} usable=${usableW.toFixed(1)}x${usableH.toFixed(1)} cards=${cards.length}`);
     if (Number.isFinite(_refCellW) && _refCellW > 2 && Number.isFinite(_refCellH) && _refCellH > 2) {
         (stylesToApply as any).__refCellW = _refCellW;
         (stylesToApply as any).__refCellH = _refCellH;
@@ -36337,41 +36442,29 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         (card as any)._zoneSlot = { zoneId: zone._customId, left: boundedX, top: boundedY, width: slotW, height: slotH };
         const cx = boundedX + slotW / 2;
         const cy = boundedY + slotH / 2;
-        // FIX: Suppress LayoutManager on card group during placement to prevent
-        // Fabric v7 from recalculating bounds and corrupting positions.
+        // Ensure LayoutManager is disabled on card groups (resizeSmartObject also does this)
         const pcLm = (card as any).layoutManager;
-        const pcOrigPL = pcLm?.performLayout;
-        if (pcLm) pcLm.performLayout = () => {};
-        try {
-            if (card.isSmartObject || card.name?.startsWith('product-card')) {
-                // On rehydrate (preserveCardInternals), skip resizeSmartObject when card
-                // dimensions haven't changed — this preserves text formatting (fontSize,
-                // textWidth) that would otherwise be recalculated with different wrapping.
-                // On interactive changes (styles, gaps, etc.) always run resize.
-                let shouldResize = true;
-                if (opts.preserveCardInternals) {
-                    const prevW = Number((card as any)._cardWidth) || 0;
-                    const prevH = Number((card as any)._cardHeight) || 0;
-                    if (prevW > 0 && prevH > 0 &&
-                        Math.abs(prevW - slotW) < 2 && Math.abs(prevH - slotH) < 2) {
-                        shouldResize = false;
-                    }
-                }
-                if (shouldResize) {
-                    try {
-                        resizeSmartObject(card, slotW, slotH, stylesToApply);
-                    } catch (resizeErr) {
-                        console.warn('[placeCard] resizeSmartObject failed, positioning card at slot:', resizeErr);
-                    }
-                }
-                card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
+        if (pcLm && pcLm.performLayout) pcLm.performLayout = () => {};
+
+        if (card.isSmartObject || card.name?.startsWith('product-card')) {
+            if (opts.skipResize) {
+                // skipResize: preserve card internal layout from JSON.
+                // Only set outer dimensions and position — don't touch children.
+                card.set({ width: slotW, height: slotH });
+                (card as any)._cardWidth = slotW;
+                (card as any)._cardHeight = slotH;
             } else {
-                card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: slotW / (card.width || 1), scaleY: slotH / (card.height || 1) });
+                try {
+                    resizeSmartObject(card, slotW, slotH, stylesToApply);
+                } catch (resizeErr) {
+                    console.warn('[placeCard] resizeSmartObject failed, positioning card at slot:', resizeErr);
+                }
             }
-            card.setCoords();
-        } finally {
-            if (pcLm && pcOrigPL) pcLm.performLayout = pcOrigPL;
+            card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
+        } else {
+            card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: slotW / (card.width || 1), scaleY: slotH / (card.height || 1) });
         }
+        card.setCoords();
     };
 
     // Highlight detection
@@ -37010,7 +37103,20 @@ const rehydrateCanvasZones = (
             // If scaleX/Y were already 1 (normalizeZoneScale bailed early), we still
             // need to ensure coords are fresh for getBoundingRect to work in relayout.
             z.setCoords?.();
-            
+
+            // DEBUG: Log zone dimensions on rehydrate
+            const _dbgRect = getZoneRect(z);
+            console.log('[DEBUG-ZONE] rehydrateCanvasZones zone:', {
+                zoneId: z._customId,
+                _zoneWidth: z._zoneWidth, _zoneHeight: z._zoneHeight,
+                scaleX: z.scaleX, scaleY: z.scaleY,
+                width: z.width, height: z.height,
+                innerRect: _dbgRect ? {
+                    w: _dbgRect.width, h: _dbgRect.height,
+                    sx: _dbgRect.scaleX, sy: _dbgRect.scaleY
+                } : null
+            });
+
             const rawZoneStyles = (z as any)._zoneGlobalStyles;
             const hasPersistedZoneStyles =
                 !!rawZoneStyles &&
@@ -37122,11 +37228,28 @@ const rehydrateCanvasZones = (
             // in CANVAS_CUSTOM_PROPS so it reverts to true after loadFromJSON.
             // Without this, style changes via resizeSmartObject may not render.
             card.set({ objectCaching: false, statefullCache: false, dirty: true });
-            // Also disable caching on nested groups (e.g. priceGroup)
+
+            // CRITICAL: Permanently disable Fabric v7 LayoutManager on card groups.
+            // Card layout is fully managed by resizeSmartObject — Fabric's auto-layout
+            // only causes corruption by recalculating bounds from children at stale positions.
+            const cardLm = (card as any).layoutManager;
+            if (cardLm && cardLm.performLayout) cardLm.performLayout = () => {};
+
+            // Restore saved dimensions — LayoutManager may have corrupted them
+            // between loadFromJSON and this rehydrate code.
+            const savedW = Number((card as any)._cardWidth) || 0;
+            const savedH = Number((card as any)._cardHeight) || 0;
+            if (savedW > 0 && savedH > 0) {
+                card.set({ width: savedW, height: savedH });
+            }
+
+            // Also disable caching and LayoutManager on nested groups (e.g. priceGroup)
             if (typeof card.getObjects === 'function') {
                 card.getObjects().forEach((child: any) => {
                     if (child && child.type === 'group') {
                         child.set({ objectCaching: false, statefullCache: false, dirty: true });
+                        const nestedLm = (child as any).layoutManager;
+                        if (nestedLm && nestedLm.performLayout) nestedLm.performLayout = () => {};
                     }
                 });
             }
@@ -37250,6 +37373,11 @@ const rehydrateCanvasZones = (
                         // Preserve manually-saved placements after reload.
                         // Reflow only when this zone has cards without reliable saved positions.
                         const zoneCards = cards.filter((c: any) => String((c as any).parentZoneId || '').trim() === String(z._customId || '').trim());
+                        // DEBUG: Log first card dims before relayout
+                        if (zoneCards.length > 0) {
+                            const fc = zoneCards[0];
+                            console.log(`[DEBUG-ZONE] BEFORE relayout: card=${fc._customId} w=${fc.width?.toFixed?.(1)} h=${fc.height?.toFixed?.(1)} _cardW=${fc._cardWidth} _cardH=${fc._cardHeight} left=${fc.left?.toFixed?.(1)} top=${fc.top?.toFixed?.(1)} sig=${fc.__lastCardRelayoutSignature ? 'YES' : 'NO'}`);
+                        }
                         // FIX: ALWAYS force a full relayout on rehydrate.
                         // Previously we tried to preserve "saved positions" to avoid
                         // visual jumps, but this caused cards to stay at stale/corrupted
@@ -37262,7 +37390,16 @@ const rehydrateCanvasZones = (
                         // The relayout is fast (just position math, no DOM/render) and
                         // guarantees cards are always correctly placed inside their zone.
                         // Card ORDER is preserved via _zoneOrder which was already saved.
-                        recalculateZoneLayout(z, zoneCards, { preserveCardInternals: true });
+                        // CRITICAL FIX: Use skipResize to preserve card internal layout from JSON.
+                        // Without this, resizeSmartObject repositions all card children (title, image,
+                        // price, splash), destroying the saved layout. Cards are already correctly
+                        // sized in the JSON — we only need to reposition them within the zone grid.
+                        recalculateZoneLayout(z, zoneCards, { skipResize: true });
+                        // DEBUG: Log first card dims after relayout
+                        if (zoneCards.length > 0) {
+                            const fc = zoneCards[0];
+                            console.log(`[DEBUG-ZONE] AFTER relayout: card=${fc._customId} w=${fc.width?.toFixed?.(1)} h=${fc.height?.toFixed?.(1)} _cardW=${fc._cardWidth} _cardH=${fc._cardHeight} left=${fc.left?.toFixed?.(1)} top=${fc.top?.toFixed?.(1)}`);
+                        }
                     } catch (err) {
                         console.warn('[rehydrateCanvasZones] Failed to relayout zone', err);
                     }
