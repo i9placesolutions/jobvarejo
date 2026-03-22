@@ -40,20 +40,6 @@ const actionsStyle = computed(() => ({
   transform: 'translateX(-100%)',
 }));
 
-const isCompactZone = computed(() => props.width < 300 || props.height < 180);
-
-const emptyStateStyle = computed(() => {
-  const inset = Math.max(14, Math.min(22, props.width * 0.06));
-  const availableHeight = Math.max(props.height - 28, 72);
-  const targetHeight = isCompactZone.value ? availableHeight * 0.34 : availableHeight * 0.28;
-  const placeholderHeight = Math.max(72, Math.min(targetHeight, isCompactZone.value ? 96 : 132));
-  const topInset = Math.max(14, (props.height - placeholderHeight) / 2);
-  return {
-    left: `${props.left + inset}px`,
-    top: `${props.top + topInset}px`,
-    width: `${Math.max(props.width - inset * 2, 120)}px`,
-  };
-});
 </script>
 
 <template>
@@ -132,22 +118,21 @@ const emptyStateStyle = computed(() => {
       </div>
     </Transition>
 
-    <!-- Empty zone CTA (inside zone area) -->
-    <button
+    <!-- Empty zone: subtle centered pill CTA -->
+    <div
       v-if="isEmpty"
-      type="button"
-      class="pointer-events-auto absolute flex flex-col items-center justify-center gap-1.5 rounded-[26px] border border-dashed border-emerald-400/30 bg-[linear-gradient(180deg,rgba(16,185,129,0.18),rgba(6,95,70,0.14))] px-5 py-4 text-center text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_44px_rgba(0,0,0,0.16)] backdrop-blur-sm transition-all duration-200 hover:border-emerald-300/45 hover:bg-[linear-gradient(180deg,rgba(16,185,129,0.22),rgba(6,95,70,0.18))]"
-      :style="emptyStateStyle"
-      @click="emit('append')"
+      class="pointer-events-none absolute flex items-center justify-center"
+      :style="{ left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` }"
     >
-      <span class="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/14 bg-white/10">
-        <Plus class="h-5 w-5" />
-      </span>
-      <span class="text-sm font-semibold tracking-[0.01em]">Adicionar produtos</span>
-      <span v-if="!isCompactZone" class="text-[11px] text-emerald-50/75">
-        Preencha esta zona mantendo o layout e o template atual.
-      </span>
-    </button>
+      <button
+        type="button"
+        class="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/6 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 shadow-sm transition-all duration-150 hover:border-emerald-400/30 hover:bg-emerald-500/10 hover:text-emerald-200"
+        @click.stop="emit('append')"
+      >
+        <Plus class="h-3 w-3" />
+        Adicionar
+      </button>
+    </div>
   </div>
 </template>
 

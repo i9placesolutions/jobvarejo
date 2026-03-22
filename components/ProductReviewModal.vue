@@ -2358,7 +2358,7 @@ const getAssetDisplayName = (asset: any): string => {
         title="Importação Inteligente"
         width="1120px"
     >
-        <div class="flex flex-col gap-3 min-h-[580px] max-h-[84vh]">
+        <div class="flex flex-col gap-3 min-h-145 max-h-[84vh]">
 
             <!-- STEP 1: INPUT -->
             <div v-if="step === 'input'" class="flex flex-col gap-4 flex-1">
@@ -2388,7 +2388,7 @@ const getAssetDisplayName = (asset: any): string => {
                 <div class="grid gap-4 md:grid-cols-2 flex-1">
                     <!-- Upload de arquivo -->
                     <div
-                        class="group rounded-2xl border-2 border-dashed border-zinc-700/60 bg-zinc-900/30 p-6 flex flex-col items-center justify-center text-center transition-all hover:border-sky-400/40 hover:bg-sky-500/[0.04] cursor-pointer min-h-[280px]"
+                        class="group rounded-2xl border-2 border-dashed border-zinc-700/60 bg-zinc-900/30 p-6 flex flex-col items-center justify-center text-center transition-all hover:border-sky-400/40 hover:bg-sky-500/4 cursor-pointer min-h-70"
                         @dragover.prevent
                         @drop.prevent="handleDropFile"
                         @click="triggerFilePicker"
@@ -2398,7 +2398,7 @@ const getAssetDisplayName = (asset: any): string => {
                             <Upload class="h-6 w-6 text-sky-300" />
                         </div>
                         <div class="text-lg font-semibold text-white mb-1">Arquivo ou Imagem</div>
-                        <div class="text-[12px] text-zinc-400 mb-4 max-w-[280px]">
+                        <div class="text-[12px] text-zinc-400 mb-4 max-w-70">
                             Arraste aqui ou clique para enviar. Aceita CSV, Excel, PDF, TXT e imagem.
                         </div>
                         <div class="flex flex-wrap justify-center gap-1.5">
@@ -2408,7 +2408,7 @@ const getAssetDisplayName = (asset: any): string => {
                     </div>
 
                     <!-- Colar lista -->
-                    <div class="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-5 flex flex-col min-h-[280px]">
+                    <div class="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-5 flex flex-col min-h-70">
                         <div class="flex items-center justify-between gap-3 mb-3">
                             <div>
                                 <div class="text-sm font-semibold text-white">Colar Lista</div>
@@ -2419,7 +2419,7 @@ const getAssetDisplayName = (asset: any): string => {
                         <textarea
                             v-model="textInput"
                             placeholder="Ex: Arroz Tio João 5kg R$ 29,90&#10;Feijão Camil 1kg 8,90&#10;Óleo Soya 900ml 6,49..."
-                            class="flex-1 min-h-[180px] w-full rounded-xl border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-sm text-white resize-none placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40 transition-colors"
+                            class="flex-1 min-h-45 w-full rounded-xl border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-sm text-white resize-none placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40 transition-colors"
                         ></textarea>
                         <div class="mt-3 flex items-center justify-between gap-3">
                             <div class="text-[10px] text-zinc-500 leading-relaxed">
@@ -2720,7 +2720,7 @@ const getAssetDisplayName = (asset: any): string => {
                                 type="button"
                                 class="w-full rounded-xl border px-2 py-2 text-left transition-all"
                                 :class="activeReviewRowIndex === row.index
-                                    ? 'border-sky-500/30 bg-sky-500/[0.08] shadow-sm'
+                                    ? 'border-sky-500/30 bg-sky-500/8 shadow-sm'
                                     : 'border-transparent hover:border-zinc-700 hover:bg-zinc-800/40'"
                                 @click="activeReviewRowIndex = row.index"
                             >
@@ -2901,10 +2901,10 @@ const getAssetDisplayName = (asset: any): string => {
                                     v-for="(candidate, candidateIndex) in activeReviewCandidates"
                                     :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
                                     type="button"
-                                    class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/[0.04]"
+                                    class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/4"
                                     @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
                                 >
-                                    <div class="relative aspect-[4/3] bg-zinc-900/60">
+                                    <div class="relative aspect-4/3 bg-zinc-900/60">
                                         <img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" />
                                         <div v-if="candidate.recommended" class="absolute left-1.5 top-1.5 rounded-md bg-emerald-500/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">Recomendada</div>
                                         <div class="absolute right-1.5 top-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">{{ candidate.source === 's3' ? 'Storage' : 'Busca' }}</div>
@@ -3061,7 +3061,7 @@ const getAssetDisplayName = (asset: any): string => {
                 </div>
                 <div
                     v-else
-                    class="rounded-[28px] border border-dashed border-white/10 bg-white/[0.02] px-6 py-10 text-center text-[12px] leading-relaxed text-zinc-500"
+                    class="rounded-[28px] border border-dashed border-white/10 bg-white/2 px-6 py-10 text-center text-[12px] leading-relaxed text-zinc-500"
                 >
                     Nenhum produto disponível nesta revisão. Ajuste os filtros ou volte para a entrada para carregar um novo lote.
                 </div>

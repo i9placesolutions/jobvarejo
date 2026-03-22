@@ -12679,7 +12679,7 @@ const repairZoneCardsAfterHistoryRestore = () => {
         // corrupted saves).  The relayout is cheap and guarantees correct card
         // placement.  Card order is preserved via _zoneOrder.
         try {
-            recalculateZoneLayout(zone, cards, { save: false });
+            recalculateZoneLayout(zone, cards, { save: false, skipResize: true });
             repairedZones += 1;
         } catch (err) {
             console.warn('[history-repair] Failed to relayout zone after undo/redo', err);
