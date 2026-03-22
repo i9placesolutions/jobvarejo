@@ -43,7 +43,7 @@ const actionsStyle = computed(() => ({
 </script>
 
 <template>
-  <div v-if="visible" class="pointer-events-none absolute inset-0 z-[115]">
+  <div v-if="visible" class="pointer-events-none absolute inset-0 z-115">
 
     <!-- Compact corner badge (always shown, top-right of zone) -->
     <div class="pointer-events-auto absolute" :style="badgeStyle">
@@ -55,7 +55,7 @@ const actionsStyle = computed(() => ({
         <!-- Primary action (Preencher / Substituir) -->
         <button
           type="button"
-          class="rounded-[10px] bg-[linear-gradient(135deg,rgba(16,185,129,0.24),rgba(5,150,105,0.18))] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.04em] text-emerald-100 transition-colors hover:bg-[linear-gradient(135deg,rgba(16,185,129,0.36),rgba(5,150,105,0.28))] border border-emerald-400/25 hover:border-emerald-300/40"
+          class="rounded-md bg-[linear-gradient(135deg,rgba(16,185,129,0.24),rgba(5,150,105,0.18))] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.04em] text-emerald-100 transition-colors hover:bg-[linear-gradient(135deg,rgba(16,185,129,0.36),rgba(5,150,105,0.28))] border border-emerald-400/25 hover:border-emerald-300/40"
           @click.stop="emit('fill')"
         >
           {{ isEmpty ? 'Preencher' : 'Substituir' }}
