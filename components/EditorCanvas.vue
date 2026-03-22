@@ -37755,24 +37755,7 @@ const handleRecalculateLayout = () => {
                     @label-mousedown="handleFrameLabelMouseDown"
                   />
 
-                  <ZoneQuickActions
-                    :visible="showZoneQuickActions"
-                    :top="selectedObjectPos.top"
-                    :left="selectedObjectPos.left"
-                    :width="selectedObjectPos.width"
-                    :height="selectedObjectPos.height"
-                    :name="selectedZoneQuickActions?.name || 'Zona de Produtos'"
-                    :role-label="selectedZoneQuickActions?.roleLabel || 'Grid'"
-                    :status-label="selectedZoneQuickActions?.statusLabel || 'Vazia'"
-                    :frame-label="selectedZoneQuickActions?.frameLabel"
-                    :product-count="selectedZoneQuickActions?.productCount || 0"
-                    :is-empty="!!selectedZoneQuickActions?.isEmpty"
-                    @fill="handleZoneQuickActionFill"
-                    @append="handleZoneQuickActionAppend"
-                    @replace="handleZoneQuickActionReplace"
-                    @preset="handleZoneQuickActionPreset"
-                    @duplicate="handleZoneQuickActionDuplicate"
-                  />
+                  <!-- ZoneQuickActions removido — ações de zona são acessadas pelo painel lateral -->
 
                   <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" accept="image/*" multiple />
               </div>
