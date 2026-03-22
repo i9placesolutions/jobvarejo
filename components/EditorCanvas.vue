@@ -9232,7 +9232,7 @@ const flushZoneRelayoutOnDrop = () => {
         const zone = findContainmentZoneById(zoneId);
         if (!zone) return;
         ensureZoneSanity(zone);
-        recalculateZoneLayout(zone, getZoneChildren(zone), { save: false });
+        recalculateZoneLayout(zone, getZoneChildren(zone), { save: false, preserveStyles: true });
     });
 
     canvas.value.requestRenderAll();
@@ -12406,7 +12406,7 @@ const handleObjectModified = (e: any) => {
 
         affectedZones.forEach((zone: any) => {
             ensureZoneSanity(zone);
-            recalculateZoneLayout(zone, getZoneChildren(zone), { save: false });
+            recalculateZoneLayout(zone, getZoneChildren(zone), { save: false, preserveStyles: true });
         });
         return;
     }
@@ -12434,7 +12434,7 @@ const handleObjectModified = (e: any) => {
         syncZoneCardFrameBindings(obj, cachedChildren);
         ensureZoneSanity(obj);
         normalizeZoneScale(obj);
-        recalculateZoneLayout(obj, cachedChildren, { save: false });
+        recalculateZoneLayout(obj, cachedChildren, { save: false, preserveStyles: true });
         return;
     }
 
@@ -12516,7 +12516,7 @@ const handleObjectModified = (e: any) => {
                     (card as any)._zoneSlot = { zoneId: zone._customId, left: slotLeft, top: slotTop, width: slotW, height: slotH };
 
                     if (card.isSmartObject || card.name?.startsWith('product-card')) {
-                        resizeSmartObject(card, slotW, slotH, stylesToApply);
+                        resizeSmartObject(card, slotW, slotH, opts.preserveStyles ? undefined : stylesToApply);
                         card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
                     } else {
                         card.set({
@@ -12548,7 +12548,7 @@ const handleObjectModified = (e: any) => {
                             }
 	                            obj.setCoords?.();
 	                        }
-	                        recalculateZoneLayout(zone, ordered, { save: false });
+	                        recalculateZoneLayout(zone, ordered, { save: false, preserveStyles: true });
 	                        return;
 	                    }
 	                }
@@ -12567,7 +12567,7 @@ const handleObjectModified = (e: any) => {
 	                        applyCardToSlot(toCard, fromSlot, fromIndex)
 	                    ) {
 	                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
-	                        recalculateZoneLayout(zone, ordered, { save: false });
+	                        recalculateZoneLayout(zone, ordered, { save: false, preserveStyles: true });
 	                        saveCurrentState({ reason: 'card-swap' });
 	                        return;
 	                    }
@@ -12584,7 +12584,7 @@ const handleObjectModified = (e: any) => {
                 }
 
                 // Snap everything back into the grid after drop.
-                recalculateZoneLayout(zone, ordered, { save: false });
+                recalculateZoneLayout(zone, ordered, { save: false, preserveStyles: true });
                 // Persist swap state so undo/redo works correctly
                 if (fromIndex !== toIndex) {
                     saveCurrentState({ reason: 'card-swap' });
@@ -13844,7 +13844,7 @@ const finalizeDuplicatedObjects = (clones: any[]) => {
 
     affectedZones.forEach((zone: any) => {
         ensureZoneSanity(zone);
-        recalculateZoneLayout(zone, getZoneChildren(zone), { save: false });
+        recalculateZoneLayout(zone, getZoneChildren(zone), { save: false, preserveStyles: true });
     });
 
     const topLevelClones = clones.filter((obj: any) => !obj?.group);
@@ -18899,7 +18899,7 @@ const setupReactivity = () => {
             }
 
             // Use cached children to ensure they stay bound to zone during resize
-            recalculateZoneLayout(obj, cachedChildren, { save: false });
+            recalculateZoneLayout(obj, cachedChildren, { save: false, preserveStyles: true });
         }
 
         // 🔒 Apply containment after scaling.
@@ -19960,20 +19960,20 @@ const updateObjectProperty = (prop: string, value: any) => {
                     
                     // Cache children before layout to avoid losing them
                     const cachedChildren = getZoneChildren(active);
-                    recalculateZoneLayout(active, cachedChildren, { save: false });
+                    recalculateZoneLayout(active, cachedChildren, { save: false, preserveStyles: true });
                     canvas.value.requestRenderAll();
                     debouncedSaveCurrentState();
                     refreshSelectedRef();
                     return;
                 }
             }
-            
+
             if (prop === 'scaleX' || prop === 'scaleY') {
                 // Cache children before layout
                 const cachedChildren = getZoneChildren(active);
                 active.set(prop, value);
                 normalizeZoneScale(active);
-                recalculateZoneLayout(active, cachedChildren, { save: false });
+                recalculateZoneLayout(active, cachedChildren, { save: false, preserveStyles: true });
                 canvas.value.requestRenderAll();
                 debouncedSaveCurrentState();
                 refreshSelectedRef();
@@ -36391,6 +36391,9 @@ type RecalculateZoneLayoutOptions = {
     /** When true, only reposition cards (set left/top) without calling resizeSmartObject.
      *  Used on rehydrate to preserve card internal layout (text sizes, positions) from JSON. */
     skipResize?: boolean;
+    /** When true, resize cards proportionally but do NOT re-apply zone global styles
+     *  (colors, fonts, borders). Used on zone move/resize to preserve existing card styling. */
+    preserveStyles?: boolean;
 };
 
 const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: RecalculateZoneLayoutOptions = {}) => {
@@ -36556,7 +36559,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                 (card as any)._cardHeight = slotH;
             } else {
                 try {
-                    resizeSmartObject(card, slotW, slotH, stylesToApply);
+                    resizeSmartObject(card, slotW, slotH, opts.preserveStyles ? undefined : stylesToApply);
                 } catch (resizeErr) {
                     console.warn('[placeCard] resizeSmartObject failed, positioning card at slot:', resizeErr);
                 }
