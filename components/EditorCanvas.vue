@@ -12516,7 +12516,17 @@ const handleObjectModified = (e: any) => {
                     (card as any)._zoneSlot = { zoneId: zone._customId, left: slotLeft, top: slotTop, width: slotW, height: slotH };
 
                     if (card.isSmartObject || card.name?.startsWith('product-card')) {
-                        resizeSmartObject(card, slotW, slotH, opts.preserveStyles ? undefined : stylesToApply);
+                        // preserveStyles: skip resize if dimensions unchanged to preserve template layout
+                        const prevW = Number((card as any)._cardWidth) || card.width || 0;
+                        const prevH = Number((card as any)._cardHeight) || card.height || 0;
+                        const dimChanged = Math.abs(prevW - slotW) > 1 || Math.abs(prevH - slotH) > 1;
+                        if (dimChanged) {
+                            resizeSmartObject(card, slotW, slotH, undefined);
+                        } else {
+                            card.set({ width: slotW, height: slotH });
+                            (card as any)._cardWidth = slotW;
+                            (card as any)._cardHeight = slotH;
+                        }
                         card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
                     } else {
                         card.set({
@@ -36557,9 +36567,26 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                 card.set({ width: slotW, height: slotH });
                 (card as any)._cardWidth = slotW;
                 (card as any)._cardHeight = slotH;
+            } else if (opts.preserveStyles) {
+                // preserveStyles: resize card proportionally but don't re-apply zone styles.
+                // If card dimensions haven't changed, skip resize entirely to preserve template layout.
+                const prevW = Number((card as any)._cardWidth) || card.width || 0;
+                const prevH = Number((card as any)._cardHeight) || card.height || 0;
+                const dimChanged = Math.abs(prevW - slotW) > 1 || Math.abs(prevH - slotH) > 1;
+                if (dimChanged) {
+                    try {
+                        resizeSmartObject(card, slotW, slotH, undefined);
+                    } catch (resizeErr) {
+                        console.warn('[placeCard] resizeSmartObject (preserveStyles) failed:', resizeErr);
+                    }
+                } else {
+                    card.set({ width: slotW, height: slotH });
+                    (card as any)._cardWidth = slotW;
+                    (card as any)._cardHeight = slotH;
+                }
             } else {
                 try {
-                    resizeSmartObject(card, slotW, slotH, opts.preserveStyles ? undefined : stylesToApply);
+                    resizeSmartObject(card, slotW, slotH, stylesToApply);
                 } catch (resizeErr) {
                     console.warn('[placeCard] resizeSmartObject failed, positioning card at slot:', resizeErr);
                 }
