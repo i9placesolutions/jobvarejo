@@ -27,6 +27,16 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   if (!auth.isAuthenticated.value) {
+    // For /admin/builder/* routes, also accept builder admin sessions
+    if (to.path.startsWith('/admin/builder')) {
+      const builderAuth = useBuilderAuth()
+      if (!builderAuth.isAuthenticated.value) {
+        await builderAuth.getSession()
+      }
+      if (builderAuth.isAuthenticated.value) {
+        return // builder admin session is valid, let admin middleware check role
+      }
+    }
     return navigateTo('/auth/login')
   }
 })

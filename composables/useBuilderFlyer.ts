@@ -4,6 +4,7 @@ import type {
   BuilderTheme,
   BuilderModel,
   BuilderLayout,
+  BuilderPriceTagStyle,
   BuilderThemeCssConfig,
 } from '~/types/builder'
 
@@ -16,6 +17,7 @@ interface BuilderFlyerState {
   themes: BuilderTheme[]
   models: BuilderModel[]
   layouts: BuilderLayout[]
+  priceTagStyles: BuilderPriceTagStyle[]
   isDirty: boolean
   isSaving: boolean
   isLoading: boolean
@@ -35,6 +37,7 @@ export const useBuilderFlyer = () => {
     themes: [],
     models: [],
     layouts: [],
+    priceTagStyles: [],
     isDirty: false,
     isSaving: false,
     isLoading: false,
@@ -44,6 +47,9 @@ export const useBuilderFlyer = () => {
 
   // ── Computed ────────────────────────────────────────────────────────────
 
+  // Shared UI state for product editor panel
+  const productEditorOpen = useState('builder-product-editor-open', () => false)
+
   const flyer = computed(() => state.value.flyer)
   const products = computed(() => state.value.products)
   const theme = computed(() => state.value.theme)
@@ -52,13 +58,25 @@ export const useBuilderFlyer = () => {
   const themes = computed(() => state.value.themes)
   const models = computed(() => state.value.models)
   const layouts = computed(() => state.value.layouts)
+  const priceTagStyles = computed(() => state.value.priceTagStyles)
   const isDirty = computed(() => state.value.isDirty)
   const isSaving = computed(() => state.value.isSaving)
   const isLoading = computed(() => state.value.isLoading)
   const zoom = computed(() => state.value.zoom)
   const currentPage = computed(() => state.value.currentPage)
 
-  const productsPerPage = computed(() => state.value.layout?.products_per_page ?? 6)
+  // Custom override from flyer, otherwise layout default
+  // Auto layout (columns=0 rows=0 or no layout) → all products on same page
+  const productsPerPage = computed(() => {
+    const custom = (state.value.flyer as any)?.custom_products_per_page
+    if (custom && custom > 0) return custom
+    const lo = state.value.layout
+    // No layout or auto layout → show all products on one page
+    if (!lo || (lo.columns === 0 && lo.rows === 0)) {
+      return Math.max(state.value.products.length, 1)
+    }
+    return lo.products_per_page ?? 6
+  })
 
   const totalPages = computed(() => {
     if (!state.value.products.length) return 1
@@ -110,13 +128,22 @@ export const useBuilderFlyer = () => {
   const loadFlyer = async (id: string) => {
     state.value.isLoading = true
     try {
-      const [flyerData, productsData] = await Promise.all([
-        $fetch<BuilderFlyer>(`/api/builder/flyers/${id}`),
-        $fetch<BuilderFlyerProduct[]>(`/api/builder/flyers/${id}/products`),
-      ])
+      const flyerRes = await $fetch<any>(`/api/builder/flyers/${id}`)
 
+      const flyerData: BuilderFlyer = flyerRes?.flyer || flyerRes
       state.value.flyer = flyerData
-      state.value.products = (productsData || []).sort((a, b) => a.position - b.position)
+
+      // Products may come bundled with the flyer response or from a separate endpoint
+      let productsData: BuilderFlyerProduct[] = []
+      if (Array.isArray(flyerRes?.products)) {
+        productsData = flyerRes.products
+      } else {
+        try {
+          const productsRes = await $fetch<any>(`/api/builder/flyers/${id}/products`)
+          productsData = Array.isArray(productsRes) ? productsRes : productsRes?.products || []
+        } catch { /* no products yet */ }
+      }
+      state.value.products = productsData.sort((a, b) => a.position - b.position)
       state.value.isDirty = false
       state.value.currentPage = 1
 
@@ -161,14 +188,16 @@ export const useBuilderFlyer = () => {
 
   const loadCatalog = async () => {
     try {
-      const [themesData, modelsData, layoutsData] = await Promise.all([
-        $fetch<BuilderTheme[]>('/api/builder/themes'),
-        $fetch<BuilderModel[]>('/api/builder/models'),
-        $fetch<BuilderLayout[]>('/api/builder/layouts'),
+      const [themesRes, modelsRes, layoutsRes, priceTagRes] = await Promise.all([
+        $fetch<any>('/api/builder/themes'),
+        $fetch<any>('/api/builder/models'),
+        $fetch<any>('/api/builder/layouts'),
+        $fetch<any>('/api/builder/price-tag-styles').catch(() => ({ priceTagStyles: [] })),
       ])
-      state.value.themes = themesData || []
-      state.value.models = modelsData || []
-      state.value.layouts = layoutsData || []
+      state.value.themes = (Array.isArray(themesRes) ? themesRes : themesRes?.themes) || []
+      state.value.models = (Array.isArray(modelsRes) ? modelsRes : modelsRes?.models) || []
+      state.value.layouts = (Array.isArray(layoutsRes) ? layoutsRes : layoutsRes?.layouts) || []
+      state.value.priceTagStyles = (Array.isArray(priceTagRes) ? priceTagRes : priceTagRes?.priceTagStyles) || []
     } catch (error) {
       console.error('[useBuilderFlyer] loadCatalog error:', error)
     }
@@ -205,6 +234,10 @@ export const useBuilderFlyer = () => {
   const updateFlyer = (fields: Partial<BuilderFlyer>) => {
     if (!state.value.flyer) return
     state.value.flyer = { ...state.value.flyer, ...fields }
+    // Clear layout state when layout_id is set to null (auto mode)
+    if ('layout_id' in fields && fields.layout_id === null) {
+      state.value.layout = null
+    }
     markDirty()
   }
 
@@ -342,6 +375,7 @@ export const useBuilderFlyer = () => {
     themes,
     models,
     layouts,
+    priceTagStyles,
     isDirty,
     isSaving,
     isLoading,
@@ -368,5 +402,6 @@ export const useBuilderFlyer = () => {
     setZoom,
     setCurrentPage,
     cleanup,
+    productEditorOpen,
   }
 }

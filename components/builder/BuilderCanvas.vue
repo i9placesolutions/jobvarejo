@@ -16,7 +16,7 @@ const canvasStyle = computed(() => {
     width: `${w}px`,
     height: `${h}px`,
     transform: `scale(${zoom.value})`,
-    transformOrigin: 'top center',
+    transformOrigin: 'top left',
     ...cssVariables.value,
   }
 })
@@ -53,7 +53,7 @@ defineExpose({ canvasRef })
 </script>
 
 <template>
-  <div class="inline-block" :style="wrapperStyle">
+  <div class="shrink-0 m-auto" :style="wrapperStyle">
     <div
       ref="canvasRef"
       class="relative overflow-hidden"

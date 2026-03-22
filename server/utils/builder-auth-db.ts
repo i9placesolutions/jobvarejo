@@ -68,13 +68,16 @@ export const updateTenantLastLogin = async (tenantId: string): Promise<void> => 
 
 export const updateTenantProfile = async (
   tenantId: string,
-  fields: Partial<Pick<BuilderTenant, 'name' | 'phone' | 'phone2' | 'whatsapp' | 'instagram' | 'facebook' | 'website' | 'address' | 'payment_notes' | 'cep' | 'slogan' | 'logo' | 'logo_position' | 'slug' | 'segment1' | 'segment2' | 'segment3' | 'show_on_portal'>>
+  fields: Partial<Pick<BuilderTenant, 'name' | 'phone' | 'phone2' | 'whatsapp' | 'instagram' | 'facebook' | 'website' | 'address' | 'payment_notes' | 'cep' | 'slogan' | 'logo' | 'logo_position' | 'slug' | 'segment1' | 'segment2' | 'segment3' | 'show_on_portal' | 'flyer_defaults'>>
 ): Promise<TenantRow | null> => {
   const allowedKeys = [
     'name', 'phone', 'phone2', 'whatsapp', 'instagram', 'facebook',
     'website', 'address', 'payment_notes', 'cep', 'slogan', 'logo',
-    'logo_position', 'slug', 'segment1', 'segment2', 'segment3', 'show_on_portal'
+    'logo_position', 'slug', 'segment1', 'segment2', 'segment3', 'show_on_portal',
+    'flyer_defaults'
   ] as const
+
+  const jsonbKeys = new Set(['logo_position', 'flyer_defaults'])
 
   const setClauses: string[] = []
   const values: any[] = []
@@ -83,14 +86,14 @@ export const updateTenantProfile = async (
   for (const key of allowedKeys) {
     if (key in fields) {
       const value = (fields as any)[key]
-      if (key === 'logo_position') {
+      if (jsonbKeys.has(key)) {
         setClauses.push(`${key} = $${paramIndex}::jsonb`)
       } else if (key === 'show_on_portal') {
         setClauses.push(`${key} = $${paramIndex}::boolean`)
       } else {
         setClauses.push(`${key} = $${paramIndex}`)
       }
-      values.push(key === 'logo_position' ? JSON.stringify(value) : value)
+      values.push(jsonbKeys.has(key) ? JSON.stringify(value) : value)
       paramIndex++
     }
   }

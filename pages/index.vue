@@ -85,6 +85,14 @@ const showNotifications = ref(false)
 const notifications = ref<any[]>([])
 const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
 const notificationButtonRef = ref<HTMLElement | null>(null)
+const notificationModalStyle = computed(() => {
+  if (!notificationButtonRef.value) return {}
+  const rect = notificationButtonRef.value.getBoundingClientRect()
+  return {
+    top: `${rect.bottom + 8}px`,
+    right: `${Math.max(8, globalThis.innerWidth - rect.right)}px`
+  }
+})
 
 // Delete confirmation modal
 const showDeleteConfirm = ref(false)
@@ -1449,7 +1457,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 <template>
   <div class="dash-root h-screen w-screen overflow-hidden flex flex-col">
-    <div class="flex-1 w-full h-full max-w-[1920px] mx-auto overflow-hidden flex flex-col relative">
+    <div class="flex-1 w-full h-full max-w-480 mx-auto overflow-hidden flex flex-col relative">
 
       <!-- Top Bar -->
       <header class="dash-topbar h-12 px-5 flex items-center justify-between shrink-0 relative z-30 safe-top">
@@ -1477,11 +1485,11 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <span v-if="unreadCount > 0" class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-indigo-400 rounded-full ring-1 ring-black"></span>
           </button>
           <div v-if="user" class="flex items-center gap-2 px-2 py-1 hover:bg-white/6 rounded-lg cursor-pointer transition-all group">
-            <div class="w-6 h-6 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 overflow-hidden">
+            <div class="w-6 h-6 bg-linear-to-br from-indigo-500 to-violet-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 overflow-hidden">
               <img v-if="user.avatar_url" :src="user.avatar_url" :alt="user.name" class="w-full h-full object-cover" />
               <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
             </div>
-            <span class="text-[12px] font-medium text-zinc-400 group-hover:text-zinc-200 max-w-[140px] truncate transition-colors">{{ formatUserName(user?.name) }}</span>
+            <span class="text-[12px] font-medium text-zinc-400 group-hover:text-zinc-200 max-w-35 truncate transition-colors">{{ formatUserName(user?.name) }}</span>
             <ChevronDown class="w-3 h-3 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
           </div>
         </div>
@@ -1501,7 +1509,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   v-model="searchQuery"
                   type="text"
                   placeholder="Buscar projetos…"
-                  class="w-full h-8 bg-white/[0.04] border border-white/[0.07] rounded-lg text-[12px] text-white pl-8 pr-3 focus:outline-none focus:border-indigo-400/40 placeholder:text-zinc-600 transition-all"
+                  class="w-full h-8 bg-white/4 border border-white/[0.07] rounded-lg text-[12px] text-white pl-8 pr-3 focus:outline-none focus:border-indigo-400/40 placeholder:text-zinc-600 transition-all"
                 />
               </div>
             </div>
@@ -1536,7 +1544,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </DashboardMobileDrawer>
 
         <!-- Sidebar (hidden on mobile) -->
-        <aside v-show="!dashMobile" class="dash-sidebar w-[220px] h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
+        <aside v-show="!dashMobile" class="dash-sidebar w-55 h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
 
           <!-- Search -->
           <div class="px-3 pt-3 pb-2.5 shrink-0">
@@ -1546,7 +1554,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 v-model="searchQuery"
                 type="text"
                 placeholder="Buscar projetos…"
-                class="w-full h-8 bg-white/[0.04] border border-white/[0.07] rounded-lg text-[12px] text-white pl-8 pr-3 focus:outline-none focus:border-indigo-400/40 focus:bg-white/[0.06] placeholder:text-zinc-600 transition-all"
+                class="w-full h-8 bg-white/4 border border-white/[0.07] rounded-lg text-[12px] text-white pl-8 pr-3 focus:outline-none focus:border-indigo-400/40 focus:bg-white/6 placeholder:text-zinc-600 transition-all"
               />
             </div>
           </div>
@@ -1687,7 +1695,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 </span>
                 <template v-if="activeFolderId">
                   <span class="text-zinc-700 text-[10px]">/</span>
-                  <span class="text-[10px] text-zinc-500 truncate max-w-[200px]">{{ folders.find(f => f.id === activeFolderId)?.name }}</span>
+                  <span class="text-[10px] text-zinc-500 truncate max-w-50">{{ folders.find(f => f.id === activeFolderId)?.name }}</span>
                 </template>
               </div>
               <h1 :class="['dash-page-title font-semibold leading-tight text-white tracking-tight truncate', dashMobile ? 'text-[17px]' : 'text-[20px]']">{{ dashboardTitle }}</h1>
@@ -1723,7 +1731,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <FilterDropdown v-model="filterTime" label="Período" :options="timeFilterOptions" min-width-class="min-w-[175px]" />
               <FilterDropdown v-model="filterFolderId" label="Pasta" :options="folderFilterDropdownOptions" min-width-class="min-w-[240px]" />
             </template>
-            <div class="flex items-center bg-white/[0.04] rounded-lg p-0.5 border border-white/[0.07] shrink-0">
+            <div class="flex items-center bg-white/4 rounded-lg p-0.5 border border-white/[0.07] shrink-0">
               <button @click="viewMode = 'grid'" :class="['p-1.5 rounded-md transition-all', viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-300']" title="Grade"><Grid class="w-3.5 h-3.5" /></button>
               <button @click="viewMode = 'list'" :class="['p-1.5 rounded-md transition-all', viewMode === 'list' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-300']" title="Lista"><List class="w-3.5 h-3.5" /></button>
             </div>
@@ -1733,7 +1741,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <button
             v-if="dashMobile"
             @click="showCreateProject = true"
-            class="fixed bottom-6 right-5 z-[100] w-14 h-14 rounded-full bg-indigo-500 hover:bg-indigo-400 shadow-xl shadow-indigo-500/30 flex items-center justify-center text-white transition-all active:scale-95 safe-bottom"
+            class="fixed bottom-6 right-5 z-100 w-14 h-14 rounded-full bg-indigo-500 hover:bg-indigo-400 shadow-xl shadow-indigo-500/30 flex items-center justify-center text-white transition-all active:scale-95 safe-bottom"
           >
             <Plus class="w-6 h-6" />
           </button>
@@ -1762,7 +1770,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <!-- Content Grid -->
           <div ref="projectGridViewportEl" class="flex-1 overflow-y-auto px-7 pb-7">
             <div v-if="isLoadingProjects" class="flex items-center justify-center h-full">
-              <div class="w-5 h-5 border-[2px] border-indigo-500 border-t-transparent rounded-full animate-spin opacity-70"></div>
+              <div class="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin opacity-70"></div>
             </div>
 
             <div v-else>
@@ -1822,7 +1830,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 >
                   <!-- Grid mode -->
                   <template v-if="viewMode === 'grid'">
-                    <div class="aspect-[16/10] bg-[#0d0d12] relative overflow-hidden">
+                    <div class="aspect-16/10 bg-[#0d0d12] relative overflow-hidden">
                       <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 p-2 flex items-center justify-center">
                         <img
                           :src="getProjectPreviewSrc(project, projectIndex)"
@@ -1840,7 +1848,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                       <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="absolute inset-0 p-2">
                         <div class="w-full h-full rounded-lg border border-white/12 relative overflow-hidden flex flex-col justify-end p-3" :style="getProjectThumbStyle(project)">
                           <div class="absolute inset-0 opacity-12 pointer-events-none" style="background:radial-gradient(circle at 25% 25%,rgba(255,255,255,0.5) 0%,transparent 45%)"></div>
-                          <div class="relative z-[1] text-white font-black text-3xl leading-none tracking-tighter drop-shadow-lg">{{ getProjectInitials(project) }}</div>
+                          <div class="relative z-1 text-white font-black text-3xl leading-none tracking-tighter drop-shadow-lg">{{ getProjectInitials(project) }}</div>
                         </div>
                       </div>
                       <button
@@ -1866,7 +1874,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                           <Clock class="w-2.5 h-2.5 shrink-0" />
                           {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
                         </p>
-                        <span v-if="!String(project.folder_id || '').trim()" class="text-[9px] font-semibold uppercase tracking-wider text-zinc-700 border border-white/[0.06] rounded-full px-1.5 py-0.5 shrink-0">Raiz</span>
+                        <span v-if="!String(project.folder_id || '').trim()" class="text-[9px] font-semibold uppercase tracking-wider text-zinc-700 border border-white/6 rounded-full px-1.5 py-0.5 shrink-0">Raiz</span>
                       </div>
                     </div>
                   </template>
@@ -1874,7 +1882,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   <!-- List mode -->
                   <template v-else>
                     <div class="flex items-center gap-3 px-4 py-2.5">
-                      <div class="w-10 h-10 rounded-lg overflow-hidden bg-[#0d0d12] shrink-0 border border-white/[0.06]">
+                      <div class="w-10 h-10 rounded-lg overflow-hidden bg-[#0d0d12] shrink-0 border border-white/6">
                         <img v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" :src="getProjectPreviewSrc(project, projectIndex)" class="w-full h-full object-cover" draggable="false" :loading="projectIndex < 4 ? 'eager' : 'lazy'" @dragstart.prevent @load="handleProjectThumbLoad(project, $event)" @error="project._thumbError = true" />
                         <div v-else class="w-full h-full flex items-center justify-center font-black text-sm text-white" :style="getProjectThumbStyle(project)">{{ getProjectInitials(project) }}</div>
                       </div>
@@ -1900,7 +1908,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <!-- Empty State -->
               <div v-if="filteredProjects.length === 0 && !isLoadingProjects" class="flex items-center justify-center h-56">
                 <div class="text-center">
-                  <div class="w-11 h-11 bg-white/[0.04] rounded-xl flex items-center justify-center mx-auto mb-3 border border-white/[0.07]">
+                  <div class="w-11 h-11 bg-white/4 rounded-xl flex items-center justify-center mx-auto mb-3 border border-white/[0.07]">
                     <FolderOpen class="w-5 h-5 text-zinc-600" />
                   </div>
                   <h3 class="text-[14px] font-semibold text-zinc-500 mb-1">
@@ -1924,7 +1932,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </div>
 
     <!-- Create Project Modal -->
-    <div v-if="showCreateProject" class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="showCreateProject = false">
+    <div v-if="showCreateProject" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="showCreateProject = false">
       <div class="dash-modal w-full max-w-sm">
         <h3 class="text-[15px] font-semibold text-white mb-1">Novo Projeto</h3>
         <p class="text-[12px] text-zinc-600 mb-5">
@@ -1940,7 +1948,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     </div>
 
     <!-- Create Folder Modal -->
-    <div v-if="showCreateFolder" class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="showCreateFolder = false">
+    <div v-if="showCreateFolder" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="showCreateFolder = false">
       <div class="dash-modal w-full max-w-sm">
         <h3 class="text-[15px] font-semibold text-white mb-1">Nova Pasta</h3>
         <p class="text-[12px] text-zinc-600 mb-5">
@@ -1959,7 +1967,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showFolderMenu"
-        class="folder-context-menu fixed z-[100] bg-[#161618] border border-white/[0.09] rounded-xl py-1.5 min-w-[160px] shadow-2xl shadow-black/60"
+        class="folder-context-menu fixed z-100 bg-[#161618] border border-white/9 rounded-xl py-1.5 min-w-40 shadow-2xl shadow-black/60"
         :style="{ left: `${folderMenuPosition.x}px`, top: `${folderMenuPosition.y}px` }"
       >
         <button @click="startEditFolder(folders.find(f => f.id === showFolderMenu))" class="ctx-menu-item w-full">
@@ -1977,7 +1985,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showProjectMenu"
-        class="project-context-menu fixed z-[100] bg-[#161618] border border-white/[0.09] rounded-xl py-1.5 min-w-[160px] shadow-2xl shadow-black/60"
+        class="project-context-menu fixed z-100 bg-[#161618] border border-white/9 rounded-xl py-1.5 min-w-40 shadow-2xl shadow-black/60"
         :style="{ left: `${projectMenuPosition.x}px`, top: `${projectMenuPosition.y}px` }"
       >
         <button @click="startRenameProject(projects.find(p => p.id === showProjectMenu))" class="ctx-menu-item w-full">
@@ -2005,24 +2013,24 @@ const handleDropOnRoot = async (event: DragEvent) => {
     </teleport>
 
     <!-- Move Project Modal -->
-    <div v-if="showMoveProjectModal" class="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="closeMoveProjectModal">
+    <div v-if="showMoveProjectModal" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="closeMoveProjectModal">
       <div class="dash-modal w-full max-w-xl">
         <h3 class="text-[15px] font-semibold text-white mb-1">Mover projeto</h3>
         <p class="text-[12px] text-zinc-600 mb-4">Escolha a pasta de destino.</p>
 
-        <div class="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 mb-3">
+        <div class="rounded-xl border border-white/8 bg-white/3 p-3 mb-3">
           <p class="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Projeto</p>
           <p class="text-[13px] text-zinc-200 font-semibold truncate">{{ projectToMoveName }}</p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-          <div class="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2.5">
+          <div class="rounded-lg border border-white/[0.07] bg-white/2 p-2.5">
             <p class="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Pasta atual</p>
-            <p class="text-[12px] text-zinc-300 break-words">{{ projectToMoveCurrentFolderLabel }}</p>
+            <p class="text-[12px] text-zinc-300 wrap-break-word">{{ projectToMoveCurrentFolderLabel }}</p>
           </div>
           <div class="rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-2.5">
             <p class="text-[10px] uppercase tracking-wider text-indigo-400/70 mb-1">Destino</p>
-            <p class="text-[12px] text-indigo-200 break-words">{{ moveProjectDestinationFolderLabel }}</p>
+            <p class="text-[12px] text-indigo-200 wrap-break-word">{{ moveProjectDestinationFolderLabel }}</p>
           </div>
         </div>
 
@@ -2070,12 +2078,12 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <!-- Notifications Modal -->
     <teleport to="body">
       <Transition enter-active-class="transition-opacity duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition-opacity duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
-        <div v-if="showNotifications" class="fixed inset-0 z-[199] bg-black/20" @click="showNotifications = false"></div>
+        <div v-if="showNotifications" class="fixed inset-0 z-199 bg-black/20" @click="showNotifications = false"></div>
       </Transition>
       <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0 scale-95 translate-y-[-8px]" enter-to-class="opacity-100 scale-100 translate-y-0" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100 scale-100 translate-y-0" leave-to-class="opacity-0 scale-95 translate-y-[-8px]">
-        <div v-if="showNotifications && notificationButtonRef" class="notifications-modal fixed z-[200]" :style="{ top: `${notificationButtonRef.getBoundingClientRect().bottom + 8}px`, left: `${notificationButtonRef.getBoundingClientRect().right + 8}px` }" @click.stop>
-          <div class="w-80 bg-[#161618] border border-white/[0.09] rounded-2xl shadow-2xl shadow-black/60 overflow-hidden flex flex-col max-h-[500px]">
-            <div class="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
+        <div v-if="showNotifications && notificationButtonRef" class="notifications-modal fixed z-200" :style="notificationModalStyle" @click.stop>
+          <div class="w-80 bg-[#161618] border border-white/9 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden flex flex-col max-h-125">
+            <div class="px-4 py-3 border-b border-white/6 flex items-center justify-between">
               <h3 class="text-[13px] font-semibold text-white">Notificações</h3>
               <button v-if="unreadCount > 0" @click="markAllAsRead" class="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors">Marcar todas</button>
             </div>
@@ -2084,8 +2092,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <Bell class="w-7 h-7 text-zinc-700 mx-auto mb-2" />
                 <p class="text-[12px] text-zinc-600">Nenhuma notificação</p>
               </div>
-              <div v-else class="divide-y divide-white/[0.05]">
-                <div v-for="notification in notifications" :key="notification.id" @click="markAsRead(notification.id)" :class="['px-4 py-3 cursor-pointer transition-colors hover:bg-white/4', !notification.read ? 'bg-white/[0.03]' : '']">
+              <div v-else class="divide-y divide-white/5">
+                <div v-for="notification in notifications" :key="notification.id" @click="markAsRead(notification.id)" :class="['px-4 py-3 cursor-pointer transition-colors hover:bg-white/4', !notification.read ? 'bg-white/3' : '']">
                   <div class="flex items-start gap-3">
                     <div :class="['w-7 h-7 rounded-lg flex items-center justify-center shrink-0', notification.type === 'success' ? 'bg-green-500/15 text-green-400' : notification.type === 'share' ? 'bg-blue-500/15 text-blue-400' : 'bg-indigo-500/15 text-indigo-400']">
                       <Bell v-if="notification.type === 'share'" class="w-3.5 h-3.5" />
@@ -2101,7 +2109,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 </div>
               </div>
             </div>
-            <div class="px-4 py-3 border-t border-white/[0.06]">
+            <div class="px-4 py-3 border-t border-white/6">
               <button @click="showNotifications = false" class="w-full text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors text-center">Fechar</button>
             </div>
           </div>
@@ -2114,7 +2122,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
   <!-- Toast Notifications -->
   <teleport to="body">
-    <div class="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none">
+    <div class="fixed bottom-6 right-6 z-9999 flex flex-col gap-2 pointer-events-none">
       <TransitionGroup name="toast">
         <div
           v-for="toast in toasts"
@@ -2123,7 +2131,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             'px-4 py-3 rounded-xl text-[13px] font-medium shadow-2xl border pointer-events-auto max-w-xs backdrop-blur-xl',
             toast.type === 'error' ? 'bg-red-950/90 border-red-500/25 text-red-200' :
             toast.type === 'success' ? 'bg-green-950/90 border-green-500/25 text-green-200' :
-            'bg-[#161618]/95 border-white/[0.09] text-white/80'
+            'bg-[#161618]/95 border-white/9 text-white/80'
           ]"
         >
           {{ toast.message }}

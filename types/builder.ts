@@ -2,6 +2,30 @@
 // Builder de Encartes — TypeScript Types
 // ============================================================================
 
+export interface BuilderFlyerDefaults {
+    show_logo?: boolean
+    show_company_name?: boolean
+    show_slogan?: boolean
+    show_phone?: boolean
+    show_whatsapp?: boolean
+    show_phone_label?: boolean
+    show_payment_methods?: boolean
+    show_payment_notes?: boolean
+    show_address?: boolean
+    show_instagram?: boolean
+    show_facebook?: boolean
+    show_website?: boolean
+    logo_size?: number
+    logo_x?: number
+    logo_y?: number
+    payment_methods?: string[]
+    footer_layout?: string
+    footer_bg?: string | null
+    footer_text_color?: string | null
+    footer_primary?: string | null
+    footer_secondary?: string | null
+}
+
 export interface BuilderTenant {
     id: string
     email: string
@@ -23,6 +47,7 @@ export interface BuilderTenant {
     segment2: string | null
     segment3: string | null
     show_on_portal: boolean
+    flyer_defaults: BuilderFlyerDefaults | null
     plan: string
     is_active: boolean
     last_login_at: string | null
@@ -120,6 +145,46 @@ export interface BuilderPriceTagStyle {
         bgColor: string
         textColor: string
         shape: 'rounded' | 'square' | 'pill' | 'circle'
+        fontFamily?: string
+        decimalStyle?: 'small' | 'large' | 'superscript'
+        // Border
+        borderWidth?: number
+        borderColor?: string
+        borderStyle?: 'none' | 'solid' | 'dashed' | 'dotted' | 'double'
+        // Border radius custom per corner (overrides shape)
+        borderRadiusTL?: number
+        borderRadiusTR?: number
+        borderRadiusBL?: number
+        borderRadiusBR?: number
+        // Shadow
+        shadow?: 'none' | 'sm' | 'md' | 'lg' | 'glow'
+        // Gradient
+        bgGradient?: boolean
+        bgGradientColor?: string
+        bgGradientDirection?: 'to-right' | 'to-bottom' | 'to-br' | 'to-bl' | 'radial'
+        // Spacing & sizing
+        padding?: 'compact' | 'normal' | 'spacious'
+        priceScale?: number
+        // Opacity
+        bgOpacity?: number
+        // Hide unit suffix (/kg, /un)
+        hideUnit?: boolean
+        // Background image
+        bgImage?: string
+        bgImageSize?: 'cover' | 'contain' | 'stretch'
+        bgImageOpacity?: number
+        // Display mode
+        displayMode?: 'filled' | 'outline' | 'underline' | 'naked' | 'splash'
+        // Text shadow
+        textShadow?: 'none' | 'sm' | 'md' | 'lg' | 'hard'
+        // R$ symbol size
+        currencySize?: 'small' | 'medium' | 'large'
+        // Rotation
+        rotation?: number
+        // Gondola features
+        showCutLine?: boolean
+        showBarcode?: boolean
+        showValidity?: boolean
     }
     is_global: boolean
     is_active: boolean
@@ -171,7 +236,7 @@ export interface BuilderProduct {
 export type BuilderFlyerStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
 export type BuilderTextSizeMode = 'MAXIMUM' | 'MINIMUM' | 'MEDIUM'
 export type BuilderPriceMode = 'simple' | 'from_to' | 'x_per_y' | 'take_pay' | 'installment' | 'symbolic' | 'club_price' | 'anticipation' | 'none'
-export type BuilderProductUnit = 'UN' | 'KG' | 'G' | 'L' | 'ML' | 'PCT' | 'CX' | 'DZ' | 'BD' | 'FD' | 'SC'
+export type BuilderProductUnit = 'UN' | 'KG' | 'G' | '100G' | '500G' | 'L' | 'ML' | 'PCT' | 'CX' | 'DZ' | 'BD' | 'FD' | 'SC'
 
 export interface BuilderFlyer {
     id: string
@@ -255,6 +320,7 @@ export interface BuilderFlyerProduct {
     anticipation_text: string | null
     show_discount: boolean
     quantity_unit: string | null
+    price_label: string | null
 
     is_highlight: boolean
     is_adult: boolean
@@ -266,16 +332,21 @@ export interface BuilderFlyerProduct {
     price_tag_style_id: string | null
     badge_style_id: string | null
 
+    image_zoom: number
+    image_x: number
+    image_y: number
+
     created_at: string
     updated_at: string
 }
 
 // Session token payload for builder
 export interface BuilderTokenPayload {
-    sub: string       // tenant id
+    sub: string       // tenant id or profile id (when isAdmin)
     email: string
     name: string
     scope: 'builder'
+    isAdmin?: boolean
     iat: number
     exp: number
 }

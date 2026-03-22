@@ -55,6 +55,7 @@ export const createBuilderSessionToken = (params: {
   tenantId: string
   email: string
   name: string
+  isAdmin?: boolean
 }): { token: string; expiresIn: number; payload: BuilderTokenPayload } => {
   const nowSeconds = Math.floor(Date.now() / 1000)
   const expiresIn = getTokenTtlSeconds()
@@ -63,6 +64,7 @@ export const createBuilderSessionToken = (params: {
     email: params.email,
     name: params.name,
     scope: 'builder',
+    ...(params.isAdmin ? { isAdmin: true } : {}),
     iat: nowSeconds,
     exp: nowSeconds + expiresIn
   }

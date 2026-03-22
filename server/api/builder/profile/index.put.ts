@@ -10,8 +10,8 @@ export default defineEventHandler(async (event) => {
 
   const allowedKeys = [
     'name', 'phone', 'phone2', 'whatsapp', 'instagram', 'facebook',
-    'website', 'address', 'payment_notes', 'cep', 'slogan',
-    'segment1', 'segment2', 'segment3', 'show_on_portal'
+    'website', 'address', 'payment_notes', 'cep', 'slogan', 'logo',
+    'segment1', 'segment2', 'segment3', 'show_on_portal', 'flyer_defaults'
   ] as const
 
   const fields: Record<string, any> = {}
@@ -36,6 +36,7 @@ export default defineEventHandler(async (event) => {
       id: updated.id,
       email: updated.email,
       name: updated.name,
+      logo: updated.logo ?? null,
       phone: updated.phone ?? null,
       phone2: updated.phone2 ?? null,
       whatsapp: updated.whatsapp ?? null,
@@ -49,7 +50,8 @@ export default defineEventHandler(async (event) => {
       segment1: updated.segment1 ?? null,
       segment2: updated.segment2 ?? null,
       segment3: updated.segment3 ?? null,
-      show_on_portal: updated.show_on_portal ?? false
+      show_on_portal: updated.show_on_portal ?? false,
+      flyer_defaults: updated.flyer_defaults ?? null
     }
   }
 })

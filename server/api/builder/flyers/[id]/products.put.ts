@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { requireBuilderTenant } from '../../../../utils/builder-auth'
+import { requireBuilderTenant, isBuilderAdmin } from '../../../../utils/builder-auth'
 import { enforceRateLimit } from '../../../../utils/rate-limit'
 import { pgOneOrNull, pgTx } from '../../../../utils/postgres'
 
@@ -7,6 +7,7 @@ export default defineEventHandler(async (event) => {
   const tenant = await requireBuilderTenant(event)
   enforceRateLimit(event, `builder-flyer-products:${tenant.id}`, 60, 60_000)
 
+  const admin = isBuilderAdmin(event)
   const flyerId = String(getRouterParam(event, 'id') || '').trim()
   if (!flyerId) {
     throw createError({ statusCode: 400, statusMessage: 'Flyer ID is required' })
@@ -15,11 +16,16 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<Record<string, any>>(event)
   const products = Array.isArray(body?.products) ? body.products : []
 
-  // Verify flyer belongs to tenant
-  const flyer = await pgOneOrNull(
-    `SELECT id FROM public.builder_flyers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
-    [flyerId, tenant.id]
-  )
+  // Verify flyer exists (admin can access any, tenant only their own)
+  const flyer = admin
+    ? await pgOneOrNull(
+        `SELECT id FROM public.builder_flyers WHERE id = $1 LIMIT 1`,
+        [flyerId]
+      )
+    : await pgOneOrNull(
+        `SELECT id FROM public.builder_flyers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        [flyerId, tenant.id]
+      )
   if (!flyer) {
     throw createError({ statusCode: 404, statusMessage: 'Flyer not found' })
   }
@@ -43,6 +49,7 @@ export default defineEventHandler(async (event) => {
             price_mode, take_quantity, pay_quantity,
             installment_count, installment_price, no_interest,
             club_name, anticipation_text, show_discount, quantity_unit,
+            price_label,
             is_highlight, is_adult,
             is_pinned, is_price_pinned, bg_opacity, custom_lines,
             price_tag_style_id, badge_style_id)
@@ -52,9 +59,10 @@ export default defineEventHandler(async (event) => {
             $12, $13, $14,
             $15, $16, $17::boolean,
             $18, $19, $20::boolean, $21,
-            $22::boolean, $23::boolean,
-            $24::boolean, $25::boolean, $26, $27::jsonb,
-            $28::uuid, $29::uuid)
+            $22,
+            $23::boolean, $24::boolean,
+            $25::boolean, $26::boolean, $27, $28::jsonb,
+            $29::uuid, $30::uuid)
          RETURNING *`,
         [
           id, flyerId, p.product_id || null, p.position ?? 0,
@@ -64,6 +72,7 @@ export default defineEventHandler(async (event) => {
           p.price_mode || null, p.take_quantity ?? null, p.pay_quantity ?? null,
           p.installment_count ?? null, p.installment_price ?? null, p.no_interest ?? true,
           p.club_name || null, p.anticipation_text || null, p.show_discount ?? false, p.quantity_unit || null,
+          p.price_label || null,
           p.is_highlight ?? false, p.is_adult ?? false,
           p.is_pinned ?? false, p.is_price_pinned ?? false,
           p.bg_opacity ?? null, p.custom_lines ? JSON.stringify(p.custom_lines) : null,

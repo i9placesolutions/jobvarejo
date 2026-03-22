@@ -1,9 +1,51 @@
 <script setup lang="ts">
-import { Plus, ClipboardPaste } from 'lucide-vue-next'
+import { Plus, ClipboardPaste, ChevronUp, ChevronDown, BookOpen } from 'lucide-vue-next'
 
-const { products, addProduct, reorderProducts } = useBuilderFlyer()
+const { products, addProduct, updateProduct, reorderProducts, productEditorOpen } = useBuilderFlyer()
+
+const isExpanded = productEditorOpen
 
 const pasteDialogOpen = ref(false)
+const catalogPickerOpen = ref(false)
+
+const handleCatalogSelect = async (selected: Array<{ name: string; image: string | null; brand: string | null }>) => {
+  const startIndex = products.value.length
+  const needsImageSearch: Array<{ name: string; index: number }> = []
+
+  for (let i = 0; i < selected.length; i++) {
+    const item = selected[i]!
+    addProduct({
+      custom_name: item.name,
+      custom_image: item.image || undefined,
+      observation: item.brand || undefined,
+    })
+    if (!item.image && item.name && item.name.length >= 3) {
+      needsImageSearch.push({ name: item.name, index: startIndex + i })
+    }
+  }
+
+  // Auto-search Wasabi images for catalog products without images
+  if (needsImageSearch.length > 0) {
+    try {
+      const terms = needsImageSearch.map(p => p.name)
+      const result = await $fetch<{ results: Record<string, { key: string; url: string; name: string } | null> }>('/api/builder/batch-search-images', {
+        method: 'POST',
+        body: { terms },
+      })
+
+      if (result.results) {
+        for (const item of needsImageSearch) {
+          const match = result.results[item.name]
+          if (match) {
+            updateProduct(item.index, { custom_image: match.key })
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[BuilderProductEditor] Auto-search catalog images error:', err)
+    }
+  }
+}
 
 // Drag & drop state
 const dragIndex = ref<number | null>(null)
@@ -50,65 +92,82 @@ const handleAddProduct = () => {
 </script>
 
 <template>
-  <div class="p-3 space-y-2">
-    <!-- Header bar -->
-    <div class="flex items-center justify-between gap-3">
-      <span class="text-xs text-zinc-400 font-medium">
-        {{ products.length }} {{ products.length === 1 ? 'produto' : 'produtos' }}
-      </span>
-
+  <div>
+    <!-- Toggle header bar -->
+    <button
+      @click="isExpanded = !isExpanded"
+      class="w-full flex items-center justify-between gap-3 px-3 py-2 hover:bg-white/5 transition-colors"
+    >
       <div class="flex items-center gap-2">
+        <component :is="isExpanded ? ChevronDown : ChevronUp" class="w-3.5 h-3.5 text-zinc-500" />
+        <span class="text-xs text-zinc-400 font-medium">
+          {{ products.length }} {{ products.length === 1 ? 'produto' : 'produtos' }}
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2" @click.stop>
+        <button
+          @click="catalogPickerOpen = true"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all
+            border border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+        >
+          <BookOpen class="w-3 h-3" />
+          Catalogo
+        </button>
+
         <button
           @click="pasteDialogOpen = true"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all
             border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10"
         >
-          <ClipboardPaste class="w-3.5 h-3.5" />
-          Colar Lista
+          <ClipboardPaste class="w-3 h-3" />
+          Colar
         </button>
 
         <button
           @click="handleAddProduct"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all
             bg-emerald-600 hover:bg-emerald-500 text-white"
         >
-          <Plus class="w-3.5 h-3.5" />
+          <Plus class="w-3 h-3" />
           Adicionar
         </button>
       </div>
-    </div>
+    </button>
 
-    <!-- Horizontal scrollable product cards -->
-    <div class="overflow-x-auto pb-2 -mx-1 px-1">
-      <div class="flex gap-3 min-w-min">
-        <div
-          v-for="(product, idx) in products"
-          :key="product.id"
-          draggable="true"
-          @dragstart="handleDragStart(idx, $event)"
-          @dragover="handleDragOver(idx, $event)"
-          @dragleave="handleDragLeave"
-          @drop="handleDrop(idx, $event)"
-          @dragend="handleDragEnd"
-          :class="[
-            'shrink-0 transition-all duration-150',
-            dragIndex === idx ? 'opacity-40 scale-95' : '',
-            dragOverIndex === idx && dragIndex !== idx ? 'translate-x-2' : ''
-          ]"
-        >
-          <BuilderProductEditorCard :product="product" :index="idx" />
+    <!-- Collapsible product cards -->
+    <div v-if="isExpanded" class="px-3 pb-3">
+      <div class="overflow-x-auto pb-2 -mx-1 px-1">
+        <div class="flex gap-2 min-w-min">
+          <div
+            v-for="(product, idx) in products"
+            :key="product.id"
+            draggable="true"
+            @dragstart="handleDragStart(idx, $event)"
+            @dragover="handleDragOver(idx, $event)"
+            @dragleave="handleDragLeave"
+            @drop="handleDrop(idx, $event)"
+            @dragend="handleDragEnd"
+            :class="[
+              'shrink-0 transition-all duration-150',
+              dragIndex === idx ? 'opacity-40 scale-95' : '',
+              dragOverIndex === idx && dragIndex !== idx ? 'translate-x-2' : ''
+            ]"
+          >
+            <BuilderProductEditorCard :product="product" :index="idx" />
+          </div>
+
+          <!-- Add product card -->
+          <button
+            @click="handleAddProduct"
+            class="shrink-0 w-44 min-h-52 border border-dashed border-white/10 rounded-xl
+              flex flex-col items-center justify-center gap-2
+              text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/30 transition-all"
+          >
+            <Plus class="w-5 h-5" />
+            <span class="text-[11px]">Adicionar</span>
+          </button>
         </div>
-
-        <!-- Add product card -->
-        <button
-          @click="handleAddProduct"
-          class="shrink-0 w-[220px] min-h-[320px] border border-dashed border-white/10 rounded-xl
-            flex flex-col items-center justify-center gap-2
-            text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/30 transition-all"
-        >
-          <Plus class="w-6 h-6" />
-          <span class="text-xs">Adicionar produto</span>
-        </button>
       </div>
     </div>
 
@@ -116,6 +175,13 @@ const handleAddProduct = () => {
     <BuilderPasteListDialog
       :open="pasteDialogOpen"
       @close="pasteDialogOpen = false"
+    />
+
+    <!-- Catalog picker dialog -->
+    <BuilderCatalogPicker
+      :open="catalogPickerOpen"
+      @close="catalogPickerOpen = false"
+      @select="handleCatalogSelect"
     />
   </div>
 </template>

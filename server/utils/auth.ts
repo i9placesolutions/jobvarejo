@@ -2,6 +2,7 @@ import type { H3Event } from 'h3'
 import type { UserRole } from '~/types/auth'
 import { getProfileById } from './auth-db'
 import { verifySessionToken } from './session-token'
+import { verifyBuilderSessionToken } from './builder-session-token'
 
 const _profileCache = new Map<string, { id: string; email: string; role: string; name: string | null; avatar_url: string | null; expiresAt: number }>()
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
@@ -100,17 +101,42 @@ export const requireAuthenticatedUser = async (event: H3Event): Promise<Authenti
 export const requireAdminUser = async (
   event: H3Event
 ): Promise<{ user: AuthenticatedUser; role: UserRole }> => {
-  const user = await requireAuthenticatedUser(event)
-
-  const role = String(user.role || '').trim() as UserRole
-  const isAdmin = role === 'admin' || role === 'super_admin'
-
-  if (!isAdmin) {
-    throw createError({
-      statusCode: 403,
-      statusMessage: 'Admin access required'
-    })
+  // Try main auth token first
+  const mainToken = getBearerToken(event)
+  if (mainToken) {
+    const user = await requireAuthenticatedUser(event)
+    const role = String(user.role || '').trim() as UserRole
+    const isAdmin = role === 'admin' || role === 'super_admin'
+    if (!isAdmin) {
+      throw createError({ statusCode: 403, statusMessage: 'Admin access required' })
+    }
+    return { user, role }
   }
 
-  return { user, role }
+  // Fallback: try builder admin token
+  const builderTokenRaw = getCookie(event, 'builder-access-token') || null
+  if (builderTokenRaw) {
+    let decoded: string
+    try { decoded = decodeURIComponent(String(builderTokenRaw)).trim() } catch { decoded = String(builderTokenRaw).trim() }
+    const payload = verifyBuilderSessionToken(decoded)
+    if (payload?.isAdmin && payload?.sub) {
+      const profile = await getCachedProfile(payload.sub)
+      if (profile?.id) {
+        const role = String(profile.role || 'user') as UserRole
+        if (role === 'admin' || role === 'super_admin') {
+          return {
+            user: {
+              id: profile.id,
+              email: String(profile.email),
+              role,
+              user_metadata: { name: profile.name ?? null, avatar_url: profile.avatar_url ?? null }
+            },
+            role
+          }
+        }
+      }
+    }
+  }
+
+  throw createError({ statusCode: 401, statusMessage: 'Admin access required' })
 }

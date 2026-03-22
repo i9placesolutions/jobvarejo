@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {
-  Search, Plus, Pencil, Trash2, X, Upload, Image, Loader2, Package,
-  Camera, Barcode, Tag, ShoppingBag,
+  Search, Plus, Pencil, Trash2, X, Upload, Loader2, Package,
+  Camera, List, ClipboardPaste, ImageOff, Wand2, Eraser,
 } from 'lucide-vue-next'
 
 definePageMeta({
@@ -30,7 +30,7 @@ const products = ref<Product[]>([])
 const searchQuery = ref('')
 const searchTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
 
-// Modal state
+// Modal
 const showModal = ref(false)
 const isEditing = ref(false)
 const editingProductId = ref<string | null>(null)
@@ -38,41 +38,24 @@ const isSaving = ref(false)
 const isUploading = ref(false)
 const errorMessage = ref('')
 
-// Delete state
+// Delete
 const confirmDeleteId = ref<string | null>(null)
 const deletingId = ref<string | null>(null)
+
+// Bulk
+const showBulkModal = ref(false)
+const bulkText = ref('')
+const bulkSaving = ref(false)
+const bulkError = ref('')
 
 // Form
 const form = reactive({
   name: '',
-  brand: '',
-  category: '',
-  barcode: '',
   image: '' as string | null,
 })
 
-const categoryOptions = [
-  'Alimentos',
-  'Bebidas',
-  'Limpeza',
-  'Higiene',
-  'Hortifruti',
-  'Carnes',
-  'Laticinios',
-  'Padaria',
-  'Congelados',
-  'Pet',
-  'Outros',
-]
-
-// ── Image preview URL ───────────────────────────────────────────────────────────
-const imagePreviewUrl = computed(() => {
-  if (!form.image) return null
-  if (form.image.startsWith('http') || form.image.startsWith('/api/')) return form.image
-  return `/api/storage/p?key=${encodeURIComponent(form.image)}`
-})
-
-const productImageUrl = (image: string | null): string | null => {
+// ── Helpers ─────────────────────────────────────────────────────────────────────
+const resolveImageUrl = (image: string | null): string | null => {
   if (!image) return null
   if (image.startsWith('http') || image.startsWith('/api/')) return image
   return `/api/storage/p?key=${encodeURIComponent(image)}`
@@ -93,7 +76,6 @@ const fetchProducts = async (query?: string) => {
   }
 }
 
-// ── Search (debounced) ──────────────────────────────────────────────────────────
 const onSearchInput = () => {
   if (searchTimeout.value) clearTimeout(searchTimeout.value)
   searchTimeout.value = setTimeout(() => {
@@ -101,14 +83,13 @@ const onSearchInput = () => {
   }, 400)
 }
 
-// ── Modal helpers ───────────────────────────────────────────────────────────────
+// ── Modal ───────────────────────────────────────────────────────────────────────
 const resetForm = () => {
   form.name = ''
-  form.brand = ''
-  form.category = ''
-  form.barcode = ''
   form.image = null
   errorMessage.value = ''
+  imageSearchResults.value = []
+  showImageSearch.value = false
 }
 
 const openNewProduct = () => {
@@ -120,9 +101,6 @@ const openNewProduct = () => {
 
 const openEditProduct = (product: Product) => {
   form.name = product.name || ''
-  form.brand = product.brand || ''
-  form.category = product.category || ''
-  form.barcode = product.barcode || ''
   form.image = product.image || null
   errorMessage.value = ''
   isEditing.value = true
@@ -137,12 +115,72 @@ const closeModal = () => {
   resetForm()
 }
 
-// ── Image upload ────────────────────────────────────────────────────────────────
-const fileInput = ref<HTMLInputElement | null>(null)
-
-const triggerFileInput = () => {
-  fileInput.value?.click()
+// ── Image search (banco de imagens) ─────────────────────────────────────────────
+interface SearchImageResult {
+  key: string
+  url: string
+  name: string
 }
+
+const imageSearchResults = ref<SearchImageResult[]>([])
+const isSearchingImages = ref(false)
+const showImageSearch = ref(false)
+
+const searchImages = async () => {
+  const name = form.name.trim()
+  if (name.length < 2) { errorMessage.value = 'Digite o nome do produto primeiro.'; return }
+
+  isSearchingImages.value = true
+  showImageSearch.value = true
+  imageSearchResults.value = []
+
+  try {
+    const data = await $fetch<{ candidates: Array<{ key: string; url: string; name: string }> }>('/api/builder/search-image', {
+      method: 'POST',
+      body: { term: name },
+    })
+
+    imageSearchResults.value = (data.candidates || []).map(c => ({
+      key: c.key,
+      url: c.url,
+      name: c.name || '',
+    }))
+  } catch {
+    imageSearchResults.value = []
+  } finally {
+    isSearchingImages.value = false
+  }
+}
+
+const selectSearchImage = (img: SearchImageResult) => {
+  form.image = img.key
+  showImageSearch.value = false
+  imageSearchResults.value = []
+}
+
+// ── Remove background ───────────────────────────────────────────────────────────
+const isRemovingBg = ref(false)
+
+const removeBackground = async (s3Key: string) => {
+  isRemovingBg.value = true
+  try {
+    const data = await $fetch<{ url: string; key?: string }>('/api/builder/remove-bg', {
+      method: 'POST',
+      body: { s3Key },
+    })
+    if (data.key) {
+      form.image = data.key
+    }
+  } catch {
+    errorMessage.value = 'Erro ao remover fundo.'
+  } finally {
+    isRemovingBg.value = false
+  }
+}
+
+// ── Upload ──────────────────────────────────────────────────────────────────────
+const fileInput = ref<HTMLInputElement | null>(null)
+const triggerFileInput = () => fileInput.value?.click()
 
 const handleImageUpload = async (event: Event) => {
   const input = event.target as HTMLInputElement
@@ -150,11 +188,11 @@ const handleImageUpload = async (event: Event) => {
   if (!file) return
 
   if (!file.type.startsWith('image/')) {
-    errorMessage.value = 'Por favor, selecione uma imagem valida.'
+    errorMessage.value = 'Selecione uma imagem valida.'
     return
   }
   if (file.size > 5 * 1024 * 1024) {
-    errorMessage.value = 'A imagem deve ter no maximo 5MB.'
+    errorMessage.value = 'Maximo 5MB.'
     return
   }
 
@@ -166,10 +204,8 @@ const handleImageUpload = async (event: Event) => {
 
   try {
     const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
-    const filename = `product_${Date.now()}.${ext}`
-    const key = `builder/${tenantId}/products/${filename}`
+    const key = `builder/${tenantId}/products/product_${Date.now()}.${ext}`
     const contentType = file.type || 'image/png'
-
     const buffer = await file.arrayBuffer()
 
     const result = await $fetch<{ key: string }>('/api/builder/storage/upload', {
@@ -180,21 +216,29 @@ const handleImageUpload = async (event: Event) => {
     })
 
     if (result.key) {
-      form.image = result.key
+      // Auto remove background
+      try {
+        const bgData = await $fetch<{ url: string; key?: string }>('/api/builder/remove-bg', {
+          method: 'POST',
+          body: { s3Key: result.key },
+        })
+        form.image = bgData.key || result.key
+      } catch {
+        // If bg removal fails, use original
+        form.image = result.key
+      }
     }
-  } catch (err: any) {
-    console.error('Erro no upload:', err)
-    errorMessage.value = 'Erro ao enviar imagem. Tente novamente.'
+  } catch {
+    errorMessage.value = 'Erro ao enviar imagem.'
   } finally {
     isUploading.value = false
     if (input) input.value = ''
   }
 }
 
-// ── Save product (create or update) ─────────────────────────────────────────────
+// ── Save ────────────────────────────────────────────────────────────────────────
 const saveProduct = async () => {
   if (isSaving.value) return
-
   if (!form.name.trim()) {
     errorMessage.value = 'O nome do produto e obrigatorio.'
     return
@@ -203,203 +247,193 @@ const saveProduct = async () => {
   isSaving.value = true
   errorMessage.value = ''
 
-  const payload = {
-    name: form.name.trim(),
-    brand: form.brand.trim() || null,
-    category: form.category || null,
-    barcode: form.barcode.trim() || null,
-    image: form.image || null,
-  }
-
   try {
     if (isEditing.value && editingProductId.value) {
-      // Update
       const data = await $fetch<{ product: Product }>(`/api/builder/products/${editingProductId.value}`, {
         method: 'PUT',
-        body: payload,
+        body: { name: form.name.trim(), image: form.image || null },
       })
-      // Update in local list
       const idx = products.value.findIndex(p => p.id === editingProductId.value)
-      if (idx !== -1 && data.product) {
-        products.value[idx] = data.product
-      }
+      if (idx !== -1 && data.product) products.value[idx] = data.product
     } else {
-      // Create
       const data = await $fetch<{ product: Product }>('/api/builder/products', {
         method: 'POST',
-        body: payload,
+        body: { name: form.name.trim(), image: form.image || null },
       })
       if (data.product) {
         products.value.unshift(data.product)
-        // Re-sort by name
         products.value.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
       }
     }
     closeModal()
   } catch (err: any) {
-    console.error('Erro ao salvar produto:', err)
-    errorMessage.value = err?.data?.statusMessage || err?.message || 'Erro ao salvar produto. Tente novamente.'
+    errorMessage.value = err?.data?.statusMessage || 'Erro ao salvar produto.'
   } finally {
     isSaving.value = false
   }
 }
 
-// ── Delete product ──────────────────────────────────────────────────────────────
-const requestDelete = (id: string) => {
-  confirmDeleteId.value = id
-}
-
-const cancelDelete = () => {
-  confirmDeleteId.value = null
-}
+// ── Delete ──────────────────────────────────────────────────────────────────────
+const requestDelete = (id: string) => { confirmDeleteId.value = id }
+const cancelDelete = () => { confirmDeleteId.value = null }
 
 const confirmDelete = async () => {
   const id = confirmDeleteId.value
   if (!id) return
   confirmDeleteId.value = null
   deletingId.value = id
-
   try {
     await $fetch(`/api/builder/products/${id}`, { method: 'DELETE' })
     products.value = products.value.filter(p => p.id !== id)
-  } catch (err: any) {
-    console.error('Erro ao excluir produto:', err)
-    alert('Erro ao excluir produto. Tente novamente.')
+  } catch {
+    // silently fail
   } finally {
     deletingId.value = null
   }
 }
 
-// ── Init ────────────────────────────────────────────────────────────────────────
-onMounted(() => {
-  fetchProducts()
+// ── Bulk ────────────────────────────────────────────────────────────────────────
+const bulkParsedProducts = computed(() => {
+  if (!bulkText.value.trim()) return []
+  return bulkText.value
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .map(line => {
+      for (const sep of [' - ', ' | ', ' ; ', '\t']) {
+        const idx = line.indexOf(sep)
+        if (idx > 0) return { name: line.slice(0, idx).trim() }
+      }
+      return { name: line }
+    })
 })
+
+const openBulkModal = () => { bulkText.value = ''; bulkError.value = ''; showBulkModal.value = true }
+const closeBulkModal = () => { showBulkModal.value = false; bulkText.value = ''; bulkError.value = '' }
+
+const saveBulkProducts = async () => {
+  if (bulkSaving.value) return
+  const items = bulkParsedProducts.value
+  if (items.length === 0) { bulkError.value = 'Insira pelo menos um produto.'; return }
+  if (items.length > 200) { bulkError.value = 'Maximo 200 por vez.'; return }
+
+  bulkSaving.value = true
+  bulkError.value = ''
+  try {
+    const data = await $fetch<{ products: Product[] }>('/api/builder/products/bulk', {
+      method: 'POST',
+      body: { products: items },
+    })
+    if (data.products) {
+      products.value.push(...data.products)
+      products.value.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+    }
+    closeBulkModal()
+  } catch (err: any) {
+    bulkError.value = err?.data?.statusMessage || 'Erro ao importar.'
+  } finally {
+    bulkSaving.value = false
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────────
+onMounted(() => fetchProducts())
 </script>
 
 <template>
-  <div class="max-w-7xl mx-auto px-4 py-8">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-      <div>
-        <h1 class="text-2xl font-bold text-white tracking-tight">Meus Produtos</h1>
-        <p class="text-sm text-zinc-500 mt-1">Gerencie o catalogo de produtos da sua empresa</p>
-      </div>
-      <button
-        @click="openNewProduct"
-        class="inline-flex items-center justify-center gap-2 h-11 px-6 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 hover:-translate-y-0.5 shrink-0"
-      >
-        <Plus class="w-4 h-4" />
-        <span>Novo Produto</span>
-      </button>
+  <div class="max-w-5xl mx-auto px-4 py-6">
+
+    <!-- Explicacao -->
+    <div class="mb-5 p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
+      <p class="text-sm text-zinc-300 leading-relaxed">
+        Cadastre aqui os produtos da sua loja. Depois, ao criar um encarte, voce pode puxar esses produtos direto do catalogo sem precisar digitar tudo de novo.
+      </p>
     </div>
 
-    <!-- Search Bar -->
-    <div class="mb-6">
-      <div class="relative group max-w-md">
-        <Search class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+      <div>
+        <h1 class="text-xl font-bold text-white">Meus Produtos</h1>
+        <p class="text-xs text-zinc-500 mt-0.5">{{ products.length }} produtos cadastrados</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button @click="openBulkModal" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition-all border border-white/10">
+          <List class="w-3.5 h-3.5" />
+          Cadastrar Lista
+        </button>
+        <button @click="openNewProduct" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-all">
+          <Plus class="w-3.5 h-3.5" />
+          Novo Produto
+        </button>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="mb-4">
+      <div class="relative max-w-sm">
+        <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
         <input
           v-model="searchQuery"
           @input="onSearchInput"
           type="text"
-          placeholder="Buscar produto por nome..."
-          class="w-full h-12 pl-12 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+          placeholder="Buscar produto..."
+          class="w-full h-9 pl-9 pr-3 bg-white/5 border border-white/5 rounded-lg text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
         />
       </div>
     </div>
 
-    <!-- Loading Skeleton -->
-    <div v-if="isLoading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      <div
-        v-for="i in 8"
-        :key="i"
-        class="bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden animate-pulse"
-      >
-        <div class="h-40 bg-white/5"></div>
-        <div class="p-4 space-y-3">
-          <div class="h-4 bg-white/5 rounded-lg w-3/4"></div>
-          <div class="h-3 bg-white/5 rounded w-1/2"></div>
-          <div class="h-3 bg-white/5 rounded w-1/3"></div>
-        </div>
+    <!-- Loading -->
+    <div v-if="isLoading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      <div v-for="i in 8" :key="i" class="bg-white/5 rounded-xl animate-pulse h-40"></div>
+    </div>
+
+    <!-- Empty -->
+    <div v-else-if="products.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
+      <Package class="w-12 h-12 text-zinc-700 mb-3" />
+      <p class="text-sm text-zinc-400 mb-1">{{ searchQuery.trim() ? 'Nenhum produto encontrado' : 'Nenhum produto cadastrado' }}</p>
+      <p class="text-xs text-zinc-600 mb-4">{{ searchQuery.trim() ? 'Tente outro termo.' : 'Cadastre seus produtos para usar nos encartes.' }}</p>
+      <div v-if="!searchQuery.trim()" class="flex gap-2">
+        <button @click="openBulkModal" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-lg text-xs font-medium border border-white/10 transition-all">
+          <List class="w-3.5 h-3.5" />
+          Cadastrar Lista
+        </button>
+        <button @click="openNewProduct" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-all">
+          <Plus class="w-3.5 h-3.5" />
+          Novo Produto
+        </button>
       </div>
     </div>
 
-    <!-- Empty State -->
-    <div
-      v-else-if="products.length === 0"
-      class="flex flex-col items-center justify-center py-20 text-center"
-    >
-      <div class="w-20 h-20 bg-[#18181b]/80 border border-white/5 rounded-2xl flex items-center justify-center mb-6">
-        <Package class="w-10 h-10 text-zinc-600" />
-      </div>
-      <h2 class="text-lg font-semibold text-zinc-300 mb-2">
-        {{ searchQuery.trim() ? 'Nenhum produto encontrado' : 'Nenhum produto cadastrado' }}
-      </h2>
-      <p class="text-sm text-zinc-500 max-w-md mb-6">
-        {{ searchQuery.trim()
-          ? 'Nenhum produto corresponde a sua busca. Tente outro termo.'
-          : 'Comece cadastrando seus produtos para usa-los nos encartes.' }}
-      </p>
-      <button
-        v-if="!searchQuery.trim()"
-        @click="openNewProduct"
-        class="inline-flex items-center gap-2 h-11 px-6 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 hover:-translate-y-0.5"
-      >
-        <Plus class="w-4 h-4" />
-        <span>Cadastrar primeiro produto</span>
-      </button>
-    </div>
-
-    <!-- Products Grid -->
-    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <!-- Products grid -->
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       <div
         v-for="product in products"
         :key="product.id"
-        class="group bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden hover:border-emerald-500/20 hover:bg-[#18181b] transition-all duration-300"
+        class="group bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden hover:border-white/10 transition-all"
       >
-        <!-- Product Image -->
-        <div class="relative h-40 bg-[#09090b]/50 flex items-center justify-center overflow-hidden">
+        <!-- Image -->
+        <div class="relative h-32 bg-[#09090b]/50 flex items-center justify-center overflow-hidden cursor-pointer" @click="openEditProduct(product)">
           <img
-            v-if="productImageUrl(product.image)"
-            :src="productImageUrl(product.image)!"
+            v-if="resolveImageUrl(product.image)"
+            :src="resolveImageUrl(product.image)!"
             :alt="product.name"
-            class="w-full h-full object-contain p-3"
+            class="w-full h-full object-contain p-2"
           />
-          <Package v-else class="w-12 h-12 text-zinc-700" />
+          <Package v-else class="w-8 h-8 text-zinc-700" />
         </div>
 
-        <!-- Product Info -->
-        <div class="p-4">
-          <h3 class="text-sm font-semibold text-white truncate mb-1.5 group-hover:text-emerald-300 transition-colors">
+        <!-- Info -->
+        <div class="p-3 flex items-start justify-between gap-2">
+          <h3 class="text-xs font-semibold text-white truncate flex-1 group-hover:text-emerald-300 transition-colors cursor-pointer" @click="openEditProduct(product)">
             {{ product.name }}
           </h3>
-          <div class="space-y-1">
-            <p v-if="product.brand" class="text-xs text-zinc-500 truncate flex items-center gap-1.5">
-              <Tag class="w-3 h-3 shrink-0" />
-              {{ product.brand }}
-            </p>
-            <p v-if="product.category" class="text-xs text-zinc-500 truncate flex items-center gap-1.5">
-              <ShoppingBag class="w-3 h-3 shrink-0" />
-              {{ product.category }}
-            </p>
-          </div>
-
-          <!-- Actions -->
-          <div class="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-white/5">
-            <button
-              @click="openEditProduct(product)"
-              class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
-            >
-              <Pencil class="w-3.5 h-3.5" />
-              <span>Editar</span>
+          <div class="flex items-center gap-0.5 shrink-0">
+            <button @click="openEditProduct(product)" class="p-1 text-zinc-600 hover:text-emerald-400 rounded transition-colors" title="Editar">
+              <Pencil class="w-3 h-3" />
             </button>
-            <button
-              @click="requestDelete(product.id)"
-              :disabled="deletingId === product.id"
-              class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-50"
-            >
-              <Loader2 v-if="deletingId === product.id" class="w-3.5 h-3.5 animate-spin" />
-              <Trash2 v-else class="w-3.5 h-3.5" />
-              <span>Excluir</span>
+            <button @click="requestDelete(product.id)" :disabled="deletingId === product.id" class="p-1 text-zinc-600 hover:text-red-400 rounded transition-colors disabled:opacity-50" title="Excluir">
+              <Loader2 v-if="deletingId === product.id" class="w-3 h-3 animate-spin" />
+              <Trash2 v-else class="w-3 h-3" />
             </button>
           </div>
         </div>
@@ -408,249 +442,182 @@ onMounted(() => {
 
     <!-- Product Form Modal -->
     <Teleport to="body">
-      <Transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="opacity-0"
-        enter-to-class="opacity-100"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="opacity-100"
-        leave-to-class="opacity-0"
-      >
-        <div
-          v-if="showModal"
-          class="fixed inset-0 z-[100] flex items-center justify-center p-4"
-        >
-          <!-- Backdrop -->
+      <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100" leave-to-class="opacity-0">
+        <div v-if="showModal" class="fixed inset-0 z-100 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="closeModal"></div>
+          <div class="relative bg-[#18181b] border border-white/10 rounded-2xl p-5 max-w-md w-full shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-base font-semibold text-white">{{ isEditing ? 'Editar Produto' : 'Novo Produto' }}</h2>
+              <button @click="closeModal" class="p-1.5 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
 
-          <!-- Modal Content -->
-          <Transition
-            enter-active-class="transition duration-200 ease-out"
-            enter-from-class="opacity-0 scale-95 translate-y-4"
-            enter-to-class="opacity-100 scale-100 translate-y-0"
-            leave-active-class="transition duration-150 ease-in"
-            leave-from-class="opacity-100 scale-100 translate-y-0"
-            leave-to-class="opacity-0 scale-95 translate-y-4"
-            appear
-          >
-            <div class="relative bg-[#18181b] border border-white/10 rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-              <!-- Modal Header -->
-              <div class="flex items-center justify-between mb-6">
-                <h2 class="text-lg font-semibold text-white">
-                  {{ isEditing ? 'Editar Produto' : 'Novo Produto' }}
-                </h2>
-                <button
-                  @click="closeModal"
-                  class="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                >
-                  <X class="w-5 h-5" />
-                </button>
+            <div v-if="errorMessage" class="mb-3 p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl">
+              <p class="text-xs text-red-400">{{ errorMessage }}</p>
+            </div>
+
+            <form @submit.prevent="saveProduct" class="space-y-4">
+              <!-- Name -->
+              <input
+                v-model="form.name"
+                type="text"
+                placeholder="Nome do produto (ex: Arroz Tio Joao 1kg)"
+                required
+                class="w-full h-11 px-4 bg-[#09090b]/50 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+              />
+
+              <!-- Image selected -->
+              <div v-if="resolveImageUrl(form.image)" class="flex items-center gap-3 p-3 bg-white/5 rounded-xl">
+                <img :src="resolveImageUrl(form.image)!" alt="" class="w-16 h-16 object-contain rounded-lg bg-white/5 p-1" />
+                <div class="flex-1 min-w-0">
+                  <p class="text-[11px] text-zinc-400">Imagem selecionada</p>
+                </div>
+                <div class="flex gap-1 shrink-0">
+                  <button type="button" @click="removeBackground(form.image!)" :disabled="isRemovingBg" class="p-1.5 text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors disabled:opacity-50" title="Remover fundo">
+                    <Loader2 v-if="isRemovingBg" class="w-3.5 h-3.5 animate-spin" />
+                    <Eraser v-else class="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" @click="triggerFileInput" class="p-1.5 text-zinc-500 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Trocar imagem">
+                    <Camera class="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" @click="form.image = null" class="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Remover imagem">
+                    <ImageOff class="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
-              <!-- Error Message -->
-              <div v-if="errorMessage" class="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <p class="text-sm text-red-400">{{ errorMessage }}</p>
-              </div>
+              <!-- No image: actions -->
+              <div v-else class="space-y-3">
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    @click="searchImages"
+                    :disabled="isSearchingImages || form.name.trim().length < 2"
+                    class="flex items-center gap-1.5 px-3 py-2 text-xs text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg transition-colors disabled:opacity-40"
+                  >
+                    <Loader2 v-if="isSearchingImages" class="w-3.5 h-3.5 animate-spin" />
+                    <Wand2 v-else class="w-3.5 h-3.5" />
+                    Buscar no banco
+                  </button>
+                  <button
+                    type="button"
+                    @click="triggerFileInput"
+                    :disabled="isUploading"
+                    class="flex items-center gap-1.5 px-3 py-2 text-xs text-zinc-400 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <Loader2 v-if="isUploading" class="w-3.5 h-3.5 animate-spin" />
+                    <Upload v-else class="w-3.5 h-3.5" />
+                    {{ isUploading ? 'Enviando e removendo fundo...' : 'Enviar minha foto' }}
+                  </button>
+                </div>
+                <p class="text-[10px] text-zinc-600 ml-0.5">Ao enviar sua foto, o fundo e removido automaticamente.</p>
 
-              <!-- Form -->
-              <form @submit.prevent="saveProduct" class="space-y-5">
-                <!-- Image Upload -->
-                <div>
-                  <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1 mb-2 block">
-                    Imagem do produto
-                  </label>
-                  <div class="flex items-center gap-4">
-                    <div
-                      @click="triggerFileInput"
-                      class="relative w-28 h-28 bg-[#09090b]/50 border-2 border-dashed border-white/10 rounded-xl flex items-center justify-center cursor-pointer hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group/img overflow-hidden shrink-0"
-                    >
-                      <img
-                        v-if="imagePreviewUrl"
-                        :src="imagePreviewUrl"
-                        alt="Produto"
-                        class="w-full h-full object-contain rounded-xl p-1"
-                      />
-                      <div v-else class="flex flex-col items-center gap-1.5 text-zinc-600 group-hover/img:text-emerald-400 transition-colors">
-                        <Image class="w-8 h-8" />
-                        <span class="text-[10px]">Adicionar</span>
-                      </div>
-                      <!-- Upload overlay -->
-                      <div v-if="imagePreviewUrl" class="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl">
-                        <Camera class="w-5 h-5 text-white" />
-                      </div>
-                      <!-- Uploading spinner -->
-                      <div v-if="isUploading" class="absolute inset-0 bg-black/60 flex items-center justify-center rounded-xl">
-                        <Loader2 class="w-6 h-6 text-emerald-400 animate-spin" />
-                      </div>
-                    </div>
-
-                    <div class="flex-1 min-w-0">
-                      <p class="text-xs text-zinc-500 mb-2">PNG, JPG ou WebP. Maximo 5MB.</p>
+                <!-- Image search results -->
+                <div v-if="showImageSearch" class="bg-[#09090b]/50 border border-white/5 rounded-xl p-2.5">
+                  <div v-if="isSearchingImages" class="flex items-center justify-center py-6">
+                    <Loader2 class="w-5 h-5 text-blue-400 animate-spin" />
+                  </div>
+                  <div v-else-if="imageSearchResults.length === 0" class="py-4 text-center">
+                    <p class="text-[11px] text-zinc-500">Nenhuma imagem encontrada para "{{ form.name }}"</p>
+                  </div>
+                  <div v-else>
+                    <p class="text-[10px] text-zinc-500 mb-2">{{ imageSearchResults.length }} resultados — clique para selecionar</p>
+                    <div class="grid grid-cols-3 gap-2 max-h-56 overflow-y-auto">
                       <button
+                        v-for="(img, i) in imageSearchResults"
+                        :key="i"
                         type="button"
-                        @click="triggerFileInput"
-                        :disabled="isUploading"
-                        class="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-zinc-300 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors disabled:opacity-50"
+                        @click="selectSearchImage(img)"
+                        class="flex flex-col bg-white/5 rounded-lg overflow-hidden border border-white/5 hover:border-emerald-500/50 hover:ring-1 hover:ring-emerald-500/30 transition-all"
                       >
-                        <Upload class="w-3.5 h-3.5" />
-                        {{ isUploading ? 'Enviando...' : 'Enviar imagem' }}
+                        <div class="aspect-square p-1 flex items-center justify-center">
+                          <img :src="img.url" class="w-full h-full object-contain" loading="lazy" />
+                        </div>
+                        <div class="px-1.5 pb-1.5 pt-0.5">
+                          <p class="text-[9px] text-zinc-400 leading-tight line-clamp-2 text-center">{{ img.name }}</p>
+                        </div>
                       </button>
                     </div>
                   </div>
-
-                  <input
-                    ref="fileInput"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    class="hidden"
-                    @change="handleImageUpload"
-                  />
                 </div>
+              </div>
 
-                <!-- Name -->
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="product-name">
-                    Nome do produto *
-                  </label>
-                  <div class="relative group">
-                    <Package class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
-                    <input
-                      id="product-name"
-                      v-model="form.name"
-                      type="text"
-                      placeholder="Ex: Arroz Integral 1kg"
-                      required
-                      class="w-full h-12 pl-12 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                    />
-                  </div>
-                </div>
+              <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="handleImageUpload" />
 
-                <!-- Brand -->
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="product-brand">
-                    Marca
-                  </label>
-                  <div class="relative group">
-                    <Tag class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
-                    <input
-                      id="product-brand"
-                      v-model="form.brand"
-                      type="text"
-                      placeholder="Ex: Tio Joao"
-                      class="w-full h-12 pl-12 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                    />
-                  </div>
-                </div>
-
-                <!-- Category -->
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="product-category">
-                    Categoria
-                  </label>
-                  <div class="relative group">
-                    <ShoppingBag class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within:text-emerald-400 pointer-events-none" />
-                    <select
-                      id="product-category"
-                      v-model="form.category"
-                      class="w-full h-12 pl-12 pr-10 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all appearance-none cursor-pointer"
-                    >
-                      <option value="" class="bg-[#09090b] text-zinc-400">Selecione uma categoria</option>
-                      <option
-                        v-for="cat in categoryOptions"
-                        :key="cat"
-                        :value="cat"
-                        class="bg-[#09090b] text-white"
-                      >
-                        {{ cat }}
-                      </option>
-                    </select>
-                    <!-- Custom dropdown arrow -->
-                    <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <svg class="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Barcode -->
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="product-barcode">
-                    Codigo de barras
-                  </label>
-                  <div class="relative group">
-                    <Barcode class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
-                    <input
-                      id="product-barcode"
-                      v-model="form.barcode"
-                      type="text"
-                      placeholder="Ex: 7891234567890"
-                      class="w-full h-12 pl-12 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                    />
-                  </div>
-                </div>
-
-                <!-- Modal Actions -->
-                <div class="flex items-center justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    @click="closeModal"
-                    class="px-5 py-2.5 text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    :disabled="isSaving || isUploading"
-                    class="inline-flex items-center justify-center gap-2 h-11 px-6 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                  >
-                    <Loader2 v-if="isSaving" class="w-4 h-4 animate-spin" />
-                    <span>{{ isSaving ? 'Salvando...' : (isEditing ? 'Salvar alteracoes' : 'Cadastrar produto') }}</span>
-                  </button>
-                </div>
-              </form>
-            </div>
-          </Transition>
+              <div class="flex items-center justify-end gap-2 pt-1">
+                <button type="button" @click="closeModal" class="px-4 py-2 text-sm text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">Cancelar</button>
+                <button type="submit" :disabled="isSaving || isUploading" class="inline-flex items-center gap-1.5 h-9 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-40">
+                  <Loader2 v-if="isSaving" class="w-3.5 h-3.5 animate-spin" />
+                  {{ isSaving ? 'Salvando...' : (isEditing ? 'Salvar' : 'Cadastrar') }}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </Transition>
     </Teleport>
 
-    <!-- Delete Confirmation Modal -->
+    <!-- Bulk Modal -->
     <Teleport to="body">
-      <Transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="opacity-0"
-        enter-to-class="opacity-100"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="opacity-100"
-        leave-to-class="opacity-0"
-      >
-        <div
-          v-if="confirmDeleteId"
-          class="fixed inset-0 z-[100] flex items-center justify-center p-4"
-        >
-          <!-- Backdrop -->
-          <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="cancelDelete"></div>
+      <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100" leave-to-class="opacity-0">
+        <div v-if="showBulkModal" class="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="closeBulkModal"></div>
+          <div class="relative bg-[#18181b] border border-white/10 rounded-2xl p-5 max-w-xl w-full shadow-2xl max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h2 class="text-base font-semibold text-white">Cadastrar Lista</h2>
+                <p class="text-[11px] text-zinc-500">Um produto por linha</p>
+              </div>
+              <button @click="closeBulkModal" class="p-1.5 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
 
-          <!-- Modal -->
-          <div class="relative bg-[#18181b] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-            <h3 class="text-lg font-semibold text-white mb-2">Excluir produto?</h3>
-            <p class="text-sm text-zinc-400 mb-6">
-              Esta acao nao pode ser desfeita. O produto sera removido permanentemente do seu catalogo.
-            </p>
-            <div class="flex items-center justify-end gap-3">
-              <button
-                @click="cancelDelete"
-                class="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                @click="confirmDelete"
-                class="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
-              >
-                Sim, excluir
-              </button>
+            <div v-if="bulkError" class="mb-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p class="text-xs text-red-400">{{ bulkError }}</p>
+            </div>
+
+            <div class="mb-2 p-2 bg-white/5 rounded-lg text-[10px] text-zinc-500 font-mono leading-relaxed">
+              Arroz Integral 1kg<br/>Feijao Carioca 1kg<br/>Leite Integral 1L
+            </div>
+
+            <textarea
+              v-model="bulkText"
+              placeholder="Cole a lista de produtos aqui..."
+              class="flex-1 min-h-40 max-h-[40vh] w-full bg-[#09090b]/50 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 p-3 focus:outline-none focus:border-emerald-500/50 transition-all resize-none font-mono leading-relaxed"
+            ></textarea>
+
+            <div class="flex items-center justify-between mt-3">
+              <span v-if="bulkParsedProducts.length > 0" class="text-xs font-medium px-2 py-0.5 rounded-md" :class="bulkParsedProducts.length > 200 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'">
+                {{ bulkParsedProducts.length }} produtos
+              </span>
+              <div v-else></div>
+              <div class="flex items-center gap-2">
+                <button @click="closeBulkModal" class="px-3 py-1.5 text-xs text-zinc-400 hover:text-white rounded-lg transition-colors">Cancelar</button>
+                <button @click="saveBulkProducts" :disabled="bulkSaving || bulkParsedProducts.length === 0 || bulkParsedProducts.length > 200" class="inline-flex items-center gap-1.5 h-8 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-40">
+                  <Loader2 v-if="bulkSaving" class="w-3.5 h-3.5 animate-spin" />
+                  <ClipboardPaste v-else class="w-3.5 h-3.5" />
+                  {{ bulkSaving ? 'Cadastrando...' : 'Cadastrar todos' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Delete Confirmation -->
+    <Teleport to="body">
+      <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100" leave-to-class="opacity-0">
+        <div v-if="confirmDeleteId" class="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="cancelDelete"></div>
+          <div class="relative bg-[#18181b] border border-white/10 rounded-2xl p-5 max-w-sm w-full shadow-2xl">
+            <h3 class="text-base font-semibold text-white mb-2">Excluir produto?</h3>
+            <p class="text-sm text-zinc-400 mb-5">O produto sera removido permanentemente.</p>
+            <div class="flex items-center justify-end gap-2">
+              <button @click="cancelDelete" class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white rounded-lg transition-colors">Cancelar</button>
+              <button @click="confirmDelete" class="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors">Excluir</button>
             </div>
           </div>
         </div>

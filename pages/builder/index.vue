@@ -155,7 +155,7 @@ onMounted(() => {
       <button
         @click="createFlyer"
         :disabled="isCreating"
-        class="inline-flex items-center justify-center gap-2 h-11 px-6 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 shrink-0"
+        class="inline-flex items-center justify-center gap-2 h-11 px-6 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 shrink-0"
       >
         <Loader2 v-if="isCreating" class="w-4 h-4 animate-spin" />
         <Plus v-else class="w-4 h-4" />
@@ -216,7 +216,7 @@ onMounted(() => {
         v-if="activeFilter === 'ALL'"
         @click="createFlyer"
         :disabled="isCreating"
-        class="inline-flex items-center gap-2 h-11 px-6 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+        class="inline-flex items-center gap-2 h-11 px-6 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
       >
         <Plus class="w-4 h-4" />
         <span>Criar primeiro encarte</span>
@@ -289,7 +289,7 @@ onMounted(() => {
       >
         <div
           v-if="confirmDeleteId"
-          class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          class="fixed inset-0 z-100 flex items-center justify-center p-4"
         >
           <!-- Backdrop -->
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="cancelDelete"></div>

@@ -4,7 +4,8 @@
 
 /**
  * Calcula a melhor grade (columns x rows) baseado na quantidade de produtos.
- * Baseado no QR Ofertas.
+ * A última linha incompleta é preenchida pelo último produto expandindo (colSpan).
+ * Prefere layouts mais largos que altos. Max 6 colunas.
  */
 export function getAutoGrid(productCount: number): { columns: number; rows: number } {
   if (productCount <= 0) return { columns: 1, rows: 1 }
@@ -12,18 +13,15 @@ export function getAutoGrid(productCount: number): { columns: number; rows: numb
   if (productCount === 2) return { columns: 2, rows: 1 }
   if (productCount === 3) return { columns: 3, rows: 1 }
   if (productCount === 4) return { columns: 2, rows: 2 }
-  if (productCount <= 6) return { columns: 3, rows: 2 }
-  if (productCount <= 8) return { columns: 4, rows: 2 }
-  if (productCount === 9) return { columns: 3, rows: 3 }
-  if (productCount <= 12) return { columns: 4, rows: 3 }
-  if (productCount <= 15) return { columns: 5, rows: 3 }
-  if (productCount <= 16) return { columns: 4, rows: 4 }
-  if (productCount <= 20) return { columns: 5, rows: 4 }
-  if (productCount <= 24) return { columns: 6, rows: 4 }
-  if (productCount <= 25) return { columns: 5, rows: 5 }
-  if (productCount <= 30) return { columns: 6, rows: 5 }
-  // Fallback: roughly square
-  const cols = Math.ceil(Math.sqrt(productCount * 1.2))
+
+  // For 5+ products, calculate ideal columns based on count
+  let cols: number
+  if (productCount <= 6) cols = 3
+  else if (productCount <= 8) cols = 4
+  else if (productCount <= 12) cols = 4
+  else if (productCount <= 20) cols = 5
+  else cols = 6
+
   const rows = Math.ceil(productCount / cols)
   return { columns: cols, rows }
 }
@@ -38,7 +36,6 @@ export function isAutoLayout(layout: { columns: number; rows: number } | null): 
 
 // ── Highlight layout presets ────────────────────────────────────────────────
 // Layouts com grid-template-areas para produtos em destaque.
-// Key = nome legível, value = configuração CSS Grid.
 
 export interface HighlightLayoutConfig {
   name: string
@@ -46,7 +43,7 @@ export interface HighlightLayoutConfig {
   columns: string           // grid-template-columns
   rows: string              // grid-template-rows
   areas: string             // grid-template-areas
-  highlightPositions: number[] // quais índices são destaque (ocupam mais espaço)
+  highlightPositions: number[] // quais índices são destaque
 }
 
 export const HIGHLIGHT_LAYOUTS: HighlightLayoutConfig[] = [
@@ -86,14 +83,14 @@ export const HIGHLIGHT_LAYOUTS: HighlightLayoutConfig[] = [
     areas: '"d0 d0 d1 d1" "p2 p3 p4 p5"',
     highlightPositions: [0, 1],
   },
-  // 7 Produtos - 3 destaques topo + 4 normais
+  // 7 Produtos - 1 destaque esquerdo + 6 normais
   {
-    name: '7 Produtos - 3 Dest. Topo',
+    name: '7 Produtos - 1 Dest. Esq.',
     productsPerPage: 7,
-    columns: '1fr 1fr 1fr',
-    rows: '1.4fr 1fr',
-    areas: '"d0 d1 d2" "p3 p4 . " "p5 p6 ."',
-    highlightPositions: [0, 1, 2],
+    columns: '2fr 1fr 1fr',
+    rows: '1fr 1fr 1fr',
+    areas: '"d0 p1 p2" "d0 p3 p4" "p5 p6 p6"',
+    highlightPositions: [0],
   },
   // 8 Produtos - 2 destaques topo + 6 normais
   {
@@ -113,7 +110,7 @@ export const HIGHLIGHT_LAYOUTS: HighlightLayoutConfig[] = [
     areas: '"p1 d0 p2" "p3 d0 p4" "p5 p6 p7"',
     highlightPositions: [0],
   },
-  // 10 Produtos - 2 destaques laterais + 6 normais
+  // 10 Produtos - 2 destaques laterais + 8 normais
   {
     name: '10 Produtos - 2 Dest. Laterais',
     productsPerPage: 10,
@@ -121,6 +118,15 @@ export const HIGHLIGHT_LAYOUTS: HighlightLayoutConfig[] = [
     rows: '1fr 1fr 1fr',
     areas: '"d0 p2 p3 d1" "d0 p4 p5 d1" "p6 p7 p8 p9"',
     highlightPositions: [0, 1],
+  },
+  // 11 Produtos - 1 destaque esquerdo + 10 normais
+  {
+    name: '11 Produtos - 1 Dest. Esq.',
+    productsPerPage: 11,
+    columns: '2fr 1fr 1fr 1fr',
+    rows: '1fr 1fr 1fr',
+    areas: '"d0 p1 p2 p3" "d0 p4 p5 p6" "p7 p8 p9 p10"',
+    highlightPositions: [0],
   },
   // 12 Produtos - 4 destaques topo + 8 normais
   {
@@ -131,7 +137,56 @@ export const HIGHLIGHT_LAYOUTS: HighlightLayoutConfig[] = [
     areas: '"d0 d1 d2 d3" "p4 p5 p6 p7" "p8 p9 p10 p11"',
     highlightPositions: [0, 1, 2, 3],
   },
+  // 14 Produtos - 2 destaques topo + 12 normais
+  {
+    name: '14 Produtos - 2 Dest. Topo',
+    productsPerPage: 14,
+    columns: '1fr 1fr 1fr 1fr',
+    rows: '1.4fr 1fr 1fr 1fr',
+    areas: '"d0 d0 d1 d1" "p2 p3 p4 p5" "p6 p7 p8 p9" "p10 p11 p12 p13"',
+    highlightPositions: [0, 1],
+  },
+  // 16 Produtos - 4 destaques topo + 12 normais
+  {
+    name: '16 Produtos - 4 Dest. Topo',
+    productsPerPage: 16,
+    columns: '1fr 1fr 1fr 1fr',
+    rows: '1.4fr 1fr 1fr 1fr',
+    areas: '"d0 d1 d2 d3" "p4 p5 p6 p7" "p8 p9 p10 p11" "p12 p13 p14 p15"',
+    highlightPositions: [0, 1, 2, 3],
+  },
+  // 18 Produtos - 4 destaques topo + 14 normais
+  {
+    name: '18 Produtos - 4 Dest. Topo',
+    productsPerPage: 18,
+    columns: '1fr 1fr 1fr 1fr 1fr',
+    rows: '1.4fr 1fr 1fr 1fr',
+    areas: '"d0 d0 d1 d2 d3" "p4 p5 p6 p7 p8" "p9 p10 p11 p12 p13" "p14 p15 p16 p17 p17"',
+    highlightPositions: [0, 1, 2, 3],
+  },
+  // 20 Produtos - 4 destaques topo + 16 normais
+  {
+    name: '20 Produtos - 4 Dest. Topo',
+    productsPerPage: 20,
+    columns: '1fr 1fr 1fr 1fr 1fr',
+    rows: '1.4fr 1fr 1fr 1fr',
+    areas: '"d0 d0 d1 d1 d2" "d2 p3 p4 p5 p6" "p7 p8 p9 p10 p11" "p12 p13 p14 p15 . " "p16 p17 p18 p19 ."',
+    highlightPositions: [0, 1, 2],
+  },
 ]
+
+/**
+ * Busca o primeiro HighlightLayout que atende EXATAMENTE a quantidade de produtos.
+ * Se o primeiro produto tem is_highlight, prefere layouts com destaque esquerdo/topo.
+ */
+export function getAutoHighlightLayout(productCount: number): HighlightLayoutConfig | null {
+  if (productCount < 5) return null
+  // Find layouts matching exact product count
+  const matches = HIGHLIGHT_LAYOUTS.filter(l => l.productsPerPage === productCount)
+  if (matches.length === 0) return null
+  // Prefer first match (typically left highlight or top highlight)
+  return matches[0]
+}
 
 /**
  * Dado um grid_config com areas, gera o CSS style para grid-template-areas.
@@ -163,13 +218,35 @@ export function getCellAreaName(index: number, isHighlight: boolean): string {
 // ── Composable ──────────────────────────────────────────────────────────────
 
 export const useBuilderLayout = () => {
-  const { layout, products, paginatedProducts } = useBuilderFlyer()
+  const { layout, products, paginatedProducts, productsPerPage } = useBuilderFlyer()
 
-  const isAuto = computed(() => isAutoLayout(layout.value))
+  // Auto when layout is null OR columns=0 rows=0
+  const isAuto = computed(() => !layout.value || isAutoLayout(layout.value))
+
+  // In auto mode, try to use a highlight layout if available for the product count
+  const autoHighlightLayout = computed<HighlightLayoutConfig | null>(() => {
+    if (!isAuto.value) return null
+    const count = paginatedProducts.value.length
+    if (count < 5) return null
+    // Check if any product has is_highlight flag
+    const hasHL = paginatedProducts.value.some(p => p.is_highlight)
+    const hl = getAutoHighlightLayout(count)
+    if (hl) return hl
+    // No exact match — no auto highlight
+    return null
+  })
 
   const effectiveGrid = computed(() => {
     if (isAuto.value) {
-      return getAutoGrid(paginatedProducts.value.length || products.value.length)
+      if (autoHighlightLayout.value) {
+        // Highlight layout defines its own grid
+        return {
+          columns: autoHighlightLayout.value.columns.split(' ').length,
+          rows: autoHighlightLayout.value.rows.split(' ').length,
+        }
+      }
+      const count = paginatedProducts.value.length || productsPerPage.value
+      return getAutoGrid(count)
     }
     return {
       columns: layout.value?.columns ?? 3,
@@ -179,21 +256,37 @@ export const useBuilderLayout = () => {
 
   const effectiveProductsPerPage = computed(() => {
     if (isAuto.value) {
-      // Em modo automático, todos os produtos ficam na mesma página (sem paginação forçada)
-      // ou usa o total dos produtos
       return products.value.length || 6
     }
     return layout.value?.products_per_page ?? 6
   })
 
   const hasHighlightLayout = computed(() => {
+    // Check manually-set layout first
     const cfg = layout.value?.grid_config
-    return !!(cfg && typeof cfg === 'object' && 'areas' in cfg && cfg.areas)
+    if (cfg && typeof cfg === 'object' && 'areas' in cfg && cfg.areas) return true
+    // Then check auto highlight
+    return !!autoHighlightLayout.value
   })
 
   const highlightGridStyle = computed(() => {
-    if (!hasHighlightLayout.value) return null
-    return getGridAreasStyle(layout.value?.grid_config as any)
+    // Manual layout config takes priority
+    const cfg = layout.value?.grid_config
+    if (cfg && typeof cfg === 'object' && 'areas' in cfg && cfg.areas) {
+      return getGridAreasStyle(cfg as any)
+    }
+    // Auto highlight layout
+    if (autoHighlightLayout.value) {
+      return getGridAreasStyle(autoHighlightLayout.value)
+    }
+    return null
+  })
+
+  const autoHighlightPositions = computed<number[]>(() => {
+    if (autoHighlightLayout.value) {
+      return autoHighlightLayout.value.highlightPositions
+    }
+    return []
   })
 
   return {
@@ -202,6 +295,7 @@ export const useBuilderLayout = () => {
     effectiveProductsPerPage,
     hasHighlightLayout,
     highlightGridStyle,
+    autoHighlightPositions,
     getAutoGrid,
     getCellAreaName,
   }

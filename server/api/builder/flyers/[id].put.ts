@@ -1,4 +1,4 @@
-import { requireBuilderTenant } from '../../../utils/builder-auth'
+import { requireBuilderTenant, isBuilderAdmin } from '../../../utils/builder-auth'
 import { enforceRateLimit } from '../../../utils/rate-limit'
 import { pgOneOrNull } from '../../../utils/postgres'
 
@@ -74,16 +74,25 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'No valid fields to update' })
   }
 
+  const admin = isBuilderAdmin(event)
   setClauses.push(`updated_at = timezone('utc', now())`)
-  values.push(flyerId, tenant.id)
+  values.push(flyerId)
 
-  const flyer = await pgOneOrNull(
-    `UPDATE public.builder_flyers
-     SET ${setClauses.join(', ')}
-     WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}
-     RETURNING *`,
-    values
-  )
+  const flyer = admin
+    ? await pgOneOrNull(
+        `UPDATE public.builder_flyers
+         SET ${setClauses.join(', ')}
+         WHERE id = $${paramIndex}
+         RETURNING *`,
+        values
+      )
+    : await pgOneOrNull(
+        `UPDATE public.builder_flyers
+         SET ${setClauses.join(', ')}
+         WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}
+         RETURNING *`,
+        [...values, tenant.id]
+      )
 
   if (!flyer) {
     throw createError({ statusCode: 404, statusMessage: 'Flyer not found' })

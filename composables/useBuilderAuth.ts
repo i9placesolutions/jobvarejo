@@ -15,6 +15,7 @@ const isAuthFlagSet = (): boolean => {
 
 const clearAuthFlag = () => {
   if (!import.meta.client) return
+  document.cookie = `${AUTH_COOKIE}=; path=/; max-age=0; samesite=lax`
   document.cookie = `${AUTH_COOKIE}=; path=/builder; max-age=0; samesite=lax`
 }
 
@@ -41,6 +42,7 @@ const toTenant = (data: any): BuilderTenantPublic | null => {
     segment2: data.segment2 ?? null,
     segment3: data.segment3 ?? null,
     show_on_portal: data.show_on_portal ?? false,
+    flyer_defaults: data.flyer_defaults ?? null,
     plan: String(data.plan || 'free'),
     created_at: String(data.created_at || ''),
     updated_at: String(data.updated_at || '')

@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { Plus } from 'lucide-vue-next'
+
 const {
   layout,
   theme,
   paginatedProducts,
   productsPerPage,
   highlightPositions,
+  addProduct,
+  productEditorOpen,
 } = useBuilderFlyer()
 
 const {
@@ -12,6 +16,7 @@ const {
   effectiveGrid,
   hasHighlightLayout,
   highlightGridStyle,
+  autoHighlightPositions,
   getCellAreaName,
 } = useBuilderLayout()
 
@@ -48,53 +53,106 @@ const cells = computed(() => {
     : productsPerPage.value
   const prods = paginatedProducts.value
   const hlPositions = highlightPositions.value
+  const autoHL = autoHighlightPositions.value
+  const cols = effectiveGrid.value.columns
+  const usingHighlightAreas = hasHighlightLayout.value
   const result: Array<{
     product: typeof prods[number] | null
     index: number
     isHighlight: boolean
     areaName: string
+    colSpan: number
   }> = []
 
   for (let i = 0; i < perPage; i++) {
-    const isHL = hlPositions.includes(i) || prods[i]?.is_highlight
+    // Determine if this position is a highlight
+    const isHL = hlPositions.includes(i) || autoHL.includes(i) || prods[i]?.is_highlight
+    // In auto mode without highlight areas, last product fills remaining columns
+    let colSpan = 1
+    if (isAuto.value && !usingHighlightAreas && prods[i] && i === prods.length - 1) {
+      const posInRow = i % cols
+      const remaining = cols - posInRow
+      if (remaining > 1) colSpan = remaining
+    }
     result.push({
       product: prods[i] || null,
       index: i,
       isHighlight: !!isHL,
       areaName: getCellAreaName(i, !!isHL),
+      colSpan,
     })
   }
   return result
 })
+
+const columns = computed(() => effectiveGrid.value.columns)
+
+const hasProducts = computed(() => paginatedProducts.value.length > 0)
+
+const handleOpenEditor = () => {
+  productEditorOpen.value = true
+}
 </script>
 
 <template>
-  <div :style="gridStyle" class="w-full h-full overflow-hidden">
+  <!-- Empty state: no products — single large CTA -->
+  <div
+    v-if="!hasProducts"
+    class="w-full h-full flex flex-col items-center justify-center cursor-pointer group"
+    :style="{ padding: `${padding}px`, backgroundColor: 'var(--builder-body-bg, transparent)' }"
+    @click="handleOpenEditor"
+  >
+    <div
+      class="w-16 h-16 rounded-2xl border-2 border-dashed flex items-center justify-center transition-all
+        group-hover:scale-110"
+      :style="{ borderColor: 'var(--builder-text, rgba(150,150,150,0.3))' }"
+    >
+      <Plus
+        class="w-8 h-8"
+        :style="{ color: 'var(--builder-text, rgba(150,150,150,0.4))' }"
+      />
+    </div>
+    <span
+      class="text-base font-semibold mt-3 opacity-40 group-hover:opacity-70 transition-opacity"
+      :style="{ color: 'var(--builder-text, #999)' }"
+    >
+      Adicionar produtos
+    </span>
+    <span
+      class="text-xs mt-1 opacity-25 group-hover:opacity-50 transition-opacity"
+      :style="{ color: 'var(--builder-text, #999)' }"
+    >
+      Clique para abrir o editor
+    </span>
+  </div>
+
+  <!-- Grid with products -->
+  <div v-else :style="gridStyle" class="w-full h-full overflow-hidden">
     <template v-for="cell in cells" :key="cell.index">
-      <!-- Product card -->
       <BuilderFlyerProductCard
         v-if="cell.product"
         :product="cell.product"
         :is-highlight="cell.isHighlight"
-        :style="hasHighlightLayout ? { gridArea: cell.areaName, minHeight: 0 } : { minHeight: 0 }"
+        :columns="columns"
+        :box-index="cell.index"
+        :style="{
+          minHeight: 0,
+          ...(hasHighlightLayout ? { gridArea: cell.areaName } : {}),
+          ...(cell.colSpan > 1 ? { gridColumn: `span ${cell.colSpan}` } : {}),
+        }"
       />
 
       <!-- Empty slot placeholder -->
       <div
         v-else
-        class="flex items-center justify-center rounded border-2 border-dashed opacity-30 min-h-0 overflow-hidden"
+        class="flex items-center justify-center rounded border-2 border-dashed opacity-20 min-h-0 overflow-hidden"
         :style="{
           borderColor: 'var(--builder-text, #999)',
           borderRadius: 'var(--builder-border-radius, 8px)',
           ...(hasHighlightLayout ? { gridArea: cell.areaName } : {}),
         }"
       >
-        <span
-          class="text-3xl font-light"
-          :style="{ color: 'var(--builder-text, #999)' }"
-        >
-          +
-        </span>
+        <span class="text-3xl font-light" :style="{ color: 'var(--builder-text, #999)' }">+</span>
       </div>
     </template>
   </div>

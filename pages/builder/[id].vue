@@ -14,18 +14,38 @@ const flyerId = computed(() => String(route.params.id || ''))
 
 const {
   flyer,
+  model,
   isLoading,
   currentPage,
   totalPages,
   loadFlyer,
   loadCatalog,
   setCurrentPage,
+  setZoom,
   cleanup,
 } = useBuilderFlyer()
 
 const canvasComponent = ref<{ canvasRef: HTMLElement | null } | null>(null)
 const showExportDialog = ref(false)
 const canvasElement = computed(() => canvasComponent.value?.canvasRef ?? null)
+const canvasAreaRef = ref<HTMLElement | null>(null)
+
+// Auto-fit zoom to available space
+const fitCanvasToView = () => {
+  const area = canvasAreaRef.value
+  if (!area) return
+  const w = model.value?.width ?? 1080
+  const h = model.value?.height ?? 1080
+  const areaW = area.clientWidth - 48 // padding
+  const areaH = area.clientHeight - 48
+  if (areaW <= 0 || areaH <= 0) return
+  const scaleX = areaW / w
+  const scaleY = areaH / h
+  const fitZoom = Math.min(scaleX, scaleY, 1) // never exceed 100%
+  setZoom(Math.round(fitZoom * 100) / 100)
+}
+
+let resizeObserver: ResizeObserver | null = null
 
 // Load data on mount
 onMounted(async () => {
@@ -37,9 +57,22 @@ onMounted(async () => {
       await navigateTo('/builder')
     }
   }
+  // Auto-fit after data loads
+  nextTick(() => {
+    fitCanvasToView()
+    // Re-fit on resize
+    if (canvasAreaRef.value) {
+      resizeObserver = new ResizeObserver(() => fitCanvasToView())
+      resizeObserver.observe(canvasAreaRef.value)
+    }
+  })
 })
 
+// Re-fit when model changes
+watch(model, () => nextTick(fitCanvasToView))
+
 onUnmounted(() => {
+  resizeObserver?.disconnect()
   cleanup()
 })
 </script>
@@ -70,10 +103,13 @@ onUnmounted(() => {
 
       <!-- Main area -->
       <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <!-- Canvas area -->
-        <div class="flex-1 overflow-auto flex items-start justify-center bg-[#0a0a0a] p-6">
+        <!-- Canvas area — centered both axes -->
+        <div
+          ref="canvasAreaRef"
+          class="flex-1 overflow-auto flex bg-[#0a0a0a] p-6"
+        >
           <template v-if="isLoading">
-            <div class="flex flex-col items-center gap-3 mt-20">
+            <div class="flex flex-col items-center gap-3">
               <Loader2 class="w-8 h-8 text-emerald-500 animate-spin" />
               <span class="text-sm text-zinc-400">Carregando encarte...</span>
             </div>

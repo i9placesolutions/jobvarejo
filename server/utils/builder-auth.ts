@@ -1,7 +1,9 @@
 import type { H3Event } from 'h3'
 import type { BuilderTenant } from '~/types/builder'
 import { getTenantById } from './builder-auth-db'
+import { getProfileById } from './auth-db'
 import { verifyBuilderSessionToken } from './builder-session-token'
+import { pgOneOrNull } from './postgres'
 
 const _tenantCache = new Map<string, { tenant: BuilderTenant; expiresAt: number }>()
 const TENANT_CACHE_TTL_MS = 5 * 60 * 1000
@@ -34,6 +36,7 @@ const getCachedTenant = async (id: string): Promise<BuilderTenant | null> => {
       segment2: row.segment2 ?? null,
       segment3: row.segment3 ?? null,
       show_on_portal: row.show_on_portal ?? false,
+      flyer_defaults: row.flyer_defaults ?? null,
       plan: row.plan ?? 'free',
       is_active: row.is_active ?? true,
       last_login_at: row.last_login_at ?? null,
@@ -67,6 +70,13 @@ const getBuilderToken = (event: H3Event): string | null => {
   }
 }
 
+export const isBuilderAdmin = (event: H3Event): boolean => {
+  const token = getBuilderToken(event)
+  if (!token) return false
+  const payload = verifyBuilderSessionToken(token)
+  return !!payload?.isAdmin
+}
+
 export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenant> => {
   const token = getBuilderToken(event)
   if (!token) {
@@ -82,6 +92,60 @@ export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenan
       statusCode: 401,
       statusMessage: 'Invalid or expired builder token'
     })
+  }
+
+  // Check if this is an admin user from profiles table
+  if (payload.isAdmin) {
+    const profile = await getProfileById(payload.sub)
+    const role = String(profile?.role || '').trim()
+    if (!profile?.id || (role !== 'super_admin' && role !== 'admin')) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: 'Invalid or expired builder token'
+      })
+    }
+
+    // Ensure a builder_tenants row exists for this admin (needed for FK constraints)
+    const existingTenant = await getTenantById(profile.id)
+    if (!existingTenant?.id) {
+      await pgOneOrNull(
+        `INSERT INTO public.builder_tenants (id, email, password_hash, name, plan, is_active)
+         VALUES ($1::uuid, $2, 'admin-no-password', $3, 'admin', TRUE)
+         ON CONFLICT (id) DO NOTHING
+         RETURNING id`,
+        [profile.id, String(profile.email), String(profile.name || 'Admin')]
+      )
+      // Invalidate cache
+      _tenantCache.delete(profile.id)
+    }
+
+    return {
+      id: profile.id,
+      email: String(profile.email),
+      name: String(profile.name || 'Admin'),
+      slug: null,
+      logo: null,
+      logo_position: {},
+      slogan: null,
+      phone: null,
+      phone2: null,
+      whatsapp: null,
+      instagram: null,
+      facebook: null,
+      website: null,
+      address: null,
+      payment_notes: null,
+      cep: null,
+      segment1: null,
+      segment2: null,
+      segment3: null,
+      show_on_portal: false,
+      plan: 'admin',
+      is_active: true,
+      last_login_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    } as BuilderTenant
   }
 
   const tenant = await getCachedTenant(payload.sub)

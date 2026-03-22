@@ -11978,19 +11978,6 @@ const removeImageObjectsDeep = (node: any): any => {
         // toJSON(), causing inconsistent saved data or serialization failures. The render
         // will happen naturally after the save completes.
         
-        // DEBUG: Log zone dimensions right before serialization
-        try {
-            const _dbgAllObjs = canvasInstance.getObjects?.() || [];
-            _dbgAllObjs.filter((o: any) => o?.type === 'group' && (o?.isGridZone || o?.isProductZone)).forEach((z: any) => {
-                const _dbgR = getZoneRect(z);
-                const _dbgCards = canvasInstance.getObjects?.().filter((o: any) => o?.parentZoneId === z._customId) || [];
-                const _dbgFC = _dbgCards[0];
-                console.log(`[DEBUG-ZONE] PRE-SAVE zone=${z._customId} _zW=${z._zoneWidth?.toFixed?.(1)} _zH=${z._zoneHeight?.toFixed?.(1)} sx=${z.scaleX} sy=${z.scaleY} w=${z.width?.toFixed?.(1)} h=${z.height?.toFixed?.(1)} rect=${_dbgR ? `${_dbgR.width?.toFixed?.(1)}x${_dbgR.height?.toFixed?.(1)} sx=${_dbgR.scaleX} sy=${_dbgR.scaleY}` : 'null'} card0=${_dbgFC ? `w=${_dbgFC.width?.toFixed?.(1)} h=${_dbgFC.height?.toFixed?.(1)} _cW=${_dbgFC._cardWidth} _cH=${_dbgFC._cardHeight}` : 'none'}`);
-                console.log('[DEBUG-ZONE] PRE-SAVE details:', {
-                    zoneId: z._customId
-                });
-            });
-        } catch (_e) { /* debug only */ }
 
         // Serialize with custom props
         let json: any
@@ -27817,6 +27804,23 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
         return;
     }
 
+    // CRITICAL FIX: After applying styles, re-grid cards within their zones.
+    // resizeSmartObject changes group dimensions via group.set({ width, height }),
+    // which can shift the group's bounding box. Without re-gridding, cards may
+    // appear outside the zone or overlap each other.
+    if (!isTemplateChange) {
+        effectiveTargets.forEach((z: any) => {
+            try {
+                const zCards = getZoneChildren(z);
+                if (zCards.length > 0) {
+                    recalculateZoneLayout(z, zCards, { save: false, requestRender: false });
+                }
+            } catch (e) {
+                console.warn('[handleUpdateGlobalStyles] Re-grid failed:', e);
+            }
+        });
+    }
+
     // CRITICAL: Force aggressive re-render. After loadFromJSON, Fabric v7 groups
     // may cache stale renders. Clearing renderCache on all affected cards ensures
     // the new styles are visually applied.
@@ -34645,24 +34649,28 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     const cardLm = (group as any).layoutManager;
     if (cardLm && cardLm.performLayout) cardLm.performLayout = () => {};
 
-    // Reset Group Scale/Skew to ensure clean internal layout
-    group.scale(1);
-    group.set({ width: w, height: h });
-
+    // CRITICAL FIX: Check signature BEFORE calling group.set({ width, height }).
+    // In Fabric v7, group.set({ width, height }) shifts the group's internal coordinate
+    // system (center origin), which displaces ALL children. If we can skip the relayout
+    // (signature matches), we must NOT touch width/height to avoid this corruption.
     const relayoutSignature = buildCardRelayoutSignature(group, w, h, styles);
     const forceRelayout = (group as any).__forceCardRelayout === true;
     if (!forceRelayout && (group as any).__lastCardRelayoutSignature === relayoutSignature) {
-        console.log(`[DEBUG-ZONE] resizeSmartObject SKIP (signature match) card=${group._customId || group.name} w=${w.toFixed(1)} h=${h.toFixed(1)} savedW=${(group as any)._cardWidth} savedH=${(group as any)._cardHeight}`);
+        // Dimensions and styles match — skip relayout entirely.
+        // Only update stored card dimensions (for serialization) without touching the group.
         (group as any)._cardWidth = w;
         (group as any)._cardHeight = h;
         group.dirty = true;
         group.setCoords?.();
-        // LayoutManager is permanently disabled (no-op) — nothing to restore.
         return;
     }
-    console.log(`[DEBUG-ZONE] resizeSmartObject FULL RELAYOUT card=${group._customId || group.name} w=${w.toFixed(1)} h=${h.toFixed(1)} prevW=${(group as any)._cardWidth} prevH=${(group as any)._cardHeight} forced=${forceRelayout} sigMatch=${(group as any).__lastCardRelayoutSignature === relayoutSignature}`);
     (group as any).__lastCardRelayoutSignature = relayoutSignature;
     (group as any).__forceCardRelayout = false;
+
+    // Now that we know we're doing a full relayout, set dimensions.
+    // Reset scale first to ensure clean internal layout.
+    group.scale(1);
+    group.set({ width: w, height: h });
     
     const halfW = w / 2;
     const halfH = h / 2;
@@ -35714,11 +35722,7 @@ const getZoneMetrics = (zone: any) => {
     if (rect) {
         const rectW = Math.abs((rect.width ?? 0) * (rect.scaleX ?? 1));
         const rectH = Math.abs((rect.height ?? 0) * (rect.scaleY ?? 1));
-        console.log('[DEBUG-ZONE] getZoneMetrics RECT path:', {
-            rectRawW: rect.width, rectRawH: rect.height,
-            rectScaleX: rect.scaleX, rectScaleY: rect.scaleY,
-            rectW, rectH, zoneId: zone._customId
-        });
+
         if (rectW > 0 && rectH > 0) {
             // Use the zone's center point for positioning (most stable reference)
             const center = typeof zone.getCenterPoint === 'function'
@@ -35737,7 +35741,6 @@ const getZoneMetrics = (zone: any) => {
                     centerX: center.x,
                     centerY: center.y
                 };
-                console.log('[DEBUG-ZONE] getZoneMetrics RECT+center result:', result);
                 return result;
             }
 
@@ -35759,7 +35762,6 @@ const getZoneMetrics = (zone: any) => {
     }
 
     // Fallback: use stored dims or group bounding rect when inner rect is unavailable
-    console.log('[DEBUG-ZONE] getZoneMetrics FALLBACK path (no rect or zero dims)', { hasRect: !!rect, zoneId: zone._customId });
     const liveBounds = zone.getBoundingRect ? zone.getBoundingRect(true) : null;
     const liveW = liveBounds ? Math.abs(liveBounds.width) : 0;
     const liveH = liveBounds ? Math.abs(liveBounds.height) : 0;
@@ -36424,7 +36426,6 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
     // — including highlight (featured) cards that get larger slots.
     const _refCellW = (usableW - (cols - 1) * gapX) / Math.max(1, cols);
     const _refCellH = (usableH - (effectiveRows - 1) * gapY) / Math.max(1, effectiveRows);
-    console.log(`[DEBUG-ZONE] recalculateZoneLayout: zone=${zone._customId} rect=${zoneRect.width.toFixed(1)}x${zoneRect.height.toFixed(1)} pad=${rawPadding} gapX=${rawGapX} gapY=${rawGapY} cols=${cols} rows=${effectiveRows} slotW=${_refCellW.toFixed(1)} slotH=${_refCellH.toFixed(1)} usable=${usableW.toFixed(1)}x${usableH.toFixed(1)} cards=${cards.length}`);
     if (Number.isFinite(_refCellW) && _refCellW > 2 && Number.isFinite(_refCellH) && _refCellH > 2) {
         (stylesToApply as any).__refCellW = _refCellW;
         (stylesToApply as any).__refCellH = _refCellH;
@@ -37104,18 +37105,6 @@ const rehydrateCanvasZones = (
             // need to ensure coords are fresh for getBoundingRect to work in relayout.
             z.setCoords?.();
 
-            // DEBUG: Log zone dimensions on rehydrate
-            const _dbgRect = getZoneRect(z);
-            console.log('[DEBUG-ZONE] rehydrateCanvasZones zone:', {
-                zoneId: z._customId,
-                _zoneWidth: z._zoneWidth, _zoneHeight: z._zoneHeight,
-                scaleX: z.scaleX, scaleY: z.scaleY,
-                width: z.width, height: z.height,
-                innerRect: _dbgRect ? {
-                    w: _dbgRect.width, h: _dbgRect.height,
-                    sx: _dbgRect.scaleX, sy: _dbgRect.scaleY
-                } : null
-            });
 
             const rawZoneStyles = (z as any)._zoneGlobalStyles;
             const hasPersistedZoneStyles =
@@ -37373,11 +37362,6 @@ const rehydrateCanvasZones = (
                         // Preserve manually-saved placements after reload.
                         // Reflow only when this zone has cards without reliable saved positions.
                         const zoneCards = cards.filter((c: any) => String((c as any).parentZoneId || '').trim() === String(z._customId || '').trim());
-                        // DEBUG: Log first card dims before relayout
-                        if (zoneCards.length > 0) {
-                            const fc = zoneCards[0];
-                            console.log(`[DEBUG-ZONE] BEFORE relayout: card=${fc._customId} w=${fc.width?.toFixed?.(1)} h=${fc.height?.toFixed?.(1)} _cardW=${fc._cardWidth} _cardH=${fc._cardHeight} left=${fc.left?.toFixed?.(1)} top=${fc.top?.toFixed?.(1)} sig=${fc.__lastCardRelayoutSignature ? 'YES' : 'NO'}`);
-                        }
                         // FIX: ALWAYS force a full relayout on rehydrate.
                         // Previously we tried to preserve "saved positions" to avoid
                         // visual jumps, but this caused cards to stay at stale/corrupted
@@ -37395,11 +37379,6 @@ const rehydrateCanvasZones = (
                         // price, splash), destroying the saved layout. Cards are already correctly
                         // sized in the JSON — we only need to reposition them within the zone grid.
                         recalculateZoneLayout(z, zoneCards, { skipResize: true });
-                        // DEBUG: Log first card dims after relayout
-                        if (zoneCards.length > 0) {
-                            const fc = zoneCards[0];
-                            console.log(`[DEBUG-ZONE] AFTER relayout: card=${fc._customId} w=${fc.width?.toFixed?.(1)} h=${fc.height?.toFixed?.(1)} _cardW=${fc._cardWidth} _cardH=${fc._cardHeight} left=${fc.left?.toFixed?.(1)} top=${fc.top?.toFixed?.(1)}`);
-                        }
                     } catch (err) {
                         console.warn('[rehydrateCanvasZones] Failed to relayout zone', err);
                     }

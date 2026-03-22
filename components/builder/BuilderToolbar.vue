@@ -70,7 +70,12 @@ const handleModelChange = (e: Event) => {
 
 const handleLayoutChange = (e: Event) => {
   const val = (e.target as HTMLSelectElement).value
-  if (val) setLayout(val)
+  if (val === '__auto__') {
+    // Clear layout → auto mode
+    updateFlyer({ layout_id: null })
+  } else if (val) {
+    setLayout(val)
+  }
 }
 
 const handleZoomChange = (e: Event) => {
@@ -121,15 +126,30 @@ const handleSave = async () => {
     <div class="flex items-center gap-1 shrink-0">
       <label class="text-[10px] text-zinc-500 font-medium">Grade</label>
       <select
-        :value="layout?.id || ''"
+        :value="isAuto ? '__auto__' : (layout?.id || '__auto__')"
         @change="handleLayoutChange"
         class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
       >
+        <option value="__auto__">Automatica</option>
         <option v-for="l in layouts" :key="l.id" :value="l.id">
           {{ l.name }}
         </option>
       </select>
-      <span v-if="isAuto" class="text-[9px] text-emerald-400 font-medium">Auto</span>
+    </div>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
+    <!-- Produtos por pagina -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Qtd/Pag</label>
+      <select
+        :value="(flyer as any)?.custom_products_per_page || 0"
+        @change="updateFlyer({ custom_products_per_page: Number(($event.target as HTMLSelectElement).value) } as any)"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50 w-16"
+      >
+        <option :value="0">Auto</option>
+        <option v-for="n in [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 20, 24, 25, 30, 36, 40, 48, 50]" :key="n" :value="n">{{ n }}</option>
+      </select>
     </div>
 
     <div class="w-px h-5 bg-white/5 mx-1" />
@@ -227,7 +247,7 @@ const handleSave = async () => {
       >
         <ChevronLeft class="w-3.5 h-3.5" />
       </button>
-      <span class="text-[11px] text-zinc-400 min-w-[32px] text-center">
+      <span class="text-[11px] text-zinc-400 min-w-8 text-center">
         {{ currentPage }}/{{ totalPages }}
       </span>
       <button
