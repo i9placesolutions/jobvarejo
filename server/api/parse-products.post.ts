@@ -767,6 +767,23 @@ ${text ? `"${String(text).slice(0, MAX_PROMPT_SOURCE_CHARS)}"` : '(image attache
                 prod.priceSpecial = prod.priceSpecialUnit;
             }
             
+            // FIX: Quando a IA interpreta o preço como peso (ex: "CHAMBARI 12,99 kg" → weight="12,99KG", price=null),
+            // detectar o padrão e corrigir: peso com formato de preço (X,XX) sem preço definido.
+            if (!prod.price && !prod.priceUnit && !prod.pricePack && prod.weight) {
+                const weightStr = String(prod.weight).trim();
+                // Peso com formato de preço: "12,99KG", "12,99 KG", "7.99KG" etc.
+                const weightPriceMatch = weightStr.match(/^(\d{1,4}[.,]\d{2})\s*(?:KG|UN[D.]?|LT|ML|PCT|G|GR)$/i);
+                if (weightPriceMatch) {
+                    const extractedPrice = normalizePrice(weightPriceMatch[1]);
+                    if (extractedPrice) {
+                        prod.price = extractedPrice;
+                        prod.priceUnit = extractedPrice;
+                        // Limpar o peso incorreto — o peso real geralmente é algo como "1KG", "500G"
+                        prod.weight = null;
+                    }
+                }
+            }
+
             // Se nenhum preço principal foi definido, mas tem priceUnit ou pricePack
             if (!prod.price) {
                 prod.price = prod.priceUnit || prod.pricePack || null;

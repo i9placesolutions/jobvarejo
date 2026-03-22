@@ -24686,6 +24686,18 @@ const createSmartObject = async (
         }
         if (isRedBurst) tuneRedBurstPriceGroupLayout(pg);
         applyAtacarejoPricingToPriceGroup(pg, product);
+        // DEBUG: verify final price text values after all price manipulations
+        const debugParts = collectObjectsDeep(pg);
+        const debugPriceTexts = debugParts
+            .filter((o: any) => isTextLikeObject(o) && o?.name && (
+                o.name.includes('price') || o.name.includes('Price') ||
+                o.name.includes('integer') || o.name.includes('Integer') ||
+                o.name.includes('decimal') || o.name.includes('Decimal') ||
+                o.name.includes('retail') || o.name.includes('wholesale') ||
+                o.name === 'smart_price'
+            ))
+            .map((o: any) => `${o.name}="${o.text}" visible=${o.visible !== false}`);
+        console.log('[buildPriceGroupFromTemplate] FINAL price state for', product?.name, ':', debugPriceTexts.join(' | '));
         return pg;
     };
 
@@ -32229,6 +32241,9 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
     if (!fabric || !groupJson) throw new Error('Template missing group JSON');
     const objectsJson = Array.isArray(groupJson.objects) ? groupJson.objects : [];
     if (objectsJson.length === 0) throw new Error('Template group JSON has no objects');
+    // DEBUG: Log template JSON names to verify they exist in the source data
+    const jsonNames = objectsJson.map((o: any) => `${o?.name || '(sem nome)'}[${o?.type || '?'}]`);
+    console.log('[instantiatePriceGroupFromTemplate] JSON objectsJson names:', jsonNames.join(', '));
     const groupOpts = { ...groupJson };
     delete (groupOpts as any).objects;
     // Fabric objects have a fixed `type` based on the class; restoring `type` from JSON is ignored and warns.
@@ -32238,6 +32253,34 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
     delete (groupOpts as any).layout;
     const enlivened = await enlivenObjectsAsync(objectsJson);
     if (!Array.isArray(enlivened) || enlivened.length === 0) throw new Error('Template group failed to enliven objects');
+
+    // FIX: Fabric v7 enlivenObjects does NOT restore `name` and custom props on children.
+    // Re-apply them from the original JSON so setPriceOnPriceGroup can find named text fields.
+    const restoreNamesFromJson = (objects: any[], jsonArr: any[]) => {
+        for (let i = 0; i < objects.length && i < jsonArr.length; i++) {
+            const obj = objects[i];
+            const json = jsonArr[i];
+            if (!obj || !json) continue;
+            // Restore name if missing
+            if (json.name && !obj.name) {
+                obj.name = json.name;
+            }
+            // Restore custom __ props (template metadata)
+            for (const key of Object.keys(json)) {
+                if (key.startsWith('__') && obj[key] === undefined) {
+                    obj[key] = json[key];
+                }
+            }
+            // Recurse into nested groups
+            const childObjs = typeof obj.getObjects === 'function' ? obj.getObjects() : null;
+            const childJsons = Array.isArray(json.objects) ? json.objects : null;
+            if (childObjs && childJsons && childObjs.length > 0 && childJsons.length > 0) {
+                restoreNamesFromJson(childObjs, childJsons);
+            }
+        }
+    };
+    restoreNamesFromJson(enlivened, objectsJson);
+
     const g = new fabric.Group(enlivened, groupOpts);
     const cloneSafe = <T>(value: T): T => {
         try {
@@ -32500,6 +32543,11 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     if (!pg || typeof pg.getObjects !== 'function') return;
     const parts = collectObjectsDeep(pg);
     const preserveTemplateVisual = shouldPreserveManualTemplateVisual(pg);
+
+    // DEBUG: Log all named objects in the price group for diagnosis
+    const allNames = parts.map((o: any) => `${o?.name || '(sem nome)'}[${String(o?.type || '?').toLowerCase()}]`);
+    console.log('[setPriceOnPriceGroup] rawPrice:', rawPrice, '| total parts:', parts.length, '| names:', allNames.join(', '));
+
     const isVisibleNode = (obj: any): boolean => {
         if (!obj) return false;
         if (obj.visible === false) return false;
@@ -32512,10 +32560,54 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     const currency = parts.find((o: any) => o?.name === 'price_currency_text');
     if (currency && (!currency.text || String(currency.text).trim().length === 0)) currency.set?.('text', 'R$');
 
-    const intTxt = parts.find((o: any) => o?.name === 'price_integer_text' || o?.name === 'priceInteger' || o?.name === 'price_integer');
-    const decTxt = parts.find((o: any) => o?.name === 'price_decimal_text' || o?.name === 'priceDecimal' || o?.name === 'price_decimal');
-    const unitTxt = parts.find((o: any) => o?.name === 'price_unit_text' || o?.name === 'priceUnit' || o?.name === 'price_unit');
-    const legacy = parts.find((o: any) => o?.name === 'smart_price' || o?.name === 'price_value_text');
+    let intTxt = parts.find((o: any) => o?.name === 'price_integer_text' || o?.name === 'priceInteger' || o?.name === 'price_integer');
+    let decTxt = parts.find((o: any) => o?.name === 'price_decimal_text' || o?.name === 'priceDecimal' || o?.name === 'price_decimal');
+    let unitTxt = parts.find((o: any) => o?.name === 'price_unit_text' || o?.name === 'priceUnit' || o?.name === 'price_unit');
+    let legacy = parts.find((o: any) => o?.name === 'smart_price' || o?.name === 'price_value_text');
+
+    // FIX: Fabric v7 enlivenObjects drops `name` from children.
+    // When no named fields are found, identify price text objects by their content pattern.
+    if (!intTxt && !decTxt && !legacy) {
+        const textParts = parts.filter((o: any) => {
+            const t = String(o?.type || '').toLowerCase();
+            return (t === 'i-text' || t === 'text' || t === 'textbox') && o?.visible !== false;
+        });
+        for (const obj of textParts) {
+            const txt = String(obj?.text || '').trim();
+            // Currency text (R$, $)
+            if (!currency && /^R?\$$/i.test(txt)) {
+                if (!obj.name) obj.name = 'price_currency_text';
+                continue;
+            }
+            // Decimal part: starts with comma followed by digits (e.g. ",99")
+            if (!decTxt && /^,\d{1,2}$/.test(txt)) {
+                decTxt = obj;
+                obj.name = 'price_decimal_text';
+                continue;
+            }
+            // Integer part: pure digits (e.g. "10", "34")
+            if (!intTxt && /^\d{1,4}$/.test(txt)) {
+                intTxt = obj;
+                obj.name = 'price_integer_text';
+                continue;
+            }
+            // Unit text: short label like "UN", "KG", "UN.", "/KG"
+            if (!unitTxt && /^[\/]?(?:UN[D.]?|KG|LT|ML|G|GR|PCT)\.?$/i.test(txt)) {
+                unitTxt = obj;
+                obj.name = 'price_unit_text';
+                continue;
+            }
+            // Legacy full price: "10,99" or "R$ 10,99"
+            if (!legacy && /^\d{1,4}[,.]\d{1,2}$/.test(txt.replace(/R\$\s*/g, ''))) {
+                legacy = obj;
+                obj.name = 'smart_price';
+                continue;
+            }
+        }
+        if (intTxt || decTxt || legacy) {
+            console.log('[setPriceOnPriceGroup] Fallback por conteudo: intTxt:', !!intTxt, '| decTxt:', !!decTxt, '| legacy:', !!legacy, '| unitTxt:', !!unitTxt);
+        }
+    }
 
     const priceParts = splitPriceParts(rawPrice);
     const integer = priceParts.integer;
