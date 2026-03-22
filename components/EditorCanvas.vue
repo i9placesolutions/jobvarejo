@@ -24651,6 +24651,8 @@ const createSmartObject = async (
 
     if (!priceStr || priceStr === '0,00') {
         console.warn('[createSmartObject] PRECO VAZIO para produto:', product.name);
+    } else {
+        console.log('[createSmartObject] Produto:', product.name, '| priceStr:', priceStr, '| priceUnit:', product.priceUnit, '| price:', product.price);
     }
 
     // Default tag (fallback)
@@ -25990,8 +25992,8 @@ const simulateSmartGrid = async (
                                   child.set('name', sourceChild.name);
                               }
                               
-                              // Recursively fix nested groups
-                              if (child.type === 'group' && sourceChild && sourceChild.type === 'group') {
+                              // Recursively fix nested groups (Fabric v7: type is 'Group' not 'group')
+                              if (String(child.type || '').toLowerCase() === 'group' && sourceChild && String(sourceChild.type || '').toLowerCase() === 'group') {
                                   fixNestedNames(child, sourceChild);
                               }
                           });
@@ -27865,10 +27867,14 @@ const handleApplyTemplateToZone = async () => {
 
 const collectObjectsDeep = (root: any): any[] => {
     const out: any[] = [];
+    const isGroupLike = (obj: any): boolean => {
+        const t = String(obj?.type || '').toLowerCase();
+        return t === 'group' && typeof obj.getObjects === 'function';
+    };
     const walk = (obj: any) => {
         if (!obj) return;
         out.push(obj);
-        if (obj.type === 'group' && typeof obj.getObjects === 'function') {
+        if (isGroupLike(obj)) {
             const children = obj.getObjects() || [];
             children.forEach(walk);
         }
@@ -32506,9 +32512,9 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     const currency = parts.find((o: any) => o?.name === 'price_currency_text');
     if (currency && (!currency.text || String(currency.text).trim().length === 0)) currency.set?.('text', 'R$');
 
-    const intTxt = parts.find((o: any) => o?.name === 'price_integer_text');
-    const decTxt = parts.find((o: any) => o?.name === 'price_decimal_text');
-    const unitTxt = parts.find((o: any) => o?.name === 'price_unit_text');
+    const intTxt = parts.find((o: any) => o?.name === 'price_integer_text' || o?.name === 'priceInteger' || o?.name === 'price_integer');
+    const decTxt = parts.find((o: any) => o?.name === 'price_decimal_text' || o?.name === 'priceDecimal' || o?.name === 'price_decimal');
+    const unitTxt = parts.find((o: any) => o?.name === 'price_unit_text' || o?.name === 'priceUnit' || o?.name === 'price_unit');
     const legacy = parts.find((o: any) => o?.name === 'smart_price' || o?.name === 'price_value_text');
 
     const priceParts = splitPriceParts(rawPrice);
@@ -32568,6 +32574,8 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
             unitTxt.set?.('text', u);
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
         }
+    } else {
+        console.warn('[setPriceOnPriceGroup] Nenhum campo de preco encontrado no template! rawPrice:', rawPrice, 'parts:', parts.length, 'names:', parts.map((o: any) => o?.name).filter(Boolean));
     }
     // Keep Mini Editor templates visually identical and only fit dynamic values.
     if (preserveTemplateVisual) {
