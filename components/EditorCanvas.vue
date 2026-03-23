@@ -126,6 +126,12 @@ const isNodeEditing = ref(false)
 // When true, style updates from child components (ProductZoneSettings) are ignored
 // because they are just echoing back the values we synced from the zone during rehydrate.
 let _suppressGlobalStyleUpdates = false
+// FIX: Cooldown flag to suppress persistence after undo/redo.
+// After undo/redo completes, deferred canvas events (object:added/modified from
+// rehydration, text recalc, etc.) can fire and trigger saveCurrentState, marking
+// the page dirty and persisting the undo state as a "new" change.  This cooldown
+// prevents saves for a short window after history navigation completes.
+let _historyRestoreCooldownUntil = 0
 const isPenMode = ref(false) // Pen Tool mode (vector path creation)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingImageReplaceTargetId = ref<string | null>(null)
@@ -7274,17 +7280,24 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
         }
 
         if (shouldPersistLocalState) {
-            // Save to in-memory project + local draft immediately (sync path inside saveState/updatePageData).
-            try {
-                saveCurrentState({
-                    reason: `lifecycle:${reason}`,
-                    source: 'system',
-                    markUnsaved: true,
-                    skipIfUnchanged: true,
-                    skipCoalesce: true
-                });
-            } catch (err) {
-                console.warn('[persist] Falha ao salvar estado em flush de lifecycle:', err);
+            // FIX: During the post-undo/redo cooldown, skip persisting the canvas
+            // state — the canvas contains the restored snapshot and saving it would
+            // overwrite the user's original data with the undo target.
+            if (Date.now() < _historyRestoreCooldownUntil) {
+                console.log(`⏳ [flushPersistence] Suprimido durante cooldown pós-undo/redo (reason=${reason})`)
+            } else {
+                // Save to in-memory project + local draft immediately (sync path inside saveState/updatePageData).
+                try {
+                    saveCurrentState({
+                        reason: `lifecycle:${reason}`,
+                        source: 'system',
+                        markUnsaved: true,
+                        skipIfUnchanged: true,
+                        skipCoalesce: true
+                    });
+                } catch (err) {
+                    console.warn('[persist] Falha ao salvar estado em flush de lifecycle:', err);
+                }
             }
         }
 
@@ -8840,6 +8853,23 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     // 4. Reset History for this page context
     historyStack.value = [];
     historyIndex.value = -1;
+
+    // FIX: Capture the freshly-loaded canvas as the initial history entry.
+    // Without this, the history stack is empty after load, so Ctrl+Z has
+    // no previous state to revert to.  We must wait a tick for all
+    // post-load rehydration (zone syncs, text metrics, etc.) to settle
+    // before taking the snapshot, otherwise we'd capture an intermediate state.
+    if (loadedOk && canvas.value && typeof saveCurrentState === 'function') {
+        nextTick(() => {
+            if (isStaleLoad() || !canvas.value) return;
+            try {
+                saveCurrentState({ reason: 'initial-history-capture', source: 'system', skipIfUnchanged: true });
+                console.log('[activePageWatch] ✅ Estado inicial do histórico capturado após loadFromJSON');
+            } catch (e) {
+                console.warn('[activePageWatch] ⚠️ Falha ao capturar estado inicial do histórico:', e);
+            }
+        });
+    }
 
     // 5. Restore viewport (last pan/zoom) or fallback to zoom-to-fit.
     if (savedVpt) {
@@ -10413,13 +10443,21 @@ onMounted(async () => {
                               });
                           }
 
-                          // Ensure product cards stay in zones and images stay in cards
-                          const allLoadedObjects = canvas.value.getObjects();
-                          allLoadedObjects.forEach((obj: any) => {
-                              if (shouldApplyContainmentConstraints(obj)) {
-                                  applyContainmentConstraints(obj);
-                              }
-                          });
+                          // FIX: Do NOT apply containment constraints during post-load.
+                          // applyContainmentConstraints can move cards/images based on
+                          // potentially stale zone metrics (fonts not loaded, coords not
+                          // recalculated). This was causing progressive layout degradation
+                          // on each load→save cycle: rehydration shifted objects, the
+                          // scheduled post-load save persisted the shifted positions, and
+                          // the next load shifted them even further.
+                          // Containment constraints are already enforced on user
+                          // interaction (object:modified), which is the correct trigger.
+                          // const allLoadedObjects = canvas.value.getObjects();
+                          // allLoadedObjects.forEach((obj: any) => {
+                          //     if (shouldApplyContainmentConstraints(obj)) {
+                          //         applyContainmentConstraints(obj);
+                          //     }
+                          // });
 
                           refreshCanvasObjects();
                           if (!degradedPage) {
@@ -10475,26 +10513,17 @@ onMounted(async () => {
                   historyIndex.value = -1;
                   // Important: DO NOT auto-save after a degraded load (missing images),
                   // otherwise we overwrite the stored JSON with placeholders/empty state.
-                  if (!degradedPage) {
-                      const expectedObjects = Number(page?.canvasData?.objects?.length || 0);
-                      const nonTransientObjects = canvas.value
-                          .getObjects()
-                          .filter((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg').length;
-
-                      if (expectedObjects > 0 && nonTransientObjects === 0) {
-                          console.warn('⚠️ Pós-load gerou canvas vazio para página que tinha objetos. Pulando auto-save para evitar sobrescrita.');
-                      } else {
-                          // Persistência pós-load em modo ocioso:
-                          // evita travar o primeiro paint do editor.
-	                          scheduleIdleStatePersistence({
-	                              allowEmptyOverwrite: expectedObjects === 0,
-	                              reason: 'post-load-cleanup',
-                                  source: 'system',
-                                  skipIfUnchanged: true
-	                          });
-                      }
-                  } else {
+                  // FIX: Do NOT schedule auto-save after loading a project.
+                  // The post-load rehydration (origin normalization, clipPath
+                  // clearing, text metrics recalc) modifies live canvas objects,
+                  // making the serialized state differ from the loaded JSON.
+                  // Saving this modified state overwrites the original good data,
+                  // causing progressive layout corruption on each load→save cycle.
+                  // Only user-initiated changes should trigger saves.
+                  if (degradedPage) {
                       console.warn('⚠️ Carregamento degradado (imagens com erro). Pulando auto-save para não sobrescrever o projeto.');
+                  } else {
+                      console.log('✅ Post-load: auto-save suprimido para preservar layout original.');
                   }
 
                   // Stop watching after successful load
@@ -12257,6 +12286,17 @@ const removeImageObjectsDeep = (node: any): any => {
     }
     
     invokeSaveStateSafely = async (opts: SaveStateOptions = {}) => {
+        // FIX: Skip saves during the cooldown window after undo/redo.
+        // After history restore, deferred canvas events (object:added, object:modified)
+        // fire because loadFromJSON re-creates objects.  Without this guard those
+        // events would persist the restored (potentially intermediate) state, marking
+        // the page dirty and triggering auto-save of a state the user is undoing.
+        const reason = String(opts.reason || '')
+        if (Date.now() < _historyRestoreCooldownUntil && reason !== 'initial-history-capture') {
+            console.log(`⏳ [saveState] Suprimido durante cooldown pós-undo/redo (reason=${reason})`)
+            return false
+        }
+
         const nextOpts: SaveStateOptions = { ...(opts || {}) };
         if (!nextOpts.expectedPageId) {
             const pageId = getActiveProjectPageId();
@@ -12683,17 +12723,13 @@ const repairZoneCardsAfterHistoryRestore = () => {
             card.setCoords?.();
         });
 
-        // FIX: ALWAYS relayout zones after undo/redo.  Previously we only
-        // relaid out when no card was "near" the zone, but cards could still be
-        // outside the zone grid slots (displaced by normalizeZoneScale shifts or
-        // corrupted saves).  The relayout is cheap and guarantees correct card
-        // placement.  Card order is preserved via _zoneOrder.
-        try {
-            recalculateZoneLayout(zone, cards, { save: false, skipResize: true });
-            repairedZones += 1;
-        } catch (err) {
-            console.warn('[history-repair] Failed to relayout zone after undo/redo', err);
-        }
+        // FIX: Do NOT force recalculateZoneLayout after undo/redo.
+        // The history snapshot already contains the correct card positions
+        // as they were at the time of the snapshot.  Forcing a relayout
+        // overwrites those saved positions with freshly-calculated grid
+        // slots, destroying the hand-designed layout.
+        // The visibility, opacity and coords repairs above are sufficient.
+        repairedZones += 1;
     });
 
     if (repairedZones > 0) {
@@ -12792,6 +12828,11 @@ const undo = async () => {
         }
     } finally {
         isHistoryProcessing.value = false;
+        // FIX: Set cooldown to suppress deferred save events after undo.
+        // Deferred canvas events (rehydration, text recalc) can fire after
+        // isHistoryProcessing is cleared, marking the page dirty and saving
+        // the undo state as a "new" change.
+        _historyRestoreCooldownUntil = Date.now() + 1500;
     }
 }
 
@@ -12808,6 +12849,8 @@ const redo = async () => {
         }
     } finally {
         isHistoryProcessing.value = false;
+        // FIX: Same cooldown as undo — suppress deferred saves after redo.
+        _historyRestoreCooldownUntil = Date.now() + 1500;
     }
 }
 
@@ -26902,6 +26945,17 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
         }
         const zoneRelatedObjs = allObjs.filter((o: any) => zoneChildIds.has(o));
         restoredViewportObjects = restoreViewportCulledObjects(zoneRelatedObjs);
+        // FIX: Also force-restore visibility for zone cards that lost their
+        // __viewportCulled flag (e.g. after undo/redo or culling cleanup) but
+        // remain invisible.  Without this, getZoneChildren skips them and the
+        // relayout silently produces an empty grid.
+        for (const obj of zoneRelatedObjs) {
+            if (obj && obj !== zone && obj.visible === false && !(obj as any).__viewportCulled) {
+                obj.visible = true;
+                obj.dirty = true;
+                restoredViewportObjects++;
+            }
+        }
         if (restoredViewportObjects > 0) {
             lastViewportCullSignature = '';
         }
@@ -35993,9 +36047,16 @@ const syncZoneCardFrameBindings = (zone: any, cards?: any[]) => {
 const getZoneChildCandidates = (zone: any) => {
     if (!canvas.value || !zone) return [];
     const topLevel = canvas.value.getObjects() || [];
+    const zoneId = String((zone as any)?._customId || '').trim();
     const isCandidateGroup = (o: any) => {
         if (!o || o === zone) return false;
-        if (o.visible === false) return false;
+        // FIX: Do NOT skip invisible objects when they are explicitly bound to
+        // this zone via parentZoneId.  Viewport culling sets visible=false but
+        // may clear __viewportCulled during cleanup, leaving "orphan-hidden"
+        // cards.  These cards must still be found so recalculateZoneLayout can
+        // reposition and re-show them.
+        const isBoundToThisZone = zoneId && String((o as any)?.parentZoneId || '').trim() === zoneId;
+        if (o.visible === false && !isBoundToThisZone) return false;
         if ((o as any).excludeFromExport) return false;
         if ((o as any).isFrame) return false;
         if (isLikelyProductZone(o)) return false;
@@ -36550,6 +36611,17 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         const slotH = Math.max(2, h);
         const boundedX = clamp(x, startX, Math.max(startX, maxSlotX - slotW));
         const boundedY = clamp(y, startY, Math.max(startY, maxSlotY - slotH));
+        // FIX: Restore visibility for cards that were hidden by viewport culling.
+        // Viewport culling can set visible=false and then clear __viewportCulled,
+        // leaving cards permanently hidden.  Since we're actively placing this card
+        // in a layout slot, it must be visible.
+        if (card.visible === false) {
+            card.set('visible', true);
+            card.visible = true;
+            card.dirty = true;
+            delete (card as any).__viewportCulled;
+            delete (card as any).__viewportCullPrevVisible;
+        }
         card.parentZoneId = zone._customId;
         applyCardFrameBinding(card, zoneFrameId);
         card._zoneOrder = order;
