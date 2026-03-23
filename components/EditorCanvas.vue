@@ -10912,6 +10912,17 @@ const CANVAS_CUSTOM_PROPS = [
 	    '__originalRx',
 	    '__originalRy',
 	    '__originalStrokeWidth',
+	    '__originalFontFamily',
+
+	    // Visibility toggle (setVisible salva scale original antes de colapsar para 0)
+	    '__visibleScaleX',
+	    '__visibleScaleY',
+
+	    // Text transform (preserva texto original antes de upper/lower case)
+	    '__rawText',
+
+	    // Price text scaling base (referência para splashTextScale)
+	    '__fontSizeBase',
 
     // Product zone metadata
     'isGridZone',
@@ -18881,7 +18892,7 @@ const setupReactivity = () => {
                             scaleY: (target.scaleY || 1) / (child.scaleY || 1),
                             angle: (target.angle || 0) - childAngle,
                         });
-                        child.clipPath.setCoords();
+                        if (typeof child.clipPath.setCoords === 'function') child.clipPath.setCoords();
                         child.clipPath.dirty = true;
                         child.set('dirty', true);
                     }
@@ -27464,24 +27475,51 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
     ) {
         const preserveTemplateVisual = shouldPreserveManualTemplateVisual(priceGroup);
         const parts = collectObjectsDeep(priceGroup);
-        const priceBg = parts.find((o: any) => o?.name === 'price_bg');
-        const currencyText = parts.find((o: any) => o?.name === 'price_currency_text');
-        const priceTexts = parts.filter((o: any) => ['price_integer_text', 'price_decimal_text', 'price_unit_text', 'price_value_text'].includes(String(o?.name || '')));
+        // FIX: Buscar objetos de preço por nome exato OU variantes atacarejo.
+        // Cards atacarejo usam nomes como atac_retail_bg, retail_currency_text, etc.
+        const priceBg = parts.find((o: any) => {
+            const n = String(o?.name || '');
+            return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
+        });
+        const currencyText = parts.find((o: any) => {
+            const n = String(o?.name || '');
+            return n === 'price_currency_text' || n === 'retail_currency_text' || n === 'wholesale_currency_text';
+        });
+        const priceTexts = parts.filter((o: any) => {
+            const n = String(o?.name || '');
+            return ['price_integer_text', 'price_decimal_text', 'price_unit_text', 'price_value_text',
+                    'retail_integer_text', 'retail_decimal_text', 'retail_unit_text',
+                    'wholesale_integer_text', 'wholesale_decimal_text', 'wholesale_unit_text'].includes(n);
+        });
 
-        if ((p === 'splashColor' || p === 'accentColor') && priceBg) {
+        // FIX: Aplicar cor em TODOS os bgs de preço (atacarejo tem retail + wholesale)
+        const allPriceBgs = parts.filter((o: any) => {
+            const n = String(o?.name || '');
+            return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
+        });
+        if ((p === 'splashColor' || p === 'accentColor') && allPriceBgs.length > 0) {
             const accent = styles.splashColor ?? styles.accentColor;
-            if (accent) priceBg.set('stroke', accent);
+            if (accent) allPriceBgs.forEach((bg: any) => bg.set('stroke', accent));
             changed = true;
         }
-        if (p === 'splashFill' && priceBg) {
-            if (styles.splashFill) priceBg.set('fill', styles.splashFill);
+        if (p === 'splashFill' && allPriceBgs.length > 0) {
+            if (styles.splashFill) allPriceBgs.forEach((bg: any) => bg.set('fill', styles.splashFill));
             changed = true;
         }
-        if (p === 'priceCurrencyColor' && currencyText && isTextLikeObject(currencyText)) {
+        if (p === 'priceCurrencyColor') {
+            // FIX: Aplicar em todos os currency texts (atacarejo tem retail + wholesale)
+            const allCurrencyTexts = parts.filter((o: any) => {
+                const n = String(o?.name || '');
+                return (n === 'price_currency_text' || n === 'retail_currency_text' || n === 'wholesale_currency_text') && isTextLikeObject(o);
+            });
             const nextCurrency = styles.priceCurrencyColor ?? styles.priceTextColor ?? styles.splashTextColor;
-            if (nextCurrency) currencyText.set('fill', nextCurrency);
-            if (typeof currencyText.initDimensions === 'function') currencyText.initDimensions();
-            changed = true;
+            if (nextCurrency && allCurrencyTexts.length > 0) {
+                allCurrencyTexts.forEach((ct: any) => {
+                    ct.set('fill', nextCurrency);
+                    if (typeof ct.initDimensions === 'function') ct.initDimensions();
+                });
+                changed = true;
+            }
         }
         if (p === 'priceTextColor' || p === 'splashTextColor') {
             const nextTextColor = styles.priceTextColor ?? styles.splashTextColor;
@@ -27788,8 +27826,19 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
             return;
         }
 
-        // Explicit global-style updates (coming from sidebar controls) must always relayout.
-        // This guarantees realtime visual feedback even if a style is not part of the layout signature.
+        // FIX CRÍTICO: Se a prop é lightweight (cor, fonte, etc.) e o fast path falhou,
+        // NÃO fazer full resizeSmartObject — isso reposiciona TODOS os elementos internos
+        // e destrói o layout do card. Apenas marcar como dirty para atualizar visualmente.
+        if (allowFastPath && fastProp) {
+            // O fast path já tentou e falhou, mas é uma prop que não precisa de relayout.
+            // Apenas atualizar dirty flags e pular.
+            markDirtyRecursive(card);
+            card.setCoords();
+            summary.cardsTouched += 1;
+            return;
+        }
+
+        // Para props que NÃO são lightweight (ex: template change), forçar relayout completo.
         if (fastProp) {
             (card as any).__forceCardRelayout = true;
         }
@@ -28025,6 +28074,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     }
 
     const isTemplateChange = prop === 'splashTemplateId';
+    let totalFullRelayout = 0;
 
     if (effectiveTargets.length > 0) {
         if (isTemplateChange) {
@@ -28036,7 +28086,6 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
         } else {
             let totalCardsTouched = 0;
             let totalFastApplied = 0;
-            let totalFullRelayout = 0;
             effectiveTargets.forEach((z: any) => {
                 const zStyles = getZoneGlobalStyles(z);
                 const stats = applyGlobalStylesToCards(zStyles, z, { prop });
@@ -28062,16 +28111,16 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
         return;
     }
 
-    // CRITICAL FIX: After applying styles, re-grid cards within their zones.
-    // resizeSmartObject changes group dimensions via group.set({ width, height }),
-    // which can shift the group's bounding box. Without re-gridding, cards may
-    // appear outside the zone or overlap each other.
-    if (!isTemplateChange) {
+    // FIX: Somente re-grid quando resizeSmartObject rodou (fullRelayout > 0).
+    // Para props lightweight (cor, fonte, etc.), o fast path altera apenas propriedades
+    // visuais sem tocar dimensões — re-grid é desnecessário e reposiciona cards,
+    // destruindo posições manuais ou salvas.
+    if (!isTemplateChange && totalFullRelayout > 0) {
         effectiveTargets.forEach((z: any) => {
             try {
                 const zCards = getZoneChildren(z);
                 if (zCards.length > 0) {
-                    recalculateZoneLayout(z, zCards, { save: false, requestRender: false });
+                    recalculateZoneLayout(z, zCards, { save: false, requestRender: false, skipResize: true });
                 }
             } catch (e) {
                 console.warn('[handleUpdateGlobalStyles] Re-grid failed:', e);
@@ -37581,35 +37630,34 @@ const rehydrateCanvasZones = (
 
         let zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
 
-        // FIX: Remove duplicate zones per frame. If multiple zones share the same
-        // parentFrameId, keep only the one with the most children (most products).
+        // FIX: Remove TRULY duplicate zones per frame (same _customId only).
+        // Multiple zones per frame are now supported — the user can have as many
+        // product zones as needed inside the same frame.
+        // Only remove zones that share the EXACT SAME _customId (actual clones/corruption).
         if (zones.length > 1) {
-            const frameZoneMap = new Map<string, any[]>();
-            zones.forEach((z: any) => {
-                const fid = String((z as any).parentFrameId || '').trim() || '__unbound__';
-                if (!frameZoneMap.has(fid)) frameZoneMap.set(fid, []);
-                frameZoneMap.get(fid)!.push(z);
-            });
+            const seenIds = new Map<string, any>();
             const duplicatesToRemove: any[] = [];
-            frameZoneMap.forEach((zoneList, fid) => {
-                if (zoneList.length <= 1) return;
-                // Sort: most children first, then largest area
-                zoneList.sort((a: any, b: any) => {
-                    const aChildren = typeof a.getObjects === 'function' ? a.getObjects().length : 0;
-                    const bChildren = typeof b.getObjects === 'function' ? b.getObjects().length : 0;
-                    if (bChildren !== aChildren) return bChildren - aChildren;
-                    const aArea = (a.width || 0) * (a.height || 0);
-                    const bArea = (b.width || 0) * (b.height || 0);
-                    return bArea - aArea;
-                });
-                // Keep the first (best), remove the rest
-                for (let i = 1; i < zoneList.length; i++) {
-                    duplicatesToRemove.push(zoneList[i]);
+            zones.forEach((z: any) => {
+                const zid = String((z as any)._customId || '').trim();
+                if (!zid) return;
+                if (seenIds.has(zid)) {
+                    // Duplicata real (mesmo ID) — manter a com mais filhos
+                    const existing = seenIds.get(zid)!;
+                    const existingChildren = typeof existing.getObjects === 'function' ? existing.getObjects().length : 0;
+                    const currentChildren = typeof z.getObjects === 'function' ? z.getObjects().length : 0;
+                    if (currentChildren > existingChildren) {
+                        duplicatesToRemove.push(existing);
+                        seenIds.set(zid, z);
+                    } else {
+                        duplicatesToRemove.push(z);
+                    }
+                } else {
+                    seenIds.set(zid, z);
                 }
             });
             if (duplicatesToRemove.length > 0) {
                 duplicatesToRemove.forEach((z: any) => canvas.value.remove(z));
-                console.log(`[rehydrateCanvasZones] Removed ${duplicatesToRemove.length} duplicate zone(s)`);
+                console.log(`[rehydrateCanvasZones] Removed ${duplicatesToRemove.length} true duplicate zone(s) (same _customId)`);
                 objs = canvas.value.getObjects();
                 zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
             }

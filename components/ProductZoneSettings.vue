@@ -96,7 +96,7 @@ const expandedSections = ref({
   cardStyle: false,
   typography: false,
   priceTag: false,
-  diagnostics: true
+  diagnostics: false
 });
 
 const zoneRoleOptions = [
@@ -163,6 +163,17 @@ watch(
   () => {
     syncGaps.value = isSpacingSynced();
   }
+);
+
+// Auto-expandir diagnóstico quando há alertas críticos
+watch(
+  () => props.zone.diagnostics,
+  (diags) => {
+    if (Array.isArray(diags) && diags.some((d) => d.severity === 'critical')) {
+      expandedSections.value.diagnostics = true;
+    }
+  },
+  { immediate: true }
 );
 
 type HighlightPos = 'first' | 'last' | 'random' | 'center' | 'top' | 'bottom';
@@ -459,6 +470,23 @@ const activeTemplateName = computed(() => {
   return props.labelTemplates?.find((tpl) => String(tpl.id) === templateId)?.name || 'Modelo selecionado';
 });
 
+// Detecta se o template ativo é atacarejo (possui estrutura de 2 preços: varejo + atacado).
+// Templates atacarejo têm layout fixo — controles como splashTextScale não se aplicam.
+const isActiveTemplateAtacarejo = computed(() => {
+  const templateId = String(props.globalStyles?.splashTemplateId || '').trim();
+  if (!templateId) return false;
+  const tpl = props.labelTemplates?.find((t) => String(t.id) === templateId);
+  if (!tpl?.group) return false;
+  // Verifica recursivamente se o JSON do grupo contém 'atac_retail_bg'
+  const hasAtacNode = (obj: any): boolean => {
+    if (!obj || typeof obj !== 'object') return false;
+    if (obj.name === 'atac_retail_bg') return true;
+    if (Array.isArray(obj.objects)) return obj.objects.some(hasAtacNode);
+    return false;
+  };
+  return hasAtacNode(tpl.group);
+});
+
 const zoneRoleLabel = computed(() => getZoneRoleLabel(props.zone.role ?? 'grid'));
 const zoneStatusLabel = computed(() => getZoneStatusLabel(props.zone.contentStatus ?? 'empty'));
 const zoneSourceLabel = computed(() => {
@@ -693,19 +721,15 @@ onBeforeUnmount(() => {
         </div>
         <div>
           <h3 class="overview-card__title">{{ zone.name || 'Zona de produtos' }}</h3>
-          <p class="overview-card__description">
-            <span v-if="zone.frameLabel">Vinculada a {{ zone.frameLabel }}. </span>
-            Organize a vitrine com uma grade legível, respiro consistente e etiqueta previsível.
+          <p v-if="zone.frameLabel" class="overview-card__description">
+            Vinculada a {{ zone.frameLabel }}
           </p>
         </div>
         <div class="overview-card__chips">
-          <span class="metric-chip">{{ zoneRoleLabel }}</span>
-          <span class="metric-chip">{{ zoneStatusLabel }}</span>
-          <span class="metric-chip">{{ zone.productCount ?? 0 }} itens</span>
           <span class="metric-chip metric-chip--accent">{{ currentPresetName }}</span>
+          <span class="metric-chip">{{ zone.productCount ?? 0 }} itens</span>
           <span class="metric-chip">{{ zoneColumnsLabel }}</span>
           <span class="metric-chip">{{ zoneRowsLabel }}</span>
-          <span class="metric-chip">{{ highlightSummaryLabel }}</span>
         </div>
       </div>
 
@@ -746,7 +770,7 @@ onBeforeUnmount(() => {
                 <span class="section-title">Conteúdo</span>
                 <span class="section-summary">{{ zoneStatusLabel }}</span>
               </div>
-              <p class="section-description">Nome, papel da zona, origem e acesso rápido para revisar os produtos.</p>
+              <p class="section-description">Nome, papel e origem dos produtos.</p>
             </div>
           </div>
           <component :is="expandedSections.content ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -756,7 +780,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="field-stack__head">
               <label for="product-zone-name" class="field-label">Nome da zona</label>
-              <p class="field-hint">Aparece nas layers e ajuda a localizar a área certa para importar ou revisar.</p>
+              <p class="field-hint">Identificação nas layers do editor.</p>
             </div>
             <input
               id="product-zone-name"
@@ -770,7 +794,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="field-stack__head">
               <label class="field-label">Função da zona</label>
-              <p class="field-hint">Ajuda a distinguir grade principal, destaque hero e áreas de apoio.</p>
+              <p class="field-hint">Define o comportamento visual da zona.</p>
             </div>
             <div class="segmented-grid segmented-grid--2">
               <button
@@ -809,7 +833,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="field-stack__head">
               <label class="field-label">Política de overflow</label>
-              <p class="field-hint">Define o comportamento desejado quando a vitrine ficar apertada demais.</p>
+              <p class="field-hint">O que fazer quando os produtos não cabem.</p>
             </div>
             <div class="segmented-grid segmented-grid--2">
               <button
@@ -830,7 +854,7 @@ onBeforeUnmount(() => {
             <div class="template-card__head">
               <div>
                 <label class="field-label">Revisão e destino</label>
-                <p class="field-hint">Abra o fluxo de importação já apontando para esta zona e preservando o template ativo.</p>
+                <p class="field-hint">Importe ou revise os produtos desta zona.</p>
               </div>
               <span class="template-card__status">{{ activeTemplateName }}</span>
             </div>
@@ -854,7 +878,7 @@ onBeforeUnmount(() => {
                 <span class="section-title">Bases de layout</span>
                 <span class="section-summary">{{ currentPresetName }}</span>
               </div>
-              <p class="section-description">Escolha uma estrutura pronta ou mantenha um ajuste manual.</p>
+              <p class="section-description">Estruturas prontas para a grade.</p>
             </div>
           </div>
           <component :is="expandedSections.presets ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -940,7 +964,7 @@ onBeforeUnmount(() => {
                 <span class="section-title">Estrutura da grade</span>
                 <span class="section-summary">{{ zoneColumnsLabel }}</span>
               </div>
-              <p class="section-description">Defina a malha da zona e como os cards fecham cada espaço.</p>
+              <p class="section-description">Colunas, linhas e formato dos cards.</p>
             </div>
           </div>
           <component :is="expandedSections.layout ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -954,9 +978,7 @@ onBeforeUnmount(() => {
                   <label for="product-zone-columns" class="field-label">Colunas</label>
                   <span class="value-badge">{{ zone.columns === 0 ? 'Autoajuste' : 'Quantidade fixa' }}</span>
                 </div>
-                <p id="product-zone-columns-hint" class="field-hint">
-                  Define quantos cards entram em cada linha. Use `0` para a zona se ajustar sozinha.
-                </p>
+                <p id="product-zone-columns-hint" class="field-hint">0 = autoajuste</p>
               </div>
               <div class="value-editor value-editor--full">
                 <input
@@ -998,10 +1020,7 @@ onBeforeUnmount(() => {
                   <label for="product-zone-rows" class="field-label">Linhas</label>
                   <span class="value-badge">{{ zone.rows === 0 ? 'Altura livre' : 'Moldura fixa' }}</span>
                 </div>
-                <p id="product-zone-rows-hint" class="field-hint">
-                  Limita a altura da grade quando você quer fechar a vitrine num número fixo de faixas. Use `0`
-                  para crescer conforme a oferta.
-                </p>
+                <p id="product-zone-rows-hint" class="field-hint">0 = altura livre</p>
               </div>
               <div class="value-editor value-editor--full">
                 <input
@@ -1039,7 +1058,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="field-stack__head">
               <label class="field-label">Ordem de preenchimento</label>
-              <p class="field-hint">Define se a grade avança linha a linha ou coluna a coluna.</p>
+              <p class="field-hint">Direção do preenchimento da grade.</p>
             </div>
             <div class="segmented-grid segmented-grid--2">
               <button
@@ -1059,7 +1078,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="field-stack__head">
               <label class="field-label">Fechamento da última linha</label>
-              <p class="field-hint">Escolhe como acomodar os cards que sobrarem no fim da grade.</p>
+              <p class="field-hint">Como preencher os cards restantes.</p>
             </div>
             <div class="segmented-grid segmented-grid--2">
               <button
@@ -1079,7 +1098,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="field-stack__head">
               <label class="field-label">Ocupação vertical</label>
-              <p class="field-hint">Controla como cada card usa a altura disponível do slot.</p>
+              <p class="field-hint">Como os cards ocupam a altura do slot.</p>
             </div>
             <div class="segmented-grid segmented-grid--2">
               <button
@@ -1098,7 +1117,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="field-stack__head">
               <label class="field-label">Formato dos cards</label>
-              <p class="field-hint">Ajuda a deixar a vitrine mais compacta, técnica ou editorial.</p>
+              <p class="field-hint">Proporção dos cards na grade.</p>
             </div>
             <select
               :value="zone.cardAspectRatio ?? 'fill'"
@@ -1124,7 +1143,7 @@ onBeforeUnmount(() => {
                 <span class="section-title">Ritmo e espaçamento</span>
                 <span class="section-summary">{{ spacingSummaryLabel }}</span>
               </div>
-              <p class="section-description">Mantenha o respiro da zona estável e previsível.</p>
+              <p class="section-description">Padding e gaps entre os cards.</p>
             </div>
           </div>
           <component :is="expandedSections.spacing ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -1134,7 +1153,7 @@ onBeforeUnmount(() => {
           <label class="switch-card">
             <div>
               <span class="field-label">Vincular gaps ao padding</span>
-              <p class="field-hint">Quando ativo, a grade inteira respira no mesmo ritmo.</p>
+              <p class="field-hint">Gaps acompanham o padding automaticamente.</p>
             </div>
             <span class="switch" :class="{ 'switch--checked': syncGaps }">
               <input
@@ -1152,7 +1171,7 @@ onBeforeUnmount(() => {
             <div class="control-card__head">
               <div>
                 <label class="field-label">Padding externo</label>
-                <p class="field-hint">Respiro entre a borda da zona e o primeiro bloco de produto.</p>
+                <p class="field-hint">Respiro externo da zona.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -1256,7 +1275,7 @@ onBeforeUnmount(() => {
                 <span class="section-title">Produto hero</span>
                 <span class="section-summary">{{ highlightSummaryLabel }}</span>
               </div>
-              <p class="section-description">Defina quantos cards quebram a grade para chamar atenção.</p>
+              <p class="section-description">Cards em destaque na grade.</p>
             </div>
           </div>
           <component :is="expandedSections.highlight ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -1266,7 +1285,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="field-stack__head">
               <label class="field-label">Quantidade de destaques</label>
-              <p class="field-hint">`0` mantém todos os produtos na mesma hierarquia.</p>
+              <p class="field-hint">0 = sem destaque.</p>
             </div>
             <div class="segmented-grid segmented-grid--5">
               <button
@@ -1286,7 +1305,7 @@ onBeforeUnmount(() => {
             <div class="field-stack">
               <div class="field-stack__head">
                 <label class="field-label">Posição preferida</label>
-                <p class="field-hint">Escolha onde a área hero deve aparecer na leitura visual.</p>
+                <p class="field-hint">Onde o destaque aparece na grade.</p>
               </div>
               <div class="segmented-grid segmented-grid--2">
                 <button
@@ -1306,7 +1325,7 @@ onBeforeUnmount(() => {
               <div class="control-card__head">
                 <div>
                   <label class="field-label">Altura do hero</label>
-                  <p class="field-hint">Aumenta a presença vertical do card destacado.</p>
+                  <p class="field-hint">Multiplicador de altura do hero.</p>
                 </div>
                 <div class="value-editor">
                   <input
@@ -1347,7 +1366,7 @@ onBeforeUnmount(() => {
                 <span class="section-title">Card e moldura</span>
                 <span class="section-summary">Base visual da oferta</span>
               </div>
-              <p class="section-description">Cores, transparência, raio e borda do módulo de produto.</p>
+              <p class="section-description">Cor, raio e borda dos cards.</p>
             </div>
           </div>
           <component :is="expandedSections.cardStyle ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -1358,7 +1377,7 @@ onBeforeUnmount(() => {
             <div class="color-field">
               <div class="color-field__copy">
                 <label class="field-label">Fundo do card</label>
-                <p class="field-hint">Plano principal do bloco de produto.</p>
+                <p class="field-hint">Cor de fundo dos cards.</p>
               </div>
               <div class="color-field__controls">
                 <ColorPicker
@@ -1387,7 +1406,7 @@ onBeforeUnmount(() => {
             <div class="color-field">
               <div class="color-field__copy">
                 <label class="field-label">Cor de destaque</label>
-                <p class="field-hint">Usada nas ênfases do card e da etiqueta.</p>
+                <p class="field-hint">Ênfase visual do card e etiqueta.</p>
               </div>
               <div class="color-field__controls">
                 <ColorPicker
@@ -1416,7 +1435,7 @@ onBeforeUnmount(() => {
             <label class="switch-card">
               <div>
                 <span class="field-label">Produto sem fundo</span>
-                <p class="field-hint">Útil para embalagens e garrafas que precisam parecer recortadas.</p>
+                <p class="field-hint">Remove o fundo atrás da imagem do produto.</p>
               </div>
               <span class="switch" :class="{ 'switch--checked': globalStyles?.isProdBgTransparent ?? false }">
                 <input
@@ -1434,7 +1453,7 @@ onBeforeUnmount(() => {
               <div class="control-card__head">
                 <div>
                   <label class="field-label">Raio dos cantos</label>
-                  <p class="field-hint">Deixa o card mais técnico ou mais amigável.</p>
+                  <p class="field-hint">Arredondamento dos cantos.</p>
                 </div>
                 <div class="value-editor">
                   <input
@@ -1465,7 +1484,7 @@ onBeforeUnmount(() => {
               <div class="control-card__head">
                 <div>
                   <label class="field-label">Espessura da borda</label>
-                  <p class="field-hint">Cria separação entre os produtos e o fundo da página.</p>
+                  <p class="field-hint">Contorno ao redor do card.</p>
                 </div>
                 <div class="value-editor">
                   <input
@@ -1495,7 +1514,7 @@ onBeforeUnmount(() => {
             <div class="color-field">
               <div class="color-field__copy">
                 <label class="field-label">Cor da borda</label>
-                <p class="field-hint">Aparece quando a espessura da borda for maior que `0`.</p>
+                <p class="field-hint">Visível quando a borda é > 0.</p>
               </div>
               <div class="color-field__controls">
                 <ColorPicker
@@ -1535,7 +1554,7 @@ onBeforeUnmount(() => {
                 <span class="section-title">Nome do produto</span>
                 <span class="section-summary">Tipografia e alinhamento</span>
               </div>
-              <p class="section-description">Organize a leitura do texto sem esmagar o card.</p>
+              <p class="section-description">Fonte, cor e escala do nome.</p>
             </div>
           </div>
           <component :is="expandedSections.typography ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -1545,7 +1564,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="field-stack__head">
               <label class="field-label">Família tipográfica</label>
-              <p class="field-hint">Mantém consistência com o restante da oferta.</p>
+              <p class="field-hint">Fonte usada no nome do produto.</p>
             </div>
             <select :value="globalStyles?.prodNameFont ?? 'Inter'" class="field-select" @change="handleProdNameFontChange">
               <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
@@ -1555,7 +1574,6 @@ onBeforeUnmount(() => {
           <div class="color-field">
             <div class="color-field__copy">
               <label class="field-label">Cor do nome</label>
-              <p class="field-hint">Use alto contraste para leitura rápida em tabloide.</p>
             </div>
             <div class="color-field__controls">
               <ColorPicker
@@ -1600,7 +1618,7 @@ onBeforeUnmount(() => {
             <div class="control-card__head">
               <div>
                 <label class="field-label">Escala do texto</label>
-                <p class="field-hint">Ajusta o impacto do nome sem mudar a hierarquia da etiqueta.</p>
+                <p class="field-hint">Tamanho relativo do nome.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -1631,7 +1649,7 @@ onBeforeUnmount(() => {
             <div class="control-card__head">
               <div>
                 <label class="field-label">Altura de linha</label>
-                <p class="field-hint">Ajuda nomes longos sem virar bloco pesado.</p>
+                <p class="field-hint">Espaçamento entre linhas.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -1662,7 +1680,7 @@ onBeforeUnmount(() => {
             <div class="control-card__head">
               <div>
                 <label class="field-label">Deslocamento Y</label>
-                <p class="field-hint">Move o nome do produto para cima ou para baixo dentro do card.</p>
+                <p class="field-hint">Posição vertical do nome no card.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -1749,7 +1767,7 @@ onBeforeUnmount(() => {
                 <span class="section-title">Etiqueta de preço</span>
                 <span class="section-summary">{{ styleSummaryLabel }}</span>
               </div>
-              <p class="section-description">Biblioteca, fallback visual e ajustes de posição.</p>
+              <p class="section-description">Template, cores e escala do preço.</p>
             </div>
           </div>
           <component :is="expandedSections.priceTag ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -1760,7 +1778,7 @@ onBeforeUnmount(() => {
             <div class="template-card__head">
               <div>
                 <label class="field-label">Modelo da zona</label>
-                <p class="field-hint">Aplique uma etiqueta comum para todos os cards da zona.</p>
+                <p class="field-hint">Etiqueta compartilhada por todos os cards.</p>
               </div>
               <button type="button" class="ghost-button" @click="emit('manage-label-templates')">
                 Gerenciar
@@ -1788,7 +1806,7 @@ onBeforeUnmount(() => {
             <div class="field-stack">
               <div class="field-stack__head">
                 <label class="field-label">Fallback da etiqueta</label>
-                <p class="field-hint">Usado quando a zona não está com um template customizado.</p>
+                <p class="field-hint">Estilo padrão quando não há template.</p>
               </div>
               <select
                 :value="globalStyles?.splashStyle ?? 'classic'"
@@ -1804,7 +1822,7 @@ onBeforeUnmount(() => {
             <div class="color-field">
               <div class="color-field__copy">
                 <label class="field-label">Fundo da etiqueta</label>
-                <p class="field-hint">Plano principal do splash.</p>
+                <p class="field-hint">Fundo da etiqueta de preço.</p>
               </div>
               <div class="color-field__controls">
                 <ColorPicker
@@ -1833,7 +1851,7 @@ onBeforeUnmount(() => {
             <div class="color-field">
               <div class="color-field__copy">
                 <label class="field-label">Texto da etiqueta</label>
-                <p class="field-hint">Cor principal do preço no fallback vetorial.</p>
+                <p class="field-hint">Cor dos textos na etiqueta.</p>
               </div>
               <div class="color-field__controls">
                 <ColorPicker
@@ -1859,6 +1877,10 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </template>
+
+          <div class="section-divider">
+            <span class="section-divider__label">Tipografia</span>
+          </div>
 
           <div class="field-stack">
             <div class="field-stack__head">
@@ -1889,11 +1911,7 @@ onBeforeUnmount(() => {
             <div class="field-stack__head">
               <label class="field-label">Estilo da fonte</label>
               <p class="field-hint">
-                {{
-                  priceFontSupportsItalic
-                    ? 'Aplica itálico em todos os textos da etiqueta.'
-                    : 'A família atual não tem variante itálica no catálogo carregado.'
-                }}
+                {{ priceFontSupportsItalic ? 'Itálico disponível.' : 'Itálico indisponível nesta fonte.' }}
               </p>
             </div>
             <div class="segmented-grid segmented-grid--2">
@@ -1919,11 +1937,11 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="control-card">
+          <div v-if="!isActiveTemplateAtacarejo" class="control-card">
             <div class="control-card__head">
               <div>
                 <label class="field-label">Escala dos textos</label>
-                <p class="field-hint">Amplia `R$`, valor e complemento mantendo a proporção da etiqueta.</p>
+                <p class="field-hint">Escala de R$, valor e centavos.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -1950,10 +1968,13 @@ onBeforeUnmount(() => {
             />
           </div>
 
+          <div class="section-divider">
+            <span class="section-divider__label">Cores do preço</span>
+          </div>
+
           <div class="color-field">
             <div class="color-field__copy">
               <label class="field-label">Cor do valor</label>
-              <p class="field-hint">Sobrescreve a cor principal do preço quando necessário.</p>
             </div>
             <div class="color-field__controls">
               <ColorPicker
@@ -1981,8 +2002,7 @@ onBeforeUnmount(() => {
 
           <div class="color-field">
             <div class="color-field__copy">
-              <label class="field-label">Cor do símbolo</label>
-              <p class="field-hint">Permite separar o `R$` do valor principal.</p>
+              <label class="field-label">Cor do R$</label>
             </div>
             <div class="color-field__controls">
               <ColorPicker
@@ -2008,11 +2028,15 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <div class="section-divider">
+            <span class="section-divider__label">Posição e escala</span>
+          </div>
+
           <div class="control-card">
             <div class="control-card__head">
               <div>
                 <label class="field-label">Escala da etiqueta</label>
-                <p class="field-hint">Reduz ou amplia a etiqueta, mesmo quando ela ultrapassa o card.</p>
+                <p class="field-hint">Tamanho geral da etiqueta.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -2043,7 +2067,7 @@ onBeforeUnmount(() => {
             <div class="control-card__head">
               <div>
                 <label class="field-label">Deslocamento Y</label>
-                <p class="field-hint">Move a etiqueta para cima ou para baixo dentro do card.</p>
+                <p class="field-hint">Posição vertical da etiqueta.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -2083,7 +2107,7 @@ onBeforeUnmount(() => {
                 <span class="section-title">Diagnóstico</span>
                 <span class="section-summary">{{ diagnosticsSummaryLabel }}</span>
               </div>
-              <p class="section-description">Mostra riscos comerciais e visuais antes de fechar a página.</p>
+              <p class="section-description">Alertas e riscos da zona.</p>
             </div>
           </div>
           <component :is="expandedSections.diagnostics ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -2225,7 +2249,7 @@ onBeforeUnmount(() => {
 .overview-card__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .metric-chip,
@@ -2234,11 +2258,11 @@ onBeforeUnmount(() => {
 .section-summary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 6px 10px;
-  font-size: 11px;
+  padding: 4px 8px;
+  font-size: 10px;
   line-height: 1;
   color: #e4e4e7;
   background: rgba(255, 255, 255, 0.04);
@@ -2440,10 +2464,10 @@ onBeforeUnmount(() => {
 }
 
 .section-description {
-  margin-top: 4px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: #a1a1aa;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #71717a;
 }
 
 .section-chevron {
@@ -2457,6 +2481,29 @@ onBeforeUnmount(() => {
   gap: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding: 14px;
+}
+
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.section-divider__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #71717a;
+  white-space: nowrap;
 }
 
 .section-block {
@@ -2610,9 +2657,10 @@ onBeforeUnmount(() => {
 }
 
 .hex-input {
-  max-width: 110px;
+  max-width: 88px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   text-transform: uppercase;
+  padding: 8px 10px;
 }
 
 .control-card,
@@ -2818,7 +2866,8 @@ onBeforeUnmount(() => {
 
 .color-field {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
 }
 
@@ -2889,22 +2938,26 @@ onBeforeUnmount(() => {
 .color-field__copy {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .color-field__controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex: none;
 }
 
 .color-trigger {
-  height: 38px;
-  width: 38px;
+  height: 34px;
+  width: 34px;
   flex: none;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
 }
 
 .switch {
@@ -3092,6 +3145,7 @@ input:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .color-field,
   .color-field__controls,
   .template-card__footer,
   .template-card__head,
