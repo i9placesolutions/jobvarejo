@@ -5670,8 +5670,88 @@ function sanitizeFabricJsonTreeForLoad(
     return { removed, fixedGroupTypes };
 }
 
+/**
+ * FIX: Repair orphan-hidden text elements inside product card price groups.
+ * Viewport culling + auto-save corruption could persist `visible: false` on text
+ * elements that should be visible (integer, decimal, unit, pack-line).
+ * This runs on the raw JSON BEFORE Fabric loads it, so it restores the visual
+ * state without needing canvas access.
+ *
+ * Rule: inside a price sub-group, if a background Rect is visible,
+ * all text elements positioned within that rect's vertical bounds must also be visible.
+ */
+function repairHiddenPriceGroupTexts(json: any): number {
+    if (!json || !Array.isArray(json.objects)) return 0;
+    let repaired = 0;
+
+    const isProductCardGroup = (obj: any): boolean => {
+        if (obj?.type !== 'Group' && obj?.type !== 'group') return false;
+        const children = Array.isArray(obj.objects) ? obj.objects : [];
+        // A product card has a Textbox (name) + nested Group (price group)
+        const hasTextbox = children.some((c: any) => c?.type === 'Textbox');
+        const hasNestedGroup = children.some((c: any) => c?.type === 'Group' || c?.type === 'group');
+        return hasTextbox && hasNestedGroup;
+    };
+
+    const repairPriceGroup = (pg: any) => {
+        const children = Array.isArray(pg.objects) ? pg.objects : [];
+        // Collect background rects (red, white, yellow)
+        const rects = children.filter((c: any) => c?.type === 'Rect');
+        // Collect all text elements (including deeply nested)
+        const texts: any[] = [];
+        const collectTexts = (objs: any[]) => {
+            for (const o of objs) {
+                if (!o || typeof o !== 'object') continue;
+                if (o.type === 'IText' || o.type === 'Textbox' || o.type === 'Text') {
+                    texts.push(o);
+                }
+                if (Array.isArray(o.objects)) collectTexts(o.objects);
+            }
+        };
+        collectTexts(children);
+
+        for (const rect of rects) {
+            // Only process visible rects
+            if (rect.visible === false) continue;
+            const rTop = rect.top ?? 0;
+            const rBottom = rTop + (rect.height ?? 0);
+
+            for (const txt of texts) {
+                if (txt.visible !== false) continue; // Already visible
+                const tTop = txt.top ?? 0;
+                // Text is considered "inside" the rect if its top is within the rect's vertical span.
+                // Tolerance of 25px above the rect because decimal digits (e.g. ",99") are
+                // visually positioned above the integer baseline inside the same price section.
+                if (tTop >= rTop - 25 && tTop < rBottom) {
+                    txt.visible = true;
+                    repaired++;
+                }
+            }
+        }
+    };
+
+    // Walk all top-level objects looking for product card groups
+    for (const obj of json.objects) {
+        if (!isProductCardGroup(obj)) continue;
+        const children = Array.isArray(obj.objects) ? obj.objects : [];
+        for (const child of children) {
+            if ((child?.type === 'Group' || child?.type === 'group') && Array.isArray(child.objects)) {
+                repairPriceGroup(child);
+            }
+        }
+    }
+
+    if (repaired > 0) {
+        console.warn(`[loadFromJSON] 🔧 Repaired ${repaired} orphan-hidden text element(s) in price groups`);
+    }
+    return repaired;
+}
+
 function sanitizeCanvasJsonBeforeLoad(json: any): { removed: number; fixedGroupTypes: number } {
     if (!json || typeof json !== 'object') return { removed: 0, fixedGroupTypes: 0 };
+
+    // FIX: Repair hidden price texts before any other processing
+    repairHiddenPriceGroupTexts(json);
 
     let removed = 0;
     let fixedGroupTypes = 0;
@@ -8762,11 +8842,15 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 applyZoneStyles: false
             });
 
-            // Clear suppression after a tick to allow Vue's reactive system to settle.
-            // Use requestAnimationFrame + nextTick to ensure all watchers have fired.
+            // Clear suppression after multiple ticks to allow Vue's reactive system to settle.
+            // A single rAF + nextTick is not always enough: deep watchers triggered by
+            // productZoneState.updateGlobalStyles/updateZone may fire across multiple ticks.
+            // Use double rAF + nextTick to ensure all cascading watchers have fired.
             requestAnimationFrame(() => {
-                nextTick(() => {
-                    _suppressGlobalStyleUpdates = false;
+                requestAnimationFrame(() => {
+                    nextTick(() => {
+                        _suppressGlobalStyleUpdates = false;
+                    });
                 });
             });
 
@@ -10290,8 +10374,8 @@ onMounted(async () => {
                           // Same safeguard for the legacy loader path: trust persisted canvas visuals on reload.
                           applyZoneStyles: false
                       });
-                      requestAnimationFrame(() => { nextTick(() => { _suppressGlobalStyleUpdates = false; }); });
-                      
+                      requestAnimationFrame(() => { requestAnimationFrame(() => { nextTick(() => { _suppressGlobalStyleUpdates = false; }); }); });
+
                       // CRITICAL FIX: Restore lost object names in product cards after JSON load
                       // When canvas is loaded from JSON, nested object names inside groups are lost
                       const restoreProductCardNames = () => {
@@ -19502,21 +19586,35 @@ const updateObjectProperty = (prop: string, value: any) => {
                                     ? obj.getObjects().find((o: any) => o?.type === 'rect')
                                     : null;
                                 if (zoneRect) {
+                                    const newRectW = (zoneRect.width || 0) * scaleX;
+                                    const newRectH = (zoneRect.height || 0) * scaleY;
                                     zoneRect.set({
-                                        width: (zoneRect.width || 0) * scaleX,
-                                        height: (zoneRect.height || 0) * scaleY,
+                                        width: newRectW,
+                                        height: newRectH,
                                         scaleX: 1,
                                         scaleY: 1
                                     });
+                                    // FIX: Sync group dimensions to match rect
+                                    obj.set({
+                                        left: newCenterX,
+                                        top: newCenterY,
+                                        width: newRectW,
+                                        height: newRectH,
+                                        scaleX: 1,
+                                        scaleY: 1,
+                                        originX: 'center',
+                                        originY: 'center'
+                                    });
+                                } else {
+                                    obj.set({
+                                        left: newCenterX,
+                                        top: newCenterY,
+                                        scaleX: 1,
+                                        scaleY: 1,
+                                        originX: 'center',
+                                        originY: 'center'
+                                    });
                                 }
-                                obj.set({
-                                    left: newCenterX,
-                                    top: newCenterY,
-                                    scaleX: 1,
-                                    scaleY: 1,
-                                    originX: 'center',
-                                    originY: 'center'
-                                });
                                 obj._zoneWidth = undefined;
                                 obj._zoneHeight = undefined;
                                 safeAddWithUpdate(obj);
@@ -23060,8 +23158,13 @@ const loadCanvasData = async (data: any) => {
     // before rehydrateCanvasZones could restore their isFrame flag.
     // This was causing frames to be removed and re-added at the end, changing layer order.
     
-    rehydrateCanvasZones();
-    
+    // CRITICAL: Suppress global style updates during rehydrate (same as main load paths).
+    _suppressGlobalStyleUpdates = true;
+    rehydrateCanvasZones({
+        applyZoneStyles: false
+    });
+    requestAnimationFrame(() => { nextTick(() => { _suppressGlobalStyleUpdates = false; }); });
+
     // CRITICAL: Remove any artboard-bg that might have been incorrectly created from a Frame
     const artboard = canvas.value.getObjects().find((o: any) => o.id === 'artboard-bg');
     if (artboard && (artboard.isFrame || artboard.clipContent || artboard.selectable)) {
@@ -25664,7 +25767,34 @@ const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
 
 const addGridZone = () => {
     if (!canvas.value) return;
-    
+
+    // FIX: Prevent duplicate zones. If the active frame already has a zone,
+    // select it instead of creating another one.
+    const activeFrame = canvas.value.getActiveObject() as any;
+    const activeFrameId = activeFrame?.isFrame ? String(activeFrame._customId || '').trim() : '';
+    const existingZones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+
+    if (activeFrameId) {
+        const zoneForFrame = existingZones.find((z: any) =>
+            String((z as any).parentFrameId || '').trim() === activeFrameId
+        );
+        if (zoneForFrame) {
+            canvas.value.setActiveObject(zoneForFrame);
+            canvas.value.requestRenderAll();
+            notifyEditorInfo('Este frame já possui uma zona de produtos.');
+            return;
+        }
+    } else if (existingZones.length > 0) {
+        // No active frame — check if any unbound zone exists already
+        const unboundZone = existingZones.find((z: any) => !String((z as any).parentFrameId || '').trim());
+        if (unboundZone) {
+            canvas.value.setActiveObject(unboundZone);
+            canvas.value.requestRenderAll();
+            notifyEditorInfo('Já existe uma zona de produtos no canvas.');
+            return;
+        }
+    }
+
     const center = getCenterOfView();
     // Create a nicer placeholder zone
     // Background with Glass/Dark aesthetic
@@ -26860,12 +26990,17 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
 
     let shouldRelayout = false;
 
-    // FIX: Suppress Fabric v7 LayoutManager during property updates.
-    // zone.set() for layout-related props can trigger performLayout() which
-    // recalculates group bounds from children at old positions, corrupting the layout.
+    // FIX: Permanently disable Fabric v7 LayoutManager on zone groups.
+    // Zone layout is fully managed by recalculateZoneLayout — Fabric's auto-layout
+    // only causes corruption by recalculating bounds from children at stale positions.
+    // Previously this was temporarily disabled and restored, but the restore allowed
+    // Fabric to re-trigger layout between operations (especially during preset changes
+    // where multiple properties are set), shifting the group center and corrupting
+    // all subsequent card position calculations.
     const zoneLm = (zone as any).layoutManager;
-    const zoneOrigPerformLayout = zoneLm?.performLayout;
-    if (zoneLm) zoneLm.performLayout = () => {};
+    if (zoneLm && typeof zoneLm.performLayout === 'function' && zoneLm.performLayout.toString() !== '() => {}') {
+        zoneLm.performLayout = () => {};
+    }
 
     try {
     Object.entries(updates).forEach(([prop, val]) => {
@@ -26921,8 +27056,10 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
         if (relayoutProps.has(prop)) shouldRelayout = true;
     });
     } finally {
-        // Restore LayoutManager after all props are set
-        if (zoneLm && zoneOrigPerformLayout) zoneLm.performLayout = zoneOrigPerformLayout;
+        // FIX: LayoutManager stays permanently disabled — no restore needed.
+        // Restoring it allowed Fabric to re-trigger layout between the property set
+        // and the explicit recalculateZoneLayout, shifting the group origin and
+        // corrupting card positions (especially during preset changes).
     }
 
     // FIX Fabric v7: Avoid triggerLayout() for non-structural changes.
@@ -27679,54 +27816,97 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
 };
 
 const handleApplyZonePreset = async (presetId: string) => {
-    productZoneState.applyPreset(presetId);
     if (!canvas.value) return;
-    const active = getCurrentZoneObject();
-    if (!active) return;
 
-    // CRITICAL FIX: Clear cached signatures and manual transform flags on ALL cards
-    // before applying the new preset. Without this:
-    // 1. __lastCardRelayoutSignature may match (if only grid changed but styles didn't),
-    //    causing resizeSmartObject to skip child repositioning entirely
-    // 2. __manualTransform / __preserveManualLayout on children prevents resizeSmartObject
-    //    from moving price/splash elements to new positions for the new slot dimensions
-    // 3. __priceLayoutSnapshot captures positions from the OLD card size, corrupting layout
-    try {
-        const presetCards = getZoneChildren(active);
-        presetCards.forEach((card: any) => {
-            card.__forceCardRelayout = true;
-            card.__lastCardRelayoutSignature = null;
-            if (typeof card.getObjects === 'function') {
-                card.getObjects().forEach((child: any) => {
-                    if (child) {
-                        child.__manualTransform = false;
-                        child.__preserveManualLayout = false;
-                        child.__priceLayoutSnapshot = null;
-                        child.__priceLayoutSnapshotAt = null;
-                    }
-                });
-            }
-        });
-    } catch (e) {
-        console.warn('[handleApplyZonePreset] Failed to clear card flags:', e);
+    // FIX: Get zone BEFORE updating composable state. The reactive state change from
+    // applyPreset() can trigger Vue watchers/re-renders that deselect the zone or change
+    // the active object, making getCurrentZoneObject() fail afterwards.
+    const active = getCurrentZoneObject();
+    if (!active) {
+        // Still update composable state even without canvas zone (UI consistency)
+        productZoneState.applyPreset(presetId);
+        return;
     }
 
-    const z = productZoneState.productZone.value;
-    await applyZoneUpdates(active, {
-        role: z.role ?? 'grid',
-        padding: z.padding ?? 15,
-        gapHorizontal: z.gapHorizontal ?? z.padding ?? 15,
-        gapVertical: z.gapVertical ?? z.padding ?? 15,
-        columns: z.columns ?? 0,
-        rows: z.rows ?? 0,
-        layoutDirection: z.layoutDirection ?? 'horizontal',
-        cardAspectRatio: z.cardAspectRatio ?? 'fill',
-        lastRowBehavior: z.lastRowBehavior ?? 'fill',
-        verticalAlign: z.verticalAlign ?? 'stretch',
-        highlightCount: z.highlightCount ?? 0,
-        highlightPos: z.highlightPos ?? 'first',
-        highlightHeight: z.highlightHeight ?? 1.5
-    }, { saveReason: 'preset-change' });
+    // FIX: Permanently disable Fabric v7 LayoutManager on the zone group.
+    // Any prior call to triggerLayout() (e.g. from ensureZoneSanity, or Fabric internal set())
+    // can recalculate the group's bounding box from ALL children, shifting the group center.
+    // Since zone layout is fully managed by recalculateZoneLayout, auto-layout only corrupts positions.
+    const zoneLm = (active as any).layoutManager;
+    if (zoneLm && typeof zoneLm.performLayout === 'function' && zoneLm.performLayout.toString() !== '() => {}') {
+        zoneLm.performLayout = () => {};
+    }
+
+    // FIX: Suppress global style updates during preset application.
+    // When applyPreset() updates the composable state, Vue reactivity can cause
+    // ProductZoneSettings to re-emit update-global-styles events, which triggers
+    // applyGlobalStylesToCards with __forceCardRelayout — corrupting the layout before
+    // our intended relayout even runs.
+    _suppressGlobalStyleUpdates = true;
+
+    try {
+        // Now update composable state
+        productZoneState.applyPreset(presetId);
+
+        // CRITICAL FIX: Clear cached signatures and manual transform flags on ALL cards
+        // before applying the new preset. Without this:
+        // 1. __lastCardRelayoutSignature may match (if only grid changed but styles didn't),
+        //    causing resizeSmartObject to skip child repositioning entirely
+        // 2. __manualTransform / __preserveManualLayout on children prevents resizeSmartObject
+        //    from moving price/splash elements to new positions for the new slot dimensions
+        // 3. __priceLayoutSnapshot captures positions from the OLD card size, corrupting layout
+        try {
+            const presetCards = getZoneChildren(active);
+            presetCards.forEach((card: any) => {
+                card.__forceCardRelayout = true;
+                card.__lastCardRelayoutSignature = null;
+                // FIX: Also reset the card's LayoutManager to prevent Fabric v7
+                // from auto-recalculating group bounds during resizeSmartObject
+                const cardLm = (card as any).layoutManager;
+                if (cardLm && typeof cardLm.performLayout === 'function') {
+                    cardLm.performLayout = () => {};
+                }
+                if (typeof card.getObjects === 'function') {
+                    card.getObjects().forEach((child: any) => {
+                        if (child) {
+                            child.__manualTransform = false;
+                            child.__preserveManualLayout = false;
+                            child.__priceLayoutSnapshot = null;
+                            child.__priceLayoutSnapshotAt = null;
+                        }
+                    });
+                }
+            });
+        } catch (e) {
+            console.warn('[handleApplyZonePreset] Failed to clear card flags:', e);
+        }
+
+        const z = productZoneState.productZone.value;
+        await applyZoneUpdates(active, {
+            role: z.role ?? 'grid',
+            padding: z.padding ?? 15,
+            gapHorizontal: z.gapHorizontal ?? z.padding ?? 15,
+            gapVertical: z.gapVertical ?? z.padding ?? 15,
+            columns: z.columns ?? 0,
+            rows: z.rows ?? 0,
+            layoutDirection: z.layoutDirection ?? 'horizontal',
+            cardAspectRatio: z.cardAspectRatio ?? 'fill',
+            lastRowBehavior: z.lastRowBehavior ?? 'fill',
+            verticalAlign: z.verticalAlign ?? 'stretch',
+            highlightCount: z.highlightCount ?? 0,
+            highlightPos: z.highlightPos ?? 'first',
+            highlightHeight: z.highlightHeight ?? 1.5
+        }, { saveReason: 'preset-change' });
+    } finally {
+        // FIX: Restore global style updates after preset application is complete.
+        // Use requestAnimationFrame to ensure it happens AFTER any pending Vue reactivity
+        // and the post-relayout viewport culling pass.
+        requestAnimationFrame(() => {
+            nextTick(() => {
+                _suppressGlobalStyleUpdates = false;
+            });
+        });
+    }
 };
 
 const handleSyncZoneGaps = (padding: number) => {
@@ -29697,10 +29877,96 @@ const setVisible = (obj: any, visible: boolean) => {
     obj.set({ visible: false, scaleX: 0, scaleY: 0 });
 };
 
+/**
+ * FIX: Fabric v7 may drop `name` from deeply nested group children during
+ * enlivenObjects/deserialization. This repairs atacarejo text names by matching
+ * text objects to their tier backgrounds based on position proximity and content patterns.
+ */
+const repairAtacarejoTextNames = (all: any[]) => {
+    const retailBg = findByName(all, 'atac_retail_bg');
+    const wholesaleBg = findByName(all, 'atac_wholesale_bg');
+    if (!retailBg) return;
+
+    // Collect all unnamed text-like objects
+    const texts = all.filter((o: any) => {
+        if (!o || typeof o.set !== 'function') return false;
+        const t = String(o?.type || '').toLowerCase();
+        if (t !== 'text' && t !== 'i-text' && t !== 'textbox') return false;
+        // Already named with a tier prefix — skip
+        const n = String(o?.name || '');
+        if (n.startsWith('retail_') || n.startsWith('wholesale_') || n === 'wholesale_banner_text') return false;
+        return true;
+    });
+    if (!texts.length) return;
+
+    // Use the backgrounds' top to partition texts into tiers.
+    // Objects created in the same tier tend to have similar default Y positions.
+    // After the first layoutAtacarejoPriceGroup they are repositioned, so we also
+    // check explicit names that survived partially.
+    const getBgCenter = (bg: any) => {
+        if (!bg) return null;
+        const oy = String(bg.originY || 'center');
+        const h = (bg.height ?? 0) * (bg.scaleY ?? 1);
+        const top = bg.top ?? 0;
+        if (oy === 'center') return top;
+        if (oy === 'top') return top + h / 2;
+        return top - h / 2;
+    };
+
+    const retailCY = getBgCenter(retailBg);
+    const wholesaleCY = getBgCenter(wholesaleBg);
+
+    const assignNames = (tierTexts: any[], prefix: 'retail' | 'wholesale') => {
+        let currency: any = null;
+        let integer: any = null;
+        let decimal: any = null;
+        let unit: any = null;
+        let pack: any = null;
+
+        // Already named check
+        if (findByName(all, `${prefix}_integer_text`)) return; // Names intact for this tier
+
+        for (const t of tierTexts) {
+            const txt = String(t?.text || '').trim();
+            if (!txt) continue;
+            if (!currency && /^R?\$$/i.test(txt)) { currency = t; continue; }
+            if (!decimal && /^,\d{1,2}$/.test(txt)) { decimal = t; continue; }
+            if (!integer && /^\d{1,5}$/.test(txt)) { integer = t; continue; }
+            if (!unit && /^[\/]?(?:UN[D.]?|KG|LT|ML|G|GR|PCT)\.?$/i.test(txt)) { unit = t; continue; }
+            // Pack line: longer text containing price info
+            if (!pack && txt.length > 5 && /\d/.test(txt)) { pack = t; continue; }
+        }
+
+        // CRITICAL FIX: Also rename objects with 'price_' prefix (from setPriceOnPriceGroup fallback).
+        // These were created by the single-price fallback and conflict with atacarejo tier names.
+        const shouldRename = (obj: any) => !obj.name || String(obj.name).startsWith('price_');
+        if (currency && shouldRename(currency)) currency.name = `${prefix}_currency_text`;
+        if (integer && shouldRename(integer)) integer.name = `${prefix}_integer_text`;
+        if (decimal && shouldRename(decimal)) decimal.name = `${prefix}_decimal_text`;
+        if (unit && shouldRename(unit)) unit.name = `${prefix}_unit_text`;
+        if (pack && shouldRename(pack)) pack.name = `${prefix}_pack_line_text`;
+    };
+
+    // Partition texts by distance to each tier's background center
+    if (retailCY !== null && wholesaleCY !== null) {
+        const mid = (retailCY + wholesaleCY) / 2;
+        const retailTexts = texts.filter((t: any) => (t.top ?? 0) <= mid);
+        const wholesaleTexts = texts.filter((t: any) => (t.top ?? 0) > mid);
+        assignNames(retailTexts, 'retail');
+        assignNames(wholesaleTexts, 'wholesale');
+    } else if (retailCY !== null) {
+        // Only retail tier (single price with condition)
+        assignNames(texts, 'retail');
+    }
+};
+
 const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
     if (!pg || typeof pg.getObjects !== 'function') return;
     const all = collectObjectsDeep(pg);
     const byName = (name: string) => all.filter((o: any) => o?.name === name);
+
+    // FIX: Repair names that Fabric v7 may have dropped during deserialization
+    repairAtacarejoTextNames(all);
 
     const retailBg = findByName(all, 'atac_retail_bg');
     const bannerBg = findByName(all, 'atac_banner_bg');
@@ -29928,6 +30194,9 @@ const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
 const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number) => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
     const all = collectObjectsDeep(priceGroup);
+
+    // FIX: Repair names that Fabric v7 may have dropped during deserialization
+    repairAtacarejoTextNames(all);
 
     const retailBg = findByName(all, 'atac_retail_bg');
     if (!retailBg) return null;
@@ -35871,7 +36140,33 @@ const ensureZoneSanity = (zone: any) => {
         });
     }
 
-    if (needsBoundsUpdate) safeAddWithUpdate(zone);
+    // FIX: Do NOT call safeAddWithUpdate(zone) here — it invokes triggerLayout()
+    // which recalculates the group bounding box from ALL children (rect + labels).
+    // This shifts the group center away from the rect center, corrupting all
+    // subsequent getZoneMetrics calculations that derive card positions.
+    // Instead, manually sync group dimensions to match the rect.
+    // ALWAYS sync (not just on needsBoundsUpdate) — after JSON deserialization the
+    // group width/height may not match the rect if it was saved in a corrupt state.
+    if (rect) {
+        const rectW = Math.abs((rect.width ?? 0) * (rect.scaleX ?? 1));
+        const rectH = Math.abs((rect.height ?? 0) * (rect.scaleY ?? 1));
+        if (rectW > 0 && rectH > 0) {
+            const groupW = zone.width ?? 0;
+            const groupH = zone.height ?? 0;
+            if (Math.abs(groupW - rectW) > 1 || Math.abs(groupH - rectH) > 1) {
+                zone.set({ width: rectW, height: rectH });
+                zone.dirty = true;
+            }
+        }
+    } else if (needsBoundsUpdate) {
+        zone.dirty = true;
+    }
+    // FIX: Permanently disable LayoutManager on zone groups (same as product cards).
+    // Zone layout is fully managed by recalculateZoneLayout.
+    const zoneLm = (zone as any).layoutManager;
+    if (zoneLm && typeof zoneLm.performLayout === 'function' && zoneLm.performLayout.toString() !== '() => {}') {
+        zoneLm.performLayout = () => {};
+    }
     zone.setCoords();
 }
 
@@ -35888,22 +36183,55 @@ const getZoneMetrics = (zone: any) => {
         const rectH = Math.abs((rect.height ?? 0) * (rect.scaleY ?? 1));
 
         if (rectW > 0 && rectH > 0) {
-            // Use the zone's center point for positioning (most stable reference)
-            const center = typeof zone.getCenterPoint === 'function'
-                ? zone.getCenterPoint()
-                : null;
+            // FIX: Calculate the rect's ABSOLUTE center by transforming its local coords
+            // through the group's transform matrix. This is more reliable than
+            // zone.getCenterPoint() which returns the group's CENTER — not the rect's
+            // center — and can drift when the zone group contains non-rect children
+            // (e.g., text labels) that shift the group bounding box after triggerLayout().
+            let rectCenterX: number | null = null;
+            let rectCenterY: number | null = null;
 
-            if (center) {
+            try {
+                if (typeof zone.calcTransformMatrix === 'function' && fabric?.util?.transformPoint && fabric?.Point) {
+                    const m = zone.calcTransformMatrix();
+                    const localX = Number(rect.left ?? 0);
+                    const localY = Number(rect.top ?? 0);
+                    const p = new fabric.Point(localX, localY);
+                    const abs = fabric.util.transformPoint(p, m);
+                    rectCenterX = Number(abs?.x);
+                    rectCenterY = Number(abs?.y);
+                    if (!Number.isFinite(rectCenterX) || !Number.isFinite(rectCenterY)) {
+                        rectCenterX = null;
+                        rectCenterY = null;
+                    }
+                }
+            } catch {
+                rectCenterX = null;
+                rectCenterY = null;
+            }
+
+            // Fallback: use zone.getCenterPoint() if transform-based calculation failed
+            if (rectCenterX === null || rectCenterY === null) {
+                const center = typeof zone.getCenterPoint === 'function'
+                    ? zone.getCenterPoint()
+                    : null;
+                if (center) {
+                    rectCenterX = center.x;
+                    rectCenterY = center.y;
+                }
+            }
+
+            if (rectCenterX !== null && rectCenterY !== null) {
                 // Sync stored dims from the actual rect (not group bounds)
                 zone._zoneWidth = rectW;
                 zone._zoneHeight = rectH;
                 const result = {
-                    left: center.x - (rectW / 2),
-                    top: center.y - (rectH / 2),
+                    left: rectCenterX - (rectW / 2),
+                    top: rectCenterY - (rectH / 2),
                     width: rectW,
                     height: rectH,
-                    centerX: center.x,
-                    centerY: center.y
+                    centerX: rectCenterX,
+                    centerY: rectCenterY
                 };
                 return result;
             }
@@ -36295,7 +36623,12 @@ const applyZoneScaleToRect = (zone: any, minSize = 60) => {
         scaleY: 1
     });
 
+    // FIX: Sync group dimensions to match rect. LayoutManager is permanently
+    // disabled on zones, so safeAddWithUpdate/triggerLayout won't recalculate
+    // the group bounding box. We must set width/height explicitly.
     zone.set({
+        width: nextWidth,
+        height: nextHeight,
         scaleX: 1,
         scaleY: 1,
         flipX: false,
@@ -36635,10 +36968,22 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         if (card.isSmartObject || card.name?.startsWith('product-card')) {
             if (opts.skipResize) {
                 // skipResize: preserve card internal layout from JSON.
-                // Only set outer dimensions and position — don't touch children.
-                card.set({ width: slotW, height: slotH });
-                (card as any)._cardWidth = slotW;
-                (card as any)._cardHeight = slotH;
+                // Only reposition — don't touch children or saved dimensions.
+                // CRITICAL FIX: If card already has valid saved dimensions, preserve them.
+                // Overwriting with slot dimensions causes proportional mismatch because
+                // internal elements (text, images, prices) keep their old positions/sizes.
+                // Slot dimensions may differ from saved due to zone metric rounding after
+                // normalizeZoneScale / ensureZoneSanity.
+                const savedW = Number((card as any)._cardWidth) || 0;
+                const savedH = Number((card as any)._cardHeight) || 0;
+                if (savedW > 0 && savedH > 0) {
+                    // Keep saved dimensions intact — only reposition below
+                    card.set({ width: savedW, height: savedH });
+                } else {
+                    card.set({ width: slotW, height: slotH });
+                    (card as any)._cardWidth = slotW;
+                    (card as any)._cardHeight = slotH;
+                }
             } else if (opts.preserveStyles) {
                 // preserveStyles: resize card proportionally but don't re-apply zone styles.
                 // If card dimensions haven't changed, skip resize entirely to preserve template layout.
@@ -37234,7 +37579,42 @@ const rehydrateCanvasZones = (
             }
         }
 
-        const zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
+        let zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
+
+        // FIX: Remove duplicate zones per frame. If multiple zones share the same
+        // parentFrameId, keep only the one with the most children (most products).
+        if (zones.length > 1) {
+            const frameZoneMap = new Map<string, any[]>();
+            zones.forEach((z: any) => {
+                const fid = String((z as any).parentFrameId || '').trim() || '__unbound__';
+                if (!frameZoneMap.has(fid)) frameZoneMap.set(fid, []);
+                frameZoneMap.get(fid)!.push(z);
+            });
+            const duplicatesToRemove: any[] = [];
+            frameZoneMap.forEach((zoneList, fid) => {
+                if (zoneList.length <= 1) return;
+                // Sort: most children first, then largest area
+                zoneList.sort((a: any, b: any) => {
+                    const aChildren = typeof a.getObjects === 'function' ? a.getObjects().length : 0;
+                    const bChildren = typeof b.getObjects === 'function' ? b.getObjects().length : 0;
+                    if (bChildren !== aChildren) return bChildren - aChildren;
+                    const aArea = (a.width || 0) * (a.height || 0);
+                    const bArea = (b.width || 0) * (b.height || 0);
+                    return bArea - aArea;
+                });
+                // Keep the first (best), remove the rest
+                for (let i = 1; i < zoneList.length; i++) {
+                    duplicatesToRemove.push(zoneList[i]);
+                }
+            });
+            if (duplicatesToRemove.length > 0) {
+                duplicatesToRemove.forEach((z: any) => canvas.value.remove(z));
+                console.log(`[rehydrateCanvasZones] Removed ${duplicatesToRemove.length} duplicate zone(s)`);
+                objs = canvas.value.getObjects();
+                zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
+            }
+        }
+
         restoreMissingManualTemplateFlagsInCanvas(canvas.value, 'rehydrate');
         
         if (LEGACY_PRODUCT_ZONE_RENDERER_ENABLED) {
@@ -37468,6 +37848,44 @@ const rehydrateCanvasZones = (
             console.log('[rehydrateCanvasZones] Legacy image repair applied:', repairStats);
         }
 
+        // CRITICAL FIX: Repair atacarejo price text names and re-apply pricing.
+        // During initial creation, Fabric v7 dropped text names → setPriceOnPriceGroup
+        // renamed them to `price_*` → applyAtacarejoPricingToPriceGroup couldn't find
+        // `retail_*` names → retail tier was saved with empty text content.
+        // This repair step fixes names and re-populates prices from stored _productData.
+        cards.forEach((card: any) => {
+            if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') return;
+            const productData = (card as any)?._productData;
+            if (!productData || typeof productData !== 'object') return;
+
+            // Find the priceGroup inside the card
+            const children = card.getObjects() || [];
+            const priceGroup = children.find((c: any) =>
+                c?.type === 'group' && (c?.name === 'priceGroup' || String(c?.name || '').includes('price'))
+            );
+            if (!priceGroup || typeof priceGroup.getObjects !== 'function') return;
+
+            // Check if this is an atacarejo template (has atac_retail_bg)
+            const pgChildren = collectObjectsDeep(priceGroup);
+            const hasAtacBg = pgChildren.some((o: any) => o?.name === 'atac_retail_bg');
+            if (!hasAtacBg) return;
+
+            // Check if retail tier is missing prices (empty or just "R$")
+            const retailInteger = pgChildren.find((o: any) => o?.name === 'retail_integer_text');
+            const hasPriceIntNamedCorrectly = !!retailInteger;
+            const retailIntText = String(retailInteger?.text || '').trim();
+            const retailMissing = !hasPriceIntNamedCorrectly || !retailIntText || retailIntText === '0';
+
+            if (retailMissing) {
+                // Re-apply atacarejo pricing from stored product data
+                try {
+                    applyAtacarejoPricingToPriceGroup(priceGroup, productData);
+                } catch (e) {
+                    // ignore repair failures
+                }
+            }
+        });
+
         // Repair missing parentZoneId by intersection (helps after old history/undo states)
         const cardsWithSavedParentZone = new Set<any>();
         cards.forEach((card: any) => {
@@ -37561,26 +37979,27 @@ const rehydrateCanvasZones = (
             zones.forEach((z: any) => {
                 if (z.isProductZone || zoneIdsWithCards.has(z._customId)) {
                     try {
-                        // Preserve manually-saved placements after reload.
-                        // Reflow only when this zone has cards without reliable saved positions.
                         const zoneCards = cards.filter((c: any) => String((c as any).parentZoneId || '').trim() === String(z._customId || '').trim());
-                        // FIX: ALWAYS force a full relayout on rehydrate.
-                        // Previously we tried to preserve "saved positions" to avoid
-                        // visual jumps, but this caused cards to stay at stale/corrupted
-                        // positions when:
-                        //   1. The zone was moved/resized and normalizeZoneScale shifted
-                        //      the group origin without updating cards
-                        //   2. Viewport culling persisted visible:false (now fixed)
-                        //   3. The frame/artboard was resized and the zone followed but
-                        //      cards still had old absolute coordinates
-                        // The relayout is fast (just position math, no DOM/render) and
-                        // guarantees cards are always correctly placed inside their zone.
-                        // Card ORDER is preserved via _zoneOrder which was already saved.
-                        // CRITICAL FIX: Use skipResize to preserve card internal layout from JSON.
-                        // Without this, resizeSmartObject repositions all card children (title, image,
-                        // price, splash), destroying the saved layout. Cards are already correctly
-                        // sized in the JSON — we only need to reposition them within the zone grid.
-                        recalculateZoneLayout(z, zoneCards, { skipResize: true });
+                        // CRITICAL FIX: Do NOT force relayout if cards already have valid
+                        // saved positions from JSON. Relaying out overwrites saved left/top/width/height
+                        // with grid-computed values, destroying the exact layout the user saved.
+                        // Only relayout if cards are clearly missing positions (all at 0,0 or NaN).
+                        const allHavePositions = zoneCards.length > 0 && zoneCards.every((c: any) => {
+                            const l = Number(c.left ?? NaN);
+                            const t = Number(c.top ?? NaN);
+                            return Number.isFinite(l) && Number.isFinite(t);
+                        });
+                        const allAtOrigin = zoneCards.length > 1 && zoneCards.every((c: any) => {
+                            return Math.abs(Number(c.left ?? 0)) < 2 && Math.abs(Number(c.top ?? 0)) < 2;
+                        });
+                        if (allHavePositions && !allAtOrigin) {
+                            // Cards have valid saved positions — preserve them exactly as saved.
+                            // Just ensure coords are fresh for hit-testing.
+                            zoneCards.forEach((c: any) => c.setCoords?.());
+                        } else {
+                            // Cards are missing positions or all stacked at origin — relayout needed.
+                            recalculateZoneLayout(z, zoneCards, { skipResize: true });
+                        }
                     } catch (err) {
                         console.warn('[rehydrateCanvasZones] Failed to relayout zone', err);
                     }

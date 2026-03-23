@@ -1,62 +1,202 @@
-# context-mode — MANDATORY routing rules
+# CLAUDE.md — Regras globais do projeto
 
-You have context-mode MCP tools available. These rules are NOT optional — they protect your context window from flooding. A single unrouted command can dump 56 KB into context and waste the entire session.
+## IDIOMA — OBRIGATÓRIO
+- SEMPRE responda em **português brasileiro (pt-BR)**.
+- Comentários no código em português.
+- Commits em português.
+- Nomes de variáveis e funções em inglês (padrão da indústria).
+- Mensagens de erro e logs em português quando voltadas ao usuário, inglês quando internas.
 
-## BLOCKED commands — do NOT attempt these
+---
 
-### curl / wget — BLOCKED
-Any Bash command containing `curl` or `wget` is intercepted and replaced with an error message. Do NOT retry.
-Instead use:
-- `ctx_fetch_and_index(url, source)` to fetch and index web pages
-- `ctx_execute(language: "javascript", code: "const r = await fetch(...)")` to run HTTP calls in sandbox
+## SKILLS — USO OBRIGATÓRIO
 
-### Inline HTTP — BLOCKED
-Any Bash command containing `fetch('http`, `requests.get(`, `requests.post(`, `http.get(`, or `http.request(` is intercepted and replaced with an error message. Do NOT retry with Bash.
-Instead use:
-- `ctx_execute(language, code)` to run HTTP calls in sandbox — only stdout enters context
+### Regra de ouro
+**NUNCA comece a executar uma tarefa sem antes ler o SKILL.md correspondente.**
+Isso não é sugestão — é requisito. Pule isso e o output será inferior.
 
-### WebFetch — BLOCKED
-WebFetch calls are denied entirely. The URL is extracted and you are told to use `ctx_fetch_and_index` instead.
-Instead use:
-- `ctx_fetch_and_index(url, source)` then `ctx_search(queries)` to query the indexed content
+### Fluxo obrigatório
+1. Identifique a tarefa (criar arquivo, deploy, debug, documento, etc.)
+2. Leia o SKILL.md correspondente usando a tool `Read`
+3. Siga as instruções do skill à risca
+4. Só então execute a tarefa
 
-## REDIRECTED tools — use sandbox equivalents
+### Mapa de skills disponíveis
 
-### Bash (>20 lines output)
-Bash is ONLY for: `git`, `mkdir`, `rm`, `mv`, `cd`, `ls`, `npm install`, `pip install`, and other short-output commands.
-For everything else, use:
-- `ctx_batch_execute(commands, queries)` — run multiple commands + search in ONE call
-- `ctx_execute(language: "shell", code: "...")` — run in sandbox, only stdout enters context
+| Tarefa | Skill | Caminho |
+|--------|-------|---------|
+| Word/docx | docx | `/mnt/skills/public/docx/SKILL.md` |
+| PDF | pdf | `/mnt/skills/public/pdf/SKILL.md` |
+| PowerPoint/pptx | pptx | `/mnt/skills/public/pptx/SKILL.md` |
+| Excel/xlsx | xlsx | `/mnt/skills/public/xlsx/SKILL.md` |
+| Frontend/UI | frontend-design | `/mnt/skills/public/frontend-design/SKILL.md` |
+| Leitura de arquivos | file-reading | `/mnt/skills/public/file-reading/SKILL.md` |
+| Leitura de PDF | pdf-reading | `/mnt/skills/public/pdf-reading/SKILL.md` |
+| Coolify/Deploy | coolify-expert | `/mnt/skills/user/coolify-expert/SKILL.md` |
+| Produtos Anthropic | product-self-knowledge | `/mnt/skills/public/product-self-knowledge/SKILL.md` |
 
-### Read (for analysis)
-If you are reading a file to **Edit** it → Read is correct (Edit needs content in context).
-If you are reading to **analyze, explore, or summarize** → use `ctx_execute_file(path, language, code)` instead. Only your printed summary enters context. The raw file content stays in the sandbox.
+### Skills extras (usar quando relevante)
+- Canvas/Design: `/mnt/skills/examples/canvas-design/SKILL.md`
+- Co-autoria de docs: `/mnt/skills/examples/doc-coauthoring/SKILL.md`
+- Criador de skills: `/mnt/skills/examples/skill-creator/SKILL.md`
+- Temas visuais: `/mnt/skills/examples/theme-factory/SKILL.md`
+- MCP Builder: `/mnt/skills/examples/mcp-builder/SKILL.md`
+- Arte algorítmica: `/mnt/skills/examples/algorithmic-art/SKILL.md`
+- Web artifacts: `/mnt/skills/examples/web-artifacts-builder/SKILL.md`
 
-### Grep (large results)
-Grep results can flood context. Use `ctx_execute(language: "shell", code: "grep ...")` to run searches in sandbox. Only your printed summary enters context.
+### Múltiplos skills
+Se a tarefa envolve mais de uma área (ex: criar um PDF com design bonito), leia TODOS os skills relevantes antes de começar.
 
-## Tool selection hierarchy
+---
 
-1. **GATHER**: `ctx_batch_execute(commands, queries)` — Primary tool. Runs all commands, auto-indexes output, returns search results. ONE call replaces 30+ individual calls.
-2. **FOLLOW-UP**: `ctx_search(queries: ["q1", "q2", ...])` — Query indexed content. Pass ALL questions as array in ONE call.
-3. **PROCESSING**: `ctx_execute(language, code)` | `ctx_execute_file(path, language, code)` — Sandbox execution. Only stdout enters context.
-4. **WEB**: `ctx_fetch_and_index(url, source)` then `ctx_search(queries)` — Fetch, chunk, index, query. Raw HTML never enters context.
-5. **INDEX**: `ctx_index(content, source)` — Store content in FTS5 knowledge base for later search.
+## RESOLUÇÃO DE ERROS — PROTOCOLO INTELIGENTE
 
-## Subagent routing
+### Quando encontrar um erro, NUNCA chute a solução. Siga este protocolo:
 
-When spawning subagents (Agent/Task tool), the routing block is automatically injected into their prompt. Bash-type subagents are upgraded to general-purpose so they have access to MCP tools. You do NOT need to manually instruct subagents about context-mode.
+#### Passo 1: Analise o erro
+- Leia a mensagem de erro COMPLETA
+- Identifique: arquivo, linha, tipo de erro, stack trace
+- Classifique: erro de sintaxe, runtime, dependência, configuração, permissão, rede
 
-## Output constraints
+#### Passo 2: Pesquise ANTES de tentar corrigir
+- Use `ctx_fetch_and_index` para buscar a documentação oficial da lib/framework envolvido
+- Use `ctx_search` para verificar se já encontrou algo similar indexado
+- Se o erro envolve uma dependência, consulte o GitHub Issues do pacote
+- Se o erro é de uma API, consulte a documentação oficial
 
-- Keep responses under 500 words.
-- Write artifacts (code, configs, PRDs) to FILES — never return them as inline text. Return only: file path + 1-line description.
-- When indexing content, use descriptive source labels so others can `ctx_search(source: "label")` later.
+#### Passo 3: Consulte fontes confiáveis (nesta ordem)
+1. **Documentação oficial** da lib/framework (sempre primeiro)
+2. **GitHub Issues** do repositório do pacote
+3. **Changelogs/Release Notes** (pode ser breaking change)
+4. **Stack Overflow** (apenas respostas com alta votação)
 
-## ctx commands
+#### Passo 4: Corrija com contexto
+- Explique o que causou o erro em português
+- Mostre a correção e POR QUE funciona
+- Se houver risco de efeito colateral, avise
 
-| Command | Action |
-|---------|--------|
-| `ctx stats` | Call the `ctx_stats` MCP tool and display the full output verbatim |
-| `ctx doctor` | Call the `ctx_doctor` MCP tool, run the returned shell command, display as checklist |
-| `ctx upgrade` | Call the `ctx_upgrade` MCP tool, run the returned shell command, display as checklist |
+### Erros recorrentes
+Se o mesmo erro aparecer 2x após tentativa de correção:
+1. PARE de tentar corrigir
+2. Faça uma análise mais profunda da causa raiz
+3. Pesquise online com mais contexto
+4. Considere que o problema pode estar em outro lugar (dependência, versão, config)
+
+---
+
+## PLUGINS E FERRAMENTAS MCP — USO PROATIVO
+
+### Regras de uso de MCP
+- SEMPRE verifique quais MCP servers estão conectados antes de tarefas que envolvem ferramentas externas
+- Use `/mcp` para verificar status dos servidores
+- Se um MCP server relevante estiver disponível, USE-O ao invés de alternativas manuais
+
+### Prioridade de ferramentas
+1. **MCP server específico** (PostgreSQL, GitHub, etc.) → sempre preferido
+2. **ctx_batch_execute** → para comandos shell e análise
+3. **ctx_fetch_and_index** → para buscar documentação online
+4. **Bash direto** → apenas para comandos curtos (git, npm, ls, etc.)
+
+### Pesquisa proativa
+Quando trabalhar com uma lib/framework que não domina ou que pode ter mudado:
+- Use Context7 MCP (se disponível) para docs atualizadas
+- Use `ctx_fetch_and_index` na documentação oficial
+- NÃO confie apenas no conhecimento de treinamento para versões recentes
+
+---
+
+## QUALIDADE DE CÓDIGO — PADRÕES
+
+### Antes de entregar qualquer código:
+- Verifique se compila/roda sem erros
+- Trate TODOS os erros com try/catch ou equivalente
+- Valide inputs quando relevante
+- Não deixe console.log de debug no código final
+- Não use `any` em TypeScript (use tipos explícitos)
+
+### Ao editar código existente:
+- Leia o arquivo completo antes de editar
+- Entenda o padrão existente e siga-o
+- Não refatore o que não foi pedido (a menos que solicitado)
+- Mantenha consistência com o estilo do projeto
+
+---
+
+## COMUNICAÇÃO
+
+### Formato de resposta
+- Respostas diretas e objetivas
+- Código vai em ARQUIVOS, não inline (a menos que seja snippet curto de explicação)
+- Quando criar/editar arquivo: retorne caminho + descrição de 1 linha
+- Máximo 500 palavras por resposta (exceto quando a tarefa exige mais)
+- Use emojis com moderação (apenas para destacar avisos ⚠️ ou sucesso ✅)
+
+### Quando não souber
+- Diga "não sei" ao invés de inventar
+- Pesquise usando as ferramentas disponíveis
+- Sugira alternativas quando possível
+
+---
+
+## context-mode — Regras de roteamento OBRIGATÓRIAS
+
+Você tem ferramentas MCP de context-mode disponíveis. Estas regras NÃO são opcionais — elas protegem sua janela de contexto de flooding. Um único comando não roteado pode despejar 56 KB no contexto e desperdiçar a sessão inteira.
+
+### Comandos BLOQUEADOS — NÃO tente estes
+
+#### curl / wget — BLOQUEADO
+Qualquer comando Bash contendo `curl` ou `wget` é interceptado e substituído por mensagem de erro. NÃO tente novamente.
+Use ao invés:
+- `ctx_fetch_and_index(url, source)` para buscar e indexar páginas web
+- `ctx_execute(language: "javascript", code: "const r = await fetch(...)")` para chamadas HTTP em sandbox
+
+#### HTTP Inline — BLOQUEADO
+Qualquer comando Bash contendo `fetch('http`, `requests.get(`, `requests.post(`, `http.get(`, ou `http.request(` é interceptado e substituído por mensagem de erro. NÃO tente novamente com Bash.
+Use ao invés:
+- `ctx_execute(language, code)` para rodar chamadas HTTP em sandbox — apenas stdout entra no contexto
+
+#### WebFetch — BLOQUEADO
+Chamadas WebFetch são negadas completamente. A URL é extraída e você é orientado a usar `ctx_fetch_and_index`.
+Use ao invés:
+- `ctx_fetch_and_index(url, source)` depois `ctx_search(queries)` para consultar o conteúdo indexado
+
+### Ferramentas REDIRECIONADAS — use equivalentes em sandbox
+
+#### Bash (>20 linhas de output)
+Bash é APENAS para: `git`, `mkdir`, `rm`, `mv`, `cd`, `ls`, `npm install`, `pip install`, e outros comandos de output curto.
+Para todo o resto, use:
+- `ctx_batch_execute(commands, queries)` — rode múltiplos comandos + busca em UMA chamada
+- `ctx_execute(language: "shell", code: "...")` — rode em sandbox, apenas stdout entra no contexto
+
+#### Read (para análise)
+Se você está lendo um arquivo para **Editar** → Read está correto (Edit precisa do conteúdo no contexto).
+Se você está lendo para **analisar, explorar ou resumir** → use `ctx_execute_file(path, language, code)`. Apenas seu resumo impresso entra no contexto. O conteúdo bruto do arquivo fica no sandbox.
+
+#### Grep (resultados grandes)
+Resultados de Grep podem inundar o contexto. Use `ctx_execute(language: "shell", code: "grep ...")` para rodar buscas em sandbox. Apenas seu resumo impresso entra no contexto.
+
+### Hierarquia de seleção de ferramentas
+
+1. **COLETAR**: `ctx_batch_execute(commands, queries)` — Ferramenta primária. Roda todos os comandos, auto-indexa output, retorna resultados de busca. UMA chamada substitui 30+ chamadas individuais.
+2. **ACOMPANHAR**: `ctx_search(queries: ["q1", "q2", ...])` — Consulte conteúdo indexado. Passe TODAS as perguntas como array em UMA chamada.
+3. **PROCESSAR**: `ctx_execute(language, code)` | `ctx_execute_file(path, language, code)` — Execução em sandbox. Apenas stdout entra no contexto.
+4. **WEB**: `ctx_fetch_and_index(url, source)` depois `ctx_search(queries)` — Buscar, fragmentar, indexar, consultar. HTML bruto nunca entra no contexto.
+5. **INDEXAR**: `ctx_index(content, source)` — Armazene conteúdo na base de conhecimento FTS5 para busca posterior.
+
+### Roteamento de subagentes
+
+Ao criar subagentes (ferramenta Agent/Task), o bloco de roteamento é automaticamente injetado no prompt deles. Subagentes do tipo Bash são atualizados para propósito geral para que tenham acesso às ferramentas MCP. Você NÃO precisa instruir manualmente os subagentes sobre context-mode.
+
+### Restrições de output
+
+- Mantenha respostas abaixo de 500 palavras.
+- Escreva artefatos (código, configs, PRDs) em ARQUIVOS — nunca retorne como texto inline. Retorne apenas: caminho do arquivo + descrição de 1 linha.
+- Ao indexar conteúdo, use rótulos descritivos de fonte para que outros possam `ctx_search(source: "rótulo")` depois.
+
+### Comandos ctx
+
+| Comando | Ação |
+|---------|------|
+| `ctx stats` | Chame a tool MCP `ctx_stats` e exiba o output completo |
+| `ctx doctor` | Chame a tool MCP `ctx_doctor`, rode o comando shell retornado, exiba como checklist |
+| `ctx upgrade` | Chame a tool MCP `ctx_upgrade`, rode o comando shell retornado, exiba como checklist |

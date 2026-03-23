@@ -994,18 +994,18 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             </div>
           </div>
           <div class="flex items-center gap-2 mt-2">
-            <div class="pp-input-row w-[76px] shrink-0">
+            <div class="pp-input-row w-19 shrink-0">
               <span class="pp-input-label text-[#71717a]" title="Rotação">∠</span>
               <input type="number" :value="displayAngle ?? Math.round(getVal('angle', 0))" @focus="handleFocus('angle')" @blur="handleBlur" @input="e => handlePropertyInput('angle', Number((e.target as any).value))" class="pp-number-input pr-4" />
               <span class="absolute right-1 text-[10px] text-zinc-500">°</span>
             </div>
-            <div class="pp-input-row w-[76px] shrink-0" v-if="isRectLike && !isText">
+            <div class="pp-input-row w-19 shrink-0" v-if="isRectLike && !isText">
               <span class="pp-input-label text-[#71717a]" title="Raio dos cantos">R</span>
               <input type="number" :value="Math.round(cornerRadii.tl || 0)" @input="e => { $emit('update-property', 'rx', Number((e.target as any).value)); $emit('update-property', 'ry', Number((e.target as any).value)) }" class="pp-number-input" />
             </div>
             <div class="flex-1 flex items-center gap-2 min-w-0">
               <input type="range" min="0" max="1" step="0.05" :value="Number(getVal('opacity', 1))" @input="$emit('update-property', 'opacity', Number(($event.target as any).value))" class="flex-1 h-1 bg-zinc-700/50 rounded-lg appearance-none cursor-pointer accent-violet-500 min-w-0" title="Opacidade" />
-              <div class="pp-input-row w-[68px] shrink-0 relative">
+              <div class="pp-input-row w-17 shrink-0 relative">
                 <input
                   type="number"
                   min="0"
@@ -1050,11 +1050,11 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <div class="pp-grid-2">
                   <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
                       <span class="pp-input-label w-5">X</span>
-                      <input type="number" :value="Math.round(getVal('left', 0))" @input="e => $emit('update-property', 'left', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 text-left h-auto py-0" />
+                      <input type="number" :value="Math.round(getVal('left', 0))" @input="e => $emit('update-property', 'left', Number((e.target as any).value))" class="pp-number-input bg-transparent! border-0! text-left h-auto py-0" />
                   </div>
                   <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
                       <span class="pp-input-label w-5">Y</span>
-                      <input type="number" :value="Math.round(getVal('top', 0))" @input="e => $emit('update-property', 'top', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 text-left h-auto py-0" />
+                      <input type="number" :value="Math.round(getVal('top', 0))" @input="e => $emit('update-property', 'top', Number((e.target as any).value))" class="pp-number-input bg-transparent! border-0! text-left h-auto py-0" />
                   </div>
               </div>
           </div>
@@ -1132,12 +1132,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Camada</span>
           </div>
           <div class="pp-grid-2">
-              <select :value="getVal('globalCompositeOperation', 'source-over')" @change="e => $emit('update-property', 'globalCompositeOperation', (e.target as any).value)" class="pp-number-input !text-left h-8 cursor-pointer pl-2 appearance-none">
+              <select :value="getVal('globalCompositeOperation', 'source-over')" @change="e => $emit('update-property', 'globalCompositeOperation', (e.target as any).value)" class="pp-number-input text-left! h-8 cursor-pointer pl-2 appearance-none">
                   <option value="source-over">Normal</option>
                   <option v-for="mode in BLEND_MODES" :key="mode" :value="mode">{{ mode }}</option>
               </select>
               <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-lg border border-white/5 relative">
-                  <input type="number" :value="Math.round(getVal('opacity', 1) * 100)" @input="e => $emit('update-property', 'opacity', Number((e.target as any).value) / 100)" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 l-1" title="Opacidade" />
+                  <input type="number" :value="Math.round(getVal('opacity', 1) * 100)" @input="e => $emit('update-property', 'opacity', Number((e.target as any).value) / 100)" class="pp-number-input bg-transparent! border-0! text-left h-6 py-0 l-1" title="Opacidade" />
                   <span class="absolute right-2 text-[10px] text-zinc-500">%</span>
               </div>
           </div>
@@ -1150,12 +1150,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Texto</span>
           </div>
           
-          <select :value="getVal('fontFamily', 'Arial')" @change="e => $emit('update-property', 'fontFamily', (e.target as any).value)" class="pp-number-input !text-left h-8 cursor-pointer pl-2 appearance-none">
+          <select :value="getVal('fontFamily', 'Arial')" @change="e => $emit('update-property', 'fontFamily', (e.target as any).value)" class="pp-number-input text-left! h-8 cursor-pointer pl-2 appearance-none">
               <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
           </select>
 
           <div class="pp-grid-2">
-              <select :value="getVal('fontWeight', 'normal')" @change="e => $emit('update-property', 'fontWeight', (e.target as any).value)" class="pp-number-input !text-left h-8 cursor-pointer pl-2 appearance-none">
+              <select :value="getVal('fontWeight', 'normal')" @change="e => $emit('update-property', 'fontWeight', (e.target as any).value)" class="pp-number-input text-left! h-8 cursor-pointer pl-2 appearance-none">
                   <option value="normal">Regular</option>
                   <option value="bold">Negrito</option>
                   <option value="900">Extra Negrito</option>
@@ -1167,7 +1167,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                     :value="fontSizeInputValue"
                     :placeholder="fontSizeInputPlaceholder"
                     @input="e => handleFontSizeChange((e.target as any).value)"
-                    class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-6"
+                    class="pp-number-input bg-transparent! border-0! text-left h-6 py-0 pl-6"
                   />
               </div>
           </div>
@@ -1214,11 +1214,11 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <div class="pp-grid-2">
                <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative" title="Altura da linha">
                   <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">L↓</span>
-                  <input type="number" step="0.1" :value="getVal('lineHeight', 1.2)" @input="e => $emit('update-property', 'lineHeight', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-6" />
+                  <input type="number" step="0.1" :value="getVal('lineHeight', 1.2)" @input="e => $emit('update-property', 'lineHeight', Number((e.target as any).value))" class="pp-number-input bg-transparent! border-0! text-left h-6 py-0 pl-6" />
               </div>
               <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative" title="Espaçamento entre letras">
                   <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">E↔</span>
-                  <input type="number" :value="getVal('charSpacing', 0)" @input="e => $emit('update-property', 'charSpacing', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-7" />
+                  <input type="number" :value="getVal('charSpacing', 0)" @input="e => $emit('update-property', 'charSpacing', Number((e.target as any).value))" class="pp-number-input bg-transparent! border-0! text-left h-6 py-0 pl-7" />
               </div>
           </div>
           
@@ -1284,12 +1284,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 type="text" 
                 :value="fillHexInputValue" 
                 @change="e => handleFillHexChange((e.target as any).value)" 
-                class="pp-number-input !text-left font-mono uppercase bg-[#27272a]/50 min-w-0" 
+                class="pp-number-input text-left! font-mono uppercase bg-[#27272a]/50 min-w-0" 
                 :placeholder="fillHexInputPlaceholder"
                 maxlength="6"
               />
               <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-lg border border-white/5 relative w-16 shrink-0">
-                  <input type="number" value="100" class="pp-number-input !bg-transparent !border-0 py-0 pr-4 text-center h-6" />
+                  <input type="number" value="100" class="pp-number-input bg-transparent! border-0! py-0 pr-4 text-center h-6" />
                   <span class="absolute right-2 text-[10px] text-zinc-500">%</span>
               </div>
           </div>
@@ -1322,18 +1322,18 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               </div>
               <div class="flex items-center gap-1 bg-[#27272a]/50 border border-white/5 rounded px-1.5 h-6">
                   <GripVertical class="w-3 h-3 text-zinc-500" />
-                  <input type="number" :value="getVal('gap', 0)" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="pp-number-input !bg-transparent !border-0 text-center w-10 py-0" placeholder="0" title="Espaçamento" />
+                  <input type="number" :value="getVal('gap', 0)" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="pp-number-input bg-transparent! border-0! text-center w-10 py-0" placeholder="0" title="Espaçamento" />
               </div>
           </div>
           
           <div class="pp-grid-2">
               <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative" title="Preenchimento horizontal">
                   <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">PH</span>
-                  <input type="number" :value="getVal('paddingX', 0)" @input="e => $emit('action', 'update-padding-x:' + (e.target as any).value)" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-7" />
+                  <input type="number" :value="getVal('paddingX', 0)" @input="e => $emit('action', 'update-padding-x:' + (e.target as any).value)" class="pp-number-input bg-transparent! border-0! text-left h-6 py-0 pl-7" />
               </div>
               <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5 relative" title="Preenchimento vertical">
                   <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">PV</span>
-                  <input type="number" :value="getVal('paddingY', 0)" @input="e => $emit('action', 'update-padding-y:' + (e.target as any).value)" class="pp-number-input !bg-transparent !border-0 text-left h-6 py-0 pl-7" />
+                  <input type="number" :value="getVal('paddingY', 0)" @input="e => $emit('action', 'update-padding-y:' + (e.target as any).value)" class="pp-number-input bg-transparent! border-0! text-left h-6 py-0 pl-7" />
               </div>
           </div>
           
@@ -1413,7 +1413,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                     type="text"
                     :value="stickerOutlineColor.replace('#', '').toUpperCase()"
                     @change="e => $emit('update-property', 'stickerOutlineColor', '#' + (e.target as any).value.replace('#', ''))"
-                    class="pp-number-input !text-left font-mono uppercase bg-[#27272a]/50 min-w-0 flex-1"
+                    class="pp-number-input text-left! font-mono uppercase bg-[#27272a]/50 min-w-0 flex-1"
                     placeholder="FFFFFF"
                     maxlength="6"
                   />
@@ -1423,7 +1423,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                       type="number"
                       :value="stickerOutlineWidth"
                       @input="e => $emit('update-property', 'stickerOutlineWidth', Math.max(1, Number((e.target as any).value)))"
-                      class="pp-number-input !bg-transparent !border-0 py-0 pl-6 text-left h-6"
+                      class="pp-number-input bg-transparent! border-0! py-0 pl-6 text-left h-6"
                       title="Espessura do contorno (px)"
                       min="1"
                       max="50"
@@ -1443,7 +1443,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                         step="1"
                         :value="Math.round(stickerOutlineOpacity * 100)"
                         @input="emitClampedProperty('stickerOutlineOpacity', Number(($event.target as HTMLInputElement).value) / 100, stickerOutlineOpacity, 0, 1, 2)"
-                        class="pp-number-input !bg-transparent !border-0 text-center h-5 py-0 pr-3"
+                        class="pp-number-input bg-transparent! border-0! text-center h-5 py-0 pr-3"
                       />
                       <span class="text-[9px] text-zinc-600 absolute right-2">%</span>
                     </div>
@@ -1500,14 +1500,14 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                 type="text" 
                 :value="(getVal('stroke', '') || '#000000').toString().replace('#', '').toUpperCase()" 
                 @change="e => $emit('update-property', 'stroke', '#' + (e.target as any).value.replace('#', ''))" 
-                class="pp-number-input !text-left font-mono uppercase bg-[#27272a]/50 min-w-0 flex-1" 
+                class="pp-number-input text-left! font-mono uppercase bg-[#27272a]/50 min-w-0 flex-1" 
                 placeholder="1E1E1E"
                 maxlength="6"
               />
               
               <div class="pp-input-row bg-[#27272a]/50 p-1 rounded-lg border border-white/5 relative w-16 shrink-0">
                   <span class="text-[10px] text-zinc-500 absolute left-2 font-medium">W:</span>
-                  <input type="number" :value="getVal('strokeWidth', 0)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="pp-number-input !bg-transparent !border-0 py-0 pl-6 text-left h-6" title="Espessura do contorno" />
+                  <input type="number" :value="getVal('strokeWidth', 0)" @input="e => $emit('update-property', 'strokeWidth', Number((e.target as any).value))" class="pp-number-input bg-transparent! border-0! py-0 pl-6 text-left h-6" title="Espessura do contorno" />
               </div>
           </div>
           
@@ -1516,7 +1516,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                <!-- Posição (Interno/Centro/Externo) -->
                <div v-if="isVectorPath" class="space-y-1">
                    <label class="text-[10px] text-zinc-500 font-medium tracking-wide uppercase">Posição</label>
-                   <select :value="getVal('strokePosition', 'center')" @change="e => $emit('update-property', 'strokePosition', (e.target as any).value)" class="pp-number-input !text-left h-8 cursor-pointer pl-2 appearance-none">
+                   <select :value="getVal('strokePosition', 'center')" @change="e => $emit('update-property', 'strokePosition', (e.target as any).value)" class="pp-number-input text-left! h-8 cursor-pointer pl-2 appearance-none">
                        <option value="inside">Interno</option>
                        <option value="center">Centro</option>
                        <option value="outside">Externo</option>
@@ -1524,12 +1524,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                </div>
                
                <div class="pp-grid-2">
-                    <select :value="getVal('strokeLineCap', 'butt')" @change="e => $emit('update-property', 'strokeLineCap', (e.target as any).value)" class="pp-number-input !text-left h-7 cursor-pointer pl-2 appearance-none text-[10px]">
+                    <select :value="getVal('strokeLineCap', 'butt')" @change="e => $emit('update-property', 'strokeLineCap', (e.target as any).value)" class="pp-number-input text-left! h-7 cursor-pointer pl-2 appearance-none text-[10px]">
                         <option value="butt">Terminal: Reto</option>
                         <option value="round">Terminal: Arredondado</option>
                         <option value="square">Terminal: Quadrado</option>
                     </select>
-                    <select :value="getVal('strokeLineJoin', 'miter')" @change="e => $emit('update-property', 'strokeLineJoin', (e.target as any).value)" class="pp-number-input !text-left h-7 cursor-pointer pl-2 appearance-none text-[10px]">
+                    <select :value="getVal('strokeLineJoin', 'miter')" @change="e => $emit('update-property', 'strokeLineJoin', (e.target as any).value)" class="pp-number-input text-left! h-7 cursor-pointer pl-2 appearance-none text-[10px]">
                         <option value="miter">Junção: Esquadro</option>
                         <option value="round">Junção: Arredondada</option>
                         <option value="bevel">Junção: Chanfro</option>
@@ -1538,7 +1538,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                
                <!-- Limite de Esquadro -->
                <div v-if="getVal('strokeLineJoin', 'miter') === 'miter'" class="flex items-center justify-between gap-3">
-                   <label class="text-[10px] text-zinc-500 font-medium tracking-wide uppercase max-w-[80px] leading-tight shrink-0">Limite Esquadro</label>
+                   <label class="text-[10px] text-zinc-500 font-medium tracking-wide uppercase max-w-20 leading-tight shrink-0">Limite Esquadro</label>
                    <input type="number" :value="getVal('strokeMiterLimit', 4)" @input="e => $emit('update-property', 'strokeMiterLimit', Number((e.target as any).value))" class="pp-number-input" min="1" max="100" step="0.1" />
                </div>
                
@@ -1584,7 +1584,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                     type="number"
                     :value="Math.round(cornerRadii.tl || 0)"
                     @input="e => $emit('update-property', 'cornerRadius', Number((e.target as any).value))"
-                    class="pp-number-input !bg-transparent !border-0 text-left h-7 py-0 w-full"
+                    class="pp-number-input bg-transparent! border-0! text-left h-7 py-0 w-full"
                   />
               </div>
               <span class="text-[9px] text-zinc-600 uppercase tracking-widest px-2 whitespace-nowrap border-l border-white/5">
@@ -1595,19 +1595,19 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           <div class="pp-grid-4 gap-2" v-if="useIndividualRadii">
               <div class="flex flex-col gap-1 relative pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
                   <span class="text-[9px] text-zinc-500 absolute left-1.5 top-1.5 pointer-events-none font-medium">SE</span>
-                  <input type="number" class="pp-number-input !bg-transparent !border-0 !text-right h-6 py-0 w-full" :value="cornerRadii.tl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tl: Number((e.target as any).value) })" />
+                  <input type="number" class="pp-number-input bg-transparent! border-0! text-right! h-6 py-0 w-full" :value="cornerRadii.tl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tl: Number((e.target as any).value) })" />
               </div>
               <div class="flex flex-col gap-1 relative pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
                   <span class="text-[9px] text-zinc-500 absolute left-1.5 top-1.5 pointer-events-none font-medium">SD</span>
-                  <input type="number" class="pp-number-input !bg-transparent !border-0 !text-right h-6 py-0 w-full" :value="cornerRadii.tr" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tr: Number((e.target as any).value) })" />
+                  <input type="number" class="pp-number-input bg-transparent! border-0! text-right! h-6 py-0 w-full" :value="cornerRadii.tr" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, tr: Number((e.target as any).value) })" />
               </div>
               <div class="flex flex-col gap-1 relative pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
                   <span class="text-[9px] text-zinc-500 absolute left-1.5 top-1.5 pointer-events-none font-medium">IE</span>
-                  <input type="number" class="pp-number-input !bg-transparent !border-0 !text-right h-6 py-0 w-full" :value="cornerRadii.bl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, bl: Number((e.target as any).value) })" />
+                  <input type="number" class="pp-number-input bg-transparent! border-0! text-right! h-6 py-0 w-full" :value="cornerRadii.bl" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, bl: Number((e.target as any).value) })" />
               </div>
               <div class="flex flex-col gap-1 relative pp-input-row bg-[#27272a]/50 p-1 rounded-md border border-white/5">
                   <span class="text-[9px] text-zinc-500 absolute left-1.5 top-1.5 pointer-events-none font-medium">ID</span>
-                  <input type="number" class="pp-number-input !bg-transparent !border-0 !text-right h-6 py-0 w-full" :value="cornerRadii.br" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, br: Number((e.target as any).value) })" />
+                  <input type="number" class="pp-number-input bg-transparent! border-0! text-right! h-6 py-0 w-full" :value="cornerRadii.br" @input="e => $emit('update-property', 'cornerRadii', { ...cornerRadii, br: Number((e.target as any).value) })" />
               </div>
           </div>
       </div>
@@ -2041,7 +2041,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
           <div class="space-y-1.5 relative z-10">
                <label class="text-[10px] text-zinc-400 font-medium uppercase tracking-wide">Modo de Preço</label>
-               <select :value="getVal('priceMode', 'standard')" @change="e => $emit('update-smart-group', 'priceMode', (e.target as any).value)" class="pp-number-input w-full !text-left h-8 cursor-pointer pl-2 appearance-none focus:border-violet-500/50">
+               <select :value="getVal('priceMode', 'standard')" @change="e => $emit('update-smart-group', 'priceMode', (e.target as any).value)" class="pp-number-input w-full text-left! h-8 cursor-pointer pl-2 appearance-none focus:border-violet-500/50">
                    <option value="standard">Padrão</option>
                    <option value="de_por">De / Por</option>
                    <option value="clube">Clube</option>
