@@ -23148,20 +23148,32 @@ const loadCanvasData = async (data: any) => {
         }
     });
     
-    // CRITICAL: Remove any duplicate objects BEFORE rehydration
+    // CRITICAL: Handle duplicate _customId BEFORE rehydration.
+    // Instead of removing duplicates, regenerate the _customId (same approach as
+    // the other load paths at lines ~8788 and ~10335). This prevents product zones
+    // from being incorrectly deleted when two distinct zones share the same _customId.
     const allObjsBefore = canvas.value.getObjects();
     const seenIds = new Set<string>();
     const duplicates: any[] = [];
     allObjsBefore.forEach((obj: any) => {
+        if (isTransientCanvasObject(obj)) return;
         const id = obj._customId || obj.id;
         if (id && seenIds.has(id)) {
-            duplicates.push(obj);
+            if (obj._customId) {
+                // Regenerar ID em vez de remover — preserva zonas e cards distintos
+                const old = obj._customId;
+                obj._customId = makeCanvasObjectId();
+                seenIds.add(obj._customId);
+                console.warn(`⚠️ _customId duplicado em loadCanvasData. Regenerado ${old} -> ${obj._customId}`);
+            } else {
+                duplicates.push(obj);
+            }
         } else if (id) {
             seenIds.add(id);
         }
     });
     if (duplicates.length > 0) {
-        console.warn(`⚠️ Removendo ${duplicates.length} objeto(s) duplicado(s) após loadFromJSON`);
+        console.warn(`⚠️ Removendo ${duplicates.length} objeto(s) duplicado(s) sem _customId após loadFromJSON`);
         duplicates.forEach(dup => canvas.value.remove(dup));
     }
     
@@ -37630,37 +37642,42 @@ const rehydrateCanvasZones = (
 
         let zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
 
-        // FIX: Remove TRULY duplicate zones per frame (same _customId only).
-        // Multiple zones per frame are now supported — the user can have as many
-        // product zones as needed inside the same frame.
-        // Only remove zones that share the EXACT SAME _customId (actual clones/corruption).
+        // Diagnóstico: logar todas as zonas detectadas para debug
+        if (zones.length > 0) {
+            console.log(`[rehydrateCanvasZones] Detectadas ${zones.length} zona(s) de produtos:`, zones.map((z: any) => ({
+                id: z._customId,
+                name: z.name,
+                visible: z.visible,
+                left: Math.round(z.left ?? 0),
+                top: Math.round(z.top ?? 0),
+                width: Math.round(z._zoneWidth ?? z.width ?? 0),
+                height: Math.round(z._zoneHeight ?? z.height ?? 0),
+                children: typeof z.getObjects === 'function' ? z.getObjects().length : 0,
+                isGridZone: z.isGridZone,
+                isProductZone: z.isProductZone,
+                parentFrameId: z.parentFrameId
+            })));
+        }
+
+        // FIX: Multiple zones per frame are fully supported — the user can have as many
+        // product zones as needed. If two zones share the EXACT SAME _customId (corruption),
+        // regenerate the duplicate's ID instead of removing it. This prevents zones from
+        // disappearing after save/reload.
         if (zones.length > 1) {
-            const seenIds = new Map<string, any>();
-            const duplicatesToRemove: any[] = [];
+            const seenIds = new Set<string>();
             zones.forEach((z: any) => {
                 const zid = String((z as any)._customId || '').trim();
                 if (!zid) return;
                 if (seenIds.has(zid)) {
-                    // Duplicata real (mesmo ID) — manter a com mais filhos
-                    const existing = seenIds.get(zid)!;
-                    const existingChildren = typeof existing.getObjects === 'function' ? existing.getObjects().length : 0;
-                    const currentChildren = typeof z.getObjects === 'function' ? z.getObjects().length : 0;
-                    if (currentChildren > existingChildren) {
-                        duplicatesToRemove.push(existing);
-                        seenIds.set(zid, z);
-                    } else {
-                        duplicatesToRemove.push(z);
-                    }
+                    // Mesmo _customId — regenerar em vez de remover
+                    const oldId = z._customId;
+                    z._customId = Math.random().toString(36).substr(2, 9);
+                    seenIds.add(z._customId);
+                    console.warn(`[rehydrateCanvasZones] Zona com _customId duplicado. Regenerado: ${oldId} -> ${z._customId}`);
                 } else {
-                    seenIds.set(zid, z);
+                    seenIds.add(zid);
                 }
             });
-            if (duplicatesToRemove.length > 0) {
-                duplicatesToRemove.forEach((z: any) => canvas.value.remove(z));
-                console.log(`[rehydrateCanvasZones] Removed ${duplicatesToRemove.length} true duplicate zone(s) (same _customId)`);
-                objs = canvas.value.getObjects();
-                zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
-            }
         }
 
         restoreMissingManualTemplateFlagsInCanvas(canvas.value, 'rehydrate');
