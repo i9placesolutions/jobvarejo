@@ -23,7 +23,9 @@ const { updateProduct, removeProduct } = useBuilderFlyer()
 const { tenant } = useBuilderAuth()
 
 const fileInput = ref<HTMLInputElement | null>(null)
+const extraFileInput = ref<HTMLInputElement | null>(null)
 const isUploading = ref(false)
+const isUploadingExtra = ref(false)
 const isRemovingBg = ref(false)
 const isSearching = ref(false)
 const showPriceModal = ref(false)
@@ -128,6 +130,57 @@ const handleFileChange = async (e: Event) => {
     isUploading.value = false
     if (input) input.value = ''
   }
+}
+
+const resolveExtraUrl = (img: string) => {
+  if (!img) return ''
+  if (img.startsWith('/api/') || img.startsWith('http')) return img
+  return `/api/storage/p?key=${encodeURIComponent(img)}`
+}
+
+const duplicateMainImage = () => {
+  const img = props.product.custom_image
+  if (!img) return
+  const current = props.product.extra_images || []
+  update({ extra_images: [...current, img] })
+}
+
+// ── Extra images ──
+const handleExtraImageUpload = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !tenant.value) return
+
+  isUploadingExtra.value = true
+  try {
+    const tenantId = tenant.value.id
+    const ext = file.name.split('.').pop() || 'jpg'
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const key = `builder/${tenantId}/products/${filename}`
+    const contentType = file.type || 'image/jpeg'
+    const body = await file.arrayBuffer()
+
+    await $fetch('/api/builder/storage/upload', {
+      method: 'POST',
+      query: { key, contentType },
+      body: new Uint8Array(body),
+      headers: { 'Content-Type': 'application/octet-stream' },
+    })
+
+    const current = props.product.extra_images || []
+    update({ extra_images: [...current, key] })
+  } catch (err) {
+    console.error('[BuilderProductEditorCard] Extra image upload error:', err)
+  } finally {
+    isUploadingExtra.value = false
+    if (input) input.value = ''
+  }
+}
+
+const removeExtraImage = (idx: number) => {
+  const current = [...(props.product.extra_images || [])]
+  current.splice(idx, 1)
+  update({ extra_images: current })
 }
 
 // ── Remove background ──
@@ -475,6 +528,20 @@ onUnmounted(() => {
           <button @click.stop="removeImage" class="p-1 rounded text-zinc-400 hover:text-red-400 hover:bg-white/10 transition-colors" title="Remover imagem">
             <X class="w-3 h-3" />
           </button>
+          <button @click.stop="extraFileInput?.click()" :disabled="isUploadingExtra" class="p-1 rounded text-zinc-400 hover:text-yellow-400 hover:bg-white/10 transition-colors disabled:opacity-30" title="Adicionar mais imagem">
+            <Loader2 v-if="isUploadingExtra" class="w-3 h-3 animate-spin" />
+            <ImagePlus v-else class="w-3 h-3" />
+          </button>
+        </div>
+
+        <!-- Extra images thumbnails -->
+        <div v-if="product.extra_images?.length" class="absolute top-0 right-0 z-10 flex flex-col gap-0.5 p-0.5">
+          <div v-for="(exImg, exIdx) in product.extra_images" :key="exIdx" class="relative group/ex">
+            <img :src="resolveExtraUrl(exImg)" class="w-6 h-6 object-contain rounded bg-black/60 border border-white/10" alt="" />
+            <button @click.stop="removeExtraImage(exIdx)" class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/ex:opacity-100 transition-opacity">
+              <X class="w-2 h-2 text-white" />
+            </button>
+          </div>
         </div>
       </template>
 
@@ -498,6 +565,27 @@ onUnmounted(() => {
           <Loader2 class="w-5 h-5 text-emerald-400 animate-spin" />
           <span class="text-[8px] text-emerald-400">Removendo fundo...</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Extra images: botao + miniaturas -->
+    <div v-if="imagePreviewUrl" class="bg-[#111] border-b border-white/5 px-2 py-1">
+      <div class="flex items-center gap-1 flex-wrap">
+        <div v-for="(exImg, exIdx) in (product.extra_images || [])" :key="exIdx" class="relative group/ex">
+          <img :src="resolveExtraUrl(exImg)" class="w-7 h-7 object-contain rounded bg-white/5 border border-white/10" alt="" />
+          <button @click.stop="removeExtraImage(exIdx)" class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/ex:opacity-100 transition-opacity">
+            <X class="w-2 h-2 text-white" />
+          </button>
+        </div>
+        <button @click.stop="duplicateMainImage" class="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] text-zinc-400 hover:text-emerald-400 bg-white/5 hover:bg-white/10 border border-dashed border-white/10 transition-colors" title="Duplicar imagem principal">
+          <span>Duplicar</span>
+        </button>
+        <label class="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] text-zinc-400 hover:text-yellow-400 bg-white/5 hover:bg-white/10 border border-dashed border-white/10 cursor-pointer transition-colors">
+          <Loader2 v-if="isUploadingExtra" class="w-2.5 h-2.5 animate-spin" />
+          <ImagePlus v-else class="w-2.5 h-2.5" />
+          <span>+ Imagem</span>
+          <input type="file" accept="image/*" class="hidden" :disabled="isUploadingExtra" @change="handleExtraImageUpload" />
+        </label>
       </div>
     </div>
 
@@ -584,6 +672,13 @@ onUnmounted(() => {
       accept="image/*"
       class="hidden"
       @change="handleFileChange"
+    />
+    <input
+      ref="extraFileInput"
+      type="file"
+      accept="image/*"
+      class="hidden"
+      @change="handleExtraImageUpload"
     />
 
     <!-- Compact form: name + price always visible -->
@@ -741,6 +836,25 @@ onUnmounted(() => {
         <div>
           <label class="text-[9px] text-zinc-500 block mb-0.5">Observacao</label>
           <textarea :value="product.observation || ''" @input="handleObservationInput" placeholder="Ex: Valido ate 30/03" rows="2" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 resize-none" />
+        </div>
+
+        <!-- Badge/Selo -->
+        <div>
+          <label class="text-[9px] text-zinc-500 font-medium">Selo</label>
+          <select
+            :value="product.badge_style_id || ''"
+            @change="update({ badge_style_id: ($event.target as HTMLSelectElement).value || null })"
+            class="w-full bg-[#09090b]/50 text-[9px] text-white outline-none border border-white/5 rounded px-1.5 py-0.5 mt-0.5"
+          >
+            <option value="">Nenhum</option>
+            <option value="OFERTA">OFERTA</option>
+            <option value="PROMOCAO">PROMOCAO</option>
+            <option value="NOVIDADE">NOVIDADE</option>
+            <option value="MAIS VENDIDO">MAIS VENDIDO</option>
+            <option value="IMPERDIVEL">IMPERDIVEL</option>
+            <option value="DESTAQUE">DESTAQUE</option>
+            <option value="LIMITADO">LIMITADO</option>
+          </select>
         </div>
 
         <!-- Toggles -->

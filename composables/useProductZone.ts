@@ -639,6 +639,7 @@ export const useProductZone = () => {
    * Move produto para cima no z-index
    */
   const bringToFront = (productId: string | number) => {
+    if (products.value.length === 0) return;
     const maxZ = Math.max(...products.value.map(p => p.zIndex ?? 0));
     updateProduct(productId, { zIndex: maxZ + 1 });
   };
@@ -647,6 +648,7 @@ export const useProductZone = () => {
    * Move produto para baixo no z-index
    */
   const sendToBack = (productId: string | number) => {
+    if (products.value.length === 0) return;
     const minZ = Math.min(...products.value.map(p => p.zIndex ?? 0));
     updateProduct(productId, { zIndex: minZ - 1 });
   };

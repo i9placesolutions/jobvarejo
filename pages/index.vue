@@ -160,8 +160,8 @@ const loadData = async () => {
     // Fire all three requests in parallel
     const [profile, , projectsData] = await Promise.all([
       $fetch('/api/profile', { headers }).catch(() => null),
-      loadFolders({ scope: 'project' }),
-      $fetch('/api/projects', { headers })
+      loadFolders({ scope: 'project' }).catch(() => null),
+      $fetch('/api/projects', { headers }).catch(() => [])
     ])
 
     if (profile) user.value = profile as any
@@ -1351,12 +1351,12 @@ const {
   getId: (project: any) => String(project?.id || ''),
   getSrc: (project: any) => hasUsableProjectPreview(project) ? String(project?.preview_url || '').trim() : '',
   enabled: () => !isLoadingProjects.value,
-  immediateCount: () => viewMode.value === 'list' ? 2 : 4,
-  batchSize: () => viewMode.value === 'list' ? 1 : 2,
-  rootMargin: () => viewMode.value === 'list' ? '32px' : '72px',
-  threshold: () => viewMode.value === 'list' ? 0.4 : 0.28,
-  hydrateVisibleOnly: true,
-  maxVisibleHydrated: () => viewMode.value === 'list' ? 2 : 4
+  immediateCount: () => viewMode.value === 'list' ? 6 : 12,
+  batchSize: () => viewMode.value === 'list' ? 4 : 6,
+  rootMargin: () => viewMode.value === 'list' ? '200px' : '300px',
+  threshold: () => viewMode.value === 'list' ? 0.1 : 0.05,
+  hydrateVisibleOnly: false,
+  maxVisibleHydrated: null
 })
 
 watch(projectGridViewportEl, (value) => {
@@ -1831,10 +1831,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   <!-- Grid mode -->
                   <template v-if="viewMode === 'grid'">
                     <div class="aspect-16/10 bg-[#0d0d12] relative overflow-hidden">
-                      <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 p-2 flex items-center justify-center">
+                      <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 flex items-center justify-center">
                         <img
                           :src="getProjectPreviewSrc(project, projectIndex)"
-                          class="project-thumb-media max-w-full max-h-full object-contain rounded-lg"
+                          class="project-thumb-media w-full h-full object-cover"
                           :alt="project.name"
                           draggable="false"
                           :loading="projectIndex < 8 ? 'eager' : 'lazy'"

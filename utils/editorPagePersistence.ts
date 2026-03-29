@@ -45,15 +45,8 @@ export const persistSerializedPageState = (
     return { didUpdate: false, targetPageIndex, targetPage: opts.pages[targetPageIndex] || null }
   }
 
-  // FIX: only trigger auto-save first; update the cached metadata (fingerprint,
-  // serialized JSON) AFTER. Previously the fingerprint was stamped before
-  // triggerAutoSave() ran — if triggerAutoSave threw, the page was permanently
-  // marked as "saved" without data ever reaching the server, causing silent data loss.
-  if (!opts.shouldSkipAutoSave(opts.source, opts.reason)) {
-    opts.triggerAutoSave()
-  }
-
-  // Stamp the cache metadata only after the save has been successfully initiated.
+  // Setar fingerprint ANTES do triggerAutoSave para evitar race condition
+  // onde outro save dispara antes do fingerprint ser atualizado.
   const activePageRef = opts.pages[targetPageIndex]
   if (activePageRef) {
     activePageRef.lastSavedFingerprint = opts.currentFingerprint
@@ -70,6 +63,10 @@ export const persistSerializedPageState = (
       opts.json?.updatedAt ||
       0
     ) || undefined
+  }
+
+  if (!opts.shouldSkipAutoSave(opts.source, opts.reason)) {
+    opts.triggerAutoSave()
   }
 
   const savedPage = opts.pages[targetPageIndex]

@@ -7256,6 +7256,13 @@ const debouncedSaveCurrentState = () => {
         saveCurrentState({ reason: 'properties-panel' });
     }, 150); // 150ms debounce for snappy feel but coalesces rapid changes
 };
+const flushPropertySave = () => {
+    if (propertySaveTimer) {
+        clearTimeout(propertySaveTimer);
+        propertySaveTimer = null;
+    }
+    saveCurrentState({ reason: 'properties-panel-flush' });
+};
 
 // Debounced save for text editing (typing in i-text/textbox does not always emit object:modified).
 let textEditSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -10939,10 +10946,13 @@ const CANVAS_CUSTOM_PROPS = [
     '_zoneTemplateSnapshotId',
     '_zoneTemplateSnapshot',
     'backgroundColor', // Zone background color
+    'padding',
     'gapHorizontal',
     'gapVertical',
     'columns',
     'rows',
+    'columnRatio',
+    'rowRatio',
     'cardAspectRatio',
     'lastRowBehavior',
     'layoutDirection',
@@ -10950,6 +10960,11 @@ const CANVAS_CUSTOM_PROPS = [
     'highlightCount',
     'highlightPos',
     'highlightHeight',
+    'splashOffsetByCol',
+    'splashOffsetByRow',
+    'minCardSize',
+    'maxColumns',
+    'maxRows',
 
     // Price mode engine
     'priceMode',
@@ -12312,7 +12327,11 @@ const removeImageObjectsDeep = (node: any): any => {
             currentPage.lastSerializedCanvasBytes = serializedBytes
             currentPage.lastSerializedCanvasSavedAt = saveStamp
         }
-        if (shouldSkipByFingerprint({
+        // Nunca pular save se o count de objetos mudou (indica mudança estrutural real)
+        const prevObjectCount = currentPage?.canvasData?.objects?.length ?? -1
+        const currObjectCount = json?.objects?.length ?? 0
+        const objectCountChanged = prevObjectCount >= 0 && prevObjectCount !== currObjectCount
+        if (!objectCountChanged && shouldSkipByFingerprint({
             skipIfUnchanged: opts.skipIfUnchanged,
             lastSavedFingerprint: currentPage?.lastSavedFingerprint,
             currentFingerprint
@@ -12387,8 +12406,14 @@ const removeImageObjectsDeep = (node: any): any => {
         // events would persist the restored (potentially intermediate) state, marking
         // the page dirty and triggering auto-save of a state the user is undoing.
         const reason = String(opts.reason || '')
-        if (Date.now() < _historyRestoreCooldownUntil && reason !== 'initial-history-capture') {
-            console.log(`⏳ [saveState] Suprimido durante cooldown pós-undo/redo (reason=${reason})`)
+        // Permitir saves explícitos do usuário (global-style, properties-panel, layers-drag)
+        // mesmo durante cooldown pós-undo/redo. Apenas suprimir eventos automáticos do canvas.
+        const isUserInitiated = reason.startsWith('global-style:')
+            || reason.startsWith('properties-panel')
+            || reason.startsWith('layers-drag')
+            || reason === 'object:modified(zone)'
+            || opts.skipIfUnchanged === false
+        if (!isUserInitiated && Date.now() < _historyRestoreCooldownUntil && reason !== 'initial-history-capture') {
             return false
         }
 
@@ -12493,7 +12518,20 @@ function syncCardProductDataNameFromTitleTarget(
     return true;
 }
 
+let _isHandlingObjectModified = false;
 const handleObjectModified = (e: any) => {
+    const obj = e.target;
+    if (!obj) return;
+    // Proteção anti-reentrância: recalculateZoneLayout pode disparar object:modified
+    if (_isHandlingObjectModified) return;
+    _isHandlingObjectModified = true;
+    try {
+    _handleObjectModifiedInner(e);
+    } finally {
+    _isHandlingObjectModified = false;
+    }
+};
+const _handleObjectModifiedInner = (e: any) => {
     const obj = e.target;
     if (!obj) return;
 
@@ -12518,6 +12556,8 @@ const handleObjectModified = (e: any) => {
     if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
         const members = (obj.getObjects() || []).slice();
         const affectedZones = new Map<string, any>();
+        const action = String(e?.transform?.action || '');
+        const didDragOrScale = action === 'drag' || action.includes('scale');
 
         members.forEach((member: any) => {
             if (!member) return;
@@ -12536,7 +12576,7 @@ const handleObjectModified = (e: any) => {
             ));
             if (!zone) return;
             applyCardFrameBinding(member, getResolvedZoneFrameId(zone));
-            affectedZones.set(zoneId, zone);
+            if (didDragOrScale) affectedZones.set(zoneId, zone);
         });
 
         affectedZones.forEach((zone: any) => {
@@ -12568,8 +12608,25 @@ const handleObjectModified = (e: any) => {
         const cachedChildren = getZoneChildren(obj);
         syncZoneCardFrameBindings(obj, cachedChildren);
         ensureZoneSanity(obj);
+
+        const prevW = obj._zoneWidth ?? 0;
+        const prevH = obj._zoneHeight ?? 0;
         normalizeZoneScale(obj);
-        recalculateZoneLayout(obj, cachedChildren, { save: false, preserveStyles: true });
+        const newW = obj._zoneWidth ?? 0;
+        const newH = obj._zoneHeight ?? 0;
+
+        // Só recalcular layout se a zona realmente mudou de tamanho (> 2px).
+        // Cliques acidentais ou movimentos mínimos não devem reposicionar os cards.
+        const action = String(e?.transform?.action || '');
+        const didResize = action.includes('scale') || action.includes('resize');
+        const deltaW = Math.abs(newW - prevW);
+        const deltaH = Math.abs(newH - prevH);
+        if (didResize && (deltaW > 2 || deltaH > 2)) {
+            recalculateZoneLayout(obj, cachedChildren, { save: false, preserveStyles: true });
+            requestAnimationFrame(() => {
+                saveCurrentState({ reason: 'zone-resize', skipIfUnchanged: false });
+            });
+        }
         return;
     }
 
@@ -12693,7 +12750,8 @@ const handleObjectModified = (e: any) => {
                             }
 	                            obj.setCoords?.();
 	                        }
-	                        recalculateZoneLayout(zone, ordered, { save: false, preserveStyles: true });
+                        // Card voltou ao mesmo slot — não precisa recalcular toda a zona.
+                        canvas.value.requestRenderAll();
 	                        return;
 	                    }
 	                }
@@ -12713,7 +12771,7 @@ const handleObjectModified = (e: any) => {
 	                    ) {
 	                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
 	                        recalculateZoneLayout(zone, ordered, { save: false, preserveStyles: true });
-	                        saveCurrentState({ reason: 'card-swap' });
+	                        requestAnimationFrame(() => { saveCurrentState({ reason: 'card-swap' }); });
 	                        return;
 	                    }
 	                }
@@ -12730,9 +12788,11 @@ const handleObjectModified = (e: any) => {
 
                 // Snap everything back into the grid after drop.
                 recalculateZoneLayout(zone, ordered, { save: false, preserveStyles: true });
-                // Persist swap state so undo/redo works correctly
+                // Persistir APÓS render completar para evitar salvar estado intermediário
                 if (fromIndex !== toIndex) {
-                    saveCurrentState({ reason: 'card-swap' });
+                    requestAnimationFrame(() => {
+                        saveCurrentState({ reason: 'card-swap' });
+                    });
                 }
             }
         }
@@ -12927,7 +12987,7 @@ const undo = async () => {
         // Deferred canvas events (rehydration, text recalc) can fire after
         // isHistoryProcessing is cleared, marking the page dirty and saving
         // the undo state as a "new" change.
-        _historyRestoreCooldownUntil = Date.now() + 1500;
+        _historyRestoreCooldownUntil = Date.now() + 500;
     }
 }
 
@@ -12945,7 +13005,7 @@ const redo = async () => {
     } finally {
         isHistoryProcessing.value = false;
         // FIX: Same cooldown as undo — suppress deferred saves after redo.
-        _historyRestoreCooldownUntil = Date.now() + 1500;
+        _historyRestoreCooldownUntil = Date.now() + 500;
     }
 }
 
@@ -17571,6 +17631,8 @@ const setupReactivity = () => {
         const nextH = Math.max(50, Math.round(Number(scaledH) || 0));
         if (!nextW || !nextH) return;
 
+        // Resetar scale e posição — NÃO setar width/height aqui
+        // resizeSmartObject cuida de width/height + _cardWidth/_cardHeight
         card.set({
             originX: 'center',
             originY: 'center',
@@ -17579,9 +17641,7 @@ const setupReactivity = () => {
             scaleX: 1,
             scaleY: 1,
             flipX: false,
-            flipY: false,
-            width: nextW,
-            height: nextH
+            flipY: false
         });
 
         const styles = getStylesForCard(card);
@@ -18255,9 +18315,15 @@ const setupReactivity = () => {
 
         const shouldSave = opts.save !== false;
 
-        // Base scale BEFORE the gesture started (critical: do NOT force >=1)
-        const baseScaleX = abs(original.scaleX) || abs(img.scaleX) || 1;
-        const baseScaleY = abs(original.scaleY) || abs(img.scaleY) || 1;
+        // Base scale BEFORE the gesture started.
+        // Usar __baseScaleX persistente para evitar acumulação quando original não existe.
+        const baseScaleX = abs(original.scaleX) || abs((img as any).__baseScaleX) || 1;
+        const baseScaleY = abs(original.scaleY) || abs((img as any).__baseScaleY) || 1;
+        // Armazenar para futuras operações (captura apenas na primeira vez)
+        if (!Number.isFinite((img as any).__baseScaleX) || !(img as any).__baseScaleX) {
+            (img as any).__baseScaleX = baseScaleX;
+            (img as any).__baseScaleY = baseScaleY;
+        }
 
         // Anchor point (keep the opposite side fixed, like Canva)
         let anchorOriginX: any = 'center';
@@ -18602,11 +18668,15 @@ const setupReactivity = () => {
     
     canvas.value.on('object:added', (e: any) => {
         if (isBulkProductMutation || isHistoryProcessing.value || isDesignLoading.value) return;
+        // Não disparar relayout durante cooldown pós-undo/redo (loadFromJSON recria objetos)
+        if (Date.now() < _historyRestoreCooldownUntil) return;
         const obj = e.target;
         if (!obj) return;
         const isCard = !!(obj.isProductCard || obj.isSmartObject || isLikelyProductCard(obj));
         if (!isCard) return;
-        
+        // Cards que já possuem parentZoneId (restaurados do JSON) não devem disparar relayout
+        if (String((obj as any).parentZoneId || '').trim()) return;
+
         // Find intersecting zone
         const zones = canvas.value.getObjects().filter((o: any) => o.isGridZone || o.isProductZone);
         for (const zone of zones) {
@@ -18619,7 +18689,7 @@ const setupReactivity = () => {
                 break;
             }
         }
-        
+
         // Debounced layout - waits for all objects in batch to be added
         clearTimeout(layoutDebounceTimer);
         layoutDebounceTimer = setTimeout(() => {
@@ -19028,17 +19098,22 @@ const setupReactivity = () => {
 
         // 3. Zone Auto-Layout (Realtime Resize)
         if (obj && isLikelyProductZone(obj)) {
+            const prevW = obj._zoneWidth ?? 0;
+            const prevH = obj._zoneHeight ?? 0;
+
             // CRITICAL: Cache children BEFORE updating zone dimensions
             // This prevents losing cards that may fall outside new bounds during resize
             const cachedChildren = getZoneChildren(obj);
 
             ensureZoneSanity(obj);
             obj.setCoords();
-            // Use inner rect dimensions * scale instead of group bounds to avoid inflation
+            // Durante scaling (tempo real), calcular dimensões combinando rect + scale do grupo.
+            // NÃO chamar normalizeZoneScale aqui — resetar scaleX=1 durante o gesto
+            // confunde o Fabric. A normalização é feita no object:modified (fim do gesto).
             const zr = getZoneRect(obj);
+            const sx = Math.abs(obj.scaleX ?? 1);
+            const sy = Math.abs(obj.scaleY ?? 1);
             if (zr) {
-                const sx = Math.abs(obj.scaleX ?? 1);
-                const sy = Math.abs(obj.scaleY ?? 1);
                 obj._zoneWidth = Math.abs((zr.width ?? 0) * (zr.scaleX ?? 1)) * sx;
                 obj._zoneHeight = Math.abs((zr.height ?? 0) * (zr.scaleY ?? 1)) * sy;
             } else {
@@ -19046,8 +19121,13 @@ const setupReactivity = () => {
                 obj._zoneHeight = Math.abs(obj.getScaledHeight?.() ?? obj._zoneHeight ?? 0);
             }
 
-            // Use cached children to ensure they stay bound to zone during resize
-            recalculateZoneLayout(obj, cachedChildren, { save: false, preserveStyles: true });
+            // Só recalcular layout se houve mudança real de tamanho (> 2px).
+            // Evita que clique acidental na zona reposicione todos os cards.
+            const deltaW = Math.abs((obj._zoneWidth || 0) - prevW);
+            const deltaH = Math.abs((obj._zoneHeight || 0) - prevH);
+            if (deltaW > 2 || deltaH > 2) {
+                recalculateZoneLayout(obj, cachedChildren, { save: false, preserveStyles: true });
+            }
         }
 
         // 🔒 Apply containment after scaling.
@@ -20158,7 +20238,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 safeAddWithUpdate(active);
                 active.setCoords();
                 canvas.value.requestRenderAll();
-                debouncedSaveCurrentState();
+                flushPropertySave();
                 refreshSelectedRef();
                 return;
             }
@@ -20179,7 +20259,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 safeAddWithUpdate(active);
                 active.setCoords();
                 canvas.value.requestRenderAll();
-                debouncedSaveCurrentState();
+                flushPropertySave();
                 refreshSelectedRef();
                 return;
             }
@@ -22018,8 +22098,8 @@ const reorderLayerByDrag = (payload: LayerReorderPayload) => {
     if (targetIndexAfterRemoval < 0) return;
 
     const insertIndexAfterRemoval = place === 'before'
-        ? targetIndexAfterRemoval + 1
-        : targetIndexAfterRemoval;
+        ? targetIndexAfterRemoval
+        : targetIndexAfterRemoval + 1;
     const finalIndex = Math.max(0, Math.min(insertIndexAfterRemoval, compact.length));
 
     const canvasApi: any = canvas.value as any;
@@ -24721,7 +24801,6 @@ const createSmartObject = async (
         top: titleY,
         width: initialTitleWidth,
         name: 'smart_title',
-        shadow: new fabric.Shadow({ color: 'rgba(255,255,255,0.8)', blur: 2, offsetX: 1, offsetY: 1 }),
         // UX: Prevent font stretching/blurring, enforce reflow
         lockScalingY: true, 
         splitByGrapheme: false
@@ -26649,13 +26728,13 @@ const scheduleGlobalStylesStateSave = (prop: string) => {
     }
 
     if (immediate) {
-        saveCurrentState({ reason: `global-style:${prop}`, skipIfUnchanged: true });
+        saveCurrentState({ reason: `global-style:${prop}`, skipIfUnchanged: false });
         return;
     }
 
     globalStylesSaveTimer = setTimeout(() => {
         globalStylesSaveTimer = null;
-        saveCurrentState({ reason: 'global-style:debounced', skipIfUnchanged: true });
+        saveCurrentState({ reason: 'global-style:debounced', skipIfUnchanged: false });
     }, 180);
 };
 
@@ -26755,7 +26834,8 @@ const getZoneCardDiagnosticsPayload = (zone: any) => {
 
 const syncZoneDerivedMetadata = (zone: any, diagnostics?: ProductZoneDiagnostic[]) => {
     if (!zone || !isLikelyProductZone(zone)) return null;
-    const zoneCards = getZoneChildren(zone);
+    // Snapshot dos children — usado para diagnostics e contentStatus
+    const zoneCards = getZoneChildren(zone).slice();
     const nextDiagnostics = diagnostics ?? buildProductZoneDiagnostics({
         zone: {
             name: String((zone as any)?.zoneName || '').trim() || undefined,
@@ -28597,6 +28677,8 @@ const normalizePriceGroupPlacementInCard = (
         };
     };
 
+    // Resetar scale para 1 antes de calcular fitScale — evita acumulação
+    priceGroup.set({ scaleX: 1, scaleY: 1 });
     let bounds = updateBounds();
     if (!bounds) return false;
 
@@ -28609,9 +28691,10 @@ const normalizePriceGroupPlacementInCard = (
     );
 
     if (Number.isFinite(fitScale) && fitScale > 0 && fitScale < 0.999) {
+        // Usar escala absoluta, não multiplicar a existente — evita crescimento acumulativo
         priceGroup.set({
-            scaleX: (Number(priceGroup.scaleX ?? 1) || 1) * fitScale,
-            scaleY: (Number(priceGroup.scaleY ?? 1) || 1) * fitScale
+            scaleX: fitScale,
+            scaleY: fitScale
         });
         bounds = updateBounds();
         if (!bounds) return false;
@@ -32659,9 +32742,9 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
             if (json.name && !obj.name) {
                 obj.name = json.name;
             }
-            // Restore custom __ props (template metadata)
+            // Restore custom _ e __ props (template metadata, zone bindings, product data)
             for (const key of Object.keys(json)) {
-                if (key.startsWith('__') && obj[key] === undefined) {
+                if (key.startsWith('_') && obj[key] === undefined) {
                     obj[key] = json[key];
                 }
             }
@@ -34020,8 +34103,7 @@ function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _
         selectable: true,
         evented: true,
         name: 'offer_header_text',
-        charSpacing: 120,
-        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.18)', blur: 2, offsetX: 0, offsetY: 2 })
+        charSpacing: 120
     });
 
     const parts = splitPriceParts(priceStr);
@@ -34039,8 +34121,7 @@ function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _
         originY: 'center',
         left: -110,
         top: priceAreaCenterY + 4,
-        name: 'price_currency_text',
-        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.12)', blur: 2, offsetX: 0, offsetY: 2 })
+        name: 'price_currency_text'
     });
 
     const priceInteger = new fabric.IText(integer, {
@@ -34052,8 +34133,7 @@ function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _
         originY: 'center',
         left: -70,
         top: priceAreaCenterY + 8,
-        name: 'price_integer_text',
-        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.10)', blur: 2, offsetX: 0, offsetY: 2 })
+        name: 'price_integer_text'
     });
 
     const priceDecimal = new fabric.IText(`,${dec}`, {
@@ -34065,8 +34145,7 @@ function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _
         originY: 'center',
         left: 40,
         top: priceAreaCenterY - 10,
-        name: 'price_decimal_text',
-        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.10)', blur: 2, offsetX: 0, offsetY: 2 })
+        name: 'price_decimal_text'
     });
 
     const u = normalizeUnitForLabel(unitText);
@@ -34279,8 +34358,7 @@ function buildRedBurstPriceGroupForCard(priceStr: string, cardW: number, cardH: 
         left: hasHeaderUnit ? -headerW * 0.055 : 0,
         top: headerY + (headerH * 0.01),
         name: 'price_header_text',
-        charSpacing: 20,
-        shadow: new fabric.Shadow({ color: 'rgba(44,0,0,0.62)', blur: 2, offsetX: 0, offsetY: 2 })
+        charSpacing: 20
     });
 
     const headerUnitText = new fabric.Text(headerUnit || 'KG', {
@@ -34293,8 +34371,7 @@ function buildRedBurstPriceGroupForCard(priceStr: string, cardW: number, cardH: 
         left: headerW * 0.33,
         top: headerY + (headerH * 0.02),
         name: 'price_header_unit_text',
-        visible: hasHeaderUnit,
-        shadow: new fabric.Shadow({ color: 'rgba(34,0,0,0.6)', blur: 2, offsetX: 0, offsetY: 2 })
+        visible: hasHeaderUnit
     });
 
     const parts = splitPriceParts(priceStr);
@@ -34313,8 +34390,7 @@ function buildRedBurstPriceGroupForCard(priceStr: string, cardW: number, cardH: 
         originY: 'center',
         left: currencyX,
         top: priceBaselineY + (labelH * 0.015),
-        name: 'price_currency_text',
-        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.38)', blur: 3, offsetX: 0, offsetY: 2 })
+        name: 'price_currency_text'
     });
 
     const integerX = -labelW * 0.02;
@@ -34323,14 +34399,11 @@ function buildRedBurstPriceGroupForCard(priceStr: string, cardW: number, cardH: 
         fontFamily: 'Inter',
         fontWeight: '900',
         fill: '#ffffff',
-        stroke: '#a5a5a5',
-        strokeWidth: Math.max(1, labelH * 0.008),
         originX: 'center',
         originY: 'center',
         left: integerX,
         top: priceBaselineY + (labelH * 0.01),
-        name: 'price_integer_text',
-        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.35)', blur: 5, offsetX: 0, offsetY: 3 })
+        name: 'price_integer_text'
     });
 
     const priceDecimal = new fabric.IText(`,${dec}`, {
@@ -34338,14 +34411,11 @@ function buildRedBurstPriceGroupForCard(priceStr: string, cardW: number, cardH: 
         fontFamily: 'Inter',
         fontWeight: '900',
         fill: '#ffffff',
-        stroke: '#b8b8b8',
-        strokeWidth: Math.max(1, labelH * 0.006),
         originX: 'left',
         originY: 'center',
         left: integerX + (labelW * 0.145),
         top: priceBaselineY - (labelH * 0.145),
-        name: 'price_decimal_text',
-        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.33)', blur: 4, offsetX: 0, offsetY: 2 })
+        name: 'price_decimal_text'
     });
 
     // Unit is displayed on the top strip for this style.
@@ -35161,10 +35231,20 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     (group as any).__lastCardRelayoutSignature = relayoutSignature;
     (group as any).__forceCardRelayout = false;
 
+    // Preservar _productData antes de operações que podem perdê-la
+    const savedProductData = ((group as any)?._productData && typeof (group as any)._productData === 'object')
+        ? JSON.parse(JSON.stringify((group as any)._productData))
+        : null;
+
     // Now that we know we're doing a full relayout, set dimensions.
     // Reset scale first to ensure clean internal layout.
     group.scale(1);
     group.set({ width: w, height: h });
+
+    // Restaurar _productData caso Fabric a tenha perdido no set()
+    if (savedProductData && (!(group as any)?._productData || typeof (group as any)._productData !== 'object')) {
+        (group as any)._productData = savedProductData;
+    }
     
     const halfW = w / 2;
     const halfH = h / 2;
@@ -35710,26 +35790,12 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 const _rawOffY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
                 const offsetY = _rawOffY * (h / _refH);
 
-                // Armazenar o scale ORIGINAL (na criação), não o scale atual
-                // Isso garante que o redimensionamento funcione corretamente em ambas direções
-                if (typeof (splash as any).__originalScaleX !== 'number') {
-                    // Primeira vez: capturar o scale atual como "original"
-                    (splash as any).__originalScaleX = splash.scaleX || 1;
-                    (splash as any).__originalScaleY = splash.scaleY || 1;
-                }
-
-                // Calcular scale baseado no tamanho do cartão relativo ao tamanho original
-                const originalW = (splash as any).__originalCardWidth || splash.width || 100;
-                const sizeRatio = _refW / originalW;
-
-                // Aplicar: scale_original × ratio × globalScale
-                const origScaleX = (splash as any).__originalScaleX || 1;
-                const origScaleY = (splash as any).__originalScaleY || 1;
-                let sScaleX = origScaleX * sizeRatio * globalScale;
-                let sScaleY = origScaleY * sizeRatio * globalScale;
-
-                // Armazenar largura original do cartão para próximos redimensionamentos
-                (splash as any).__originalCardWidth = _refW;
+                // Calcular escala proporcional ao tamanho do card sem acumulação.
+                // Usar tamanho de referência fixo (300px) para evitar capturar valores inflados.
+                const SPLASH_REF_WIDTH = 300;
+                const sizeRatio = Math.max(0.3, Math.min(3, w / SPLASH_REF_WIDTH));
+                let sScaleX = sizeRatio * globalScale;
+                let sScaleY = sizeRatio * globalScale;
 
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
@@ -36660,16 +36726,16 @@ const applyZoneScaleToRect = (zone: any, minSize = 60) => {
     const zoneRect = zone.getObjects().find((o: any) => o.type === 'rect');
     if (!zoneRect) return null;
 
-    // CRITICAL FIX: Use the inner RECT dimensions * zone scale, NOT zone.getScaledWidth().
-    // zone.getScaledWidth() returns the GROUP bounding box (which includes text labels
-    // and other non-rect children), inflating _zoneWidth each time normalizeZoneScale runs.
-    // The rect is the actual zone area where cards are placed.
-    const rectW = Math.abs((zoneRect.width ?? 0) * (zoneRect.scaleX ?? 1));
-    const rectH = Math.abs((zoneRect.height ?? 0) * (zoneRect.scaleY ?? 1));
+    // Normalizar rect para scale=1 antes de calcular dimensões finais.
+    // Evita duplicar escala quando rect já absorveu scale de iterações anteriores.
+    const rawRectW = Math.abs((zoneRect.width ?? 0) * (zoneRect.scaleX ?? 1));
+    const rawRectH = Math.abs((zoneRect.height ?? 0) * (zoneRect.scaleY ?? 1));
+    zoneRect.set({ width: rawRectW, height: rawRectH, scaleX: 1, scaleY: 1 });
+
     const zoneScaleX = Math.abs(zone.scaleX ?? 1);
     const zoneScaleY = Math.abs(zone.scaleY ?? 1);
-    const nextWidth = Math.max(minSize, rectW * zoneScaleX);
-    const nextHeight = Math.max(minSize, rectH * zoneScaleY);
+    const nextWidth = Math.max(minSize, rawRectW * zoneScaleX);
+    const nextHeight = Math.max(minSize, rawRectH * zoneScaleY);
     if (!nextWidth || !nextHeight) return null;
 
     // FIX: capture zone center BEFORE resetting scale, so we can detect if
@@ -36696,18 +36762,10 @@ const applyZoneScaleToRect = (zone: any, minSize = 60) => {
         flipY: false
     });
 
-    safeAddWithUpdate(zone);
+    // Não usar safeAddWithUpdate — triggerLayout recalcula bounds do grupo
+    // e desloca zone.left/top, quebrando posição dos cards.
+    zone.dirty = true;
     zone.setCoords();
-
-    // FIX: after safeAddWithUpdate, Fabric recalculates the group's bounding box
-    // which can shift zone.left/top.  Product cards are positioned with absolute
-    // canvas coordinates, so they don't follow the zone automatically.  Translate
-    // all bound cards by the delta to keep them aligned with the zone.
-    const dx = (zone.left ?? 0) - prevLeft
-    const dy = (zone.top ?? 0) - prevTop
-    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-        moveZoneChildren(zone, dx, dy)
-    }
 
     zone._zoneWidth = nextWidth;
     zone._zoneHeight = nextHeight;
@@ -37035,11 +37093,12 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                 // internal elements (text, images, prices) keep their old positions/sizes.
                 // Slot dimensions may differ from saved due to zone metric rounding after
                 // normalizeZoneScale / ensureZoneSanity.
-                const savedW = Number((card as any)._cardWidth) || 0;
-                const savedH = Number((card as any)._cardHeight) || 0;
+                const savedW = Number((card as any)._cardWidth) || Number(card.width) || 0;
+                const savedH = Number((card as any)._cardHeight) || Number(card.height) || 0;
                 if (savedW > 0 && savedH > 0) {
-                    // Keep saved dimensions intact — only reposition below
                     card.set({ width: savedW, height: savedH });
+                    (card as any)._cardWidth = savedW;
+                    (card as any)._cardHeight = savedH;
                 } else {
                     card.set({ width: slotW, height: slotH });
                     (card as any)._cardWidth = slotW;
@@ -37757,11 +37816,10 @@ const rehydrateCanvasZones = (
             const hasPersistedZoneStyles =
                 !!rawZoneStyles &&
                 typeof rawZoneStyles === 'object' &&
-                !Array.isArray(rawZoneStyles) &&
-                Object.keys(rawZoneStyles).length > 0;
+                !Array.isArray(rawZoneStyles);
 
-            // Only normalize and re-apply when styles were explicitly persisted for the zone.
-            // This avoids overriding card visuals on reload with fresh defaults.
+            // Normalizar sempre que _zoneGlobalStyles existir (mesmo parcial/vazio).
+            // Objeto vazio significa "manter defaults, sem overrides" — diferente de undefined.
             if (hasPersistedZoneStyles) {
                 (z as any)._zoneGlobalStyles = normalizeGlobalStyles(rawZoneStyles as Partial<GlobalStyles>);
             }
@@ -37785,10 +37843,19 @@ const rehydrateCanvasZones = (
         // manually clicks the zone (which triggers refreshSelectedRef).
         // ═══════════════════════════════════════════════════════════════════
         if (zones.length > 0) {
-            const zonesWithCounts = zones.map((z: any) => ({ zone: z, count: getZoneChildren(z).length }));
+            const zonesWithCounts = zones.map((z: any) => ({
+                zone: z,
+                count: getZoneChildren(z).length,
+                hasPersistedConfig: !!(z as any)._zoneGlobalStyles || (z.columns > 0)
+            }));
             const primaryZone =
+                // Priorizar zona com cards
                 zonesWithCounts
                     .filter((item: any) => item.count > 0)
+                    .sort((a: any, b: any) => b.count - a.count)[0]?.zone ??
+                // Se nenhuma com cards, priorizar a que tem config persistida
+                zonesWithCounts
+                    .filter((item: any) => item.hasPersistedConfig)
                     .sort((a: any, b: any) => b.count - a.count)[0]?.zone ??
                 zones.find((z: any) => z?.isProductZone || String(z?.name || '') === 'productZoneContainer') ??
                 zones[0];
@@ -37796,10 +37863,10 @@ const rehydrateCanvasZones = (
             // Sync global styles
             productZoneState.updateGlobalStyles(getZoneGlobalStyles(primaryZone));
 
-            // Sync zone config (columns, rows, gaps, padding, layout settings, highlights)
+            // Sync zone config completo (incluindo propriedades derivadas)
             const pad = typeof primaryZone._zonePadding === 'number'
                 ? primaryZone._zonePadding
-                : (primaryZone.padding || 20);
+                : (typeof primaryZone.padding === 'number' ? primaryZone.padding : 20);
             const zoneConfig: Partial<ProductZone> = {
                 enabled: true,
                 columns: primaryZone.columns || 0,
@@ -37814,9 +37881,13 @@ const rehydrateCanvasZones = (
                 highlightCount: primaryZone.highlightCount || 0,
                 highlightPos: primaryZone.highlightPos || 'first',
                 highlightHeight: primaryZone.highlightHeight || 1.5,
+                role: primaryZone.role || 'grid',
+                contentSource: primaryZone.contentSource || 'manual',
+                contentStatus: primaryZone.contentStatus || 'ready',
+                overflowPolicy: primaryZone.overflowPolicy || 'warn',
+                zoneName: primaryZone.zoneName || 'Zona de Produtos',
             };
             productZoneState.updateZone(zoneConfig);
-            console.log('[rehydrateCanvasZones] Synced composable from zone:', { styles: true, config: zoneConfig });
         }
 
         const zonesById = new Map<string, any>();

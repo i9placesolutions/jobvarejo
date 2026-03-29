@@ -78,7 +78,13 @@ const paddingStyle = computed(() => {
 })
 
 // ── Price scale ─────────────────────────────────────────────────────────────
-const priceScale = computed(() => props.tagStyle?.css_config?.priceScale ?? 1)
+const { flyer } = useBuilderFlyer()
+const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
+const flyerPriceScale = computed(() => fontConfig.value.price_scale ?? 1)
+const priceScale = computed(() => (props.tagStyle?.css_config?.priceScale ?? 1) * flyerPriceScale.value)
+
+// Estilo visual global da etiqueta (sobrescreve displayMode do tagStyle)
+const priceVisualStyle = computed(() => fontConfig.value.price_visual_style || 'padrao')
 
 // ── Opacity ─────────────────────────────────────────────────────────────────
 const bgOpacity = computed(() => props.tagStyle?.css_config?.bgOpacity ?? 1)
@@ -130,8 +136,44 @@ const showBarcode = computed(() => props.tagStyle?.css_config?.showBarcode ?? fa
 const showValidity = computed(() => props.tagStyle?.css_config?.showValidity ?? false)
 
 // ── Combined seal style ─────────────────────────────────────────────────────
+const effectiveDisplayMode = computed(() => {
+  const pvs = priceVisualStyle.value
+  if (pvs === 'bandeira') return 'bandeira'
+  if (pvs === 'splash') return 'splash'
+  if (pvs === 'limpo') return 'limpo'
+  return displayMode.value // padrao: usa do tagStyle
+})
+
 const sealStyle = computed(() => {
-  const dm = displayMode.value
+  const edm = effectiveDisplayMode.value
+
+  // Bandeira: ribbon com ponta
+  if (edm === 'bandeira') {
+    return {
+      color: textColor.value,
+      background: bgColor.value,
+      padding: '0.15em 0.7em 0.15em 0.4em',
+      position: 'relative' as const,
+      overflow: 'visible' as const,
+      borderRadius: '4px 0 0 4px',
+      boxShadow: '2px 2px 4px rgba(0,0,0,0.25)',
+      clipPath: 'polygon(0 0, calc(100% - 0.5em) 0, 100% 50%, calc(100% - 0.5em) 100%, 0 100%)',
+    }
+  }
+
+  // Limpo: sem fundo, texto grande colorido
+  if (edm === 'limpo') {
+    return {
+      color: bgColor.value,
+      background: 'transparent',
+      padding: '0',
+      position: 'relative' as const,
+      textShadow: '1px 1px 2px rgba(0,0,0,0.1)',
+    }
+  }
+
+  // Padrao e splash: logica original
+  const dm = edm === 'splash' ? 'splash' : displayMode.value
   const style: Record<string, string> = {
     color: textColor.value,
     padding: paddingStyle.value,
@@ -519,12 +561,12 @@ const mode = computed(() => props.product.price_mode || 'simple')
     <div
       v-if="mode === 'installment' ? installmentParts : priceParts"
       class="inline-flex items-baseline justify-center gap-0.5"
-      :class="[shapeClass, { 'splash-shape': displayMode === 'splash' }]"
+      :class="[shapeClass, { 'splash-shape': effectiveDisplayMode === 'splash' }]"
       :style="sealStyle"
     >
       <!-- Splash SVG background -->
       <svg
-        v-if="displayMode === 'splash'"
+        v-if="effectiveDisplayMode === 'splash'"
         class="absolute inset-0 w-full h-full"
         viewBox="0 0 100 100"
         preserveAspectRatio="none"

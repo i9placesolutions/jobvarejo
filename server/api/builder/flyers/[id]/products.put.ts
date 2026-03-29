@@ -52,7 +52,8 @@ export default defineEventHandler(async (event) => {
             price_label,
             is_highlight, is_adult,
             is_pinned, is_price_pinned, bg_opacity, custom_lines,
-            price_tag_style_id, badge_style_id)
+            price_tag_style_id, badge_style_id,
+            extra_images)
          VALUES
            ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6,
             $7, $8, $9, $10, $11,
@@ -62,7 +63,8 @@ export default defineEventHandler(async (event) => {
             $22,
             $23::boolean, $24::boolean,
             $25::boolean, $26::boolean, $27, $28::jsonb,
-            $29::uuid, $30::uuid)
+            $29::uuid, $30::uuid,
+            $31::jsonb)
          RETURNING *`,
         [
           id, flyerId, p.product_id || null, p.position ?? 0,
@@ -76,7 +78,8 @@ export default defineEventHandler(async (event) => {
           p.is_highlight ?? false, p.is_adult ?? false,
           p.is_pinned ?? false, p.is_price_pinned ?? false,
           p.bg_opacity ?? null, p.custom_lines ? JSON.stringify(p.custom_lines) : null,
-          p.price_tag_style_id || null, p.badge_style_id || null
+          p.price_tag_style_id || null, p.badge_style_id || null,
+          JSON.stringify(p.extra_images || [])
         ]
       )
       if (result.rows[0]) inserted.push(result.rows[0])

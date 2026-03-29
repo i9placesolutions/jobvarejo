@@ -61,6 +61,142 @@ const tabs = [
 ]
 
 // ── Products panel ──────────────────────────────────────────────────────────
+// ── Capas sazonais (cores pre-definidas aplicadas via font_config) ───────────
+type SeasonalCap = { id: string; label: string; preview: string; headerBg: string; primaryColor: string; accentColor: string; bodyBg: string; footerBg: string }
+
+const activeCap = computed(() => fontConfig.value.seasonal_cap_id || '')
+
+const seasonalCategories = [
+  {
+    name: 'Pascoa',
+    caps: [
+      { id: 'pascoa-1', label: 'Chocolate', preview: 'linear-gradient(135deg, #5D4037, #8D6E63, #FFCC80)', headerBg: '#5D4037', primaryColor: '#FFCC80', accentColor: '#FF8F00', bodyBg: '#FFF8E1', footerBg: '#3E2723' },
+      { id: 'pascoa-2', label: 'Coelho', preview: 'linear-gradient(135deg, #7B1FA2, #CE93D8, #F3E5F5)', headerBg: '#7B1FA2', primaryColor: '#CE93D8', accentColor: '#E040FB', bodyBg: '#F3E5F5', footerBg: '#4A148C' },
+      { id: 'pascoa-3', label: 'Primavera', preview: 'linear-gradient(135deg, #2E7D32, #81C784, #FFF9C4)', headerBg: '#2E7D32', primaryColor: '#FFF176', accentColor: '#66BB6A', bodyBg: '#F1F8E9', footerBg: '#1B5E20' },
+    ],
+  },
+  {
+    name: 'Natal',
+    caps: [
+      { id: 'natal-1', label: 'Classico', preview: 'linear-gradient(135deg, #B71C1C, #D32F2F, #1B5E20)', headerBg: '#B71C1C', primaryColor: '#FFD54F', accentColor: '#C62828', bodyBg: '#FFF8E1', footerBg: '#1B5E20' },
+      { id: 'natal-2', label: 'Neve', preview: 'linear-gradient(135deg, #0D47A1, #42A5F5, #E3F2FD)', headerBg: '#0D47A1', primaryColor: '#E3F2FD', accentColor: '#1565C0', bodyBg: '#E3F2FD', footerBg: '#0D47A1' },
+      { id: 'natal-3', label: 'Dourado', preview: 'linear-gradient(135deg, #880E4F, #C62828, #FFD700)', headerBg: '#880E4F', primaryColor: '#FFD700', accentColor: '#F44336', bodyBg: '#FFF8E1', footerBg: '#4A148C' },
+    ],
+  },
+  {
+    name: 'Black Friday',
+    caps: [
+      { id: 'bf-1', label: 'Escuro', preview: 'linear-gradient(135deg, #000000, #212121, #FF6F00)', headerBg: '#000000', primaryColor: '#FF6F00', accentColor: '#FFD600', bodyBg: '#1a1a1a', footerBg: '#000000' },
+      { id: 'bf-2', label: 'Neon', preview: 'linear-gradient(135deg, #0a0a0a, #1a237E, #00E676)', headerBg: '#0a0a0a', primaryColor: '#00E676', accentColor: '#651FFF', bodyBg: '#121212', footerBg: '#000000' },
+      { id: 'bf-3', label: 'Vermelho', preview: 'linear-gradient(135deg, #1a1a1a, #B71C1C, #FF1744)', headerBg: '#1a1a1a', primaryColor: '#FF1744', accentColor: '#FF5252', bodyBg: '#212121', footerBg: '#0a0a0a' },
+    ],
+  },
+  {
+    name: 'Dia das Maes',
+    caps: [
+      { id: 'maes-1', label: 'Rosa', preview: 'linear-gradient(135deg, #AD1457, #EC407A, #FCE4EC)', headerBg: '#AD1457', primaryColor: '#FCE4EC', accentColor: '#E91E63', bodyBg: '#FCE4EC', footerBg: '#880E4F' },
+      { id: 'maes-2', label: 'Lilas', preview: 'linear-gradient(135deg, #6A1B9A, #AB47BC, #F3E5F5)', headerBg: '#6A1B9A', primaryColor: '#F3E5F5', accentColor: '#9C27B0', bodyBg: '#F3E5F5', footerBg: '#4A148C' },
+    ],
+  },
+  {
+    name: 'Dia dos Pais',
+    caps: [
+      { id: 'pais-1', label: 'Azul', preview: 'linear-gradient(135deg, #0D47A1, #1565C0, #BBDEFB)', headerBg: '#0D47A1', primaryColor: '#BBDEFB', accentColor: '#1976D2', bodyBg: '#E3F2FD', footerBg: '#0D47A1' },
+      { id: 'pais-2', label: 'Elegante', preview: 'linear-gradient(135deg, #263238, #455A64, #CFD8DC)', headerBg: '#263238', primaryColor: '#CFD8DC', accentColor: '#546E7A', bodyBg: '#ECEFF1', footerBg: '#263238' },
+    ],
+  },
+  {
+    name: 'Sao Joao',
+    caps: [
+      { id: 'sj-1', label: 'Fogueira', preview: 'linear-gradient(135deg, #E65100, #FF6D00, #FFF176)', headerBg: '#E65100', primaryColor: '#FFF176', accentColor: '#FF6D00', bodyBg: '#FFF8E1', footerBg: '#BF360C' },
+      { id: 'sj-2', label: 'Bandeirinhas', preview: 'linear-gradient(135deg, #1565C0, #E53935, #FDD835)', headerBg: '#1565C0', primaryColor: '#FDD835', accentColor: '#E53935', bodyBg: '#FFFDE7', footerBg: '#0D47A1' },
+    ],
+  },
+  {
+    name: 'Aniversario',
+    caps: [
+      { id: 'aniv-1', label: 'Festivo', preview: 'linear-gradient(135deg, #6A1B9A, #E91E63, #FFD600)', headerBg: '#6A1B9A', primaryColor: '#FFD600', accentColor: '#E91E63', bodyBg: '#FFF8E1', footerBg: '#4A148C' },
+      { id: 'aniv-2', label: 'Confete', preview: 'linear-gradient(135deg, #00897B, #26C6DA, #FFF9C4)', headerBg: '#00897B', primaryColor: '#FFF9C4', accentColor: '#00BCD4', bodyBg: '#E0F7FA', footerBg: '#004D40' },
+      { id: 'aniv-3', label: 'Baloes', preview: 'linear-gradient(135deg, #F44336, #FF9800, #4CAF50)', headerBg: '#F44336', primaryColor: '#FFFFFF', accentColor: '#FF9800', bodyBg: '#FFF3E0', footerBg: '#D32F2F' },
+    ],
+  },
+  {
+    name: 'Generico',
+    caps: [
+      { id: 'gen-1', label: 'Ofertas', preview: 'linear-gradient(135deg, #D32F2F, #FF5722, #FDD835)', headerBg: '#D32F2F', primaryColor: '#FDD835', accentColor: '#FF5722', bodyBg: '#FFF8E1', footerBg: '#B71C1C' },
+      { id: 'gen-2', label: 'Limpo', preview: 'linear-gradient(135deg, #FFFFFF, #F5F5F5, #E0E0E0)', headerBg: '#FFFFFF', primaryColor: '#1a1a1a', accentColor: '#4CAF50', bodyBg: '#FAFAFA', footerBg: '#F5F5F5' },
+      { id: 'gen-3', label: 'Verde', preview: 'linear-gradient(135deg, #1B5E20, #4CAF50, #C8E6C9)', headerBg: '#1B5E20', primaryColor: '#C8E6C9', accentColor: '#4CAF50', bodyBg: '#E8F5E9', footerBg: '#1B5E20' },
+      { id: 'gen-4', label: 'Azul', preview: 'linear-gradient(135deg, #0D47A1, #2196F3, #BBDEFB)', headerBg: '#0D47A1', primaryColor: '#BBDEFB', accentColor: '#2196F3', bodyBg: '#E3F2FD', footerBg: '#0D47A1' },
+    ],
+  },
+]
+
+const applySeasonalCap = (cap: SeasonalCap) => {
+  updateFlyer({
+    font_config: {
+      ...fontConfig.value,
+      seasonal_cap_id: cap.id,
+      // Cores do rodape premium
+      footer_color_1: cap.footerBg,
+      footer_color_2: cap.primaryColor,
+      footer_color_3: cap.accentColor,
+    },
+    // Cores do header/body via campos do flyer
+    footer_bg: cap.footerBg,
+    footer_primary: cap.primaryColor,
+    footer_secondary: cap.accentColor,
+    card_bg_color: cap.bodyBg === '#1a1a1a' || cap.bodyBg === '#121212' || cap.bodyBg === '#212121' ? '#2a2a2a' : '#ffffff',
+    card_text_color: cap.bodyBg === '#1a1a1a' || cap.bodyBg === '#121212' || cap.bodyBg === '#212121' ? '#ffffff' : '#1a1a1a',
+  } as any)
+}
+
+// ── Overlay images (imagens decorativas) ────────────────────────────────────
+type OverlayImage = { id: string; url: string; x: number; y: number; width: number; opacity: number; zFront: boolean }
+const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
+const overlayImages = computed<OverlayImage[]>(() => fontConfig.value.overlay_images || [])
+const isUploadingOverlay = ref(false)
+
+const resolveOverlayUrl = (url: string) => {
+  if (!url) return ''
+  if (url.startsWith('/api/') || url.startsWith('http')) return url
+  return `/api/storage/p?key=${encodeURIComponent(url)}`
+}
+
+const updateOverlay = (idx: number, changes: Partial<OverlayImage>) => {
+  const list = [...overlayImages.value]
+  list[idx] = { ...list[idx], ...changes }
+  updateFlyer({ font_config: { ...fontConfig.value, overlay_images: list } })
+}
+
+const removeOverlay = (idx: number) => {
+  const list = overlayImages.value.filter((_, i) => i !== idx)
+  updateFlyer({ font_config: { ...fontConfig.value, overlay_images: list } })
+}
+
+const handleOverlayUpload = async (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file || !tenant.value) return
+  isUploadingOverlay.value = true
+  try {
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
+    const key = `builder/${tenant.value.id}/overlays/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const buf = await file.arrayBuffer()
+    await $fetch('/api/builder/storage/upload', {
+      method: 'POST',
+      query: { key, contentType: file.type },
+      body: new Uint8Array(buf),
+    })
+    const newOverlay: OverlayImage = { id: crypto.randomUUID(), url: key, x: 10, y: 10, width: 20, opacity: 1, zFront: false }
+    updateFlyer({ font_config: { ...fontConfig.value, overlay_images: [...overlayImages.value, newOverlay] } })
+  } catch (err) {
+    console.error('Erro ao enviar imagem overlay:', err)
+  } finally {
+    isUploadingOverlay.value = false
+    ;(e.target as HTMLInputElement).value = ''
+  }
+}
+
+// ── Products panel ──────────────────────────────────────────────────────────
 const productTab = ref<'search' | 'paste'>('search')
 const searchQuery = ref('')
 const searchResults = ref<any[]>([])
@@ -464,18 +600,38 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
       <!-- TEMAS -->
       <template v-else-if="activePanel === 'themes'">
-        <div class="p-3">
-          <h3 class="text-xs font-semibold text-zinc-300 mb-3">Temas</h3>
-          <div class="grid grid-cols-3 gap-2">
-            <button v-for="t in themes" :key="t.id" @click="setTheme(t.id)" :class="['relative rounded-lg overflow-hidden border-2 transition-all aspect-square', theme?.id === t.id ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-white/5 hover:border-white/15']" :title="t.name">
-              <img v-if="t.thumbnail" :src="storageProxyUrl(t.thumbnail)" :alt="t.name" class="w-full h-full object-cover" />
-              <div v-else class="w-full h-full flex items-center justify-center text-[10px] text-zinc-500" :style="{ backgroundColor: t.css_config?.bgColor || '#333' }">{{ t.name?.charAt(0) || '?' }}</div>
-              <div v-if="theme?.id === t.id" class="absolute inset-0 bg-emerald-500/10 flex items-center justify-center">
-                <div class="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center"><svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg></div>
-              </div>
-            </button>
+        <div class="p-3 space-y-4">
+          <!-- Temas do banco -->
+          <div>
+            <h3 class="text-xs font-semibold text-zinc-300 mb-2">Temas</h3>
+            <div class="grid grid-cols-3 gap-2">
+              <button v-for="t in themes" :key="t.id" @click="setTheme(t.id)" :class="['relative rounded-lg overflow-hidden border-2 transition-all aspect-square', theme?.id === t.id ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-white/5 hover:border-white/15']" :title="t.name">
+                <img v-if="t.thumbnail" :src="storageProxyUrl(t.thumbnail)" :alt="t.name" class="w-full h-full object-cover" />
+                <div v-else class="w-full h-full flex items-center justify-center text-[10px] text-zinc-500" :style="{ backgroundColor: t.css_config?.bgColor || '#333' }">{{ t.name?.charAt(0) || '?' }}</div>
+                <div v-if="theme?.id === t.id" class="absolute inset-0 bg-emerald-500/10 flex items-center justify-center">
+                  <div class="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center"><svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg></div>
+                </div>
+              </button>
+            </div>
+            <p v-if="!themes.length" class="text-[10px] text-zinc-600 text-center py-4">Nenhum tema disponivel</p>
           </div>
-          <p v-if="!themes.length" class="text-[10px] text-zinc-600 text-center py-4">Nenhum tema disponivel</p>
+
+          <!-- Capas sazonais (cores pre-definidas) -->
+          <div v-for="cat in seasonalCategories" :key="cat.name">
+            <h4 class="text-[10px] font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider">{{ cat.name }}</h4>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button
+                v-for="cap in cat.caps"
+                :key="cap.id"
+                @click="applySeasonalCap(cap)"
+                :class="['relative rounded-lg overflow-hidden border-2 transition-all aspect-video', activeCap === cap.id ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-white/5 hover:border-white/15']"
+                :title="cap.label"
+              >
+                <div class="w-full h-full" :style="{ background: cap.preview }" />
+                <span class="absolute bottom-0 inset-x-0 text-[7px] text-white font-bold text-center py-0.5 bg-black/50 leading-tight">{{ cap.label }}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -579,11 +735,89 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
         </div>
       </template>
 
-      <!-- FONTES -->
+      <!-- FONTES & IMAGENS -->
       <template v-else-if="activePanel === 'fonts'">
-        <div class="p-3">
-          <h3 class="text-xs font-semibold text-zinc-300 mb-3">Fontes</h3>
-          <p class="text-[10px] text-zinc-500">Configuracao de fontes via Google Fonts.</p>
+        <div class="p-3 space-y-4">
+          <h3 class="text-xs font-semibold text-zinc-300">Fontes & Imagens</h3>
+
+          <!-- Cores do Rodape Premium -->
+          <div v-if="fontConfig.footer_mode === 'premium'">
+            <p class="text-[10px] text-zinc-500 font-medium mb-2">Cores do Rodape</p>
+            <div class="space-y-2">
+              <label class="flex items-center gap-2">
+                <input type="color" :value="fontConfig.footer_color_1 || '#1B5E20'" @input="updateFlyer({ font_config: { ...fontConfig, footer_color_1: ($event.target as HTMLInputElement).value } })" class="w-6 h-6 rounded cursor-pointer border border-white/10" />
+                <span class="text-[9px] text-zinc-400">Redes Sociais</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="color" :value="fontConfig.footer_color_2 || '#FDD835'" @input="updateFlyer({ font_config: { ...fontConfig, footer_color_2: ($event.target as HTMLInputElement).value } })" class="w-6 h-6 rounded cursor-pointer border border-white/10" />
+                <span class="text-[9px] text-zinc-400">Info Empresa</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="color" :value="fontConfig.footer_color_3 || '#D32F2F'" @input="updateFlyer({ font_config: { ...fontConfig, footer_color_3: ($event.target as HTMLInputElement).value } })" class="w-6 h-6 rounded cursor-pointer border border-white/10" />
+                <span class="text-[9px] text-zinc-400">Endereco</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="color" :value="fontConfig.footer_text_color_premium || '#ffffff'" @input="updateFlyer({ font_config: { ...fontConfig, footer_text_color_premium: ($event.target as HTMLInputElement).value } })" class="w-6 h-6 rounded cursor-pointer border border-white/10" />
+                <span class="text-[9px] text-zinc-400">Texto</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Imagens Decorativas (overlay) -->
+          <div>
+            <p class="text-[10px] text-zinc-500 font-medium mb-2">Imagens Decorativas</p>
+            <p class="text-[9px] text-zinc-600 mb-2">Adicione imagens extras ao encarte (selos, logos, decoracoes)</p>
+
+            <!-- Lista de overlays existentes -->
+            <div v-for="(ov, idx) in overlayImages" :key="ov.id" class="mb-3 p-2 bg-white/5 rounded border border-white/5">
+              <div class="flex items-center gap-2 mb-2">
+                <img :src="resolveOverlayUrl(ov.url)" class="w-10 h-10 object-contain rounded bg-white/10" alt="" />
+                <div class="flex-1 min-w-0">
+                  <p class="text-[10px] text-zinc-400 truncate">{{ ov.url.split('/').pop() }}</p>
+                </div>
+                <button @click="removeOverlay(idx)" class="p-1 hover:bg-red-500/20 rounded text-red-400">
+                  <Trash2 class="w-3 h-3" />
+                </button>
+              </div>
+
+              <!-- Posicao X -->
+              <label class="block mb-1">
+                <span class="text-[9px] text-zinc-500">Posicao X: {{ ov.x }}%</span>
+                <input type="range" min="0" max="100" :value="ov.x" @input="updateOverlay(idx, { x: parseInt(($event.target as HTMLInputElement).value) })" class="w-full" />
+              </label>
+
+              <!-- Posicao Y -->
+              <label class="block mb-1">
+                <span class="text-[9px] text-zinc-500">Posicao Y: {{ ov.y }}%</span>
+                <input type="range" min="0" max="100" :value="ov.y" @input="updateOverlay(idx, { y: parseInt(($event.target as HTMLInputElement).value) })" class="w-full" />
+              </label>
+
+              <!-- Tamanho -->
+              <label class="block mb-1">
+                <span class="text-[9px] text-zinc-500">Tamanho: {{ ov.width }}%</span>
+                <input type="range" min="5" max="100" :value="ov.width" @input="updateOverlay(idx, { width: parseInt(($event.target as HTMLInputElement).value) })" class="w-full" />
+              </label>
+
+              <!-- Opacidade -->
+              <label class="block mb-1">
+                <span class="text-[9px] text-zinc-500">Opacidade: {{ Math.round((ov.opacity ?? 1) * 100) }}%</span>
+                <input type="range" min="10" max="100" :value="Math.round((ov.opacity ?? 1) * 100)" @input="updateOverlay(idx, { opacity: parseInt(($event.target as HTMLInputElement).value) / 100 })" class="w-full" />
+              </label>
+
+              <!-- Camada -->
+              <label class="flex items-center gap-2 mt-1 cursor-pointer">
+                <input type="checkbox" :checked="ov.zFront" @change="updateOverlay(idx, { zFront: ($event.target as HTMLInputElement).checked })" class="rounded" />
+                <span class="text-[9px] text-zinc-500">Na frente dos produtos</span>
+              </label>
+            </div>
+
+            <!-- Botao adicionar -->
+            <label class="flex items-center justify-center gap-1.5 px-3 py-2 rounded text-[11px] font-medium bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-dashed border-white/10 cursor-pointer transition-colors">
+              <ImagePlus class="w-3.5 h-3.5" />
+              <span>{{ isUploadingOverlay ? 'Enviando...' : 'Adicionar Imagem' }}</span>
+              <input type="file" accept="image/*" class="hidden" :disabled="isUploadingOverlay" @change="handleOverlayUpload" />
+            </label>
+          </div>
         </div>
       </template>
 

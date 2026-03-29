@@ -148,6 +148,16 @@ const darken = (hex: string, amt: number): string => {
   return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`
 }
 
+// ── Footer mode (nenhum, simples, premium) ──
+const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
+const footerMode = computed(() => fontConfig.value.footer_mode || 'simples')
+
+// ── Cores customizaveis do rodape premium ──
+const footerColor1 = computed(() => fontConfig.value.footer_color_1 || '#1B5E20')
+const footerColor2 = computed(() => fontConfig.value.footer_color_2 || '#FDD835')
+const footerColor3 = computed(() => fontConfig.value.footer_color_3 || '#D32F2F')
+const footerTextColorPremium = computed(() => fontConfig.value.footer_text_color_premium || '#ffffff')
+
 // ── Collapse when nothing to show ──
 const hasPayments = computed(() => flyer.value?.show_payment_methods && selectedPaymentMethods.value.length > 0)
 const hasWarnings = computed(() => warnings.value.length > 0)
@@ -178,8 +188,71 @@ const shapeClass = computed(() => {
 </script>
 
 <template>
+  <!-- Nenhum rodape -->
+  <template v-if="footerMode === 'nenhum'" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- RODAPE PREMIUM: 3 secoes empilhadas com cores customizaveis       -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <footer v-else-if="footerMode === 'premium'" class="shrink-0 overflow-hidden">
+    <!-- SECAO 1: Redes sociais — min-height 40px, padding 8px, icones grandes -->
+    <div class="flex items-center justify-center flex-wrap" style="min-height: 40px; padding: 8px 16px; gap: 20px; font-size: 14px" :style="{ backgroundColor: footerColor1, color: footerTextColorPremium }">
+      <div v-if="whatsappNumber" class="flex items-center gap-2">
+        <svg style="width: 18px; height: 18px" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.612.616l4.537-1.462A11.948 11.948 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.24 0-4.312-.727-5.994-1.96l-.424-.316-2.687.866.882-2.632-.346-.45A9.958 9.958 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+        <span class="font-bold">{{ whatsappNumber }}</span>
+      </div>
+      <div v-if="phoneNumber" class="flex items-center gap-2">
+        <svg style="width: 16px; height: 16px" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        <span class="font-bold">{{ phoneNumber }}</span>
+      </div>
+      <div v-if="facebookPage" class="flex items-center gap-2">
+        <svg style="width: 16px; height: 16px" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        <span>{{ facebookPage }}</span>
+      </div>
+      <div v-if="instagramHandle" class="flex items-center gap-2">
+        <svg style="width: 16px; height: 16px" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+        <span>@{{ instagramHandle }}</span>
+      </div>
+    </div>
+
+    <!-- SECAO 2: Info empresa + pagamento + validade — min-height 50px, padding 10px -->
+    <div class="flex items-center justify-between flex-wrap" style="min-height: 50px; padding: 10px 16px; gap: 10px; font-size: 13px" :style="{ backgroundColor: footerColor2, color: footerColor2 === '#FDD835' || footerColor2 === '#FFEB3B' || footerColor2 === '#FFF176' || footerColor2 === '#FFFF00' ? '#1a1a1a' : footerTextColorPremium }">
+      <!-- Nome empresa esquerda -->
+      <div v-if="companyName" class="shrink-0 font-black leading-tight" style="font-size: 16px">
+        {{ companyName }}
+      </div>
+
+      <!-- Bandeiras de pagamento centro -->
+      <div v-if="hasPayments" class="flex-1 flex items-center justify-center gap-2 flex-wrap">
+        <span v-for="pm in selectedPaymentMethods" :key="pm" class="font-bold" style="padding: 3px 8px; border-radius: 4px; font-size: 10px; min-height: 20px; display: flex; align-items: center; background: rgba(0,0,0,0.12)">
+          {{ pm === 'pix' ? 'PIX' : pm === 'dinheiro' ? 'DINHEIRO' : pm === 'visa' ? 'VISA' : pm === 'mastercard' ? 'MASTER' : pm === 'elo' ? 'ELO' : pm === 'hipercard' ? 'HIPER' : pm === 'alelo' ? 'ALELO' : pm === 'sodexo' ? 'SODEXO' : pm === 'ticket' ? 'TICKET' : pm === 'amex' ? 'AMEX' : pm === 'debito' ? 'DEBITO' : pm === 'credito' ? 'CREDITO' : pm.toUpperCase() }}
+        </span>
+      </div>
+
+      <!-- Validade direita -->
+      <div v-if="dateRange" class="shrink-0 text-right leading-tight" style="font-size: 12px">
+        <span class="font-bold">{{ dateLabel }}</span><br />
+        <span>{{ dateRange.start }} ate {{ dateRange.end }}</span>
+      </div>
+    </div>
+
+    <!-- SECAO 3: Endereco + avisos — min-height 35px, padding 6px -->
+    <div class="text-center" style="min-height: 35px; padding: 6px 16px; font-size: 12px" :style="{ backgroundColor: footerColor3, color: footerTextColorPremium }">
+      <div v-if="addressText" class="flex items-center justify-center gap-2">
+        <svg style="width: 14px; height: 14px" class="shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+        <span>{{ addressText }}</span>
+      </div>
+      <p v-if="warnings.length" class="opacity-70 mt-1" style="font-size: 9px">
+        <span v-for="(w, idx) in warnings" :key="idx">{{ w }} </span>
+      </p>
+    </div>
+  </footer>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- RODAPE SIMPLES: Layout original existente                          -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
   <footer
-    v-if="hasAnyContent"
+    v-else-if="hasAnyContent"
     class="shrink-0 overflow-hidden relative"
     :class="shapeClass"
     :style="{ backgroundColor: footerBg, color: textColor }"

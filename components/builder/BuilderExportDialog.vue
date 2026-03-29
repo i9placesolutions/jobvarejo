@@ -135,12 +135,12 @@ const handleClose = () => {
 
           <!-- Preview -->
           <div class="px-6 pb-4">
-            <div class="bg-zinc-900 rounded-xl p-3 flex items-center justify-center min-h-[160px] border border-zinc-800">
+            <div class="bg-zinc-900 rounded-xl p-3 flex items-center justify-center min-h-40 border border-zinc-800">
               <img
                 v-if="previewUrl"
                 :src="previewUrl"
                 alt="Preview do encarte"
-                class="max-h-[200px] max-w-full object-contain rounded"
+                class="max-h-50 max-w-full object-contain rounded"
               />
               <div v-else class="text-zinc-500 text-sm">
                 Carregando preview...

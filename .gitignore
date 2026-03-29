@@ -57,3 +57,6 @@ tmp/
 .vercel
 .env*.local
 .playwright-cli/
+
+# MCP config (contém tokens sensíveis)
+.mcp.json

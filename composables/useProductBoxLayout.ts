@@ -7,7 +7,7 @@ export type OrdemType = 'TITULO-IMAGEM-ETIQUETA' | 'IMAGEM-TITULO-ETIQUETA' | 'I
 export type ContentType = 'CONTENT_LINE' | 'CONTENT_COL_ETIQUETA_TITULO' | 'CONTENT_ROW_ETIQUETA_TITULO' | 'CONTENT_ROW_BOTTOM' | 'CONTENT_ROW_ETIQUETA_IMAGEM'
 export type EtiquetaType = 'ETIQUETA-HORIZONTAL' | 'ETIQUETA-VERTICAL'
 export type XType = 'X_30-70' | 'X_40-60' | 'X_50-50' | 'X_60-40' | 'X_70-30'
-export type YType = 'Y_20-80' | 'Y_30-70' | 'Y_50-50' | 'Y_60-40' | 'Y_70-30' | 'Y_80-20'
+export type YType = 'Y_20-80' | 'Y_30-70' | 'Y_35-65' | 'Y_50-50' | 'Y_60-40' | 'Y_65-35' | 'Y_70-30' | 'Y_80-20'
 export type InvadirType = 'NAO_INVADIR' | 'INVADIR_20' | 'INVADIR_50' | 'INVADIR_100'
 
 export interface ProductBoxLayoutConfig {
@@ -23,12 +23,12 @@ export interface ProductBoxLayoutConfig {
 
 export const PRODUCT_BOX_LAYOUTS: ProductBoxLayoutConfig[] = [
   // --- CONTENT_LINE (empilhado vertical) ---
-  { id: 1, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-HORIZONTAL', x: 'X_70-30', y: 'Y_80-20', invadir: 'INVADIR_20', descricao: 'Nome cima, imagem grande, preço horizontal embaixo' },
-  { id: 2, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-HORIZONTAL', x: 'X_60-40', y: 'Y_80-20', invadir: 'INVADIR_20', descricao: 'Nome cima, imagem média, preço horizontal embaixo' },
-  { id: 3, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-HORIZONTAL', x: 'X_70-30', y: 'Y_80-20', invadir: 'INVADIR_50', descricao: 'Nome cima, imagem grande invasão média, preço horizontal' },
+  { id: 1, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-HORIZONTAL', x: 'X_70-30', y: 'Y_70-30', invadir: 'INVADIR_20', descricao: 'Nome cima, imagem grande, preço horizontal embaixo' },
+  { id: 2, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-HORIZONTAL', x: 'X_60-40', y: 'Y_65-35', invadir: 'INVADIR_20', descricao: 'Nome cima, imagem média, preço horizontal embaixo' },
+  { id: 3, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-HORIZONTAL', x: 'X_70-30', y: 'Y_70-30', invadir: 'INVADIR_50', descricao: 'Nome cima, imagem grande invasão média, preço horizontal' },
   { id: 4, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-VERTICAL', x: 'X_40-60', y: 'Y_20-80', invadir: 'NAO_INVADIR', descricao: 'Nome cima pequeno, imagem+preço vertical ocupam 80%' },
-  { id: 5, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-VERTICAL', x: 'X_60-40', y: 'Y_80-20', invadir: 'INVADIR_20', descricao: 'Nome cima, imagem 60%, preço vertical 40%' },
-  { id: 6, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-VERTICAL', x: 'X_70-30', y: 'Y_80-20', invadir: 'INVADIR_50', descricao: 'Nome cima, imagem 70%, preço vertical estreito' },
+  { id: 5, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-VERTICAL', x: 'X_60-40', y: 'Y_70-30', invadir: 'INVADIR_20', descricao: 'Nome cima, imagem 60%, preço vertical 40%' },
+  { id: 6, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_LINE', etiqueta: 'ETIQUETA-VERTICAL', x: 'X_70-30', y: 'Y_70-30', invadir: 'INVADIR_50', descricao: 'Nome cima, imagem 70%, preço vertical estreito' },
 
   // --- CONTENT_ROW_BOTTOM ---
   { id: 7, ordem: 'TITULO-IMAGEM-ETIQUETA', content: 'CONTENT_ROW_BOTTOM', etiqueta: 'ETIQUETA-VERTICAL', x: 'X_60-40', y: 'Y_30-70', invadir: 'NAO_INVADIR', descricao: 'Nome 30% topo, imagem+preço vertical em row embaixo' },
@@ -46,7 +46,7 @@ export const PRODUCT_BOX_LAYOUTS: ProductBoxLayoutConfig[] = [
 
   // --- CONTENT_ROW_ETIQUETA_TITULO (imagem grande, preço+nome em row) ---
   { id: 15, ordem: 'IMAGEM-ETIQUETA-TITULO', content: 'CONTENT_ROW_ETIQUETA_TITULO', etiqueta: 'ETIQUETA-VERTICAL', x: 'X_40-60', y: 'Y_70-30', invadir: 'INVADIR_100', descricao: 'Imagem invasão total, preço+nome em row embaixo (30%)' },
-  { id: 16, ordem: 'IMAGEM-ETIQUETA-TITULO', content: 'CONTENT_ROW_ETIQUETA_TITULO', etiqueta: 'ETIQUETA-VERTICAL', x: 'X_40-60', y: 'Y_80-20', invadir: 'INVADIR_100', descricao: 'Imagem invasão total (80%), preço+nome row embaixo (20%)' },
+  { id: 16, ordem: 'IMAGEM-ETIQUETA-TITULO', content: 'CONTENT_ROW_ETIQUETA_TITULO', etiqueta: 'ETIQUETA-VERTICAL', x: 'X_40-60', y: 'Y_70-30', invadir: 'INVADIR_100', descricao: 'Imagem invasão total (70%), preço+nome row embaixo (30%)' },
 ]
 
 // Layouts bons para destaques (horizontal / colunas / invasão)

@@ -49,6 +49,25 @@ const inkEconomyOpacity = computed(() => {
   return 1 - (eco / 100)
 })
 
+// Overlay images (imagens decorativas)
+type OverlayImage = { id: string; url: string; x: number; y: number; width: number; opacity: number; zFront: boolean }
+const overlayImages = computed<OverlayImage[]>(() => {
+  const fc = flyer.value?.font_config as any
+  return fc?.overlay_images || []
+})
+
+const resolveOverlayUrl = (url: string) => {
+  if (!url) return ''
+  if (url.startsWith('/api/') || url.startsWith('http')) return url
+  return `/api/storage/p?key=${encodeURIComponent(url)}`
+}
+
+// QR Code toggle
+const showQrCode = computed(() => {
+  const fc = flyer.value?.font_config as any
+  return fc?.show_qr_code ?? false
+})
+
 defineExpose({ canvasRef })
 </script>
 
@@ -71,11 +90,47 @@ defineExpose({ canvasRef })
         alt=""
       />
 
+      <!-- Overlay images (atras do conteudo) -->
+      <img
+        v-for="ov in overlayImages.filter(o => !o.zFront)"
+        :key="ov.id"
+        :src="resolveOverlayUrl(ov.url)"
+        class="absolute pointer-events-none"
+        :style="{
+          left: `${ov.x}%`,
+          top: `${ov.y}%`,
+          width: `${ov.width}%`,
+          opacity: ov.opacity ?? 1,
+          zIndex: 5,
+        }"
+        alt=""
+      />
+
       <!-- Content layers -->
       <div class="relative z-10 flex flex-col h-full">
         <BuilderFlyerHeader />
         <BuilderFlyerProductGrid class="flex-1 min-h-0" />
         <BuilderFlyerFooter />
+      </div>
+
+      <!-- Overlay images (na frente do conteudo) -->
+      <img
+        v-for="ov in overlayImages.filter(o => o.zFront)"
+        :key="ov.id"
+        :src="resolveOverlayUrl(ov.url)"
+        class="absolute pointer-events-none"
+        :style="{
+          left: `${ov.x}%`,
+          top: `${ov.y}%`,
+          width: `${ov.width}%`,
+          opacity: ov.opacity ?? 1,
+          zIndex: 20,
+        }"
+        alt=""
+      />
+      <!-- QR Code no canto inferior direito -->
+      <div v-if="showQrCode" class="absolute z-30 pointer-events-none" style="bottom: 8px; right: 8px">
+        <BuilderFlyerQRCode />
       </div>
     </div>
   </div>

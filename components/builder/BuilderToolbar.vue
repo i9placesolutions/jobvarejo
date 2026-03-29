@@ -7,6 +7,7 @@ import {
   Download,
   Save,
   Loader2,
+  Eye,
 } from 'lucide-vue-next'
 
 const {
@@ -32,6 +33,7 @@ const { isAuto } = useBuilderLayout()
 
 const emit = defineEmits<{
   export: []
+  preview: []
 }>()
 
 // Zoom controls
@@ -62,6 +64,71 @@ const FOOTER_STYLES = [
   { value: 'square-large', label: 'Quadrado Grande' },
   { value: 'square-compact', label: 'Quadrado Compacto' },
 ]
+
+const FOOTER_MODE_OPTIONS = [
+  { value: 'nenhum', label: 'Nenhum' },
+  { value: 'simples', label: 'Simples' },
+  { value: 'premium', label: 'Premium' },
+]
+
+const TEXT_TRANSFORM_OPTIONS = [
+  { value: 'uppercase', label: 'ABC' },
+  { value: 'capitalize', label: 'Abc' },
+  { value: 'lowercase', label: 'abc' },
+  { value: 'none', label: 'Aa' },
+]
+
+const FONT_FAMILY_OPTIONS = [
+  { value: 'inherit', label: 'Padrao' },
+  { value: 'Arial, sans-serif', label: 'Arial' },
+  { value: 'Impact, sans-serif', label: 'Impact' },
+  { value: "'Bebas Neue', sans-serif", label: 'Bebas Neue' },
+  { value: "'Oswald', sans-serif", label: 'Oswald' },
+  { value: "'Montserrat', sans-serif", label: 'Montserrat' },
+  { value: "'Poppins', sans-serif", label: 'Poppins' },
+  { value: "'Roboto', sans-serif", label: 'Roboto' },
+  { value: "'Barlow Condensed', sans-serif", label: 'Barlow Condensed' },
+  { value: "'Nunito', sans-serif", label: 'Nunito' },
+  { value: "'Lato', sans-serif", label: 'Lato' },
+  { value: "'Open Sans', sans-serif", label: 'Open Sans' },
+]
+
+// Font config helpers
+const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
+
+const handleFontFamilyChange = (e: Event) => {
+  const val = (e.target as HTMLSelectElement).value
+  updateFlyer({ font_config: { ...fontConfig.value, name_font_family: val } })
+  // Carregar Google Font se necessário
+  const family = val.replace(/'.+?'/g, m => m.slice(1, -1)).split(',')[0]?.trim()
+  if (family && family !== 'inherit' && family !== 'Arial' && family !== 'Impact') {
+    loadGoogleFont(family)
+  }
+}
+
+const handleTextTransformChange = (e: Event) => {
+  const val = (e.target as HTMLSelectElement).value
+  updateFlyer({ font_config: { ...fontConfig.value, name_text_transform: val } })
+}
+
+const loadGoogleFont = (family: string) => {
+  const id = `gfont-${family.replace(/\s+/g, '-')}`
+  if (document.getElementById(id)) return
+  const link = document.createElement('link')
+  link.id = id
+  link.rel = 'stylesheet'
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400;700;800;900&display=swap`
+  document.head.appendChild(link)
+}
+
+// Carregar fonte ao iniciar se já tiver uma configurada
+onMounted(() => {
+  const family = fontConfig.value.name_font_family
+  if (family && family !== 'inherit') {
+    const name = family.replace(/'.+?'/g, (m: string) => m.slice(1, -1)).split(',')[0]?.trim()
+    if (name && name !== 'Arial' && name !== 'Impact') loadGoogleFont(name)
+  }
+})
 
 const handleModelChange = (e: Event) => {
   const val = (e.target as HTMLSelectElement).value
@@ -170,6 +237,196 @@ const handleSave = async () => {
 
     <div class="w-px h-5 bg-white/5 mx-1" />
 
+    <!-- Layout do Card -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Card</label>
+      <select
+        :value="fontConfig.card_layout || 'classico'"
+        @change="updateFlyer({ font_config: { ...fontConfig, card_layout: ($event.target as HTMLSelectElement).value } })"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+      >
+        <option value="classico">Classico</option>
+        <option value="lateral">Lateral</option>
+        <option value="premium">Premium</option>
+      </select>
+    </div>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
+    <!-- Fonte -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Fonte</label>
+      <select
+        :value="fontConfig.name_font_family || 'inherit'"
+        @change="handleFontFamilyChange"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+      >
+        <option v-for="f in FONT_FAMILY_OPTIONS" :key="f.value" :value="f.value">
+          {{ f.label }}
+        </option>
+      </select>
+    </div>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
+    <!-- Caixa (text-transform) -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Caixa</label>
+      <select
+        :value="fontConfig.name_text_transform || 'uppercase'"
+        @change="handleTextTransformChange"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+      >
+        <option v-for="t in TEXT_TRANSFORM_OPTIONS" :key="t.value" :value="t.value">
+          {{ t.label }}
+        </option>
+      </select>
+    </div>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
+    <!-- Imagem (escala - so reduz, 100% é o maximo que cabe no card) -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Imagem</label>
+      <select
+        :value="fontConfig.image_scale || 1"
+        @change="updateFlyer({ font_config: { ...fontConfig, image_scale: parseFloat(($event.target as HTMLSelectElement).value) } })"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+      >
+        <option :value="0.5">50%</option>
+        <option :value="0.6">60%</option>
+        <option :value="0.7">70%</option>
+        <option :value="0.8">80%</option>
+        <option :value="0.9">90%</option>
+        <option :value="1">100%</option>
+      </select>
+    </div>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
+    <!-- Etiqueta (escala do preco) -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Etiqueta</label>
+      <select
+        :value="fontConfig.price_scale || 1"
+        @change="updateFlyer({ font_config: { ...fontConfig, price_scale: parseFloat(($event.target as HTMLSelectElement).value) } })"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+      >
+        <option :value="0.7">70%</option>
+        <option :value="0.8">80%</option>
+        <option :value="0.9">90%</option>
+        <option :value="1">100%</option>
+        <option :value="1.1">110%</option>
+        <option :value="1.2">120%</option>
+        <option :value="1.3">130%</option>
+        <option :value="1.5">150%</option>
+        <option :value="1.8">180%</option>
+        <option :value="2">200%</option>
+      </select>
+    </div>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
+    <!-- Estilo da Etiqueta -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Etiq.</label>
+      <select
+        :value="fontConfig.price_visual_style || 'padrao'"
+        @change="updateFlyer({ font_config: { ...fontConfig, price_visual_style: ($event.target as HTMLSelectElement).value } })"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+      >
+        <option value="padrao">Padrao</option>
+        <option value="bandeira">Bandeira</option>
+        <option value="splash">Splash</option>
+        <option value="limpo">Limpo</option>
+      </select>
+    </div>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
+    <!-- Cor do Card -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Card</label>
+      <input
+        type="color"
+        :value="fontConfig.card_bg_color || '#ffffff'"
+        @input="updateFlyer({ font_config: { ...fontConfig, card_bg_color: ($event.target as HTMLInputElement).value } })"
+        class="w-5 h-5 rounded cursor-pointer border border-white/10 bg-transparent"
+      />
+    </div>
+
+    <!-- Borda do Card -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Borda</label>
+      <select
+        :value="fontConfig.card_border_radius || '8px'"
+        @change="updateFlyer({ font_config: { ...fontConfig, card_border_radius: ($event.target as HTMLSelectElement).value } })"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+      >
+        <option value="0px">Nenhum</option>
+        <option value="8px">Suave</option>
+        <option value="16px">Arredondado</option>
+      </select>
+    </div>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
+    <!-- Gap entre cards -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Gap</label>
+      <select
+        :value="fontConfig.card_gap ?? 8"
+        @change="updateFlyer({ font_config: { ...fontConfig, card_gap: parseInt(($event.target as HTMLSelectElement).value) } })"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+      >
+        <option :value="0">Nenhum</option>
+        <option :value="2">Fino</option>
+        <option :value="4">Medio</option>
+        <option :value="8">Grande</option>
+      </select>
+    </div>
+
+    <!-- Padding do grid -->
+    <div class="flex items-center gap-1 shrink-0">
+      <label class="text-[10px] text-zinc-500 font-medium">Pad</label>
+      <select
+        :value="fontConfig.card_padding ?? 12"
+        @change="updateFlyer({ font_config: { ...fontConfig, card_padding: parseInt(($event.target as HTMLSelectElement).value) } })"
+        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+      >
+        <option :value="0">Nenhum</option>
+        <option :value="4">Fino</option>
+        <option :value="8">Medio</option>
+        <option :value="12">Grande</option>
+      </select>
+    </div>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
+    <!-- QR Code toggle -->
+    <label class="flex items-center gap-1 shrink-0 cursor-pointer">
+      <span class="text-[10px] text-zinc-500 font-medium">QR</span>
+      <button
+        type="button"
+        role="switch"
+        :aria-checked="fontConfig.show_qr_code ?? false"
+        @click="updateFlyer({ font_config: { ...fontConfig, show_qr_code: !(fontConfig.show_qr_code ?? false) } })"
+        :class="[
+          'relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors',
+          fontConfig.show_qr_code ? 'bg-emerald-600' : 'bg-white/10'
+        ]"
+      >
+        <span
+          :class="[
+            'pointer-events-none inline-block h-3 w-3 rounded-full bg-white shadow transform transition-transform mt-0.5',
+            fontConfig.show_qr_code ? 'translate-x-3.5 ml-px' : 'translate-x-0.5'
+          ]"
+        />
+      </button>
+    </label>
+
+    <div class="w-px h-5 bg-white/5 mx-1" />
+
     <!-- Capa toggle -->
     <label class="flex items-center gap-1 shrink-0 cursor-pointer">
       <span class="text-[10px] text-zinc-500 font-medium">Capa</span>
@@ -198,11 +455,11 @@ const handleSave = async () => {
     <div class="flex items-center gap-1 shrink-0">
       <label class="text-[10px] text-zinc-500 font-medium">Rodape</label>
       <select
-        :value="flyer?.footer_style || 'rounded-large'"
-        @change="handleFooterStyleChange"
+        :value="fontConfig.footer_mode || 'simples'"
+        @change="updateFlyer({ font_config: { ...fontConfig, footer_mode: ($event.target as HTMLSelectElement).value } })"
         class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
       >
-        <option v-for="f in FOOTER_STYLES" :key="f.value" :value="f.value">
+        <option v-for="f in FOOTER_MODE_OPTIONS" :key="f.value" :value="f.value">
           {{ f.label }}
         </option>
       </select>
@@ -267,6 +524,14 @@ const handleSave = async () => {
       <span v-if="isSaving" class="text-[9px] text-blue-400 flex items-center gap-1">
         <Loader2 class="w-3 h-3 animate-spin" />
       </span>
+
+      <button
+        @click="emit('preview')"
+        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/5 transition-colors"
+      >
+        <Eye class="w-3 h-3" />
+        Preview
+      </button>
 
       <button
         @click="emit('export')"

@@ -335,6 +335,7 @@ export interface BuilderFlyerProduct {
     image_zoom: number
     image_x: number
     image_y: number
+    extra_images: string[]
 
     created_at: string
     updated_at: string

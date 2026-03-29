@@ -261,7 +261,6 @@ export const useProductLayout = () => {
           originY: 'center',
           left: 8,
           top: 5,
-          shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.3)', blur: 5, offsetX: 2, offsetY: 2 }),
           data: { smartType: 'product-price-main' }
         });
 

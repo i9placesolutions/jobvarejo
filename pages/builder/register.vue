@@ -89,18 +89,18 @@ const handleRegister = async () => {
 <template>
   <div class="w-full">
     <div class="w-full">
-      <div class="bg-[#18181b]/80 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 sm:p-10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] relative overflow-hidden">
+      <div class="bg-[#18181b]/80 backdrop-blur-xl border border-white/10 rounded-4xl p-8 sm:p-10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] relative overflow-hidden">
         <!-- Decoration light -->
         <div class="absolute -top-32 -left-32 w-64 h-64 bg-emerald-600/20 rounded-full blur-[80px] pointer-events-none"></div>
         <div class="absolute -bottom-32 -right-32 w-64 h-64 bg-teal-600/10 rounded-full blur-[80px] pointer-events-none"></div>
 
         <!-- Logo & Header -->
         <div class="text-center mb-8 relative z-10">
-          <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-600/20 to-teal-600/20 backdrop-blur-md rounded-2xl mb-5 border border-white/10 shadow-[0_0_30px_rgba(16,185,129,0.15)] relative group">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-linear-to-br from-emerald-600/20 to-teal-600/20 backdrop-blur-md rounded-2xl mb-5 border border-white/10 shadow-[0_0_30px_rgba(16,185,129,0.15)] relative group">
             <div class="absolute inset-0 bg-emerald-500/20 rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <FileText class="w-8 h-8 text-emerald-300 relative z-10" />
           </div>
-          <h1 class="text-2xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-zinc-400 tracking-tight">Crie sua conta</h1>
+          <h1 class="text-2xl font-bold mb-2 text-transparent bg-clip-text bg-linear-to-r from-white to-zinc-400 tracking-tight">Crie sua conta</h1>
           <p class="text-sm font-medium text-zinc-500">
             Comece a criar encartes profissionais grátis
           </p>
@@ -109,7 +109,7 @@ const handleRegister = async () => {
         <!-- Success Message -->
         <div v-if="successMessage" class="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg backdrop-blur-sm">
           <div class="flex items-start gap-3">
-            <div class="flex-shrink-0 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+            <div class="shrink-0 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
               <Check class="w-3 h-3 text-white" />
             </div>
             <p class="text-sm text-green-400">{{ successMessage }}</p>
@@ -273,7 +273,7 @@ const handleRegister = async () => {
           <button
             type="submit"
             :disabled="isLoading"
-            class="w-full h-12 mt-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 group hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            class="w-full h-12 mt-4 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 group hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             <span v-if="isLoading">Criando conta...</span>
             <span v-else class="flex items-center justify-center gap-2">

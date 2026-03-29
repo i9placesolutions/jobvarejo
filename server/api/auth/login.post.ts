@@ -32,27 +32,30 @@ export default defineEventHandler(async (event) => {
   })
 
   const isProduction = process.env.NODE_ENV === 'production'
+  const isTunnel = String(getHeader(event, 'host') || '').includes('devtunnels.ms')
+  const useSecure = isProduction || isTunnel
+  const sameSite = isTunnel ? 'none' as const : 'lax' as const
   setCookie(event, 'access-token', token, {
     path: '/',
     maxAge: expiresIn,
-    sameSite: 'lax',
-    secure: isProduction,
+    sameSite,
+    secure: useSecure,
     httpOnly: true
   })
   // Keep legacy cookie for backward compatibility during cutover.
   setCookie(event, 'sb-access-token', token, {
     path: '/',
     maxAge: expiresIn,
-    sameSite: 'lax',
-    secure: isProduction,
+    sameSite,
+    secure: useSecure,
     httpOnly: true
   })
   // Non-httpOnly flag so client JS can detect authenticated state without reading the token
   setCookie(event, 'authenticated', 'true', {
     path: '/',
     maxAge: expiresIn,
-    sameSite: 'lax',
-    secure: isProduction,
+    sameSite,
+    secure: useSecure,
     httpOnly: false
   })
 

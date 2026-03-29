@@ -8,8 +8,54 @@ const {
   productsPerPage,
   highlightPositions,
   addProduct,
+  updateProduct,
+  reorderProducts,
   productEditorOpen,
 } = useBuilderFlyer()
+
+// Duplo clique alterna destaque
+const toggleHighlight = (idx: number) => {
+  const prod = paginatedProducts.value[idx]
+  if (!prod) return
+  updateProduct(idx, { is_highlight: !prod.is_highlight })
+}
+
+// ── Drag & Drop para reordenar produtos ─────────────────────────────────────
+const dragFromIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
+
+const onDragStart = (e: DragEvent, idx: number) => {
+  dragFromIndex.value = idx
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(idx))
+  }
+}
+
+const onDragOver = (e: DragEvent, idx: number) => {
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dragOverIndex.value = idx
+}
+
+const onDragLeave = () => {
+  dragOverIndex.value = null
+}
+
+const onDrop = (e: DragEvent, toIdx: number) => {
+  e.preventDefault()
+  const fromIdx = dragFromIndex.value
+  if (fromIdx !== null && fromIdx !== toIdx) {
+    reorderProducts(fromIdx, toIdx)
+  }
+  dragFromIndex.value = null
+  dragOverIndex.value = null
+}
+
+const onDragEnd = () => {
+  dragFromIndex.value = null
+  dragOverIndex.value = null
+}
 
 const {
   isAuto,
@@ -20,8 +66,10 @@ const {
   getCellAreaName,
 } = useBuilderLayout()
 
-const gap = computed(() => theme.value?.body_config?.gap ?? 8)
-const padding = computed(() => theme.value?.body_config?.padding ?? 12)
+const { flyer } = useBuilderFlyer()
+const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
+const gap = computed(() => fontConfig.value.card_gap ?? theme.value?.body_config?.gap ?? 8)
+const padding = computed(() => fontConfig.value.card_padding ?? theme.value?.body_config?.padding ?? 12)
 
 // Standard grid style (no highlight areas)
 const standardGridStyle = computed(() => ({
@@ -64,16 +112,29 @@ const cells = computed(() => {
     colSpan: number
   }> = []
 
+  // Rastrear posicoes consumidas por destaque (colSpan 2)
+  let skipNext = false
   for (let i = 0; i < perPage; i++) {
+    if (skipNext) { skipNext = false; continue }
+
     // Determine if this position is a highlight
     const isHL = hlPositions.includes(i) || autoHL.includes(i) || prods[i]?.is_highlight
-    // In auto mode without highlight areas, last product fills remaining columns
     let colSpan = 1
-    if (isAuto.value && !usingHighlightAreas && prods[i] && i === prods.length - 1) {
+
+    if (isHL && cols >= 2 && !usingHighlightAreas) {
+      // Produto destacado ocupa 2 colunas (se nao estiver na ultima coluna da linha)
+      const posInRow = i % cols
+      if (posInRow < cols - 1) {
+        colSpan = 2
+        skipNext = true // pular proxima posicao (ocupada pelo span)
+      }
+    } else if (isAuto.value && !usingHighlightAreas && prods[i] && i === prods.length - 1) {
+      // Ultimo produto preenche colunas restantes
       const posInRow = i % cols
       const remaining = cols - posInRow
       if (remaining > 1) colSpan = remaining
     }
+
     result.push({
       product: prods[i] || null,
       index: i,
@@ -135,11 +196,23 @@ const handleOpenEditor = () => {
         :is-highlight="cell.isHighlight"
         :columns="columns"
         :box-index="cell.index"
+        draggable="true"
         :style="{
           minHeight: 0,
+          cursor: dragFromIndex !== null ? 'grabbing' : 'grab',
+          opacity: dragFromIndex === cell.index ? 0.4 : 1,
+          outline: dragOverIndex === cell.index && dragFromIndex !== cell.index ? '3px dashed var(--builder-accent, #10b981)' : 'none',
+          outlineOffset: '-3px',
+          transition: 'opacity 0.15s, outline 0.15s',
           ...(hasHighlightLayout ? { gridArea: cell.areaName } : {}),
           ...(cell.colSpan > 1 ? { gridColumn: `span ${cell.colSpan}` } : {}),
         }"
+        @dragstart="onDragStart($event, cell.index)"
+        @dragover="onDragOver($event, cell.index)"
+        @dragleave="onDragLeave"
+        @drop="onDrop($event, cell.index)"
+        @dragend="onDragEnd"
+        @dblclick="toggleHighlight(cell.index)"
       />
 
       <!-- Empty slot placeholder -->

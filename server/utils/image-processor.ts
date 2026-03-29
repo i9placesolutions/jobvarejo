@@ -479,8 +479,23 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         const refinedBuffer = await refineAlphaChannel(rbBuffer, sharp);
         console.log(`📊 [Image Process] Após refino: ${refinedBuffer.length} bytes`);
 
+        // 2.6. Auto-trim: recortar bordas transparentes para produto preencher a imagem
+        let trimmedBuffer = refinedBuffer;
+        try {
+            const trimResult = await sharp(refinedBuffer)
+                .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 10 })
+                .toBuffer({ resolveWithObject: true });
+            // Só usar trim se o resultado tiver tamanho razoável (min 20x20)
+            if (trimResult.info.width >= 20 && trimResult.info.height >= 20) {
+                trimmedBuffer = trimResult.data;
+                console.log(`✂️ [Image Process] Auto-trim: ${trimResult.info.width}x${trimResult.info.height}`);
+            }
+        } catch (e) {
+            console.warn('⚠️ [Image Process] Trim falhou, usando imagem sem trim:', (e as any)?.message);
+        }
+
         // Validate that the result has actual content
-        const hasContent = await validateImageHasContent(refinedBuffer, sharp);
+        const hasContent = await validateImageHasContent(trimmedBuffer, sharp);
         
         if (!hasContent) {
             console.warn('⚠️ [Image Process] Imagem resultante está vazia/transparente! Retornando original otimizada...');
@@ -492,7 +507,7 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
             return fallbackBuffer;
         }
 
-        const outStats = await getAlphaStats(refinedBuffer, sharp);
+        const outStats = await getAlphaStats(trimmedBuffer, sharp);
 
         // Additional guard for very light/low contrast images: if the result is mostly transparent,
         // prefer returning the original (better than deleting the subject).
@@ -516,7 +531,7 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         }
 
         // Guard geral para evitar "furos" agressivos no produto.
-        const shapeStats = await getAlphaShapeStats(refinedBuffer, sharp);
+        const shapeStats = await getAlphaShapeStats(trimmedBuffer, sharp);
         const aggressive = isOverAggressiveRemoval(outStats, shapeStats);
         if (aggressive.aggressive) {
             console.warn(`⚠️ [Image Process] Resultado agressivo de remoção detectado (${aggressive.reason})`);
@@ -552,16 +567,16 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
 
         console.log('✅ [Image Process] Fundo removido com sucesso!');
 
-        // 3. Optimize output (preserve alpha) - usar buffer refinado
+        // 3. Optimize output (preserve alpha) - usar buffer trimmed
         if (outputFormat === 'png') {
             console.log('📦 [Image Process] Otimizando para PNG...');
-            const finalPng = await sharp(refinedBuffer).png().toBuffer();
+            const finalPng = await sharp(trimmedBuffer).png().toBuffer();
             console.log(`✅ [Image Process] Imagem processada: ${finalPng.length} bytes`);
             return finalPng;
         }
 
         console.log('📦 [Image Process] Otimizando para WebP...');
-        const finalWebp = await sharp(refinedBuffer).webp({ quality: 85, alphaQuality: 100 }).toBuffer();
+        const finalWebp = await sharp(trimmedBuffer).webp({ quality: 85, alphaQuality: 100 }).toBuffer();
 
         console.log(`✅ [Image Process] Imagem processada: ${finalWebp.length} bytes`);
         return finalWebp;

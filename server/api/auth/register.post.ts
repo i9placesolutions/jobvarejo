@@ -66,9 +66,12 @@ export default defineEventHandler(async (event) => {
     })
 
     const isProduction = process.env.NODE_ENV === 'production'
-    setCookie(event, 'access-token', token, { path: '/', maxAge: expiresIn, sameSite: 'lax', secure: isProduction, httpOnly: true })
-    setCookie(event, 'sb-access-token', token, { path: '/', maxAge: expiresIn, sameSite: 'lax', secure: isProduction, httpOnly: true })
-    setCookie(event, 'authenticated', 'true', { path: '/', maxAge: expiresIn, sameSite: 'lax', secure: isProduction, httpOnly: false })
+    const isTunnel = String(getHeader(event, 'host') || '').includes('devtunnels.ms')
+    const useSecure = isProduction || isTunnel
+    const sameSite = isTunnel ? 'none' as const : 'lax' as const
+    setCookie(event, 'access-token', token, { path: '/', maxAge: expiresIn, sameSite, secure: useSecure, httpOnly: true })
+    setCookie(event, 'sb-access-token', token, { path: '/', maxAge: expiresIn, sameSite, secure: useSecure, httpOnly: true })
+    setCookie(event, 'authenticated', 'true', { path: '/', maxAge: expiresIn, sameSite, secure: useSecure, httpOnly: false })
 
     response.session = {
       access_token: token,

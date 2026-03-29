@@ -10,6 +10,32 @@ const backgroundStyle = {
     #0f0f0f
   `,
 }
+
+// Mouse tracking para efeito ambient
+const mousePosition = ref<{ x: number; y: number } | null>(null)
+let rafId: number
+
+const handleMouseMove = (e: MouseEvent) => {
+  if (rafId) cancelAnimationFrame(rafId)
+  rafId = requestAnimationFrame(() => {
+    mousePosition.value = { x: e.clientX, y: e.clientY }
+  })
+}
+
+const handleMouseLeave = () => {
+  mousePosition.value = null
+}
+
+onMounted(() => {
+  window.addEventListener('mousemove', handleMouseMove)
+  window.addEventListener('mouseleave', handleMouseLeave)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', handleMouseMove)
+  window.removeEventListener('mouseleave', handleMouseLeave)
+  if (rafId) cancelAnimationFrame(rafId)
+})
 </script>
 
 <template>
@@ -64,7 +90,7 @@ const backgroundStyle = {
         class="pointer-events-none fixed inset-0 z-0 transition-opacity duration-500 opacity-30"
       >
         <div
-          class="absolute w-[600px] h-[600px] rounded-full blur-3xl bg-violet-500/20"
+          class="absolute w-150 h-150 rounded-full blur-3xl bg-violet-500/20"
           style="transform: translate(-50%, -50%);"
           :style="{
             left: mousePosition?.x + 'px' || '50%',
@@ -76,27 +102,6 @@ const backgroundStyle = {
   </div>
 </template>
 
-<script lang="ts">
-// Mouse tracking for ambient effect
-const mousePosition = ref<{ x: number; y: number } | null>(null)
-
-if (process.client) {
-  let rafId: number
-
-  window.addEventListener('mousemove', (e) => {
-    if (rafId) cancelAnimationFrame(rafId)
-
-    rafId = requestAnimationFrame(() => {
-      mousePosition.value = { x: e.clientX, y: e.clientY }
-    })
-  })
-
-  // Reset when mouse leaves window
-  window.addEventListener('mouseleave', () => {
-    mousePosition.value = null
-  })
-}
-</script>
 
 <style scoped>
 /* Smooth transitions */
