@@ -4822,7 +4822,7 @@ const updateNodePosition = (e: any) => {
 
 // ... (existing code)
 import { parseProductList } from '~/lib/utils'
-import { calculateGridLayout } from '~/utils/product-zone-helpers'
+import { calculateGridLayout, getAspectRatioValue } from '~/utils/product-zone-helpers'
 import { DEFAULT_GLOBAL_STYLES, DEFAULT_PRODUCT_ZONE } from '~/types/product-zone'
 import type { ProductZone, GlobalStyles } from '~/types/product-zone'
 import { useProject } from '~/composables/useProject'
@@ -27810,6 +27810,9 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
                 if (typeof txt.initDimensions === 'function') txt.initDimensions();
             });
 
+            // Propagar splashTextScale como metadado para as funções de layout.
+            (priceGroup as any).__splashTextScale = typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
+
             if (preserveTemplateVisual) {
                 refreshManualTemplateAfterTypographyChange(priceGroup);
             }
@@ -31500,16 +31503,23 @@ const layoutManualTemplateGroup = (priceGroup: any, cardW: number, cardH: number
     let effectiveW = baseW;
     let effectiveH = baseH;
     if (hasAtacarejoStructure) {
-        let bounds = visibleBounds(directChildren);
-        if (bounds && (Math.abs(bounds.centerX) > 0.001 || Math.abs(bounds.centerY) > 0.001)) {
+        // Centralizar children se necessário.
+        let centerBounds = visibleBounds(directChildren);
+        if (centerBounds && (Math.abs(centerBounds.centerX) > 0.001 || Math.abs(centerBounds.centerY) > 0.001)) {
             directChildren.forEach((obj: any) => {
                 if (!obj || typeof obj.set !== 'function') return;
                 obj.set({
-                    left: Number(obj.left || 0) - bounds!.centerX,
-                    top: Number(obj.top || 0) - bounds!.centerY
+                    left: Number(obj.left || 0) - centerBounds!.centerX,
+                    top: Number(obj.top || 0) - centerBounds!.centerY
                 });
                 obj.setCoords?.();
             });
+        }
+        // Usar bounds dos BACKGROUNDS (não texto) para calcular o fit.
+        // Isso evita que splashTextScale altere o fitScale indiretamente.
+        const fitAnchors = atacAnchors.length > 0 ? atacAnchors : directChildren;
+        let bounds = visibleBounds(fitAnchors);
+        if (!bounds || !hasSaneBounds(bounds, directChildrenVisibleBounds)) {
             bounds = visibleBounds(directChildren);
         }
         if (bounds && hasSaneBounds(bounds, directChildrenVisibleBounds)) {
@@ -31698,6 +31708,11 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     const hasSplitPrice = !!(priceInteger && priceDecimal);
     const hasPriceStructure = hasSplitPrice || priceText;
 
+    // Ler multiplicador de escala de texto propagado pelo card refresh.
+    const textScaleMult = typeof (priceGroup as any).__splashTextScale === 'number'
+        ? (priceGroup as any).__splashTextScale
+        : 1;
+
     // First pass: scale all text elements
     all.forEach((obj: any) => {
         if (!isTextLikeObject(obj)) return;
@@ -31716,7 +31731,7 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         // Position will be set later for price elements
         obj.set({
             fontFamily: originalFontFamily || undefined,
-            fontSize: originalFontSize * scale,
+            fontSize: originalFontSize * scale * textScaleMult,
             scaleX: 1,
             scaleY: 1,
             strokeWidth: (obj.strokeWidth || 0) * scale
@@ -32334,10 +32349,15 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         if (typeof priceGroup.remove === 'function') priceGroup.remove(o);
     });
 
+    // Ler multiplicador de escala de texto propagado pelo card refresh / fast-apply path.
+    const textScaleMult = typeof (priceGroup as any).__splashTextScale === 'number'
+        ? (priceGroup as any).__splashTextScale
+        : 1;
+
     const setTextSizing = (txt: any, defaultScale: number) => {
         if (!txt || !txt.type || !String(txt.type).includes('text')) return;
         const scale = typeof txt.__fontScale === 'number' ? txt.__fontScale : defaultScale;
-        txt.set({ fontSize: pillH * scale, scaleX: 1, scaleY: 1 });
+        txt.set({ fontSize: pillH * scale * textScaleMult, scaleX: 1, scaleY: 1 });
         if (typeof txt.initDimensions === 'function') txt.initDimensions();
     };
 
@@ -32484,7 +32504,7 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     });
     
     currencyText.set({
-        fontSize: circleSize * 0.32,
+        fontSize: circleSize * 0.32 * textScaleMult,
         originX: 'center',
         originY: 'center',
         left: circleCenterX,
@@ -35867,6 +35887,9 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 }
             }
 
+            // Propagar splashTextScale como metadado para as funções de layout.
+            (splash as any).__splashTextScale = typeof styles?.splashTextScale === 'number' ? styles!.splashTextScale! : 1;
+
             // Use reference cell dimensions (from zone layout) so that pill size
             // is uniform across highlight and normal cards.
             const _refW = Number((styles as any)?.__refCellW) || w;
@@ -37501,8 +37524,66 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
 
     const totalGapW = (gridCols - 1) * gapX;
     const totalGapH = (effectiveRows - 1) * gapY;
-    const itemW = (usableW - totalGapW) / gridCols;
-    const itemH = (usableH - totalGapH) / effectiveRows;
+    const slotW = (usableW - totalGapW) / gridCols;
+    const slotH = (usableH - totalGapH) / effectiveRows;
+
+    // Aplicar cardAspectRatio para obter dimensões reais do card.
+    let itemW = slotW;
+    let itemH = slotH;
+    const aspectRatioStr = zone.cardAspectRatio as string | undefined;
+    const hasAspectConstraint = !!aspectRatioStr && aspectRatioStr !== 'auto' && aspectRatioStr !== 'fill';
+    if (hasAspectConstraint) {
+        const arVal = getAspectRatioValue(aspectRatioStr!);
+        if (arVal && arVal > 0) {
+            const hFromRatio = itemW / arVal;
+            if (hFromRatio <= itemH) {
+                itemH = hFromRatio;
+            } else {
+                itemW = itemH * arVal;
+            }
+        }
+    }
+
+    // Aplicar verticalAlign — posicionar o grid quando há espaço vertical sobrando.
+    const vAlign = String((zone as any).verticalAlign || 'stretch').toLowerCase();
+    let gridStartY = startY;
+    let gridGapY = gapY;
+
+    if (hasAspectConstraint && itemH < slotH) {
+        const totalGridH = (effectiveRows * itemH) + ((effectiveRows - 1) * gapY);
+        const excessH = usableH - totalGridH;
+        if (excessH > 1) {
+            if (vAlign === 'center') {
+                gridStartY = startY + excessH / 2;
+            } else if (vAlign === 'bottom') {
+                gridStartY = startY + excessH;
+            } else if (vAlign === 'stretch') {
+                // Distribuir espaço extra entre as linhas.
+                if (effectiveRows > 1) {
+                    gridGapY = gapY + excessH / (effectiveRows - 1);
+                } else {
+                    gridStartY = startY + excessH / 2;
+                }
+            }
+            // 'top': keep gridStartY as-is.
+        }
+    }
+
+    // Centralizar horizontalmente quando aspect ratio restringe a largura.
+    let gridStartX = startX;
+    let gridGapX = gapX;
+
+    if (hasAspectConstraint && itemW < slotW) {
+        const totalGridW = (gridCols * itemW) + ((gridCols - 1) * gapX);
+        const excessW = usableW - totalGridW;
+        if (excessW > 1) {
+            if (gridCols > 1) {
+                gridGapX = gapX + excessW / (gridCols - 1);
+            } else {
+                gridStartX = startX + excessW / 2;
+            }
+        }
+    }
 
     if (!Number.isFinite(itemW) || !Number.isFinite(itemH) || itemW <= 0 || itemH <= 0) {
         return;
@@ -37527,8 +37608,8 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         // Handle vertical "last column" alignment/fill (analogous to last-row behavior).
         if (layoutDirection === 'vertical' && isLastCol && itemsInCol < effectiveRows) {
             let colItemH = itemH;
-            let colGapY = gapY;
-            let colStartY = startY;
+            let colGapY = gridGapY;
+            let colStartY = gridStartY;
 
             if ((lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInCol >= 1) {
                 // Fill the full height by stretching items (gaps stay consistent).
@@ -37540,10 +37621,10 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                 colStartY = startY + (usableH - colH) / 2;
             } else if (lastRowBehavior === 'left') {
                 // Treat "left" as "top" for vertical flow.
-                colStartY = startY;
+                colStartY = gridStartY;
             }
 
-            let x = startX + (col * (itemW + gapX));
+            let x = gridStartX + (col * (itemW + gridGapX));
             let y = colStartY + (row * (colItemH + colGapY));
 
             x = clamp(x, startX, Math.max(startX, maxSlotX - itemW));
@@ -37558,8 +37639,8 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         // - stretch: stretch card width to occupy full width
         // - left: keep card size, align left
         let rowItemW = itemW;
-        let rowGapX = gapX;
-        let rowStartX = startX;
+        let rowGapX = gridGapX;
+        let rowStartX = gridStartX;
 
         if (isLastRow && itemsInRow < cols) {
             if ((lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow >= 1) {
@@ -37571,12 +37652,12 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                 const rowW = (itemsInRow * rowItemW) + ((itemsInRow - 1) * rowGapX);
                 const shouldCenter = lastRowBehavior === 'center';
                 if (shouldCenter) rowStartX = startX + (usableW - rowW) / 2;
-                else if (lastRowBehavior === 'left') rowStartX = startX;
+                else if (lastRowBehavior === 'left') rowStartX = gridStartX;
             }
         }
 
         let x = rowStartX + (col * (rowItemW + rowGapX));
-        let y = startY + (row * (itemH + gapY));
+        let y = gridStartY + (row * (itemH + gridGapY));
 
         x = clamp(x, startX, Math.max(startX, maxSlotX - rowItemW));
         y = clamp(y, startY, Math.max(startY, maxSlotY - itemH));
