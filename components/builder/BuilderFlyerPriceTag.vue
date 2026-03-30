@@ -100,7 +100,20 @@ const shapeClass = computed(() => {
 })
 
 // ── Background image ────────────────────────────────────────────────────────
-const bgImage = computed(() => props.tagStyle?.css_config?.bgImage || '')
+const rawBgImage = computed(() => props.tagStyle?.css_config?.bgImage || '')
+// Resolver URL de imagem (proxy Wasabi, storage keys)
+const bgImage = computed(() => {
+  const img = rawBgImage.value
+  if (!img) return ''
+  if (img.startsWith('/api/') || img.startsWith('data:')) return img
+  const wasabiMatch = img.match(/^https?:\/\/[^/]*wasabi[^/]*\/[^/]+\/(.+?)(\?.*)?$/)
+  if (wasabiMatch) return `/api/storage/p?key=${encodeURIComponent(wasabiMatch[1]!)}`
+  if (img.startsWith('http://') || img.startsWith('https://')) return img
+  if (img.startsWith('builder/') || img.startsWith('products/') || img.startsWith('imagens/') || img.includes('.')) {
+    return `/api/storage/p?key=${encodeURIComponent(img)}`
+  }
+  return img
+})
 const bgImageSize = computed(() => props.tagStyle?.css_config?.bgImageSize || 'cover')
 const bgImageOpacity = computed(() => props.tagStyle?.css_config?.bgImageOpacity ?? 1)
 
@@ -225,7 +238,7 @@ const bgImageStyle = computed(() => {
   return {
     position: 'absolute' as const,
     inset: '0',
-    backgroundImage: `url(${bgImage.value})`,
+    backgroundImage: `url('${bgImage.value}')`,
     backgroundSize: bgImageSize.value === 'stretch' ? '100% 100%' : bgImageSize.value,
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -343,11 +356,156 @@ const symbolicItems = computed(() => {
 })
 
 const mode = computed(() => props.product.price_mode || 'simple')
+
+// Estilos que usam renderizacao customizada (sem sealStyle)
+const customStyles = new Set(['explodir', 'circulo', 'oval', 'selo', 'minimal', 'tag', 'pill', 'neon', 'glass', 'gradient', 'oferta', 'queima', 'flash', 'gold', 'darkprice', 'outline'])
+const isCustomStyle = computed(() => customStyles.has(priceVisualStyle.value))
+
+// Helpers de formatacao para estilos customizados
+const priceInt = computed(() => priceParts.value?.integer || '0')
+const priceDec = computed(() => priceParts.value?.decimal || '00')
+const priceFormatted = computed(() => priceParts.value ? `${priceParts.value.integer},${priceParts.value.decimal}` : '0,00')
 </script>
 
 <template>
   <!-- none: no price tag -->
   <div v-if="mode === 'none'" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- ESTILOS CUSTOMIZADOS DE ETIQUETA (intercepta antes dos modos)      -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+  <!-- EXPLOSAO: estrela irregular -->
+  <div v-else-if="priceVisualStyle === 'explodir' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: bgColor, border: `2px solid ${textColor}`, borderRadius: '50% 40% 55% 45% / 45% 55% 40% 50%', padding: `${0.2*s}em ${0.4*s}em`, transform: 'rotate(-2deg)', boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.45*s}em`, color: textColor }">R$</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.3*s}em`, color: textColor, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.6*s}em`, color: textColor }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- CIRCULO: redondo perfeito, empilhado vertical -->
+  <div v-else-if="priceVisualStyle === 'circulo' && priceParts" class="inline-flex flex-col items-center justify-center relative overflow-hidden" :style="{ background: bgColor, borderRadius: '50%', width: `${3*s}em`, height: `${3*s}em`, color: textColor }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.35*s}em`, lineHeight: '1' }">R$</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.1*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em`, lineHeight: '1' }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- OVAL: horizontal arredondado -->
+  <div v-else-if="priceVisualStyle === 'oval' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: bgColor, borderRadius: '999px', padding: `${0.15*s}em ${0.5*s}em`, color: textColor }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em` }">R$&nbsp;</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.1*s}em`, lineHeight: '1' }">{{ priceFormatted }}</span>
+  </div>
+
+  <!-- SELO: circular tracejado, estilo carimbo -->
+  <div v-else-if="priceVisualStyle === 'selo' && priceParts" class="inline-flex flex-col items-center justify-center relative overflow-hidden" :style="{ border: `3px dashed ${bgColor}`, borderRadius: '50%', width: `${3.2*s}em`, height: `${3.2*s}em`, background: textColor, color: bgColor, transform: 'rotate(-5deg)' }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.35*s}em`, lineHeight: '1' }">R$</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em`, lineHeight: '1' }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- MINIMAL: sem fundo, underline sutil -->
+  <div v-else-if="priceVisualStyle === 'minimal' && priceParts" class="inline-flex items-baseline relative" :style="{ borderBottom: `2px solid ${bgColor}33`, paddingBottom: `${0.1*s}em` }">
+    <span :style="{ fontSize: `${0.4*s}em`, color: bgColor, fontWeight: '500', opacity: '0.6' }">R$&nbsp;</span>
+    <span class="font-extrabold" :style="{ fontSize: `${1.3*s}em`, color: bgColor, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold" :style="{ fontSize: `${0.6*s}em`, color: bgColor }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- TAG: etiqueta de roupa com furo -->
+  <div v-else-if="priceVisualStyle === 'tag' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: bgColor, color: textColor, padding: `${0.15*s}em ${0.5*s}em ${0.15*s}em ${0.7*s}em`, clipPath: 'polygon(12% 0%, 100% 0%, 100% 100%, 12% 100%, 0% 50%)', borderRadius: '0 6px 6px 0' }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em` }">R$&nbsp;</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.1*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.55*s}em` }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- PILL: capsula -->
+  <div v-else-if="priceVisualStyle === 'pill' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: bgColor, borderRadius: '999px', padding: `${0.15*s}em ${0.6*s}em`, color: textColor, boxShadow: `0 3px 8px ${bgColor}66` }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em` }">R$&nbsp;</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.15*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.55*s}em` }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- NEON: glow luminoso -->
+  <div v-else-if="priceVisualStyle === 'neon' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ border: `2px solid ${bgColor}`, borderRadius: '8px', padding: `${0.12*s}em ${0.4*s}em`, color: bgColor, boxShadow: `0 0 8px ${bgColor}, 0 0 16px ${bgColor}4d`, background: 'rgba(0,0,0,0.8)' }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em` }">R$&nbsp;</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.15*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.55*s}em` }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- GLASS: glassmorphism -->
+  <div v-else-if="priceVisualStyle === 'glass' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '10px', padding: `${0.15*s}em ${0.45*s}em`, color: textColor, textShadow: '0 1px 3px rgba(0,0,0,0.3)' }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em` }">R$&nbsp;</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.15*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.55*s}em` }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- GRADIENT: fundo gradiente diagonal -->
+  <div v-else-if="priceVisualStyle === 'gradient' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: backgroundStyle, borderRadius: '12px', padding: `${0.15*s}em ${0.5*s}em`, color: textColor, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em` }">R$&nbsp;</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.2*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.55*s}em` }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- OFERTA: mega oferta com texto OFERTA -->
+  <div v-else-if="priceVisualStyle === 'oferta' && priceParts" class="inline-flex flex-col items-center relative overflow-hidden" :style="{ background: bgColor, border: `3px solid ${textColor}`, borderRadius: '8px', padding: `${0.1*s}em ${0.4*s}em ${0.15*s}em` }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-black relative z-1" :style="{ fontSize: `${0.35*s}em`, color: textColor, letterSpacing: '2px', lineHeight: '1' }">OFERTA</span>
+    <div class="flex items-baseline relative z-1">
+      <span class="font-bold" :style="{ fontSize: `${0.4*s}em`, color: textColor }">R$</span>
+      <span class="font-black" :style="{ fontSize: `${1.3*s}em`, color: textColor, lineHeight: '1' }">{{ priceInt }}</span>
+      <span class="font-bold" :style="{ fontSize: `${0.6*s}em`, color: textColor }">,{{ priceDec }}</span>
+    </div>
+  </div>
+
+  <!-- QUEIMA: fundo escuro, texto contrastante -->
+  <div v-else-if="priceVisualStyle === 'queima' && priceParts" class="inline-flex flex-col items-center relative overflow-hidden" :style="{ background: bgColor, borderRadius: '8px', padding: `${0.1*s}em ${0.45*s}em ${0.15*s}em`, boxShadow: `0 2px 8px ${bgColor}80` }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-black relative z-1" :style="{ fontSize: `${0.3*s}em`, color: textColor, letterSpacing: '1px', lineHeight: '1' }">QUEIMA</span>
+    <div class="flex items-baseline relative z-1">
+      <span class="font-bold" :style="{ fontSize: `${0.4*s}em`, color: textColor }">R$</span>
+      <span class="font-black" :style="{ fontSize: `${1.2*s}em`, color: textColor, lineHeight: '1' }">{{ priceInt }}</span>
+      <span class="font-bold" :style="{ fontSize: `${0.55*s}em`, color: textColor }">,{{ priceDec }}</span>
+    </div>
+  </div>
+
+  <!-- FLASH: angular, skew -->
+  <div v-else-if="priceVisualStyle === 'flash' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: bgColor, border: `2px solid ${textColor}`, padding: `${0.12*s}em ${0.5*s}em`, color: textColor, transform: 'skewX(-5deg)' }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em` }">R$&nbsp;</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.2*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.55*s}em` }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- GOLD: dourado premium -->
+  <div v-else-if="priceVisualStyle === 'gold' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: `linear-gradient(135deg, ${bgColor}, ${bgColor}88, ${bgColor})`, border: `1px solid ${bgColor}`, borderRadius: '6px', padding: `${0.15*s}em ${0.5*s}em`, color: textColor }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="relative z-1" :style="{ fontSize: `${0.4*s}em`, fontWeight: '400', letterSpacing: '1px' }">R$&nbsp;</span>
+    <span class="relative z-1" :style="{ fontSize: `${1.2*s}em`, fontWeight: '300', lineHeight: '1', letterSpacing: '1px' }">{{ priceInt }}</span>
+    <span class="relative z-1" :style="{ fontSize: `${0.55*s}em`, fontWeight: '400' }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- DARK PREMIUM: fundo escuro, texto claro -->
+  <div v-else-if="priceVisualStyle === 'darkprice' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: '#1a1a2e', border: '1px solid #444', borderRadius: '4px', padding: `${0.15*s}em ${0.45*s}em`, color: textColor }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="relative z-1" :style="{ fontSize: `${0.4*s}em`, color: bgColor, fontWeight: '600' }">R$&nbsp;</span>
+    <span class="font-extrabold relative z-1" :style="{ fontSize: `${1.15*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.55*s}em` }">,{{ priceDec }}</span>
+  </div>
+
+  <!-- OUTLINE: contorno sem fundo -->
+  <div v-else-if="priceVisualStyle === 'outline' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: 'transparent', border: `3px solid ${bgColor}`, borderRadius: '8px', padding: `${0.1*s}em ${0.4*s}em`, color: bgColor }">
+    <div v-if="bgImageStyle" :style="bgImageStyle" />
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.4*s}em` }">R$&nbsp;</span>
+    <span class="font-black relative z-1" :style="{ fontSize: `${1.15*s}em`, lineHeight: '1' }">{{ priceInt }}</span>
+    <span class="font-bold relative z-1" :style="{ fontSize: `${0.55*s}em` }">,{{ priceDec }}</span>
+  </div>
 
   <!-- anticipation: custom text -->
   <div v-else-if="mode === 'anticipation'" class="flex flex-col items-center w-full" :style="{ fontFamily }">

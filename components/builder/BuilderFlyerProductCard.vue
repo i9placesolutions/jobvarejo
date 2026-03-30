@@ -108,7 +108,7 @@ const baseFontSize = computed(() => {
 })
 
 const cardBg = computed(() => fontConfig.value.card_bg_color || (flyer.value as any)?.card_bg_color || '#ffffff')
-const cardText = computed(() => (flyer.value as any)?.card_text_color || '#000000')
+const cardText = computed(() => fontConfig.value.card_text_color || (flyer.value as any)?.card_text_color || '#000000')
 
 const cardStyle = computed(() => ({
   backgroundColor: cardBg.value,
@@ -248,13 +248,30 @@ const bottomRowStyle = computed(() => {
   <div
     class="relative overflow-hidden min-h-0"
     :class="[
-      cardLayout === 'lateral' ? 'flex flex-row' : 'flex flex-col',
+      cardLayout === 'lateral' || cardLayout === 'mini' || cardLayout === 'etiqueta' ? 'flex flex-row' : 'flex flex-col',
     ]"
     :style="{
       ...cardStyle,
-      border: isHighlight ? '3px solid var(--builder-accent, var(--builder-primary, #10b981))' : '1px solid rgba(0,0,0,0.12)',
+      border: isHighlight ? '3px solid var(--builder-accent, var(--builder-primary, #10b981))'
+        : cardLayout === 'tabloide' ? '3px solid #D32F2F'
+        : cardLayout === 'elegante' ? '1px solid #D4AF37'
+        : cardLayout === 'glassmorphism' ? '1px solid rgba(255,255,255,0.3)'
+        : cardLayout === 'minimalista' ? 'none'
+        : '1px solid rgba(0,0,0,0.12)',
       fontSize: `${baseFontSize}px`,
-      background: isHighlight ? `linear-gradient(135deg, ${cardBg}, ${cardBg}ee)` : cardBg,
+      background: cardLayout === 'dark' ? '#1a1a2e'
+        : cardLayout === 'splash' ? 'var(--builder-primary, #E53935)'
+        : cardLayout === 'glassmorphism' ? 'rgba(255,255,255,0.65)'
+        : cardLayout === 'tabloide' ? '#FFFDE7'
+        : cardLayout === 'elegante' ? '#FFFEF5'
+        : isHighlight ? `linear-gradient(135deg, ${cardBg}, ${cardBg}ee)` : cardBg,
+      boxShadow: cardLayout === 'minimalista' ? '0 2px 12px rgba(0,0,0,0.08)'
+        : cardLayout === 'card3d' ? '0 8px 24px rgba(0,0,0,0.15), 0 2px 6px rgba(0,0,0,0.1)'
+        : cardStyle.boxShadow,
+      borderRadius: cardLayout === 'card3d' ? '16px'
+        : cardLayout === 'minimalista' ? '12px'
+        : borderRadius,
+      backdropFilter: cardLayout === 'glassmorphism' ? 'blur(12px)' : undefined,
     }"
   >
     <!-- Badge -->
@@ -277,7 +294,7 @@ const bottomRowStyle = computed(() => {
     <template v-if="cardLayout === 'classico'">
       <!-- TITULO -->
       <div class="shrink-0 relative z-10" style="padding: 6px 12px 0">
-        <p v-if="product.custom_name" class="font-extrabold leading-tight line-clamp-2 text-center"
+        <p v-if="product.custom_name" class="font-extrabold leading-tight wrap-break-word text-center"
           :style="{ fontSize: nameFontSize, fontFamily: nameFontFamily, textTransform: nameTextTransform }">
           {{ product.custom_name }}
         </p>
@@ -327,8 +344,8 @@ const bottomRowStyle = computed(() => {
       </div>
 
       <!-- Lado direito: nome + etiqueta GRANDE, centralizados verticalmente -->
-      <div style="width: 57%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 16px; overflow: hidden; gap: 6px">
-        <p v-if="product.custom_name" class="font-extrabold leading-tight line-clamp-2 text-center"
+      <div style="width: 57%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 16px; gap: 6px">
+        <p v-if="product.custom_name" class="font-extrabold leading-tight wrap-break-word text-center"
           :style="{ fontSize: nameFontSize, fontFamily: nameFontFamily, textTransform: nameTextTransform }">
           {{ product.custom_name }}
         </p>
@@ -346,9 +363,9 @@ const bottomRowStyle = computed(() => {
     <!-- Estilo encarte supermercado — imagem domina, info na barra inferior -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <template v-else-if="cardLayout === 'premium'">
-      <!-- IMAGEM: ocupa ~65% do card, grande e centralizada -->
-      <div style="flex: 7; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 0.3em 0.3em 0.1em">
-        <img v-if="imageUrl" :src="imageUrl" style="width: 100%; height: 100%; object-fit: contain" alt="" draggable="false" />
+      <!-- IMAGEM ENORME: 65-70% do card -->
+      <div style="flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; width: 100%; padding: 12px 12px 4px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 90%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
         <div v-else class="opacity-20">
           <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -356,22 +373,185 @@ const bottomRowStyle = computed(() => {
         </div>
       </div>
 
-      <!-- BARRA INFERIOR: ~35% do card, Nome esquerda + Preco direita -->
-      <div style="flex: 3; flex-shrink: 0; min-height: 0; display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 10px 16px; gap: 10px; overflow: hidden">
-        <!-- Nome a esquerda -->
-        <div style="flex: 1; min-width: 0; overflow: hidden; margin-left: 2px">
-          <p v-if="product.custom_name" class="font-extrabold leading-tight line-clamp-2"
-            :style="{ fontSize: nameFontSize, fontFamily: nameFontFamily, textTransform: nameTextTransform }">
-            {{ product.custom_name }}
-          </p>
-          <p v-if="product.observation" class="text-[0.45em] opacity-50 leading-tight line-clamp-1">
-            {{ product.observation }}
-          </p>
+      <!-- BARRA INFERIOR: Nome esquerda + Etiqueta direita, mesma linha -->
+      <div style="flex-shrink: 0; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px 12px; gap: 12px">
+        <div style="flex: 1; min-width: 0; font-weight: 900; font-size: 1.15em; line-height: 1.2; word-wrap: break-word; overflow-wrap: break-word; text-transform: uppercase; text-align: left"
+          :style="{ fontFamily: nameFontFamily }">
+          {{ product.custom_name }}
         </div>
-        <!-- Preco a direita, grande -->
-        <div style="flex-shrink: 0; font-size: 1.2em; margin-right: 2px">
+        <div style="flex-shrink: 0; font-size: 1.25em">
           <BuilderFlyerPriceTag :product="product" :tag-style="priceTagStyle" :is-highlight="true" />
         </div>
+      </div>
+    </template>
+
+    <!-- ═══ COMPACTO: card pequeno eficiente ═══ -->
+    <template v-else-if="cardLayout === 'compacto'">
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 4px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      </div>
+      <div class="shrink-0 text-center" style="padding: 2px 8px 6px">
+        <p v-if="product.custom_name" class="font-bold leading-tight wrap-break-word" :style="{ fontSize: '0.8em', fontFamily: nameFontFamily, textTransform: nameTextTransform }">{{ product.custom_name }}</p>
+        <p v-if="product.offer_price != null" class="font-extrabold" :style="{ fontSize: '1.1em', color: 'var(--builder-primary, #D32F2F)' }">R$ {{ Number(product.offer_price).toFixed(2).replace('.', ',') }}</p>
+      </div>
+    </template>
+
+    <!-- ═══ MINI: ultra compacto estilo lista ═══ -->
+    <template v-else-if="cardLayout === 'mini'">
+      <div style="display: flex; flex-direction: row; align-items: center; height: 100%; padding: 4px 10px; gap: 8px; overflow: hidden">
+        <img v-if="imageUrl" :src="imageUrl" style="width: 2.5em; height: 2.5em; object-fit: contain; flex-shrink: 0" alt="" draggable="false" />
+        <p v-if="product.custom_name" class="font-bold leading-tight wrap-break-word" style="flex: 1; min-width: 0" :style="{ fontSize: '0.85em', fontFamily: nameFontFamily, textTransform: nameTextTransform }">{{ product.custom_name }}</p>
+        <p v-if="product.offer_price != null" class="font-extrabold shrink-0" :style="{ fontSize: '1.1em', color: 'var(--builder-primary, #D32F2F)' }">R$ {{ Number(product.offer_price).toFixed(2).replace('.', ',') }}</p>
+      </div>
+    </template>
+
+    <!-- ═══ GRADE: so imagem + preco sobreposto, sem nome ═══ -->
+    <template v-else-if="cardLayout === 'grade'">
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 6px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      </div>
+      <div style="position: absolute; bottom: 6px; right: 6px; z-index: 20; font-size: 1.1em">
+        <BuilderFlyerPriceTag :product="product" :tag-style="priceTagStyle" :is-highlight="true" />
+      </div>
+    </template>
+
+    <!-- ═══ VITRINE: imagem grande + barra gradiente inferior ═══ -->
+    <template v-else-if="cardLayout === 'vitrine'">
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 8px 8px 0">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      </div>
+      <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center; padding: 8px 14px; background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.4)); color: #fff; gap: 4px">
+        <p v-if="product.custom_name" class="font-bold leading-tight wrap-break-word text-center" style="width: 100%; word-wrap: break-word; overflow-wrap: break-word" :style="{ fontSize: nameFontSize, fontFamily: nameFontFamily, textTransform: nameTextTransform }">{{ product.custom_name }}</p>
+        <div style="font-size: 1.15em">
+          <BuilderFlyerPriceTag :product="product" :tag-style="priceTagStyle" :is-highlight="true" />
+        </div>
+      </div>
+    </template>
+
+    <!-- ═══ SPLASH: fundo vibrante, sombra forte, estilo promo agressiva ═══ -->
+    <template v-else-if="cardLayout === 'splash'">
+      <div class="shrink-0 text-center" style="padding: 8px 12px 0">
+        <p v-if="product.custom_name" class="font-black leading-tight wrap-break-word" :style="{ fontSize: '1.15em', color: '#fff', fontFamily: nameFontFamily, textTransform: nameTextTransform, textShadow: '1px 2px 4px rgba(0,0,0,0.4)' }">{{ product.custom_name }}</p>
+      </div>
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 4px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 90%; max-height: 90%; object-fit: contain; filter: drop-shadow(4px 6px 8px rgba(0,0,0,0.5))" alt="" draggable="false" />
+      </div>
+      <div class="shrink-0 flex items-center justify-center" style="padding: 4px 12px 10px">
+        <div style="transform: rotate(-2deg); font-size: 1.3em">
+          <BuilderFlyerPriceTag :product="product" :tag-style="priceTagStyle" :is-highlight="true" />
+        </div>
+      </div>
+    </template>
+
+    <!-- ═══ MINIMALISTA: clean, sombra suave, muito respiro ═══ -->
+    <template v-else-if="cardLayout === 'minimalista'">
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 16px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      </div>
+      <div class="shrink-0 text-center" style="padding: 0 16px 12px">
+        <p v-if="product.custom_name" class="leading-tight wrap-break-word" :style="{ fontSize: '0.9em', fontWeight: '300', fontFamily: nameFontFamily, textTransform: nameTextTransform, letterSpacing: '0.5px' }">{{ product.custom_name }}</p>
+        <p v-if="product.offer_price != null" class="font-bold" style="margin-top: 6px" :style="{ fontSize: '1.4em', color: 'var(--builder-primary, #1a1a1a)' }">R$ {{ Number(product.offer_price).toFixed(2).replace('.', ',') }}</p>
+      </div>
+    </template>
+
+    <!-- ═══ FLAT: fundo colorido solido, badge circular ═══ -->
+    <template v-else-if="cardLayout === 'flat'">
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 10px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      </div>
+      <div class="shrink-0 text-center" style="padding: 4px 12px 10px">
+        <p v-if="product.custom_name" class="font-bold leading-tight wrap-break-word" :style="{ fontSize: nameFontSize, fontFamily: nameFontFamily, textTransform: nameTextTransform }">{{ product.custom_name }}</p>
+        <div v-if="product.offer_price != null" style="display: inline-flex; align-items: center; justify-content: center; margin-top: 4px; padding: 4px 14px; border-radius: 999px; font-weight: 800; color: #fff; background: var(--builder-primary, #E53935)" :style="{ fontSize: '1.05em' }">
+          R$ {{ Number(product.offer_price).toFixed(2).replace('.', ',') }}
+        </div>
+      </div>
+    </template>
+
+    <!-- ═══ CARD3D: sombra profunda, borda arredondada ═══ -->
+    <template v-else-if="cardLayout === 'card3d'">
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 12px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      </div>
+      <div class="shrink-0 text-center" style="padding: 4px 14px 10px">
+        <p v-if="product.custom_name" class="font-bold leading-tight wrap-break-word" :style="{ fontSize: nameFontSize, fontFamily: nameFontFamily, textTransform: nameTextTransform }">{{ product.custom_name }}</p>
+        <div style="margin-top: 6px; display: inline-block; font-size: 1.1em; box-shadow: 0 3px 8px rgba(0,0,0,0.25); border-radius: 8px">
+          <BuilderFlyerPriceTag :product="product" :tag-style="priceTagStyle" :is-highlight="isHighlight" />
+        </div>
+      </div>
+    </template>
+
+    <!-- ═══ GLASSMORPHISM: vidro semi-transparente ═══ -->
+    <template v-else-if="cardLayout === 'glassmorphism'">
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 10px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      </div>
+      <div class="shrink-0 text-center" style="padding: 6px 14px 10px">
+        <p v-if="product.custom_name" class="font-bold leading-tight wrap-break-word" :style="{ fontSize: nameFontSize, fontFamily: nameFontFamily, textTransform: nameTextTransform }">{{ product.custom_name }}</p>
+        <div style="margin-top: 4px; font-size: 1.05em">
+          <BuilderFlyerPriceTag :product="product" :tag-style="priceTagStyle" :is-highlight="isHighlight" />
+        </div>
+      </div>
+    </template>
+
+    <!-- ═══ TABLOIDE: estilo encarte jornal tradicional ═══ -->
+    <template v-else-if="cardLayout === 'tabloide'">
+      <div class="shrink-0 text-center" style="padding: 6px 10px 2px">
+        <p v-if="product.custom_name" class="font-black leading-tight wrap-break-word" :style="{ fontSize: '1.05em', color: '#000', fontFamily: nameFontFamily, textTransform: nameTextTransform }">{{ product.custom_name }}</p>
+      </div>
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 4px 8px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      </div>
+      <div class="shrink-0 text-center" style="padding: 4px 10px 8px">
+        <p v-if="product.offer_price != null" class="font-black" style="color: #D32F2F; line-height: 1">
+          <span style="font-size: 0.5em; vertical-align: top">R$</span>
+          <span :style="{ fontSize: '1.8em' }">{{ String(Math.floor(Number(product.offer_price))).replace(/\B(?=(\d{3})+(?!\d))/g, '.') }}</span>
+          <span style="font-size: 0.7em; vertical-align: top">,{{ (Number(product.offer_price).toFixed(2)).split('.')[1] }}</span>
+        </p>
+      </div>
+    </template>
+
+    <!-- ═══ ETIQUETA: estilo gondola/prateleira, horizontal ═══ -->
+    <template v-else-if="cardLayout === 'etiqueta'">
+      <div style="display: flex; flex-direction: row; align-items: center; height: 100%; padding: 6px 12px; gap: 8px; overflow: hidden">
+        <img v-if="imageUrl" :src="imageUrl" style="width: 3em; height: 3em; object-fit: contain; flex-shrink: 0" alt="" draggable="false" />
+        <div style="flex: 1; min-width: 0; overflow: hidden">
+          <p v-if="product.custom_name" class="font-semibold leading-tight wrap-break-word" :style="{ fontSize: '0.8em', fontFamily: nameFontFamily, textTransform: nameTextTransform }">{{ product.custom_name }}</p>
+          <p v-if="product.observation" class="truncate opacity-50" style="font-size: 0.55em">{{ product.observation }}</p>
+        </div>
+        <div style="flex-shrink: 0; text-align: right">
+          <p v-if="product.offer_price != null" class="font-black" style="color: #D32F2F; line-height: 1; white-space: nowrap">
+            <span style="font-size: 0.6em">R$</span><span :style="{ fontSize: '1.6em' }">{{ String(Math.floor(Number(product.offer_price))) }}</span><span style="font-size: 0.7em">,{{ (Number(product.offer_price).toFixed(2)).split('.')[1] }}</span>
+          </p>
+        </div>
+      </div>
+    </template>
+
+    <!-- ═══ ELEGANTE: gourmet, borda dourada, serifado ═══ -->
+    <template v-else-if="cardLayout === 'elegante'">
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 16px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      </div>
+      <div class="shrink-0 text-center" style="padding: 0 14px 12px">
+        <p v-if="product.custom_name" class="leading-tight wrap-break-word" :style="{ fontSize: '0.85em', fontWeight: '600', fontFamily: 'Georgia, serif', textTransform: 'uppercase', letterSpacing: '2px' }">{{ product.custom_name }}</p>
+        <hr style="border: none; border-top: 1px solid #D4AF37; margin: 6px auto; width: 60%" />
+        <p v-if="product.offer_price != null" style="line-height: 1; color: #333; margin-top: 4px">
+          <span style="font-size: 0.6em; font-weight: 400">R$</span>
+          <span class="font-light" :style="{ fontSize: '1.6em' }">{{ Number(product.offer_price).toFixed(2).replace('.', ',') }}</span>
+        </p>
+      </div>
+    </template>
+
+    <!-- ═══ DARK: fundo escuro, preco neon ═══ -->
+    <template v-else-if="cardLayout === 'dark'">
+      <div class="flex-1 min-h-0 flex items-center justify-center overflow-hidden" style="padding: 10px">
+        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 0 8px rgba(0,180,255,0.3))" alt="" draggable="false" />
+      </div>
+      <div class="shrink-0 text-center" style="padding: 4px 12px 10px">
+        <p v-if="product.custom_name" class="font-bold leading-tight wrap-break-word" :style="{ fontSize: nameFontSize, color: '#e0e0e0', fontFamily: nameFontFamily, textTransform: nameTextTransform }">{{ product.custom_name }}</p>
+        <p v-if="product.offer_price != null" class="font-black" style="margin-top: 4px; line-height: 1; color: #00d4ff; text-shadow: 0 0 10px rgba(0,212,255,0.5)">
+          <span style="font-size: 0.5em">R$</span>
+          <span :style="{ fontSize: '1.5em' }">{{ Number(product.offer_price).toFixed(2).replace('.', ',') }}</span>
+        </p>
       </div>
     </template>
 
@@ -380,7 +560,7 @@ const bottomRowStyle = computed(() => {
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <template v-else>
       <div class="shrink-0 px-2 pt-1 relative z-10">
-        <p v-if="product.custom_name" class="font-extrabold leading-tight line-clamp-2 text-center"
+        <p v-if="product.custom_name" class="font-extrabold leading-tight wrap-break-word text-center"
           :style="{ fontSize: nameFontSize, fontFamily: nameFontFamily, textTransform: nameTextTransform }">
           {{ product.custom_name }}
         </p>

@@ -5671,14 +5671,18 @@ function sanitizeFabricJsonTreeForLoad(
 }
 
 /**
- * FIX: Repair orphan-hidden text elements inside product card price groups.
- * Viewport culling + auto-save corruption could persist `visible: false` on text
- * elements that should be visible (integer, decimal, unit, pack-line).
- * This runs on the raw JSON BEFORE Fabric loads it, so it restores the visual
- * state without needing canvas access.
+ * FIX: Repara elementos ocultos dentro de price groups de product cards.
+ * Viewport culling + auto-save corruption pode persistir `visible: false` em
+ * elementos que deveriam estar visíveis (backgrounds, textos de preço, imagens).
+ * Roda no JSON cru ANTES do Fabric carregá-lo.
  *
- * Rule: inside a price sub-group, if a background Rect is visible,
- * all text elements positioned within that rect's vertical bounds must also be visible.
+ * Estratégia:
+ * 1. Identifica price groups pelo nome 'priceGroup' ou pela estrutura (Rect + textos).
+ * 2. Se o price group tem QUALQUER texto visível, restaura visibilidade de TODOS
+ *    os elementos estruturais (Rect de fundo, Image de fundo, textos de preço).
+ * 3. Se NENHUM elemento está visível mas o grupo tem conteúdo, restaura tudo
+ *    (caso raro de corrupção total pela culling).
+ * 4. Repara recursivamente sub-grupos (atacarejo com retail + wholesale).
  */
 function repairHiddenPriceGroupTexts(json: any): number {
     if (!json || !Array.isArray(json.objects)) return 0;
@@ -5687,45 +5691,113 @@ function repairHiddenPriceGroupTexts(json: any): number {
     const isProductCardGroup = (obj: any): boolean => {
         if (obj?.type !== 'Group' && obj?.type !== 'group') return false;
         const children = Array.isArray(obj.objects) ? obj.objects : [];
-        // A product card has a Textbox (name) + nested Group (price group)
         const hasTextbox = children.some((c: any) => c?.type === 'Textbox');
         const hasNestedGroup = children.some((c: any) => c?.type === 'Group' || c?.type === 'group');
         return hasTextbox && hasNestedGroup;
     };
 
+    // Nomes conhecidos de elementos estruturais do price group que NUNCA devem ficar ocultos
+    const PRICE_BG_NAMES = new Set([
+        'price_bg', 'price_bg_image', 'splash_image',
+        'price_header_bg', 'offerBackground',
+        'atac_banner_bg', 'atac_wholesale_bg', 'atac_retail_bg'
+    ]);
+    const PRICE_TEXT_NAMES = new Set([
+        'price_currency_text', 'price_integer_text', 'price_decimal_text',
+        'price_unit_text', 'price_value_text', 'smart_price',
+        'price_header_text', 'price_header_unit_text',
+        'priceInteger', 'priceDecimal', 'price_integer', 'price_decimal',
+        'atac_retail_price', 'atac_wholesale_price',
+        'atac_retail_unit', 'atac_wholesale_unit',
+        'atac_retail_label', 'atac_wholesale_label'
+    ]);
+
+    const isTextType = (t: string) => t === 'IText' || t === 'Textbox' || t === 'Text';
+    const isBackgroundType = (t: string) => t === 'Rect' || t === 'Circle' || t === 'Ellipse' || t === 'Image' || t === 'Path';
+
+    const collectAllDeep = (objs: any[]): any[] => {
+        const out: any[] = [];
+        const stack = [...objs];
+        while (stack.length) {
+            const o = stack.pop();
+            if (!o || typeof o !== 'object') continue;
+            out.push(o);
+            if (Array.isArray(o.objects)) {
+                for (let i = o.objects.length - 1; i >= 0; i--) stack.push(o.objects[i]);
+            }
+        }
+        return out;
+    };
+
     const repairPriceGroup = (pg: any) => {
         const children = Array.isArray(pg.objects) ? pg.objects : [];
-        // Collect background rects (red, white, yellow)
-        const rects = children.filter((c: any) => c?.type === 'Rect');
-        // Collect all text elements (including deeply nested)
-        const texts: any[] = [];
-        const collectTexts = (objs: any[]) => {
-            for (const o of objs) {
-                if (!o || typeof o !== 'object') continue;
-                if (o.type === 'IText' || o.type === 'Textbox' || o.type === 'Text') {
-                    texts.push(o);
-                }
-                if (Array.isArray(o.objects)) collectTexts(o.objects);
+        if (!children.length) return;
+
+        const allDeep = collectAllDeep(children);
+
+        // Detectar se é um price group pelo nome ou pela presença de elementos nomeados
+        const pgName = String(pg.name || '');
+        const isPriceGroupByName = pgName === 'priceGroup';
+        const hasNamedPriceElements = allDeep.some((o: any) =>
+            PRICE_BG_NAMES.has(String(o?.name || '')) || PRICE_TEXT_NAMES.has(String(o?.name || ''))
+        );
+        if (!isPriceGroupByName && !hasNamedPriceElements) return;
+
+        // Contar elementos visíveis vs ocultos
+        const visibleTexts = allDeep.filter((o: any) => isTextType(String(o?.type || '')) && o.visible !== false);
+        const hiddenTexts = allDeep.filter((o: any) => isTextType(String(o?.type || '')) && o.visible === false);
+        const hiddenBgs = allDeep.filter((o: any) => {
+            if (o.visible !== false) return false;
+            const name = String(o?.name || '');
+            const type = String(o?.type || '');
+            return PRICE_BG_NAMES.has(name) || (isBackgroundType(type) && !isTextType(type));
+        });
+
+        // Se tem textos visíveis, os backgrounds devem estar visíveis também
+        // Se NENHUM elemento está visível, restaurar tudo (corrupção total)
+        const hasAnyVisible = visibleTexts.length > 0 || allDeep.some((o: any) => o.visible !== false);
+        const shouldRepairBgs = visibleTexts.length > 0 || !hasAnyVisible;
+
+        if (shouldRepairBgs) {
+            for (const bg of hiddenBgs) {
+                bg.visible = true;
+                repaired++;
             }
-        };
-        collectTexts(children);
+        }
 
-        for (const rect of rects) {
-            // Only process visible rects
-            if (rect.visible === false) continue;
-            const rTop = rect.top ?? 0;
-            const rBottom = rTop + (rect.height ?? 0);
-
-            for (const txt of texts) {
-                if (txt.visible !== false) continue; // Already visible
+        // Reparar textos ocultos: se há backgrounds visíveis, textos devem estar visíveis
+        // Usa lógica por nome para elementos conhecidos do price group
+        for (const txt of hiddenTexts) {
+            const name = String(txt?.name || '');
+            if (PRICE_TEXT_NAMES.has(name)) {
+                txt.visible = true;
+                repaired++;
+                continue;
+            }
+            // Fallback: reparar textos posicionados dentro de rects visíveis
+            const visibleRects = children.filter((c: any) => c?.type === 'Rect' && c.visible !== false);
+            for (const rect of visibleRects) {
+                const rTop = rect.top ?? 0;
+                const rBottom = rTop + (rect.height ?? 0);
                 const tTop = txt.top ?? 0;
-                // Text is considered "inside" the rect if its top is within the rect's vertical span.
-                // Tolerance of 25px above the rect because decimal digits (e.g. ",99") are
-                // visually positioned above the integer baseline inside the same price section.
                 if (tTop >= rTop - 25 && tTop < rBottom) {
                     txt.visible = true;
                     repaired++;
+                    break;
                 }
+            }
+        }
+
+        // Reparar o próprio price group se ele estiver oculto mas tem conteúdo
+        if (pg.visible === false && allDeep.length > 0) {
+            pg.visible = true;
+            repaired++;
+        }
+
+        // Reparar sub-grupos (atacarejo pode ter retail_group + wholesale_group dentro)
+        for (const child of children) {
+            if ((child?.type === 'Group' || child?.type === 'group') && Array.isArray(child.objects)) {
+                repairPriceGroup(child);
             }
         }
     };
@@ -5742,7 +5814,65 @@ function repairHiddenPriceGroupTexts(json: any): number {
     }
 
     if (repaired > 0) {
-        console.warn(`[loadFromJSON] 🔧 Repaired ${repaired} orphan-hidden text element(s) in price groups`);
+        console.warn(`[loadFromJSON] Repaired ${repaired} orphan-hidden element(s) in price groups`);
+    }
+    return repaired;
+}
+
+/**
+ * FIX: Repara elementos de fundo de etiquetas de preço em objetos Fabric já carregados.
+ * Roda DEPOIS do loadFromJSON, operando nos objetos Fabric vivos do canvas.
+ * Cobre casos que o reparo pré-load (JSON) não consegue resolver:
+ * - Imagens de fundo que falharam ao carregar (src válido mas element vazio)
+ * - Elementos que ficaram invisible durante rehydrate/relayout pós-load
+ */
+function repairLivePriceGroupBackgrounds(c: any): number {
+    if (!c || typeof c.getObjects !== 'function') return 0;
+    let repaired = 0;
+
+    const PRICE_BG_NAMES_LIVE = new Set([
+        'price_bg', 'price_bg_image', 'splash_image',
+        'price_header_bg', 'offerBackground',
+        'atac_banner_bg', 'atac_wholesale_bg', 'atac_retail_bg'
+    ]);
+
+    const allObjects = collectObjectsDeep(c);
+    const productCards = allObjects.filter((obj: any) =>
+        obj?.type === 'group' && (obj?.isSmartObject || obj?.isProductCard || isLikelyProductCard(obj))
+    );
+
+    for (const card of productCards) {
+        const pg = getPriceGroupFromAny(card);
+        if (!pg || typeof pg.getObjects !== 'function') continue;
+
+        const pgChildren = collectObjectsDeep(pg);
+        const hasVisibleText = pgChildren.some((o: any) =>
+            isTextLikeObject(o) && o.visible !== false
+        );
+        if (!hasVisibleText) continue;
+
+        for (const child of pgChildren) {
+            if (!child || child.visible !== false) continue;
+            const name = String(child.name || '');
+            if (PRICE_BG_NAMES_LIVE.has(name)) {
+                child.set('visible', true);
+                child.visible = true;
+                child.dirty = true;
+                repaired++;
+            }
+        }
+
+        // Reparar o próprio price group se estiver oculto
+        if (pg.visible === false) {
+            pg.set('visible', true);
+            pg.visible = true;
+            pg.dirty = true;
+            repaired++;
+        }
+    }
+
+    if (repaired > 0) {
+        console.warn(`[post-load] Repaired ${repaired} hidden price group background(s)`);
     }
     return repaired;
 }
@@ -8902,6 +9032,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 // Same issue as webfont load: JSON could have been measured with fallback fonts.
                 // Re-fit manual label templates so cards match the mini editor geometry.
                 refreshLoadedCanvasTextMetrics(canvas.value);
+                // FIX: Reparar elementos de fundo de etiquetas de preço que ficaram
+                // invisíveis após deserialização (viewport culling corruption, image load fail).
+                repairLivePriceGroupBackgrounds(canvas.value);
                 if (!degradedNewPage) {
                     syncPreparedCanvasStateToPage(pageToLoad, canonicalCanvasDataToLoad);
                 }
@@ -31997,6 +32130,22 @@ const stabilizeSinglePriceGroupForPersistence = (group: any) => {
     if (!group || typeof group.getObjects !== 'function') return { fixed: false, captured: false };
     if (!isLikelyPriceGroupObject(group)) return { fixed: false, captured: false };
     ensureRedBurstPriceGroupVisibility(group);
+
+    // FIX: Garantir que backgrounds de QUALQUER price group (não apenas red burst)
+    // estejam visíveis antes da serialização. Viewport culling corruption pode
+    // persistir visible: false em price_bg, price_bg_image, etc.
+    const pgParts = collectObjectsDeep(group);
+    const bgNames = new Set(['price_bg', 'price_bg_image', 'splash_image', 'price_header_bg']);
+    const hasVisibleText = pgParts.some((o: any) => isTextLikeObject(o) && o.visible !== false);
+    if (hasVisibleText) {
+        for (const part of pgParts) {
+            if (part && part.visible === false && bgNames.has(String(part.name || ''))) {
+                part.set?.('visible', true);
+                part.visible = true;
+                part.dirty = true;
+            }
+        }
+    }
 
     const wasCorrupted = hasCorruptedPriceLayout(group);
     let fixed = false;

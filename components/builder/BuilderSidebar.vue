@@ -132,27 +132,29 @@ const seasonalCategories = [
 ]
 
 const applySeasonalCap = (cap: SeasonalCap) => {
+  const isDark = cap.bodyBg === '#1a1a1a' || cap.bodyBg === '#121212' || cap.bodyBg === '#212121'
   updateFlyer({
     font_config: {
       ...fontConfig.value,
       seasonal_cap_id: cap.id,
-      // Cores do rodape premium
       footer_color_1: cap.footerBg,
       footer_color_2: cap.primaryColor,
       footer_color_3: cap.accentColor,
+      footer_bg: cap.footerBg,
+      footer_primary: cap.primaryColor,
+      footer_secondary: cap.accentColor,
+      card_bg_color: isDark ? '#2a2a2a' : '#ffffff',
+      card_text_color: isDark ? '#ffffff' : '#1a1a1a',
     },
-    // Cores do header/body via campos do flyer
-    footer_bg: cap.footerBg,
-    footer_primary: cap.primaryColor,
-    footer_secondary: cap.accentColor,
-    card_bg_color: cap.bodyBg === '#1a1a1a' || cap.bodyBg === '#121212' || cap.bodyBg === '#212121' ? '#2a2a2a' : '#ffffff',
-    card_text_color: cap.bodyBg === '#1a1a1a' || cap.bodyBg === '#121212' || cap.bodyBg === '#212121' ? '#ffffff' : '#1a1a1a',
   } as any)
 }
 
 // ── Overlay images (imagens decorativas) ────────────────────────────────────
 type OverlayImage = { id: string; url: string; x: number; y: number; width: number; opacity: number; zFront: boolean }
 const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
+const setFc = (changes: Record<string, any>) => {
+  updateFlyer({ font_config: { ...fontConfig.value, ...changes } })
+}
 const overlayImages = computed<OverlayImage[]>(() => fontConfig.value.overlay_images || [])
 const isUploadingOverlay = ref(false)
 
@@ -740,26 +742,85 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
         <div class="p-3 space-y-4">
           <h3 class="text-xs font-semibold text-zinc-300">Fontes & Imagens</h3>
 
-          <!-- Cores do Rodape Premium -->
-          <div v-if="fontConfig.footer_mode === 'premium'">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Cores do Rodape</p>
+          <!-- Dados do Rodape -->
+          <div v-if="(fontConfig.footer_mode || 'premium') !== 'nenhum'">
+            <p class="text-[10px] text-zinc-500 font-medium mb-2">Dados do Rodape</p>
             <div class="space-y-2">
-              <label class="flex items-center gap-2">
-                <input type="color" :value="fontConfig.footer_color_1 || '#1B5E20'" @input="updateFlyer({ font_config: { ...fontConfig, footer_color_1: ($event.target as HTMLInputElement).value } })" class="w-6 h-6 rounded cursor-pointer border border-white/10" />
-                <span class="text-[9px] text-zinc-400">Redes Sociais</span>
-              </label>
-              <label class="flex items-center gap-2">
-                <input type="color" :value="fontConfig.footer_color_2 || '#FDD835'" @input="updateFlyer({ font_config: { ...fontConfig, footer_color_2: ($event.target as HTMLInputElement).value } })" class="w-6 h-6 rounded cursor-pointer border border-white/10" />
-                <span class="text-[9px] text-zinc-400">Info Empresa</span>
-              </label>
-              <label class="flex items-center gap-2">
-                <input type="color" :value="fontConfig.footer_color_3 || '#D32F2F'" @input="updateFlyer({ font_config: { ...fontConfig, footer_color_3: ($event.target as HTMLInputElement).value } })" class="w-6 h-6 rounded cursor-pointer border border-white/10" />
-                <span class="text-[9px] text-zinc-400">Endereco</span>
-              </label>
-              <label class="flex items-center gap-2">
-                <input type="color" :value="fontConfig.footer_text_color_premium || '#ffffff'" @input="updateFlyer({ font_config: { ...fontConfig, footer_text_color_premium: ($event.target as HTMLInputElement).value } })" class="w-6 h-6 rounded cursor-pointer border border-white/10" />
-                <span class="text-[9px] text-zinc-400">Texto</span>
-              </label>
+              <!-- Nome da empresa -->
+              <div>
+                <label class="text-[9px] text-zinc-500">Nome da Empresa</label>
+                <input :value="fontConfig.footer_empresa_nome || ''" @input="setFc({ footer_empresa_nome: ($event.target as HTMLInputElement).value })" placeholder="Meu Supermercado" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+              </div>
+              <!-- WhatsApp -->
+              <div>
+                <label class="text-[9px] text-zinc-500">WhatsApp</label>
+                <input :value="fontConfig.footer_whatsapp || ''" @input="setFc({ footer_whatsapp: ($event.target as HTMLInputElement).value })" placeholder="(00) 00000-0000" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+              </div>
+              <!-- Facebook -->
+              <div>
+                <label class="text-[9px] text-zinc-500">Facebook</label>
+                <input :value="fontConfig.footer_facebook || ''" @input="setFc({ footer_facebook: ($event.target as HTMLInputElement).value })" placeholder="nomedapagina" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+              </div>
+              <!-- Instagram -->
+              <div>
+                <label class="text-[9px] text-zinc-500">Instagram</label>
+                <input :value="fontConfig.footer_instagram || ''" @input="setFc({ footer_instagram: ($event.target as HTMLInputElement).value })" placeholder="@nomedapagina" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+              </div>
+              <!-- Endereco -->
+              <div>
+                <label class="text-[9px] text-zinc-500">Endereco Completo</label>
+                <textarea :value="fontConfig.footer_endereco || ''" @input="setFc({ footer_endereco: ($event.target as HTMLTextAreaElement).value })" placeholder="Rua Exemplo, 123 - Bairro - Cidade/UF" rows="2" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5 resize-none" />
+              </div>
+              <!-- Horario -->
+              <div>
+                <label class="text-[9px] text-zinc-500">Horario</label>
+                <input :value="fontConfig.footer_horario || ''" @input="setFc({ footer_horario: ($event.target as HTMLInputElement).value })" placeholder="Seg a Sab: 7h as 21h | Dom: 8h as 18h" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+              </div>
+              <!-- Texto ofertas -->
+              <div>
+                <label class="text-[9px] text-zinc-500">Texto de Ofertas</label>
+                <input :value="fontConfig.footer_ofertas_texto || ''" @input="setFc({ footer_ofertas_texto: ($event.target as HTMLInputElement).value })" placeholder="ou enquanto durarem os estoques." class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+              </div>
+
+              <!-- Bandeiras de pagamento -->
+              <div>
+                <label class="text-[9px] text-zinc-500 mb-1 block">Formas de Pagamento</label>
+                <div class="grid grid-cols-2 gap-1">
+                  <label v-for="pm in [
+                    { key: 'dinheiro', label: 'Dinheiro', def: true },
+                    { key: 'pix', label: 'PIX', def: true },
+                    { key: 'visa', label: 'Visa', def: true },
+                    { key: 'mastercard', label: 'MasterCard', def: true },
+                    { key: 'elo', label: 'Elo', def: true },
+                    { key: 'hipercard', label: 'Hipercard', def: false },
+                    { key: 'alelo', label: 'Alelo', def: false },
+                    { key: 'sodexo', label: 'Sodexo', def: false },
+                    { key: 'ticket', label: 'Ticket', def: false },
+                    { key: 'americanexpress', label: 'Amex', def: false },
+                    { key: 'vr', label: 'VR', def: false },
+                    { key: 'vale_alimentacao', label: 'V.A.', def: false },
+                    { key: 'cielo', label: 'Cielo', def: false },
+                  ]" :key="pm.key" class="flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" :checked="fontConfig[`footer_pay_${pm.key}`] ?? pm.def" @change="setFc({ [`footer_pay_${pm.key}`]: ($event.target as HTMLInputElement).checked })" class="w-3 h-3 rounded accent-emerald-500" />
+                    <span class="text-[9px] text-zinc-400">{{ pm.label }}</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Cores -->
+              <div class="pt-1 border-t border-white/5">
+                <label class="text-[9px] text-zinc-500 mb-1 block">Cores do Rodape</label>
+                <div class="space-y-1.5">
+                  <label class="flex items-center gap-2">
+                    <input type="color" :value="fontConfig.footer_color_bg_top || '#333333'" @input="setFc({ footer_color_bg_top: ($event.target as HTMLInputElement).value })" class="w-5 h-5 rounded cursor-pointer border border-white/10" />
+                    <span class="text-[9px] text-zinc-400">Faixa Redes Sociais</span>
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input type="color" :value="fontConfig.footer_color_bg_bottom || '#F5B800'" @input="setFc({ footer_color_bg_bottom: ($event.target as HTMLInputElement).value })" class="w-5 h-5 rounded cursor-pointer border border-white/10" />
+                    <span class="text-[9px] text-zinc-400">Faixa Principal</span>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 
