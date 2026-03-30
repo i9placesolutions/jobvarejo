@@ -27439,6 +27439,8 @@ const LIGHTWEIGHT_GLOBAL_STYLE_PROPS = new Set<string>([
     'prodNameAlign',
     'prodNameTransform',
     'prodNameLineHeight',
+    'prodNameScale',
+    'prodNameOffsetY',
     'limitFont',
     'limitColor',
     'splashColor',
@@ -27450,7 +27452,10 @@ const LIGHTWEIGHT_GLOBAL_STYLE_PROPS = new Set<string>([
     'priceFontWeight',
     'priceFontStyle',
     'splashTextScale',
-    'splashFill'
+    'splashFill',
+    'splashScale',
+    'splashOffsetY',
+    'splashRoundness'
 ]);
 
 const isLightweightGlobalStyleProp = (prop: string) => LIGHTWEIGHT_GLOBAL_STYLE_PROPS.has(String(prop || '').trim());
@@ -27822,6 +27827,145 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             }
             changed = true;
         }
+    }
+
+    // ── Fast-apply: splashScale / splashOffsetY ──
+    // Reposiciona o priceGroup dentro do card SEM tocar em título, imagem ou background.
+    if ((p === 'splashScale' || p === 'splashOffsetY') && priceGroup && cardW > 0 && cardH > 0) {
+        const halfH = cardH / 2;
+        const _refH = Number((styles as any)?.__refCellH) || cardH;
+        const _refW = Number((styles as any)?.__refCellW) || cardW;
+        const marginBottom = cardH * 0.05;
+        const splashManual = !!(priceGroup as any).__manualTransform;
+        const preserveTV = shouldPreserveManualTemplateVisual(priceGroup);
+
+        // Propagar splashTextScale como metadado (garante que layoutPriceGroup o leia).
+        (priceGroup as any).__splashTextScale = typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
+
+        // Guardar scaleX/Y de base ANTES do layoutPriceGroup (que reseta para fitScale).
+        // Para manual templates: é o fitScale * splashScale anterior.
+        // Precisamos descontar o splashScale anterior para obter o fitScale puro.
+        const prevScaleX = Math.abs(Number(priceGroup.scaleX)) || 1;
+        const prevScaleY = Math.abs(Number(priceGroup.scaleY)) || 1;
+
+        const layout = layoutPriceGroup(priceGroup, _refW, _refH);
+
+        const rawScale = typeof styles.splashScale === 'number' ? styles.splashScale : 1;
+        const rawOffsetY = typeof styles.splashOffsetY === 'number' ? styles.splashOffsetY : 0;
+        const scale = rawScale;
+        const offsetY = rawOffsetY * (cardH / _refH);
+
+        priceGroup.dirty = true;
+
+        if (layout) {
+            const { pillH } = layout;
+            // Após layoutPriceGroup, scaleX/Y é o fitScale (para manual) ou 1 (para standard).
+            const fitScaleX = Math.abs(Number(priceGroup.scaleX)) || 1;
+            const fitScaleY = Math.abs(Number(priceGroup.scaleY)) || 1;
+
+            if (!splashManual) {
+                const newTop = halfH - ((pillH * scale) / 2) - marginBottom + offsetY;
+                // Standard: fitScale já definiu a geometria interna, aplicar zone-scale por cima.
+                const finalScaleX = preserveTV ? (fitScaleX * scale) : scale;
+                const finalScaleY = preserveTV ? (fitScaleY * scale) : scale;
+                if (preserveTV) {
+                    (priceGroup as any).__originalScaleX = fitScaleX;
+                    (priceGroup as any).__originalScaleY = fitScaleY;
+                }
+                priceGroup.set({
+                    scaleX: finalScaleX,
+                    scaleY: finalScaleY,
+                    originX: 'center',
+                    originY: 'center',
+                    left: 0,
+                    top: newTop
+                });
+            } else {
+                const finalScaleX = preserveTV ? (fitScaleX * scale) : scale;
+                const finalScaleY = preserveTV ? (fitScaleY * scale) : scale;
+                priceGroup.set({ scaleX: finalScaleX, scaleY: finalScaleY });
+            }
+
+            normalizePriceGroupPlacementInCard(priceGroup, cardW, cardH, null);
+        } else {
+            // Fallback: layoutPriceGroup retornou null (splash genérico sem partes nomeadas).
+            // Replicar Path B do resizeSmartObject.
+            const SPLASH_REF_WIDTH = 300;
+            const sizeRatio = Math.max(0.3, Math.min(3, cardW / SPLASH_REF_WIDTH));
+            const sScaleX = sizeRatio * scale;
+            const sScaleY = sizeRatio * scale;
+
+            if (!splashManual) {
+                const newTop = halfH - marginBottom + offsetY;
+                priceGroup.set({
+                    scaleX: sScaleX,
+                    scaleY: sScaleY,
+                    originX: 'center',
+                    originY: 'bottom',
+                    left: 0,
+                    top: newTop
+                });
+            } else {
+                priceGroup.set({ scaleX: sScaleX, scaleY: sScaleY });
+            }
+        }
+
+        priceGroup.setCoords();
+        changed = true;
+    }
+
+    // ── Fast-apply: splashRoundness ──
+    // Atualiza apenas o arredondamento do price_bg SEM tocar em outros elementos.
+    if (p === 'splashRoundness' && priceGroup && typeof styles.splashRoundness === 'number') {
+        const parts = collectObjectsDeep(priceGroup);
+        const priceBg = parts.find((o: any) => {
+            const n = String(o?.name || '');
+            return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
+        });
+        if (priceBg && String(priceBg?.type || '').toLowerCase() === 'rect') {
+            const clampVal = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+            const roundness = clampVal(styles.splashRoundness, 0, 1);
+            (priceBg as any).__roundness = roundness;
+            const hRaw = Number(priceBg.height || 0);
+            if (Number.isFinite(hRaw) && hRaw > 0) {
+                const radius = (hRaw / 2) * roundness;
+                priceBg.set({ rx: radius, ry: radius });
+            }
+            priceBg.dirty = true;
+            changed = true;
+        }
+    }
+
+    // ── Fast-apply: prodNameScale ──
+    // Recalcula fontSize do título SEM reposicionar splash ou imagem.
+    if (p === 'prodNameScale' && title && isTextLikeObject(title)) {
+        const baseSize = Math.min(cardW, cardH);
+        const scale = typeof styles.prodNameScale === 'number' ? styles.prodNameScale : 1;
+        const clampVal = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+        const baseFont = baseSize * 0.09;
+        const nextFont = clampVal(baseFont * scale, 10, baseSize * 0.22);
+        title.set('fontSize', nextFont);
+        if (typeof title.initDimensions === 'function') title.initDimensions();
+        title.dirty = true;
+        changed = true;
+    }
+
+    // ── Fast-apply: prodNameOffsetY ──
+    // Move o título verticalmente SEM tocar em splash ou imagem.
+    if (p === 'prodNameOffsetY' && title && isTextLikeObject(title) && !(title as any).__manualTransform) {
+        const halfH = cardH / 2;
+        const _refH = Number((styles as any)?.__refCellH) || cardH;
+        const marginTop = cardH * 0.05;
+        const rawOffY = typeof styles.prodNameOffsetY === 'number' ? styles.prodNameOffsetY : 0;
+        const titleOffsetY = rawOffY * (cardH / _refH);
+        title.set({
+            originX: 'center',
+            originY: 'top',
+            left: 0,
+            top: -halfH + marginTop + titleOffsetY
+        });
+        title.dirty = true;
+        changed = true;
     }
 
     return changed;
@@ -35898,8 +36042,10 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
 
             if (layout) {
                 const { pillH } = layout;
-                layoutScaleX = Number(splash.scaleX) || 1;
-                layoutScaleY = Number(splash.scaleY) || 1;
+                // fitScale: escala que layoutPriceGroup aplicou para caber no card.
+                // Este é o "base scale" — splashScale multiplica por cima dele.
+                const fitScaleX = Math.abs(Number(splash.scaleX)) || 1;
+                const fitScaleY = Math.abs(Number(splash.scaleY)) || 1;
                 const rawScale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
                 const rawOffsetY = typeof styles?.splashOffsetY === 'number' ? styles!.splashOffsetY! : 0;
                 const scale = rawScale;
@@ -35917,17 +36063,17 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
 
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
-                
+
                 if (!splashManual) {
                     const newTop = halfH - ((pillH * scale) / 2) - marginBottom + offsetY;
-                    const baseScaleX = preserveTemplateVisual ? resolvePriceGroupBaseScale(splash, 'x', scale) : layoutScaleX;
-                    const baseScaleY = preserveTemplateVisual ? resolvePriceGroupBaseScale(splash, 'y', scale) : layoutScaleY;
+                    // Para manual templates, fitScale é a escala base que o layout calculou.
+                    // Guardar como __originalScale ANTES de multiplicar por splashScale.
                     if (preserveTemplateVisual) {
-                        (splash as any).__originalScaleX = baseScaleX;
-                        (splash as any).__originalScaleY = baseScaleY;
+                        (splash as any).__originalScaleX = fitScaleX;
+                        (splash as any).__originalScaleY = fitScaleY;
                     }
-                    const finalScaleX = preserveTemplateVisual ? (baseScaleX * scale) : scale;
-                    const finalScaleY = preserveTemplateVisual ? (baseScaleY * scale) : scale;
+                    const finalScaleX = preserveTemplateVisual ? (fitScaleX * scale) : scale;
+                    const finalScaleY = preserveTemplateVisual ? (fitScaleY * scale) : scale;
                     splash.set({
                         scaleX: finalScaleX,
                         scaleY: finalScaleY,
@@ -35938,14 +36084,12 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     });
                 } else {
                     // Manual positioning: keep left/top, but still apply the zone-level scale.
-                    const baseScaleX = preserveTemplateVisual ? resolvePriceGroupBaseScale(splash, 'x', scale) : layoutScaleX;
-                    const baseScaleY = preserveTemplateVisual ? resolvePriceGroupBaseScale(splash, 'y', scale) : layoutScaleY;
                     if (preserveTemplateVisual) {
-                        (splash as any).__originalScaleX = baseScaleX;
-                        (splash as any).__originalScaleY = baseScaleY;
+                        (splash as any).__originalScaleX = fitScaleX;
+                        (splash as any).__originalScaleY = fitScaleY;
                     }
-                    const finalScaleX = preserveTemplateVisual ? (baseScaleX * scale) : scale;
-                    const finalScaleY = preserveTemplateVisual ? (baseScaleY * scale) : scale;
+                    const finalScaleX = preserveTemplateVisual ? (fitScaleX * scale) : scale;
+                    const finalScaleY = preserveTemplateVisual ? (fitScaleY * scale) : scale;
                     splash.set({ scaleX: finalScaleX, scaleY: finalScaleY });
                 }
 
