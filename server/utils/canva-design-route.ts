@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import type { BuilderTenant } from '~/types/builder'
+import type { BuilderTenant } from '../../types/builder'
 import { requireBuilderTenant } from './builder-auth'
 import { pgOneOrNull } from './postgres'
 
@@ -43,7 +43,7 @@ export const resolveCanvaDesignRoute = async (
     `SELECT id, tenant_id, title, canva_design_id, canva_edit_url, canva_view_url,
             folder_id, template_id, status, thumbnail_url, created_at, updated_at
      FROM public.canva_designs
-     WHERE tenant_id = $1 AND (id = $2 OR canva_design_id = $2)
+     WHERE tenant_id = $1::uuid AND (id::text = $2 OR canva_design_id = $2)
      LIMIT 1`,
     [tenant.id, routeId]
   )

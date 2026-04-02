@@ -5,8 +5,8 @@
 // Esta API tenta a operacao via editing transaction.
 // Se falhar, retorna instrucao para o cliente duplicar manualmente no Canva.
 
-import { canvaDuplicatePage } from '~/server/utils/canva-client'
-import { resolveCanvaDesignRoute } from '~/server/utils/canva-design-route'
+import { canvaDuplicatePage } from '../../../../utils/canva-client'
+import { resolveCanvaDesignRoute } from '../../../../utils/canva-design-route'
 
 export default defineEventHandler(async (event) => {
   const { canvaDesignId } = await resolveCanvaDesignRoute(event)
