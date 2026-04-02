@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(node -e \":*)",
-      "Bash(npx --yes open-cli http://localhost:3000)"
+      "Bash(npx --yes open-cli http://localhost:3000)",
+      "mcp__claude_ai_Canva__search-designs",
+      "Bash(find /workspace/projetos/jobvarejo/pages -name \"*.vue\" -exec grep -l \"builder\\\\|editor\\\\|product\\\\|offer\" {} \\\\;)",
+      "Bash(grep -r \"label\\\\|offer\\\\|product\" /workspace/projetos/jobvarejo/database/*.sql)",
+      "Bash(ls -1 /workspace/projetos/jobvarejo/database/*.sql)",
+      "Bash(find /workspace/projetos/jobvarejo/database -name \"*.sql\" -exec basename {} \\\\;)"
     ]
   }
 }

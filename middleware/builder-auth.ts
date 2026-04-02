@@ -5,8 +5,10 @@ const publicBuilderRoutes = [
 ]
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  // Only handle /builder/* routes
-  if (!to.path.startsWith('/builder')) return
+  // Handle /builder/* and /canva/* routes
+  const isBuilderRoute = to.path.startsWith('/builder')
+  const isCanvaRoute = to.path.startsWith('/canva')
+  if (!isBuilderRoute && !isCanvaRoute) return
 
   const isPublicRoute = publicBuilderRoutes.some(route => to.path.startsWith(route))
   if (isPublicRoute) return
