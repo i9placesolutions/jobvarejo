@@ -12,7 +12,13 @@ export default defineEventHandler(async (event) => {
       name: tenant.name ?? null,
       logo: tenant.logo ?? null,
       phone: tenant.phone ?? null,
-      whatsapp: tenant.whatsapp ?? null
+      whatsapp: tenant.whatsapp ?? null,
+      address: tenant.address ?? null,
+      instagram: tenant.instagram ?? null,
+      facebook: tenant.facebook ?? null,
+      website: tenant.website ?? null,
+      slogan: tenant.slogan ?? null,
+      cep: tenant.cep ?? null,
     }
   }
 })

@@ -8,6 +8,7 @@ import {
 definePageMeta({
   layout: 'canva',
   middleware: 'builder-auth',
+  ssr: false,
 })
 
 // Interfaces
@@ -593,7 +594,7 @@ onUnmounted(() => {
             </button>
             <button
               @click="createFolder"
-              :disabled="!newFolderName.trim()"
+              :disabled="!(newFolderName || '').trim()"
               class="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-lg transition-all border border-violet-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Criar
@@ -642,7 +643,7 @@ onUnmounted(() => {
             </button>
             <button
               @click="renameFolder"
-              :disabled="!renameFolderName.trim()"
+              :disabled="!(renameFolderName || '').trim()"
               class="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-lg transition-all border border-violet-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Salvar

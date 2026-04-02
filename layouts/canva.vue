@@ -52,9 +52,11 @@ const isActive = (item: typeof navItems[0]) => {
           >
             Ir para Builder
           </NuxtLink>
-          <span class="text-xs text-zinc-500 hidden md:block truncate max-w-[160px]">
-            {{ auth.tenant.value?.name }}
-          </span>
+          <ClientOnly>
+            <span class="text-xs text-zinc-500 hidden md:block truncate max-w-[160px]">
+              {{ auth.tenant.value?.name }}
+            </span>
+          </ClientOnly>
           <button
             @click="auth.signOut()"
             class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"

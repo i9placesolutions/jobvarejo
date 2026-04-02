@@ -5,10 +5,15 @@
 // 3. Salva na tabela canva_designs com tenant_id do cliente
 
 import { requireBuilderTenant } from '../../../../utils/builder-auth'
-import { pgOneOrNull } from '../../../../utils/postgres'
 import { canvaCopyDesign } from '../../../../utils/canva-client'
+import { pgOneOrNull } from '../../../../utils/postgres'
 
 export default defineEventHandler(async (event) => {
+  // Autenticacao
+  const cookieToken = getCookie(event, 'builder-access-token')
+  const authHeader = getHeader(event, 'authorization')
+  console.log('[canva/copy] cookie:', !!cookieToken, 'header:', !!authHeader)
+
   const tenant = await requireBuilderTenant(event)
   const templateId = getRouterParam(event, 'id')
 
@@ -54,7 +59,20 @@ export default defineEventHandler(async (event) => {
   }
 
   // Copiar design via Canva API
-  const canvaResult = await canvaCopyDesign(template.canva_design_id, title)
+  let canvaResult: Awaited<ReturnType<typeof canvaCopyDesign>>
+  try {
+    canvaResult = await canvaCopyDesign(template.canva_design_id, title)
+  } catch (error: any) {
+    const statusCode = Number(error?.statusCode || error?.response?.status || 0)
+    if (statusCode === 401 || statusCode === 403) {
+      throw createError({
+        statusCode: 502,
+        statusMessage: 'Falha ao copiar design na Canva. Verifique token e escopos da integracao.',
+        data: error?.data || null,
+      })
+    }
+    throw error
+  }
 
   // Salvar na tabela canva_designs
   const design = await pgOneOrNull(

@@ -827,6 +827,7 @@ const createCompanionDesign = async (products: any[]) => {
     const result = await $fetch<any>(`/api/canva/templates/${companion.value.id}/copy`, {
       method: 'POST',
       body: { title: `${companion.value.label} - ${designInfo.value?.title || 'Meu Design'}` },
+      credentials: 'include',
     })
 
     if (result.design?.id) {

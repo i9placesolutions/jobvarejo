@@ -4,6 +4,7 @@ import { Search, Loader2, Image, Layers, Copy, X, Wand2, Filter } from 'lucide-v
 definePageMeta({
   layout: 'canva',
   middleware: 'builder-auth',
+  ssr: false,
 })
 
 // Tipagem do template
@@ -69,8 +70,8 @@ const fetchTemplates = async () => {
     const params: Record<string, string> = {}
     if (selectedCategory.value) params.category = selectedCategory.value
 
-    const data = await $fetch<CanvaTemplate[]>('/api/canva/templates', { query: params })
-    templates.value = data || []
+    const data = await $fetch<{ templates: CanvaTemplate[] }>('/api/canva/templates', { query: params })
+    templates.value = data.templates || []
   } catch (err: unknown) {
     console.error('Erro ao buscar templates:', err)
     templates.value = []
@@ -163,14 +164,15 @@ const confirmCopy = async () => {
 
   isCopying.value = true
   try {
-    const result = await $fetch<{ id: string }>(`/api/canva/templates/${selectedTemplate.value.id}/copy`, {
+    const result = await $fetch<{ design: { id: string } }>(`/api/canva/templates/${selectedTemplate.value.id}/copy`, {
       method: 'POST',
       body: { title: customTitle.value.trim() },
+      credentials: 'include',
     })
 
     closeModal()
     // Redireciona para o design copiado usando o id do canva_designs
-    await navigateTo(`/canva/${result.id}`)
+    await navigateTo(`/canva/${result.design?.id || result.id}`)
   } catch (err: unknown) {
     console.error('Erro ao copiar template:', err)
   } finally {
@@ -246,7 +248,7 @@ onUnmounted(() => {
         :key="i"
         class="bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden animate-pulse"
       >
-        <div class="aspect-[4/3] bg-white/5" />
+        <div class="aspect-[4/5] bg-white/5" />
         <div class="p-4 space-y-3">
           <div class="h-4 bg-white/5 rounded w-3/4" />
           <div class="h-3 bg-white/5 rounded w-1/2" />
@@ -285,7 +287,7 @@ onUnmounted(() => {
         @click="openUseModal(template)"
       >
         <!-- Thumbnail -->
-        <div class="aspect-[4/3] bg-[#09090b] relative overflow-hidden">
+        <div class="aspect-[4/5] bg-[#09090b] relative overflow-hidden">
           <img
             v-if="template.thumbnail_url"
             :src="template.thumbnail_url"
@@ -358,7 +360,7 @@ onUnmounted(() => {
           >
             <div
               v-if="showModal"
-              class="relative w-full max-w-md bg-[#141416] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+              class="relative w-full max-w-md max-h-[90vh] bg-[#141416] border border-white/10 rounded-2xl shadow-2xl overflow-y-auto"
             >
               <!-- Header do modal -->
               <div class="flex items-center justify-between p-5 border-b border-white/5">
@@ -429,7 +431,7 @@ onUnmounted(() => {
                 </button>
                 <button
                   @click="confirmCopy"
-                  :disabled="isCopying || !customTitle.trim()"
+                  :disabled="isCopying || !(customTitle || '').trim()"
                   class="inline-flex items-center gap-2 px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-xl transition-all border border-violet-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Loader2 v-if="isCopying" class="w-4 h-4 animate-spin" />
@@ -444,13 +446,15 @@ onUnmounted(() => {
     </Teleport>
 
     <!-- Modal de dados obrigatórios da empresa -->
-    <CanvaCompanySetup
-      v-if="auth.tenant.value"
-      :open="showCompanySetup"
-      :tenant="auth.tenant.value"
-      :missing-fields="missingFields"
-      @close="showCompanySetup = false; pendingTemplate = null"
-      @saved="onCompanySetupSaved"
-    />
+    <ClientOnly>
+      <CanvaCompanySetup
+        v-if="auth.tenant.value"
+        :open="showCompanySetup"
+        :tenant="auth.tenant.value"
+        :missing-fields="missingFields"
+        @close="showCompanySetup = false; pendingTemplate = null"
+        @saved="onCompanySetupSaved"
+      />
+    </ClientOnly>
   </div>
 </template>

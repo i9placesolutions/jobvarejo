@@ -2,6 +2,7 @@ import { enforceRateLimit } from '../../../utils/rate-limit'
 import { hashPassword } from '../../../utils/password'
 import { createBuilderSessionToken } from '../../../utils/builder-session-token'
 import { createTenant, getTenantByEmail, normalizeBuilderEmail } from '../../../utils/builder-auth-db'
+import { setBuilderAuthCookies } from '../../../utils/builder-cookie'
 
 const normalizeName = (value: unknown): string => String(value || '').trim().replace(/\s+/g, ' ')
 
@@ -39,21 +40,7 @@ export default defineEventHandler(async (event) => {
     name: tenant.name
   })
 
-  const secure = !import.meta.dev
-  setCookie(event, 'builder-access-token', token, {
-    path: '/builder',
-    maxAge: expiresIn,
-    sameSite: 'lax',
-    secure,
-    httpOnly: true
-  })
-  setCookie(event, 'builder-authenticated', 'true', {
-    path: '/builder',
-    maxAge: expiresIn,
-    sameSite: 'lax',
-    secure,
-    httpOnly: false
-  })
+  setBuilderAuthCookies(event, token, expiresIn)
 
   return {
     tenant: {
