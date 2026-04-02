@@ -29,8 +29,13 @@ const handleLogin = async () => {
   try {
     const result = await auth.signIn(email.value, password.value)
     isRedirecting.value = true
-    // Redirect admin users to admin builder area
-    const destination = result?.tenant?._isAdmin ? '/admin/builder' : '/builder'
+    // Redirecionar para a pagina de origem ou builder por padrao
+    const route = useRoute()
+    const redirectTo = (route.query.redirect as string) || null
+    let destination = result?.tenant?._isAdmin ? '/admin/builder' : '/builder'
+    if (redirectTo && redirectTo.startsWith('/')) {
+      destination = redirectTo
+    }
     await navigateTo(destination, { replace: true })
   } catch (error: any) {
     isRedirecting.value = false
