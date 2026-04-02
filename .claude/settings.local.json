@@ -9,7 +9,9 @@
       "Bash(ls -1 /workspace/projetos/jobvarejo/database/*.sql)",
       "Bash(find /workspace/projetos/jobvarejo/database -name \"*.sql\" -exec basename {} \\\\;)",
       "Bash(xargs ls:*)",
-      "Bash(grep -n \"interface CropRect\\\\|getCachedS3Objects\\\\|normalizeSearchTerm\" /workspace/projetos/jobvarejo/server/utils/*.ts)"
+      "Bash(grep -n \"interface CropRect\\\\|getCachedS3Objects\\\\|normalizeSearchTerm\" /workspace/projetos/jobvarejo/server/utils/*.ts)",
+      "Bash(ls /workspace/projetos/jobvarejo/server/utils/canva-*.ts)",
+      "Bash(npx nuxi:*)"
     ]
   }
 }

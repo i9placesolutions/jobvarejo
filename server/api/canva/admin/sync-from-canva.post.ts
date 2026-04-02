@@ -2,6 +2,7 @@
 // Pode ser chamado por: admin (manual) ou cron (automatico a cada 30min)
 
 import { pgQuery } from '../../../utils/postgres'
+import { canvaFetch } from '../../../utils/canva-client'
 
 const CANVA_FOLDER_ID = process.env.CANVA_FOLDER_ID || 'FAFvyPGKYO0'
 
@@ -37,7 +38,7 @@ export default defineEventHandler(async (event) => {
       query.continuation = continuation
     }
 
-    const response = await (canvaFetch as any)(`/folders/${CANVA_FOLDER_ID}/items`, { query })
+    const response = await canvaFetch<any>(`/folders/${CANVA_FOLDER_ID}/items`, { query })
 
     if (response.items && Array.isArray(response.items)) {
       allItems.push(...response.items)
