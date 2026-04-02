@@ -7,7 +7,9 @@
       "Bash(find /workspace/projetos/jobvarejo/pages -name \"*.vue\" -exec grep -l \"builder\\\\|editor\\\\|product\\\\|offer\" {} \\\\;)",
       "Bash(grep -r \"label\\\\|offer\\\\|product\" /workspace/projetos/jobvarejo/database/*.sql)",
       "Bash(ls -1 /workspace/projetos/jobvarejo/database/*.sql)",
-      "Bash(find /workspace/projetos/jobvarejo/database -name \"*.sql\" -exec basename {} \\\\;)"
+      "Bash(find /workspace/projetos/jobvarejo/database -name \"*.sql\" -exec basename {} \\\\;)",
+      "Bash(xargs ls:*)",
+      "Bash(grep -n \"interface CropRect\\\\|getCachedS3Objects\\\\|normalizeSearchTerm\" /workspace/projetos/jobvarejo/server/utils/*.ts)"
     ]
   }
 }

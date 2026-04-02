@@ -32,11 +32,18 @@ const getAccessToken = async (): Promise<string> => {
     }
   }
 
-  // Fallback: usar token do .env
-  const token = config.canvaAccessToken
-    || process.env.CANVA_ACCESS_TOKEN
-    || process.env.NUXT_CANVA_ACCESS_TOKEN
-    || ''
+  // Fallback: usar token do .env (process.env e mais confiavel em server/utils)
+  let token = ''
+  try {
+    token = config.canvaAccessToken || ''
+  } catch {
+    // useRuntimeConfig pode falhar fora de event handler
+  }
+  if (!token) {
+    token = process.env.CANVA_ACCESS_TOKEN
+      || process.env.NUXT_CANVA_ACCESS_TOKEN
+      || ''
+  }
 
   if (!token) {
     throw createError({
@@ -96,7 +103,7 @@ export const resetCanvaToken = () => {
 /**
  * Requisicao generica para a Canva API
  */
-const canvaFetch = async <T = any>(
+export const canvaFetch = async <T = any>(
   path: string,
   options: {
     method?: string
@@ -198,29 +205,9 @@ export const canvaGetDesign = async (designId: string): Promise<CanvaApiDesign> 
 
 // ── Editing Transactions ────────────────────────────────────────────────────
 
-interface CanvaEditingTransactionResponse {
-  transaction: {
-    id: string
-    design: {
-      id: string
-      pages: Array<{
-        id: string
-        index: number
-        elements: Array<{
-          id: string
-          type: string
-          text?: string
-          asset_id?: string
-          dimensions?: { width: number; height: number; top: number; left: number }
-        }>
-        thumbnail?: { url: string }
-      }>
-    }
-  }
-}
-
-export const canvaStartEditingTransaction = async (designId: string): Promise<CanvaEditingTransactionResponse> => {
-  return canvaFetch<CanvaEditingTransactionResponse>('/editing-sessions', {
+// Resposta completa da transacao de edicao (inclui richtexts, fills, thumbnails, pages)
+export const canvaStartEditingTransaction = async (designId: string): Promise<any> => {
+  return canvaFetch<any>('/editing-sessions', {
     method: 'POST',
     body: { design_id: designId },
   })
@@ -326,6 +313,76 @@ export const canvaGetAssetUploadJob = async (jobId: string): Promise<CanvaAssetU
   return canvaFetch<CanvaAssetUploadResponse>(`/asset-uploads/${jobId}`)
 }
 
+// ── Duplicar Pagina ────────────────────────────────────────────────────────
+
+/**
+ * Tentar duplicar uma pagina de um design via editing transaction.
+ * A Canva Connect API nao possui operacao nativa de "duplicate_page",
+ * entao tentamos via editing operations. Se falhar, retorna fallback
+ * com link para edicao manual no Canva.
+ */
+export const canvaDuplicatePage = async (
+  designId: string,
+  pageIndex: number = 1
+): Promise<{
+  success: boolean
+  manual_required: boolean
+  edit_url: string
+  message: string
+  transaction_id?: string
+}> => {
+  try {
+    // 1. Iniciar sessao de edicao
+    const session = await canvaStartEditingTransaction(designId)
+    const transactionId = session.id || session.editing_session?.id
+
+    if (!transactionId) {
+      throw new Error('Nao foi possivel obter ID da sessao de edicao')
+    }
+
+    // 2. Tentar operacao de duplicar pagina
+    try {
+      await canvaPerformEditingOperations(transactionId, [
+        { type: 'duplicate_page', page_index: pageIndex },
+      ], pageIndex)
+
+      // 3. Commit da transacao
+      await canvaCommitEditingTransaction(transactionId)
+
+      return {
+        success: true,
+        manual_required: false,
+        edit_url: `https://www.canva.com/design/${designId}/edit`,
+        message: 'Pagina duplicada com sucesso via API.',
+        transaction_id: transactionId,
+      }
+    } catch (opError: any) {
+      // Operacao nao suportada - cancelar transacao e retornar fallback
+      try {
+        await canvaCancelEditingTransaction(transactionId)
+      } catch {
+        // Ignora erro ao cancelar - transacao pode ja ter expirado
+      }
+
+      // Fallback: orientar duplicacao manual
+      return {
+        success: false,
+        manual_required: true,
+        edit_url: `https://www.canva.com/design/${designId}/edit`,
+        message: 'A Canva Connect API nao suporta duplicacao de paginas programaticamente. Abra o design no Canva, duplique a pagina desejada e volte para re-analisar.',
+      }
+    }
+  } catch (err: any) {
+    // Fallback geral - se nem a sessao de edicao abrir
+    return {
+      success: false,
+      manual_required: true,
+      edit_url: `https://www.canva.com/design/${designId}/edit`,
+      message: 'Nao foi possivel duplicar via API. Abra o design no Canva, duplique a pagina desejada e volte para re-analisar.',
+    }
+  }
+}
+
 // ── Design Pages (thumbnails) ───────────────────────────────────────────────
 
 interface CanvaDesignPagesResponse {
@@ -345,4 +402,72 @@ export const canvaGetDesignPages = async (
       limit: options.limit,
     },
   })
+}
+
+// ── Copiar Design (via export+import) ───────────────────────────────────────
+
+/**
+ * Copiar um design do Canva criando uma nova copia.
+ * Estrategia: exportar como PDF e reimportar como novo design.
+ */
+export const canvaCopyDesign = async (
+  sourceDesignId: string,
+  newTitle: string
+): Promise<{ design_id: string; title: string; edit_url: string; view_url: string }> => {
+  // 1. Exportar o design original como PDF
+  const exportResponse = await canvaExportDesign(sourceDesignId, { type: 'pdf' })
+  const exportJobId = exportResponse.job.id
+
+  // 2. Polling ate export terminar
+  let exportUrl: string | null = null
+  for (let i = 0; i < 20; i++) {
+    const status = await canvaGetExportJob(exportJobId)
+    if (status.job.status === 'completed' || status.job.status === 'success') {
+      exportUrl = status.job.urls?.[0] || null
+      break
+    }
+    if (status.job.status === 'failed') {
+      throw new Error('Falha ao exportar design original')
+    }
+    await new Promise(r => setTimeout(r, 2000))
+  }
+
+  if (!exportUrl) {
+    throw new Error('Timeout ao exportar design original')
+  }
+
+  // 3. Importar como novo design
+  const importResponse = await canvaFetch<any>('/imports', {
+    method: 'POST',
+    body: { url: exportUrl, title: newTitle },
+  })
+
+  const importJobId = importResponse.job?.id
+  if (!importJobId) {
+    throw new Error('Falha ao iniciar importacao')
+  }
+
+  // 4. Polling ate import terminar
+  for (let i = 0; i < 20; i++) {
+    const status = await canvaFetch<any>(`/imports/${importJobId}`)
+    if (status.job?.status === 'completed' || status.job?.status === 'success') {
+      const designId = status.job?.design?.id || status.job?.result?.design?.id
+      if (!designId) throw new Error('Design ID nao encontrado na resposta')
+
+      // Obter info completa do novo design
+      const newDesign = await canvaGetDesign(designId)
+      return {
+        design_id: newDesign.id,
+        title: newDesign.title,
+        edit_url: newDesign.urls.edit_url,
+        view_url: newDesign.urls.view_url,
+      }
+    }
+    if (status.job?.status === 'failed') {
+      throw new Error('Falha ao importar design copiado')
+    }
+    await new Promise(r => setTimeout(r, 2000))
+  }
+
+  throw new Error('Timeout ao importar design copiado')
 }

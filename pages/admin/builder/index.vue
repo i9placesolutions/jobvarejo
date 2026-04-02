@@ -8,7 +8,8 @@ import {
   Award,
   Type,
   Building2,
-  ArrowLeft
+  ArrowLeft,
+  Image,
 } from 'lucide-vue-next'
 
 definePageMeta({
@@ -83,6 +84,14 @@ const sections = ref<SectionItem[]>([
     href: '/admin/builder/tenants',
     icon: Building2,
     countKey: 'tenants',
+    count: null
+  },
+  {
+    title: 'Templates Canva',
+    description: 'Gerenciar templates do Canva disponíveis para os clientes',
+    href: '/admin/canva/templates',
+    icon: Image,
+    countKey: 'canvaTemplates',
     count: null
   }
 ])
