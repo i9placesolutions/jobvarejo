@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
     const pages = txn.pages || []
 
     // Analise inteligente com IA
-    const { analyzeDesignWithAI } = await import('~/server/utils/canva-ai-analyzer')
+    const { analyzeDesignWithAI } = await import('../../../../utils/canva-ai-analyzer')
     const analysis = await analyzeDesignWithAI(canvaDesignId, richtexts, fills, pages)
 
     // Cancelar transacao (era so leitura)
