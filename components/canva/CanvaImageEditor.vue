@@ -55,7 +55,7 @@ const previewUrl = computed(() => resolveImageUrl(selectedKey.value))
 
 // Busca automatica ao abrir
 const searchImages = async (term?: string) => {
-  const query = term ?? searchQuery.value.trim() || props.productName
+  const query = term ?? (searchQuery.value.trim() || props.productName)
   if (!query || isSearching.value) return
 
   isSearching.value = true
