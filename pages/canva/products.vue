@@ -5,6 +5,7 @@
 definePageMeta({
   layout: 'canva',
   middleware: 'builder-auth',
+  ssr: false,
 })
 
 // Importa os mesmos icones e logica da pagina de produtos do builder
@@ -244,7 +245,7 @@ onMounted(() => {
               </button>
               <button
                 @click="saveProduct"
-                :disabled="!form.name.trim()"
+                :disabled="!(form.name || '').trim()"
                 class="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-40"
               >
                 Salvar

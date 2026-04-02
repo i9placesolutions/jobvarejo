@@ -19,10 +19,11 @@ export default defineEventHandler(async (event) => {
 
   const result = await pgQuery(
     `SELECT id, title, category, canva_design_id, thumbnail_url,
-            description, created_at, updated_at
+            description, page_count, products_per_page, pattern,
+            design_type, is_active, sort_order, created_at, updated_at
      FROM public.canva_templates
      WHERE is_active = true${categoryFilter}
-     ORDER BY title ASC`,
+     ORDER BY sort_order ASC, title ASC`,
     params
   )
 

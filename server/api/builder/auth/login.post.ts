@@ -3,6 +3,7 @@ import { verifyPassword } from '../../../utils/password'
 import { createBuilderSessionToken } from '../../../utils/builder-session-token'
 import { getTenantByEmail, normalizeBuilderEmail, updateTenantLastLogin } from '../../../utils/builder-auth-db'
 import { getProfileByEmail } from '../../../utils/auth-db'
+import { setBuilderAuthCookies } from '../../../utils/builder-cookie'
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
@@ -33,7 +34,7 @@ export default defineEventHandler(async (event) => {
       name: String(tenant.name)
     })
 
-    setBuilderCookies(event, token, expiresIn)
+    setBuilderAuthCookies(event, token, expiresIn)
     await updateTenantLastLogin(tenant.id)
 
     return {
@@ -66,7 +67,7 @@ export default defineEventHandler(async (event) => {
       isAdmin: true
     })
 
-    setBuilderCookies(event, token, expiresIn)
+    setBuilderAuthCookies(event, token, expiresIn)
 
     return {
       tenant: {
@@ -80,21 +81,3 @@ export default defineEventHandler(async (event) => {
 
   throw createError({ statusCode: 401, statusMessage: 'E-mail ou senha invalidos' })
 })
-
-function setBuilderCookies(event: any, token: string, expiresIn: number) {
-  const secure = !import.meta.dev
-  setCookie(event, 'builder-access-token', token, {
-    path: '/',
-    maxAge: expiresIn,
-    sameSite: 'lax',
-    secure,
-    httpOnly: true
-  })
-  setCookie(event, 'builder-authenticated', 'true', {
-    path: '/',
-    maxAge: expiresIn,
-    sameSite: 'lax',
-    secure,
-    httpOnly: false
-  })
-}
