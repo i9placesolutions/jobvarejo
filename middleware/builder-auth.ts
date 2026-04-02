@@ -22,6 +22,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   if (!auth.isAuthenticated.value) {
-    return navigateTo('/builder/login')
+    // Preservar destino original para redirecionar apos login
+    const redirect = isCanvaRoute ? to.fullPath : undefined
+    return navigateTo({
+      path: '/builder/login',
+      query: redirect ? { redirect } : undefined,
+    })
   }
 })
