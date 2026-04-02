@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \":*)",
+      "Bash(npx --yes open-cli http://localhost:3000)"
+    ]
+  }
+}
