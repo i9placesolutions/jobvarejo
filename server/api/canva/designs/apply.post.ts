@@ -1,6 +1,8 @@
 // Aplicar mapeamentos de produtos no design do Canva
 // Recebe os mapeamentos e executa as operacoes de edicao
 
+import { canvaPerformEditingOperations } from '../../../utils/canva-client'
+
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const { transaction_id, mappings, company_data } = body

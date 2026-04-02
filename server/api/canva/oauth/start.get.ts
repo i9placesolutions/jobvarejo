@@ -33,16 +33,16 @@ const resolveCanvaRedirectUri = (event: any): string => {
   const forwardedProto = getFirstHeaderValue(event, 'x-forwarded-proto')
   if (forwardedHost) {
     const proto = forwardedProto || 'https'
-    return `${proto}://${forwardedHost}/api/canva/callback`
+    return `${proto}://${forwardedHost}/api/canva/oauth/callback`
   }
 
   const host = getFirstHeaderValue(event, 'host')
   if (host) {
     const proto = forwardedProto || (host.includes('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https')
-    return `${proto}://${host}/api/canva/callback`
+    return `${proto}://${host}/api/canva/oauth/callback`
   }
 
-  return `${getRequestURL(event).origin}/api/canva/callback`
+  return `${getRequestURL(event).origin}/api/canva/oauth/callback`
 }
 
 export default defineEventHandler(async (event) => {

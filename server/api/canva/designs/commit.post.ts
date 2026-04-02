@@ -1,5 +1,7 @@
 // Confirmar (commit) transacao de edicao no Canva
 
+import { canvaCommitEditingTransaction } from '../../../utils/canva-client'
+
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const { transaction_id } = body
