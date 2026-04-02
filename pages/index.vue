@@ -1460,37 +1460,49 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <div class="flex-1 w-full h-full max-w-480 mx-auto overflow-hidden flex flex-col relative">
 
       <!-- Top Bar -->
-      <header class="dash-topbar h-12 px-5 flex items-center justify-between shrink-0 relative z-30 safe-top">
+      <header class="dash-topbar h-14 px-5 flex items-center justify-between shrink-0 relative z-30 safe-top">
         <div class="flex items-center gap-2.5">
           <!-- Mobile hamburger -->
           <button
             v-if="dashMobile"
-            class="w-8 h-8 flex items-center justify-center hover:bg-white/6 rounded-lg transition-all text-zinc-400 hover:text-white -ml-1"
+            class="w-8 h-8 flex items-center justify-center hover:bg-black/5 rounded-lg transition-all text-slate-500 hover:text-slate-800 -ml-1"
             @click="showMobileDrawer = true"
           >
             <MenuIcon class="w-5 h-5" />
           </button>
-          <div class="w-7 h-7 rounded-lg flex items-center justify-center bg-indigo-500/20 border border-indigo-400/25 shadow-[0_0_12px_rgba(99,102,241,0.2)]">
-            <Sparkles class="w-3.5 h-3.5 text-indigo-300" />
+          <div class="w-8 h-8 rounded-xl flex items-center justify-center bg-indigo-50 border border-indigo-200">
+            <Sparkles class="w-4 h-4 text-indigo-500" />
           </div>
-          <span v-if="!dashMobile" class="text-[13px] font-semibold tracking-tight text-white/90">Studio <span class="text-white/30 font-normal">PRO</span></span>
+          <span v-if="!dashMobile" class="text-[14px] font-bold tracking-tight text-slate-800">Studio <span class="text-slate-400 font-normal">PRO</span></span>
         </div>
-        <div class="flex items-center gap-1">
+        <!-- Busca centralizada no desktop -->
+        <div v-if="!dashMobile" class="flex-1 max-w-md mx-6">
+          <div class="relative">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Buscar projetos…"
+              class="w-full h-9 bg-slate-100 border border-slate-200 rounded-xl text-[13px] text-slate-800 pl-9 pr-4 focus:outline-none focus:border-indigo-400 focus:bg-white placeholder:text-slate-400 transition-all"
+            />
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
           <button
             ref="notificationButtonRef"
             @click.stop="toggleNotifications"
-            class="notification-button w-8 h-8 flex items-center justify-center hover:bg-white/6 rounded-lg transition-all text-zinc-500 hover:text-zinc-200 relative"
+            class="notification-button w-9 h-9 flex items-center justify-center hover:bg-black/5 rounded-xl transition-all text-slate-400 hover:text-slate-700 relative"
           >
-            <Bell class="w-4 h-4" />
-            <span v-if="unreadCount > 0" class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-indigo-400 rounded-full ring-1 ring-black"></span>
+            <Bell class="w-[18px] h-[18px]" />
+            <span v-if="unreadCount > 0" class="absolute top-1.5 right-1.5 w-2 h-2 bg-indigo-500 rounded-full ring-2 ring-white"></span>
           </button>
-          <div v-if="user" class="flex items-center gap-2 px-2 py-1 hover:bg-white/6 rounded-lg cursor-pointer transition-all group">
-            <div class="w-6 h-6 bg-linear-to-br from-indigo-500 to-violet-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 overflow-hidden">
+          <div v-if="user" class="flex items-center gap-2 px-2.5 py-1.5 hover:bg-black/5 rounded-xl cursor-pointer transition-all group">
+            <div class="w-7 h-7 bg-linear-to-br from-indigo-500 to-violet-600 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden">
               <img v-if="user.avatar_url" :src="user.avatar_url" :alt="user.name" class="w-full h-full object-cover" />
               <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
             </div>
-            <span class="text-[12px] font-medium text-zinc-400 group-hover:text-zinc-200 max-w-35 truncate transition-colors">{{ formatUserName(user?.name) }}</span>
-            <ChevronDown class="w-3 h-3 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+            <span v-if="!dashMobile" class="text-[13px] font-medium text-slate-500 group-hover:text-slate-700 max-w-35 truncate transition-colors">{{ formatUserName(user?.name) }}</span>
+            <ChevronDown v-if="!dashMobile" class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </div>
         </div>
       </header>
@@ -1504,12 +1516,12 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <!-- Search -->
             <div class="px-3 pt-3 pb-2.5 shrink-0">
               <div class="relative">
-                <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
+                <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                 <input
                   v-model="searchQuery"
                   type="text"
                   placeholder="Buscar projetos…"
-                  class="w-full h-8 bg-white/4 border border-white/[0.07] rounded-lg text-[12px] text-white pl-8 pr-3 focus:outline-none focus:border-indigo-400/40 placeholder:text-zinc-600 transition-all"
+                  class="w-full h-8 bg-slate-100 border border-slate-200 rounded-lg text-[12px] text-slate-800 pl-8 pr-3 focus:outline-none focus:border-indigo-400/40 placeholder:text-slate-400 transition-all"
                 />
               </div>
             </div>
@@ -1544,30 +1556,17 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </DashboardMobileDrawer>
 
         <!-- Sidebar (hidden on mobile) -->
-        <aside v-show="!dashMobile" class="dash-sidebar w-55 h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
-
-          <!-- Search -->
-          <div class="px-3 pt-3 pb-2.5 shrink-0">
-            <div class="relative">
-              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
-              <input
-                v-model="searchQuery"
-                type="text"
-                placeholder="Buscar projetos…"
-                class="w-full h-8 bg-white/4 border border-white/[0.07] rounded-lg text-[12px] text-white pl-8 pr-3 focus:outline-none focus:border-indigo-400/40 focus:bg-white/6 placeholder:text-zinc-600 transition-all"
-              />
-            </div>
-          </div>
+        <aside v-show="!dashMobile" class="dash-sidebar w-64 h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
 
           <!-- Nav Section -->
-          <div class="px-2 pb-1 shrink-0">
-            <p class="sidebar-section-label px-2 mb-1">Explorar</p>
+          <div class="px-3 pt-4 pb-1 shrink-0">
+            <p class="sidebar-section-label px-1 mb-2">Explorar</p>
             <button
               @click="activeView = 'recent'"
               :class="['dash-nav-item w-full', activeView === 'recent' ? 'active' : '']"
               aria-label="Visualizar projetos recentes"
             >
-              <Clock class="w-3.5 h-3.5 shrink-0" />
+              <Clock class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Recentes</span>
               <span class="nav-count">10</span>
             </button>
@@ -1576,7 +1575,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               :class="['dash-nav-item w-full', activeView === 'all' && !isNoFolderView && !activeFolderId ? 'active' : '']"
               aria-label="Visualizar todos os projetos"
             >
-              <FolderOpen class="w-3.5 h-3.5 shrink-0" />
+              <FolderOpen class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Todos</span>
               <span class="nav-count">{{ safeProjects.length }}</span>
             </button>
@@ -1585,7 +1584,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               :class="['dash-nav-item w-full', isNoFolderView ? 'active' : '']"
               title="Projetos sem pasta"
             >
-              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
                 <line x1="9" y1="12" x2="15" y2="12" />
               </svg>
@@ -1596,7 +1595,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               @click="activeView = 'starred'"
               :class="['dash-nav-item w-full', activeView === 'starred' ? 'active starred' : '']"
             >
-              <Star class="w-3.5 h-3.5 shrink-0" :class="{ 'fill-current text-amber-400': activeView === 'starred' }" />
+              <Star class="w-4 h-4 shrink-0" :class="{ 'fill-current text-amber-400': activeView === 'starred' }" />
               <span class="flex-1 text-left">Favoritos</span>
               <span v-if="starredProjectsCount > 0" class="nav-count">{{ starredProjectsCount }}</span>
             </button>
@@ -1605,24 +1604,24 @@ const handleDropOnRoot = async (event: DragEvent) => {
               :class="['dash-nav-item w-full', activeView === 'shared' ? 'active' : '']"
               aria-label="Visualizar projetos compartilhados"
             >
-              <Users class="w-3.5 h-3.5 shrink-0" />
+              <Users class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Compartilhados</span>
             </button>
           </div>
 
           <!-- Divider -->
-          <div class="sidebar-divider mx-3 my-1"></div>
+          <div class="sidebar-divider mx-4 my-2"></div>
 
           <!-- Folders -->
-          <div class="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
-            <div class="flex items-center justify-between px-2 mb-1">
+          <div class="flex-1 min-h-0 overflow-y-auto px-3 pb-2">
+            <div class="flex items-center justify-between px-1 mb-2">
               <p class="sidebar-section-label">Pastas</p>
               <button
                 @click="showCreateFolder = true"
-                class="w-5 h-5 flex items-center justify-center hover:bg-white/10 rounded text-zinc-600 hover:text-zinc-300 transition-all"
+                class="w-6 h-6 flex items-center justify-center hover:bg-slate-100 rounded-md text-slate-400 hover:text-slate-600 transition-all"
                 title="Nova pasta"
               >
-                <FolderPlus class="w-3 h-3" />
+                <FolderPlus class="w-3.5 h-3.5" />
               </button>
             </div>
             <div
@@ -1632,8 +1631,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
               @drop="handleDropOnRoot"
               style="cursor:pointer"
             >
-              <FolderOpen class="w-3.5 h-3.5 shrink-0 opacity-50" />
-              <span class="flex-1 text-left text-[12px] font-medium truncate">Raiz</span>
+              <FolderOpen class="w-4 h-4 shrink-0 opacity-50" />
+              <span class="flex-1 text-left font-medium truncate">Raiz</span>
               <span class="nav-count">{{ safeProjects.length }}</span>
             </div>
             <div class="folder-tree" v-if="isMounted">
@@ -1662,14 +1661,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
 
           <!-- Bottom -->
-          <div class="px-2 pb-3 shrink-0">
+          <div class="px-3 pb-3 shrink-0">
             <div class="sidebar-divider mx-1 mb-2"></div>
             <button
               @click="navigateTo('/profile')"
               class="dash-nav-item w-full"
               aria-label="Abrir perfil do usuário"
             >
-              <User class="w-3.5 h-3.5 shrink-0" />
+              <User class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Meu Perfil</span>
             </button>
             <button
@@ -1677,7 +1676,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               class="dash-nav-item signout w-full"
               title="Sair"
             >
-              <LogOut class="w-3.5 h-3.5 shrink-0" />
+              <LogOut class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Sair</span>
             </button>
           </div>
@@ -1687,22 +1686,19 @@ const handleDropOnRoot = async (event: DragEvent) => {
         <main class="dash-main flex-1 flex flex-col overflow-hidden relative z-10">
 
           <!-- Page Header -->
-          <div :class="['flex items-start justify-between gap-4 shrink-0', dashMobile ? 'px-4 pt-4 pb-3' : 'px-7 pt-6 pb-4']">
+          <div :class="['flex items-center justify-between gap-4 shrink-0', dashMobile ? 'px-4 pt-4 pb-3' : 'px-7 pt-5 pb-4']">
             <div class="min-w-0 flex-1">
-              <div v-if="!dashMobile" class="flex items-center gap-1.5 mb-1">
-                <span class="text-[10px] uppercase tracking-[0.2em] text-zinc-600 font-semibold">
-                  {{ activeView === 'recent' ? 'Recentes' : activeView === 'starred' ? 'Favoritos' : activeView === 'shared' ? 'Compartilhados' : activeFolderId ? 'Pasta' : 'Workspace' }}
-                </span>
+              <div class="flex items-center gap-2">
+                <h1 :class="['dash-page-title font-bold leading-tight text-slate-800 tracking-tight truncate', dashMobile ? 'text-[18px]' : 'text-[22px]']">{{ dashboardTitle }}</h1>
                 <template v-if="activeFolderId">
-                  <span class="text-zinc-700 text-[10px]">/</span>
-                  <span class="text-[10px] text-zinc-500 truncate max-w-50">{{ folders.find(f => f.id === activeFolderId)?.name }}</span>
+                  <span class="text-slate-300 text-[12px]">/</span>
+                  <span class="text-[13px] text-slate-500 truncate max-w-50 font-medium">{{ folders.find(f => f.id === activeFolderId)?.name }}</span>
                 </template>
               </div>
-              <h1 :class="['dash-page-title font-semibold leading-tight text-white tracking-tight truncate', dashMobile ? 'text-[17px]' : 'text-[20px]']">{{ dashboardTitle }}</h1>
-              <p class="text-[11px] text-zinc-600 mt-0.5">
-                <span class="text-zinc-500 font-medium">{{ filteredProjects.length }}</span>
+              <p class="text-[12px] text-slate-400 mt-0.5">
+                <span class="text-slate-500 font-semibold">{{ filteredProjects.length }}</span>
                 {{ filteredProjects.length === 1 ? ' projeto' : ' projetos' }}
-                <span v-if="!dashMobile" class="mx-1.5 text-zinc-700">·</span>
+                <span v-if="!dashMobile" class="mx-1.5 text-slate-300">·</span>
                 <span v-if="!dashMobile">{{ dashboardContextHint }}</span>
               </p>
             </div>
@@ -1710,30 +1706,25 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <button
               v-if="!dashMobile"
               @click="showCreateProject = true"
-              class="dash-cta shrink-0 h-9 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all mt-1"
+              class="dash-cta shrink-0 h-10 px-5 rounded-xl text-[13px] font-semibold flex items-center gap-2 transition-all"
             >
-              <Plus class="w-3.5 h-3.5" />
+              <Plus class="w-4 h-4" />
               Novo Projeto
             </button>
           </div>
 
           <!-- Toolbar -->
-          <div :class="['pb-3 flex items-center gap-2.5 shrink-0', dashMobile ? 'px-4 overflow-x-auto' : 'px-7']">
-            <div class="dash-tabs flex items-center gap-0.5 p-0.5 rounded-lg shrink-0">
+          <div :class="['pb-3 flex items-center gap-3 shrink-0', dashMobile ? 'px-4 overflow-x-auto' : 'px-7']">
+            <div class="dash-tabs flex items-center gap-0.5 p-0.5 rounded-xl shrink-0">
               <button @click="activeView = 'recent'" :class="['dash-tab', activeView === 'recent' ? 'active' : '']">Recentes</button>
               <button @click="activeView = 'all'" :class="['dash-tab', activeView === 'all' ? 'active' : '']">Todos</button>
+              <button @click="activeView = 'starred'" :class="['dash-tab', activeView === 'starred' ? 'active' : '']">Favoritos</button>
               <button @click="activeView = 'shared'" :class="['dash-tab', activeView === 'shared' ? 'active' : '']">Compartilhados</button>
             </div>
             <div class="flex-1 min-w-0"></div>
-            <template v-if="!dashMobile">
-              <FilterDropdown v-model="filterOrganization" label="Equipe" :options="organizationFilterOptions" min-width-class="min-w-[170px]" />
-              <FilterDropdown v-model="filterType" label="Tipo" :options="typeFilterOptions" min-width-class="min-w-[170px]" />
-              <FilterDropdown v-model="filterTime" label="Período" :options="timeFilterOptions" min-width-class="min-w-[175px]" />
-              <FilterDropdown v-model="filterFolderId" label="Pasta" :options="folderFilterDropdownOptions" min-width-class="min-w-[240px]" />
-            </template>
-            <div class="flex items-center bg-white/4 rounded-lg p-0.5 border border-white/[0.07] shrink-0">
-              <button @click="viewMode = 'grid'" :class="['p-1.5 rounded-md transition-all', viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-300']" title="Grade"><Grid class="w-3.5 h-3.5" /></button>
-              <button @click="viewMode = 'list'" :class="['p-1.5 rounded-md transition-all', viewMode === 'list' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-300']" title="Lista"><List class="w-3.5 h-3.5" /></button>
+            <div class="flex items-center bg-slate-100 rounded-xl p-0.5 border border-slate-200 shrink-0">
+              <button @click="viewMode = 'grid'" :class="['p-2 rounded-lg transition-all', viewMode === 'grid' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600']" title="Grade"><Grid class="w-4 h-4" /></button>
+              <button @click="viewMode = 'list'" :class="['p-2 rounded-lg transition-all', viewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600']" title="Lista"><List class="w-4 h-4" /></button>
             </div>
           </div>
 
@@ -1748,12 +1739,12 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
           <!-- Active Filter Chips -->
           <div v-if="activeFilterChips.length > 0" class="px-7 pb-3 flex items-center gap-2 flex-wrap shrink-0">
-            <span class="text-[10px] uppercase tracking-[0.15em] text-zinc-600 font-semibold">Filtros</span>
+            <span class="text-[10px] uppercase tracking-[0.15em] text-slate-400 font-semibold">Filtros</span>
             <button
               v-for="chip in activeFilterChips"
               :key="chip.key"
               @click="chip.clear()"
-              class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-500/12 text-indigo-300 border border-indigo-400/20 hover:bg-indigo-500/20 hover:text-white transition-all"
+              class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 hover:text-indigo-700 transition-all"
             >
               {{ chip.label }}
               <svg class="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -1763,7 +1754,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <button
               v-if="activeFilterChips.length > 1"
               @click="filterOrganization = 'all'; filterType = 'all'; filterTime = 'all'; filterFolderId = 'all'; setActiveFolder(null)"
-              class="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors underline underline-offset-2"
+              class="text-[11px] text-slate-400 hover:text-slate-600 transition-colors underline underline-offset-2"
             >Limpar tudo</button>
           </div>
 
@@ -1781,7 +1772,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     <span v-if="activeFolderId">Subpastas</span>
                     <span v-else>Pastas</span>
                   </h2>
-                  <span class="text-[10px] text-zinc-700">{{ visibleFoldersOnDashboard.length }}</span>
+                  <span class="text-[10px] text-slate-400">{{ visibleFoldersOnDashboard.length }}</span>
                 </div>
                 <div class="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   <button
@@ -1793,27 +1784,27 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     @contextmenu="(e: MouseEvent) => showFolderContextMenu(folder.id, e)"
                   >
                     <div class="flex items-center justify-between mb-2.5">
-                      <div class="w-7 h-7 rounded-lg bg-indigo-500/12 border border-indigo-400/18 flex items-center justify-center">
+                      <div class="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center">
                         <Folder class="w-3.5 h-3.5 text-indigo-400" />
                       </div>
-                      <span class="text-[10px] text-zinc-600 font-mono">{{ getFolderProjectCount(folder.id) }}</span>
+                      <span class="text-[10px] text-slate-400 font-mono">{{ getFolderProjectCount(folder.id) }}</span>
                     </div>
-                    <p class="text-[13px] font-semibold text-zinc-200 truncate leading-tight group-hover:text-white transition-colors">{{ folder.name || 'Sem nome' }}</p>
-                    <p class="mt-0.5 text-[10px] text-zinc-600">{{ pluralize(getFolderSubfolderCount(folder.id), 'subpasta', 'subpastas') }}</p>
+                    <p class="text-[13px] font-semibold text-slate-700 truncate leading-tight group-hover:text-slate-900 transition-colors">{{ folder.name || 'Sem nome' }}</p>
+                    <p class="mt-0.5 text-[10px] text-slate-400">{{ pluralize(getFolderSubfolderCount(folder.id), 'subpasta', 'subpastas') }}</p>
                   </button>
                 </div>
               </section>
 
               <div v-if="activeView === 'all' && visibleFoldersOnDashboard.length > 0 && filteredProjects.length > 0" class="flex items-center justify-between mb-3">
                 <h2 class="section-label">Projetos</h2>
-                <span class="text-[10px] text-zinc-700">{{ filteredProjects.length }}</span>
+                <span class="text-[10px] text-slate-400">{{ filteredProjects.length }}</span>
               </div>
 
               <!-- Project Cards -->
               <div
                 v-if="filteredProjects.length > 0"
-                class="grid gap-3"
-                :class="viewMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'grid-cols-1'"
+                class="grid gap-4"
+                :class="viewMode === 'grid' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' : 'grid-cols-1'"
               >
                 <div
                   v-for="(project, projectIndex) in filteredProjects"
@@ -1830,11 +1821,11 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 >
                   <!-- Grid mode -->
                   <template v-if="viewMode === 'grid'">
-                    <div class="aspect-16/10 bg-[#0d0d12] relative overflow-hidden">
+                    <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden rounded-t-[10px]">
                       <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 flex items-center justify-center">
                         <img
                           :src="getProjectPreviewSrc(project, projectIndex)"
-                          class="project-thumb-media w-full h-full object-cover"
+                          class="project-thumb-media w-full h-full object-contain"
                           :alt="project.name"
                           draggable="false"
                           :loading="projectIndex < 8 ? 'eager' : 'lazy'"
@@ -1845,60 +1836,62 @@ const handleDropOnRoot = async (event: DragEvent) => {
                           @error="project._thumbError = true"
                         />
                       </div>
-                      <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="absolute inset-0 p-2">
-                        <div class="w-full h-full rounded-lg border border-white/12 relative overflow-hidden flex flex-col justify-end p-3" :style="getProjectThumbStyle(project)">
+                      <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="absolute inset-0 p-3">
+                        <div class="w-full h-full rounded-xl border border-slate-200 relative overflow-hidden flex flex-col justify-end p-4" :style="getProjectThumbStyle(project)">
                           <div class="absolute inset-0 opacity-12 pointer-events-none" style="background:radial-gradient(circle at 25% 25%,rgba(255,255,255,0.5) 0%,transparent 45%)"></div>
-                          <div class="relative z-1 text-white font-black text-3xl leading-none tracking-tighter drop-shadow-lg">{{ getProjectInitials(project) }}</div>
+                          <div class="relative z-1 text-white font-black text-4xl leading-none tracking-tighter drop-shadow-lg">{{ getProjectInitials(project) }}</div>
                         </div>
                       </div>
+                      <!-- Overlay de acoes no hover -->
+                      <div class="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-all pointer-events-none"></div>
                       <button
                         @pointerdown.stop @mousedown.stop @touchstart.stop
                         @click.stop="toggleStarred(project.id)"
-                        :class="['absolute top-2 left-2 w-7 h-7 rounded-lg backdrop-blur-sm flex items-center justify-center border transition-all', project.is_starred ? 'bg-amber-500/25 text-amber-400 border-amber-400/30 opacity-100' : 'bg-black/50 text-white/50 border-white/8 opacity-0 group-hover:opacity-100 hover:text-white']"
+                        :class="['absolute top-2.5 left-2.5 w-8 h-8 rounded-lg backdrop-blur-md flex items-center justify-center border transition-all', project.is_starred ? 'bg-amber-50 text-amber-500 border-amber-300 opacity-100 shadow-sm' : 'bg-white/90 text-slate-400 border-slate-200 opacity-0 group-hover:opacity-100 hover:text-slate-700 shadow-sm']"
                         title="Favoritar"
-                      ><Star class="w-3.5 h-3.5" :class="{ 'fill-current': project.is_starred }" /></button>
+                      ><Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" /></button>
                       <button
                         @pointerdown.stop @mousedown.stop @touchstart.stop
                         @click.stop="showProjectContextMenu(project.id, $event)"
-                        class="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/50 backdrop-blur-sm border border-white/8 text-white/50 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                        class="absolute top-2.5 right-2.5 w-8 h-8 rounded-lg bg-white/90 backdrop-blur-md border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 shadow-sm"
                         title="Ações"
-                      ><MoreVertical class="w-3.5 h-3.5" /></button>
+                      ><MoreVertical class="w-4 h-4" /></button>
                     </div>
-                    <div class="px-3 pt-2.5 pb-3 flex flex-col gap-1.5 dash-card-info">
+                    <div class="px-3.5 pt-3 pb-3.5 flex flex-col gap-1 dash-card-info">
                       <div v-if="renamingProjectId === project.id" @click.stop>
-                        <input v-model="editingProjectName" type="text" class="w-full px-2 py-1 text-[12px] bg-white/8 border border-indigo-500/50 rounded-md focus:outline-none text-white" @keyup.enter="saveProjectName(project.id)" @keyup.esc="cancelRenameProject" @blur="saveProjectName(project.id)" ref="renameInput" />
+                        <input v-model="editingProjectName" type="text" class="w-full px-2 py-1 text-[13px] bg-slate-50 border border-indigo-400 rounded-md focus:outline-none text-slate-800" @keyup.enter="saveProjectName(project.id)" @keyup.esc="cancelRenameProject" @blur="saveProjectName(project.id)" ref="renameInput" />
                       </div>
-                      <h3 v-else class="font-semibold text-[13px] text-zinc-300 truncate tracking-tight transition-colors group-hover:text-white leading-tight">{{ project.name || 'Sem título' }}</h3>
-                      <div class="flex items-center justify-between gap-2">
-                        <p class="text-[10px] text-zinc-600 truncate flex items-center gap-1 font-medium">
-                          <Clock class="w-2.5 h-2.5 shrink-0" />
+                      <h3 v-else class="font-semibold text-[14px] text-slate-800 truncate tracking-tight transition-colors group-hover:text-indigo-600 leading-snug">{{ project.name || 'Sem título' }}</h3>
+                      <div class="flex items-center justify-between gap-2 mt-0.5">
+                        <p class="text-[11px] text-slate-400 truncate flex items-center gap-1 font-medium">
+                          <Clock class="w-3 h-3 shrink-0" />
                           {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
                         </p>
-                        <span v-if="!String(project.folder_id || '').trim()" class="text-[9px] font-semibold uppercase tracking-wider text-zinc-700 border border-white/6 rounded-full px-1.5 py-0.5 shrink-0">Raiz</span>
+                        <span v-if="!String(project.folder_id || '').trim()" class="text-[9px] font-semibold uppercase tracking-wider text-slate-400 border border-slate-200 rounded-full px-1.5 py-0.5 shrink-0">Raiz</span>
                       </div>
                     </div>
                   </template>
 
                   <!-- List mode -->
                   <template v-else>
-                    <div class="flex items-center gap-3 px-4 py-2.5">
-                      <div class="w-10 h-10 rounded-lg overflow-hidden bg-[#0d0d12] shrink-0 border border-white/6">
-                        <img v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" :src="getProjectPreviewSrc(project, projectIndex)" class="w-full h-full object-cover" draggable="false" :loading="projectIndex < 4 ? 'eager' : 'lazy'" @dragstart.prevent @load="handleProjectThumbLoad(project, $event)" @error="project._thumbError = true" />
-                        <div v-else class="w-full h-full flex items-center justify-center font-black text-sm text-white" :style="getProjectThumbStyle(project)">{{ getProjectInitials(project) }}</div>
+                    <div class="flex items-center gap-4 px-4 py-3">
+                      <div class="w-16 h-20 rounded-lg overflow-hidden bg-slate-50 shrink-0 border border-slate-200">
+                        <img v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" :src="getProjectPreviewSrc(project, projectIndex)" class="w-full h-full object-contain" draggable="false" :loading="projectIndex < 4 ? 'eager' : 'lazy'" @dragstart.prevent @load="handleProjectThumbLoad(project, $event)" @error="project._thumbError = true" />
+                        <div v-else class="w-full h-full flex items-center justify-center font-black text-base text-white rounded-lg" :style="getProjectThumbStyle(project)">{{ getProjectInitials(project) }}</div>
                       </div>
                       <div class="flex-1 min-w-0">
                         <div v-if="renamingProjectId === project.id" @click.stop>
-                          <input v-model="editingProjectName" type="text" class="w-full px-2 py-0.5 text-[12px] bg-white/8 border border-indigo-500/50 rounded focus:outline-none text-white" @keyup.enter="saveProjectName(project.id)" @keyup.esc="cancelRenameProject" @blur="saveProjectName(project.id)" ref="renameInput" />
+                          <input v-model="editingProjectName" type="text" class="w-full px-2 py-0.5 text-[13px] bg-slate-50 border border-indigo-400 rounded focus:outline-none text-slate-800" @keyup.enter="saveProjectName(project.id)" @keyup.esc="cancelRenameProject" @blur="saveProjectName(project.id)" ref="renameInput" />
                         </div>
-                        <h3 v-else class="text-[13px] font-semibold text-zinc-300 truncate group-hover:text-white transition-colors">{{ project.name || 'Sem título' }}</h3>
-                        <p class="text-[10px] text-zinc-600 flex items-center gap-1 mt-0.5">
-                          <Clock class="w-2.5 h-2.5 shrink-0" />
+                        <h3 v-else class="text-[14px] font-semibold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">{{ project.name || 'Sem título' }}</h3>
+                        <p class="text-[11px] text-slate-400 flex items-center gap-1 mt-1">
+                          <Clock class="w-3 h-3 shrink-0" />
                           {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
                         </p>
                       </div>
-                      <div class="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
-                        <button @pointerdown.stop @mousedown.stop @touchstart.stop @click.stop="toggleStarred(project.id)" :class="['w-7 h-7 rounded-lg border flex items-center justify-center transition-all', project.is_starred ? 'bg-amber-500/18 text-amber-400 border-amber-400/25' : 'bg-white/4 text-zinc-600 border-white/[0.07] hover:text-white']"><Star class="w-3.5 h-3.5" :class="{ 'fill-current': project.is_starred }" /></button>
-                        <button @pointerdown.stop @mousedown.stop @touchstart.stop @click.stop="showProjectContextMenu(project.id, $event)" class="w-7 h-7 rounded-lg bg-white/4 border border-white/[0.07] text-zinc-600 hover:text-white flex items-center justify-center transition-all"><MoreVertical class="w-3.5 h-3.5" /></button>
+                      <div class="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                        <button @pointerdown.stop @mousedown.stop @touchstart.stop @click.stop="toggleStarred(project.id)" :class="['w-8 h-8 rounded-lg border flex items-center justify-center transition-all', project.is_starred ? 'bg-amber-50 text-amber-500 border-amber-300' : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-slate-600']"><Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" /></button>
+                        <button @pointerdown.stop @mousedown.stop @touchstart.stop @click.stop="showProjectContextMenu(project.id, $event)" class="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-all"><MoreVertical class="w-4 h-4" /></button>
                       </div>
                     </div>
                   </template>
@@ -1908,15 +1901,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <!-- Empty State -->
               <div v-if="filteredProjects.length === 0 && !isLoadingProjects" class="flex items-center justify-center h-56">
                 <div class="text-center">
-                  <div class="w-11 h-11 bg-white/4 rounded-xl flex items-center justify-center mx-auto mb-3 border border-white/[0.07]">
-                    <FolderOpen class="w-5 h-5 text-zinc-600" />
+                  <div class="w-11 h-11 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3 border border-slate-200">
+                    <FolderOpen class="w-5 h-5 text-slate-400" />
                   </div>
-                  <h3 class="text-[14px] font-semibold text-zinc-500 mb-1">
+                  <h3 class="text-[14px] font-semibold text-slate-500 mb-1">
                     <span v-if="searchQuery">Nenhum resultado</span>
                     <span v-else-if="activeFolderId">Pasta vazia</span>
                     <span v-else>Nenhum projeto ainda</span>
                   </h3>
-                  <p class="text-[12px] text-zinc-700 mb-4">
+                  <p class="text-[12px] text-slate-400 mb-4">
                     <span v-if="searchQuery">Tente outra busca ou limpe os filtros</span>
                     <span v-else>Crie seu primeiro projeto para começar</span>
                   </p>
@@ -1932,10 +1925,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </div>
 
     <!-- Create Project Modal -->
-    <div v-if="showCreateProject" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="showCreateProject = false">
+    <div v-if="showCreateProject" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" @click.self="showCreateProject = false">
       <div class="dash-modal w-full max-w-sm">
-        <h3 class="text-[15px] font-semibold text-white mb-1">Novo Projeto</h3>
-        <p class="text-[12px] text-zinc-600 mb-5">
+        <h3 class="text-[15px] font-semibold text-slate-800 mb-1">Novo Projeto</h3>
+        <p class="text-[12px] text-slate-400 mb-5">
           <span v-if="activeFolderId">Em: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
           <span v-else>Na raiz do workspace</span>
         </p>
@@ -1948,10 +1941,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
     </div>
 
     <!-- Create Folder Modal -->
-    <div v-if="showCreateFolder" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="showCreateFolder = false">
+    <div v-if="showCreateFolder" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" @click.self="showCreateFolder = false">
       <div class="dash-modal w-full max-w-sm">
-        <h3 class="text-[15px] font-semibold text-white mb-1">Nova Pasta</h3>
-        <p class="text-[12px] text-zinc-600 mb-5">
+        <h3 class="text-[15px] font-semibold text-slate-800 mb-1">Nova Pasta</h3>
+        <p class="text-[12px] text-slate-400 mb-5">
           <span v-if="activeFolderId">Dentro de: {{ folders.find(f => f.id === activeFolderId)?.name }}</span>
           <span v-else>Na raiz</span>
         </p>
@@ -1967,7 +1960,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showFolderMenu"
-        class="folder-context-menu fixed z-100 bg-[#161618] border border-white/9 rounded-xl py-1.5 min-w-40 shadow-2xl shadow-black/60"
+        class="folder-context-menu fixed z-100 bg-white border border-slate-200 rounded-xl py-1.5 min-w-40 shadow-xl shadow-black/10"
         :style="{ left: `${folderMenuPosition.x}px`, top: `${folderMenuPosition.y}px` }"
       >
         <button @click="startEditFolder(folders.find(f => f.id === showFolderMenu))" class="ctx-menu-item w-full">
@@ -1985,7 +1978,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showProjectMenu"
-        class="project-context-menu fixed z-100 bg-[#161618] border border-white/9 rounded-xl py-1.5 min-w-40 shadow-2xl shadow-black/60"
+        class="project-context-menu fixed z-100 bg-white border border-slate-200 rounded-xl py-1.5 min-w-40 shadow-xl shadow-black/10"
         :style="{ left: `${projectMenuPosition.x}px`, top: `${projectMenuPosition.y}px` }"
       >
         <button @click="startRenameProject(projects.find(p => p.id === showProjectMenu))" class="ctx-menu-item w-full">
@@ -2004,7 +1997,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <Star class="w-3.5 h-3.5" :class="{ 'fill-current': projects.find(p => p.id === showProjectMenu)?.is_starred }" />
           {{ projects.find(p => p.id === showProjectMenu)?.is_starred ? 'Desfavoritar' : 'Favoritar' }}
         </button>
-        <div class="h-px bg-white/[0.07] my-1.5 mx-2"></div>
+        <div class="h-px bg-slate-100 my-1.5 mx-2"></div>
         <button @click="deleteProject(showProjectMenu)" class="ctx-menu-item danger w-full">
           <Trash2 class="w-3.5 h-3.5" />
           Excluir
@@ -2013,20 +2006,20 @@ const handleDropOnRoot = async (event: DragEvent) => {
     </teleport>
 
     <!-- Move Project Modal -->
-    <div v-if="showMoveProjectModal" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" @click.self="closeMoveProjectModal">
+    <div v-if="showMoveProjectModal" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" @click.self="closeMoveProjectModal">
       <div class="dash-modal w-full max-w-xl">
-        <h3 class="text-[15px] font-semibold text-white mb-1">Mover projeto</h3>
-        <p class="text-[12px] text-zinc-600 mb-4">Escolha a pasta de destino.</p>
+        <h3 class="text-[15px] font-semibold text-slate-800 mb-1">Mover projeto</h3>
+        <p class="text-[12px] text-slate-400 mb-4">Escolha a pasta de destino.</p>
 
-        <div class="rounded-xl border border-white/8 bg-white/3 p-3 mb-3">
-          <p class="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Projeto</p>
-          <p class="text-[13px] text-zinc-200 font-semibold truncate">{{ projectToMoveName }}</p>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 mb-3">
+          <p class="text-[10px] uppercase tracking-wider text-slate-400 mb-1">Projeto</p>
+          <p class="text-[13px] text-slate-700 font-semibold truncate">{{ projectToMoveName }}</p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-          <div class="rounded-lg border border-white/[0.07] bg-white/2 p-2.5">
-            <p class="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Pasta atual</p>
-            <p class="text-[12px] text-zinc-300 wrap-break-word">{{ projectToMoveCurrentFolderLabel }}</p>
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+            <p class="text-[10px] uppercase tracking-wider text-slate-400 mb-1">Pasta atual</p>
+            <p class="text-[12px] text-slate-600 wrap-break-word">{{ projectToMoveCurrentFolderLabel }}</p>
           </div>
           <div class="rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-2.5">
             <p class="text-[10px] uppercase tracking-wider text-indigo-400/70 mb-1">Destino</p>
@@ -2034,22 +2027,22 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
         </div>
 
-        <label class="block text-[11px] text-zinc-500 mb-2">Selecionar destino</label>
-        <div class="mb-4 max-h-60 overflow-y-auto rounded-xl border border-white/[0.07] bg-[#0f0f14] p-1.5">
-          <button type="button" class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all" :class="normalizeFolderId(moveProjectFolderId) === '' ? 'bg-indigo-500/15 border border-indigo-500/25' : 'hover:bg-white/5 border border-transparent'" @click="moveProjectFolderId = ''">
-            <Check v-if="normalizeFolderId(moveProjectFolderId) === ''" class="w-4 h-4 text-indigo-300 shrink-0 mt-0.5" />
+        <label class="block text-[11px] text-slate-500 mb-2">Selecionar destino</label>
+        <div class="mb-4 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+          <button type="button" class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all" :class="normalizeFolderId(moveProjectFolderId) === '' ? 'bg-indigo-50 border border-indigo-300' : 'hover:bg-slate-100 border border-transparent'" @click="moveProjectFolderId = ''">
+            <Check v-if="normalizeFolderId(moveProjectFolderId) === ''" class="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
             <span v-else class="w-4 shrink-0"></span>
             <span class="min-w-0">
-              <span class="block text-[12px] text-zinc-200">Sem pasta (raiz)</span>
-              <span class="block text-[10px] text-zinc-600">Projetos fora de qualquer pasta.</span>
+              <span class="block text-[12px] text-slate-700">Sem pasta (raiz)</span>
+              <span class="block text-[10px] text-slate-400">Projetos fora de qualquer pasta.</span>
             </span>
           </button>
-          <button v-for="folderOption in moveProjectFolderOptions" :key="folderOption.id" type="button" class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all border" :class="normalizeFolderId(moveProjectFolderId) === folderOption.id ? 'bg-indigo-500/15 border-indigo-500/25' : 'hover:bg-white/5 border-transparent'" @click="moveProjectFolderId = folderOption.id">
-            <Check v-if="normalizeFolderId(moveProjectFolderId) === folderOption.id" class="w-4 h-4 text-indigo-300 shrink-0 mt-0.5" />
+          <button v-for="folderOption in moveProjectFolderOptions" :key="folderOption.id" type="button" class="w-full flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all border" :class="normalizeFolderId(moveProjectFolderId) === folderOption.id ? 'bg-indigo-50 border-indigo-300' : 'hover:bg-slate-100 border-transparent'" @click="moveProjectFolderId = folderOption.id">
+            <Check v-if="normalizeFolderId(moveProjectFolderId) === folderOption.id" class="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
             <span v-else class="w-4 shrink-0"></span>
             <span class="min-w-0">
-              <span class="block text-[12px] text-zinc-200 truncate" :style="{ paddingLeft: `${folderOption.depth * 10}px` }">{{ folderOption.name }}</span>
-              <span class="block text-[10px] text-zinc-600 truncate">{{ folderOption.pathLabel }}</span>
+              <span class="block text-[12px] text-slate-700 truncate" :style="{ paddingLeft: `${folderOption.depth * 10}px` }">{{ folderOption.name }}</span>
+              <span class="block text-[10px] text-slate-400 truncate">{{ folderOption.pathLabel }}</span>
             </span>
           </button>
         </div>
@@ -2082,35 +2075,35 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </Transition>
       <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0 scale-95 translate-y-[-8px]" enter-to-class="opacity-100 scale-100 translate-y-0" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100 scale-100 translate-y-0" leave-to-class="opacity-0 scale-95 translate-y-[-8px]">
         <div v-if="showNotifications && notificationButtonRef" class="notifications-modal fixed z-200" :style="notificationModalStyle" @click.stop>
-          <div class="w-80 bg-[#161618] border border-white/9 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden flex flex-col max-h-125">
-            <div class="px-4 py-3 border-b border-white/6 flex items-center justify-between">
-              <h3 class="text-[13px] font-semibold text-white">Notificações</h3>
-              <button v-if="unreadCount > 0" @click="markAllAsRead" class="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors">Marcar todas</button>
+          <div class="w-80 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-black/8 overflow-hidden flex flex-col max-h-125">
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <h3 class="text-[13px] font-semibold text-slate-800">Notificações</h3>
+              <button v-if="unreadCount > 0" @click="markAllAsRead" class="text-[11px] text-indigo-500 hover:text-indigo-600 transition-colors">Marcar todas</button>
             </div>
             <div class="flex-1 overflow-y-auto">
               <div v-if="notifications.length === 0" class="p-8 text-center">
-                <Bell class="w-7 h-7 text-zinc-700 mx-auto mb-2" />
-                <p class="text-[12px] text-zinc-600">Nenhuma notificação</p>
+                <Bell class="w-7 h-7 text-slate-300 mx-auto mb-2" />
+                <p class="text-[12px] text-slate-400">Nenhuma notificação</p>
               </div>
-              <div v-else class="divide-y divide-white/5">
-                <div v-for="notification in notifications" :key="notification.id" @click="markAsRead(notification.id)" :class="['px-4 py-3 cursor-pointer transition-colors hover:bg-white/4', !notification.read ? 'bg-white/3' : '']">
+              <div v-else class="divide-y divide-slate-100">
+                <div v-for="notification in notifications" :key="notification.id" @click="markAsRead(notification.id)" :class="['px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50', !notification.read ? 'bg-indigo-50/50' : '']">
                   <div class="flex items-start gap-3">
-                    <div :class="['w-7 h-7 rounded-lg flex items-center justify-center shrink-0', notification.type === 'success' ? 'bg-green-500/15 text-green-400' : notification.type === 'share' ? 'bg-blue-500/15 text-blue-400' : 'bg-indigo-500/15 text-indigo-400']">
+                    <div :class="['w-7 h-7 rounded-lg flex items-center justify-center shrink-0', notification.type === 'success' ? 'bg-green-50 text-green-500' : notification.type === 'share' ? 'bg-blue-50 text-blue-500' : 'bg-indigo-50 text-indigo-500']">
                       <Bell v-if="notification.type === 'share'" class="w-3.5 h-3.5" />
                       <Sparkles v-else class="w-3.5 h-3.5" />
                     </div>
                     <div class="flex-1 min-w-0">
-                      <p class="text-[12px] font-semibold text-white mb-0.5">{{ notification.title }}</p>
-                      <p class="text-[11px] text-zinc-500 line-clamp-2">{{ notification.message }}</p>
-                      <p class="text-[10px] text-zinc-700 mt-1">{{ formatDistanceToNow(notification.created_at) }}</p>
+                      <p class="text-[12px] font-semibold text-slate-700 mb-0.5">{{ notification.title }}</p>
+                      <p class="text-[11px] text-slate-500 line-clamp-2">{{ notification.message }}</p>
+                      <p class="text-[10px] text-slate-400 mt-1">{{ formatDistanceToNow(notification.created_at) }}</p>
                     </div>
-                    <div v-if="!notification.read" class="w-1.5 h-1.5 bg-indigo-400 rounded-full shrink-0 mt-1.5"></div>
+                    <div v-if="!notification.read" class="w-1.5 h-1.5 bg-indigo-500 rounded-full shrink-0 mt-1.5"></div>
                   </div>
                 </div>
               </div>
             </div>
-            <div class="px-4 py-3 border-t border-white/6">
-              <button @click="showNotifications = false" class="w-full text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors text-center">Fechar</button>
+            <div class="px-4 py-3 border-t border-slate-100">
+              <button @click="showNotifications = false" class="w-full text-[11px] text-slate-400 hover:text-slate-600 transition-colors text-center">Fechar</button>
             </div>
           </div>
         </div>
@@ -2129,9 +2122,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
           :key="toast.id"
           :class="[
             'px-4 py-3 rounded-xl text-[13px] font-medium shadow-2xl border pointer-events-auto max-w-xs backdrop-blur-xl',
-            toast.type === 'error' ? 'bg-red-950/90 border-red-500/25 text-red-200' :
-            toast.type === 'success' ? 'bg-green-950/90 border-green-500/25 text-green-200' :
-            'bg-[#161618]/95 border-white/9 text-white/80'
+            toast.type === 'error' ? 'bg-red-50 border-red-300 text-red-700' :
+            toast.type === 'success' ? 'bg-green-50 border-green-300 text-green-700' :
+            'bg-white border-slate-200 text-slate-700 shadow-lg'
           ]"
         >
           {{ toast.message }}
@@ -2144,19 +2137,16 @@ const handleDropOnRoot = async (event: DragEvent) => {
 <style scoped>
 /* ─── Root ───────────────────────────────────────────── */
 .dash-root {
-  background: #0c0c10;
-  background-image:
-    radial-gradient(ellipse 80% 50% at 15% 0%, rgba(99,102,241,0.07) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 40% at 85% 10%, rgba(139,92,246,0.04) 0%, transparent 50%);
+  background: #f8f9fb;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
 }
 
 /* ─── Top Bar ─────────────────────────────────────────── */
 .dash-topbar {
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  background: rgba(12,12,16,0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 /* ─── Layout ──────────────────────────────────────────── */
@@ -2166,82 +2156,85 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 /* ─── Sidebar ─────────────────────────────────────────── */
 .dash-sidebar {
-  border-right: 1px solid rgba(255,255,255,0.05);
-  background: rgba(10,10,14,0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  border-right: 1px solid rgba(0,0,0,0.07);
+  background: #ffffff;
 }
 
 .sidebar-section-label {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(113,113,122,0.7);
+  color: #94a3b8;
   display: block;
 }
 
 .sidebar-divider {
   height: 1px;
-  background: rgba(255,255,255,0.05);
+  background: rgba(0,0,0,0.06);
 }
 
 /* ─── Nav Items ───────────────────────────────────────── */
 .dash-nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 8px;
-  font-size: 12px;
+  gap: 10px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 13px;
   font-weight: 500;
-  color: rgba(161,161,170,0.7);
+  color: #475569;
   transition: all 0.15s ease;
   border: 1px solid transparent;
-  margin-bottom: 1px;
+  margin-bottom: 2px;
   background: transparent;
 }
 
 .dash-nav-item:hover {
-  color: rgba(255,255,255,0.85);
-  background: rgba(255,255,255,0.05);
+  color: #1e293b;
+  background: rgba(0,0,0,0.04);
 }
 
 .dash-nav-item.active {
-  color: rgba(255,255,255,0.92);
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.1);
+  color: #4338ca;
+  font-weight: 600;
+  background: rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.12);
 }
 
 .dash-nav-item.active.starred {
-  color: #fbbf24;
-  background: rgba(251,191,36,0.08);
-  border-color: rgba(251,191,36,0.15);
+  color: #d97706;
+  font-weight: 600;
+  background: rgba(251,191,36,0.1);
+  border-color: rgba(251,191,36,0.18);
 }
 
 .dash-nav-item.signout {
-  color: rgba(113,113,122,0.6);
+  color: #94a3b8;
 }
 
 .dash-nav-item.signout:hover {
-  color: #f87171;
-  background: rgba(239,68,68,0.07);
+  color: #ef4444;
+  background: rgba(239,68,68,0.06);
 }
 
 .nav-count {
-  font-size: 10px;
-  font-weight: 500;
-  color: rgba(113,113,122,0.5);
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, 'SF Mono', monospace;
-  min-width: 14px;
+  min-width: 16px;
   text-align: right;
+  background: rgba(0,0,0,0.04);
+  padding: 1px 6px;
+  border-radius: 6px;
 }
 
 /* ─── Main ────────────────────────────────────────────── */
 .dash-main {
-  background: rgba(12,12,16,0.4);
+  background: #f8f9fb;
 }
 
 /* ─── Page Title ──────────────────────────────────────── */
@@ -2251,42 +2244,44 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 /* ─── CTA Button ──────────────────────────────────────── */
 .dash-cta {
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  background: #4f46e5;
   color: white;
-  border: 1px solid rgba(99,102,241,0.3);
-  box-shadow: 0 4px 14px rgba(99,102,241,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+  border: none;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.25);
 }
 
 .dash-cta:hover {
-  background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
-  box-shadow: 0 6px 20px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+  background: #4338ca;
+  box-shadow: 0 8px 24px rgba(99,102,241,0.35);
   transform: translateY(-1px);
 }
 
 /* ─── Tabs ────────────────────────────────────────────── */
 .dash-tabs {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(0,0,0,0.03);
+  border: 1px solid rgba(0,0,0,0.07);
 }
 
 .dash-tab {
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 500;
-  color: rgba(113,113,122,0.8);
+  color: #64748b;
   transition: all 0.15s ease;
   border: 1px solid transparent;
 }
 
 .dash-tab:hover {
-  color: rgba(255,255,255,0.8);
+  color: #1e293b;
 }
 
 .dash-tab.active {
-  background: rgba(255,255,255,0.09);
-  color: white;
-  border-color: rgba(255,255,255,0.1);
+  background: #ffffff;
+  color: #1e293b;
+  border-color: rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  font-weight: 600;
 }
 
 /* ─── Section Labels ──────────────────────────────────── */
@@ -2295,57 +2290,61 @@ const handleDropOnRoot = async (event: DragEvent) => {
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(113,113,122,0.6);
+  color: #94a3b8;
 }
 
 /* ─── Folder Cards ────────────────────────────────────── */
 .dash-folder-card {
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.025);
-  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.07);
+  background: #ffffff;
+  padding: 14px 16px;
   transition: all 0.15s ease;
 }
 
 .dash-folder-card:hover {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.1);
+  background: #ffffff;
+  border-color: rgba(99,102,241,0.3);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  transform: translateY(-1px);
 }
 
 .dash-folder-card.active {
   border-color: rgba(99,102,241,0.4);
-  background: rgba(99,102,241,0.07);
+  background: rgba(99,102,241,0.04);
 }
 
 /* ─── Project Cards ───────────────────────────────────── */
 .dash-project-card {
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.025);
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.07);
+  background: #ffffff;
+  overflow: hidden;
 }
 
 .dash-project-card:hover {
-  border-color: rgba(255,255,255,0.11);
-  background: rgba(255,255,255,0.04);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  border-color: rgba(99,102,241,0.3);
+  background: #ffffff;
+  transform: translateY(-3px);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.08), 0 0 0 1px rgba(99,102,241,0.08);
 }
 
 .dash-card-info {
-  border-top: 1px solid rgba(255,255,255,0.05);
-  background: rgba(255,255,255,0.015);
-  border-radius: 0 0 10px 10px;
+  border-top: 1px solid rgba(0,0,0,0.05);
+  background: #ffffff;
+  border-radius: 0 0 14px 14px;
 }
 
 .dash-project-list-item {
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.05);
-  background: rgba(255,255,255,0.02);
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.07);
+  background: #ffffff;
 }
 
 .dash-project-list-item:hover {
-  border-color: rgba(255,255,255,0.09);
-  background: rgba(255,255,255,0.04);
+  border-color: rgba(99,102,241,0.3);
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
 /* ─── Context Menus ───────────────────────────────────── */
@@ -2356,43 +2355,43 @@ const handleDropOnRoot = async (event: DragEvent) => {
   padding: 7px 12px;
   font-size: 12px;
   font-weight: 500;
-  color: rgba(228,228,231,0.85);
+  color: #374151;
   transition: all 0.1s ease;
   text-align: left;
 }
 
 .ctx-menu-item:hover {
-  background: rgba(255,255,255,0.07);
-  color: white;
+  background: rgba(0,0,0,0.05);
+  color: #111827;
 }
 
 .ctx-menu-item.danger {
-  color: rgba(248,113,113,0.85);
+  color: #dc2626;
 }
 
 .ctx-menu-item.danger:hover {
-  background: rgba(239,68,68,0.1);
-  color: #fca5a5;
+  background: rgba(239,68,68,0.08);
+  color: #b91c1c;
 }
 
 /* ─── Modals ──────────────────────────────────────────── */
 .dash-modal {
-  background: #161618;
-  border: 1px solid rgba(255,255,255,0.09);
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.1);
   border-radius: 16px;
   padding: 24px;
-  box-shadow: 0 25px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+  box-shadow: 0 25px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04);
 }
 
 .dash-modal-input {
   width: 100%;
   height: 40px;
   padding: 0 12px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.09);
+  background: #f8f9fb;
+  border: 1px solid rgba(0,0,0,0.12);
   border-radius: 8px;
   font-size: 13px;
-  color: white;
+  color: #1e293b;
   outline: none;
   transition: all 0.15s ease;
   display: block;
@@ -2400,18 +2399,18 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 .dash-modal-input:focus {
   border-color: rgba(99,102,241,0.5);
-  background: rgba(255,255,255,0.07);
+  background: #ffffff;
 }
 
 .dash-modal-input::placeholder {
-  color: rgba(113,113,122,0.6);
+  color: #94a3b8;
 }
 
 .dash-modal-btn-cancel {
   height: 38px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
-  color: rgba(228,228,231,0.7);
+  background: #f1f5f9;
+  border: 1px solid rgba(0,0,0,0.1);
+  color: #475569;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
@@ -2419,8 +2418,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
 }
 
 .dash-modal-btn-cancel:hover {
-  background: rgba(255,255,255,0.09);
-  color: white;
+  background: #e2e8f0;
+  color: #1e293b;
 }
 
 .dash-modal-btn-confirm {
@@ -2453,8 +2452,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
 /* ─── Scrollbar ───────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.18); }
 
 /* ─── Focus ───────────────────────────────────────────── */
 button:focus-visible,

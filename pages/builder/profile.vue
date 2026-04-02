@@ -322,21 +322,21 @@ onMounted(() => {
   <div class="max-w-3xl mx-auto px-4 py-8">
     <!-- Header -->
     <div class="mb-6">
-      <h1 class="text-2xl font-bold text-white tracking-tight">Minha Empresa</h1>
-      <p class="text-sm text-zinc-500 mt-1">Dados e configuracoes padrao para seus encartes</p>
+      <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Minha Empresa</h1>
+      <p class="text-sm text-slate-400 mt-1">Dados e configuracoes padrao para seus encartes</p>
     </div>
 
     <!-- Sync explanation -->
-    <div class="mb-6 p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
+    <div class="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
       <div class="flex items-start gap-3">
-        <RefreshCw class="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+        <RefreshCw class="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
         <div>
-          <p class="text-sm text-zinc-300 leading-relaxed">
+          <p class="text-sm text-slate-600 leading-relaxed">
             Tudo que voce configurar aqui sera o padrao para novos encartes.
             Nome, logo, telefone, redes sociais, formas de pagamento e layout do rodape
             — tudo ja vem preenchido automaticamente.
           </p>
-          <p class="text-xs text-zinc-500 mt-1.5">
+          <p class="text-xs text-slate-400 mt-1.5">
             Voce ainda pode personalizar cada encarte individualmente na aba "Empresa" do editor.
           </p>
         </div>
@@ -345,9 +345,9 @@ onMounted(() => {
 
     <!-- Loading State -->
     <div v-if="isLoading" class="space-y-6">
-      <div v-for="i in 4" :key="i" class="bg-[#18181b]/80 border border-white/5 rounded-xl p-6 animate-pulse">
-        <div class="h-4 bg-white/5 rounded w-24 mb-4"></div>
-        <div class="h-12 bg-white/5 rounded-xl"></div>
+      <div v-for="i in 4" :key="i" class="bg-white border border-slate-200 rounded-xl p-6 animate-pulse">
+        <div class="h-4 bg-slate-100 rounded w-24 mb-4"></div>
+        <div class="h-12 bg-slate-100 rounded-xl"></div>
       </div>
     </div>
 
@@ -362,64 +362,64 @@ onMounted(() => {
         leave-from-class="opacity-100 translate-y-0"
         leave-to-class="opacity-0 -translate-y-2"
       >
-        <div v-if="showSuccess" class="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl backdrop-blur-sm">
+        <div v-if="showSuccess" class="p-4 bg-emerald-50 border border-emerald-200 rounded-xl backdrop-blur-sm">
           <div class="flex items-center gap-3">
             <div class="shrink-0 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
               <Check class="w-3.5 h-3.5 text-white" />
             </div>
-            <p class="text-sm font-medium text-emerald-400">Salvo! Novos encartes ja usarao essas configuracoes.</p>
+            <p class="text-sm font-medium text-emerald-600">Salvo! Novos encartes ja usarao essas configuracoes.</p>
           </div>
         </div>
       </Transition>
 
       <!-- Error Message -->
-      <div v-if="errorMessage" class="p-4 bg-red-500/10 border border-red-500/20 rounded-xl backdrop-blur-sm">
-        <p class="text-sm text-red-400">{{ errorMessage }}</p>
+      <div v-if="errorMessage" class="p-4 bg-red-50 border border-red-200 rounded-xl backdrop-blur-sm">
+        <p class="text-sm text-red-600">{{ errorMessage }}</p>
       </div>
 
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
       <!-- LOGO E IDENTIDADE                                                       -->
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
-      <div class="bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden">
+      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <button
           type="button"
           @click="toggleSection('identity')"
-          class="w-full flex items-center justify-between p-5 hover:bg-white/2 transition-colors"
+          class="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors"
         >
           <div class="flex items-center gap-3">
-            <Building2 class="w-4 h-4 text-emerald-400" />
-            <h2 class="text-sm font-semibold text-white">Logo e Identidade</h2>
+            <Building2 class="w-4 h-4 text-emerald-600" />
+            <h2 class="text-sm font-semibold text-slate-800">Logo e Identidade</h2>
           </div>
-          <ChevronDown class="w-4 h-4 text-zinc-500 transition-transform" :class="openSections.identity ? 'rotate-180' : ''" />
+          <ChevronDown class="w-4 h-4 text-slate-400 transition-transform" :class="openSections.identity ? 'rotate-180' : ''" />
         </button>
 
-        <div v-show="openSections.identity" class="px-5 pb-5 space-y-5 border-t border-white/5">
+        <div v-show="openSections.identity" class="px-5 pb-5 space-y-5 border-t border-slate-200">
           <!-- Logo -->
           <div class="flex items-start gap-5 pt-5">
             <div
               @click="triggerFileInput"
-              class="relative w-20 h-20 bg-[#09090b]/50 border-2 border-dashed border-white/10 rounded-xl flex items-center justify-center cursor-pointer hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group overflow-hidden shrink-0"
+              class="relative w-20 h-20 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50 transition-all group overflow-hidden shrink-0"
             >
               <img v-if="logoPreviewUrl" :src="logoPreviewUrl" alt="Logo" class="w-full h-full object-contain rounded-xl" />
-              <div v-else class="text-zinc-600 group-hover:text-emerald-400 transition-colors">
+              <div v-else class="text-slate-400 group-hover:text-emerald-600 transition-colors">
                 <Image class="w-7 h-7" />
               </div>
-              <div class="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
+              <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
                 <Camera class="w-4 h-4 text-white" />
               </div>
-              <div v-if="isUploading" class="absolute inset-0 bg-black/60 flex items-center justify-center rounded-xl">
-                <Loader2 class="w-5 h-5 text-emerald-400 animate-spin" />
+              <div v-if="isUploading" class="absolute inset-0 bg-black/40 flex items-center justify-center rounded-xl">
+                <Loader2 class="w-5 h-5 text-emerald-600 animate-spin" />
               </div>
             </div>
 
             <div class="flex-1">
-              <p class="text-sm text-zinc-300 mb-0.5">Logo da empresa</p>
-              <p class="text-xs text-zinc-600 mb-2">PNG ou JPG, fundo transparente recomendado</p>
+              <p class="text-sm text-slate-600 mb-0.5">Logo da empresa</p>
+              <p class="text-xs text-slate-400 mb-2">PNG ou JPG, fundo transparente recomendado</p>
               <button
                 type="button"
                 @click="triggerFileInput"
                 :disabled="isUploading"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-zinc-300 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors disabled:opacity-50"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors disabled:opacity-50"
               >
                 <Upload class="w-3 h-3" />
                 {{ isUploading ? 'Enviando...' : (logoPreviewUrl ? 'Trocar' : 'Enviar') }}
@@ -430,29 +430,29 @@ onMounted(() => {
           </div>
 
           <!-- Logo position & size -->
-          <div v-if="logoPreviewUrl" class="bg-[#09090b]/30 rounded-lg p-3 space-y-3">
-            <p class="text-[10px] text-zinc-500 font-medium">Posicao e tamanho da logo na capa</p>
+          <div v-if="logoPreviewUrl" class="bg-slate-100 rounded-lg p-3 space-y-3">
+            <p class="text-[10px] text-slate-400 font-medium">Posicao e tamanho da logo na capa</p>
             <!-- Size -->
             <label class="block">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-[10px] text-zinc-500">Tamanho</span>
-                <span class="text-[10px] text-zinc-400 tabular-nums">{{ defaults.logo_size }}px</span>
+                <span class="text-[10px] text-slate-400">Tamanho</span>
+                <span class="text-[10px] text-slate-500 tabular-nums">{{ defaults.logo_size }}px</span>
               </div>
               <input type="range" min="30" max="400" step="5" v-model.number="defaults.logo_size" class="w-full accent-emerald-500 h-1" />
             </label>
             <!-- X position -->
             <label class="block">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-[10px] text-zinc-500">Horizontal</span>
-                <span class="text-[10px] text-zinc-400 tabular-nums">{{ defaults.logo_x }}%</span>
+                <span class="text-[10px] text-slate-400">Horizontal</span>
+                <span class="text-[10px] text-slate-500 tabular-nums">{{ defaults.logo_x }}%</span>
               </div>
               <input type="range" min="0" max="100" step="1" v-model.number="defaults.logo_x" class="w-full accent-emerald-500 h-1" />
             </label>
             <!-- Y position -->
             <label class="block">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-[10px] text-zinc-500">Vertical</span>
-                <span class="text-[10px] text-zinc-400 tabular-nums">{{ defaults.logo_y }}%</span>
+                <span class="text-[10px] text-slate-400">Vertical</span>
+                <span class="text-[10px] text-slate-500 tabular-nums">{{ defaults.logo_y }}%</span>
               </div>
               <input type="range" min="0" max="100" step="1" v-model.number="defaults.logo_y" class="w-full accent-emerald-500 h-1" />
             </label>
@@ -473,8 +473,8 @@ onMounted(() => {
                 :key="pos.label"
                 type="button"
                 @click="defaults.logo_x = pos.x; defaults.logo_y = pos.y"
-                class="w-full h-7 rounded bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white text-[11px] transition-colors flex items-center justify-center"
-                :class="defaults.logo_x === pos.x && defaults.logo_y === pos.y ? 'ring-1 ring-emerald-500/50 bg-emerald-500/10 text-emerald-400' : ''"
+                class="w-full h-7 rounded bg-slate-100 hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-[11px] transition-colors flex items-center justify-center"
+                :class="defaults.logo_x === pos.x && defaults.logo_y === pos.y ? 'ring-1 ring-emerald-400 bg-emerald-50 text-emerald-600' : ''"
               >
                 {{ pos.label }}
               </button>
@@ -483,44 +483,44 @@ onMounted(() => {
 
           <!-- Name -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-name">
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-name">
               Nome da empresa *
             </label>
             <div class="relative group">
-              <Building2 class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+              <Building2 class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
               <input
                 id="profile-name" v-model="form.name" type="text" placeholder="Supermercado Exemplo" required
-                class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
               />
             </div>
           </div>
 
           <!-- Slogan -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-slogan">Slogan</label>
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-slogan">Slogan</label>
             <div class="relative group">
-              <Tag class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+              <Tag class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
               <input
                 id="profile-slogan" v-model="form.slogan" type="text" placeholder="O melhor preco da regiao"
-                class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
               />
             </div>
           </div>
 
           <!-- Segment -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-segment">Segmento</label>
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-segment">Segmento</label>
             <div class="relative group">
-              <Tag class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400 pointer-events-none" />
+              <Tag class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600 pointer-events-none" />
               <select
                 id="profile-segment" v-model="form.segment1"
-                class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all appearance-none cursor-pointer"
+                class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all appearance-none cursor-pointer"
               >
-                <option value="" class="bg-[#09090b] text-zinc-400">Selecione um segmento</option>
-                <option v-for="opt in segmentOptions" :key="opt" :value="opt" class="bg-[#09090b] text-white">{{ opt }}</option>
+                <option value="" class="bg-white text-slate-400">Selecione um segmento</option>
+                <option v-for="opt in segmentOptions" :key="opt" :value="opt" class="bg-white text-slate-800">{{ opt }}</option>
               </select>
               <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                <svg class="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
@@ -532,42 +532,42 @@ onMounted(() => {
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
       <!-- CONTATO                                                                 -->
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
-      <div class="bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden">
-        <button type="button" @click="toggleSection('contact')" class="w-full flex items-center justify-between p-5 hover:bg-white/2 transition-colors">
+      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <button type="button" @click="toggleSection('contact')" class="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
           <div class="flex items-center gap-3">
-            <Phone class="w-4 h-4 text-emerald-400" />
-            <h2 class="text-sm font-semibold text-white">Contato</h2>
+            <Phone class="w-4 h-4 text-emerald-600" />
+            <h2 class="text-sm font-semibold text-slate-800">Contato</h2>
           </div>
-          <ChevronDown class="w-4 h-4 text-zinc-500 transition-transform" :class="openSections.contact ? 'rotate-180' : ''" />
+          <ChevronDown class="w-4 h-4 text-slate-400 transition-transform" :class="openSections.contact ? 'rotate-180' : ''" />
         </button>
 
-        <div v-show="openSections.contact" class="px-5 pb-5 space-y-4 border-t border-white/5 pt-5">
+        <div v-show="openSections.contact" class="px-5 pb-5 space-y-4 border-t border-slate-200 pt-5">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
-              <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-phone">Telefone</label>
+              <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-phone">Telefone</label>
               <div class="relative group">
-                <Phone class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+                <Phone class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
                 <input id="profile-phone" v-model="form.phone" type="tel" placeholder="(11) 3333-4444"
-                  class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                  class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
                 />
               </div>
             </div>
             <div class="flex flex-col gap-1.5">
-              <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-phone2">Telefone 2</label>
+              <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-phone2">Telefone 2</label>
               <div class="relative group">
-                <Phone class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+                <Phone class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
                 <input id="profile-phone2" v-model="form.phone2" type="tel" placeholder="(11) 4444-5555"
-                  class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                  class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
                 />
               </div>
             </div>
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-whatsapp">WhatsApp</label>
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-whatsapp">WhatsApp</label>
             <div class="relative group">
-              <MessageCircle class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+              <MessageCircle class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
               <input id="profile-whatsapp" v-model="form.whatsapp" type="tel" placeholder="(11) 99999-9999"
-                class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
               />
             </div>
           </div>
@@ -577,31 +577,31 @@ onMounted(() => {
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
       <!-- ENDERECO                                                                -->
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
-      <div class="bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden">
-        <button type="button" @click="toggleSection('address')" class="w-full flex items-center justify-between p-5 hover:bg-white/2 transition-colors">
+      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <button type="button" @click="toggleSection('address')" class="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
           <div class="flex items-center gap-3">
-            <MapPin class="w-4 h-4 text-emerald-400" />
-            <h2 class="text-sm font-semibold text-white">Endereco</h2>
+            <MapPin class="w-4 h-4 text-emerald-600" />
+            <h2 class="text-sm font-semibold text-slate-800">Endereco</h2>
           </div>
-          <ChevronDown class="w-4 h-4 text-zinc-500 transition-transform" :class="openSections.address ? 'rotate-180' : ''" />
+          <ChevronDown class="w-4 h-4 text-slate-400 transition-transform" :class="openSections.address ? 'rotate-180' : ''" />
         </button>
 
-        <div v-show="openSections.address" class="px-5 pb-5 space-y-4 border-t border-white/5 pt-5">
+        <div v-show="openSections.address" class="px-5 pb-5 space-y-4 border-t border-slate-200 pt-5">
           <div class="flex flex-col gap-1.5">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-address">Endereco completo</label>
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-address">Endereco completo</label>
             <div class="relative group">
-              <MapPin class="absolute left-4 top-3.5 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+              <MapPin class="absolute left-4 top-3.5 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
               <textarea id="profile-address" v-model="form.address" rows="2" placeholder="Rua Exemplo, 123 - Centro, Sao Paulo - SP"
-                class="w-full pl-11 pr-4 py-3 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all resize-none"
+                class="w-full pl-11 pr-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all resize-none"
               ></textarea>
             </div>
           </div>
           <div class="flex flex-col gap-1.5 max-w-xs">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-cep">CEP</label>
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-cep">CEP</label>
             <div class="relative group">
-              <Hash class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+              <Hash class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
               <input id="profile-cep" v-model="form.cep" type="text" placeholder="01001-000" maxlength="9"
-                class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
               />
             </div>
           </div>
@@ -611,40 +611,40 @@ onMounted(() => {
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
       <!-- REDES SOCIAIS                                                           -->
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
-      <div class="bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden">
-        <button type="button" @click="toggleSection('social')" class="w-full flex items-center justify-between p-5 hover:bg-white/2 transition-colors">
+      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <button type="button" @click="toggleSection('social')" class="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
           <div class="flex items-center gap-3">
-            <Instagram class="w-4 h-4 text-emerald-400" />
-            <h2 class="text-sm font-semibold text-white">Redes Sociais e Site</h2>
+            <Instagram class="w-4 h-4 text-emerald-600" />
+            <h2 class="text-sm font-semibold text-slate-800">Redes Sociais e Site</h2>
           </div>
-          <ChevronDown class="w-4 h-4 text-zinc-500 transition-transform" :class="openSections.social ? 'rotate-180' : ''" />
+          <ChevronDown class="w-4 h-4 text-slate-400 transition-transform" :class="openSections.social ? 'rotate-180' : ''" />
         </button>
 
-        <div v-show="openSections.social" class="px-5 pb-5 space-y-4 border-t border-white/5 pt-5">
+        <div v-show="openSections.social" class="px-5 pb-5 space-y-4 border-t border-slate-200 pt-5">
           <div class="flex flex-col gap-1.5">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-instagram">Instagram</label>
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-instagram">Instagram</label>
             <div class="relative group">
-              <Instagram class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+              <Instagram class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
               <input id="profile-instagram" v-model="form.instagram" type="text" placeholder="@suaempresa"
-                class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
               />
             </div>
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-facebook">Facebook</label>
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-facebook">Facebook</label>
             <div class="relative group">
-              <Facebook class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+              <Facebook class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
               <input id="profile-facebook" v-model="form.facebook" type="text" placeholder="facebook.com/suaempresa"
-                class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
               />
             </div>
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-website">Website</label>
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-website">Website</label>
             <div class="relative group">
-              <Globe class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+              <Globe class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
               <input id="profile-website" v-model="form.website" type="url" placeholder="https://www.suaempresa.com.br"
-                class="w-full h-11 pl-11 pr-4 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                class="w-full h-11 pl-11 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
               />
             </div>
           </div>
@@ -654,30 +654,30 @@ onMounted(() => {
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
       <!-- PAGAMENTO                                                               -->
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
-      <div class="bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden">
-        <button type="button" @click="toggleSection('payment')" class="w-full flex items-center justify-between p-5 hover:bg-white/2 transition-colors">
+      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <button type="button" @click="toggleSection('payment')" class="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
           <div class="flex items-center gap-3">
-            <CreditCard class="w-4 h-4 text-emerald-400" />
-            <h2 class="text-sm font-semibold text-white">Pagamento</h2>
+            <CreditCard class="w-4 h-4 text-emerald-600" />
+            <h2 class="text-sm font-semibold text-slate-800">Pagamento</h2>
           </div>
-          <ChevronDown class="w-4 h-4 text-zinc-500 transition-transform" :class="openSections.payment ? 'rotate-180' : ''" />
+          <ChevronDown class="w-4 h-4 text-slate-400 transition-transform" :class="openSections.payment ? 'rotate-180' : ''" />
         </button>
 
-        <div v-show="openSections.payment" class="px-5 pb-5 space-y-4 border-t border-white/5 pt-5">
+        <div v-show="openSections.payment" class="px-5 pb-5 space-y-4 border-t border-slate-200 pt-5">
           <!-- Payment notes -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1" for="profile-payment">Observacoes de pagamento</label>
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1" for="profile-payment">Observacoes de pagamento</label>
             <div class="relative group">
-              <CreditCard class="absolute left-4 top-3.5 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
+              <CreditCard class="absolute left-4 top-3.5 w-4 h-4 text-slate-400 transition-colors group-focus-within:text-emerald-600" />
               <textarea id="profile-payment" v-model="form.payment_notes" rows="2" placeholder="Aceitamos: Pix, Cartoes de Credito e Debito, Dinheiro..."
-                class="w-full pl-11 pr-4 py-3 bg-[#09090b]/50 hover:bg-[#09090b]/80 border border-white/5 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all resize-none"
+                class="w-full pl-11 pr-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all resize-none"
               ></textarea>
             </div>
           </div>
 
           <!-- Payment methods / bandeiras -->
           <div>
-            <p class="text-[11px] font-bold uppercase tracking-widest text-zinc-400 ml-1 mb-3">Bandeiras aceitas</p>
+            <p class="text-[11px] font-bold uppercase tracking-widest text-slate-500 ml-1 mb-3">Bandeiras aceitas</p>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               <button
                 v-for="pm in PAYMENT_OPTIONS"
@@ -685,19 +685,19 @@ onMounted(() => {
                 type="button"
                 @click="togglePayment(pm.id)"
                 class="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all text-left"
-                :class="isPaymentSelected(pm.id) ? 'bg-white/10 ring-1 ring-emerald-500/30' : 'bg-white/2 opacity-40 hover:opacity-70'"
+                :class="isPaymentSelected(pm.id) ? 'bg-slate-200 ring-1 ring-emerald-400' : 'bg-slate-50 opacity-40 hover:opacity-70'"
               >
                 <div class="w-3 h-3 rounded-sm flex items-center justify-center shrink-0"
-                  :class="isPaymentSelected(pm.id) ? 'bg-emerald-600' : 'bg-white/10'"
+                  :class="isPaymentSelected(pm.id) ? 'bg-emerald-600' : 'bg-slate-300'"
                 >
                   <Check v-if="isPaymentSelected(pm.id)" class="w-2 h-2 text-white" />
                 </div>
-                <span class="text-[11px] font-medium" :class="isPaymentSelected(pm.id) ? 'text-white' : 'text-zinc-400'">{{ pm.label }}</span>
+                <span class="text-[11px] font-medium" :class="isPaymentSelected(pm.id) ? 'text-slate-800' : 'text-slate-500'">{{ pm.label }}</span>
               </button>
             </div>
             <div class="flex gap-3 mt-2">
-              <button type="button" @click="defaults.payment_methods = PAYMENT_OPTIONS.map(p => p.id)" class="text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors">Selecionar todas</button>
-              <button type="button" @click="defaults.payment_methods = []" class="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors">Limpar</button>
+              <button type="button" @click="defaults.payment_methods = PAYMENT_OPTIONS.map(p => p.id)" class="text-[10px] text-emerald-600 hover:text-emerald-500 transition-colors">Selecionar todas</button>
+              <button type="button" @click="defaults.payment_methods = []" class="text-[10px] text-slate-400 hover:text-slate-600 transition-colors">Limpar</button>
             </div>
           </div>
         </div>
@@ -706,25 +706,25 @@ onMounted(() => {
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
       <!-- VISIBILIDADE NO ENCARTE                                                 -->
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
-      <div class="bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden">
-        <button type="button" @click="toggleSection('visibility')" class="w-full flex items-center justify-between p-5 hover:bg-white/2 transition-colors">
+      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <button type="button" @click="toggleSection('visibility')" class="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
           <div class="flex items-center gap-3">
-            <Eye class="w-4 h-4 text-emerald-400" />
-            <h2 class="text-sm font-semibold text-white">Visibilidade no Encarte</h2>
+            <Eye class="w-4 h-4 text-emerald-600" />
+            <h2 class="text-sm font-semibold text-slate-800">Visibilidade no Encarte</h2>
           </div>
-          <ChevronDown class="w-4 h-4 text-zinc-500 transition-transform" :class="openSections.visibility ? 'rotate-180' : ''" />
+          <ChevronDown class="w-4 h-4 text-slate-400 transition-transform" :class="openSections.visibility ? 'rotate-180' : ''" />
         </button>
 
-        <div v-show="openSections.visibility" class="px-5 pb-5 border-t border-white/5 pt-5">
-          <p class="text-[10px] text-zinc-500 mb-4">Escolha quais informacoes aparecem por padrao nos novos encartes</p>
+        <div v-show="openSections.visibility" class="px-5 pb-5 border-t border-slate-200 pt-5">
+          <p class="text-[10px] text-slate-400 mb-4">Escolha quais informacoes aparecem por padrao nos novos encartes</p>
 
           <!-- Capa -->
-          <p class="text-[10px] text-zinc-500 font-medium mb-2">Capa</p>
+          <p class="text-[10px] text-slate-400 font-medium mb-2">Capa</p>
           <div class="space-y-2 mb-5">
             <div class="flex items-center justify-between">
-              <span class="text-[12px] text-zinc-300">Mostrar Logo</span>
+              <span class="text-[12px] text-slate-600">Mostrar Logo</span>
               <button type="button" role="switch" :aria-checked="defaults.show_logo" @click="defaults.show_logo = !defaults.show_logo"
-                :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', defaults.show_logo ? 'bg-emerald-600' : 'bg-white/10']"
+                :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', defaults.show_logo ? 'bg-emerald-600' : 'bg-slate-300']"
               >
                 <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', defaults.show_logo ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
               </button>
@@ -732,7 +732,7 @@ onMounted(() => {
           </div>
 
           <!-- Rodape -->
-          <p class="text-[10px] text-zinc-500 font-medium mb-2">Rodape</p>
+          <p class="text-[10px] text-slate-400 font-medium mb-2">Rodape</p>
           <div class="space-y-2">
             <div v-for="opt in [
               { key: 'show_phone', label: 'Telefone' },
@@ -747,9 +747,9 @@ onMounted(() => {
               { key: 'show_facebook', label: 'Facebook' },
               { key: 'show_website', label: 'Website' },
             ]" :key="opt.key" class="flex items-center justify-between">
-              <span class="text-[12px] text-zinc-300">{{ opt.label }}</span>
+              <span class="text-[12px] text-slate-600">{{ opt.label }}</span>
               <button type="button" role="switch" :aria-checked="(defaults as any)[opt.key]" @click="(defaults as any)[opt.key] = !(defaults as any)[opt.key]"
-                :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', (defaults as any)[opt.key] ? 'bg-emerald-600' : 'bg-white/10']"
+                :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', (defaults as any)[opt.key] ? 'bg-emerald-600' : 'bg-slate-300']"
               >
                 <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', (defaults as any)[opt.key] ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
               </button>
@@ -761,19 +761,19 @@ onMounted(() => {
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
       <!-- LAYOUT DO RODAPE                                                        -->
       <!-- ═══════════════════════════════════════════════════════════════════════ -->
-      <div class="bg-[#18181b]/80 border border-white/5 rounded-xl overflow-hidden">
-        <button type="button" @click="toggleSection('footer')" class="w-full flex items-center justify-between p-5 hover:bg-white/2 transition-colors">
+      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <button type="button" @click="toggleSection('footer')" class="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
           <div class="flex items-center gap-3">
-            <CreditCard class="w-4 h-4 text-emerald-400" />
-            <h2 class="text-sm font-semibold text-white">Layout do Rodape</h2>
+            <CreditCard class="w-4 h-4 text-emerald-600" />
+            <h2 class="text-sm font-semibold text-slate-800">Layout do Rodape</h2>
           </div>
-          <ChevronDown class="w-4 h-4 text-zinc-500 transition-transform" :class="openSections.footer ? 'rotate-180' : ''" />
+          <ChevronDown class="w-4 h-4 text-slate-400 transition-transform" :class="openSections.footer ? 'rotate-180' : ''" />
         </button>
 
-        <div v-show="openSections.footer" class="px-5 pb-5 space-y-4 border-t border-white/5 pt-5">
+        <div v-show="openSections.footer" class="px-5 pb-5 space-y-4 border-t border-slate-200 pt-5">
           <!-- Footer layout presets -->
           <div>
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Estilo</p>
+            <p class="text-[10px] text-slate-400 font-medium mb-2">Estilo</p>
             <div class="grid grid-cols-2 gap-1.5">
               <button
                 v-for="fl in FOOTER_LAYOUTS"
@@ -782,37 +782,37 @@ onMounted(() => {
                 @click="defaults.footer_layout = fl.id"
                 class="flex flex-col items-start p-3 rounded-lg border transition-all text-left"
                 :class="(defaults.footer_layout || 'classico') === fl.id
-                  ? 'border-emerald-500/50 bg-emerald-600/10 ring-1 ring-emerald-500/20'
-                  : 'border-white/5 bg-white/2 hover:bg-white/5'"
+                  ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-200'
+                  : 'border-slate-200 bg-slate-50 hover:bg-slate-50'"
               >
-                <span class="text-[11px] font-semibold" :class="(defaults.footer_layout || 'classico') === fl.id ? 'text-emerald-400' : 'text-zinc-300'">{{ fl.label }}</span>
-                <span class="text-[9px] text-zinc-600">{{ fl.desc }}</span>
+                <span class="text-[11px] font-semibold" :class="(defaults.footer_layout || 'classico') === fl.id ? 'text-emerald-600' : 'text-slate-600'">{{ fl.label }}</span>
+                <span class="text-[9px] text-slate-400">{{ fl.desc }}</span>
               </button>
             </div>
           </div>
 
           <!-- Footer colors -->
           <div>
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Cores do Rodape</p>
+            <p class="text-[10px] text-slate-400 font-medium mb-2">Cores do Rodape</p>
             <div class="grid grid-cols-2 gap-3">
               <label class="block">
-                <span class="text-[10px] text-zinc-500 block mb-1">Fundo</span>
-                <input type="color" :value="defaults.footer_bg || '#1a1a1a'" @input="defaults.footer_bg = ($event.target as HTMLInputElement).value" class="w-full h-8 rounded-lg border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[10px] text-slate-400 block mb-1">Fundo</span>
+                <input type="color" :value="defaults.footer_bg || '#1a1a1a'" @input="defaults.footer_bg = ($event.target as HTMLInputElement).value" class="w-full h-8 rounded-lg border border-slate-200 cursor-pointer bg-transparent" />
               </label>
               <label class="block">
-                <span class="text-[10px] text-zinc-500 block mb-1">Texto</span>
-                <input type="color" :value="defaults.footer_text_color || '#ffffff'" @input="defaults.footer_text_color = ($event.target as HTMLInputElement).value" class="w-full h-8 rounded-lg border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[10px] text-slate-400 block mb-1">Texto</span>
+                <input type="color" :value="defaults.footer_text_color || '#ffffff'" @input="defaults.footer_text_color = ($event.target as HTMLInputElement).value" class="w-full h-8 rounded-lg border border-slate-200 cursor-pointer bg-transparent" />
               </label>
               <label class="block">
-                <span class="text-[10px] text-zinc-500 block mb-1">Primaria</span>
-                <input type="color" :value="defaults.footer_primary || '#e85d04'" @input="defaults.footer_primary = ($event.target as HTMLInputElement).value" class="w-full h-8 rounded-lg border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[10px] text-slate-400 block mb-1">Primaria</span>
+                <input type="color" :value="defaults.footer_primary || '#e85d04'" @input="defaults.footer_primary = ($event.target as HTMLInputElement).value" class="w-full h-8 rounded-lg border border-slate-200 cursor-pointer bg-transparent" />
               </label>
               <label class="block">
-                <span class="text-[10px] text-zinc-500 block mb-1">Secundaria</span>
-                <input type="color" :value="defaults.footer_secondary || '#f48c06'" @input="defaults.footer_secondary = ($event.target as HTMLInputElement).value" class="w-full h-8 rounded-lg border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[10px] text-slate-400 block mb-1">Secundaria</span>
+                <input type="color" :value="defaults.footer_secondary || '#f48c06'" @input="defaults.footer_secondary = ($event.target as HTMLInputElement).value" class="w-full h-8 rounded-lg border border-slate-200 cursor-pointer bg-transparent" />
               </label>
             </div>
-            <button type="button" @click="defaults.footer_bg = null; defaults.footer_primary = null; defaults.footer_secondary = null; defaults.footer_text_color = null" class="text-[10px] text-zinc-500 hover:text-zinc-300 mt-2 transition-colors">
+            <button type="button" @click="defaults.footer_bg = null; defaults.footer_primary = null; defaults.footer_secondary = null; defaults.footer_text_color = null" class="text-[10px] text-slate-400 hover:text-slate-600 mt-2 transition-colors">
               Resetar cores do tema
             </button>
           </div>

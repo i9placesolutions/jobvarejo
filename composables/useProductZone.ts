@@ -52,6 +52,14 @@ const historyStack = ref<string[]>([]);
 const historyIndex = ref(-1);
 const isHistoryAction = ref(false);
 
+const normalizeIncomingZoneState = (zone: any): ProductZone => {
+  return migrateProductZone(zone || {});
+};
+
+const normalizeIncomingGlobalStylesState = (styles: any): GlobalStyles => {
+  return { ...DEFAULT_GLOBAL_STYLES, ...(styles || {}) };
+};
+
 export const useProductZone = () => {
   // ==========================================================================
   // COMPUTED
@@ -192,7 +200,7 @@ export const useProductZone = () => {
     const migrated = migrateProduct(newProduct);
     
     // Calcular posição no grid
-    const { cols, itemWidth, itemHeight } = gridLayout.value;
+    const { cols, rows, itemWidth, itemHeight } = gridLayout.value;
     const position = calculateProductPosition(
       productZone.value,
       products.value.length,
@@ -206,8 +214,12 @@ export const useProductZone = () => {
     migrated.y = position.y;
     migrated.width = itemWidth;
     migrated.height = itemHeight;
-    migrated.colIndex = products.value.length % cols;
-    migrated.rowIndex = Math.floor(products.value.length / cols);
+    migrated.colIndex = productZone.value.layoutDirection === 'vertical'
+      ? Math.floor(products.value.length / Math.max(1, rows))
+      : (products.value.length % Math.max(1, cols));
+    migrated.rowIndex = productZone.value.layoutDirection === 'vertical'
+      ? (products.value.length % Math.max(1, rows))
+      : Math.floor(products.value.length / Math.max(1, cols));
     
     products.value.push(migrated);
     
@@ -233,7 +245,7 @@ export const useProductZone = () => {
     const newProducts: Product[] = [];
     const newSplashes: Splash[] = [];
     const totalCount = products.value.length + productList.length;
-    const { cols, itemWidth, itemHeight } = calculateGridLayout(
+    const { cols, rows, itemWidth, itemHeight } = calculateGridLayout(
       productZone.value,
       totalCount
     );
@@ -256,8 +268,12 @@ export const useProductZone = () => {
       migrated.y = position.y;
       migrated.width = itemWidth;
       migrated.height = itemHeight;
-      migrated.colIndex = totalIndex % cols;
-      migrated.rowIndex = Math.floor(totalIndex / cols);
+      migrated.colIndex = productZone.value.layoutDirection === 'vertical'
+        ? Math.floor(totalIndex / Math.max(1, rows))
+        : (totalIndex % Math.max(1, cols));
+      migrated.rowIndex = productZone.value.layoutDirection === 'vertical'
+        ? (totalIndex % Math.max(1, rows))
+        : Math.floor(totalIndex / Math.max(1, cols));
       
       newProducts.push(migrated);
       
@@ -356,7 +372,7 @@ export const useProductZone = () => {
   const recalculateLayout = () => {
     if (products.value.length === 0) return;
     
-    const { cols, itemWidth, itemHeight } = calculateGridLayout(
+    const { cols, rows, itemWidth, itemHeight } = calculateGridLayout(
       productZone.value,
       products.value.length
     );
@@ -378,8 +394,12 @@ export const useProductZone = () => {
       product.y = position.y;
       product.width = itemWidth;
       product.height = itemHeight;
-      product.colIndex = index % cols;
-      product.rowIndex = Math.floor(index / cols);
+      product.colIndex = productZone.value.layoutDirection === 'vertical'
+        ? Math.floor(index / Math.max(1, rows))
+        : (index % Math.max(1, cols));
+      product.rowIndex = productZone.value.layoutDirection === 'vertical'
+        ? (index % Math.max(1, rows))
+        : Math.floor(index / Math.max(1, cols));
     });
   };
 
@@ -398,19 +418,19 @@ export const useProductZone = () => {
     const nextGapV = Math.max(0, Number.isFinite(Number(preset.gapVertical)) ? Number(preset.gapVertical) : nextPadding);
 
     updateZone({
-      role: preset.role ?? productZone.value.role ?? DEFAULT_PRODUCT_ZONE.role ?? 'grid',
-      columns: preset.columns,
-      rows: preset.rows,
-      layoutDirection: preset.layoutDirection,
-      cardAspectRatio: preset.cardAspectRatio,
-      lastRowBehavior: preset.lastRowBehavior,
-      verticalAlign: preset.verticalAlign ?? productZone.value.verticalAlign ?? DEFAULT_PRODUCT_ZONE.verticalAlign ?? 'top',
+      role: preset.role ?? DEFAULT_PRODUCT_ZONE.role ?? 'grid',
+      columns: preset.columns ?? DEFAULT_PRODUCT_ZONE.columns ?? 0,
+      rows: preset.rows ?? DEFAULT_PRODUCT_ZONE.rows ?? 0,
+      layoutDirection: preset.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection ?? 'horizontal',
+      cardAspectRatio: preset.cardAspectRatio ?? DEFAULT_PRODUCT_ZONE.cardAspectRatio ?? 'fill',
+      lastRowBehavior: preset.lastRowBehavior ?? DEFAULT_PRODUCT_ZONE.lastRowBehavior ?? 'fill',
+      verticalAlign: preset.verticalAlign ?? DEFAULT_PRODUCT_ZONE.verticalAlign ?? 'stretch',
       padding: nextPadding,
       gapHorizontal: nextGapH,
       gapVertical: nextGapV,
-      highlightCount: preset.highlightCount ?? 0,
-      highlightPos: preset.highlightPos ?? 'first',
-      highlightHeight: preset.highlightHeight ?? 1.5
+      highlightCount: preset.highlightCount ?? DEFAULT_PRODUCT_ZONE.highlightCount ?? 0,
+      highlightPos: preset.highlightPos ?? DEFAULT_PRODUCT_ZONE.highlightPos ?? 'first',
+      highlightHeight: preset.highlightHeight ?? DEFAULT_PRODUCT_ZONE.highlightHeight ?? 1.5
     });
     
     recalculateLayout();
@@ -420,9 +440,11 @@ export const useProductZone = () => {
    * Sincroniza gaps com padding
    */
   const syncGapsWithPadding = (padding: number) => {
-    productZone.value.padding = padding;
-    productZone.value.gapHorizontal = padding;
-    productZone.value.gapVertical = padding;
+    updateZone({
+      padding,
+      gapHorizontal: padding,
+      gapVertical: padding
+    });
     recalculateLayout();
   };
 
@@ -500,10 +522,10 @@ export const useProductZone = () => {
 
   const applySerializedState = (serialized: string) => {
     const state = JSON.parse(serialized);
-    products.value = state.products;
-    splashes.value = state.splashes;
-    productZone.value = state.zone;
-    globalStyles.value = state.globalStyles;
+    products.value = Array.isArray(state?.products) ? state.products.map((p: any) => migrateProduct(p)) : [];
+    splashes.value = Array.isArray(state?.splashes) ? state.splashes : [];
+    productZone.value = normalizeIncomingZoneState(state?.zone);
+    globalStyles.value = normalizeIncomingGlobalStylesState(state?.globalStyles);
   };
 
   const serializeCurrentState = () => {

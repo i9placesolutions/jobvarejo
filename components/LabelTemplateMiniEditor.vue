@@ -3242,8 +3242,7 @@ const onAddImage = async (e: Event) => {
     
     const existingBgImage =
       findObjectByNameDeep(group, 'price_bg_image') ||
-      findObjectByNameDeep(group, 'splash_image') ||
-      findObjectByNameDeep(group, 'price_bg')
+      findObjectByNameDeep(group, 'splash_image')
     img.set({
       left: 0,
       top: 0,
@@ -3626,7 +3625,13 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => props.template?.id,
+  () => [
+    props.template?.id,
+    props.template?.updatedAt,
+    props.template?.createdAt,
+    (props.template as any)?.group?._customId,
+    Array.isArray((props.template as any)?.group?.objects) ? (props.template as any).group.objects.length : 0
+  ],
   async () => {
     if (!isReady.value) return
     await loadTemplate()

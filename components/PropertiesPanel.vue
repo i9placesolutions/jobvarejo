@@ -235,9 +235,9 @@ const getZoneSelectionFingerprint = (obj: any): string => {
     typeof obj?.gapHorizontal === 'number' ? obj.gapHorizontal : pad,
     typeof obj?.gapVertical === 'number' ? obj.gapVertical : pad,
     obj?.layoutDirection ?? 'horizontal',
-    obj?.cardAspectRatio ?? 'auto',
+    obj?.cardAspectRatio ?? 'fill',
     obj?.lastRowBehavior ?? 'fill',
-    obj?.verticalAlign ?? 'top',
+    obj?.verticalAlign ?? 'stretch',
     obj?.highlightCount ?? 0,
     obj?.highlightPos ?? 'first',
     obj?.highlightHeight ?? 1.5,
@@ -319,7 +319,7 @@ const currentZoneData = computed<ZoneInspectorData>(() => {
   const inspectorMeta = props.productZoneInspector || {}
 
   return {
-    name: String((obj as any).zoneName || inspectorMeta?.name || '').trim() || 'Zona de Produtos',
+    name: String((obj as any).zoneName || (obj as any).name || inspectorMeta?.name || '').trim() || 'Zona de Produtos',
     role: (obj as any).role ?? inspectorMeta?.role ?? 'grid',
     contentSource: (obj as any).contentSource ?? inspectorMeta?.contentSource ?? 'manual',
     contentStatus: (obj as any).contentStatus ?? inspectorMeta?.contentStatus ?? 'empty',
@@ -330,9 +330,9 @@ const currentZoneData = computed<ZoneInspectorData>(() => {
     gapHorizontal: typeof obj.gapHorizontal === 'number' ? obj.gapHorizontal : pad,
     gapVertical: typeof obj.gapVertical === 'number' ? obj.gapVertical : pad,
     layoutDirection: obj.layoutDirection ?? 'horizontal',
-    cardAspectRatio: obj.cardAspectRatio ?? 'auto',
+    cardAspectRatio: obj.cardAspectRatio ?? 'fill',
     lastRowBehavior: obj.lastRowBehavior ?? 'fill',
-    verticalAlign: obj.verticalAlign ?? 'top',
+    verticalAlign: obj.verticalAlign ?? 'stretch',
     highlightCount: obj.highlightCount ?? 0,
     highlightPos: obj.highlightPos ?? 'first',
     highlightHeight: obj.highlightHeight ?? 1.5,

@@ -156,7 +156,7 @@ export const buildZoneSelectionConfig = (active: any) => {
     gapHorizontal: typeof active?.gapHorizontal === 'number' ? active.gapHorizontal : pad,
     gapVertical: typeof active?.gapVertical === 'number' ? active.gapVertical : pad,
     layoutDirection: active?.layoutDirection || 'horizontal',
-    cardAspectRatio: active?.cardAspectRatio || 'auto',
+    cardAspectRatio: active?.cardAspectRatio || 'fill',
     lastRowBehavior: active?.lastRowBehavior || 'fill',
     verticalAlign: active?.verticalAlign || 'stretch',
     highlightCount: active?.highlightCount || 0,

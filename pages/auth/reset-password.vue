@@ -97,48 +97,47 @@ const handleResetPassword = async () => {
 
 <template>
   <div class="w-full">
-    <!-- Glass Card -->
     <div class="w-full">
-      <!-- Main Glass Card -->
+      <!-- Main Card -->
       <div class="glass-card">
         <!-- Logo & Header -->
         <div class="text-center mb-6">
-          <div class="inline-flex items-center justify-center w-14 h-14 bg-violet-500/20 backdrop-blur-sm rounded-xl mb-3 border border-violet-500/30 shadow-lg">
-            <Lock class="w-7 h-7 text-violet-400" />
+          <div class="inline-flex items-center justify-center w-14 h-14 bg-indigo-50 rounded-xl mb-3 border border-indigo-200">
+            <Lock class="w-7 h-7 text-indigo-500" />
           </div>
-          <h1 class="text-xl font-bold mb-1 text-white">Redefinir senha</h1>
-          <p class="text-sm text-zinc-400">
+          <h1 class="text-xl font-bold mb-1 text-slate-800">Redefinir senha</h1>
+          <p class="text-sm text-slate-400">
             Crie sua nova senha abaixo
           </p>
         </div>
 
         <!-- Success Message -->
-        <div v-if="successMessage" class="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg backdrop-blur-sm">
+        <div v-if="successMessage" class="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
           <div class="flex items-start gap-3">
             <div class="flex-shrink-0 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
               <Check class="w-3 h-3 text-white" />
             </div>
             <div>
-              <p class="text-sm text-green-400 font-medium">Sucesso!</p>
-              <p class="text-sm text-green-400">{{ successMessage }}</p>
+              <p class="text-sm text-green-700 font-medium">Sucesso!</p>
+              <p class="text-sm text-green-600">{{ successMessage }}</p>
             </div>
           </div>
         </div>
 
         <!-- Error Message -->
-        <div v-if="errorMessage" class="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg backdrop-blur-sm">
-          <p class="text-sm text-red-400 text-center">{{ errorMessage }}</p>
+        <div v-if="errorMessage" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p class="text-sm text-red-600 text-center">{{ errorMessage }}</p>
         </div>
 
         <!-- Reset Password Form -->
         <form @submit.prevent="handleResetPassword" class="space-y-4">
           <!-- Password Input -->
           <div class="form-group">
-            <label class="form-label text-zinc-300" for="password">
+            <label class="form-label text-slate-600" for="password">
               Nova senha
             </label>
             <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors peer-focus:text-indigo-500" />
               <input
                 id="password"
                 v-model="password"
@@ -146,13 +145,13 @@ const handleResetPassword = async () => {
                 autocomplete="new-password"
                 placeholder="••••••••"
                 class="input-field pl-12 pr-12"
-                :class="{ 'border-red-500': errorMessage }"
+                :class="{ 'border-red-400': errorMessage }"
                 required
               />
               <button
                 type="button"
                 @click="showPassword = !showPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
+                class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
                 tabindex="-1"
               >
                 <EyeOff v-if="showPassword" class="w-5 h-5" />
@@ -163,8 +162,8 @@ const handleResetPassword = async () => {
             <!-- Password Strength Indicator -->
             <div v-if="password" class="mt-2">
               <div class="flex items-center justify-between mb-1.5">
-                <span class="text-xs text-zinc-500">Força da senha</span>
-                <span class="text-xs font-medium" :class="passwordStrength <= 2 ? 'text-red-400' : passwordStrength <= 3 ? 'text-yellow-400' : 'text-green-400'">
+                <span class="text-xs text-slate-400">Força da senha</span>
+                <span class="text-xs font-medium" :class="passwordStrength <= 2 ? 'text-red-500' : passwordStrength <= 3 ? 'text-yellow-500' : 'text-green-500'">
                   {{ passwordStrengthLabel }}
                 </span>
               </div>
@@ -173,10 +172,10 @@ const handleResetPassword = async () => {
                   v-for="i in 5"
                   :key="i"
                   class="h-1 flex-1 rounded-full transition-colors duration-300"
-                  :class="i <= passwordStrength ? passwordStrengthColor : 'bg-zinc-700'"
+                  :class="i <= passwordStrength ? passwordStrengthColor : 'bg-slate-200'"
                 ></div>
               </div>
-              <p class="text-xs text-zinc-500 mt-2">
+              <p class="text-xs text-slate-400 mt-2">
                 Mínimo 8 caracteres. Recomendado: maiúsculas, minúsculas, números e símbolos.
               </p>
             </div>
@@ -184,11 +183,11 @@ const handleResetPassword = async () => {
 
           <!-- Confirm Password Input -->
           <div class="form-group">
-            <label class="form-label text-zinc-300" for="confirmPassword">
+            <label class="form-label text-slate-600" for="confirmPassword">
               Confirmar nova senha
             </label>
             <div class="relative">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors peer-focus:text-violet-400" />
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors peer-focus:text-indigo-500" />
               <input
                 id="confirmPassword"
                 v-model="confirmPassword"
@@ -196,13 +195,13 @@ const handleResetPassword = async () => {
                 autocomplete="new-password"
                 placeholder="••••••••"
                 class="input-field pl-12 pr-12"
-                :class="{ 'border-red-500': errorMessage && confirmPassword !== password }"
+                :class="{ 'border-red-400': errorMessage && confirmPassword !== password }"
                 required
               />
               <button
                 type="button"
                 @click="showConfirmPassword = !showConfirmPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors p-1"
+                class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
                 tabindex="-1"
               >
                 <EyeOff v-if="showConfirmPassword" class="w-5 h-5" />
@@ -219,7 +218,7 @@ const handleResetPassword = async () => {
                 >
                   <Check v-if="password === confirmPassword" class="w-3 h-3 text-white" />
                 </div>
-                <span :class="password === confirmPassword ? 'text-green-400' : 'text-red-400'">
+                <span :class="password === confirmPassword ? 'text-green-600' : 'text-red-500'">
                   {{ password === confirmPassword ? 'As senhas coincidem' : 'As senhas não coincidem' }}
                 </span>
               </div>
@@ -244,7 +243,7 @@ const handleResetPassword = async () => {
         <div class="mt-6 text-center">
           <NuxtLink
             to="/auth/login"
-            class="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
+            class="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-700 transition-colors"
           >
             <ArrowLeft class="w-4 h-4" />
             Voltar para o login
@@ -256,14 +255,13 @@ const handleResetPassword = async () => {
 </template>
 
 <style scoped>
-/* Glassmorphism Card */
+/* Card */
 .glass-card {
-  background: rgba(30, 30, 30, 0.9);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 1.25rem;
   padding: 1.5rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.06);
   animation: cardEntry 0.5s ease-out;
 }
 
@@ -295,79 +293,65 @@ const handleResetPassword = async () => {
 .input-field {
   width: 100%;
   padding: 0.75rem 1rem;
-  background: rgba(44, 44, 44, 0.8);
-  backdrop-filter: blur(4px);
-  border: 1px solid #3f3f46;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 0.75rem;
-  color: white;
+  color: #1e293b;
   font-size: 0.875rem;
   transition: all 0.2s;
 }
 
 .input-field::placeholder {
-  color: #71717a;
+  color: #94a3b8;
 }
 
 .input-field:hover {
-  background: rgba(60, 60, 60, 0.8);
-  border-color: #52525b;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 .input-field:focus {
   outline: none;
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+  background: #ffffff;
 }
 
-.input-field.border-red-500 {
-  border-color: #ef4444;
+.input-field.border-red-400 {
+  border-color: #f87171;
 }
 
 /* Primary Button */
 .btn-primary {
   position: relative;
   padding: 0.875rem 1.5rem;
-  background: #7c3aed;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
   color: white;
   border-radius: 0.75rem;
   font-weight: 600;
-  box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.2);
   transition: all 0.2s;
   overflow: hidden;
 }
 
 .btn-primary:hover {
-  box-shadow: 0 20px 25px -5px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.25);
   transform: translateY(-2px);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.2);
+  box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.15);
 }
 
 .btn-primary:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.5), 0 0 0 4px rgba(124, 58, 237, 0.2);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4), 0 0 0 4px rgba(99, 102, 241, 0.15);
 }
 
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: translateY(0);
-}
-
-.btn-primary::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0.2), transparent);
-  border-radius: 0.75rem;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.btn-primary:hover::before {
-  opacity: 1;
 }
 </style>

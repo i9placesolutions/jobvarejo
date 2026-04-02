@@ -859,10 +859,17 @@ const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
 const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
 const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
 const BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID = 'tpl_oferta_amarela'
+const BUILTIN_LABEL_TEMPLATE_IDS = new Set([
+    BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
+    BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
+    BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID,
+    BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
+    BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID
+])
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const BUILTIN_RED_BURST_SEED_VERSION = 2
 const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
-const LABEL_TEMPLATE_EXTRA_PROPS = ['name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors']
+const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors']
 const MANUAL_TEMPLATE_STABLE_PROPS = ['__manualTemplateBaseW', '__manualTemplateBaseH'] as const;
 const MANUAL_TEMPLATE_DERIVED_PROPS = ['__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors'] as const;
 const autoHealedLabelTemplateIds = new Set<string>()
@@ -872,23 +879,33 @@ const getLabelTemplateTimestamp = (tpl: any): number => {
     return Number.isFinite(ts) ? ts : Number.NaN;
 };
 
+const isBuiltInLabelTemplateId = (value: any): boolean => {
+    const id = String(value || '').trim()
+    return !!id && BUILTIN_LABEL_TEMPLATE_IDS.has(id)
+}
+
 const normalizeLabelTemplateGroupAsManual = (group: any) => {
     if (!group || typeof group !== 'object') return group;
     sanitizeRedBurstTemplateGroupJson(group);
-    (group as any).__preserveManualLayout = true;
-    (group as any).__isCustomTemplate = true;
-    if ((group as any).__forceAtacarejoCanonical === true) {
+    if (typeof (group as any).__forceAtacarejoCanonical !== 'boolean') {
         (group as any).__forceAtacarejoCanonical = false;
+    }
+    if (typeof (group as any).__preserveManualLayout !== 'boolean') {
+        (group as any).__preserveManualLayout = (group as any).__forceAtacarejoCanonical !== true;
+    }
+    if (typeof (group as any).__isCustomTemplate !== 'boolean') {
+        (group as any).__isCustomTemplate = (group as any).__preserveManualLayout === true;
     }
     return group;
 };
 
 const normalizeLabelTemplateRecordAsManual = (tpl: any) => {
     if (!tpl || typeof tpl !== 'object') return tpl;
+    const isBuiltIn = !!(tpl as any).isBuiltIn || isBuiltInLabelTemplateId((tpl as any).id);
     return {
         ...tpl,
         group: normalizeLabelTemplateGroupAsManual((tpl as any).group),
-        isBuiltIn: false
+        isBuiltIn
     } as any;
 };
 
@@ -924,7 +941,7 @@ const serializeLabelTemplatesForProject = () => {
                 ...normalized,
                 __fromDb: undefined,
                 __localOverride: undefined,
-                isBuiltIn: undefined,
+                isBuiltIn: normalized?.isBuiltIn === true ? true : undefined,
                 previewDataUrl: undefined
             };
         })
@@ -5670,6 +5687,34 @@ function sanitizeFabricJsonTreeForLoad(
     return { removed, fixedGroupTypes };
 }
 
+const PRICE_GROUP_TEXT_TYPES = new Set(['text', 'textbox', 'i-text']);
+
+const isTinyPlaceholderImageSrc = (src: string): boolean => {
+    const normalized = String(src || '').trim();
+    return /^data:image\//i.test(normalized) && normalized.length > 0 && normalized.length < 200;
+};
+
+const isPriceGroupTemplateImageNode = (node: any): boolean => {
+    return String(node?.type || '').toLowerCase() === 'image';
+};
+
+const isRenderablePriceGroupTemplateImageNode = (node: any): boolean => {
+    if (!isPriceGroupTemplateImageNode(node)) return false;
+    const src = String(node?.src || '').trim();
+    if (!src) return false;
+    if ((node as any)?.__srcStripped === true) return false;
+    if (isTinyPlaceholderImageSrc(src)) return false;
+    return true;
+};
+
+const isPriceGroupVisualShellNode = (node: any): boolean => {
+    if (!node || typeof node !== 'object') return false;
+    const type = String(node?.type || '').toLowerCase();
+    if (!type || PRICE_GROUP_TEXT_TYPES.has(type)) return false;
+    if (type === 'group') return false;
+    return true;
+};
+
 /**
  * FIX: Repara elementos ocultos dentro de price groups de product cards.
  * Viewport culling + auto-save corruption pode persistir `visible: false` em
@@ -5794,6 +5839,17 @@ function repairHiddenPriceGroupTexts(json: any): number {
             repaired++;
         }
 
+        // Reparar price_bg com fill transparent no JSON (pre-load)
+        const priceBgNode = allDeep.find((o: any) => o?.name === 'price_bg');
+        const hasBgImageNode = allDeep.some((o: any) => isRenderablePriceGroupTemplateImageNode(o));
+        if (priceBgNode && !hasBgImageNode) {
+            const curFill = priceBgNode.fill;
+            if (!curFill || curFill === 'transparent' || curFill === '') {
+                priceBgNode.fill = priceBgNode.__originalFill || '#000000';
+                repaired++;
+            }
+        }
+
         // Reparar sub-grupos (atacarejo pode ter retail_group + wholesale_group dentro)
         for (const child of children) {
             if ((child?.type === 'Group' || child?.type === 'group') && Array.isArray(child.objects)) {
@@ -5851,10 +5907,26 @@ function repairLivePriceGroupBackgrounds(c: any): number {
         );
         if (!hasVisibleText) continue;
 
+        const bgCandidate = getSinglePriceBackgroundImageCandidate(pgChildren);
+        if (bgCandidate && String(bgCandidate?.type || '').toLowerCase() === 'image') {
+            const bgName = String(bgCandidate?.name || '').trim();
+            if (!bgName || bgName.startsWith('custom_image_')) {
+                bgCandidate.set?.('name', 'splash_image');
+                bgCandidate.name = 'splash_image';
+                bgCandidate.dirty = true;
+                repaired++;
+            }
+            const currentSrc = String((bgCandidate as any)?.src || '').trim();
+            if (currentSrc && !(bgCandidate as any).__originalSrc) {
+                (bgCandidate as any).__originalSrc = currentSrc;
+            }
+        }
+
         for (const child of pgChildren) {
+            if (!child || child === pg) continue;
             if (!child || child.visible !== false) continue;
             const name = String(child.name || '');
-            if (PRICE_BG_NAMES_LIVE.has(name)) {
+            if (PRICE_BG_NAMES_LIVE.has(name) || isPriceGroupVisualShellNode(child)) {
                 child.set('visible', true);
                 child.visible = true;
                 child.dirty = true;
@@ -5868,6 +5940,64 @@ function repairLivePriceGroupBackgrounds(c: any): number {
             pg.visible = true;
             pg.dirty = true;
             repaired++;
+        }
+
+        // Reparar price_bg com fill transparent quando nao ha imagem de fundo
+        const priceBgEl = pgChildren.find((o: any) => o?.name === 'price_bg');
+        if (priceBgEl) {
+            const hasBgImg = pgChildren.some((o: any) => isRenderablePriceGroupTemplateImageNode(o));
+            if (!hasBgImg) {
+                const curFill = priceBgEl.fill;
+                if (!curFill || curFill === 'transparent' || curFill === '') {
+                    const saved = (priceBgEl as any).__originalFill;
+                    const restored = typeof saved === 'string' && saved !== 'transparent' ? saved : '#000000';
+                    priceBgEl.set('fill', restored);
+                    priceBgEl.dirty = true;
+                    repaired++;
+                }
+            }
+            // Salvar __originalFill se nao existe
+            if (typeof (priceBgEl as any).__originalFill === 'undefined' && priceBgEl.fill && priceBgEl.fill !== 'transparent') {
+                (priceBgEl as any).__originalFill = priceBgEl.fill;
+            }
+        }
+
+        // FIX: Reparar splash_image com src stripped (imagem de template que foi
+        // removida pelo serializer porque nao tinha __originalSrc permanente).
+        // Quando o src e um placeholder 1x1 transparente, a imagem e inutil —
+        // substituir por um Rect price_bg com a cor correta para manter o visual.
+        const brokenTemplateImage = pgChildren.find((o: any) =>
+            isPriceGroupTemplateImageNode(o) && !isRenderablePriceGroupTemplateImageNode(o)
+        );
+        if (brokenTemplateImage && !priceBgEl) {
+            if (fabric?.Rect) {
+                // Criar um Rect como fallback visual no lugar da imagem stripped
+                const imgW = Number(brokenTemplateImage.width || 0) * Math.abs(Number(brokenTemplateImage.scaleX || 1));
+                const imgH = Number(brokenTemplateImage.height || 0) * Math.abs(Number(brokenTemplateImage.scaleY || 1));
+                const fallbackBg = new fabric.Rect({
+                    width: Math.max(imgW, 100),
+                    height: Math.max(imgH, 40),
+                    fill: '#000000',
+                    rx: Math.min(imgH / 2, 20),
+                    ry: Math.min(imgH / 2, 20),
+                    originX: brokenTemplateImage.originX || 'center',
+                    originY: brokenTemplateImage.originY || 'center',
+                    left: Number(brokenTemplateImage.left || 0),
+                    top: Number(brokenTemplateImage.top || 0),
+                    name: 'price_bg',
+                    visible: true
+                });
+                // Substituir a imagem stripped pelo Rect
+                if (typeof pg.remove === 'function' && typeof pg.add === 'function') {
+                    pg.remove(brokenTemplateImage);
+                    pg.add(fallbackBg);
+                    // Mover para tras (fundo)
+                    if (typeof fallbackBg.sendToBack === 'function') fallbackBg.sendToBack();
+                    pg.dirty = true;
+                    repaired++;
+                    console.warn('[post-load] Replaced stripped splash_image with fallback price_bg Rect');
+                }
+            }
         }
     }
 
@@ -11053,6 +11183,7 @@ const CANVAS_CUSTOM_PROPS = [
 	    '__originalRy',
 	    '__originalStrokeWidth',
 	    '__originalFontFamily',
+	    '__originalFill',
 
 	    // Visibility toggle (setVisible salva scale original antes de colapsar para 0)
 	    '__visibleScaleX',
@@ -12188,9 +12319,12 @@ const removeImageObjectsDeep = (node: any): any => {
 
         const shouldRunHeavySanitize = shouldRunHeavySanitizeForReason(saveReason);
         restoreMissingManualTemplateFlagsInCanvas(canvasInstance, `saveState:${saveReason}`);
+        // Price-group stabilization must run on EVERY save path.
+        // The splash image can lose `name` / `__originalSrc` immediately after
+        // product insertion, before a later "heavy sanitize" chance occurs.
+        stabilizePriceGroupsForPersistence(canvasInstance, `saveState:${saveReason}`);
         if (shouldRunHeavySanitize) {
             sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}`);
-            stabilizePriceGroupsForPersistence(canvasInstance, `saveState:${saveReason}`);
             lastHotSaveSanitizeAt = Date.now();
         } else if ((Date.now() - lastHotSaveSanitizeAt) > 3000) {
             sanitizeCanvasObjectStack(canvasInstance, `saveState:${saveReason}:throttled`);
@@ -25635,7 +25769,7 @@ const resolveOrCreateZoneForFrame = (frame: any): any | null => {
         rows: 0,
         gapHorizontal: 20,
         gapVertical: 20,
-        cardAspectRatio: 'auto',
+        cardAspectRatio: 'fill',
         lastRowBehavior: 'fill',
         layoutDirection: 'horizontal',
         verticalAlign: 'stretch',
@@ -26058,7 +26192,7 @@ const addGridZone = () => {
         rows: 0,
         gapHorizontal: 20,
         gapVertical: 20,
-        cardAspectRatio: 'auto',
+        cardAspectRatio: 'fill',
         lastRowBehavior: 'fill',
         layoutDirection: 'horizontal',
         verticalAlign: 'stretch',
@@ -26237,8 +26371,8 @@ const simulateSmartGrid = async (
             gapVertical: gapY,
             columns: typeof targetZone.columns === 'number' ? targetZone.columns : 0,
             rows: typeof targetZone.rows === 'number' ? targetZone.rows : 0,
-            cardAspectRatio: targetZone.cardAspectRatio ?? 'auto',
-            lastRowBehavior: targetZone.lastRowBehavior ?? 'center'
+            cardAspectRatio: targetZone.cardAspectRatio ?? 'fill',
+            lastRowBehavior: targetZone.lastRowBehavior ?? 'fill'
         };
         
         const gridLayout = calculateGridLayout(zoneConfig, countForLayout);
@@ -27063,7 +27197,7 @@ const selectedZoneInspectorData = computed(() => {
         gapHorizontal: Number((zone as any)?.gapHorizontal ?? pad),
         gapVertical: Number((zone as any)?.gapVertical ?? pad),
         layoutDirection: (zone as any)?.layoutDirection ?? 'horizontal',
-        cardAspectRatio: (zone as any)?.cardAspectRatio ?? 'auto',
+        cardAspectRatio: (zone as any)?.cardAspectRatio ?? 'fill',
         lastRowBehavior: (zone as any)?.lastRowBehavior ?? 'fill',
         verticalAlign: (zone as any)?.verticalAlign ?? 'stretch',
         highlightCount: Number((zone as any)?.highlightCount ?? 0),
@@ -27162,7 +27296,7 @@ const resolveZoneTargetsForUpdates = (opts: { allowAllFallback?: boolean } = {})
     // 4) If still unresolved and there is only one zone in canvas, use it.
     if (!resolved.length && zones.length === 1) pushZone(zones[0]);
 
-    // 5) Emergency fallback: apply to all zones (prevents silent no-op).
+    // 5) Emergency fallback: only use when the caller explicitly requests a broadcast.
     if (!resolved.length && opts.allowAllFallback && zones.length > 0) {
         zones.forEach((z: any) => pushZone(z));
     }
@@ -27189,6 +27323,12 @@ const handleUpdateZone = (propOrPayload: string | Record<string, any>, val?: any
     const entries = Object.entries(updates).filter(([key]) => key && key !== 'prop' && key !== 'value');
     if (!entries.length) {
         console.warn('⚠️ [handleUpdateZone] Invalid payload received:', propOrPayload);
+        return;
+    }
+
+    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false });
+    if (!targets.length) {
+        console.warn('⚠️ [handleUpdateZone] No zone resolved; skipping update to avoid UI/canvas divergence');
         return;
     }
 
@@ -28239,13 +28379,11 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
 const handleApplyZonePreset = async (presetId: string) => {
     if (!canvas.value) return;
 
-    // FIX: Get zone BEFORE updating composable state. The reactive state change from
-    // applyPreset() can trigger Vue watchers/re-renders that deselect the zone or change
-    // the active object, making getCurrentZoneObject() fail afterwards.
-    const active = getCurrentZoneObject();
+    // Resolve the target zone before mutating reactive state. If we lose the zone here,
+    // updating only the singleton composable makes the UI look changed while the canvas stays stale.
+    const active = resolveZoneTargetsForUpdates({ allowAllFallback: false })[0] || getCurrentZoneObject();
     if (!active) {
-        // Still update composable state even without canvas zone (UI consistency)
-        productZoneState.applyPreset(presetId);
+        console.warn('⚠️ [handleApplyZonePreset] No zone resolved; skipping preset to avoid partial apply');
         return;
     }
 
@@ -28331,10 +28469,13 @@ const handleApplyZonePreset = async (presetId: string) => {
 };
 
 const handleSyncZoneGaps = (padding: number) => {
+    const active = resolveZoneTargetsForUpdates({ allowAllFallback: false })[0] || getCurrentZoneObject();
+    if (!active) {
+        console.warn('⚠️ [handleSyncZoneGaps] No zone resolved; skipping sync to avoid UI/canvas divergence');
+        return;
+    }
     productZoneState.syncGapsWithPadding(padding);
     if (!canvas.value) return;
-    const active = getCurrentZoneObject();
-    if (!active) return;
     const z = productZoneState.productZone.value;
     applyZoneUpdates(active, {
         padding: z.padding,
@@ -28394,7 +28535,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     // Gather ALL zones in canvas first (for fallback).
     const allZones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
 
-    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: true });
+    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false });
     const primaryZone = targets[0];
 
     // If no zone found but a card is selected, try to find its parent zone
@@ -28420,7 +28561,6 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     }
 
     // Last deterministic fallback: pick the single zone if there's only one.
-    // IMPORTANT: For global styles this is safe (applies to the whole canvas).
     if (!zone && allZones.length === 1) {
         zone = allZones[0];
     }
@@ -28436,7 +28576,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     // Persist styles on the zone so they survive undo/redo and reload.
     const effectiveTargets = targets.length > 0
         ? targets
-        : (zone ? [zone] : (allZones.length === 1 ? [allZones[0]] : []));
+        : (zone ? [zone] : []);
     
     if (effectiveTargets.length > 0) {
         effectiveTargets.forEach((z: any) => {
@@ -28450,10 +28590,17 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
 
     if (effectiveTargets.length > 0) {
         if (isTemplateChange) {
+            let templateApplyFailed = false;
             for (const z of effectiveTargets) {
                 // Keep UI and canvas consistent: when the user picks a template,
                 // apply it to existing cards in the zone as well.
-                await applyLabelTemplateToZone(z, value, true);
+                const applied = await applyLabelTemplateToZone(z, value, true);
+                if (!applied) templateApplyFailed = true;
+            }
+            if (templateApplyFailed) {
+                productZoneState.globalStyles.value = normalizeGlobalStyles(baseStylesForState);
+                refreshSelectedRef();
+                return;
             }
         } else {
             let totalCardsTouched = 0;
@@ -29051,6 +29198,33 @@ const getSinglePriceBackgroundCandidate = (objects: any[]): any | null => {
         const effectiveArea = width * height * scaleX * scaleY;
         if (Number.isFinite(effectiveArea) && effectiveArea > 0) return effectiveArea;
         return Math.max(1, width) * Math.max(1, height);
+    };
+
+    return candidates.sort((a: any, b: any) => getArea(b) - getArea(a))[0] || null;
+};
+
+const getSinglePriceBackgroundImageCandidate = (objects: any[]): any | null => {
+    const named =
+        findByName(objects, 'price_bg_image') ||
+        findByName(objects, 'splash_image');
+    if (named && String(named?.type || '').toLowerCase() === 'image') return named;
+
+    const candidates = (objects || []).filter((obj: any) => {
+        if (!obj || typeof obj !== 'object') return false;
+        if (String(obj?.type || '').toLowerCase() !== 'image') return false;
+        const name = String(obj?.name || '');
+        if (name === 'price_currency_bg' || name === 'priceSymbolBg') return false;
+        if (name === 'price_header_bg') return false;
+        if (name.startsWith('atac_') || name.startsWith('retail_') || name.startsWith('wholesale_')) return false;
+        return true;
+    });
+
+    const getArea = (obj: any) => {
+        const width = Number(obj?.width || 0);
+        const height = Number(obj?.height || 0);
+        const scaleX = Math.abs(Number(obj?.scaleX ?? 1)) || 1;
+        const scaleY = Math.abs(Number(obj?.scaleY ?? 1)) || 1;
+        return Math.max(1, width) * Math.max(1, height) * scaleX * scaleY;
     };
 
     return candidates.sort((a: any, b: any) => getArea(b) - getArea(a))[0] || null;
@@ -31834,10 +32008,19 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             img.set({ clipPath: clip });
         }
 
+        // Salvar fill original antes de tornar transparent
         if (typeof priceBg.fill === 'string' && priceBg.fill !== 'transparent') {
+            if (typeof (priceBg as any).__originalFill === 'undefined') (priceBg as any).__originalFill = priceBg.fill;
             priceBg.set('fill', 'transparent');
         }
         if (typeof img.sendToBack === 'function') img.sendToBack();
+    } else if (priceBg) {
+        // Sem imagem de fundo: restaurar fill se ficou transparent
+        const curFill = priceBg.fill;
+        if (!curFill || curFill === 'transparent' || curFill === '') {
+            const saved = (priceBg as any).__originalFill;
+            priceBg.set('fill', typeof saved === 'string' && saved !== 'transparent' ? saved : '#000000');
+        }
     }
 
     // Identify price-related text elements for dynamic positioning
@@ -32154,7 +32337,9 @@ const rememberPriceLayoutSnapshot = (group: any) => {
             fontSize: Number(node?.fontSize || 0),
             width: Number(node?.width || 0),
             height: Number(node?.height || 0),
-            text: typeof node?.text === 'string' ? node.text : undefined
+            text: typeof node?.text === 'string' ? node.text : undefined,
+            fill: typeof node?.fill === 'string' ? node.fill : undefined,
+            stroke: typeof node?.stroke === 'string' ? node.stroke : undefined
         }))
     };
 
@@ -32253,6 +32438,10 @@ const restorePriceLayoutSnapshot = (group: any) => {
             visible: snap?.visible !== false
         });
 
+        // Restaurar fill e stroke do snapshot (previne perda de cor apos reload)
+        if (typeof snap?.fill === 'string' && snap.fill !== 'transparent') node.set?.('fill', snap.fill);
+        if (typeof snap?.stroke === 'string') node.set?.('stroke', snap.stroke);
+
         const tt = String(node?.type || '').toLowerCase();
         const isText = tt === 'text' || tt === 'i-text' || tt === 'itext' || tt === 'textbox';
         if (isText) {
@@ -32288,20 +32477,54 @@ const restorePriceLayoutSnapshot = (group: any) => {
 const stabilizeSinglePriceGroupForPersistence = (group: any) => {
     if (!group || typeof group.getObjects !== 'function') return { fixed: false, captured: false };
     if (!isLikelyPriceGroupObject(group)) return { fixed: false, captured: false };
+    if (String(group?.name || '').trim() !== 'priceGroup') group.set?.('name', 'priceGroup');
     ensureRedBurstPriceGroupVisibility(group);
 
     // FIX: Garantir que backgrounds de QUALQUER price group (não apenas red burst)
     // estejam visíveis antes da serialização. Viewport culling corruption pode
     // persistir visible: false em price_bg, price_bg_image, etc.
     const pgParts = collectObjectsDeep(group);
+    const unnamedBgImage = getSinglePriceBackgroundImageCandidate(pgParts);
+    if (unnamedBgImage && String(unnamedBgImage?.type || '').toLowerCase() === 'image') {
+        const currentName = String(unnamedBgImage?.name || '').trim();
+        if (!currentName || currentName.startsWith('custom_image_')) {
+            unnamedBgImage.set?.('name', 'splash_image');
+            unnamedBgImage.name = 'splash_image';
+        }
+        const currentSrc = String((unnamedBgImage as any)?.src || '').trim();
+        if (currentSrc && !(unnamedBgImage as any).__originalSrc) {
+            (unnamedBgImage as any).__originalSrc = currentSrc;
+        }
+        ensureObjectPersistentId(unnamedBgImage);
+    }
     const bgNames = new Set(['price_bg', 'price_bg_image', 'splash_image', 'price_header_bg']);
     const hasVisibleText = pgParts.some((o: any) => isTextLikeObject(o) && o.visible !== false);
     if (hasVisibleText) {
         for (const part of pgParts) {
-            if (part && part.visible === false && bgNames.has(String(part.name || ''))) {
+            if (!part || part === group) continue;
+            if (part.visible === false && (bgNames.has(String(part.name || '')) || isPriceGroupVisualShellNode(part))) {
                 part.set?.('visible', true);
                 part.visible = true;
                 part.dirty = true;
+            }
+        }
+
+        // Restaurar fill transparent em price_bg antes de salvar (evita persistir estado corrompido)
+        const priceBgStab = pgParts.find((o: any) => o?.name === 'price_bg');
+        if (priceBgStab) {
+            const hasBgImg = pgParts.some((o: any) => isRenderablePriceGroupTemplateImageNode(o));
+            if (!hasBgImg) {
+                const curFill = priceBgStab.fill;
+                if (!curFill || curFill === 'transparent' || curFill === '') {
+                    const saved = (priceBgStab as any).__originalFill;
+                    const restored = typeof saved === 'string' && saved !== 'transparent' ? saved : '#000000';
+                    priceBgStab.set?.('fill', restored);
+                    priceBgStab.dirty = true;
+                }
+            }
+            // Garantir que __originalFill esta salvo
+            if (typeof (priceBgStab as any).__originalFill === 'undefined' && priceBgStab.fill && priceBgStab.fill !== 'transparent') {
+                (priceBgStab as any).__originalFill = priceBgStab.fill;
             }
         }
     }
@@ -32631,13 +32854,21 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             });
             img.set({ clipPath: clip });
         }
-        // Ensure the rect doesn't hide the image (rect can still keep stroke/glow)
+        // Salvar fill original antes de tornar transparent (para restaurar no reload)
         if (typeof priceBg.fill === 'string' && priceBg.fill !== 'transparent') {
+            if (typeof (priceBg as any).__originalFill === 'undefined') (priceBg as any).__originalFill = priceBg.fill;
             priceBg.set('fill', 'transparent');
         }
         if (typeof (img as any).sendToBack === 'function') (img as any).sendToBack();
+    } else if (priceBg) {
+        // Sem imagem de fundo: restaurar fill se ficou transparent de uma sessao anterior
+        const curFill = priceBg.fill;
+        if (!curFill || curFill === 'transparent' || curFill === '') {
+            const saved = (priceBg as any).__originalFill;
+            priceBg.set('fill', typeof saved === 'string' && saved !== 'transparent' ? saved : '#000000');
+        }
     }
-    
+
     const circleCenterX = -(pillW / 2) + (circleSize * 0.35);
     currencyCircle.set({
         radius: circleSize / 2,
@@ -33089,6 +33320,11 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
         : true;
     // Ensure templates always start from a normalized transform.
     g.set({ name: 'priceGroup', originX: 'center', originY: 'center', left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0 });
+    ensureObjectPersistentId(g);
+    collectObjectsDeep(g).forEach((node: any) => {
+        if (!node || node === g) return;
+        ensureObjectPersistentId(node);
+    });
     (g as any).__preserveManualLayout = preserveManualLayout;
     (g as any).__isCustomTemplate = true;
     // Keep Atacarejo templates on canonical layout across all value variants.
@@ -33229,6 +33465,11 @@ function serializePriceGroupForTemplate(pg: any) {
     if (!pg || typeof pg.toObject !== 'function') return null;
     ensureRedBurstPriceGroupVisibility(pg);
     repairCollapsedSinglePriceTemplateGeometry(pg, 'serialize-template');
+    ensureObjectPersistentId(pg);
+    collectObjectsDeep(pg).forEach((node: any) => {
+        if (!node || node === pg) return;
+        ensureObjectPersistentId(node);
+    });
 
     const prev = {
         left: pg.left,
@@ -35051,7 +35292,7 @@ async function applyLabelTemplateToZone(
     templateId?: string,
     options: boolean | ApplyLabelTemplateToZoneOptions = false
 ) {
-    if (!canvas.value || !zone || !isLikelyProductZone(zone)) return;
+    if (!canvas.value || !zone || !isLikelyProductZone(zone)) return false;
     const applyOptions = typeof options === 'boolean'
         ? { applyToExisting: options, requestRender: true, save: true, cards: undefined }
         : {
@@ -35062,42 +35303,56 @@ async function applyLabelTemplateToZone(
         };
     const id = templateId || undefined;
     const prev = getZoneGlobalStyles(zone);
-    (zone as any)._zoneGlobalStyles = { ...prev, splashTemplateId: id };
+    const nextZoneStyles = normalizeGlobalStyles({ ...prev, splashTemplateId: id });
+    const tpl = id
+        ? labelTemplates.value.find((t: any) => String(t?.id || '') === String(id))
+        : null;
+    const snapshot = cloneTemplateGroupJson((tpl as any)?.group);
 
-    // Persist an immutable snapshot of the selected template group on the zone.
-    // New cards should always use this exact JSON from mini editor to avoid stale/incorrect matches.
-    if (id) {
-        const tpl = labelTemplates.value.find((t: any) => String(t?.id || '') === String(id));
-        const snapshot = cloneTemplateGroupJson((tpl as any)?.group);
-        (zone as any)._zoneTemplateSnapshotId = id;
-        (zone as any)._zoneTemplateSnapshot = snapshot || null;
-    } else {
-        (zone as any)._zoneTemplateSnapshotId = undefined;
-        (zone as any)._zoneTemplateSnapshot = undefined;
-    }
-
-    // Only apply to existing cards if explicitly requested (e.g., user explicitly changes template)
-    // If applyToExisting is false, just update the reference for new products
     if (applyOptions.applyToExisting) {
         const cards = applyOptions.cards && applyOptions.cards.length > 0
             ? applyOptions.cards
             : getZoneChildren(zone);
+        let failedCards = 0;
         for (const card of cards) {
             try {
                 if (id) await applyLabelTemplateToCard(card, id);
                 else await resetCardPriceGroupToDefault(card);
             } catch (err) {
+                failedCards += 1;
                 console.warn('[labelTemplates] Failed to apply zone template to card', err);
             }
         }
+        if (failedCards > 0) {
+            console.warn(`[labelTemplates] Aborting zone template persistence because ${failedCards} card(s) failed`);
+            return false;
+        }
+
+        (zone as any)._zoneGlobalStyles = nextZoneStyles;
+        if (id) {
+            (zone as any)._zoneTemplateSnapshotId = id;
+            (zone as any)._zoneTemplateSnapshot = snapshot || null;
+        } else {
+            (zone as any)._zoneTemplateSnapshotId = undefined;
+            (zone as any)._zoneTemplateSnapshot = undefined;
+        }
 
         // Also re-apply colors/text style if the zone has global styles.
-        const styles = getZoneGlobalStyles(zone);
-        applyGlobalStylesToCards(styles, zone, { cards });
+        applyGlobalStylesToCards(nextZoneStyles, zone, { cards });
+    } else {
+        (zone as any)._zoneGlobalStyles = nextZoneStyles;
+        if (id) {
+            (zone as any)._zoneTemplateSnapshotId = id;
+            (zone as any)._zoneTemplateSnapshot = snapshot || null;
+        } else {
+            (zone as any)._zoneTemplateSnapshotId = undefined;
+            (zone as any)._zoneTemplateSnapshot = undefined;
+        }
     }
 
     if (applyOptions.requestRender) canvas.value.requestRenderAll();
-    if (applyOptions.save) saveCurrentState();
+    if (applyOptions.save) await saveCurrentState();
+    return true;
 }
 
 const applyTemplateToActiveZone = (templateId?: string) => {
@@ -37298,7 +37553,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         gapVertical: rawGapY,
         columns: typeof zone.columns === 'number' ? zone.columns : 0,
         rows: typeof zone.rows === 'number' ? zone.rows : 0,
-        cardAspectRatio: zone.cardAspectRatio ?? 'auto',
+        cardAspectRatio: zone.cardAspectRatio ?? 'fill',
         lastRowBehavior: lastRowBehavior
     };
     
@@ -38217,51 +38472,44 @@ const rehydrateCanvasZones = (
         // manually clicks the zone (which triggers refreshSelectedRef).
         // ═══════════════════════════════════════════════════════════════════
         if (zones.length > 0) {
-            const zonesWithCounts = zones.map((z: any) => ({
-                zone: z,
-                count: getZoneChildren(z).length,
-                hasPersistedConfig: !!(z as any)._zoneGlobalStyles || (z.columns > 0)
-            }));
-            const primaryZone =
-                // Priorizar zona com cards
-                zonesWithCounts
-                    .filter((item: any) => item.count > 0)
-                    .sort((a: any, b: any) => b.count - a.count)[0]?.zone ??
-                // Se nenhuma com cards, priorizar a que tem config persistida
-                zonesWithCounts
-                    .filter((item: any) => item.hasPersistedConfig)
-                    .sort((a: any, b: any) => b.count - a.count)[0]?.zone ??
-                zones.find((z: any) => z?.isProductZone || String(z?.name || '') === 'productZoneContainer') ??
-                zones[0];
+            const resolvedZoneForSync = (() => {
+                const current = getCurrentZoneObject();
+                if (current && zones.includes(current)) return current;
+                if (zones.length === 1) return zones[0];
+                return null;
+            })();
 
-            // Sync global styles
-            productZoneState.updateGlobalStyles(getZoneGlobalStyles(primaryZone));
-
-            // Sync zone config completo (incluindo propriedades derivadas)
-            const pad = typeof primaryZone._zonePadding === 'number'
-                ? primaryZone._zonePadding
-                : (typeof primaryZone.padding === 'number' ? primaryZone.padding : 20);
-            const zoneConfig: Partial<ProductZone> = {
-                enabled: true,
-                columns: primaryZone.columns || 0,
-                rows: primaryZone.rows || 0,
-                padding: pad,
-                gapHorizontal: typeof primaryZone.gapHorizontal === 'number' ? primaryZone.gapHorizontal : pad,
-                gapVertical: typeof primaryZone.gapVertical === 'number' ? primaryZone.gapVertical : pad,
-                layoutDirection: primaryZone.layoutDirection || 'horizontal',
-                cardAspectRatio: primaryZone.cardAspectRatio || 'auto',
-                lastRowBehavior: primaryZone.lastRowBehavior || 'fill',
-                verticalAlign: primaryZone.verticalAlign || 'stretch',
-                highlightCount: primaryZone.highlightCount || 0,
-                highlightPos: primaryZone.highlightPos || 'first',
-                highlightHeight: primaryZone.highlightHeight || 1.5,
-                role: primaryZone.role || 'grid',
-                contentSource: primaryZone.contentSource || 'manual',
-                contentStatus: primaryZone.contentStatus || 'ready',
-                overflowPolicy: primaryZone.overflowPolicy || 'warn',
-                zoneName: primaryZone.zoneName || 'Zona de Produtos',
-            };
-            productZoneState.updateZone(zoneConfig);
+            if (resolvedZoneForSync) {
+                const pad = typeof resolvedZoneForSync._zonePadding === 'number'
+                    ? resolvedZoneForSync._zonePadding
+                    : (typeof resolvedZoneForSync.padding === 'number' ? resolvedZoneForSync.padding : 20);
+                const zoneConfig: ProductZone = {
+                    ...DEFAULT_PRODUCT_ZONE,
+                    enabled: true,
+                    name: resolvedZoneForSync.zoneName || 'Zona de Produtos',
+                    columns: resolvedZoneForSync.columns || 0,
+                    rows: resolvedZoneForSync.rows || 0,
+                    padding: pad,
+                    gapHorizontal: typeof resolvedZoneForSync.gapHorizontal === 'number' ? resolvedZoneForSync.gapHorizontal : pad,
+                    gapVertical: typeof resolvedZoneForSync.gapVertical === 'number' ? resolvedZoneForSync.gapVertical : pad,
+                    layoutDirection: resolvedZoneForSync.layoutDirection || 'horizontal',
+                    cardAspectRatio: resolvedZoneForSync.cardAspectRatio || 'fill',
+                    lastRowBehavior: resolvedZoneForSync.lastRowBehavior || 'fill',
+                    verticalAlign: resolvedZoneForSync.verticalAlign || 'stretch',
+                    highlightCount: resolvedZoneForSync.highlightCount || 0,
+                    highlightPos: resolvedZoneForSync.highlightPos || 'first',
+                    highlightHeight: resolvedZoneForSync.highlightHeight || 1.5,
+                    role: resolvedZoneForSync.role || 'grid',
+                    contentSource: resolvedZoneForSync.contentSource || 'manual',
+                    contentStatus: resolvedZoneForSync.contentStatus || 'filled',
+                    overflowPolicy: resolvedZoneForSync.overflowPolicy || 'warn',
+                };
+                productZoneState.globalStyles.value = getZoneGlobalStyles(resolvedZoneForSync);
+                productZoneState.productZone.value = zoneConfig;
+            } else {
+                productZoneState.globalStyles.value = { ...DEFAULT_GLOBAL_STYLES };
+                productZoneState.productZone.value = { ...DEFAULT_PRODUCT_ZONE };
+            }
         }
 
         const zonesById = new Map<string, any>();

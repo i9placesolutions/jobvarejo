@@ -72,6 +72,7 @@ const emit = defineEmits<{
 const showCardColorPicker = ref(false);
 const showAccentColorPicker = ref(false);
 const showSplashColorPicker = ref(false);
+const showSplashFillColorPicker = ref(false);
 const showSplashTextColorPicker = ref(false);
 const showCardBorderColorPicker = ref(false);
 const showProdNameColorPicker = ref(false);
@@ -81,6 +82,7 @@ const showPriceCurrencyColorPicker = ref(false);
 const cardColorPickerRef = ref<HTMLElement | null>(null);
 const accentColorPickerRef = ref<HTMLElement | null>(null);
 const splashColorPickerRef = ref<HTMLElement | null>(null);
+const splashFillColorPickerRef = ref<HTMLElement | null>(null);
 const splashTextColorPickerRef = ref<HTMLElement | null>(null);
 const cardBorderColorPickerRef = ref<HTMLElement | null>(null);
 const prodNameColorPickerRef = ref<HTMLElement | null>(null);
@@ -179,8 +181,12 @@ watch(
 type HighlightPos = 'first' | 'last' | 'random' | 'center' | 'top' | 'bottom';
 type PreviewTone = 'base' | 'highlight';
 type NormalizedZonePresetState = {
+  role: ProductZone['role'];
   columns: number;
   rows: number;
+  padding: number;
+  gapHorizontal: number;
+  gapVertical: number;
   layoutDirection: 'horizontal' | 'vertical';
   cardAspectRatio: string;
   lastRowBehavior: 'fill' | 'center' | 'stretch' | 'left';
@@ -223,8 +229,12 @@ const normalizeHighlightPos = (value: unknown): HighlightPos => {
 };
 
 const normalizedZoneState = computed<NormalizedZonePresetState>(() => ({
+  role: props.zone.role ?? 'grid',
   columns: Math.max(0, Math.round(toSafeNumber(props.zone.columns, 0))),
   rows: Math.max(0, Math.round(toSafeNumber(props.zone.rows, 0))),
+  padding: Math.max(0, Math.round(toSafeNumber(props.zone.padding, 15))),
+  gapHorizontal: Math.max(0, Math.round(toSafeNumber(props.zone.gapHorizontal, props.zone.padding ?? 15))),
+  gapVertical: Math.max(0, Math.round(toSafeNumber(props.zone.gapVertical, props.zone.padding ?? 15))),
   layoutDirection: props.zone.layoutDirection === 'vertical' ? 'vertical' : 'horizontal',
   cardAspectRatio: props.zone.cardAspectRatio ?? 'fill',
   lastRowBehavior: (props.zone.lastRowBehavior ?? 'fill') as NormalizedZonePresetState['lastRowBehavior'],
@@ -235,15 +245,23 @@ const normalizedZoneState = computed<NormalizedZonePresetState>(() => ({
 }));
 
 const presetMatchesZone = (preset: LayoutPreset, zone: NormalizedZonePresetState) => {
+  const presetRole = preset.role ?? 'grid';
   const presetColumns = Math.max(0, Math.round(toSafeNumber(preset.columns, 0)));
   const presetRows = Math.max(0, Math.round(toSafeNumber(preset.rows, 0)));
+  const presetPadding = Math.max(0, Math.round(toSafeNumber(preset.padding, 15)));
+  const presetGapHorizontal = Math.max(0, Math.round(toSafeNumber(preset.gapHorizontal, presetPadding)));
+  const presetGapVertical = Math.max(0, Math.round(toSafeNumber(preset.gapVertical, presetPadding)));
   const presetLayout = (preset.layoutDirection ?? 'horizontal') as NormalizedZonePresetState['layoutDirection'];
   const presetAspect = preset.cardAspectRatio ?? 'fill';
   const presetLastRow = (preset.lastRowBehavior ?? 'fill') as NormalizedZonePresetState['lastRowBehavior'];
   const presetHighlightCount = Math.max(0, Math.round(toSafeNumber(preset.highlightCount, 0)));
 
+  if (zone.role !== presetRole) return false;
   if (zone.columns !== presetColumns) return false;
   if (zone.rows !== presetRows) return false;
+  if (zone.padding !== presetPadding) return false;
+  if (zone.gapHorizontal !== presetGapHorizontal) return false;
+  if (zone.gapVertical !== presetGapVertical) return false;
   if (zone.layoutDirection !== presetLayout) return false;
   if (zone.cardAspectRatio !== presetAspect) return false;
   if (zone.lastRowBehavior !== presetLastRow) return false;
@@ -1818,65 +1836,98 @@ onBeforeUnmount(() => {
                 </option>
               </select>
             </div>
-
-            <div class="color-field">
-              <div class="color-field__copy">
-                <label class="field-label">Fundo da etiqueta</label>
-                <p class="field-hint">Fundo da etiqueta de preço.</p>
-              </div>
-              <div class="color-field__controls">
-                <ColorPicker
-                  :show="showSplashColorPicker"
-                  :model-value="globalStyles?.splashColor ?? '#dc2626'"
-                  :trigger-element="splashColorPickerRef"
-                  @update:show="showSplashColorPicker = $event"
-                  @update:model-value="(val) => updateGlobal('splashColor', val)"
-                />
-                <button
-                  ref="splashColorPickerRef"
-                  type="button"
-                  class="color-trigger"
-                  :style="{ backgroundColor: globalStyles?.splashColor ?? '#dc2626' }"
-                  @click="showSplashColorPicker = true"
-                />
-                <input
-                  type="text"
-                  class="hex-input"
-                  :value="(globalStyles?.splashColor ?? '#dc2626').replace('#', '').toUpperCase()"
-                  @blur="updateGlobal('splashColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashColor ?? '#dc2626'))"
-                />
-              </div>
-            </div>
-
-            <div class="color-field">
-              <div class="color-field__copy">
-                <label class="field-label">Texto da etiqueta</label>
-                <p class="field-hint">Cor dos textos na etiqueta.</p>
-              </div>
-              <div class="color-field__controls">
-                <ColorPicker
-                  :show="showSplashTextColorPicker"
-                  :model-value="globalStyles?.splashTextColor ?? '#ffffff'"
-                  :trigger-element="splashTextColorPickerRef"
-                  @update:show="showSplashTextColorPicker = $event"
-                  @update:model-value="(val) => updateGlobal('splashTextColor', val)"
-                />
-                <button
-                  ref="splashTextColorPickerRef"
-                  type="button"
-                  class="color-trigger"
-                  :style="{ backgroundColor: globalStyles?.splashTextColor ?? '#ffffff' }"
-                  @click="showSplashTextColorPicker = true"
-                />
-                <input
-                  type="text"
-                  class="hex-input"
-                  :value="(globalStyles?.splashTextColor ?? '#ffffff').replace('#', '').toUpperCase()"
-                  @blur="updateGlobal('splashTextColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashTextColor ?? '#ffffff'))"
-                />
-              </div>
-            </div>
           </template>
+
+          <div class="section-divider">
+            <span class="section-divider__label">Acabamento da etiqueta</span>
+          </div>
+
+          <div class="color-field">
+            <div class="color-field__copy">
+              <label class="field-label">Preenchimento da etiqueta</label>
+              <p class="field-hint">Cor principal do fundo da etiqueta.</p>
+            </div>
+            <div class="color-field__controls">
+              <ColorPicker
+                :show="showSplashFillColorPicker"
+                :model-value="globalStyles?.splashFill ?? '#000000'"
+                :trigger-element="splashFillColorPickerRef"
+                @update:show="showSplashFillColorPicker = $event"
+                @update:model-value="(val) => updateGlobal('splashFill', val)"
+              />
+              <button
+                ref="splashFillColorPickerRef"
+                type="button"
+                class="color-trigger"
+                :style="{ backgroundColor: globalStyles?.splashFill ?? '#000000' }"
+                @click="showSplashFillColorPicker = true"
+              />
+              <input
+                type="text"
+                class="hex-input"
+                :value="(globalStyles?.splashFill ?? '#000000').replace('#', '').toUpperCase()"
+                @blur="updateGlobal('splashFill', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashFill ?? '#000000'))"
+              />
+            </div>
+          </div>
+
+          <div class="color-field">
+            <div class="color-field__copy">
+              <label class="field-label">Acento da etiqueta</label>
+              <p class="field-hint">Borda, brilho ou contorno do splash.</p>
+            </div>
+            <div class="color-field__controls">
+              <ColorPicker
+                :show="showSplashColorPicker"
+                :model-value="globalStyles?.splashColor ?? '#dc2626'"
+                :trigger-element="splashColorPickerRef"
+                @update:show="showSplashColorPicker = $event"
+                @update:model-value="(val) => updateGlobal('splashColor', val)"
+              />
+              <button
+                ref="splashColorPickerRef"
+                type="button"
+                class="color-trigger"
+                :style="{ backgroundColor: globalStyles?.splashColor ?? '#dc2626' }"
+                @click="showSplashColorPicker = true"
+              />
+              <input
+                type="text"
+                class="hex-input"
+                :value="(globalStyles?.splashColor ?? '#dc2626').replace('#', '').toUpperCase()"
+                @blur="updateGlobal('splashColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashColor ?? '#dc2626'))"
+              />
+            </div>
+          </div>
+
+          <div class="color-field">
+            <div class="color-field__copy">
+              <label class="field-label">Texto da etiqueta</label>
+              <p class="field-hint">Cor geral dos textos da etiqueta.</p>
+            </div>
+            <div class="color-field__controls">
+              <ColorPicker
+                :show="showSplashTextColorPicker"
+                :model-value="globalStyles?.splashTextColor ?? '#ffffff'"
+                :trigger-element="splashTextColorPickerRef"
+                @update:show="showSplashTextColorPicker = $event"
+                @update:model-value="(val) => updateGlobal('splashTextColor', val)"
+              />
+              <button
+                ref="splashTextColorPickerRef"
+                type="button"
+                class="color-trigger"
+                :style="{ backgroundColor: globalStyles?.splashTextColor ?? '#ffffff' }"
+                @click="showSplashTextColorPicker = true"
+              />
+              <input
+                type="text"
+                class="hex-input"
+                :value="(globalStyles?.splashTextColor ?? '#ffffff').replace('#', '').toUpperCase()"
+                @blur="updateGlobal('splashTextColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashTextColor ?? '#ffffff'))"
+              />
+            </div>
+          </div>
 
           <div class="section-divider">
             <span class="section-divider__label">Tipografia</span>
@@ -1937,6 +1988,54 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Tamanho base do preço</label>
+                <p class="field-hint">Escala base da tipografia do preço preservando a proporção da etiqueta.</p>
+              </div>
+              <div class="value-editor">
+                <input
+                  type="number"
+                  min="24"
+                  max="160"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="Math.round(globalStyles?.priceFontSize ?? 60)"
+                  aria-label="Tamanho base do preço"
+                  @input="_dUpdateGlobalInt('priceFontSize', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.priceFontSize ?? 60, 24, 160)"
+                />
+                <span class="value-suffix">px</span>
+              </div>
+            </div>
+            <input
+              type="range"
+              min="24"
+              max="160"
+              :value="globalStyles?.priceFontSize ?? 60"
+              class="slider text-fuchsia-400"
+              @input="updateGlobal('priceFontSize', Number(($event.target as HTMLInputElement).value))"
+            />
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Símbolo monetário</label>
+              <p class="field-hint">Texto exibido no lugar de R$.</p>
+            </div>
+            <div class="value-editor value-editor--full">
+              <input
+                type="text"
+                maxlength="4"
+                class="value-input"
+                :value="globalStyles?.currencySymbol ?? 'R$'"
+                aria-label="Símbolo monetário"
+                @blur="updateGlobal('currencySymbol', (($event.target as HTMLInputElement).value || 'R$').trim() || 'R$')"
+              />
+            </div>
+          </div>
+
           <div v-if="!isActiveTemplateAtacarejo" class="control-card">
             <div class="control-card__head">
               <div>
@@ -1965,6 +2064,68 @@ onBeforeUnmount(() => {
               :value="Math.round((globalStyles?.splashTextScale ?? 1) * 100)"
               class="slider text-fuchsia-400"
               @input="updateGlobal('splashTextScale', Number(($event.target as HTMLInputElement).value) / 100)"
+            />
+          </div>
+
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Espessura da borda</label>
+                <p class="field-hint">Intensidade do contorno da etiqueta.</p>
+              </div>
+              <div class="value-editor">
+                <input
+                  type="number"
+                  min="0"
+                  max="24"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="Math.round(globalStyles?.splashStrokeWidth ?? 0)"
+                  aria-label="Espessura da borda da etiqueta"
+                  @input="_dUpdateGlobalInt('splashStrokeWidth', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.splashStrokeWidth ?? 0, 0, 24)"
+                />
+                <span class="value-suffix">px</span>
+              </div>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="24"
+              :value="globalStyles?.splashStrokeWidth ?? 0"
+              class="slider text-fuchsia-400"
+              @input="updateGlobal('splashStrokeWidth', Number(($event.target as HTMLInputElement).value))"
+            />
+          </div>
+
+          <div class="control-card">
+            <div class="control-card__head">
+              <div>
+                <label class="field-label">Arredondamento</label>
+                <p class="field-hint">Quanto a etiqueta fica reta ou mais pílula.</p>
+              </div>
+              <div class="value-editor">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  inputmode="numeric"
+                  class="value-input"
+                  :value="Math.round((globalStyles?.splashRoundness ?? 1) * 100)"
+                  aria-label="Arredondamento da etiqueta"
+                  @input="_dUpdateGlobalFloat('splashRoundness', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashRoundness ?? 1, 0, 1, 2)"
+                />
+                <span class="value-suffix">%</span>
+              </div>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              :value="Math.round((globalStyles?.splashRoundness ?? 1) * 100)"
+              class="slider text-fuchsia-400"
+              @input="updateGlobal('splashRoundness', Number(($event.target as HTMLInputElement).value) / 100)"
             />
           </div>
 

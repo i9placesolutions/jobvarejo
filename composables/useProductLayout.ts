@@ -492,8 +492,12 @@ export const useProductLayout = () => {
       card.set({
         smartGridId: gridId,
         gridIndex: i,
-        colIndex: i % cols,
-        rowIndex: Math.floor(i / cols)
+        colIndex: zoneConfig.layoutDirection === 'vertical'
+          ? Math.floor(i / Math.max(1, rows))
+          : (i % Math.max(1, cols)),
+        rowIndex: zoneConfig.layoutDirection === 'vertical'
+          ? (i % Math.max(1, rows))
+          : Math.floor(i / Math.max(1, cols))
       });
       
       objectsToAdd.push(card);

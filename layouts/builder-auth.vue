@@ -2,23 +2,18 @@
 import { FileText } from 'lucide-vue-next'
 
 const backgroundStyle = {
-  background: `
-    radial-gradient(circle at 15% 50%, rgba(34, 197, 94, 0.12) 0%, transparent 50%),
-    radial-gradient(circle at 85% 30%, rgba(34, 197, 94, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 50% 80%, rgba(16, 185, 129, 0.06) 0%, transparent 50%),
-    #0f0f0f
-  `,
+  background: `#f8f9fb`,
 }
 </script>
 
 <template>
   <div
-    class="h-screen w-full relative overflow-hidden bg-[#0f0f0f] text-white flex flex-col"
+    class="h-screen w-full relative overflow-hidden bg-[#f8f9fb] text-slate-800 flex flex-col"
     :style="backgroundStyle"
   >
     <!-- Decorative Grid Pattern -->
-    <div class="absolute inset-0 opacity-[0.02]">
-      <div class="w-full h-full" style="background-image: radial-gradient(circle, currentColor 1px, transparent 1px); background-size: 40px 40px;"></div>
+    <div class="absolute inset-0 opacity-[0.04]">
+      <div class="w-full h-full" style="background-image: radial-gradient(circle, #94a3b8 1px, transparent 1px); background-size: 40px 40px;"></div>
     </div>
 
     <!-- Main Content -->
@@ -30,10 +25,10 @@ const backgroundStyle = {
             to="/builder/login"
             class="inline-flex items-center gap-3 group"
           >
-            <div class="w-8 h-8 bg-emerald-500/20 backdrop-blur-sm rounded-lg flex items-center justify-center border border-emerald-500/30 group-hover:bg-emerald-500/30 transition-colors">
-              <FileText class="w-4 h-4 text-emerald-400" />
+            <div class="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-200 group-hover:bg-emerald-100 transition-colors">
+              <FileText class="w-4 h-4 text-emerald-600" />
             </div>
-            <span class="text-base font-bold text-white">Criador de Encartes</span>
+            <span class="text-base font-bold text-slate-800">Criador de Encartes</span>
           </NuxtLink>
         </div>
       </header>
@@ -46,12 +41,12 @@ const backgroundStyle = {
       </main>
 
       <!-- Footer -->
-      <footer class="w-full p-4 text-center text-xs text-zinc-500 shrink-0">
+      <footer class="w-full p-4 text-center text-xs text-slate-400 shrink-0">
         <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-4">
           <p>&copy; 2025 JobVarejo</p>
           <div class="flex items-center gap-4">
-            <NuxtLink to="/terms" class="hover:text-white transition-colors">Termos</NuxtLink>
-            <NuxtLink to="/privacy" class="hover:text-white transition-colors">Privacidade</NuxtLink>
+            <NuxtLink to="/terms" class="hover:text-slate-700 transition-colors">Termos</NuxtLink>
+            <NuxtLink to="/privacy" class="hover:text-slate-700 transition-colors">Privacidade</NuxtLink>
           </div>
         </div>
       </footer>
@@ -59,9 +54,9 @@ const backgroundStyle = {
 
     <!-- Ambient Light Effect -->
     <ClientOnly>
-      <div class="pointer-events-none fixed inset-0 z-0 transition-opacity duration-500 opacity-30">
+      <div class="pointer-events-none fixed inset-0 z-0 transition-opacity duration-500 opacity-20">
         <div
-          class="absolute w-[600px] h-[600px] rounded-full blur-3xl bg-emerald-500/15"
+          class="absolute w-[600px] h-[600px] rounded-full blur-3xl bg-emerald-300/10"
           style="transform: translate(-50%, -50%);"
           :style="{
             left: mousePosition?.x + 'px' || '50%',

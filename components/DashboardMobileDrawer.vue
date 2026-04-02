@@ -38,14 +38,14 @@ const onTouchEnd = (e: TouchEvent) => {
     <Transition name="drawer-left">
       <div
         v-if="props.open"
-        class="fixed inset-y-0 left-0 z-[9999] w-[280px] max-w-[85vw] bg-[#111113] flex flex-col safe-top safe-bottom shadow-2xl"
+        class="fixed inset-y-0 left-0 z-[9999] w-[300px] max-w-[85vw] bg-white flex flex-col safe-top safe-bottom shadow-2xl"
         @touchstart.passive="onTouchStart"
         @touchend="onTouchEnd"
       >
         <!-- Header -->
-        <div class="h-14 px-4 flex items-center justify-between border-b border-white/5 shrink-0">
-          <span class="text-sm font-semibold text-white/90">Studio PRO</span>
-          <button class="touch-target flex items-center justify-center text-white/40 hover:text-white/70" @click="close">
+        <div class="h-14 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+          <span class="text-sm font-semibold text-slate-800">Studio PRO</span>
+          <button class="touch-target flex items-center justify-center text-slate-400 hover:text-slate-600" @click="close">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
         </div>

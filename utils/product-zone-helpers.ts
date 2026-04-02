@@ -184,7 +184,7 @@ export const getGapVertical = (zone: ProductZone): number => {
  * Obtém comportamento da última linha
  */
 export const getLastRowBehavior = (zone: ProductZone): ProductZone['lastRowBehavior'] => {
-  return zone.lastRowBehavior ?? 'center';
+  return zone.lastRowBehavior ?? DEFAULT_PRODUCT_ZONE.lastRowBehavior ?? 'fill';
 };
 
 /**
@@ -217,17 +217,23 @@ export const calculateGridLayout = (
   const padding = getZonePadding(zone);
   const gapH = getGapHorizontal(zone);
   const gapV = getGapVertical(zone);
+  const layoutDirection = zone.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection ?? 'horizontal';
   
   const availableWidth = Math.max(1, zone.width - (padding * 2));
   const availableHeight = Math.max(1, zone.height - (padding * 2));
   let cols: number;
   let rows: number;
+  const fixedCols = typeof zone.columns === 'number' && zone.columns > 0 ? zone.columns : 0;
+  const fixedRows = typeof zone.rows === 'number' && zone.rows > 0 ? zone.rows : 0;
 
   // Colunas fixas ou automáticas
-  if (zone.columns && zone.columns > 0) {
+  if (fixedCols > 0) {
     // Colunas fixas: respeita o valor definido mesmo com poucos produtos
     // Isso permite layouts como "6 colunas" funcionarem corretamente
-    cols = zone.columns;
+    cols = fixedCols;
+  } else if (layoutDirection === 'horizontal' && fixedRows > 0) {
+    rows = fixedRows;
+    cols = Math.max(1, Math.ceil(Math.max(1, productCount) / Math.max(1, rows)));
   } else {
     // Auto-calculate: prioriza preenchimento e evita "órfãos" na ultima linha
     const minCardWidth = 60; 
@@ -295,7 +301,7 @@ export const calculateGridLayout = (
   // set by the user (e.g. zone.columns = 1 for a single-column design choice).
   // Now they only run on the auto-calculated path to prevent the system from
   // overriding an intentional user layout.
-  const userDefinedColumns = !!(zone.columns && zone.columns > 0);
+  const userDefinedColumns = fixedCols > 0 || (layoutDirection === 'horizontal' && fixedRows > 0);
   if (!userDefinedColumns) {
     const minForcedCardWidth = 80;
     const minWidthForCols = (desiredCols: number) => {
@@ -312,11 +318,16 @@ export const calculateGridLayout = (
   }
 
   // Linhas fixas ou calculadas
-  const minRowsForCount = Math.max(1, Math.ceil(Math.max(1, productCount) / Math.max(1, cols)));
-  if (zone.rows && zone.rows > 0) {
-    rows = Math.max(zone.rows, minRowsForCount);
+  if (layoutDirection === 'vertical' && fixedRows > 0 && fixedCols === 0) {
+    rows = fixedRows;
+    cols = Math.max(1, Math.ceil(Math.max(1, productCount) / Math.max(1, rows)));
   } else {
-    rows = minRowsForCount;
+    const minRowsForCount = Math.max(1, Math.ceil(Math.max(1, productCount) / Math.max(1, cols)));
+    if (fixedRows > 0) {
+      rows = Math.max(fixedRows, minRowsForCount);
+    } else {
+      rows = minRowsForCount;
+    }
   }
 
   // Calcular dimensões dos itens
@@ -377,28 +388,54 @@ export const calculateProductPosition = (
   const padding = getZonePadding(zone);
   const gapH = getGapHorizontal(zone);
   const gapV = getGapVertical(zone);
-  
-  const row = Math.floor(index / cols);
-  const col = index % cols;
-  
+  const layoutDirection = zone.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection ?? 'horizontal';
+  const totalRows = Math.max(1, Math.ceil(Math.max(1, productCount) / Math.max(1, cols)));
+  const effectiveRows =
+    layoutDirection === 'vertical' && typeof zone.rows === 'number' && zone.rows > 0
+      ? zone.rows
+      : totalRows;
+  const effectiveCols =
+    layoutDirection === 'vertical'
+      ? Math.max(1, Math.ceil(Math.max(1, productCount) / Math.max(1, effectiveRows)))
+      : Math.max(1, cols);
+
+  const col = layoutDirection === 'vertical'
+    ? Math.floor(index / Math.max(1, effectiveRows))
+    : (index % Math.max(1, effectiveCols));
+  const row = layoutDirection === 'vertical'
+    ? (index % Math.max(1, effectiveRows))
+    : Math.floor(index / Math.max(1, effectiveCols));
+
   let xOffset = padding + (col * (itemWidth + gapH));
-  const yOffset = padding + (row * (itemHeight + gapV));
-  
-  // Centralizar última linha se comportamento for 'center'
-  const totalRows = Math.ceil(productCount / cols);
-  const lastRowItemCount = productCount % cols || cols;
-  
-  if (row === totalRows - 1 && lastRowItemCount < cols) {
-    const behavior = getLastRowBehavior(zone);
-    
-    if (behavior === 'center') {
-      const rowWidth = (lastRowItemCount * itemWidth) + ((lastRowItemCount - 1) * gapH);
-      const availableWidth = zone.width - (padding * 2);
-      const centerOffset = (availableWidth - rowWidth) / 2;
-      xOffset = centerOffset + (col * (itemWidth + gapH)) + padding;
+  let yOffset = padding + (row * (itemHeight + gapV));
+  const behavior = getLastRowBehavior(zone);
+
+  if (layoutDirection === 'vertical') {
+    const isLastCol = col === effectiveCols - 1;
+    const itemsInCol = isLastCol ? (productCount % Math.max(1, effectiveRows) || Math.max(1, effectiveRows)) : Math.max(1, effectiveRows);
+
+    if (isLastCol && itemsInCol < Math.max(1, effectiveRows)) {
+      if (behavior === 'fill' || behavior === 'stretch') {
+        const colItemH = (zone.height - (padding * 2) - ((itemsInCol - 1) * gapV)) / Math.max(1, itemsInCol);
+        yOffset = padding + (row * (colItemH + gapV));
+      } else if (behavior === 'center') {
+        const colHeight = (itemsInCol * itemHeight) + ((itemsInCol - 1) * gapV);
+        yOffset = padding + ((zone.height - (padding * 2) - colHeight) / 2) + (row * (itemHeight + gapV));
+      }
     }
-    // 'fill' e 'stretch' mantém o comportamento padrão
-    // 'left' também mantém
+  } else {
+    const isLastRow = row === totalRows - 1;
+    const itemsInRow = isLastRow ? (productCount % Math.max(1, effectiveCols) || Math.max(1, effectiveCols)) : Math.max(1, effectiveCols);
+
+    if (isLastRow && itemsInRow < Math.max(1, effectiveCols)) {
+      if (behavior === 'fill' || behavior === 'stretch') {
+        const rowItemW = (zone.width - (padding * 2) - ((itemsInRow - 1) * gapH)) / Math.max(1, itemsInRow);
+        xOffset = padding + (col * (rowItemW + gapH));
+      } else if (behavior === 'center') {
+        const rowWidth = (itemsInRow * itemWidth) + ((itemsInRow - 1) * gapH);
+        xOffset = padding + ((zone.width - (padding * 2) - rowWidth) / 2) + (col * (itemWidth + gapH));
+      }
+    }
   }
 
   return {
@@ -516,7 +553,12 @@ export const migrateProductZone = (oldZone: any): ProductZone => {
   return {
     ...DEFAULT_PRODUCT_ZONE,
     id: oldZone.id ?? DEFAULT_PRODUCT_ZONE.id,
+    name: oldZone.name ?? oldZone.zoneName ?? DEFAULT_PRODUCT_ZONE.name,
     enabled: oldZone.enabled ?? DEFAULT_PRODUCT_ZONE.enabled,
+    role: oldZone.role ?? DEFAULT_PRODUCT_ZONE.role,
+    contentSource: oldZone.contentSource ?? DEFAULT_PRODUCT_ZONE.contentSource,
+    contentStatus: oldZone.contentStatus ?? DEFAULT_PRODUCT_ZONE.contentStatus,
+    overflowPolicy: oldZone.overflowPolicy ?? DEFAULT_PRODUCT_ZONE.overflowPolicy,
     x: oldZone.x ?? oldZone.left ?? DEFAULT_PRODUCT_ZONE.x,
     y: oldZone.y ?? oldZone.top ?? DEFAULT_PRODUCT_ZONE.y,
     width: oldZone.width ?? DEFAULT_PRODUCT_ZONE.width,
@@ -526,9 +568,9 @@ export const migrateProductZone = (oldZone: any): ProductZone => {
     gapVertical: oldZone.gapVertical ?? oldZone.gap ?? padding ?? DEFAULT_PRODUCT_ZONE.gapVertical,
     columns: oldZone.columns ?? oldZone.cols ?? 0,
     rows: oldZone.rows ?? 0,
-    layoutDirection: oldZone.layoutDirection ?? 'horizontal',
-    cardAspectRatio: oldZone.cardAspectRatio ?? 'auto',
-    lastRowBehavior: oldZone.lastRowBehavior ?? oldZone.orphanBehavior ?? 'center',
+    layoutDirection: oldZone.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection,
+    cardAspectRatio: oldZone.cardAspectRatio ?? DEFAULT_PRODUCT_ZONE.cardAspectRatio,
+    lastRowBehavior: oldZone.lastRowBehavior ?? oldZone.orphanBehavior ?? DEFAULT_PRODUCT_ZONE.lastRowBehavior,
     highlightCount: oldZone.highlightCount ?? 0,
     highlightPos: oldZone.highlightPos ?? DEFAULT_PRODUCT_ZONE.highlightPos,
     highlightHeight: oldZone.highlightHeight ?? DEFAULT_PRODUCT_ZONE.highlightHeight,

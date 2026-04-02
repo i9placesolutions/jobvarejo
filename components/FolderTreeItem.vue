@@ -55,10 +55,10 @@ const isChildEditing = (childId: string): boolean => {
   <div class="folder-item">
     <div
       :class="[
-        'flex items-center gap-2 h-9 px-3 cursor-pointer transition-all group relative rounded-lg border border-transparent',
-        isActive ? 'bg-white/12 text-white border-white/20' : 'hover:bg-white/6 text-zinc-400'
+        'flex items-center gap-2 h-9 px-2 cursor-pointer transition-all group relative rounded-lg border border-transparent',
+        isActive ? 'bg-indigo-50 text-indigo-700 border-indigo-200 font-semibold' : 'hover:bg-slate-50 text-slate-600'
       ]"
-      :style="{ paddingLeft: `${level * 16 + 12}px` }"
+      :style="{ paddingLeft: `${level * 14 + 8}px` }"
       @click="emit('select', folder.id)"
       @contextmenu="(e: MouseEvent) => emit('contextMenu', e, folder.id)"
       @dragover="(e: DragEvent) => e.preventDefault()"
@@ -67,16 +67,16 @@ const isChildEditing = (childId: string): boolean => {
       <!-- Expand/Collapse chevron -->
       <button
         v-if="hasChildren"
-        class="p-1 hover:bg-white/10 rounded-md transition-all"
+        class="p-0.5 hover:bg-slate-100 rounded-md transition-all"
         @click.stop="emit('toggle', folder.id)"
       >
-        <ChevronRight v-if="!isExpanded" class="w-3.5 h-3.5 text-zinc-500" />
-        <ChevronDown v-else class="w-3.5 h-3.5 text-zinc-500" />
+        <ChevronRight v-if="!isExpanded" class="w-3.5 h-3.5 text-slate-400" />
+        <ChevronDown v-else class="w-3.5 h-3.5 text-slate-400" />
       </button>
-      <span v-else class="w-5.5"></span>
+      <span v-else class="w-4.5"></span>
 
       <!-- Folder icon -->
-      <Folder :class="['w-4 h-4 shrink-0', isActive ? 'fill-violet-400 text-violet-400' : 'text-zinc-500']" />
+      <Folder :class="['w-[18px] h-[18px] shrink-0', isActive ? 'fill-indigo-400 text-indigo-500' : 'text-slate-400']" />
 
       <!-- Folder name -->
       <input
@@ -87,22 +87,22 @@ const isChildEditing = (childId: string): boolean => {
         @keyup.enter="emit('saveEdit')"
         @keyup.escape="emit('cancelEdit')"
         @blur="emit('saveEdit')"
-        class="flex-1 min-w-0 bg-[#2a2a2a] border border-white/10 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-violet-500/50 text-white transition-all"
+        class="flex-1 min-w-0 bg-white border border-slate-300 rounded-lg px-2 py-1 text-[13px] focus:outline-none focus:border-indigo-400 text-slate-800 transition-all"
         autofocus
       />
-      <span v-else class="flex-1 min-w-0 truncate text-xs font-medium">{{ folder.name }}</span>
+      <span v-else class="flex-1 min-w-0 truncate text-[13px] font-medium">{{ folder.name }}</span>
 
       <!-- Project count badge -->
-      <span v-if="projectCount > 0" class="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">
+      <span v-if="projectCount > 0" class="text-[11px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0">
         {{ projectCount }}
       </span>
 
       <!-- More options button -->
       <button
-        class="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-white/12 rounded-lg transition-all"
+        class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded-lg transition-all shrink-0"
         @click.stop="(e: MouseEvent) => emit('contextMenu', e, folder.id)"
       >
-        <MoreVertical class="w-3.5 h-3.5 text-zinc-500" />
+        <MoreVertical class="w-3.5 h-3.5 text-slate-400" />
       </button>
     </div>
 

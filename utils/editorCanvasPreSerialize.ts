@@ -23,9 +23,24 @@ export const prepareCanvasForSerialization = (
 ): PrepareCanvasForSerializationResult => {
   // FIX: single snapshot — avoid double getObjects() race where a listener
   // fires between the two calls and shifts index-based sync in serializer.
-  const allCanvasObjects = opts.canvasInstance
+  const topLevelCanvasObjects = opts.canvasInstance
     .getObjects()
     .filter((o: any) => opts.isValidFabricCanvasObject(o))
+
+  const allCanvasObjects: any[] = []
+  const visited = new Set<any>()
+  const visit = (obj: any) => {
+    if (!obj || visited.has(obj) || !opts.isValidFabricCanvasObject(obj)) return
+    visited.add(obj)
+    allCanvasObjects.push(obj)
+
+    if (typeof obj.getObjects === 'function') {
+      const children = obj.getObjects() || []
+      children.forEach((child: any) => visit(child))
+    }
+  }
+
+  topLevelCanvasObjects.forEach((obj: any) => visit(obj))
 
   allCanvasObjects.forEach((obj: any) => {
     opts.ensurePersistentContentFlags(obj)
@@ -68,7 +83,7 @@ export const prepareCanvasForSerialization = (
   // We null them here so toObject() won't capture runtime-only clip paths,
   // but we MUST restore them so live canvas objects are not permanently mutated.
   const savedClipPaths = new Map<any, any>()
-  allCanvasObjects.forEach((obj: any) => {
+  topLevelCanvasObjects.forEach((obj: any) => {
     if (isZoneLikeObject(obj)) {
       savedClipPaths.set(obj, obj.clipPath)
       obj.clipPath = null
