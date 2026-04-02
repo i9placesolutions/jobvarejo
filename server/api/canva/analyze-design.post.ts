@@ -31,13 +31,32 @@ export default defineEventHandler(async (event) => {
     const fills = txn.fills || []
     const pages = txn.pages || []
 
-    const analysis = analyzeCanvaDesign(canvaDesignId, richtexts, fills, pages)
+    const structuralAnalysis = analyzeCanvaDesign(canvaDesignId, richtexts, fills, pages)
+    let smartAnalysis: any = {}
+
+    try {
+      const { analyzeDesignWithAI } = await import('../../utils/canva-ai-analyzer')
+      smartAnalysis = await analyzeDesignWithAI(canvaDesignId, richtexts, fills, pages)
+    } catch (smartErr: any) {
+      console.error('[canva/analyze-design] Analise inteligente falhou, seguindo com analise estrutural:', smartErr?.message || smartErr)
+      smartAnalysis = {
+        pages: [],
+        design_type: 'offer',
+        summary: '',
+      }
+    }
 
     await canvaCancelEditingTransaction(txn.transaction_id)
 
     return {
-      ...analysis,
-      thumbnail: txn.thumbnails?.[0]?.url || null,
+      ...structuralAnalysis,
+      ...smartAnalysis,
+      products: structuralAnalysis.products || [],
+      products_per_page: structuralAnalysis.products_per_page || {},
+      pages: smartAnalysis.pages || [],
+      design_type: smartAnalysis.design_type || 'offer',
+      summary: smartAnalysis.summary || '',
+      thumbnail: txn.thumbnails?.[0]?.url || smartAnalysis.thumbnail || null,
     }
   } catch (err: any) {
     console.error('[canva/analyze-design] Erro:', err.message || err)
