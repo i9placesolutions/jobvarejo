@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   if (parentId) {
     // Buscar subpastas de uma pasta especifica
     result = await pgQuery(
-      `SELECT id, name, parent_id, created_at, updated_at
+      `SELECT id, name, parent_id, created_at
        FROM public.canva_folders
        WHERE tenant_id = $1 AND parent_id = $2
        ORDER BY name ASC`,
@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   } else {
     // Buscar pastas raiz (sem parent_id)
     result = await pgQuery(
-      `SELECT id, name, parent_id, created_at, updated_at
+      `SELECT id, name, parent_id, created_at
        FROM public.canva_folders
        WHERE tenant_id = $1 AND parent_id IS NULL
        ORDER BY name ASC`,
