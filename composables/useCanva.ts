@@ -61,18 +61,10 @@ export const useCanva = () => {
     isProcessing.value = true
     error.value = null
     try {
-      // Tenta analyze-smart (com IA), fallback para analyze (regex)
-      let data: any
-      try {
-        data = await $fetch<any>(`/api/canva/designs/${designId}/analyze-smart`, {
-          method: 'POST',
-        })
-      } catch (smartErr: any) {
-        console.warn('analyze-smart indisponivel, usando analyze basico:', smartErr?.statusCode)
-        data = await $fetch<any>(`/api/canva/designs/${designId}/analyze`, {
-          method: 'POST',
-        })
-      }
+      const data = await $fetch<any>('/api/canva/analyze-design', {
+        method: 'POST',
+        body: { design_id: designId },
+      })
       designAnalysis.value = data
       return data
     } catch (err: any) {
