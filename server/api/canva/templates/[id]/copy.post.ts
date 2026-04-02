@@ -64,11 +64,24 @@ export default defineEventHandler(async (event) => {
     canvaResult = await canvaCopyDesign(template.canva_design_id, title)
   } catch (error: any) {
     const statusCode = Number(error?.statusCode || error?.response?.status || 0)
-    if (statusCode === 401 || statusCode === 403) {
+    if (statusCode >= 400 && statusCode < 500) {
       throw createError({
         statusCode: 502,
-        statusMessage: 'Falha ao copiar design na Canva. Verifique token e escopos da integracao.',
+        statusMessage: 'Falha ao copiar design na Canva. Verifique token, escopos e permissoes da integracao.',
         data: error?.data || null,
+      })
+    }
+    if (statusCode >= 500) {
+      throw createError({
+        statusCode: 502,
+        statusMessage: 'Canva indisponivel ao copiar design. Tente novamente em instantes.',
+        data: error?.data || null,
+      })
+    }
+    if (error instanceof Error && error.message) {
+      throw createError({
+        statusCode: 502,
+        statusMessage: error.message,
       })
     }
     throw error

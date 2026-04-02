@@ -404,11 +404,11 @@ export const canvaGetDesignPages = async (
   })
 }
 
-// ── Copiar Design (via export+import) ───────────────────────────────────────
+// ── Copiar Design (via export+URL import) ───────────────────────────────────
 
 /**
  * Copiar um design do Canva criando uma nova copia.
- * Estrategia: exportar como PDF e reimportar como novo design.
+ * Estrategia: exportar como PDF e importar a URL publica temporaria como novo design.
  */
 export const canvaCopyDesign = async (
   sourceDesignId: string,
@@ -427,7 +427,8 @@ export const canvaCopyDesign = async (
       break
     }
     if (status.job.status === 'failed') {
-      throw new Error('Falha ao exportar design original')
+      const reason = (status as any)?.job?.error?.message || 'Falha ao exportar design original'
+      throw new Error(reason)
     }
     await new Promise(r => setTimeout(r, 2000))
   }
@@ -436,10 +437,16 @@ export const canvaCopyDesign = async (
     throw new Error('Timeout ao exportar design original')
   }
 
-  // 3. Importar como novo design
-  const importResponse = await canvaFetch<any>('/imports', {
+  // 3. Importar a URL do PDF como novo design.
+  // A documentacao atual da Canva separa import binario (`/imports`)
+  // de import por URL publica (`/url-imports`).
+  const importResponse = await canvaFetch<any>('/url-imports', {
     method: 'POST',
-    body: { url: exportUrl, title: newTitle },
+    body: {
+      url: exportUrl,
+      title: newTitle,
+      mime_type: 'application/pdf',
+    },
   })
 
   const importJobId = importResponse.job?.id
@@ -449,9 +456,14 @@ export const canvaCopyDesign = async (
 
   // 4. Polling ate import terminar
   for (let i = 0; i < 20; i++) {
-    const status = await canvaFetch<any>(`/imports/${importJobId}`)
+    const status = await canvaFetch<any>(`/url-imports/${importJobId}`)
     if (status.job?.status === 'completed' || status.job?.status === 'success') {
-      const designId = status.job?.design?.id || status.job?.result?.design?.id
+      const designId =
+        status.job?.result?.designs?.[0]?.id ||
+        status.job?.design?.id ||
+        status.job?.result?.design?.id ||
+        status.design?.id ||
+        status.result?.design?.id
       if (!designId) throw new Error('Design ID nao encontrado na resposta')
 
       // Obter info completa do novo design
@@ -464,7 +476,8 @@ export const canvaCopyDesign = async (
       }
     }
     if (status.job?.status === 'failed') {
-      throw new Error('Falha ao importar design copiado')
+      const reason = status.job?.error?.message || 'Falha ao importar design copiado'
+      throw new Error(reason)
     }
     await new Promise(r => setTimeout(r, 2000))
   }
