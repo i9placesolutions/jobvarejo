@@ -1,51 +1,67 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+// Salvar/ler tokens do Canva no banco de dados PostgreSQL (persiste entre deploys)
+import { pgOneOrNull, pgQuery } from './postgres'
 
 interface CanvaTokenCache {
   access_token: string
   refresh_token: string
   expires_at: number
-  updated_at: string
 }
 
-const getCachePath = () =>
-  resolve(process.cwd(), process.env.CANVA_TOKEN_CACHE_FILE || '.canva-oauth.json')
+// Cache em memória para evitar query a cada request
+let _memCache: CanvaTokenCache | null = null
+let _memCacheAt: number = 0
+const MEM_CACHE_TTL = 60_000 // 1 minuto
 
-export const readCanvaTokenCache = (): CanvaTokenCache | null => {
-  const file = getCachePath()
-  if (!existsSync(file)) return null
+export const readCanvaTokenCache = async (): Promise<CanvaTokenCache | null> => {
+  // Cache em memória
+  if (_memCache && (Date.now() - _memCacheAt) < MEM_CACHE_TTL) {
+    return _memCache
+  }
 
   try {
-    const raw = readFileSync(file, 'utf8')
-    const parsed = JSON.parse(raw) as Partial<CanvaTokenCache>
-    if (!parsed?.access_token || !parsed?.refresh_token) return null
-    return {
-      access_token: String(parsed.access_token),
-      refresh_token: String(parsed.refresh_token),
-      expires_at: Number(parsed.expires_at || 0),
-      updated_at: String(parsed.updated_at || ''),
+    const row = await pgOneOrNull<any>(
+      `SELECT access_token, refresh_token, expires_at FROM canva_oauth_tokens ORDER BY updated_at DESC LIMIT 1`
+    )
+    if (!row?.access_token) return null
+
+    _memCache = {
+      access_token: row.access_token,
+      refresh_token: row.refresh_token,
+      expires_at: Number(row.expires_at || 0),
     }
-  } catch (error) {
-    console.warn('[canva-auth] Falha ao ler cache local de token:', error)
+    _memCacheAt = Date.now()
+    return _memCache
+  } catch (err) {
+    console.warn('[canva-token-cache] Erro ao ler do banco:', err)
     return null
   }
 }
 
-export const writeCanvaTokenCache = (payload: {
+export const writeCanvaTokenCache = async (payload: {
   accessToken: string
   refreshToken: string
   expiresAt: number
 }) => {
-  const file = getCachePath()
+  _memCache = {
+    access_token: payload.accessToken,
+    refresh_token: payload.refreshToken,
+    expires_at: payload.expiresAt,
+  }
+  _memCacheAt = Date.now()
 
   try {
-    writeFileSync(file, JSON.stringify({
-      access_token: payload.accessToken,
-      refresh_token: payload.refreshToken,
-      expires_at: payload.expiresAt,
-      updated_at: new Date().toISOString(),
-    }, null, 2))
-  } catch (error) {
-    console.warn('[canva-auth] Falha ao escrever cache local de token:', error)
+    // Upsert - sempre manter apenas 1 registro
+    await pgQuery(
+      `INSERT INTO canva_oauth_tokens (id, access_token, refresh_token, expires_at, updated_at)
+       VALUES ('singleton', $1, $2, $3, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         access_token = $1,
+         refresh_token = $2,
+         expires_at = $3,
+         updated_at = NOW()`,
+      [payload.accessToken, payload.refreshToken, payload.expiresAt]
+    )
+  } catch (err) {
+    console.warn('[canva-token-cache] Erro ao salvar no banco:', err)
   }
 }

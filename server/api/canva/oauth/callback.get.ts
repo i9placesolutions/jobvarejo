@@ -76,7 +76,7 @@ export default defineEventHandler(async (event) => {
   })
 
   const expiresAt = Date.now() + ((Number(tokenData.expires_in) || 0) * 1000)
-  writeCanvaTokenCache({
+  await writeCanvaTokenCache({
     accessToken: tokenData.access_token,
     refreshToken: tokenData.refresh_token,
     expiresAt,
@@ -86,7 +86,7 @@ export default defineEventHandler(async (event) => {
   return renderHtml(
     'Canva OAuth',
     `<h1 class="ok">Autorizacao concluida</h1>
-     <p>Os novos tokens foram salvos em <code>.canva-oauth.json</code> no servidor.</p>
+     <p>Os novos tokens foram salvos no banco de dados do servidor.</p>
      <p>Voce ja pode voltar ao app e testar novamente o fluxo de criacao do design.</p>`
   )
 })

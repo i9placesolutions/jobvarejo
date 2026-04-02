@@ -76,9 +76,9 @@ const isAccessTokenUsable = (token: string): boolean => {
   return expMs > (Date.now() + 60_000)
 }
 
-const getCanvaAuthConfig = () => {
+const getCanvaAuthConfig = async () => {
   let config: Record<string, any> = {}
-  const cache = readCanvaTokenCache()
+  const cache = await readCanvaTokenCache()
   try {
     config = useRuntimeConfig() as Record<string, any>
   } catch {
@@ -129,7 +129,7 @@ const getAccessToken = async (): Promise<string> => {
     refreshToken,
     clientId,
     clientSecret,
-  } = getCanvaAuthConfig()
+  } = await getCanvaAuthConfig()
   let refreshError: any = null
   const effectiveRefreshToken = cachedRefreshToken || refreshToken
 
@@ -219,7 +219,7 @@ const refreshAccessToken = async (
   _tokenExpiresAt = Date.now() + (data.expires_in * 1000) - 60000 // 1min de margem
   const nextRefreshToken = String(data.refresh_token || refreshToken).trim()
   if (_accessToken && nextRefreshToken) {
-    writeCanvaTokenCache({
+    await writeCanvaTokenCache({
       accessToken: _accessToken,
       refreshToken: nextRefreshToken,
       expiresAt: _tokenExpiresAt,
