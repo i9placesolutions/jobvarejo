@@ -1,16 +1,15 @@
 // Obter paginas de um design do Canva (com thumbnails)
 
+import { canvaGetDesignPages } from '../../../../utils/canva-client'
+import { resolveCanvaDesignRoute } from '../../../../utils/canva-design-route'
+
 export default defineEventHandler(async (event) => {
-  const designId = getRouterParam(event, 'id')
   const query = getQuery(event)
   const page = Number(query.page) || 1
   const limit = Number(query.limit) || 20
+  const { canvaDesignId } = await resolveCanvaDesignRoute(event, { allowRemoteFallback: true })
 
-  if (!designId) {
-    throw createError({ statusCode: 400, message: 'ID do design e obrigatorio' })
-  }
-
-  const response = await canvaGetDesignPages(designId, {
+  const response = await canvaGetDesignPages(canvaDesignId, {
     offset: page,
     limit,
   })

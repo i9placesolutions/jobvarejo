@@ -1,16 +1,16 @@
 // Analisar estrutura de um design do Canva
 // Detecta slots de produtos (nome, preco, unidade, imagem)
 
-export default defineEventHandler(async (event) => {
-  const designId = getRouterParam(event, 'id')
+import { analyzeCanvaDesign } from '../../../../utils/canva-analyzer'
+import { canvaCancelEditingTransaction, canvaStartEditingTransaction } from '../../../../utils/canva-client'
+import { resolveCanvaDesignRoute } from '../../../../utils/canva-design-route'
 
-  if (!designId) {
-    throw createError({ statusCode: 400, message: 'ID do design e obrigatorio' })
-  }
+export default defineEventHandler(async (event) => {
+  const { canvaDesignId } = await resolveCanvaDesignRoute(event)
 
   try {
     // Iniciar transacao de edicao para ler os elementos
-    const txnResponse = await canvaStartEditingTransaction(designId)
+    const txnResponse = await canvaStartEditingTransaction(canvaDesignId)
     const txn = txnResponse.transaction
 
     // Extrair dados da transacao
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
     const pages = txn.pages || []
 
     // Analisar a estrutura
-    const analysis = analyzeCanvaDesign(designId, richtexts, fills, pages)
+    const analysis = analyzeCanvaDesign(canvaDesignId, richtexts, fills, pages)
 
     // Cancelar a transacao (era so leitura)
     await canvaCancelEditingTransaction(txn.transaction_id)
@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     console.error('Erro ao analisar design:', err.message || err)
     throw createError({
       statusCode: err.statusCode || 500,
-      message: err.statusMessage || err.message || 'Erro ao analisar design',
+      statusMessage: err.statusMessage || err.message || 'Erro ao analisar design',
     })
   }
 })

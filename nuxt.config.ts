@@ -89,6 +89,7 @@ export default defineNuxtConfig({
     canvaRefreshToken: process.env.CANVA_REFRESH_TOKEN || '',
     canvaClientId: process.env.CANVA_CLIENT_ID || '',
     canvaClientSecret: process.env.CANVA_CLIENT_SECRET || '',
+    canvaOauthRedirectUri: process.env.CANVA_OAUTH_REDIRECT_URI || '',
 
     openaiApiKey: process.env.NUXT_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
     geminiApiKey: process.env.NUXT_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '',

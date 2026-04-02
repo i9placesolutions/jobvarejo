@@ -57,6 +57,8 @@ tmp/
 .vercel
 .env*.local
 .playwright-cli/
+.canva-oauth.json
+.canva-oauth-session.json
 
 # MCP config (contém tokens sensíveis)
 .mcp.json

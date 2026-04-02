@@ -32,6 +32,7 @@ const searchTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
 const showModal = ref(false)
 const selectedTemplate = ref<CanvaTemplate | null>(null)
 const customTitle = ref('')
+const copyError = ref('')
 
 // Verificação de dados obrigatórios da empresa
 const auth = useBuilderAuth()
@@ -117,6 +118,7 @@ const openUseModal = async (template: CanvaTemplate) => {
   // Dados ok, prosseguir normalmente
   selectedTemplate.value = template
   customTitle.value = template.title
+  copyError.value = ''
   modalPages.value = [{ index: 1, thumbnail: template.thumbnail_url }]
   showModal.value = true
 
@@ -155,6 +157,7 @@ const closeModal = () => {
   showModal.value = false
   selectedTemplate.value = null
   customTitle.value = ''
+  copyError.value = ''
   modalPages.value = []
 }
 
@@ -163,6 +166,7 @@ const confirmCopy = async () => {
   if (!selectedTemplate.value || !customTitle.value.trim()) return
 
   isCopying.value = true
+  copyError.value = ''
   try {
     const result = await $fetch<{ design: { id: string } }>(`/api/canva/templates/${selectedTemplate.value.id}/copy`, {
       method: 'POST',
@@ -175,6 +179,7 @@ const confirmCopy = async () => {
     await navigateTo(`/canva/${result.design?.id || result.id}`)
   } catch (err: unknown) {
     const fetchError = err as { data?: { statusMessage?: string; canvaError?: string } }
+    copyError.value = fetchError?.data?.statusMessage || 'Nao foi possivel copiar o template agora.'
     console.error('Erro ao copiar template:', {
       error: err,
       statusMessage: fetchError?.data?.statusMessage || null,
@@ -423,6 +428,13 @@ onUnmounted(() => {
                 <p class="text-xs text-zinc-500">
                   Uma cópia deste template será criada para você personalizar com seus produtos.
                 </p>
+
+                <div
+                  v-if="copyError"
+                  class="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+                >
+                  {{ copyError }}
+                </div>
               </div>
 
               <!-- Ações do modal -->

@@ -64,6 +64,14 @@ export default defineEventHandler(async (event) => {
     canvaResult = await canvaCopyDesign(template.canva_design_id, title)
   } catch (error: any) {
     const statusCode = Number(error?.statusCode || error?.response?.status || 0)
+    const detail =
+      String(
+        error?.data?.canvaMessage ||
+        error?.statusMessage ||
+        error?.message ||
+        ''
+      ).trim() || null
+
     if (statusCode >= 400 && statusCode < 500) {
       console.error('[canva/copy] Canva API client error', {
         statusCode,
@@ -74,8 +82,10 @@ export default defineEventHandler(async (event) => {
       })
       throw createError({
         statusCode: 502,
-        statusMessage: 'Falha ao copiar design na Canva. Verifique token, escopos e permissoes da integracao.',
-        data: error?.data || null,
+        statusMessage: detail
+          ? `Falha ao copiar design na Canva: ${detail}`
+          : 'Falha ao copiar design na Canva. Verifique token, escopos e permissoes da integracao.',
+        data: error?.data || { detail },
       })
     }
     if (statusCode >= 500) {
@@ -88,8 +98,10 @@ export default defineEventHandler(async (event) => {
       })
       throw createError({
         statusCode: 502,
-        statusMessage: 'Canva indisponivel ao copiar design. Tente novamente em instantes.',
-        data: error?.data || null,
+        statusMessage: detail
+          ? `Canva indisponivel ao copiar design: ${detail}`
+          : 'Canva indisponivel ao copiar design. Tente novamente em instantes.',
+        data: error?.data || { detail },
       })
     }
     if (error instanceof Error && error.message) {

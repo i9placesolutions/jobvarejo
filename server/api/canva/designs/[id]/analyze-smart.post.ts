@@ -2,16 +2,15 @@
 // Detecta automaticamente: ofertas, institucional, misto
 // Classifica cada elemento: produto, logo, texto, contato, etc.
 
-export default defineEventHandler(async (event) => {
-  const designId = getRouterParam(event, 'id')
+import { canvaCancelEditingTransaction, canvaStartEditingTransaction } from '../../../../utils/canva-client'
+import { resolveCanvaDesignRoute } from '../../../../utils/canva-design-route'
 
-  if (!designId) {
-    throw createError({ statusCode: 400, message: 'ID do design e obrigatorio' })
-  }
+export default defineEventHandler(async (event) => {
+  const { canvaDesignId } = await resolveCanvaDesignRoute(event)
 
   try {
     // Iniciar transacao de edicao para ler elementos
-    const txnResponse = await canvaStartEditingTransaction(designId)
+    const txnResponse = await canvaStartEditingTransaction(canvaDesignId)
     const txn = txnResponse.transaction
 
     const richtexts = txn.richtexts || []
@@ -20,7 +19,7 @@ export default defineEventHandler(async (event) => {
 
     // Analise inteligente com IA
     const { analyzeDesignWithAI } = await import('~/server/utils/canva-ai-analyzer')
-    const analysis = await analyzeDesignWithAI(designId, richtexts, fills, pages)
+    const analysis = await analyzeDesignWithAI(canvaDesignId, richtexts, fills, pages)
 
     // Cancelar transacao (era so leitura)
     await canvaCancelEditingTransaction(txn.transaction_id)
@@ -33,7 +32,7 @@ export default defineEventHandler(async (event) => {
     console.error('Erro ao analisar design:', err.message || err)
     throw createError({
       statusCode: err.statusCode || 500,
-      message: err.statusMessage || err.message || 'Erro ao analisar design',
+      statusMessage: err.statusMessage || err.message || 'Erro ao analisar design',
     })
   }
 })

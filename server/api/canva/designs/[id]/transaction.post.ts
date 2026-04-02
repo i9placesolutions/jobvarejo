@@ -1,18 +1,18 @@
 // Iniciar transacao de edicao no Canva
 
+import { canvaStartEditingTransaction } from '../../../../utils/canva-client'
+import { resolveCanvaDesignRoute } from '../../../../utils/canva-design-route'
+
 export default defineEventHandler(async (event) => {
-  const designId = getRouterParam(event, 'id')
+  const { localDesign, canvaDesignId } = await resolveCanvaDesignRoute(event)
 
-  if (!designId) {
-    throw createError({ statusCode: 400, message: 'ID do design e obrigatorio' })
-  }
-
-  const response = await canvaStartEditingTransaction(designId)
+  const response = await canvaStartEditingTransaction(canvaDesignId)
   const txn = response.transaction
 
   return {
     transaction_id: txn.id,
     design_id: txn.design.id,
+    local_design_id: localDesign?.id || null,
     pages: txn.design.pages.map(page => ({
       index: page.index,
       id: page.id,
