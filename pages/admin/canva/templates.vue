@@ -96,11 +96,11 @@ const syncFromCanva = async () => {
   error.value = null
   try {
     const headers = await getApiAuthHeaders()
-    const data = await $fetch<{ imported: number; message?: string }>('/api/canva/admin/sync-from-canva', {
+    const data = await $fetch<{ added: number; total: number }>('/api/canva/admin/sync-from-canva', {
       method: 'POST',
       headers,
     })
-    const count = data?.imported ?? 0
+    const count = data?.added ?? 0
     syncMessage.value = `${count} novo(s) template(s) importado(s)`
     await fetchTemplates()
     // Limpar mensagem após 5 segundos

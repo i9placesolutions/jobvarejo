@@ -360,7 +360,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Loading -->
-    <div v-if="isLoading && folders.value.length === 0 && designs.value.length === 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div v-if="isLoading && folders.length === 0 && designs.length === 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       <div
         v-for="i in 8"
         :key="i"
