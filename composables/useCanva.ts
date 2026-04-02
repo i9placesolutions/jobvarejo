@@ -54,6 +54,27 @@ export const useCanva = () => {
     }
   }
 
+  // Analisar estrutura do design (detectar produtos automaticamente)
+  const designAnalysis = ref<any>(null)
+
+  const analyzeDesign = async (designId: string) => {
+    isProcessing.value = true
+    error.value = null
+    try {
+      const data = await $fetch<any>(`/api/canva/designs/${designId}/analyze-smart`, {
+        method: 'POST',
+      })
+      designAnalysis.value = data
+      return data
+    } catch (err: any) {
+      console.error('Erro ao analisar design:', err)
+      error.value = err?.data?.message || 'Erro ao analisar design'
+      throw err
+    } finally {
+      isProcessing.value = false
+    }
+  }
+
   // Iniciar transacao de edicao - le o conteudo do design
   const startTransaction = async (designId: string) => {
     isProcessing.value = true
@@ -227,9 +248,11 @@ export const useCanva = () => {
     mappings,
     isProcessing,
     error,
+    designAnalysis,
 
     // Acoes
     fetchDesigns,
+    analyzeDesign,
     startTransaction,
     detectSlots,
     mapProductToSlot,

@@ -6,6 +6,7 @@ const route = useRoute()
 
 const navItems = [
   { to: '/canva', label: 'Templates', icon: LayoutGrid, exact: true },
+  { to: '/canva/meus-designs', label: 'Meus Designs', icon: Image },
   { to: '/canva/products', label: 'Produtos', icon: Package },
   { to: '/builder/profile', label: 'Minha Empresa', icon: User },
 ]
