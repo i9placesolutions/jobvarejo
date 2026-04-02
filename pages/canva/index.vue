@@ -174,7 +174,12 @@ const confirmCopy = async () => {
     // Redireciona para o design copiado usando o id do canva_designs
     await navigateTo(`/canva/${result.design?.id || result.id}`)
   } catch (err: unknown) {
-    console.error('Erro ao copiar template:', err)
+    const fetchError = err as { data?: { statusMessage?: string; canvaError?: string } }
+    console.error('Erro ao copiar template:', {
+      error: err,
+      statusMessage: fetchError?.data?.statusMessage || null,
+      canvaError: fetchError?.data?.canvaError || null,
+    })
   } finally {
     isCopying.value = false
   }

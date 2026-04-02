@@ -835,8 +835,12 @@ const createCompanionDesign = async (products: any[]) => {
       await navigateTo(`/canva/${result.design.id}?companion=true`)
     }
   } catch (err: any) {
-    console.error('Erro ao criar companion:', err)
-    canva.error.value = 'Erro ao criar design companion'
+    console.error('Erro ao criar companion:', {
+      error: err,
+      statusMessage: err?.data?.statusMessage || null,
+      canvaError: err?.data?.canvaError || null,
+    })
+    canva.error.value = err?.data?.statusMessage || 'Erro ao criar design companion'
   } finally {
     isCreatingCompanion.value = false
   }
