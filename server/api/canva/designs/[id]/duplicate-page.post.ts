@@ -6,18 +6,12 @@
 // Se falhar, retorna instrucao para o cliente duplicar manualmente no Canva.
 
 import { canvaDuplicatePage } from '~/server/utils/canva-client'
+import { resolveCanvaDesignRoute } from '~/server/utils/canva-design-route'
 
 export default defineEventHandler(async (event) => {
-  const designId = getRouterParam(event, 'id')
+  const { canvaDesignId } = await resolveCanvaDesignRoute(event)
   const body = await readBody(event)
   const pageIndex = body?.page_index || 1
-
-  if (!designId) {
-    throw createError({
-      statusCode: 400,
-      message: 'ID do design e obrigatorio',
-    })
-  }
 
   if (typeof pageIndex !== 'number' || pageIndex < 1) {
     throw createError({
@@ -27,12 +21,12 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const result = await canvaDuplicatePage(designId, pageIndex)
+    const result = await canvaDuplicatePage(canvaDesignId, pageIndex)
     return result
   } catch (err: any) {
     throw createError({
       statusCode: 500,
-      message: err.message || 'Erro ao duplicar pagina',
+      statusMessage: err.message || 'Erro ao duplicar pagina',
     })
   }
 })

@@ -8,9 +8,11 @@
  * 4. O token sera exibido no terminal
  */
 
-const http = require("http");
-const crypto = require("crypto");
-const { URL } = require("url");
+import http from "node:http";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import { exec } from "node:child_process";
+import { URL } from "node:url";
 
 // ============================================
 // PREENCHA COM SUAS CREDENCIAIS
@@ -47,6 +49,22 @@ authUrl.searchParams.set("scope", SCOPES);
 authUrl.searchParams.set("response_type", "code");
 authUrl.searchParams.set("client_id", CANVA_CLIENT_ID);
 authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
+
+function printAuthUrl() {
+  const authUrlText = authUrl.toString();
+  console.log("\n========================================");
+  console.log("COPIE ESTE LINK SE O NAVEGADOR NAO ABRIR");
+  console.log("========================================");
+  console.log(authUrlText);
+  console.log("========================================\n");
+
+  try {
+    fs.writeFileSync(".canva-auth-url.txt", `${authUrlText}\n`);
+    console.log("URL salva em .canva-auth-url.txt\n");
+  } catch (error) {
+    console.warn("Nao foi possivel salvar .canva-auth-url.txt:", error.message);
+  }
+}
 
 // Funcao para trocar o code por access token
 async function exchangeCodeForToken(code) {
@@ -99,11 +117,28 @@ const server = http.createServer(async (req, res) => {
       console.log("ACCESS TOKEN GERADO COM SUCESSO!");
       console.log("========================================");
       console.log(`\nCANVA_ACCESS_TOKEN=${tokenData.access_token}`);
-      console.log(`\nRefresh Token: ${tokenData.refresh_token}`);
+      console.log(`CANVA_REFRESH_TOKEN=${tokenData.refresh_token}`);
+      console.log(`CANVA_CLIENT_ID=${CANVA_CLIENT_ID}`);
       console.log(`Expira em: ${tokenData.expires_in} segundos`);
       console.log("\n========================================");
-      console.log("Copie o CANVA_ACCESS_TOKEN acima e cole no .env");
+      console.log("Copie CANVA_ACCESS_TOKEN e CANVA_REFRESH_TOKEN acima e cole no .env");
       console.log("========================================\n");
+
+      try {
+        const expiresAt = Date.now() + ((Number(tokenData.expires_in) || 0) * 1000);
+        fs.writeFileSync(
+          ".canva-oauth.json",
+          JSON.stringify({
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token,
+            expires_at: expiresAt,
+            updated_at: new Date().toISOString(),
+          }, null, 2)
+        );
+        console.log("Cache local salvo em .canva-oauth.json");
+      } catch (cacheError) {
+        console.warn("Nao foi possivel salvar .canva-oauth.json:", cacheError.message);
+      }
 
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(`
@@ -134,16 +169,22 @@ server.listen(9876, "127.0.0.1", () => {
   console.log("========================================");
   console.log("\nServidor local iniciado em http://127.0.0.1:9876");
   console.log("\nAbrindo navegador para autorizacao...");
-  console.log(`\nSe o navegador nao abrir, acesse:\n${authUrl.toString()}\n`);
+  printAuthUrl();
 
-  const { exec } = require("child_process");
   const platform = process.platform;
+  const targetUrl = authUrl.toString();
 
   if (platform === "darwin") {
-    exec(`open "${authUrl.toString()}"`);
+    exec(`open "${targetUrl}"`, (error) => {
+      if (error) console.warn("Falha ao abrir navegador automaticamente:", error.message);
+    });
   } else if (platform === "win32") {
-    exec(`start "" "${authUrl.toString()}"`);
+    exec(`start "" "${targetUrl}"`, (error) => {
+      if (error) console.warn("Falha ao abrir navegador automaticamente:", error.message);
+    });
   } else {
-    exec(`xdg-open "${authUrl.toString()}"`);
+    exec(`xdg-open "${targetUrl}"`, (error) => {
+      if (error) console.warn("Falha ao abrir navegador automaticamente:", error.message);
+    });
   }
 });

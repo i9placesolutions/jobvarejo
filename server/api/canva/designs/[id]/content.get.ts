@@ -1,13 +1,12 @@
 // Obter conteudo de texto de um design do Canva
 
+import { canvaGetDesignContent } from '../../../../utils/canva-client'
+import { resolveCanvaDesignRoute } from '../../../../utils/canva-design-route'
+
 export default defineEventHandler(async (event) => {
-  const designId = getRouterParam(event, 'id')
+  const { canvaDesignId } = await resolveCanvaDesignRoute(event)
 
-  if (!designId) {
-    throw createError({ statusCode: 400, message: 'ID do design e obrigatorio' })
-  }
-
-  const response = await canvaGetDesignContent(designId, ['richtexts'])
+  const response = await canvaGetDesignContent(canvaDesignId, ['richtexts'])
 
   return {
     pages: response.pages || [],

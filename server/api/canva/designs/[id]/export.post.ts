@@ -1,15 +1,14 @@
 // Exportar design do Canva em formato especificado
 // Suporta exportar apenas paginas especificas via body.pages (array de numeros)
 
+import { canvaExportDesign, canvaGetExportJob } from '../../../../utils/canva-client'
+import { resolveCanvaDesignRoute } from '../../../../utils/canva-design-route'
+
 export default defineEventHandler(async (event) => {
-  const designId = getRouterParam(event, 'id')
+  const { canvaDesignId } = await resolveCanvaDesignRoute(event)
   const body = await readBody(event)
   const format = body.format || 'png'
   const pages = body.pages as number[] | undefined // ex: [1, 3] = so paginas 1 e 3
-
-  if (!designId) {
-    throw createError({ statusCode: 400, message: 'ID do design e obrigatorio' })
-  }
 
   // Montar opcoes de export incluindo paginas especificas
   const exportOptions: Record<string, any> = { type: format }
@@ -18,7 +17,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Iniciar export
-  const exportResponse = await canvaExportDesign(designId, exportOptions)
+  const exportResponse = await canvaExportDesign(canvaDesignId, exportOptions)
   const jobId = exportResponse.job.id
 
   // Polling ate o export terminar (max 60s)
