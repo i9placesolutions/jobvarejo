@@ -568,7 +568,7 @@ export const canvaCopyDesign = async (
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/octet-stream',
       'Import-Metadata': JSON.stringify({
-        title: newTitle,
+        title_base64: Buffer.from(newTitle).toString('base64'),
         mime_type: 'application/pdf',
       }),
     },
