@@ -553,16 +553,34 @@ export const canvaCopyDesign = async (
     throw new Error('Timeout ao exportar design original')
   }
 
-  // 3. Importar a URL do PDF como novo design via /design-imports-url
-  const importResponse = await canvaFetch<any>('/design-imports-url', {
+  // 3. Baixar o PDF e importar como binário via POST /imports
+  const token = await getAccessToken()
+  const pdfResponse = await fetch(exportUrl)
+  if (!pdfResponse.ok) {
+    throw new Error('Falha ao baixar PDF exportado')
+  }
+  const pdfBuffer = await pdfResponse.arrayBuffer()
+
+  const importUrl = new URL(`${CANVA_API_BASE}/imports`)
+  const importRes = await fetch(importUrl.toString(), {
     method: 'POST',
-    body: {
-      url: exportUrl,
-      title: newTitle,
-      mime_type: 'application/pdf',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/octet-stream',
+      'Import-Metadata': JSON.stringify({
+        title: newTitle,
+        mime_type: 'application/pdf',
+      }),
     },
+    body: pdfBuffer,
   })
 
+  if (!importRes.ok) {
+    const errText = await importRes.text().catch(() => '')
+    throw new Error(`Falha ao importar design: ${importRes.status} ${errText.slice(0, 200)}`)
+  }
+
+  const importResponse = await importRes.json() as any
   const importJobId = importResponse.job?.id
   if (!importJobId) {
     throw new Error('Falha ao iniciar importacao')
@@ -570,7 +588,7 @@ export const canvaCopyDesign = async (
 
   // 4. Polling ate import terminar
   for (let i = 0; i < 20; i++) {
-    const status = await canvaFetch<any>(`/design-imports-url/${importJobId}`)
+    const status = await canvaFetch<any>(`/imports/${importJobId}`)
     if (status.job?.status === 'completed' || status.job?.status === 'success') {
       const designId =
         status.job?.result?.design?.id ||
