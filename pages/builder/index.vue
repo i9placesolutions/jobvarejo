@@ -103,9 +103,9 @@ const confirmDelete = async () => {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const statusConfig: Record<BuilderFlyerStatus, { label: string; classes: string }> = {
-  DRAFT: { label: 'Rascunho', classes: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/20' },
-  PUBLISHED: { label: 'Publicado', classes: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' },
-  ARCHIVED: { label: 'Arquivado', classes: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
+  DRAFT: { label: 'Rascunho', classes: 'bg-gray-100 text-gray-600 border-gray-300' },
+  PUBLISHED: { label: 'Publicado', classes: 'bg-emerald-50 text-emerald-600 border-emerald-300' },
+  ARCHIVED: { label: 'Arquivado', classes: 'bg-amber-50 text-amber-600 border-amber-300' },
 }
 
 const formatDate = (dateStr: string | null): string => {
@@ -149,8 +149,8 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
       <div>
-        <h1 class="text-2xl font-bold text-white tracking-tight">Meus Encartes</h1>
-        <p class="text-sm text-zinc-500 mt-1">Crie e gerencie seus encartes promocionais</p>
+        <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Meus Encartes</h1>
+        <p class="text-sm text-gray-500 mt-1">Crie e gerencie seus encartes promocionais</p>
       </div>
       <button
         @click="createFlyer"
@@ -164,15 +164,15 @@ onMounted(() => {
     </div>
 
     <!-- Filter Tabs -->
-    <div class="flex items-center gap-1 mb-6 p-1 bg-[#18181b]/60 rounded-xl border border-white/5 w-fit">
+    <div class="flex items-center gap-1 mb-6 p-1 bg-gray-100 rounded-xl border border-gray-200 w-fit">
       <button
         v-for="tab in tabs"
         :key="tab.key"
         @click="activeFilter = tab.key"
         class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200"
         :class="activeFilter === tab.key
-          ? 'bg-emerald-500/15 text-emerald-400 shadow-sm'
-          : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'"
+          ? 'bg-emerald-500/15 text-emerald-600 shadow-sm'
+          : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'"
       >
         {{ tab.label }}
       </button>
@@ -183,15 +183,15 @@ onMounted(() => {
       <div
         v-for="i in 6"
         :key="i"
-        class="bg-[#18181b]/80 border border-white/5 rounded-xl p-5 animate-pulse"
+        class="bg-white border border-gray-200 rounded-xl p-5 animate-pulse"
       >
         <div class="flex items-start justify-between mb-4">
-          <div class="h-5 bg-white/5 rounded-lg w-40"></div>
-          <div class="h-5 bg-white/5 rounded-full w-20"></div>
+          <div class="h-5 bg-gray-100 rounded-lg w-40"></div>
+          <div class="h-5 bg-gray-100 rounded-full w-20"></div>
         </div>
         <div class="space-y-3">
-          <div class="h-4 bg-white/5 rounded w-32"></div>
-          <div class="h-4 bg-white/5 rounded w-24"></div>
+          <div class="h-4 bg-gray-100 rounded w-32"></div>
+          <div class="h-4 bg-gray-100 rounded w-24"></div>
         </div>
       </div>
     </div>
@@ -201,13 +201,13 @@ onMounted(() => {
       v-else-if="filteredFlyers.length === 0"
       class="flex flex-col items-center justify-center py-20 text-center"
     >
-      <div class="w-20 h-20 bg-[#18181b]/80 border border-white/5 rounded-2xl flex items-center justify-center mb-6">
-        <FileText class="w-10 h-10 text-zinc-600" />
+      <div class="w-20 h-20 bg-gray-50 border border-gray-200 rounded-2xl flex items-center justify-center mb-6">
+        <FileText class="w-10 h-10 text-gray-400" />
       </div>
-      <h2 class="text-lg font-semibold text-zinc-300 mb-2">
+      <h2 class="text-lg font-semibold text-gray-700 mb-2">
         {{ activeFilter === 'ALL' ? 'Nenhum encarte ainda' : 'Nenhum encarte nesta categoria' }}
       </h2>
-      <p class="text-sm text-zinc-500 max-w-md mb-6">
+      <p class="text-sm text-gray-500 max-w-md mb-6">
         {{ activeFilter === 'ALL'
           ? 'Comece criando seu primeiro encarte promocional. É rápido e fácil!'
           : 'Não há encartes com o filtro selecionado. Tente outro filtro ou crie um novo encarte.' }}
@@ -228,12 +228,12 @@ onMounted(() => {
       <div
         v-for="flyer in filteredFlyers"
         :key="flyer.id"
-        class="group bg-[#18181b]/80 border border-white/5 rounded-xl p-5 hover:border-emerald-500/20 hover:bg-[#18181b] transition-all duration-300 cursor-pointer relative"
+        class="group bg-white border border-gray-200 rounded-xl p-5 hover:border-emerald-500/30 hover:bg-gray-50 transition-all duration-300 cursor-pointer relative shadow-sm"
         @click="navigateTo(`/builder/${flyer.id}`)"
       >
         <!-- Card Header -->
         <div class="flex items-start justify-between mb-4">
-          <h3 class="text-sm font-semibold text-white group-hover:text-emerald-300 transition-colors truncate pr-3 max-w-[70%]">
+          <h3 class="text-sm font-semibold text-gray-900 group-hover:text-emerald-600 transition-colors truncate pr-3 max-w-[70%]">
             {{ flyer.title || 'Sem título' }}
           </h3>
           <span
@@ -247,7 +247,7 @@ onMounted(() => {
         <!-- Card Body -->
         <div class="space-y-2.5">
           <!-- Date range -->
-          <div class="flex items-center gap-2 text-xs text-zinc-500">
+          <div class="flex items-center gap-2 text-xs text-gray-500">
             <Calendar class="w-3.5 h-3.5 shrink-0" />
             <span v-if="flyer.start_date || flyer.end_date">
               {{ formatDate(flyer.start_date) }} — {{ formatDate(flyer.end_date) }}
@@ -256,18 +256,18 @@ onMounted(() => {
           </div>
 
           <!-- Updated at -->
-          <div class="flex items-center gap-2 text-xs text-zinc-500">
+          <div class="flex items-center gap-2 text-xs text-gray-500">
             <Clock class="w-3.5 h-3.5 shrink-0" />
             <span>Atualizado {{ formatRelativeTime(flyer.updated_at) }}</span>
           </div>
         </div>
 
         <!-- Card Footer -->
-        <div class="flex items-center justify-end mt-4 pt-3 border-t border-white/5">
+        <div class="flex items-center justify-end mt-4 pt-3 border-t border-gray-100">
           <button
             @click.stop="requestDelete(flyer.id)"
             :disabled="deletingId === flyer.id"
-            class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
           >
             <Loader2 v-if="deletingId === flyer.id" class="w-3.5 h-3.5 animate-spin" />
             <Trash2 v-else class="w-3.5 h-3.5" />
@@ -295,15 +295,15 @@ onMounted(() => {
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="cancelDelete"></div>
 
           <!-- Modal -->
-          <div class="relative bg-[#18181b] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-            <h3 class="text-lg font-semibold text-white mb-2">Excluir encarte?</h3>
-            <p class="text-sm text-zinc-400 mb-6">
+          <div class="relative bg-white border border-gray-200 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Excluir encarte?</h3>
+            <p class="text-sm text-gray-500 mb-6">
               Esta ação não pode ser desfeita. O encarte e todos os seus produtos serão removidos permanentemente.
             </p>
             <div class="flex items-center justify-end gap-3">
               <button
                 @click="cancelDelete"
-                class="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Cancelar
               </button>

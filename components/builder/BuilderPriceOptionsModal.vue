@@ -84,35 +84,35 @@ const handleOverlayClick = (e: MouseEvent) => {
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
     @click="handleOverlayClick"
   >
-    <div class="w-full max-w-lg max-h-[85vh] bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden mx-4">
+    <div class="w-full max-w-lg max-h-[85vh] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden mx-4">
       <!-- Header -->
-      <div class="flex items-center justify-between px-5 py-4 border-b border-white/5">
-        <h2 class="text-sm font-semibold text-white">Opcoes de Preco</h2>
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+        <h2 class="text-sm font-semibold text-gray-900">Opcoes de Preco</h2>
         <button
           @click="$emit('close')"
-          class="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+          class="p-1 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors"
         >
           <X class="w-4 h-4" />
         </button>
       </div>
 
       <!-- Checkboxes -->
-      <div class="px-5 py-3 border-b border-white/5 space-y-2">
+      <div class="px-5 py-3 border-b border-gray-200 space-y-2">
         <label class="flex items-center gap-2 cursor-pointer">
           <input
             v-model="applyAll"
             type="checkbox"
-            class="w-3.5 h-3.5 rounded border-white/10 bg-[#09090b] text-emerald-500 accent-emerald-500"
+            class="w-3.5 h-3.5 rounded border-gray-300 bg-gray-50 text-emerald-500 accent-emerald-500"
           />
-          <span class="text-[11px] text-zinc-300">Aplicar em todos os produtos do encarte</span>
+          <span class="text-[11px] text-gray-600">Aplicar em todos os produtos do encarte</span>
         </label>
         <label class="flex items-center gap-2 cursor-pointer">
           <input
             v-model="setAsDefault"
             type="checkbox"
-            class="w-3.5 h-3.5 rounded border-white/10 bg-[#09090b] text-emerald-500 accent-emerald-500"
+            class="w-3.5 h-3.5 rounded border-gray-300 bg-gray-50 text-emerald-500 accent-emerald-500"
           />
-          <span class="text-[11px] text-zinc-300">Definir como Padrao da conta</span>
+          <span class="text-[11px] text-gray-600">Definir como Padrao da conta</span>
         </label>
       </div>
 
@@ -125,15 +125,15 @@ const handleOverlayClick = (e: MouseEvent) => {
           class="w-full flex items-start gap-3 p-3 rounded-xl border transition-all text-left"
           :class="[
             currentMode === opt.value
-              ? 'border-emerald-500/50 bg-emerald-500/5'
-              : 'border-white/5 bg-[#09090b]/50 hover:border-white/10 hover:bg-[#09090b]/80'
+              ? 'border-emerald-500/50 bg-emerald-50'
+              : 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100'
           ]"
         >
           <!-- Radio indicator -->
           <div class="mt-0.5 shrink-0">
             <div
               class="w-4 h-4 rounded-full border-2 flex items-center justify-center"
-              :class="currentMode === opt.value ? 'border-emerald-500' : 'border-zinc-600'"
+              :class="currentMode === opt.value ? 'border-emerald-500' : 'border-gray-300'"
             >
               <div
                 v-if="currentMode === opt.value"
@@ -145,13 +145,13 @@ const handleOverlayClick = (e: MouseEvent) => {
           <!-- Content -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
-              <span class="text-xs font-medium text-white">{{ opt.label }}</span>
+              <span class="text-xs font-medium text-gray-900">{{ opt.label }}</span>
               <span
                 v-if="opt.isDefault"
-                class="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-zinc-700 text-zinc-300"
+                class="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600"
               >PADRAO</span>
             </div>
-            <p class="text-[10px] text-zinc-500 mt-0.5 leading-relaxed">{{ opt.description }}</p>
+            <p class="text-[10px] text-gray-500 mt-0.5 leading-relaxed">{{ opt.description }}</p>
           </div>
 
           <!-- Preview -->
@@ -165,7 +165,7 @@ const handleOverlayClick = (e: MouseEvent) => {
 
             <!-- From/To preview -->
             <div v-else-if="opt.value === 'from_to'" class="flex flex-col items-center gap-0.5">
-              <span class="text-[8px] text-zinc-400 line-through">R$40,00</span>
+              <span class="text-[8px] text-gray-400 line-through">R$40,00</span>
               <div class="flex items-baseline gap-0.5 bg-red-600 text-white rounded-md px-1.5 py-0.5">
                 <span class="text-[6px] font-bold">R$</span>
                 <span class="text-[11px] font-extrabold">20</span>
@@ -175,7 +175,7 @@ const handleOverlayClick = (e: MouseEvent) => {
 
             <!-- X per Y preview -->
             <div v-else-if="opt.value === 'x_per_y'" class="flex flex-col items-center gap-0.5">
-              <span class="text-[8px] text-zinc-300 font-semibold">3 Kilos</span>
+              <span class="text-[8px] text-gray-600 font-semibold">3 Kilos</span>
               <div class="flex items-baseline gap-0.5 bg-red-600 text-white rounded-md px-1.5 py-0.5">
                 <span class="text-[6px] font-bold">R$</span>
                 <span class="text-[11px] font-extrabold">15</span>
@@ -195,7 +195,7 @@ const handleOverlayClick = (e: MouseEvent) => {
 
             <!-- Installment preview -->
             <div v-else-if="opt.value === 'installment'" class="flex flex-col items-center gap-0.5">
-              <span class="text-[7px] text-zinc-300 font-semibold">10X de</span>
+              <span class="text-[7px] text-gray-600 font-semibold">10X de</span>
               <div class="flex items-baseline gap-0.5 bg-red-600 text-white rounded-md px-1.5 py-0.5">
                 <span class="text-[6px] font-bold">R$</span>
                 <span class="text-[11px] font-extrabold">153</span>
@@ -226,14 +226,14 @@ const handleOverlayClick = (e: MouseEvent) => {
 
             <!-- Anticipation preview -->
             <div v-else-if="opt.value === 'anticipation'" class="flex flex-col items-center gap-0.5">
-              <span class="text-[7px] text-zinc-400">Preco</span>
+              <span class="text-[7px] text-gray-400">Preco</span>
               <div class="bg-red-600 text-white rounded-md px-2 py-1">
                 <span class="text-[9px] font-bold">Especial</span>
               </div>
             </div>
 
             <!-- None preview -->
-            <div v-else-if="opt.value === 'none'" class="text-[9px] text-zinc-600 italic">
+            <div v-else-if="opt.value === 'none'" class="text-[9px] text-gray-400 italic">
               —
             </div>
           </div>

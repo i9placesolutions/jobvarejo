@@ -107,17 +107,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-[#0f0f0f] overflow-hidden">
+  <div class="h-screen flex flex-col bg-white overflow-hidden">
     <!-- Top bar: back + title -->
-    <header class="h-10 shrink-0 bg-[#1a1a1a] border-b border-white/5 flex items-center px-3 gap-3">
+    <header class="h-10 shrink-0 bg-gray-50 border-b border-gray-200 flex items-center px-3 gap-3">
       <button
         @click="navigateTo('/builder')"
-        class="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-zinc-400 hover:text-white shrink-0"
+        class="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900 shrink-0"
         title="Voltar"
       >
         <ArrowLeft class="w-4 h-4" />
       </button>
-      <span v-if="flyer" class="text-sm font-medium text-white truncate">
+      <span v-if="flyer" class="text-sm font-medium text-gray-900 truncate">
         {{ flyer.title || 'Sem titulo' }}
       </span>
     </header>
@@ -135,12 +135,12 @@ onUnmounted(() => {
         <!-- Canvas area — centered both axes -->
         <div
           ref="canvasAreaRef"
-          class="flex-1 overflow-auto flex bg-[#0a0a0a] p-6"
+          class="flex-1 overflow-auto flex bg-gray-100 p-6"
         >
           <template v-if="isLoading">
             <div class="flex flex-col items-center gap-3">
               <Loader2 class="w-8 h-8 text-emerald-500 animate-spin" />
-              <span class="text-sm text-zinc-400">Carregando encarte...</span>
+              <span class="text-sm text-gray-500">Carregando encarte...</span>
             </div>
           </template>
           <template v-else-if="flyer">
@@ -149,9 +149,9 @@ onUnmounted(() => {
         </div>
 
         <!-- Bottom: Pagination + Product editor -->
-        <div class="shrink-0 border-t border-white/5 bg-[#141414]">
+        <div class="shrink-0 border-t border-gray-200 bg-gray-50">
           <!-- Pagination -->
-          <div v-if="totalPages > 1" class="flex items-center justify-center gap-2 py-2 border-b border-white/5">
+          <div v-if="totalPages > 1" class="flex items-center justify-center gap-2 py-2 border-b border-gray-200">
             <button
               v-for="page in totalPages"
               :key="page"
@@ -160,7 +160,7 @@ onUnmounted(() => {
                 'w-8 h-8 rounded-lg text-xs font-medium transition-all',
                 page === currentPage
                   ? 'bg-emerald-600 text-white'
-                  : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               ]"
             >
               {{ page }}

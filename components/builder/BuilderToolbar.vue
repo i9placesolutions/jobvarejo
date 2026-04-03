@@ -177,14 +177,14 @@ const handleSave = async () => {
 </script>
 
 <template>
-  <div class="h-10 shrink-0 bg-[#1a1a1a] border-b border-white/5 flex items-center px-2 gap-1 overflow-x-auto">
+  <div class="h-10 shrink-0 bg-gray-50 border-b border-gray-200 flex items-center px-2 gap-1 overflow-x-auto">
     <!-- Modelo -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Modelo</label>
+      <label class="text-[10px] text-gray-500 font-medium">Modelo</label>
       <select
         :value="model?.id || ''"
         @change="handleModelChange"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option v-for="m in models" :key="m.id" :value="m.id">
           {{ m.name }}
@@ -192,15 +192,15 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Grade -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Grade</label>
+      <label class="text-[10px] text-gray-500 font-medium">Grade</label>
       <select
         :value="isAuto ? '__auto__' : (layout?.id || '__auto__')"
         @change="handleLayoutChange"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option value="__auto__">Automatica</option>
         <option v-for="l in layouts" :key="l.id" :value="l.id">
@@ -209,30 +209,30 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Produtos por pagina -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Qtd/Pag</label>
+      <label class="text-[10px] text-gray-500 font-medium">Qtd/Pag</label>
       <select
         :value="(flyer as any)?.custom_products_per_page || 0"
         @change="updateFlyer({ custom_products_per_page: Number(($event.target as HTMLSelectElement).value) } as any)"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50 w-16"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50 w-16"
       >
         <option :value="0">Auto</option>
         <option v-for="n in [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 20, 24, 25, 30, 36, 40, 48, 50]" :key="n" :value="n">{{ n }}</option>
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Texto -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Texto</label>
+      <label class="text-[10px] text-gray-500 font-medium">Texto</label>
       <select
         :value="flyer?.text_size_mode || 'MEDIUM'"
         @change="handleTextModeChange"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option v-for="t in TEXT_SIZE_MODES" :key="t.value" :value="t.value">
           {{ t.label }}
@@ -240,15 +240,15 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Layout do Card -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Card</label>
+      <label class="text-[10px] text-gray-500 font-medium">Card</label>
       <select
         :value="fontConfig.card_layout || 'classico'"
         @change="setFc({ card_layout: ($event.target as HTMLSelectElement).value })"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <optgroup label="Basicos">
           <option value="classico">Classico</option>
@@ -281,15 +281,15 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Fonte -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Fonte</label>
+      <label class="text-[10px] text-gray-500 font-medium">Fonte</label>
       <select
         :value="fontConfig.name_font_family || 'inherit'"
         @change="handleFontFamilyChange"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option v-for="f in FONT_FAMILY_OPTIONS" :key="f.value" :value="f.value">
           {{ f.label }}
@@ -297,15 +297,15 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Caixa (text-transform) -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Caixa</label>
+      <label class="text-[10px] text-gray-500 font-medium">Caixa</label>
       <select
         :value="fontConfig.name_text_transform || 'uppercase'"
         @change="handleTextTransformChange"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option v-for="t in TEXT_TRANSFORM_OPTIONS" :key="t.value" :value="t.value">
           {{ t.label }}
@@ -313,15 +313,15 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Imagem (escala - so reduz, 100% é o maximo que cabe no card) -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Imagem</label>
+      <label class="text-[10px] text-gray-500 font-medium">Imagem</label>
       <select
         :value="fontConfig.image_scale || 1"
         @change="setFc({ image_scale: parseFloat(($event.target as HTMLSelectElement).value) })"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option :value="0.5">50%</option>
         <option :value="0.6">60%</option>
@@ -332,15 +332,15 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Etiqueta (escala do preco) -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Etiqueta</label>
+      <label class="text-[10px] text-gray-500 font-medium">Etiqueta</label>
       <select
         :value="fontConfig.price_scale || 1"
         @change="setFc({ price_scale: parseFloat(($event.target as HTMLSelectElement).value) })"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option :value="0.7">70%</option>
         <option :value="0.8">80%</option>
@@ -355,15 +355,15 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Estilo da Etiqueta -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Etiq.</label>
+      <label class="text-[10px] text-gray-500 font-medium">Etiq.</label>
       <select
         :value="fontConfig.price_visual_style || 'padrao'"
         @change="setFc({ price_visual_style: ($event.target as HTMLSelectElement).value })"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <optgroup label="Classicas">
           <option value="padrao">Padrao</option>
@@ -394,26 +394,26 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Cor do Card -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Card</label>
+      <label class="text-[10px] text-gray-500 font-medium">Card</label>
       <input
         type="color"
         :value="fontConfig.card_bg_color || '#ffffff'"
         @input="setFc({ card_bg_color: ($event.target as HTMLInputElement).value })"
-        class="w-5 h-5 rounded cursor-pointer border border-white/10 bg-transparent"
+        class="w-5 h-5 rounded cursor-pointer border border-gray-200 bg-transparent"
       />
     </div>
 
     <!-- Borda do Card -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Borda</label>
+      <label class="text-[10px] text-gray-500 font-medium">Borda</label>
       <select
         :value="fontConfig.card_border_radius || '8px'"
         @change="setFc({ card_border_radius: ($event.target as HTMLSelectElement).value })"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option value="0px">Nenhum</option>
         <option value="8px">Suave</option>
@@ -421,15 +421,15 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Gap entre cards -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Gap</label>
+      <label class="text-[10px] text-gray-500 font-medium">Gap</label>
       <select
         :value="fontConfig.card_gap ?? 8"
         @change="setFc({ card_gap: parseInt(($event.target as HTMLSelectElement).value) })"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option :value="0">Nenhum</option>
         <option :value="2">Fino</option>
@@ -440,11 +440,11 @@ const handleSave = async () => {
 
     <!-- Padding do grid -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Pad</label>
+      <label class="text-[10px] text-gray-500 font-medium">Pad</label>
       <select
         :value="fontConfig.card_padding ?? 12"
         @change="setFc({ card_padding: parseInt(($event.target as HTMLSelectElement).value) })"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option :value="0">Nenhum</option>
         <option :value="4">Fino</option>
@@ -453,11 +453,11 @@ const handleSave = async () => {
       </select>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- QR Code toggle -->
     <label class="flex items-center gap-1 shrink-0 cursor-pointer">
-      <span class="text-[10px] text-zinc-500 font-medium">QR</span>
+      <span class="text-[10px] text-gray-500 font-medium">QR</span>
       <button
         type="button"
         role="switch"
@@ -465,7 +465,7 @@ const handleSave = async () => {
         @click="setFc({ show_qr_code: !(fontConfig.show_qr_code ?? false) })"
         :class="[
           'relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors',
-          fontConfig.show_qr_code ? 'bg-emerald-600' : 'bg-white/10'
+          fontConfig.show_qr_code ? 'bg-emerald-600' : 'bg-gray-300'
         ]"
       >
         <span
@@ -477,11 +477,11 @@ const handleSave = async () => {
       </button>
     </label>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Capa toggle -->
     <label class="flex items-center gap-1 shrink-0 cursor-pointer">
-      <span class="text-[10px] text-zinc-500 font-medium">Capa</span>
+      <span class="text-[10px] text-gray-500 font-medium">Capa</span>
       <button
         type="button"
         role="switch"
@@ -489,7 +489,7 @@ const handleSave = async () => {
         @click="updateFlyer({ show_cover: !(flyer?.show_cover ?? false) })"
         :class="[
           'relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors',
-          flyer?.show_cover ? 'bg-emerald-600' : 'bg-white/10'
+          flyer?.show_cover ? 'bg-emerald-600' : 'bg-gray-300'
         ]"
       >
         <span
@@ -501,15 +501,15 @@ const handleSave = async () => {
       </button>
     </label>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Rodape -->
     <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-zinc-500 font-medium">Rodape</label>
+      <label class="text-[10px] text-gray-500 font-medium">Rodape</label>
       <select
         :value="fontConfig.footer_mode || 'premium'"
         @change="setFc({ footer_mode: ($event.target as HTMLSelectElement).value })"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1 border border-white/5 outline-none focus:border-emerald-500/50"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
       >
         <option v-for="f in FOOTER_MODE_OPTIONS" :key="f.value" :value="f.value">
           {{ f.label }}
@@ -524,14 +524,14 @@ const handleSave = async () => {
     <div class="flex items-center gap-1 shrink-0">
       <button
         @click="zoomOut"
-        class="p-1 hover:bg-white/5 rounded text-zinc-400 hover:text-white transition-colors"
+        class="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 transition-colors"
       >
         <ZoomOut class="w-3.5 h-3.5" />
       </button>
       <select
         :value="zoom"
         @change="handleZoomChange"
-        class="bg-white/5 text-[11px] text-zinc-300 rounded px-1 py-1 border border-white/5 outline-none w-14 text-center"
+        class="bg-gray-100 text-[11px] text-gray-700 rounded px-1 py-1 border border-gray-200 outline-none w-14 text-center"
       >
         <option v-for="z in ZOOM_OPTIONS" :key="z.value" :value="z.value">
           {{ z.label }}
@@ -539,36 +539,36 @@ const handleSave = async () => {
       </select>
       <button
         @click="zoomIn"
-        class="p-1 hover:bg-white/5 rounded text-zinc-400 hover:text-white transition-colors"
+        class="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 transition-colors"
       >
         <ZoomIn class="w-3.5 h-3.5" />
       </button>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Pagination -->
     <div v-if="totalPages > 1" class="flex items-center gap-1 shrink-0">
       <button
         @click="prevPage"
         :disabled="currentPage <= 1"
-        class="p-1 hover:bg-white/5 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
+        class="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
       >
         <ChevronLeft class="w-3.5 h-3.5" />
       </button>
-      <span class="text-[11px] text-zinc-400 min-w-8 text-center">
+      <span class="text-[11px] text-gray-600 min-w-8 text-center">
         {{ currentPage }}/{{ totalPages }}
       </span>
       <button
         @click="nextPage"
         :disabled="currentPage >= totalPages"
-        class="p-1 hover:bg-white/5 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
+        class="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
       >
         <ChevronRight class="w-3.5 h-3.5" />
       </button>
     </div>
 
-    <div class="w-px h-5 bg-white/5 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
 
     <!-- Actions -->
     <div class="flex items-center gap-1.5 shrink-0">
@@ -579,7 +579,7 @@ const handleSave = async () => {
 
       <button
         @click="emit('preview')"
-        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/5 transition-colors"
+        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 border border-gray-200 transition-colors"
       >
         <Eye class="w-3 h-3" />
         Preview
@@ -587,7 +587,7 @@ const handleSave = async () => {
 
       <button
         @click="emit('export')"
-        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/5 transition-colors"
+        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 border border-gray-200 transition-colors"
       >
         <Download class="w-3 h-3" />
         Exportar

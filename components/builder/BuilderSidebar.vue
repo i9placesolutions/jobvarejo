@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { paymentBrandSvg as paymentBrandSvgs } from '~/utils/paymentBrandSvg'
 import {
   ShoppingCart,
   Palette,
@@ -59,6 +60,17 @@ const tabs = [
   { id: 'encarte', label: 'Encarte', icon: FileEdit },
   { id: 'portal', label: 'Portal', icon: Globe },
 ]
+
+// ── Theme search ────────────────────────────────────────────────────────────
+const themeSearch = ref('')
+const filteredThemes = computed(() => {
+  if (!themeSearch.value.trim()) return themes.value
+  const q = themeSearch.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return themes.value.filter((t: any) => {
+    const name = (t.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    return name.includes(q)
+  })
+})
 
 // ── Products panel ──────────────────────────────────────────────────────────
 // ── Capas sazonais (cores pre-definidas aplicadas via font_config) ───────────
@@ -527,7 +539,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 <template>
   <div class="flex h-full shrink-0">
     <!-- Icon column (72px) -->
-    <div class="w-18 shrink-0 bg-[#111] border-r border-white/5 flex flex-col items-center py-2 gap-0.5 overflow-y-auto">
+    <div class="w-18 shrink-0 bg-white border-r border-gray-200 flex flex-col items-center py-2 gap-0.5 overflow-y-auto">
       <button
         v-for="tab in tabs"
         :key="tab.id"
@@ -536,7 +548,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
           'w-14 h-14 flex flex-col items-center justify-center rounded-lg text-[9px] font-medium transition-all gap-1',
           activePanel === tab.id
             ? 'bg-emerald-600/15 text-emerald-400'
-            : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
         ]"
         :title="tab.label"
       >
@@ -548,85 +560,96 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
     <!-- Panel content (360px) -->
     <div
       v-if="activePanel"
-      class="w-90 shrink-0 bg-[#141414] border-r border-white/5 overflow-y-auto"
+      class="w-90 shrink-0 bg-gray-50 border-r border-gray-200 overflow-y-auto"
     >
       <!-- PRODUTOS -->
       <template v-if="activePanel === 'products'">
         <div class="p-3">
-          <h3 class="text-xs font-semibold text-zinc-300 mb-3">Produtos</h3>
+          <h3 class="text-xs font-semibold text-gray-600 mb-3">Produtos</h3>
           <div class="flex gap-1 mb-3">
-            <button @click="productTab = 'search'" :class="['flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-medium transition-colors', productTab === 'search' ? 'bg-emerald-600/20 text-emerald-400' : 'bg-white/5 text-zinc-400']">
+            <button @click="productTab = 'search'" :class="['flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-medium transition-colors', productTab === 'search' ? 'bg-emerald-600/20 text-emerald-400' : 'bg-gray-100 text-gray-500']">
               <Search class="w-3 h-3" /> Buscar
             </button>
-            <button @click="productTab = 'paste'" :class="['flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-medium transition-colors', productTab === 'paste' ? 'bg-emerald-600/20 text-emerald-400' : 'bg-white/5 text-zinc-400']">
+            <button @click="productTab = 'paste'" :class="['flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-medium transition-colors', productTab === 'paste' ? 'bg-emerald-600/20 text-emerald-400' : 'bg-gray-100 text-gray-500']">
               <ClipboardPaste class="w-3 h-3" /> Colar Lista
             </button>
           </div>
 
           <div v-if="productTab === 'search'">
             <div class="flex gap-1 mb-2">
-              <input v-model="searchQuery" @keydown.enter="searchProducts" placeholder="Buscar produto..." class="flex-1 bg-white/5 text-xs text-white rounded px-2 py-1.5 border border-white/5 outline-none focus:border-emerald-500/50 placeholder-zinc-600" />
+              <input v-model="searchQuery" @keydown.enter="searchProducts" placeholder="Buscar produto..." class="flex-1 bg-gray-100 text-xs text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none focus:border-emerald-500/50 placeholder-gray-400" />
               <button @click="searchProducts" class="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-500">Buscar</button>
             </div>
             <div class="space-y-1 max-h-100 overflow-y-auto">
-              <button v-for="p in searchResults" :key="p.id" @click="addFromSearch(p)" class="w-full flex items-center gap-2 p-2 rounded bg-white/5 hover:bg-white/10 transition-colors text-left">
+              <button v-for="p in searchResults" :key="p.id" @click="addFromSearch(p)" class="w-full flex items-center gap-2 p-2 rounded bg-gray-100 hover:bg-gray-200 transition-colors text-left">
                 <img v-if="p.image" :src="storageProxyUrl(p.image)" class="w-8 h-8 rounded object-cover" />
-                <div v-else class="w-8 h-8 rounded bg-white/5 flex items-center justify-center text-zinc-600 text-xs">?</div>
-                <span class="text-[11px] text-zinc-300 flex-1 truncate">{{ p.name }}</span>
+                <div v-else class="w-8 h-8 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs">?</div>
+                <span class="text-[11px] text-gray-600 flex-1 truncate">{{ p.name }}</span>
                 <span class="text-[10px] text-emerald-400 font-medium shrink-0">+ Adicionar</span>
               </button>
             </div>
           </div>
 
           <div v-if="productTab === 'paste'">
-            <textarea v-model="pasteText" @input="parsePasteText" placeholder="Cole a lista de produtos aqui..." class="w-full h-32 bg-white/5 text-xs text-white rounded px-2 py-2 border border-white/5 outline-none resize-none placeholder-zinc-600" />
+            <textarea v-model="pasteText" @input="parsePasteText" placeholder="Cole a lista de produtos aqui..." class="w-full h-32 bg-gray-100 text-xs text-gray-900 rounded px-2 py-2 border border-gray-200 outline-none resize-none placeholder-gray-400" />
             <div v-if="parsedProducts.length" class="mt-2">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-[10px] text-zinc-400">{{ parsedProducts.length }} produto(s)</span>
+                <span class="text-[10px] text-gray-500">{{ parsedProducts.length }} produto(s)</span>
                 <button @click="addAllParsed" :disabled="isAutoSearching" class="text-[10px] text-emerald-400 font-medium disabled:opacity-50">
                   <Loader2 v-if="isAutoSearching" class="w-3 h-3 animate-spin inline mr-1" />{{ isAutoSearching ? 'Buscando imagens...' : 'Adicionar tudo' }}
                 </button>
               </div>
               <div class="space-y-1 max-h-75 overflow-y-auto">
-                <div v-for="(p, idx) in parsedProducts" :key="idx" class="flex items-center gap-2 p-1.5 rounded bg-white/5">
-                  <span class="text-[11px] text-zinc-300 flex-1 truncate">{{ p.name }}</span>
+                <div v-for="(p, idx) in parsedProducts" :key="idx" class="flex items-center gap-2 p-1.5 rounded bg-gray-100">
+                  <span class="text-[11px] text-gray-600 flex-1 truncate">{{ p.name }}</span>
                   <span v-if="p.price" class="text-[10px] text-emerald-400">R${{ p.price.toFixed(2) }}</span>
-                  <button @click="addParsedProduct(p, idx)" class="text-[10px] text-zinc-400 hover:text-emerald-400">+</button>
+                  <button @click="addParsedProduct(p, idx)" class="text-[10px] text-gray-500 hover:text-emerald-400">+</button>
                 </div>
               </div>
             </div>
           </div>
-          <p class="text-[10px] text-zinc-600 mt-3">{{ products.length }} produto(s) no encarte</p>
+          <p class="text-[10px] text-gray-400 mt-3">{{ products.length }} produto(s) no encarte</p>
         </div>
       </template>
 
       <!-- TEMAS -->
       <template v-else-if="activePanel === 'themes'">
         <div class="p-3 space-y-4">
-          <!-- Temas do banco -->
+          <!-- Busca de temas -->
           <div>
-            <h3 class="text-xs font-semibold text-zinc-300 mb-2">Temas</h3>
+            <h3 class="text-xs font-semibold text-gray-600 mb-2">Temas</h3>
+            <div class="flex gap-1 mb-3">
+              <input
+                v-model="themeSearch"
+                placeholder="Pesquisar temas... Ex: Pascoa"
+                class="flex-1 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none focus:border-emerald-500/50 placeholder-gray-400"
+              />
+            </div>
             <div class="grid grid-cols-3 gap-2">
-              <button v-for="t in themes" :key="t.id" @click="setTheme(t.id)" :class="['relative rounded-lg overflow-hidden border-2 transition-all aspect-square', theme?.id === t.id ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-white/5 hover:border-white/15']" :title="t.name">
+              <button v-for="t in filteredThemes" :key="t.id" @click="setTheme(t.id)" :class="['relative rounded-lg overflow-hidden border-2 transition-all aspect-square', theme?.id === t.id ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-gray-200 hover:border-gray-300']" :title="t.name">
                 <img v-if="t.thumbnail" :src="storageProxyUrl(t.thumbnail)" :alt="t.name" class="w-full h-full object-cover" />
-                <div v-else class="w-full h-full flex items-center justify-center text-[10px] text-zinc-500" :style="{ backgroundColor: t.css_config?.bgColor || '#333' }">{{ t.name?.charAt(0) || '?' }}</div>
+                <div v-else class="w-full h-full flex items-center justify-center text-[10px] text-gray-400" :style="{ backgroundColor: t.css_config?.bgColor || '#333' }">{{ t.name?.charAt(0) || '?' }}</div>
+                <div class="absolute bottom-0 inset-x-0 bg-black/60 px-1 py-0.5">
+                  <span class="text-[7px] text-white leading-tight block truncate">{{ t.name }}</span>
+                </div>
                 <div v-if="theme?.id === t.id" class="absolute inset-0 bg-emerald-500/10 flex items-center justify-center">
                   <div class="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center"><svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg></div>
                 </div>
               </button>
             </div>
-            <p v-if="!themes.length" class="text-[10px] text-zinc-600 text-center py-4">Nenhum tema disponivel</p>
+            <p v-if="!filteredThemes.length && themeSearch" class="text-[10px] text-gray-400 text-center py-4">Nenhum tema encontrado para "{{ themeSearch }}"</p>
+            <p v-else-if="!themes.length" class="text-[10px] text-gray-400 text-center py-4">Nenhum tema disponivel</p>
           </div>
 
           <!-- Capas sazonais (cores pre-definidas) -->
           <div v-for="cat in seasonalCategories" :key="cat.name">
-            <h4 class="text-[10px] font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider">{{ cat.name }}</h4>
+            <h4 class="text-[10px] font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">{{ cat.name }}</h4>
             <div class="grid grid-cols-3 gap-1.5">
               <button
                 v-for="cap in cat.caps"
                 :key="cap.id"
                 @click="applySeasonalCap(cap)"
-                :class="['relative rounded-lg overflow-hidden border-2 transition-all aspect-video', activeCap === cap.id ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-white/5 hover:border-white/15']"
+                :class="['relative rounded-lg overflow-hidden border-2 transition-all aspect-video', activeCap === cap.id ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-gray-200 hover:border-gray-300']"
                 :title="cap.label"
               >
                 <div class="w-full h-full" :style="{ background: cap.preview }" />
@@ -640,9 +663,9 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
       <!-- GRADES -->
       <template v-else-if="activePanel === 'layouts'">
         <div class="p-3">
-          <h3 class="text-xs font-semibold text-zinc-300 mb-3">Grades</h3>
+          <h3 class="text-xs font-semibold text-gray-600 mb-3">Grades</h3>
           <div class="flex flex-wrap gap-1.5">
-            <button v-for="l in layouts" :key="l.id" @click="setLayout(l.id)" :class="['px-3 py-2 rounded-lg text-[11px] font-medium transition-all border', layout?.id === l.id ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/5 text-zinc-400 hover:bg-white/10']">
+            <button v-for="l in layouts" :key="l.id" @click="setLayout(l.id)" :class="['px-3 py-2 rounded-lg text-[11px] font-medium transition-all border', layout?.id === l.id ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-400' : 'bg-gray-100 border-gray-200 text-gray-500 hover:bg-gray-200']">
               {{ l.name }}<span v-if="l.columns === 0" class="text-[9px] ml-1 opacity-60">(Auto)</span>
             </button>
           </div>
@@ -652,12 +675,12 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
       <!-- ESTILOS -->
       <template v-else-if="activePanel === 'styles'">
         <div class="p-3 space-y-4">
-          <h3 class="text-xs font-semibold text-zinc-300">Estilos</h3>
+          <h3 class="text-xs font-semibold text-gray-600">Estilos</h3>
 
           <!-- Product box style -->
           <label class="block">
-            <span class="text-[10px] text-zinc-500 font-medium">Boxes de Produtos</span>
-            <select :value="flyer?.product_box_style || 'smart'" @change="updateFlyer({ product_box_style: ($event.target as HTMLSelectElement).value as any })" class="w-full mt-1 bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1.5 border border-white/5 outline-none">
+            <span class="text-[10px] text-gray-400 font-medium">Boxes de Produtos</span>
+            <select :value="flyer?.product_box_style || 'smart'" @change="updateFlyer({ product_box_style: ($event.target as HTMLSelectElement).value as any })" class="w-full mt-1 bg-gray-100 text-[11px] text-gray-600 rounded px-2 py-1.5 border border-gray-200 outline-none">
               <option value="smart">Inteligente</option>
               <option value="standard">Padrao</option>
             </select>
@@ -665,45 +688,45 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
           <!-- Color mode -->
           <label class="block">
-            <span class="text-[10px] text-zinc-500 font-medium">Cores</span>
-            <select :value="flyer?.color_mode || 'smart'" @change="updateFlyer({ color_mode: ($event.target as HTMLSelectElement).value as any })" class="w-full mt-1 bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1.5 border border-white/5 outline-none">
+            <span class="text-[10px] text-gray-400 font-medium">Cores</span>
+            <select :value="flyer?.color_mode || 'smart'" @change="updateFlyer({ color_mode: ($event.target as HTMLSelectElement).value as any })" class="w-full mt-1 bg-gray-100 text-[11px] text-gray-600 rounded px-2 py-1.5 border border-gray-200 outline-none">
               <option value="smart">Inteligente</option>
               <option value="standard">Padrao</option>
             </select>
           </label>
 
           <!-- Card colors -->
-          <div class="border-t border-white/5 pt-3">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Cores do Card de Produto</p>
+          <div class="border-t border-gray-200 pt-3">
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Cores do Card de Produto</p>
             <div class="grid grid-cols-2 gap-2">
               <label class="block">
-                <span class="text-[9px] text-zinc-600 block mb-1">Fundo do Card</span>
-                <input type="color" :value="(flyer as any)?.card_bg_color || '#ffffff'" @input="updateFlyer({ card_bg_color: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[9px] text-gray-400 block mb-1">Fundo do Card</span>
+                <input type="color" :value="(flyer as any)?.card_bg_color || '#ffffff'" @input="updateFlyer({ card_bg_color: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
               </label>
               <label class="block">
-                <span class="text-[9px] text-zinc-600 block mb-1">Texto do Card</span>
-                <input type="color" :value="(flyer as any)?.card_text_color || '#000000'" @input="updateFlyer({ card_text_color: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[9px] text-gray-400 block mb-1">Texto do Card</span>
+                <input type="color" :value="(flyer as any)?.card_text_color || '#000000'" @input="updateFlyer({ card_text_color: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
               </label>
             </div>
-            <button @click="updateFlyer({ card_bg_color: null, card_text_color: null } as any)" class="text-[9px] text-zinc-500 hover:text-zinc-300 mt-1.5 transition-colors">
+            <button @click="updateFlyer({ card_bg_color: null, card_text_color: null } as any)" class="text-[9px] text-gray-400 hover:text-gray-600 mt-1.5 transition-colors">
               Resetar cores do card
             </button>
           </div>
 
           <!-- Price tag style selector -->
-          <div v-if="priceTagStyles.length" class="border-t border-white/5 pt-3">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Etiqueta de Preco</p>
+          <div v-if="priceTagStyles.length" class="border-t border-gray-200 pt-3">
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Etiqueta de Preco</p>
             <div class="grid grid-cols-3 gap-1.5">
               <!-- Default (no style) -->
               <button
                 @click="updateFlyer({ price_tag_style_id: null })"
                 class="flex flex-col items-center gap-1 p-2 rounded-lg border transition-all"
-                :class="!flyer?.price_tag_style_id ? 'border-emerald-500 bg-emerald-500/10' : 'border-white/5 bg-white/3 hover:bg-white/5'"
+                :class="!flyer?.price_tag_style_id ? 'border-emerald-500 bg-emerald-500/10' : 'border-gray-200 bg-gray-50 hover:bg-gray-100'"
               >
                 <div class="w-full h-8 rounded flex items-center justify-center bg-red-500">
                   <span class="text-[10px] font-black text-white">R$ 9,99</span>
                 </div>
-                <span class="text-[8px] text-zinc-500">Padrao</span>
+                <span class="text-[8px] text-gray-400">Padrao</span>
               </button>
               <!-- Custom styles -->
               <button
@@ -711,7 +734,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                 :key="pts.id"
                 @click="updateFlyer({ price_tag_style_id: pts.id })"
                 class="flex flex-col items-center gap-1 p-2 rounded-lg border transition-all"
-                :class="flyer?.price_tag_style_id === pts.id ? 'border-emerald-500 bg-emerald-500/10' : 'border-white/5 bg-white/3 hover:bg-white/5'"
+                :class="flyer?.price_tag_style_id === pts.id ? 'border-emerald-500 bg-emerald-500/10' : 'border-gray-200 bg-gray-50 hover:bg-gray-100'"
               >
                 <div
                   class="w-full h-8 rounded flex items-center justify-center"
@@ -723,14 +746,14 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                 >
                   <span class="text-[10px] font-black">R$ 9,99</span>
                 </div>
-                <span class="text-[8px] text-zinc-500 truncate w-full text-center">{{ pts.name }}</span>
+                <span class="text-[8px] text-gray-400 truncate w-full text-center">{{ pts.name }}</span>
               </button>
             </div>
           </div>
 
           <!-- Ink economy -->
           <label class="block">
-            <span class="text-[10px] text-zinc-500 font-medium">Economia de Tinta: {{ flyer?.ink_economy ?? 0 }}%</span>
+            <span class="text-[10px] text-gray-400 font-medium">Economia de Tinta: {{ flyer?.ink_economy ?? 0 }}%</span>
             <input type="range" min="0" max="100" :value="flyer?.ink_economy ?? 0" @input="updateFlyer({ ink_economy: parseInt(($event.target as HTMLInputElement).value) })" class="w-full mt-1" />
           </label>
 
@@ -740,52 +763,52 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
       <!-- FONTES & IMAGENS -->
       <template v-else-if="activePanel === 'fonts'">
         <div class="p-3 space-y-4">
-          <h3 class="text-xs font-semibold text-zinc-300">Fontes & Imagens</h3>
+          <h3 class="text-xs font-semibold text-gray-600">Fontes & Imagens</h3>
 
           <!-- Dados do Rodape -->
           <div v-if="(fontConfig.footer_mode || 'premium') !== 'nenhum'">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Dados do Rodape</p>
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Dados do Rodape</p>
             <div class="space-y-2">
               <!-- Nome da empresa -->
               <div>
-                <label class="text-[9px] text-zinc-500">Nome da Empresa</label>
-                <input :value="fontConfig.footer_empresa_nome || ''" @input="setFc({ footer_empresa_nome: ($event.target as HTMLInputElement).value })" placeholder="Meu Supermercado" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+                <label class="text-[9px] text-gray-400">Nome da Empresa</label>
+                <input :value="fontConfig.footer_empresa_nome || ''" @input="setFc({ footer_empresa_nome: ($event.target as HTMLInputElement).value })" placeholder="Meu Supermercado" class="w-full bg-gray-100 text-[10px] text-gray-900 placeholder-gray-400 outline-none border border-gray-200 rounded px-1.5 py-1 mt-0.5" />
               </div>
               <!-- WhatsApp -->
               <div>
-                <label class="text-[9px] text-zinc-500">WhatsApp</label>
-                <input :value="fontConfig.footer_whatsapp || ''" @input="setFc({ footer_whatsapp: ($event.target as HTMLInputElement).value })" placeholder="(00) 00000-0000" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+                <label class="text-[9px] text-gray-400">WhatsApp</label>
+                <input :value="fontConfig.footer_whatsapp || ''" @input="setFc({ footer_whatsapp: ($event.target as HTMLInputElement).value })" placeholder="(00) 00000-0000" class="w-full bg-gray-100 text-[10px] text-gray-900 placeholder-gray-400 outline-none border border-gray-200 rounded px-1.5 py-1 mt-0.5" />
               </div>
               <!-- Facebook -->
               <div>
-                <label class="text-[9px] text-zinc-500">Facebook</label>
-                <input :value="fontConfig.footer_facebook || ''" @input="setFc({ footer_facebook: ($event.target as HTMLInputElement).value })" placeholder="nomedapagina" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+                <label class="text-[9px] text-gray-400">Facebook</label>
+                <input :value="fontConfig.footer_facebook || ''" @input="setFc({ footer_facebook: ($event.target as HTMLInputElement).value })" placeholder="nomedapagina" class="w-full bg-gray-100 text-[10px] text-gray-900 placeholder-gray-400 outline-none border border-gray-200 rounded px-1.5 py-1 mt-0.5" />
               </div>
               <!-- Instagram -->
               <div>
-                <label class="text-[9px] text-zinc-500">Instagram</label>
-                <input :value="fontConfig.footer_instagram || ''" @input="setFc({ footer_instagram: ($event.target as HTMLInputElement).value })" placeholder="@nomedapagina" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+                <label class="text-[9px] text-gray-400">Instagram</label>
+                <input :value="fontConfig.footer_instagram || ''" @input="setFc({ footer_instagram: ($event.target as HTMLInputElement).value })" placeholder="@nomedapagina" class="w-full bg-gray-100 text-[10px] text-gray-900 placeholder-gray-400 outline-none border border-gray-200 rounded px-1.5 py-1 mt-0.5" />
               </div>
               <!-- Endereco -->
               <div>
-                <label class="text-[9px] text-zinc-500">Endereco Completo</label>
-                <textarea :value="fontConfig.footer_endereco || ''" @input="setFc({ footer_endereco: ($event.target as HTMLTextAreaElement).value })" placeholder="Rua Exemplo, 123 - Bairro - Cidade/UF" rows="2" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5 resize-none" />
+                <label class="text-[9px] text-gray-400">Endereco Completo</label>
+                <textarea :value="fontConfig.footer_endereco || ''" @input="setFc({ footer_endereco: ($event.target as HTMLTextAreaElement).value })" placeholder="Rua Exemplo, 123 - Bairro - Cidade/UF" rows="2" class="w-full bg-gray-100 text-[10px] text-gray-900 placeholder-gray-400 outline-none border border-gray-200 rounded px-1.5 py-1 mt-0.5 resize-none" />
               </div>
               <!-- Horario -->
               <div>
-                <label class="text-[9px] text-zinc-500">Horario</label>
-                <input :value="fontConfig.footer_horario || ''" @input="setFc({ footer_horario: ($event.target as HTMLInputElement).value })" placeholder="Seg a Sab: 7h as 21h | Dom: 8h as 18h" class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+                <label class="text-[9px] text-gray-400">Horario</label>
+                <input :value="fontConfig.footer_horario || ''" @input="setFc({ footer_horario: ($event.target as HTMLInputElement).value })" placeholder="Seg a Sab: 7h as 21h | Dom: 8h as 18h" class="w-full bg-gray-100 text-[10px] text-gray-900 placeholder-gray-400 outline-none border border-gray-200 rounded px-1.5 py-1 mt-0.5" />
               </div>
               <!-- Texto ofertas -->
               <div>
-                <label class="text-[9px] text-zinc-500">Texto de Ofertas</label>
-                <input :value="fontConfig.footer_ofertas_texto || ''" @input="setFc({ footer_ofertas_texto: ($event.target as HTMLInputElement).value })" placeholder="ou enquanto durarem os estoques." class="w-full bg-[#09090b]/50 text-[10px] text-white placeholder-zinc-600 outline-none border border-white/5 rounded px-1.5 py-1 mt-0.5" />
+                <label class="text-[9px] text-gray-400">Texto de Ofertas</label>
+                <input :value="fontConfig.footer_ofertas_texto || ''" @input="setFc({ footer_ofertas_texto: ($event.target as HTMLInputElement).value })" placeholder="ou enquanto durarem os estoques." class="w-full bg-gray-100 text-[10px] text-gray-900 placeholder-gray-400 outline-none border border-gray-200 rounded px-1.5 py-1 mt-0.5" />
               </div>
 
-              <!-- Bandeiras de pagamento -->
+              <!-- Bandeiras de pagamento (com logos reais) -->
               <div>
-                <label class="text-[9px] text-zinc-500 mb-1 block">Formas de Pagamento</label>
-                <div class="grid grid-cols-2 gap-1">
+                <label class="text-[9px] text-gray-400 mb-1 block">Formas de Pagamento</label>
+                <div class="grid grid-cols-2 gap-1.5">
                   <label v-for="pm in [
                     { key: 'dinheiro', label: 'Dinheiro', def: true },
                     { key: 'pix', label: 'PIX', def: true },
@@ -800,24 +823,25 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                     { key: 'vr', label: 'VR', def: false },
                     { key: 'vale_alimentacao', label: 'V.A.', def: false },
                     { key: 'cielo', label: 'Cielo', def: false },
-                  ]" :key="pm.key" class="flex items-center gap-1 cursor-pointer">
-                    <input type="checkbox" :checked="fontConfig[`footer_pay_${pm.key}`] ?? pm.def" @change="setFc({ [`footer_pay_${pm.key}`]: ($event.target as HTMLInputElement).checked })" class="w-3 h-3 rounded accent-emerald-500" />
-                    <span class="text-[9px] text-zinc-400">{{ pm.label }}</span>
+                  ]" :key="pm.key" class="flex items-center gap-1.5 cursor-pointer p-1 rounded-md transition-all" :class="(fontConfig[`footer_pay_${pm.key}`] ?? pm.def) ? 'bg-emerald-50 ring-1 ring-emerald-200' : 'opacity-50 hover:opacity-80'">
+                    <input type="checkbox" :checked="fontConfig[`footer_pay_${pm.key}`] ?? pm.def" @change="setFc({ [`footer_pay_${pm.key}`]: ($event.target as HTMLInputElement).checked })" class="w-3 h-3 rounded accent-emerald-500 shrink-0" />
+                    <span class="inline-block w-7 h-[18px] rounded overflow-hidden shrink-0" v-html="paymentBrandSvgs[pm.key] || ''" />
+                    <span class="text-[8px] text-gray-500 truncate">{{ pm.label }}</span>
                   </label>
                 </div>
               </div>
 
               <!-- Cores -->
-              <div class="pt-1 border-t border-white/5">
-                <label class="text-[9px] text-zinc-500 mb-1 block">Cores do Rodape</label>
+              <div class="pt-1 border-t border-gray-200">
+                <label class="text-[9px] text-gray-400 mb-1 block">Cores do Rodape</label>
                 <div class="space-y-1.5">
                   <label class="flex items-center gap-2">
-                    <input type="color" :value="fontConfig.footer_color_bg_top || '#333333'" @input="setFc({ footer_color_bg_top: ($event.target as HTMLInputElement).value })" class="w-5 h-5 rounded cursor-pointer border border-white/10" />
-                    <span class="text-[9px] text-zinc-400">Faixa Redes Sociais</span>
+                    <input type="color" :value="fontConfig.footer_color_bg_top || '#333333'" @input="setFc({ footer_color_bg_top: ($event.target as HTMLInputElement).value })" class="w-5 h-5 rounded cursor-pointer border border-gray-200" />
+                    <span class="text-[9px] text-gray-500">Faixa Redes Sociais</span>
                   </label>
                   <label class="flex items-center gap-2">
-                    <input type="color" :value="fontConfig.footer_color_bg_bottom || '#F5B800'" @input="setFc({ footer_color_bg_bottom: ($event.target as HTMLInputElement).value })" class="w-5 h-5 rounded cursor-pointer border border-white/10" />
-                    <span class="text-[9px] text-zinc-400">Faixa Principal</span>
+                    <input type="color" :value="fontConfig.footer_color_bg_bottom || '#F5B800'" @input="setFc({ footer_color_bg_bottom: ($event.target as HTMLInputElement).value })" class="w-5 h-5 rounded cursor-pointer border border-gray-200" />
+                    <span class="text-[9px] text-gray-500">Faixa Principal</span>
                   </label>
                 </div>
               </div>
@@ -826,15 +850,15 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
           <!-- Imagens Decorativas (overlay) -->
           <div>
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Imagens Decorativas</p>
-            <p class="text-[9px] text-zinc-600 mb-2">Adicione imagens extras ao encarte (selos, logos, decoracoes)</p>
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Imagens Decorativas</p>
+            <p class="text-[9px] text-gray-400 mb-2">Adicione imagens extras ao encarte (selos, logos, decoracoes)</p>
 
             <!-- Lista de overlays existentes -->
-            <div v-for="(ov, idx) in overlayImages" :key="ov.id" class="mb-3 p-2 bg-white/5 rounded border border-white/5">
+            <div v-for="(ov, idx) in overlayImages" :key="ov.id" class="mb-3 p-2 bg-gray-100 rounded border border-gray-200">
               <div class="flex items-center gap-2 mb-2">
-                <img :src="resolveOverlayUrl(ov.url)" class="w-10 h-10 object-contain rounded bg-white/10" alt="" />
+                <img :src="resolveOverlayUrl(ov.url)" class="w-10 h-10 object-contain rounded bg-gray-200" alt="" />
                 <div class="flex-1 min-w-0">
-                  <p class="text-[10px] text-zinc-400 truncate">{{ ov.url.split('/').pop() }}</p>
+                  <p class="text-[10px] text-gray-500 truncate">{{ ov.url.split('/').pop() }}</p>
                 </div>
                 <button @click="removeOverlay(idx)" class="p-1 hover:bg-red-500/20 rounded text-red-400">
                   <Trash2 class="w-3 h-3" />
@@ -843,37 +867,37 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
               <!-- Posicao X -->
               <label class="block mb-1">
-                <span class="text-[9px] text-zinc-500">Posicao X: {{ ov.x }}%</span>
+                <span class="text-[9px] text-gray-400">Posicao X: {{ ov.x }}%</span>
                 <input type="range" min="0" max="100" :value="ov.x" @input="updateOverlay(idx, { x: parseInt(($event.target as HTMLInputElement).value) })" class="w-full" />
               </label>
 
               <!-- Posicao Y -->
               <label class="block mb-1">
-                <span class="text-[9px] text-zinc-500">Posicao Y: {{ ov.y }}%</span>
+                <span class="text-[9px] text-gray-400">Posicao Y: {{ ov.y }}%</span>
                 <input type="range" min="0" max="100" :value="ov.y" @input="updateOverlay(idx, { y: parseInt(($event.target as HTMLInputElement).value) })" class="w-full" />
               </label>
 
               <!-- Tamanho -->
               <label class="block mb-1">
-                <span class="text-[9px] text-zinc-500">Tamanho: {{ ov.width }}%</span>
+                <span class="text-[9px] text-gray-400">Tamanho: {{ ov.width }}%</span>
                 <input type="range" min="5" max="100" :value="ov.width" @input="updateOverlay(idx, { width: parseInt(($event.target as HTMLInputElement).value) })" class="w-full" />
               </label>
 
               <!-- Opacidade -->
               <label class="block mb-1">
-                <span class="text-[9px] text-zinc-500">Opacidade: {{ Math.round((ov.opacity ?? 1) * 100) }}%</span>
+                <span class="text-[9px] text-gray-400">Opacidade: {{ Math.round((ov.opacity ?? 1) * 100) }}%</span>
                 <input type="range" min="10" max="100" :value="Math.round((ov.opacity ?? 1) * 100)" @input="updateOverlay(idx, { opacity: parseInt(($event.target as HTMLInputElement).value) / 100 })" class="w-full" />
               </label>
 
               <!-- Camada -->
               <label class="flex items-center gap-2 mt-1 cursor-pointer">
                 <input type="checkbox" :checked="ov.zFront" @change="updateOverlay(idx, { zFront: ($event.target as HTMLInputElement).checked })" class="rounded" />
-                <span class="text-[9px] text-zinc-500">Na frente dos produtos</span>
+                <span class="text-[9px] text-gray-400">Na frente dos produtos</span>
               </label>
             </div>
 
             <!-- Botao adicionar -->
-            <label class="flex items-center justify-center gap-1.5 px-3 py-2 rounded text-[11px] font-medium bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-dashed border-white/10 cursor-pointer transition-colors">
+            <label class="flex items-center justify-center gap-1.5 px-3 py-2 rounded text-[11px] font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 border border-dashed border-gray-200 cursor-pointer transition-colors">
               <ImagePlus class="w-3.5 h-3.5" />
               <span>{{ isUploadingOverlay ? 'Enviando...' : 'Adicionar Imagem' }}</span>
               <input type="file" accept="image/*" class="hidden" :disabled="isUploadingOverlay" @change="handleOverlayUpload" />
@@ -885,17 +909,17 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
       <!-- EMPRESA -->
       <template v-else-if="activePanel === 'company'">
         <div class="p-3 space-y-4">
-          <h3 class="text-xs font-semibold text-zinc-300">Empresa</h3>
+          <h3 class="text-xs font-semibold text-gray-600">Empresa</h3>
 
           <!-- Logo upload section -->
           <div>
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Logo da Empresa</p>
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Logo da Empresa</p>
             <div class="flex items-center gap-3">
               <button
                 @click="logoFileInput?.click()"
-                class="relative w-16 h-16 rounded-lg border border-dashed border-white/10 bg-white/5
+                class="relative w-16 h-16 rounded-lg border border-dashed border-gray-200 bg-gray-100
                   flex items-center justify-center overflow-hidden
-                  hover:border-emerald-500/30 hover:bg-white/10 transition-all group"
+                  hover:border-emerald-500/30 hover:bg-gray-200 transition-all group"
               >
                 <img
                   v-if="currentLogoUrl"
@@ -903,10 +927,10 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                   alt="Logo"
                   class="w-full h-full object-contain p-1"
                 />
-                <div v-else-if="isUploadingLogo" class="text-zinc-500">
+                <div v-else-if="isUploadingLogo" class="text-gray-400">
                   <Loader2 class="w-5 h-5 animate-spin" />
                 </div>
-                <div v-else class="text-zinc-500 group-hover:text-emerald-400 transition-colors">
+                <div v-else class="text-gray-400 group-hover:text-emerald-400 transition-colors">
                   <ImagePlus class="w-5 h-5" />
                 </div>
               </button>
@@ -924,7 +948,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                 >
                   Remover
                 </button>
-                <p class="text-[9px] text-zinc-600 mt-0.5">PNG ou JPG, fundo transparente recomendado</p>
+                <p class="text-[9px] text-gray-400 mt-0.5">PNG ou JPG, fundo transparente recomendado</p>
               </div>
             </div>
             <input
@@ -938,25 +962,25 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
           <!-- Header visibility toggles -->
           <div>
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Visibilidade na Capa</p>
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Visibilidade na Capa</p>
             <div class="flex items-center justify-between gap-2">
-              <span class="text-[11px] text-zinc-400">Mostrar Logo</span>
-              <button type="button" role="switch" :aria-checked="getToggleValue('show_logo')" @click="handleToggle('show_logo', !getToggleValue('show_logo'))" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', getToggleValue('show_logo') ? 'bg-emerald-600' : 'bg-white/10']">
+              <span class="text-[11px] text-gray-500">Mostrar Logo</span>
+              <button type="button" role="switch" :aria-checked="getToggleValue('show_logo')" @click="handleToggle('show_logo', !getToggleValue('show_logo'))" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', getToggleValue('show_logo') ? 'bg-emerald-600' : 'bg-gray-200']">
                 <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', getToggleValue('show_logo') ? 'n ml-px' : 'translate-x-0.5']" />
               </button>
             </div>
           </div>
 
           <!-- Logo position & size controls -->
-          <div v-if="getToggleValue('show_logo')" class="border-t border-white/5 pt-3">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Posicao e Tamanho da Logo</p>
-            <p class="text-[9px] text-zinc-600 mb-2">Arraste a logo diretamente na capa ou use os controles abaixo</p>
+          <div v-if="getToggleValue('show_logo')" class="border-t border-gray-200 pt-3">
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Posicao e Tamanho da Logo</p>
+            <p class="text-[9px] text-gray-400 mb-2">Arraste a logo diretamente na capa ou use os controles abaixo</p>
 
             <!-- Size slider -->
             <label class="block mb-3">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-[9px] text-zinc-600">Tamanho</span>
-                <span class="text-[9px] text-zinc-500 tabular-nums">{{ (flyer as any)?.logo_size || 80 }}px</span>
+                <span class="text-[9px] text-gray-400">Tamanho</span>
+                <span class="text-[9px] text-gray-400 tabular-nums">{{ (flyer as any)?.logo_size || 80 }}px</span>
               </div>
               <input
                 type="range"
@@ -972,8 +996,8 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
             <!-- X position -->
             <label class="block mb-3">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-[9px] text-zinc-600">Horizontal</span>
-                <span class="text-[9px] text-zinc-500 tabular-nums">{{ (flyer as any)?.logo_x ?? 50 }}%</span>
+                <span class="text-[9px] text-gray-400">Horizontal</span>
+                <span class="text-[9px] text-gray-400 tabular-nums">{{ (flyer as any)?.logo_x ?? 50 }}%</span>
               </div>
               <input
                 type="range"
@@ -989,8 +1013,8 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
             <!-- Y position -->
             <label class="block mb-3">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-[9px] text-zinc-600">Vertical</span>
-                <span class="text-[9px] text-zinc-500 tabular-nums">{{ (flyer as any)?.logo_y ?? 50 }}%</span>
+                <span class="text-[9px] text-gray-400">Vertical</span>
+                <span class="text-[9px] text-gray-400 tabular-nums">{{ (flyer as any)?.logo_y ?? 50 }}%</span>
               </div>
               <input
                 type="range"
@@ -1019,7 +1043,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                 ]"
                 :key="pos.label"
                 @click="updateFlyer({ logo_x: pos.x, logo_y: pos.y } as any)"
-                class="w-full h-7 rounded bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white text-[11px] transition-colors flex items-center justify-center"
+                class="w-full h-7 rounded bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-900 text-[11px] transition-colors flex items-center justify-center"
                 :class="(flyer as any)?.logo_x === pos.x && (flyer as any)?.logo_y === pos.y ? 'ring-1 ring-emerald-500/50 bg-emerald-500/10 text-emerald-400' : ''"
               >
                 {{ pos.label }}
@@ -1027,14 +1051,14 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
             </div>
           </div>
 
-          <div class="border-t border-white/5 pt-3">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Informacoes no Rodape</p>
+          <div class="border-t border-gray-200 pt-3">
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Informacoes no Rodape</p>
             <div class="space-y-2">
               <div v-for="opt in companyToggles" :key="opt.key">
                 <div class="flex items-center justify-between gap-2">
-                  <span class="text-[11px] text-zinc-400 flex-1">{{ opt.label }}</span>
-                  <button v-if="opt.editField" @click="editingCompanyField = editingCompanyField === opt.key ? null : opt.key" class="p-1 hover:bg-white/5 rounded text-zinc-500 hover:text-zinc-300"><Pencil class="w-3 h-3" /></button>
-                  <button type="button" role="switch" :aria-checked="getToggleValue(opt.key)" @click="handleToggle(opt.key, !getToggleValue(opt.key))" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', getToggleValue(opt.key) ? 'bg-emerald-600' : 'bg-white/10']">
+                  <span class="text-[11px] text-gray-500 flex-1">{{ opt.label }}</span>
+                  <button v-if="opt.editField" @click="editingCompanyField = editingCompanyField === opt.key ? null : opt.key" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"><Pencil class="w-3 h-3" /></button>
+                  <button type="button" role="switch" :aria-checked="getToggleValue(opt.key)" @click="handleToggle(opt.key, !getToggleValue(opt.key))" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', getToggleValue(opt.key) ? 'bg-emerald-600' : 'bg-gray-200']">
                     <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', getToggleValue(opt.key) ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
                   </button>
                 </div>
@@ -1044,9 +1068,9 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                     :value="(flyer as any)?.[`custom_${opt.editField}`] || (tenant as any)?.[opt.editField] || ''"
                     @input="updateFlyer({ [`custom_${opt.editField}`]: ($event.target as HTMLInputElement).value } as any)"
                     :placeholder="`Insira ${opt.label.toLowerCase()}`"
-                    class="w-full bg-white/5 text-[11px] text-white rounded px-2 py-1.5 border border-white/5 outline-none focus:border-emerald-500/50 placeholder-zinc-600"
+                    class="w-full bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none focus:border-emerald-500/50 placeholder-gray-400"
                   />
-                  <p v-if="(tenant as any)?.[opt.editField]" class="text-[9px] text-zinc-600 mt-0.5">
+                  <p v-if="(tenant as any)?.[opt.editField]" class="text-[9px] text-gray-400 mt-0.5">
                     Perfil: {{ (tenant as any)?.[opt.editField] }}
                   </p>
                 </div>
@@ -1060,27 +1084,27 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
                 <!-- PAYMENT METHODS: show card selection when "Formas pagamento" is ON -->
                 <div v-if="opt.key === 'show_payment_methods' && getToggleValue('show_payment_methods')" class="mt-2 ml-0.5">
-                  <p class="text-[9px] text-zinc-500 mb-1.5">Bandeiras aceitas pelo estabelecimento:</p>
+                  <p class="text-[9px] text-gray-400 mb-1.5">Bandeiras aceitas pelo estabelecimento:</p>
                   <div class="grid grid-cols-2 gap-1">
                     <button
                       v-for="pm in PAYMENT_OPTIONS"
                       :key="pm.id"
                       @click="togglePaymentMethod(pm.id)"
                       class="flex items-center gap-1.5 px-2 py-1 rounded-md cursor-pointer transition-all text-left"
-                      :class="isPaymentSelected(pm.id) ? 'bg-white/10 ring-1 ring-emerald-500/30' : 'bg-white/2 opacity-40 hover:opacity-70'"
+                      :class="isPaymentSelected(pm.id) ? 'bg-gray-200 ring-1 ring-emerald-500/30' : 'bg-gray-50 opacity-40 hover:opacity-70'"
                     >
                       <div class="w-3.5 h-3.5 rounded-sm flex items-center justify-center shrink-0"
-                        :class="isPaymentSelected(pm.id) ? 'bg-emerald-600' : 'bg-white/10'"
+                        :class="isPaymentSelected(pm.id) ? 'bg-emerald-600' : 'bg-gray-200'"
                       >
                         <svg v-if="isPaymentSelected(pm.id)" class="w-2 h-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
                       </div>
                       <div class="w-3 h-3 rounded-sm shrink-0" :style="{ backgroundColor: pm.color }"></div>
-                      <span class="text-[9px] text-zinc-300 truncate">{{ pm.label }}</span>
+                      <span class="text-[9px] text-gray-600 truncate">{{ pm.label }}</span>
                     </button>
                   </div>
                   <div class="flex gap-3 mt-1.5">
                     <button @click="selectAllPayments" class="text-[9px] text-emerald-400 hover:text-emerald-300 font-medium">Todas</button>
-                    <button @click="clearAllPayments" class="text-[9px] text-zinc-500 hover:text-zinc-300">Limpar</button>
+                    <button @click="clearAllPayments" class="text-[9px] text-gray-400 hover:text-gray-600">Limpar</button>
                   </div>
                 </div>
               </div>
@@ -1088,8 +1112,8 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
           </div>
 
           <!-- Footer layout selector -->
-          <div class="border-t border-white/5 pt-3">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Layout do Rodape</p>
+          <div class="border-t border-gray-200 pt-3">
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Layout do Rodape</p>
             <div class="grid grid-cols-2 gap-1.5">
               <button
                 v-for="fl in [
@@ -1103,51 +1127,51 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                 class="flex flex-col items-start p-2 rounded-lg border transition-all text-left"
                 :class="((flyer as any)?.footer_layout || 'classico') === fl.id
                   ? 'border-emerald-500/50 bg-emerald-600/10 ring-1 ring-emerald-500/20'
-                  : 'border-white/5 bg-white/3 hover:bg-white/5'"
+                  : 'border-gray-200 bg-gray-50 hover:bg-gray-100'"
               >
-                <span class="text-[10px] font-semibold" :class="((flyer as any)?.footer_layout || 'classico') === fl.id ? 'text-emerald-400' : 'text-zinc-300'">{{ fl.label }}</span>
-                <span class="text-[8px] text-zinc-600">{{ fl.desc }}</span>
+                <span class="text-[10px] font-semibold" :class="((flyer as any)?.footer_layout || 'classico') === fl.id ? 'text-emerald-400' : 'text-gray-600'">{{ fl.label }}</span>
+                <span class="text-[8px] text-gray-400">{{ fl.desc }}</span>
               </button>
             </div>
           </div>
 
           <!-- Footer colors -->
-          <div class="border-t border-white/5 pt-3">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Cores do Rodape</p>
+          <div class="border-t border-gray-200 pt-3">
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Cores do Rodape</p>
             <div class="grid grid-cols-2 gap-2">
               <label class="block">
-                <span class="text-[9px] text-zinc-600 block mb-1">Fundo</span>
-                <input type="color" :value="(flyer as any)?.footer_bg || '#1a1a1a'" @input="updateFlyer({ footer_bg: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[9px] text-gray-400 block mb-1">Fundo</span>
+                <input type="color" :value="(flyer as any)?.footer_bg || '#1a1a1a'" @input="updateFlyer({ footer_bg: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
               </label>
               <label class="block">
-                <span class="text-[9px] text-zinc-600 block mb-1">Texto</span>
-                <input type="color" :value="(flyer as any)?.footer_text_color || '#ffffff'" @input="updateFlyer({ footer_text_color: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[9px] text-gray-400 block mb-1">Texto</span>
+                <input type="color" :value="(flyer as any)?.footer_text_color || '#ffffff'" @input="updateFlyer({ footer_text_color: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
               </label>
               <label class="block">
-                <span class="text-[9px] text-zinc-600 block mb-1">Primaria</span>
-                <input type="color" :value="(flyer as any)?.footer_primary || '#e85d04'" @input="updateFlyer({ footer_primary: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[9px] text-gray-400 block mb-1">Primaria</span>
+                <input type="color" :value="(flyer as any)?.footer_primary || '#e85d04'" @input="updateFlyer({ footer_primary: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
               </label>
               <label class="block">
-                <span class="text-[9px] text-zinc-600 block mb-1">Secundaria</span>
-                <input type="color" :value="(flyer as any)?.footer_secondary || '#f48c06'" @input="updateFlyer({ footer_secondary: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-white/10 cursor-pointer bg-transparent" />
+                <span class="text-[9px] text-gray-400 block mb-1">Secundaria</span>
+                <input type="color" :value="(flyer as any)?.footer_secondary || '#f48c06'" @input="updateFlyer({ footer_secondary: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
               </label>
             </div>
-            <button @click="updateFlyer({ footer_bg: null, footer_primary: null, footer_secondary: null, footer_text_color: null } as any)" class="text-[9px] text-zinc-500 hover:text-zinc-300 mt-1.5 transition-colors">
+            <button @click="updateFlyer({ footer_bg: null, footer_primary: null, footer_secondary: null, footer_text_color: null } as any)" class="text-[9px] text-gray-400 hover:text-gray-600 mt-1.5 transition-colors">
               Resetar cores do tema
             </button>
           </div>
 
           <!-- Footer typography -->
-          <div class="border-t border-white/5 pt-3">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Tipografia do Rodape</p>
+          <div class="border-t border-gray-200 pt-3">
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Tipografia do Rodape</p>
 
             <!-- Font family -->
             <label class="block mb-2.5">
-              <span class="text-[9px] text-zinc-600 block mb-1">Fonte do nome</span>
+              <span class="text-[9px] text-gray-400 block mb-1">Fonte do nome</span>
               <select
                 :value="(flyer as any)?.footer_name_font || ''"
                 @change="updateFlyer({ footer_name_font: ($event.target as HTMLSelectElement).value } as any)"
-                class="w-full bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1.5 border border-white/5 outline-none"
+                class="w-full bg-gray-100 text-[11px] text-gray-600 rounded px-2 py-1.5 border border-gray-200 outline-none"
               >
                 <option value="">Padrao (tema)</option>
                 <option value="Arial, sans-serif">Arial</option>
@@ -1168,11 +1192,11 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
               </select>
             </label>
             <label class="block mb-2.5">
-              <span class="text-[9px] text-zinc-600 block mb-1">Fonte dos contatos</span>
+              <span class="text-[9px] text-gray-400 block mb-1">Fonte dos contatos</span>
               <select
                 :value="(flyer as any)?.footer_body_font || ''"
                 @change="updateFlyer({ footer_body_font: ($event.target as HTMLSelectElement).value } as any)"
-                class="w-full bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1.5 border border-white/5 outline-none"
+                class="w-full bg-gray-100 text-[11px] text-gray-600 rounded px-2 py-1.5 border border-gray-200 outline-none"
               >
                 <option value="">Padrao (tema)</option>
                 <option value="Arial, sans-serif">Arial</option>
@@ -1189,7 +1213,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
             <!-- Text transform for company name -->
             <div class="mb-2.5">
-              <span class="text-[9px] text-zinc-600 block mb-1">Caixa do nome</span>
+              <span class="text-[9px] text-gray-400 block mb-1">Caixa do nome</span>
               <div class="flex gap-1">
                 <button
                   v-for="tt in [
@@ -1203,7 +1227,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                   class="flex-1 py-1.5 rounded text-[10px] font-semibold transition-all"
                   :class="((flyer as any)?.footer_name_transform || 'uppercase') === tt.id
                     ? 'bg-emerald-600/20 text-emerald-400 ring-1 ring-emerald-500/30'
-                    : 'bg-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/8'"
+                    : 'bg-gray-100 text-gray-400 hover:text-gray-600 hover:bg-gray-100'"
                 >
                   {{ tt.label }}
                 </button>
@@ -1212,7 +1236,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
             <!-- Text transform for contacts/social -->
             <div class="mb-2.5">
-              <span class="text-[9px] text-zinc-600 block mb-1">Caixa dos contatos</span>
+              <span class="text-[9px] text-gray-400 block mb-1">Caixa dos contatos</span>
               <div class="flex gap-1">
                 <button
                   v-for="tt in [
@@ -1225,7 +1249,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                   class="flex-1 py-1.5 rounded text-[10px] font-semibold transition-all"
                   :class="((flyer as any)?.footer_body_transform || 'none') === tt.id
                     ? 'bg-emerald-600/20 text-emerald-400 ring-1 ring-emerald-500/30'
-                    : 'bg-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/8'"
+                    : 'bg-gray-100 text-gray-400 hover:text-gray-600 hover:bg-gray-100'"
                 >
                   {{ tt.label }}
                 </button>
@@ -1234,7 +1258,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
             <!-- Font weight for company name -->
             <div class="mb-2.5">
-              <span class="text-[9px] text-zinc-600 block mb-1">Peso do nome</span>
+              <span class="text-[9px] text-gray-400 block mb-1">Peso do nome</span>
               <div class="flex gap-1">
                 <button
                   v-for="fw in [
@@ -1248,7 +1272,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                   class="flex-1 py-1.5 rounded text-[10px] transition-all"
                   :class="((flyer as any)?.footer_name_weight || '900') === fw.id
                     ? 'bg-emerald-600/20 text-emerald-400 ring-1 ring-emerald-500/30'
-                    : 'bg-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/8'"
+                    : 'bg-gray-100 text-gray-400 hover:text-gray-600 hover:bg-gray-100'"
                   :style="{ fontWeight: fw.id }"
                 >
                   {{ fw.label }}
@@ -1260,22 +1284,22 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
             <div class="space-y-2 mt-3">
               <label class="block">
                 <div class="flex items-center justify-between">
-                  <span class="text-[9px] text-zinc-600">Tamanho nome</span>
-                  <span class="text-[9px] text-zinc-500 font-mono">{{ (flyer as any)?.footer_name_size || 20 }}px</span>
+                  <span class="text-[9px] text-gray-400">Tamanho nome</span>
+                  <span class="text-[9px] text-gray-400 font-mono">{{ (flyer as any)?.footer_name_size || 20 }}px</span>
                 </div>
                 <input type="range" min="12" max="36" :value="(flyer as any)?.footer_name_size || 20" @input="updateFlyer({ footer_name_size: parseInt(($event.target as HTMLInputElement).value) } as any)" class="w-full mt-0.5 accent-emerald-500" />
               </label>
               <label class="block">
                 <div class="flex items-center justify-between">
-                  <span class="text-[9px] text-zinc-600">Tamanho telefones</span>
-                  <span class="text-[9px] text-zinc-500 font-mono">{{ (flyer as any)?.footer_phone_size || 15 }}px</span>
+                  <span class="text-[9px] text-gray-400">Tamanho telefones</span>
+                  <span class="text-[9px] text-gray-400 font-mono">{{ (flyer as any)?.footer_phone_size || 15 }}px</span>
                 </div>
                 <input type="range" min="10" max="28" :value="(flyer as any)?.footer_phone_size || 15" @input="updateFlyer({ footer_phone_size: parseInt(($event.target as HTMLInputElement).value) } as any)" class="w-full mt-0.5 accent-emerald-500" />
               </label>
               <label class="block">
                 <div class="flex items-center justify-between">
-                  <span class="text-[9px] text-zinc-600">Tamanho redes sociais</span>
-                  <span class="text-[9px] text-zinc-500 font-mono">{{ (flyer as any)?.footer_social_size || 11 }}px</span>
+                  <span class="text-[9px] text-gray-400">Tamanho redes sociais</span>
+                  <span class="text-[9px] text-gray-400 font-mono">{{ (flyer as any)?.footer_social_size || 11 }}px</span>
                 </div>
                 <input type="range" min="8" max="18" :value="(flyer as any)?.footer_social_size || 11" @input="updateFlyer({ footer_social_size: parseInt(($event.target as HTMLInputElement).value) } as any)" class="w-full mt-0.5 accent-emerald-500" />
               </label>
@@ -1283,59 +1307,75 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
           </div>
 
           <!-- Footer extra options -->
-          <div class="border-t border-white/5 pt-3">
-            <p class="text-[10px] text-zinc-500 font-medium mb-2">Opcoes Extras</p>
+          <div class="border-t border-gray-200 pt-3">
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Opcoes Extras</p>
             <div class="space-y-2">
               <!-- WhatsApp label -->
               <label class="block">
-                <span class="text-[9px] text-zinc-600">Legenda WhatsApp</span>
+                <span class="text-[9px] text-gray-400">Legenda WhatsApp</span>
                 <input
                   :value="(flyer as any)?.footer_whatsapp_label || ''"
                   @input="updateFlyer({ footer_whatsapp_label: ($event.target as HTMLInputElement).value } as any)"
                   placeholder="Ex: Peca pelo WhatsApp"
-                  class="w-full mt-0.5 bg-white/5 text-[11px] text-white rounded px-2 py-1.5 border border-white/5 outline-none focus:border-emerald-500/50 placeholder-zinc-600"
+                  class="w-full mt-0.5 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none focus:border-emerald-500/50 placeholder-gray-400"
                 />
               </label>
               <!-- Phone label -->
               <label class="block">
-                <span class="text-[9px] text-zinc-600">Legenda Telefone</span>
+                <span class="text-[9px] text-gray-400">Legenda Telefone</span>
                 <input
                   :value="(flyer as any)?.footer_phone_label || ''"
                   @input="updateFlyer({ footer_phone_label: ($event.target as HTMLInputElement).value } as any)"
                   placeholder="Ex: Ligue agora"
-                  class="w-full mt-0.5 bg-white/5 text-[11px] text-white rounded px-2 py-1.5 border border-white/5 outline-none focus:border-emerald-500/50 placeholder-zinc-600"
+                  class="w-full mt-0.5 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none focus:border-emerald-500/50 placeholder-gray-400"
                 />
               </label>
               <!-- Date label format -->
               <label class="block">
-                <span class="text-[9px] text-zinc-600">Texto da barra de datas</span>
+                <span class="text-[9px] text-gray-400">Texto da barra de datas</span>
                 <input
                   :value="(flyer as any)?.footer_date_label || ''"
                   @input="updateFlyer({ footer_date_label: ($event.target as HTMLInputElement).value } as any)"
                   placeholder="Ofertas validas"
-                  class="w-full mt-0.5 bg-white/5 text-[11px] text-white rounded px-2 py-1.5 border border-white/5 outline-none focus:border-emerald-500/50 placeholder-zinc-600"
+                  class="w-full mt-0.5 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none focus:border-emerald-500/50 placeholder-gray-400"
                 />
               </label>
               <!-- Show social labels toggle -->
               <div class="flex items-center justify-between gap-2">
-                <span class="text-[11px] text-zinc-400">Mostrar @ nas redes</span>
-                <button type="button" role="switch" :aria-checked="(flyer as any)?.footer_show_social_labels ?? true" @click="updateFlyer({ footer_show_social_labels: !((flyer as any)?.footer_show_social_labels ?? true) } as any)" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', (flyer as any)?.footer_show_social_labels ?? true ? 'bg-emerald-600' : 'bg-white/10']">
+                <span class="text-[11px] text-gray-500">Mostrar @ nas redes</span>
+                <button type="button" role="switch" :aria-checked="(flyer as any)?.footer_show_social_labels ?? true" @click="updateFlyer({ footer_show_social_labels: !((flyer as any)?.footer_show_social_labels ?? true) } as any)" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', (flyer as any)?.footer_show_social_labels ?? true ? 'bg-emerald-600' : 'bg-gray-200']">
                   <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', (flyer as any)?.footer_show_social_labels ?? true ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
                 </button>
               </div>
               <!-- Show payment label toggle -->
               <div class="flex items-center justify-between gap-2">
-                <span class="text-[11px] text-zinc-400">Mostrar "Aceitamos"</span>
-                <button type="button" role="switch" :aria-checked="(flyer as any)?.footer_show_payment_label ?? true" @click="updateFlyer({ footer_show_payment_label: !((flyer as any)?.footer_show_payment_label ?? true) } as any)" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', (flyer as any)?.footer_show_payment_label ?? true ? 'bg-emerald-600' : 'bg-white/10']">
+                <span class="text-[11px] text-gray-500">Mostrar "Aceitamos"</span>
+                <button type="button" role="switch" :aria-checked="(flyer as any)?.footer_show_payment_label ?? true" @click="updateFlyer({ footer_show_payment_label: !((flyer as any)?.footer_show_payment_label ?? true) } as any)" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', (flyer as any)?.footer_show_payment_label ?? true ? 'bg-emerald-600' : 'bg-gray-200']">
                   <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', (flyer as any)?.footer_show_payment_label ?? true ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
                 </button>
               </div>
               <!-- Logo in footer toggle -->
               <div class="flex items-center justify-between gap-2">
-                <span class="text-[11px] text-zinc-400">Logo no rodape</span>
-                <button type="button" role="switch" :aria-checked="(flyer as any)?.footer_show_logo ?? true" @click="updateFlyer({ footer_show_logo: !((flyer as any)?.footer_show_logo ?? true) } as any)" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', (flyer as any)?.footer_show_logo ?? true ? 'bg-emerald-600' : 'bg-white/10']">
+                <span class="text-[11px] text-gray-500">Logo no rodape</span>
+                <button type="button" role="switch" :aria-checked="(flyer as any)?.footer_show_logo ?? true" @click="updateFlyer({ footer_show_logo: !((flyer as any)?.footer_show_logo ?? true) } as any)" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', (flyer as any)?.footer_show_logo ?? true ? 'bg-emerald-600' : 'bg-gray-200']">
                   <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', (flyer as any)?.footer_show_logo ?? true ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
                 </button>
+              </div>
+              <!-- Tamanho da logo do rodape -->
+              <div v-if="(flyer as any)?.footer_show_logo ?? true">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-[9px] text-gray-400">Tamanho da logo</span>
+                  <span class="text-[9px] text-gray-400 tabular-nums">{{ (flyer as any)?.footer_logo_size || 52 }}px</span>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="200"
+                  step="2"
+                  :value="(flyer as any)?.footer_logo_size || 52"
+                  @input="updateFlyer({ footer_logo_size: Number(($event.target as HTMLInputElement).value) } as any)"
+                  class="w-full accent-emerald-500 h-1"
+                />
               </div>
             </div>
           </div>
@@ -1345,17 +1385,17 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
       <!-- DATAS -->
       <template v-else-if="activePanel === 'dates'">
         <div class="p-3">
-          <h3 class="text-xs font-semibold text-zinc-300 mb-3">Datas e Regras</h3>
+          <h3 class="text-xs font-semibold text-gray-600 mb-3">Datas e Regras</h3>
           <div class="space-y-2 mb-3">
-            <label class="block"><span class="text-[10px] text-zinc-500">Data de Inicio</span>
-              <input type="date" :value="flyer?.start_date?.split('T')[0] || ''" @input="updateFlyer({ start_date: ($event.target as HTMLInputElement).value })" class="w-full mt-0.5 bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1.5 border border-white/5 outline-none" />
+            <label class="block"><span class="text-[10px] text-gray-400">Data de Inicio</span>
+              <input type="date" :value="flyer?.start_date?.split('T')[0] || ''" @input="updateFlyer({ start_date: ($event.target as HTMLInputElement).value })" class="w-full mt-0.5 bg-gray-100 text-[11px] text-gray-600 rounded px-2 py-1.5 border border-gray-200 outline-none" />
             </label>
-            <label class="block"><span class="text-[10px] text-zinc-500">Data Final</span>
-              <input type="date" :value="flyer?.end_date?.split('T')[0] || ''" @input="updateFlyer({ end_date: ($event.target as HTMLInputElement).value })" class="w-full mt-0.5 bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1.5 border border-white/5 outline-none" />
+            <label class="block"><span class="text-[10px] text-gray-400">Data Final</span>
+              <input type="date" :value="flyer?.end_date?.split('T')[0] || ''" @input="updateFlyer({ end_date: ($event.target as HTMLInputElement).value })" class="w-full mt-0.5 bg-gray-100 text-[11px] text-gray-600 rounded px-2 py-1.5 border border-gray-200 outline-none" />
             </label>
           </div>
           <div class="flex flex-wrap gap-1 mb-4">
-            <button v-for="s in datesShortcuts" :key="s.label" @click="setDateShortcut(s)" class="px-2 py-1 rounded text-[10px] bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white transition-colors">{{ s.label }}</button>
+            <button v-for="s in datesShortcuts" :key="s.label" @click="setDateShortcut(s)" class="px-2 py-1 rounded text-[10px] bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-900 transition-colors">{{ s.label }}</button>
           </div>
           <div class="space-y-2.5">
             <label v-for="tog in [
@@ -1365,12 +1405,25 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
               { key: 'show_medicine_warning', label: 'Advertencia Medicamento', def: false },
               { key: 'show_promo_phrase', label: 'Frase Promocional', def: false },
             ]" :key="tog.key" class="flex items-center justify-between gap-2 cursor-pointer">
-              <span class="text-[11px] text-zinc-400">{{ tog.label }}</span>
-              <button type="button" role="switch" :aria-checked="(flyer as any)?.[tog.key] ?? tog.def" @click="updateFlyer({ [tog.key]: !((flyer as any)?.[tog.key] ?? tog.def) } as any)" :class="['relative inline-flex h-5 w-9 rounded-full transition-colors', (flyer as any)?.[tog.key] ?? tog.def ? 'bg-emerald-600' : 'bg-white/10']">
+              <span class="text-[11px] text-gray-500">{{ tog.label }}</span>
+              <button type="button" role="switch" :aria-checked="(flyer as any)?.[tog.key] ?? tog.def" @click="updateFlyer({ [tog.key]: !((flyer as any)?.[tog.key] ?? tog.def) } as any)" :class="['relative inline-flex h-5 w-9 rounded-full transition-colors', (flyer as any)?.[tog.key] ?? tog.def ? 'bg-emerald-600' : 'bg-gray-200']">
                 <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', (flyer as any)?.[tog.key] ?? tog.def ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
               </button>
             </label>
-            <textarea v-if="flyer?.show_promo_phrase" :value="flyer?.promo_phrase || ''" @input="updateFlyer({ promo_phrase: ($event.target as HTMLTextAreaElement).value })" placeholder="Frase promocional..." maxlength="300" class="w-full h-16 bg-white/5 text-[11px] text-white rounded px-2 py-1.5 border border-white/5 outline-none resize-none" />
+            <textarea v-if="flyer?.show_promo_phrase" :value="flyer?.promo_phrase || ''" @input="updateFlyer({ promo_phrase: ($event.target as HTMLTextAreaElement).value })" placeholder="Frase promocional..." maxlength="300" class="w-full h-16 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none resize-none" />
+          </div>
+
+          <!-- Toggle publicar no portal (duplicado da aba Portal como no QROfertas) -->
+          <div class="border-t border-gray-200 pt-3 mt-3">
+            <div class="flex items-center justify-between gap-2">
+              <div>
+                <span class="text-[11px] text-gray-500 block">Publicar encarte no portal</span>
+                <span class="text-[9px] text-gray-400">Notifica clientes inscritos no portal</span>
+              </div>
+              <button type="button" role="switch" :aria-checked="flyer?.publish_to_portal ?? false" @click="updateFlyer({ publish_to_portal: !(flyer?.publish_to_portal ?? false) })" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', flyer?.publish_to_portal ? 'bg-emerald-600' : 'bg-gray-200']">
+                <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', flyer?.publish_to_portal ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
+              </button>
+            </div>
           </div>
         </div>
       </template>
@@ -1378,20 +1431,20 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
       <!-- POSTAR -->
       <template v-else-if="activePanel === 'postar'">
         <div class="p-3">
-          <h3 class="text-xs font-semibold text-zinc-300 mb-3">Texto para Redes Sociais</h3>
+          <h3 class="text-xs font-semibold text-gray-600 mb-3">Texto para Redes Sociais</h3>
           <div class="mb-4">
             <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] text-zinc-500 font-medium">Texto Principal</span>
+              <span class="text-[10px] text-gray-400 font-medium">Texto Principal</span>
               <button @click="copyToClipboard(socialText)" class="text-[10px] text-emerald-400 hover:text-emerald-300 font-medium">Copiar</button>
             </div>
-            <pre class="whitespace-pre-wrap text-[11px] text-zinc-300 bg-white/5 rounded p-2 max-h-50 overflow-y-auto font-sans">{{ socialText }}</pre>
+            <pre class="whitespace-pre-wrap text-[11px] text-gray-600 bg-gray-100 rounded p-2 max-h-50 overflow-y-auto font-sans">{{ socialText }}</pre>
           </div>
           <div>
             <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] text-zinc-500 font-medium">#PraCegoVer</span>
+              <span class="text-[10px] text-gray-400 font-medium">#PraCegoVer</span>
               <button @click="copyToClipboard(pracegover)" class="text-[10px] text-emerald-400 hover:text-emerald-300 font-medium">Copiar</button>
             </div>
-            <pre class="whitespace-pre-wrap text-[11px] text-zinc-300 bg-white/5 rounded p-2 max-h-50 overflow-y-auto font-sans">{{ pracegover }}</pre>
+            <pre class="whitespace-pre-wrap text-[11px] text-gray-600 bg-gray-100 rounded p-2 max-h-50 overflow-y-auto font-sans">{{ pracegover }}</pre>
           </div>
         </div>
       </template>
@@ -1399,35 +1452,109 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
       <!-- ENCARTE -->
       <template v-else-if="activePanel === 'encarte'">
         <div class="p-3">
-          <h3 class="text-xs font-semibold text-zinc-300 mb-3">Encarte</h3>
-          <label class="block mb-3"><span class="text-[10px] text-zinc-500">Titulo</span>
-            <input :value="flyer?.title || ''" @input="updateFlyer({ title: ($event.target as HTMLInputElement).value })" class="w-full mt-0.5 bg-white/5 text-[11px] text-white rounded px-2 py-1.5 border border-white/5 outline-none" />
+          <h3 class="text-xs font-semibold text-gray-600 mb-3">Encarte</h3>
+          <label class="block mb-3"><span class="text-[10px] text-gray-400">Titulo</span>
+            <input :value="flyer?.title || ''" @input="updateFlyer({ title: ($event.target as HTMLInputElement).value })" class="w-full mt-0.5 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none" />
           </label>
-          <label class="block mb-3"><span class="text-[10px] text-zinc-500">Categoria</span>
-            <select :value="flyer?.category || ''" @change="updateFlyer({ category: ($event.target as HTMLSelectElement).value })" class="w-full mt-0.5 bg-white/5 text-[11px] text-zinc-300 rounded px-2 py-1.5 border border-white/5 outline-none">
+          <label class="block mb-3"><span class="text-[10px] text-gray-400">Categoria</span>
+            <select :value="flyer?.category || ''" @change="updateFlyer({ category: ($event.target as HTMLSelectElement).value })" class="w-full mt-0.5 bg-gray-100 text-[11px] text-gray-600 rounded px-2 py-1.5 border border-gray-200 outline-none">
               <option value="">Sem Categoria</option>
               <option v-for="c in FLYER_CATEGORIES" :key="c" :value="c">{{ c.charAt(0).toUpperCase() + c.slice(1).replace('-', ' ') }}</option>
             </select>
           </label>
-          <label class="block mb-3"><span class="text-[10px] text-zinc-500">Observacoes</span>
-            <textarea :value="flyer?.observations || ''" @input="updateFlyer({ observations: ($event.target as HTMLTextAreaElement).value })" class="w-full mt-0.5 h-16 bg-white/5 text-[11px] text-white rounded px-2 py-1.5 border border-white/5 outline-none resize-none" />
+          <label class="block mb-3"><span class="text-[10px] text-gray-400">Observacoes</span>
+            <textarea :value="flyer?.observations || ''" @input="updateFlyer({ observations: ($event.target as HTMLTextAreaElement).value })" class="w-full mt-0.5 h-16 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none resize-none" />
           </label>
-          <label class="block"><span class="text-[10px] text-zinc-500">Mensagem Personalizada</span>
-            <input :value="flyer?.custom_message || ''" @input="updateFlyer({ custom_message: ($event.target as HTMLInputElement).value })" class="w-full mt-0.5 bg-white/5 text-[11px] text-white rounded px-2 py-1.5 border border-white/5 outline-none" />
+          <label class="block"><span class="text-[10px] text-gray-400">Mensagem Personalizada</span>
+            <input :value="flyer?.custom_message || ''" @input="updateFlyer({ custom_message: ($event.target as HTMLInputElement).value })" class="w-full mt-0.5 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none" />
           </label>
         </div>
       </template>
 
       <!-- PORTAL -->
       <template v-else-if="activePanel === 'portal'">
-        <div class="p-3">
-          <h3 class="text-xs font-semibold text-zinc-300 mb-3">Portal</h3>
-          <label class="flex items-center justify-between gap-2 cursor-pointer">
-            <span class="text-[11px] text-zinc-400">Publicar este encarte no portal</span>
-            <button type="button" role="switch" :aria-checked="flyer?.publish_to_portal ?? false" @click="updateFlyer({ publish_to_portal: !(flyer?.publish_to_portal ?? false) })" :class="['relative inline-flex h-5 w-9 rounded-full transition-colors', flyer?.publish_to_portal ? 'bg-emerald-600' : 'bg-white/10']">
-              <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', flyer?.publish_to_portal ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
-            </button>
-          </label>
+        <div class="p-3 space-y-4">
+          <h3 class="text-xs font-semibold text-gray-600">Configuracoes do Portal de Ofertas</h3>
+
+          <!-- URL slug -->
+          <div>
+            <label class="text-[10px] text-gray-400 font-medium block mb-1">Nome para URL</label>
+            <div class="flex items-center gap-1">
+              <input
+                :value="(flyer as any)?.portal_slug || ''"
+                @input="updateFlyer({ portal_slug: ($event.target as HTMLInputElement).value } as any)"
+                placeholder="minha-loja"
+                class="flex-1 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none focus:border-emerald-500/50 placeholder-gray-400"
+              />
+            </div>
+            <p class="text-[9px] text-gray-400 mt-0.5">
+              {{ (flyer as any)?.portal_slug ? `${(flyer as any).portal_slug}.qrofertas.com` : 'slug.qrofertas.com' }}
+            </p>
+          </div>
+
+          <!-- CEP -->
+          <div>
+            <label class="text-[10px] text-gray-400 font-medium block mb-1">CEP</label>
+            <input
+              :value="(flyer as any)?.portal_cep || ''"
+              @input="updateFlyer({ portal_cep: ($event.target as HTMLInputElement).value } as any)"
+              placeholder="00000-000"
+              maxlength="9"
+              class="w-full bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none focus:border-emerald-500/50 placeholder-gray-400"
+            />
+            <p class="text-[9px] text-gray-400 mt-0.5">CEP da loja para geolocalizacao no portal</p>
+          </div>
+
+          <!-- Segmentos -->
+          <div>
+            <label class="text-[10px] text-gray-400 font-medium block mb-1">Segmentos</label>
+            <div class="space-y-1.5">
+              <select
+                v-for="segIdx in 3"
+                :key="segIdx"
+                :value="(flyer as any)?.[`portal_segment_${segIdx}`] || ''"
+                @change="updateFlyer({ [`portal_segment_${segIdx}`]: ($event.target as HTMLSelectElement).value } as any)"
+                class="w-full bg-gray-100 text-[11px] text-gray-600 rounded px-2 py-1.5 border border-gray-200 outline-none focus:border-emerald-500/50"
+              >
+                <option value="">Sem segmento</option>
+                <option value="supermercado">Supermercado</option>
+                <option value="acougue">Acougue</option>
+                <option value="padaria">Padaria</option>
+                <option value="hortifruti">Hortifruti</option>
+                <option value="farmacia">Farmacia</option>
+                <option value="bebidas">Bebidas</option>
+                <option value="pet-shop">Pet Shop</option>
+                <option value="material-construcao">Material de Construcao</option>
+                <option value="eletronicos">Eletronicos</option>
+                <option value="cosmeticos">Cosmeticos</option>
+                <option value="restaurante">Restaurante</option>
+                <option value="atacadista">Atacadista</option>
+                <option value="conveniencia">Conveniencia</option>
+                <option value="mercearia">Mercearia</option>
+                <option value="emporio">Emporio</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Toggles -->
+          <div class="space-y-2.5 border-t border-gray-200 pt-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] text-gray-500">Mostrar empresa no portal</span>
+              <button type="button" role="switch" :aria-checked="(flyer as any)?.show_on_portal ?? false" @click="updateFlyer({ show_on_portal: !((flyer as any)?.show_on_portal ?? false) } as any)" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', (flyer as any)?.show_on_portal ? 'bg-emerald-600' : 'bg-gray-200']">
+                <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', (flyer as any)?.show_on_portal ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between gap-2">
+              <div>
+                <span class="text-[11px] text-gray-500 block">Publicar encarte no portal</span>
+                <span class="text-[9px] text-gray-400">Notifica clientes inscritos</span>
+              </div>
+              <button type="button" role="switch" :aria-checked="flyer?.publish_to_portal ?? false" @click="updateFlyer({ publish_to_portal: !(flyer?.publish_to_portal ?? false) })" :class="['relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors', flyer?.publish_to_portal ? 'bg-emerald-600' : 'bg-gray-200']">
+                <span :class="['inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5', flyer?.publish_to_portal ? 'translate-x-4.5 ml-px' : 'translate-x-0.5']" />
+              </button>
+            </div>
+          </div>
         </div>
       </template>
     </div>
