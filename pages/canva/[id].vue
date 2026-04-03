@@ -1477,50 +1477,27 @@ onMounted(async () => {
           <!-- ============================== -->
           <div v-if="analysis && step !== 'done'" class="space-y-2">
             <!-- Botao principal -->
-            <button
-              v-if="isInstitutional"
-              @click="applyInstitutionalTexts"
-              :disabled="canva.isProcessing.value || step === 'applying'"
-              class="w-full flex items-center justify-center gap-2 h-12 bg-linear-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-xl text-sm font-semibold transition-all shadow-[0_8px_20px_rgba(139,92,246,0.25)] hover:shadow-[0_12px_25px_rgba(139,92,246,0.4)] border border-violet-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
+            <!-- Abrir no Canva para editar -->
+            <a
+              v-if="analysis?.edit_url"
+              :href="analysis.edit_url"
+              target="_blank"
+              class="w-full flex items-center justify-center gap-2 h-12 bg-linear-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-xl text-sm font-semibold transition-all shadow-[0_8px_20px_rgba(139,92,246,0.25)] hover:shadow-[0_12px_25px_rgba(139,92,246,0.4)] border border-violet-400/20"
             >
-              <Loader2 v-if="step === 'applying'" class="w-4 h-4 animate-spin" />
-              <Wand2 v-else class="w-4 h-4" />
-              <span>{{ step === 'applying' ? 'Aplicando...' : 'Aplicar no Design' }}</span>
-            </button>
-
-            <button
-              v-else-if="hasProducts && anyPageHasProducts"
-              @click="openReview(activePage)"
-              :disabled="canva.isProcessing.value || step === 'applying' || !currentPageHasProducts || !currentPageValidation.valid"
-              class="w-full flex items-center justify-center gap-2 h-12 bg-linear-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-xl text-sm font-semibold transition-all shadow-[0_8px_20px_rgba(139,92,246,0.25)] hover:shadow-[0_12px_25px_rgba(139,92,246,0.4)] border border-violet-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Loader2 v-if="step === 'applying'" class="w-4 h-4 animate-spin" />
-              <Wand2 v-else class="w-4 h-4" />
-              <span>{{ step === 'applying' ? 'Aplicando...' : 'Conferir e Enviar' }}</span>
-            </button>
-
-            <!-- Aplicar todas as paginas -->
-            <button
-              v-if="hasProducts && totalPages > 1 && anyPageHasProducts"
-              @click="openReviewAll()"
-              :disabled="canva.isProcessing.value || step === 'applying'"
-              class="w-full flex items-center justify-center gap-2 h-10 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white rounded-xl text-sm font-medium transition-all border border-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Layers class="w-4 h-4" />
-              <span>Aplicar Todas ({{ totalPages }} paginas)</span>
-            </button>
+              <ExternalLink class="w-4 h-4" />
+              <span>Abrir no Canva para Editar</span>
+            </a>
           </div>
 
           <!-- Instrucoes -->
           <div class="bg-violet-500/5 border border-violet-500/10 rounded-xl p-4">
             <h3 class="text-xs font-semibold text-violet-300 mb-2">Como funciona</h3>
             <ol class="text-[11px] text-zinc-400 space-y-1.5 list-decimal list-inside">
-              <li>O sistema analisa o design e detecta os elementos editaveis</li>
-              <li>Seus dados de empresa sao substituidos automaticamente</li>
-              <li v-if="hasProducts">Preencha os produtos usando catalogo, lista ou manualmente</li>
-              <li v-if="hasValidity">Configure a data de validade da promocao</li>
-              <li v-if="hasEditableTexts">Edite os textos que desejar (deixe vazio para manter original)</li>
-              <li>Confira e aplique - apenas as paginas editadas ficam para download</li>
+              <li>Uma copia do template foi criada para voce</li>
+              <li v-if="hasProducts">Monte sua lista de produtos aqui como referencia</li>
+              <li>Clique em "Abrir no Canva para Editar" para personalizar o design</li>
+              <li>No Canva, substitua os textos e imagens usando sua lista como guia</li>
+              <li>Exporte o design finalizado direto do Canva</li>
             </ol>
           </div>
         </div>
