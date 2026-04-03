@@ -11166,6 +11166,8 @@ const CANVAS_CUSTOM_PROPS = [
 	    '__fontScale',
 	    '__fontScaleBase',
 	    '__yOffsetRatio',
+	    '__manualScaleX',
+	    '__manualScaleY',
 	    '__strokeWidth',
 	    '__roundness',
 	    '__shadowBlur',
@@ -19446,6 +19448,14 @@ const setupReactivity = () => {
                 }
             }
 
+            if (String(obj?.type || '').toLowerCase() === 'group' && String(obj?.name || '') === 'priceGroup') {
+                markPriceGroupTransformAsManual(obj);
+                const cardSize = getCardSizeForPriceGroup(obj);
+                if (cardSize) {
+                    normalizePriceGroupPlacementInCard(obj, cardSize.width, cardSize.height, null);
+                }
+            }
+
             if (shouldApplyContainmentConstraints(obj)) {
                 applyContainmentConstraints(obj);
             }
@@ -19870,6 +19880,110 @@ const centerSelectionInContainer = (mode: 'h' | 'v' | 'both') => {
     triggerRef(selectedObjectRef);
 };
 
+const INSPECTOR_TRANSFORM_PROPS = new Set([
+    'left',
+    'top',
+    'width',
+    'height',
+    'scaleX',
+    'scaleY',
+    'angle'
+]);
+
+const resolveInspectorSnapshotTarget = (active: any) => {
+    if (!active || active.type === 'activeSelection') return active;
+
+    const snapshot = selectedObjectRef.value as any;
+    const snapshotId = String(snapshot?._customId || '').trim();
+    const activeId = String((active as any)?._customId || '').trim();
+    if (!snapshotId || snapshotId === activeId) {
+        if (String(snapshot?.type || '').toLowerCase() === 'group' && String(snapshot?.name || '').trim() === 'priceGroup') {
+            return getPriceGroupFromAny(active) || active;
+        }
+        return active;
+    }
+
+    const found = findObjectByCustomId(snapshotId)?.obj;
+    if (!found) return active;
+
+    const sameCard = (() => {
+        const activeCard = getCardGroupFromAny(active);
+        const foundCard = getCardGroupFromAny(found);
+        return !!(activeCard && foundCard && activeCard === foundCard);
+    })();
+    const samePriceGroup = (() => {
+        const activePriceGroup = getPriceGroupFromAny(active);
+        const foundPriceGroup = getPriceGroupFromAny(found);
+        return !!(activePriceGroup && foundPriceGroup && activePriceGroup === foundPriceGroup);
+    })();
+
+    if (found === active || found.group === active || active.group === found || sameCard || samePriceGroup) {
+        return found;
+    }
+
+    const deepActive = (active as any)?._activeObject;
+    const deepActiveId = String((deepActive as any)?._customId || '').trim();
+    if (deepActive && deepActiveId === snapshotId) {
+        return deepActive;
+    }
+
+    return active;
+};
+
+const markInspectorTransformAsManual = (target: any, prop: string) => {
+    if (!target || !INSPECTOR_TRANSFORM_PROPS.has(prop)) return;
+
+    const priceGroup = getPriceGroupFromAny(target);
+    const cardHost = (
+        getCardHostForPriceGroup(priceGroup) ||
+        getCardGroupFromAny(target) ||
+        getCardGroupFromAny(priceGroup)
+    );
+    const cardW = Number((cardHost as any)?._cardWidth ?? cardHost?.width ?? cardHost?.getScaledWidth?.() ?? 0);
+    const cardH = Number((cardHost as any)?._cardHeight ?? cardHost?.height ?? cardHost?.getScaledHeight?.() ?? 0);
+
+    const markOne = (obj: any) => {
+        if (!obj || typeof obj !== 'object') return;
+        (obj as any).__manualTransform = true;
+        if (Number.isFinite(cardW) && cardW > 0) {
+            (obj as any).__manualTransformCardW = cardW;
+        }
+        if (Number.isFinite(cardH) && cardH > 0) {
+            (obj as any).__manualTransformCardH = cardH;
+        }
+    };
+
+    markOne(target);
+    if (priceGroup && priceGroup !== target) {
+        markOne(priceGroup);
+    }
+};
+
+const markPriceGroupTransformAsManual = (group: any) => {
+    if (!group || String(group?.type || '').toLowerCase() !== 'group') return;
+    if (String(group?.name || '') !== 'priceGroup') return;
+    markInspectorTransformAsManual(group, 'top');
+    markPriceGroupAsManuallyCustomized(group, { captureSnapshot: false });
+};
+
+const updatePriceGroupManualScaleOverride = (group: any, axis: 'x' | 'y', nextScaleRaw: unknown) => {
+    if (!group || String(group?.type || '').toLowerCase() !== 'group') return null;
+    if (String(group?.name || '').trim() !== 'priceGroup') return null;
+
+    const scaleKey = axis === 'x' ? 'scaleX' : 'scaleY';
+    const manualKey = axis === 'x' ? '__manualScaleX' : '__manualScaleY';
+    const currentScale = Math.abs(Number(group?.[scaleKey] ?? 1)) || 1;
+    const nextScale = Math.max(0.01, Math.abs(Number(nextScaleRaw)) || currentScale);
+    const currentManual = Math.abs(Number((group as any)?.[manualKey] ?? 1)) || 1;
+    const ratio = currentScale > 0.0001 ? (nextScale / currentScale) : 1;
+
+    if (Number.isFinite(ratio) && ratio > 0) {
+        (group as any)[manualKey] = currentManual * ratio;
+    }
+
+    return nextScale;
+};
+
 const updateObjectProperty = (prop: string, value: any) => {
     // Special: Canvas Preset Change
     if (prop === 'canvas-preset') {
@@ -20061,11 +20175,22 @@ const updateObjectProperty = (prop: string, value: any) => {
     let active = canvas.value.getActiveObject();
     
     if (active) {
+        if (INSPECTOR_TRANSFORM_PROPS.has(prop)) {
+            active = resolveInspectorSnapshotTarget(active);
+        }
+
+        let snapshotExtra: Record<string, any> | undefined = { [prop]: value };
+
         // If locked, ignore position/size/rotate changes from the inspector.
         // Lock should only block transformations, not styling/effects.
         if (active.type !== 'activeSelection') {
-            if ((prop === 'left' || prop === 'top') && (active.lockMovementX || active.lockMovementY)) return;
-            if ((prop === 'width' || prop === 'height' || prop === 'scaleX' || prop === 'scaleY') && (active.lockScalingX || active.lockScalingY)) return;
+            if ((prop === 'left' && active.lockMovementX) || (prop === 'top' && active.lockMovementY)) return;
+            if (
+                (prop === 'width' && active.lockScalingX) ||
+                (prop === 'height' && active.lockScalingY) ||
+                (prop === 'scaleX' && active.lockScalingX) ||
+                (prop === 'scaleY' && active.lockScalingY)
+            ) return;
             if (prop === 'angle' && active.lockRotation) return;
         }
 
@@ -20490,6 +20615,60 @@ const updateObjectProperty = (prop: string, value: any) => {
             }
         }
 
+        if (
+            (prop === 'width' || prop === 'height') &&
+            active.type !== 'activeSelection' &&
+            !active.isFrame &&
+            !isLikelyProductZone(active) &&
+            (
+                String(active.type || '').toLowerCase() === 'group' ||
+                String(active.name || '') === 'priceGroup'
+            )
+        ) {
+            const rawSize = Math.abs(Number(
+                prop === 'width'
+                    ? (active.getScaledWidth?.() ?? ((active.width || 0) * (active.scaleX || 1)))
+                    : (active.getScaledHeight?.() ?? ((active.height || 0) * (active.scaleY || 1)))
+            ) || 0);
+            const desiredDisplaySize = Math.max(1, Number(value) || 0);
+            if (rawSize > 0 && Number.isFinite(desiredDisplaySize)) {
+                const scaleKey = prop === 'width' ? 'scaleX' : 'scaleY';
+                const axis = prop === 'width' ? 'x' : 'y';
+                const nextScaleRaw = (Math.abs(Number(active?.[scaleKey] ?? 1)) || 1) * (desiredDisplaySize / rawSize);
+                const nextScale = updatePriceGroupManualScaleOverride(active, axis, nextScaleRaw) ?? Math.max(0.01, nextScaleRaw);
+                active.set(scaleKey, nextScale);
+                markInspectorTransformAsManual(active, scaleKey);
+                markPriceGroupAsManuallyCustomized(active, { captureSnapshot: false });
+                if (active.group) safeAddWithUpdate(active.group);
+                active.setCoords?.();
+                canvas.value.requestRenderAll();
+                debouncedSaveCurrentState();
+                snapshotExtra = undefined;
+                selectedObjectRef.value = snapshotForPropertiesPanel(active);
+                return;
+            }
+        }
+
+        if (
+            (prop === 'scaleX' || prop === 'scaleY') &&
+            active.type !== 'activeSelection' &&
+            String(active?.type || '').toLowerCase() === 'group' &&
+            String(active?.name || '').trim() === 'priceGroup'
+        ) {
+            const axis = prop === 'scaleX' ? 'x' : 'y';
+            const nextScale = updatePriceGroupManualScaleOverride(active, axis, value) ?? Math.max(0.01, Math.abs(Number(value)) || 1);
+            active.set(prop, nextScale);
+            markInspectorTransformAsManual(active, prop);
+            markPriceGroupAsManuallyCustomized(active, { captureSnapshot: false });
+            if (active.group) safeAddWithUpdate(active.group);
+            active.setCoords?.();
+            canvas.value.requestRenderAll();
+            debouncedSaveCurrentState();
+            snapshotExtra = { [prop]: nextScale };
+            selectedObjectRef.value = snapshotForPropertiesPanel(active, snapshotExtra);
+            return;
+        }
+
         // Map common styling props to the correct child object when the selection is a group.
         // Fabric groups don't support fill/stroke/radius directly.
         if (isLikelyProductZone(active)) {
@@ -20766,9 +20945,10 @@ const updateObjectProperty = (prop: string, value: any) => {
                     lockSkewingY: true
                 });
                 applyContainmentConstraints(active);
-             }
+            }
         }
         
+        markInspectorTransformAsManual(active, prop);
         markPriceGroupAsManuallyCustomized(active);
 
         // If it's a group, we might want to dirty it
@@ -20782,7 +20962,7 @@ const updateObjectProperty = (prop: string, value: any) => {
         debouncedSaveCurrentState();
         
         // Force update ref for UI sync — create fresh snapshot so Vue detects prop change
-        selectedObjectRef.value = snapshotForPropertiesPanel(active, { [prop]: value });
+        selectedObjectRef.value = snapshotForPropertiesPanel(active, snapshotExtra);
     }
 }
 
@@ -29088,44 +29268,37 @@ const normalizePriceGroupPlacementInCard = (
     const halfCardW = cardW / 2;
     const halfCardH = cardH / 2;
     const safeAngle = Number.isFinite(Number(placement?.angle)) ? Number(placement?.angle) : Number(priceGroup.angle ?? 0) || 0;
-
-    const updateBounds = () => {
-        const local = resolvePriceGroupVisibleBoundsLocal(priceGroup);
-        if (!local) return null;
-        const sx = Math.abs(Number(priceGroup.scaleX ?? 1)) || 1;
-        const sy = Math.abs(Number(priceGroup.scaleY ?? 1)) || 1;
-        return {
-            left: Number(local.left) * sx,
-            right: Number(local.right) * sx,
-            top: Number(local.top) * sy,
-            bottom: Number(local.bottom) * sy,
-            width: Number(local.width) * sx,
-            height: Number(local.height) * sy
-        };
-    };
-
-    // Resetar scale para 1 antes de calcular fitScale — evita acumulação
-    priceGroup.set({ scaleX: 1, scaleY: 1 });
-    let bounds = updateBounds();
-    if (!bounds) return false;
+    const localBounds = resolvePriceGroupVisibleBoundsLocal(priceGroup);
+    if (!localBounds) return false;
 
     const maxAllowedW = Math.max(24, cardW * maxWidthRatio);
     const maxAllowedH = Math.max(24, cardH * maxHeightRatio);
+    const requestedScaleX = Math.max(0.0001, Math.abs(Number(priceGroup.scaleX ?? 1)) || 1);
+    const requestedScaleY = Math.max(0.0001, Math.abs(Number(priceGroup.scaleY ?? 1)) || 1);
+    const signedScaleX = Number(priceGroup.scaleX ?? 1) < 0 ? -1 : 1;
+    const signedScaleY = Number(priceGroup.scaleY ?? 1) < 0 ? -1 : 1;
     const fitScale = Math.min(
         1,
-        bounds.width > 0 ? (maxAllowedW / bounds.width) : 1,
-        bounds.height > 0 ? (maxAllowedH / bounds.height) : 1
+        localBounds.width > 0 ? (maxAllowedW / (localBounds.width * requestedScaleX)) : 1,
+        localBounds.height > 0 ? (maxAllowedH / (localBounds.height * requestedScaleY)) : 1
     );
+    const scaleClamp = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 1;
+    const nextScaleX = requestedScaleX * scaleClamp;
+    const nextScaleY = requestedScaleY * scaleClamp;
 
-    if (Number.isFinite(fitScale) && fitScale > 0 && fitScale < 0.999) {
-        // Usar escala absoluta, não multiplicar a existente — evita crescimento acumulativo
-        priceGroup.set({
-            scaleX: fitScale,
-            scaleY: fitScale
-        });
-        bounds = updateBounds();
-        if (!bounds) return false;
-    }
+    priceGroup.set({
+        scaleX: nextScaleX * signedScaleX,
+        scaleY: nextScaleY * signedScaleY
+    });
+
+    const bounds = {
+        left: Number(localBounds.left) * nextScaleX,
+        right: Number(localBounds.right) * nextScaleX,
+        top: Number(localBounds.top) * nextScaleY,
+        bottom: Number(localBounds.bottom) * nextScaleY,
+        width: Number(localBounds.width) * nextScaleX,
+        height: Number(localBounds.height) * nextScaleY
+    };
 
     let nextLeft = Number(priceGroup.left ?? 0) || 0;
     let nextTop = Number(priceGroup.top ?? 0) || 0;
@@ -36133,14 +36306,17 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         limitH = limit.visible ? ((limit.getScaledHeight?.() ?? 0) + gap) : 0;
     }
 
-    // 3. Bottom Element (Splash/Price)
-    let bottomH = 0;
-    if (splash) {
-        const marginBottom = h * 0.05;
-        const splashManual = isManual(splash);
-        let preserveTemplateVisual = false;
-        let layoutScaleX = 1;
-        let layoutScaleY = 1;
+	    // 3. Bottom Element (Splash/Price)
+	    let bottomH = 0;
+	    if (splash) {
+	        const marginBottom = h * 0.05;
+	        const splashManual = isManual(splash);
+	        let preserveTemplateVisual = false;
+	        let layoutScaleX = 1;
+	        let layoutScaleY = 1;
+	        const manualScaleX = Math.abs(Number((splash as any)?.__manualScaleX ?? 1)) || 1;
+	        const manualScaleY = Math.abs(Number((splash as any)?.__manualScaleY ?? 1)) || 1;
+	        const hasManualScaleOverride = Math.abs(manualScaleX - 1) > 0.0001 || Math.abs(manualScaleY - 1) > 0.0001;
 
         if ((splash as any).objectCaching) (splash as any).objectCaching = false;
         if ((splash as any).statefullCache) (splash as any).statefullCache = false;
@@ -36319,17 +36495,17 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
 
-                if (!splashManual) {
-                    const newTop = halfH - ((pillH * scale) / 2) - marginBottom + offsetY;
+	                if (!splashManual) {
+	                    const newTop = halfH - ((pillH * scale) / 2) - marginBottom + offsetY;
                     // Para manual templates, fitScale é a escala base que o layout calculou.
                     // Guardar como __originalScale ANTES de multiplicar por splashScale.
                     if (preserveTemplateVisual) {
                         (splash as any).__originalScaleX = fitScaleX;
                         (splash as any).__originalScaleY = fitScaleY;
                     }
-                    const finalScaleX = preserveTemplateVisual ? (fitScaleX * scale) : scale;
-                    const finalScaleY = preserveTemplateVisual ? (fitScaleY * scale) : scale;
-                    splash.set({
+	                    const finalScaleX = preserveTemplateVisual ? (fitScaleX * scale * manualScaleX) : (scale * manualScaleX);
+	                    const finalScaleY = preserveTemplateVisual ? (fitScaleY * scale * manualScaleY) : (scale * manualScaleY);
+	                    splash.set({
                         scaleX: finalScaleX,
                         scaleY: finalScaleY,
                         originX: 'center',
@@ -36337,24 +36513,26 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                         left: 0,
                         top: newTop
                     });
-                } else {
+	                } else {
                     // Manual positioning: keep left/top, but still apply the zone-level scale.
                     if (preserveTemplateVisual) {
                         (splash as any).__originalScaleX = fitScaleX;
                         (splash as any).__originalScaleY = fitScaleY;
                     }
-                    const finalScaleX = preserveTemplateVisual ? (fitScaleX * scale) : scale;
-                    const finalScaleY = preserveTemplateVisual ? (fitScaleY * scale) : scale;
-                    splash.set({ scaleX: finalScaleX, scaleY: finalScaleY });
-                }
+	                    const finalScaleX = preserveTemplateVisual ? (fitScaleX * scale * manualScaleX) : (scale * manualScaleX);
+	                    const finalScaleY = preserveTemplateVisual ? (fitScaleY * scale * manualScaleY) : (scale * manualScaleY);
+	                    splash.set({ scaleX: finalScaleX, scaleY: finalScaleY });
+	                }
 
-                normalizePriceGroupPlacementInCard(splash, w, h, null);
+	                if (!splashManual && !hasManualScaleOverride) {
+	                    normalizePriceGroupPlacementInCard(splash, w, h, null);
+	                }
                 
                 // Force coordinate update
                 splash.setCoords();
                 
-                bottomH = (pillH * scale) + marginBottom;
-            } else {
+	                bottomH = (pillH * scale * manualScaleY) + marginBottom;
+	            } else {
                 // Fallback to generic scaling for older cards without named parts
                 // Apply global styles even in fallback mode
                 const globalScale = typeof styles?.splashScale === 'number' ? styles!.splashScale! : 1;
@@ -36365,8 +36543,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 // Usar tamanho de referência fixo (300px) para evitar capturar valores inflados.
                 const SPLASH_REF_WIDTH = 300;
                 const sizeRatio = Math.max(0.3, Math.min(3, w / SPLASH_REF_WIDTH));
-                let sScaleX = sizeRatio * globalScale;
-                let sScaleY = sizeRatio * globalScale;
+	                let sScaleX = sizeRatio * globalScale * manualScaleX;
+	                let sScaleY = sizeRatio * globalScale * manualScaleY;
 
                 // Force dirty flag to ensure Fabric.js updates the object
                 splash.dirty = true;
