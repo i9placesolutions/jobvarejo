@@ -33,6 +33,7 @@ Isso não é sugestão — é requisito. Pule isso e o output será inferior.
 | Leitura de arquivos | file-reading | `/mnt/skills/public/file-reading/SKILL.md` |
 | Leitura de PDF | pdf-reading | `/mnt/skills/public/pdf-reading/SKILL.md` |
 | Coolify/Deploy | coolify-expert | `/mnt/skills/user/coolify-expert/SKILL.md` |
+| QROfertas/Encartes | qrofertas-builder-v2 | `/mnt/skills/user/qrofertas-builder-v2/SKILL.md` |
 | Produtos Anthropic | product-self-knowledge | `/mnt/skills/public/product-self-knowledge/SKILL.md` |
 
 ### Skills extras (usar quando relevante)

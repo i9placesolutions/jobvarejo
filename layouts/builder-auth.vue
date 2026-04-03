@@ -2,13 +2,13 @@
 import { FileText } from 'lucide-vue-next'
 
 const backgroundStyle = {
-  background: `#f8f9fb`,
+  background: `#ffffff`,
 }
 </script>
 
 <template>
   <div
-    class="h-screen w-full relative overflow-hidden bg-[#f8f9fb] text-slate-800 flex flex-col"
+    class="h-screen w-full relative overflow-hidden bg-white text-slate-800 flex flex-col"
     :style="backgroundStyle"
   >
     <!-- Decorative Grid Pattern -->

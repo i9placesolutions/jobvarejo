@@ -17,16 +17,16 @@ const isActive = (item: typeof navItems[0]) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#0f0f0f] text-white">
+  <div class="min-h-screen bg-white text-gray-900">
     <!-- Top Navigation -->
-    <header class="sticky top-0 z-50 border-b border-white/5 bg-[#0f0f0f]/90 backdrop-blur-xl">
+    <header class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur-xl">
       <div class="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         <!-- Logo -->
         <NuxtLink to="/builder" class="inline-flex items-center gap-3 group">
-          <div class="w-8 h-8 bg-emerald-500/20 backdrop-blur-sm rounded-lg flex items-center justify-center border border-emerald-500/30 group-hover:bg-emerald-500/30 transition-colors">
-            <FileText class="w-4 h-4 text-emerald-400" />
+          <div class="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-200 group-hover:bg-emerald-100 transition-colors">
+            <FileText class="w-4 h-4 text-emerald-600" />
           </div>
-          <span class="text-sm font-bold text-white hidden sm:block">Criador de Encartes</span>
+          <span class="text-sm font-bold text-gray-900 hidden sm:block">Criador de Encartes</span>
         </NuxtLink>
 
         <!-- Nav Items -->
@@ -36,7 +36,7 @@ const isActive = (item: typeof navItems[0]) => {
             :key="item.to"
             :to="item.to"
             class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
-            :class="isActive(item) ? 'bg-emerald-500/15 text-emerald-400' : 'text-zinc-400 hover:text-white hover:bg-white/5'"
+            :class="isActive(item) ? 'bg-emerald-50 text-emerald-600' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'"
           >
             <component :is="item.icon" class="w-4 h-4" />
             <span class="hidden sm:inline">{{ item.label }}</span>
@@ -45,12 +45,12 @@ const isActive = (item: typeof navItems[0]) => {
 
         <!-- User / Logout -->
         <div class="flex items-center gap-3">
-          <span class="text-xs text-zinc-500 hidden md:block truncate max-w-[160px]">
+          <span class="text-xs text-gray-500 hidden md:block truncate max-w-[160px]">
             {{ auth.tenant.value?.name }}
           </span>
           <button
             @click="auth.signOut()"
-            class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
           >
             <LogOut class="w-4 h-4" />
             <span class="hidden sm:inline">Sair</span>

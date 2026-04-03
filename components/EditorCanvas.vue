@@ -2327,6 +2327,84 @@ const imageHasTransparency = (img: HTMLImageElement | HTMLCanvasElement): boolea
 };
 
 /**
+ * Detecta os bounds do conteúdo visível de uma imagem Fabric, cortando whitespace e transparência.
+ * Retorna { left, top, width, height } para usar como cropX/cropY/width/height, ou null se não precisa trim.
+ */
+const detectImageTrimBounds = (fabricImg: any): { left: number; top: number; width: number; height: number } | null => {
+    try {
+        const el = fabricImg?.getElement?.() || fabricImg?._element;
+        if (!el) return null;
+        const w = (el as any).naturalWidth || el.width || fabricImg.width;
+        const h = (el as any).naturalHeight || el.height || fabricImg.height;
+        if (!w || !h || w < 4 || h < 4) return null;
+
+        // Amostragem reduzida para performance
+        const maxDim = 512;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        const sw = Math.ceil(w * scale);
+        const sh = Math.ceil(h * scale);
+
+        const oc = document.createElement('canvas');
+        oc.width = sw;
+        oc.height = sh;
+        const ctx = oc.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return null;
+
+        ctx.drawImage(el, 0, 0, sw, sh);
+        const data = ctx.getImageData(0, 0, sw, sh).data;
+
+        // Limiar: pixel é "conteúdo" se alpha > 10 E não é branco puro (R+G+B < 740)
+        const isContent = (i: number) => {
+            const a = data[i + 3]!;
+            if (a < 10) return false; // transparente
+            const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+            // Branco ou quase-branco com alpha alto = background
+            if (a > 240 && r > 245 && g > 245 && b > 245) return false;
+            return true;
+        };
+
+        let minX = sw, minY = sh, maxX = 0, maxY = 0;
+        for (let y = 0; y < sh; y++) {
+            for (let x = 0; x < sw; x++) {
+                const i = (y * sw + x) * 4;
+                if (isContent(i)) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+        }
+
+        // Se não encontrou conteúdo ou trim é insignificante (< 5% de cada lado), não cortar
+        if (maxX <= minX || maxY <= minY) return null;
+        const trimW = maxX - minX + 1;
+        const trimH = maxY - minY + 1;
+        const marginRatio = 0.05;
+        if (minX < sw * marginRatio && minY < sh * marginRatio &&
+            trimW > sw * (1 - marginRatio * 2) && trimH > sh * (1 - marginRatio * 2)) {
+            return null; // Trim insignificante
+        }
+
+        // Adicionar margem de segurança (2px na escala original)
+        const pad = Math.ceil(2 / scale);
+        const finalLeft = Math.max(0, Math.floor(minX / scale) - pad);
+        const finalTop = Math.max(0, Math.floor(minY / scale) - pad);
+        const finalRight = Math.min(w, Math.ceil((maxX + 1) / scale) + pad);
+        const finalBottom = Math.min(h, Math.ceil((maxY + 1) / scale) + pad);
+
+        return {
+            left: finalLeft,
+            top: finalTop,
+            width: finalRight - finalLeft,
+            height: finalBottom - finalTop,
+        };
+    } catch {
+        return null;
+    }
+};
+
+/**
  * Generate a professional sticker outline canvas from source alpha.
  *
  * KEY TECHNIQUES for smooth, jagged-free outlines:
@@ -3768,12 +3846,30 @@ const enterNodeEditing = (obj: any) => {
 
 
 const createPriceLayout = (product: any, width: number, top: number) => {
-    // Basic Stub for Price Layout - usa preço principal dinâmico
-    const group = new fabric.Group([], { left: 0, top: top });
+    const cardH = width * 1.4; // proporção típica do card
+    const priceStr = formatPriceValue(product?.price) || formatPriceValue(product?.priceUnit) || '0,00';
+    const unitText = inferUnitLabelFromProduct(product);
+
+    // Verificar se deve usar template atacarejo
     const availablePrices = getAvailablePrices(product);
-    const priceText = new fabric.Text(availablePrices.mainPrice || '0,00', { fontSize: 40, fill: 'red' });
-    safeAddWithUpdate(group, priceText);
-    return group;
+    const hasSpecial = availablePrices.prices.some((p: any) => p.type === 'special');
+    const hasMain = availablePrices.prices.some((p: any) => p.type === 'main' || p.type === 'pack');
+    const hasCondition = !!availablePrices.condition;
+    const hasWholesalePrice = hasSpecial && hasMain;
+    // Usar atacarejo se há dados de atacado OU se o modo foi explicitamente definido como atacarejo
+    const explicitAtacarejo = product?.priceMode === 'atacarejo';
+    const shouldAtacarejo = explicitAtacarejo || hasWholesalePrice || hasCondition || !!formatPriceValue(product?.priceWholesale);
+
+    let pg: any;
+    if (shouldAtacarejo) {
+        pg = buildAtacarejoPriceGroupForCard(product, width, cardH, top);
+    } else {
+        pg = buildDefaultPriceGroupForCard(priceStr, width, cardH, top, unitText);
+    }
+    pg.set({ name: 'priceGroup' });
+    // Aplicar dados atacarejo (no-op se não for template atacarejo)
+    applyAtacarejoPricingToPriceGroup(pg, product);
+    return pg;
 }
 
 const exitNodeEditing = () => {
@@ -21037,108 +21133,137 @@ const updateSmartGroup = (keyOrUpdates: any, value?: any) => {
         updates = keyOrUpdates;
     }
 
-    // Filter Smart Objects - Prefer ones in the currently selected Grid if any
+    // Identificar o card selecionado — só ele será alterado para mudanças estruturais.
     const active = canvas.value.getActiveObject();
-    let targetGridId: string | null = null;
-    
+    let selectedCard: any = null;
     if (active) {
-        if ((active as any).smartGridId) targetGridId = (active as any).smartGridId;
-        else if (active.group && (active.group as any).smartGridId) targetGridId = (active.group as any).smartGridId;
+        if ((active as any).isSmartObject || (active as any).isProductCard) {
+            selectedCard = active;
+        } else if (active.group && ((active.group as any).isSmartObject || (active.group as any).isProductCard)) {
+            selectedCard = active.group;
+        }
     }
 
-    const groups = canvas.value.getObjects().filter((o: any) => (o as any).isSmartObject && (!targetGridId || (o as any).smartGridId === targetGridId));
+    // Para mudanças visuais (cor, fonte, bg), aplicar no card selecionado.
+    // Para mudanças estruturais (priceMode), aplicar SOMENTE no card selecionado.
+    const targetCards = selectedCard ? [selectedCard] : [];
 
-    groups.forEach((group: any) => {
-        // Find Helper
-        const findChild = (parent: any, name: string): any => {
-            if (!parent.getObjects) return null;
-            const children = parent.getObjects();
-            for (const child of children) {
-                if (child.name === name) return child;
-                if (child.type === 'group') {
-                    const found = findChild(child, name);
-                    if (found) return found;
-                }
-            }
-            return null;
+    // Helper para buscar filhos recursivamente por nome (suporta nomes legacy e atacarejo)
+    const findChildDeep = (parent: any, ...names: string[]): any => {
+        if (!parent || typeof parent.getObjects !== 'function') return null;
+        const all = collectObjectsDeep(parent);
+        for (const name of names) {
+            const found = all.find((o: any) => o?.name === name);
+            if (found) return found;
         }
+        return null;
+    };
 
+    targetCards.forEach((group: any) => {
         // --- Style Updates ---
         if (updates.priceColor) {
-             const intTxt = findChild(group, 'priceInteger');
+             // Buscar tanto nomes legados quanto atacarejo
+             const intTxt = findChildDeep(group, 'priceInteger', 'price_integer_text', 'retail_integer_text');
              if (intTxt) intTxt.set('fill', updates.priceColor);
-             const decTxt = findChild(group, 'priceDecimal');
+             const decTxt = findChildDeep(group, 'priceDecimal', 'price_decimal_text', 'retail_decimal_text');
              if (decTxt) decTxt.set('fill', updates.priceColor);
-             const symTxt = findChild(group, 'priceSymbol');
+             const symTxt = findChildDeep(group, 'priceSymbol', 'price_currency_text', 'retail_currency_text');
              if (symTxt) symTxt.set('fill', updates.priceColor);
         }
-        
+
         if (updates.priceFont) {
-             const intTxt = findChild(group, 'priceInteger');
+             const intTxt = findChildDeep(group, 'priceInteger', 'price_integer_text', 'retail_integer_text');
              if (intTxt) intTxt.set('fontFamily', updates.priceFont);
-             const decTxt = findChild(group, 'priceDecimal');
+             const decTxt = findChildDeep(group, 'priceDecimal', 'price_decimal_text', 'retail_decimal_text');
              if (decTxt) decTxt.set('fontFamily', updates.priceFont);
-             const symTxt = findChild(group, 'priceSymbol');
+             const symTxt = findChildDeep(group, 'priceSymbol', 'price_currency_text', 'retail_currency_text');
              if (symTxt) symTxt.set('fontFamily', updates.priceFont);
         }
 
         if(updates.bgColor) {
-             const bg = findChild(group, 'offerBackground');
+             const bg = findChildDeep(group, 'offerBackground');
              if (bg) bg.set('fill', updates.bgColor);
         }
 
         // --- Structural Updates (Price Mode Engine) ---
         if (updates.priceMode !== undefined || updates.priceFrom !== undefined || updates.priceClub !== undefined) {
-             // 1. Update Metadata on Group
+             // 1. Atualizar metadados no grupo
              if (updates.priceMode) group.priceMode = updates.priceMode;
              if (updates.priceFrom !== undefined) group.priceFrom = updates.priceFrom;
              if (updates.priceClub !== undefined) group.priceClub = updates.priceClub;
-             // Atacarejo Fields
+             // Campos atacarejo
              if (updates.priceWholesale !== undefined) group.priceWholesale = updates.priceWholesale;
              if (updates.wholesaleTrigger !== undefined) group.wholesaleTrigger = updates.wholesaleTrigger;
              if (updates.wholesaleTriggerUnit !== undefined) group.wholesaleTriggerUnit = updates.wholesaleTriggerUnit;
              if (updates.packQuantity !== undefined) group.packQuantity = updates.packQuantity;
              if (updates.packUnit !== undefined) group.packUnit = updates.packUnit;
-             
-             // 2. Extract Data to reconstruct Component
-             const intTxt = findChild(group, 'priceInteger');
-             const decTxt = findChild(group, 'priceDecimal');
-             const currentPrice = (intTxt && decTxt) 
-                ? (intTxt.text + decTxt.text).replace(',', '.') 
+
+             // 2. Extrair dados do card para reconstruir (busca nomes legacy + atacarejo)
+             const intTxt = findChildDeep(group, 'priceInteger', 'price_integer_text', 'retail_integer_text');
+             const decTxt = findChildDeep(group, 'priceDecimal', 'price_decimal_text', 'retail_decimal_text');
+             const currentPrice = (intTxt && decTxt)
+                ? (intTxt.text + decTxt.text).replace(',', '.')
                 : "0.00";
-             
-             const unitObj = findChild(group, 'priceUnit');
-             
+
+             const unitObj = findChildDeep(group, 'priceUnit', 'price_unit_text', 'retail_unit_text');
+
+             // Recuperar dados de produto armazenados no card (se existirem)
+             const storedData = (group as any)._productData || {};
+
              const mockProduct = {
+                 name: storedData.name || group.productName || '',
                  price: currentPrice,
-                 priceMode: group.priceMode, // Use updated mode
+                 priceUnit: storedData.priceUnit ?? (group as any).priceUnit ?? currentPrice,
+                 pricePack: storedData.pricePack ?? (group as any).pricePack ?? null,
+                 priceSpecial: storedData.priceSpecial ?? (group as any).priceSpecial ?? null,
+                 priceSpecialUnit: storedData.priceSpecialUnit ?? (group as any).priceSpecialUnit ?? null,
+                 priceMode: group.priceMode,
                  priceFrom: group.priceFrom,
                  priceClub: group.priceClub,
-                 priceColor: intTxt ? intTxt.fill : 'red', // Preserve color
-                 unit: unitObj ? unitObj.text : 'UN',
-                 // Atacarejo props
+                 priceColor: intTxt ? intTxt.fill : 'red',
+                 unit: unitObj ? unitObj.text : (storedData.unit || 'UN'),
+                 // Atacarejo
                  priceWholesale: group.priceWholesale,
                  wholesaleTrigger: group.wholesaleTrigger,
                  wholesaleTriggerUnit: group.wholesaleTriggerUnit,
-                 packQuantity: group.packQuantity,
-                 packUnit: group.packUnit
+                 packQuantity: group.packQuantity ?? storedData.packQuantity,
+                 packUnit: group.packUnit ?? storedData.packUnit,
+                 packageLabel: (group as any).packageLabel ?? storedData.packageLabel,
+                 specialCondition: (group as any).specialCondition ?? storedData.specialCondition,
+                 observation: storedData.observation ?? storedData.observacao,
              };
 
-             // 3. Locate old Price Group Container
+             // 3. Localizar grupo de preço antigo
              const objects = group.getObjects();
              const oldPg = objects.find((o: any) => o.name === 'priceGroup');
              const bg = objects.find((o: any) => o.name === 'offerBackground');
-             const internalWidth = bg ? bg.width : 200;
+             const internalWidth = bg ? bg.width : ((group as any)._cardWidth || 200);
 
              if (oldPg) {
                  const oldTop = oldPg.top;
-                 
-                 // 4. Generate New Layout
+                 const cardH = bg ? bg.height : ((group as any)._cardHeight || (internalWidth * 1.4));
+
+                 // 4. Gerar novo layout de preço (agora suporta todos os modos)
                  const newPriceGroup = createPriceLayout(mockProduct, internalWidth, oldTop);
-                 
-                 // 5. Swap
+
+                 // 5. Trocar
                  group.remove(oldPg);
                  group.add(newPriceGroup);
+
+                 // 6. Reaplicar estilos da zona (escala, cor, fonte) no novo price group
+                 //    Sem isso o novo price group perde escala e propriedades visuais da zona.
+                 const parentZoneId = String((group as any)?.parentZoneId || '').trim();
+                 const parentZone = parentZoneId && canvas.value
+                     ? canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String((o as any)?._customId || '').trim() === parentZoneId)
+                     : null;
+                 const zoneStyles = parentZone
+                     ? getZoneGlobalStyles(parentZone)
+                     : (typeof normalizeGlobalStyles === 'function' ? normalizeGlobalStyles(productZoneState.globalStyles.value) : null);
+
+                 if (zoneStyles && cardH > 0 && internalWidth > 0) {
+                     // Aplicar estilos visuais (fonte, cor, escala) no novo price group
+                     applyGlobalStylesToCards(zoneStyles, parentZone || null, { cards: [group] });
+                 }
              }
         }
 
@@ -25294,39 +25419,69 @@ const createSmartObject = async (
 
     // 3. Product Image (Middle)
     let imgObj: any = null;
-    const imgUrl = product.imageUrl || product.image || product.url;
+    // Resolver URL: suporta image_wasabi_key (storage key), imageUrl, image e url
+    const rawImgRef = product.image_wasabi_key || product.imageUrl || product.image || product.url;
     const imageY = 0; // Centered vertically
-    
-    if (imgUrl) {
+
+    if (rawImgRef) {
         try {
-            const proxiedImgUrl = toWasabiProxyUrl(imgUrl) || imgUrl;
-            imgObj = await fabric.Image.fromURL(proxiedImgUrl, { crossOrigin: 'anonymous' });
-            
+            // Se é uma key de storage (sem http), criar URL de proxy diretamente
+            let resolvedUrl: string = rawImgRef;
+            if (!rawImgRef.startsWith('http') && !rawImgRef.startsWith('/api/') && !rawImgRef.startsWith('data:') && !rawImgRef.startsWith('blob:')) {
+                resolvedUrl = `/api/storage/p?key=${encodeURIComponent(rawImgRef)}`;
+            } else {
+                resolvedUrl = toWasabiProxyUrl(rawImgRef) || rawImgRef;
+            }
+
+            imgObj = await fabric.Image.fromURL(resolvedUrl, { crossOrigin: 'anonymous' });
+
             if (imgObj) {
-                // Scale image to fit middle area
-                const availW = width * 0.85;
-                const availH = cardHeight * 0.5;
-                const scale = Math.min(availW / imgObj.width, availH / imgObj.height);
-                
-                imgObj.set({
-                    scaleX: scale,
-                    scaleY: scale,
-                    originX: 'center',
-                    originY: 'center',
-                    left: 0, // Centered
-                    top: imageY, // Centered
-                    name: 'smart_image',
-                    lockScalingFlip: true,
-                    lockSkewingX: true,
-                    lockSkewingY: true
-                });
+                const imgW = imgObj.width || 0;
+                const imgH = imgObj.height || 0;
+
+                // Guard: imagem com dimensão zero ou inválida
+                if (imgW < 2 || imgH < 2) {
+                    console.warn('[createSmartObject] Imagem carregada com dimensões inválidas:', imgW, imgH);
+                    imgObj = null;
+                } else {
+                    // Trim automático: usar cropX/cropY para cortar whitespace/transparência
+                    const trimBounds = detectImageTrimBounds(imgObj);
+                    if (trimBounds) {
+                        imgObj.set({
+                            cropX: trimBounds.left,
+                            cropY: trimBounds.top,
+                            width: trimBounds.width,
+                            height: trimBounds.height,
+                        });
+                    }
+
+                    // Recalcular dimensões após trim
+                    const trimmedW = imgObj.width || imgW;
+                    const trimmedH = imgObj.height || imgH;
+                    const availW = width * 0.85;
+                    const availH = cardHeight * 0.5;
+                    const scale = Math.min(availW / trimmedW, availH / trimmedH, 3);
+
+                    imgObj.set({
+                        scaleX: scale,
+                        scaleY: scale,
+                        originX: 'center',
+                        originY: 'center',
+                        left: 0,
+                        top: imageY,
+                        name: 'smart_image',
+                        lockScalingFlip: true,
+                        lockSkewingX: true,
+                        lockSkewingY: true
+                    });
+                }
             }
         } catch (e) {
-            console.warn('Image load failed, using placeholder rect', e);
+            console.warn('[createSmartObject] Image load failed, using placeholder rect', e);
             imgObj = null;
         }
     }
-    
+
     // Fallback rect if no image
     if (!imgObj) {
         imgObj = new fabric.Rect({
@@ -25530,6 +25685,8 @@ const createSmartObject = async (
     (group as any).unit = (product as any).unit ?? null;
     (group as any).unitLabel = unitText;
     (group as any).limit = limitTextValue ?? null;
+    // Image reference (para re-importação e review)
+    (group as any).imageUrl = (product as any).image_wasabi_key || (product as any).imageUrl || (product as any).image || null;
     // Store original product data for reference
     (group as any)._productData = { ...product };
 
@@ -26832,6 +26989,60 @@ const simulateSmartGrid = async (
 	                     if (texts.length >= 1 && !titleFound) texts[0].set('text', cleanedName);
 	                     if (texts.length >= 2 && !priceFound) texts[1].set('text', displayPrice);
 	                 }
+
+                 // Injetar imagem do produto no clone do template
+                 const productImgRef = product?.image_wasabi_key || product?.imageUrl || product?.image || product?.url;
+                 if (productImgRef) {
+                     const existingImg = objects.find((o: any) => {
+                         const t = String(o?.type || '').toLowerCase();
+                         const n = String(o?.name || '').toLowerCase();
+                         return t === 'image' && (n === 'smart_image' || n === 'product_image' || n === 'productimage' || !n);
+                     });
+                     if (existingImg) {
+                         try {
+                             let imgUrl = productImgRef;
+                             if (!imgUrl.startsWith('http') && !imgUrl.startsWith('/api/') && !imgUrl.startsWith('data:') && !imgUrl.startsWith('blob:')) {
+                                 imgUrl = `/api/storage/p?key=${encodeURIComponent(imgUrl)}`;
+                             } else {
+                                 imgUrl = toWasabiProxyUrl(imgUrl) || imgUrl;
+                             }
+                             const newImg = await fabric.Image.fromURL(imgUrl, { crossOrigin: 'anonymous' });
+                             if (newImg && newImg.width > 2 && newImg.height > 2) {
+                                 // Trim whitespace/transparência
+                                 const trimBounds = detectImageTrimBounds(newImg);
+                                 if (trimBounds) {
+                                     newImg.set({ cropX: trimBounds.left, cropY: trimBounds.top, width: trimBounds.width, height: trimBounds.height });
+                                 }
+                                 // Calcular escala para caber no espaço do template
+                                 const oldW = existingImg.getScaledWidth?.() || existingImg.width || itemWidth * 0.5;
+                                 const oldH = existingImg.getScaledHeight?.() || existingImg.height || itemHeight * 0.4;
+                                 const newScale = Math.min(oldW / (newImg.width || 1), oldH / (newImg.height || 1), 3);
+                                 newImg.set({
+                                     scaleX: newScale,
+                                     scaleY: newScale,
+                                     originX: existingImg.originX || 'center',
+                                     originY: existingImg.originY || 'center',
+                                     left: existingImg.left || 0,
+                                     top: existingImg.top || 0,
+                                     name: existingImg.name || 'smart_image',
+                                     lockScalingFlip: true,
+                                     lockSkewingX: true,
+                                     lockSkewingY: true,
+                                 });
+                                 // Substituir a imagem antiga pela nova
+                                 const imgIndex = objects.indexOf(existingImg);
+                                 cloned.remove(existingImg);
+                                 if (typeof cloned.insertAt === 'function' && imgIndex >= 0) {
+                                     cloned.insertAt(newImg, imgIndex);
+                                 } else {
+                                     safeAddWithUpdate(cloned, newImg);
+                                 }
+                             }
+                         } catch (imgErr) {
+                             console.warn('[template-clone] Falha ao injetar imagem do produto:', imgErr);
+                         }
+                     }
+                 }
 
                  // If template doesn't include a limit object but product has a limit, create one.
                  if (!limitFound && limitTextValue) {
@@ -28472,7 +28683,8 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
                 }
 
                 if (zones.length <= 1) {
-                    console.warn('⚠️ [applyGlobalStylesToCards] No cards resolved for zone; fallback to all cards (single-zone canvas)');
+                    // Single-zone: seguro aplicar em todos os cards pois pertencem à mesma zona.
+                    console.warn('⚠️ [applyGlobalStylesToCards] No cards resolved for single zone; fallback to all cards');
                     list = allCards;
                 } else {
                     const warnedMap = ((applyGlobalStylesToCards as any).__warnedZones ||= new Set<string>());

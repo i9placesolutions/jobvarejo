@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Plus, ClipboardPaste, ChevronUp, ChevronDown, BookOpen } from 'lucide-vue-next'
 
-const { products, addProduct, updateProduct, reorderProducts, productEditorOpen } = useBuilderFlyer()
+const { products, addProduct, updateProduct, reorderProducts, removeAllProducts, productEditorOpen } = useBuilderFlyer()
+const showConfirmRemoveAll = ref(false)
 
 const isExpanded = productEditorOpen
 
@@ -96,11 +97,11 @@ const handleAddProduct = () => {
     <!-- Toggle header bar -->
     <button
       @click="isExpanded = !isExpanded"
-      class="w-full flex items-center justify-between gap-3 px-3 py-2 hover:bg-white/5 transition-colors"
+      class="w-full flex items-center justify-between gap-3 px-3 py-2 hover:bg-gray-100 transition-colors"
     >
       <div class="flex items-center gap-2">
-        <component :is="isExpanded ? ChevronDown : ChevronUp" class="w-3.5 h-3.5 text-zinc-500" />
-        <span class="text-xs text-zinc-400 font-medium">
+        <component :is="isExpanded ? ChevronDown : ChevronUp" class="w-3.5 h-3.5 text-gray-400" />
+        <span class="text-xs text-gray-500 font-medium">
           {{ products.length }} {{ products.length === 1 ? 'produto' : 'produtos' }}
         </span>
       </div>
@@ -122,6 +123,15 @@ const handleAddProduct = () => {
         >
           <ClipboardPaste class="w-3 h-3" />
           Colar
+        </button>
+
+        <button
+          v-if="products.length > 0"
+          @click="showConfirmRemoveAll = true"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all
+            border border-red-500/50 text-red-400 hover:bg-red-500/10"
+        >
+          Remover Todos
         </button>
 
         <button
@@ -160,9 +170,9 @@ const handleAddProduct = () => {
           <!-- Add product card -->
           <button
             @click="handleAddProduct"
-            class="shrink-0 w-44 min-h-52 border border-dashed border-white/10 rounded-xl
+            class="shrink-0 w-44 min-h-52 border border-dashed border-gray-300 rounded-xl
               flex flex-col items-center justify-center gap-2
-              text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/30 transition-all"
+              text-gray-400 hover:text-emerald-500 hover:border-emerald-500/30 transition-all"
           >
             <Plus class="w-5 h-5" />
             <span class="text-[11px]">Adicionar</span>
@@ -183,5 +193,33 @@ const handleAddProduct = () => {
       @close="catalogPickerOpen = false"
       @select="handleCatalogSelect"
     />
+
+    <!-- Confirmar remocao de todos os produtos -->
+    <Teleport to="body">
+      <div
+        v-if="showConfirmRemoveAll"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+        @click.self="showConfirmRemoveAll = false"
+      >
+        <div class="bg-white border border-gray-200 rounded-xl p-5 mx-4 max-w-sm w-full shadow-2xl">
+          <h3 class="text-sm font-semibold text-gray-900 mb-2">Remover todos os produtos?</h3>
+          <p class="text-[11px] text-gray-500 mb-4">Esta acao vai remover todos os {{ products.length }} produtos do encarte. Nao pode ser desfeita.</p>
+          <div class="flex gap-2 justify-end">
+            <button
+              @click="showConfirmRemoveAll = false"
+              class="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="removeAllProducts(); showConfirmRemoveAll = false"
+              class="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-600 text-white hover:bg-red-500 transition-colors"
+            >
+              Remover Todos
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

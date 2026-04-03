@@ -20,6 +20,10 @@ const scaleOptions = [
   { label: '4x', value: 4 },
 ]
 
+// Opcoes extras de exportacao (paridade QROfertas)
+const onlyCurrentPage = ref(false)
+const lightMode = ref(false)
+
 const statusMessage = ref('')
 const statusType = ref<'info' | 'success' | 'error'>('info')
 const copiedText = ref(false)
@@ -50,8 +54,11 @@ const handleDownload = async () => {
   statusType.value = 'info'
 
   try {
-    const blob = await exportAsPng(props.canvasElement, { scale: scale.value })
-    const filename = `${flyer.value?.title || 'encarte'}-${scale.value}x.png`
+    const exportScale = lightMode.value ? Math.min(scale.value, 2) : scale.value
+    const blob = await exportAsPng(props.canvasElement, { scale: exportScale })
+    const suffix = lightMode.value ? '-leve' : ''
+    const pageSuffix = onlyCurrentPage.value ? `-pag${flyer.value?.current_page || 1}` : ''
+    const filename = `${flyer.value?.title || 'encarte'}${pageSuffix}${suffix}-${exportScale}x.png`
     downloadPng(blob, filename.replace(/\s+/g, '-').toLowerCase())
     statusMessage.value = 'Download concluido!'
     statusType.value = 'success'
@@ -117,14 +124,14 @@ const handleClose = () => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         @click.self="handleClose"
       >
-        <div class="bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-zinc-800">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-200">
           <!-- Header -->
           <div class="flex items-center justify-between px-6 pt-5 pb-3">
-            <h2 class="text-lg font-semibold text-zinc-100">
+            <h2 class="text-lg font-semibold text-gray-900">
               Exportar Encarte
             </h2>
             <button
-              class="text-zinc-400 hover:text-zinc-200 transition-colors p-1 rounded-lg hover:bg-zinc-800"
+              class="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100"
               @click="handleClose"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -135,22 +142,46 @@ const handleClose = () => {
 
           <!-- Preview -->
           <div class="px-6 pb-4">
-            <div class="bg-zinc-900 rounded-xl p-3 flex items-center justify-center min-h-40 border border-zinc-800">
+            <div class="bg-gray-50 rounded-xl p-3 flex items-center justify-center min-h-40 border border-gray-200">
               <img
                 v-if="previewUrl"
                 :src="previewUrl"
                 alt="Preview do encarte"
                 class="max-h-50 max-w-full object-contain rounded"
               />
-              <div v-else class="text-zinc-500 text-sm">
+              <div v-else class="text-gray-400 text-sm">
                 Carregando preview...
               </div>
             </div>
           </div>
 
+          <!-- Opcoes de exportacao -->
+          <div class="px-6 pb-3">
+            <div class="flex flex-col gap-2">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  v-model="onlyCurrentPage"
+                  type="checkbox"
+                  class="w-4 h-4 rounded border-gray-300 bg-gray-50 text-emerald-500 accent-emerald-500"
+                />
+                <span class="text-sm text-gray-700">So esta pagina</span>
+                <span class="text-xs text-gray-400 ml-1">(baixa apenas a pagina atual)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  v-model="lightMode"
+                  type="checkbox"
+                  class="w-4 h-4 rounded border-gray-300 bg-gray-50 text-emerald-500 accent-emerald-500"
+                />
+                <span class="text-sm text-gray-700">Modo Leve</span>
+                <span class="text-xs text-gray-400 ml-1">(arquivo menor, ideal p/ WhatsApp)</span>
+              </label>
+            </div>
+          </div>
+
           <!-- Scale selector -->
           <div class="px-6 pb-4">
-            <label class="block text-sm text-zinc-400 mb-2">Qualidade da imagem</label>
+            <label class="block text-sm text-gray-500 mb-2">Qualidade da imagem</label>
             <div class="flex gap-2">
               <button
                 v-for="opt in scaleOptions"
@@ -158,13 +189,13 @@ const handleClose = () => {
                 class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all"
                 :class="scale === opt.value
                   ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'"
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'"
                 @click="scale = opt.value"
               >
                 {{ opt.label }}
               </button>
             </div>
-            <p class="text-xs text-zinc-500 mt-1.5">
+            <p class="text-xs text-gray-400 mt-1.5">
               {{ scale === 1 ? 'Tamanho original' : `${scale}x o tamanho original (${scale === 2 ? 'recomendado' : 'alta resolucao'})` }}
             </p>
           </div>
@@ -174,9 +205,9 @@ const handleClose = () => {
             <div
               class="text-sm px-3 py-2 rounded-lg"
               :class="{
-                'bg-blue-900/30 text-blue-300 border border-blue-800/50': statusType === 'info',
-                'bg-emerald-900/30 text-emerald-300 border border-emerald-800/50': statusType === 'success',
-                'bg-red-900/30 text-red-300 border border-red-800/50': statusType === 'error',
+                'bg-blue-50 text-blue-700 border border-blue-200': statusType === 'info',
+                'bg-emerald-50 text-emerald-700 border border-emerald-200': statusType === 'success',
+                'bg-red-50 text-red-700 border border-red-200': statusType === 'error',
               }"
             >
               {{ statusMessage }}
@@ -210,7 +241,7 @@ const handleClose = () => {
             </button>
 
             <button
-              class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-medium transition-all bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
+              class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-medium transition-all bg-gray-100 hover:bg-gray-200 text-gray-700"
               @click="handleCopySocialText"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
