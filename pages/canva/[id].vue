@@ -218,7 +218,7 @@ const loadDesign = async () => {
     designInfo.value = data
   } catch (err: any) {
     console.error('Erro ao carregar design:', err)
-    canva.error.value = 'Erro ao carregar design'
+    canva.error.value = err?.data?.statusMessage || err?.statusMessage || 'Erro ao carregar design'
   } finally {
     isLoading.value = false
   }
@@ -305,6 +305,7 @@ const analyzeDesignAction = async () => {
     loadPageThumbnails()
   } catch (err: any) {
     console.error('Erro ao analisar:', err)
+    canva.error.value = err?.data?.statusMessage || err?.statusMessage || canva.error.value || 'Erro ao analisar design'
   } finally {
     isAnalyzing.value = false
   }
