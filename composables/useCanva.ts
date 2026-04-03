@@ -86,49 +86,11 @@ export const useCanva = () => {
     isProcessing.value = true
     error.value = null
     try {
-      const [structuralResult, smartResult] = await Promise.allSettled([
-        $fetch<any>(`/api/canva/designs/${designId}/analyze`, {
-          method: 'POST',
-          credentials: 'include',
-        }),
-        $fetch<any>(`/api/canva/designs/${designId}/analyze-smart`, {
-          method: 'POST',
-          credentials: 'include',
-        }),
-      ])
-
-      let data: any = null
-
-      if (structuralResult.status === 'fulfilled' || smartResult.status === 'fulfilled') {
-        const structural = structuralResult.status === 'fulfilled' ? structuralResult.value : {}
-        const smart = smartResult.status === 'fulfilled' ? smartResult.value : {}
-
-        data = {
-          ...structural,
-          ...smart,
-          products: structural?.products || [],
-          products_per_page: structural?.products_per_page || {},
-          pages: smart?.pages || [],
-          design_type: smart?.design_type || 'offer',
-          summary: smart?.summary || '',
-          thumbnail: smart?.thumbnail || structural?.thumbnail || null,
-        }
-      } else {
-        const firstError = smartResult.reason || structuralResult.reason
-        const firstStatus = firstError?.statusCode || firstError?.response?.status
-
-        if (firstStatus !== 404) {
-          throw firstError
-        }
-
-        // Backward compatibility for environments still exposing the legacy route.
-        data = await $fetch<any>('/api/canva/analyze-design', {
-          method: 'POST',
-          body: { design_id: designId },
-          credentials: 'include',
-        })
-      }
-
+      const data = await $fetch<any>('/api/canva/analyze-design', {
+        method: 'POST',
+        body: { design_id: designId },
+        credentials: 'include',
+      })
       designAnalysis.value = data
       return data
     } catch (err: any) {
