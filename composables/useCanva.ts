@@ -21,6 +21,31 @@ const isProcessing = ref(false)
 const error = ref<string | null>(null)
 
 export const useCanva = () => {
+  const handleBuilderAuthFailure = async (err: any, fallbackMessage: string) => {
+    const statusCode = Number(err?.statusCode || err?.response?.status || 0)
+    const statusMessage =
+      String(err?.data?.statusMessage || err?.statusMessage || err?.data?.message || '').trim() || null
+
+    if (statusCode === 401) {
+      const auth = useBuilderAuth()
+      await auth.getSession()
+
+      error.value = statusMessage || 'Sua sessao expirou. Faca login novamente.'
+
+      if (import.meta.client && !auth.isAuthenticated.value) {
+        const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
+        await navigateTo({
+          path: '/builder/login',
+          query: redirect ? { redirect } : undefined,
+        })
+      }
+
+      return
+    }
+
+    error.value = statusMessage || fallbackMessage
+  }
+
   // Buscar designs do Canva via API server-side
   const fetchDesigns = async (query?: string, loadMore = false) => {
     isLoadingDesigns.value = true
@@ -47,7 +72,7 @@ export const useCanva = () => {
       hasMore.value = !!data.continuation
     } catch (err: any) {
       console.error('Erro ao buscar designs do Canva:', err)
-      error.value = err?.data?.message || 'Erro ao buscar designs'
+      await handleBuilderAuthFailure(err, 'Erro ao buscar designs')
       if (!loadMore) designs.value = []
     } finally {
       isLoadingDesigns.value = false
@@ -108,7 +133,7 @@ export const useCanva = () => {
       return data
     } catch (err: any) {
       console.error('Erro ao analisar design:', err)
-      error.value = err?.data?.message || 'Erro ao analisar design'
+      await handleBuilderAuthFailure(err, 'Erro ao analisar design')
       throw err
     } finally {
       isProcessing.value = false

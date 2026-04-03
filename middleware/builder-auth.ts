@@ -16,8 +16,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (import.meta.server) return
 
   const auth = useBuilderAuth()
+  const shouldForceSessionRefresh = isCanvaRoute
 
-  if (!auth.isAuthenticated.value || !auth.tenant.value) {
+  if (shouldForceSessionRefresh || !auth.isAuthenticated.value || !auth.tenant.value) {
     await auth.getSession()
   }
 
