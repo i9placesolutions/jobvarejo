@@ -357,12 +357,15 @@ export const canvaGetDesign = async (designId: string): Promise<CanvaApiDesign> 
 }
 
 // ── Editing Transactions ────────────────────────────────────────────────────
+// DEPRECATED: Os endpoints /editing-sessions NAO existem na Canva Connect REST API.
+// Essas funcoes estao mantidas apenas para referencia. Requerem MCP ou Canva Enterprise Autofill.
 
 // Resposta completa da transacao de edicao (inclui richtexts, fills, thumbnails, pages)
-export const canvaStartEditingTransaction = async (designId: string): Promise<any> => {
-  return canvaFetch<any>('/editing-sessions', {
-    method: 'POST',
-    body: { design_id: designId },
+/** @deprecated Endpoint /editing-sessions nao existe na Canva Connect REST API */
+export const canvaStartEditingTransaction = async (_designId: string): Promise<any> => {
+  throw createError({
+    statusCode: 501,
+    statusMessage: 'Funcionalidade nao disponivel via Canva Connect REST API. Requer MCP ou Canva Enterprise Autofill.',
   })
 }
 
@@ -371,30 +374,36 @@ interface CanvaEditingOperation {
   [key: string]: any
 }
 
+/** @deprecated Endpoint /editing-sessions nao existe na Canva Connect REST API */
 export const canvaPerformEditingOperations = async (
-  transactionId: string,
-  operations: CanvaEditingOperation[],
-  pageIndex: number = 1
+  _transactionId: string,
+  _operations: CanvaEditingOperation[],
+  _pageIndex: number = 1
 ): Promise<any> => {
-  return canvaFetch(`/editing-sessions/${transactionId}/operations`, {
-    method: 'POST',
-    body: { operations, page_index: pageIndex },
+  throw createError({
+    statusCode: 501,
+    statusMessage: 'Funcionalidade nao disponivel via Canva Connect REST API. Requer MCP ou Canva Enterprise Autofill.',
   })
 }
 
-export const canvaCommitEditingTransaction = async (transactionId: string): Promise<any> => {
-  return canvaFetch(`/editing-sessions/${transactionId}/commit`, {
-    method: 'POST',
+/** @deprecated Endpoint /editing-sessions nao existe na Canva Connect REST API */
+export const canvaCommitEditingTransaction = async (_transactionId: string): Promise<any> => {
+  throw createError({
+    statusCode: 501,
+    statusMessage: 'Funcionalidade nao disponivel via Canva Connect REST API. Requer MCP ou Canva Enterprise Autofill.',
   })
 }
 
-export const canvaCancelEditingTransaction = async (transactionId: string): Promise<any> => {
-  return canvaFetch(`/editing-sessions/${transactionId}`, {
-    method: 'DELETE',
+/** @deprecated Endpoint /editing-sessions nao existe na Canva Connect REST API */
+export const canvaCancelEditingTransaction = async (_transactionId: string): Promise<any> => {
+  throw createError({
+    statusCode: 501,
+    statusMessage: 'Funcionalidade nao disponivel via Canva Connect REST API. Requer MCP ou Canva Enterprise Autofill.',
   })
 }
 
 // ── Content ─────────────────────────────────────────────────────────────────
+// DEPRECATED: O endpoint /designs/{id}/content NAO existe na Canva Connect REST API.
 
 interface CanvaDesignContentResponse {
   pages: Array<{
@@ -409,12 +418,14 @@ interface CanvaDesignContentResponse {
   }>
 }
 
+/** @deprecated Endpoint /designs/{id}/content nao existe na Canva Connect REST API */
 export const canvaGetDesignContent = async (
-  designId: string,
-  contentTypes: string[] = ['richtexts']
+  _designId: string,
+  _contentTypes: string[] = ['richtexts']
 ): Promise<CanvaDesignContentResponse> => {
-  return canvaFetch<CanvaDesignContentResponse>(`/designs/${designId}/content`, {
-    query: { content_types: contentTypes.join(',') },
+  throw createError({
+    statusCode: 501,
+    statusMessage: 'Funcionalidade nao disponivel via Canva Connect REST API. Requer MCP ou Canva Enterprise Autofill.',
   })
 }
 
@@ -456,27 +467,25 @@ export const canvaUploadAssetFromUrl = async (
   url: string,
   name: string
 ): Promise<CanvaAssetUploadResponse> => {
-  return canvaFetch<CanvaAssetUploadResponse>('/asset-uploads', {
+  return canvaFetch<CanvaAssetUploadResponse>('/asset-uploads-url', {
     method: 'POST',
     body: { url, name },
   })
 }
 
 export const canvaGetAssetUploadJob = async (jobId: string): Promise<CanvaAssetUploadResponse> => {
-  return canvaFetch<CanvaAssetUploadResponse>(`/asset-uploads/${jobId}`)
+  return canvaFetch<CanvaAssetUploadResponse>(`/asset-uploads-url/${jobId}`)
 }
 
 // ── Duplicar Pagina ────────────────────────────────────────────────────────
 
 /**
- * Tentar duplicar uma pagina de um design via editing transaction.
- * A Canva Connect API nao possui operacao nativa de "duplicate_page",
- * entao tentamos via editing operations. Se falhar, retorna fallback
- * com link para edicao manual no Canva.
+ * @deprecated Duplicacao de pagina nao e possivel via Canva Connect REST API.
+ * Os endpoints /editing-sessions nao existem. Requer MCP ou Canva Enterprise Autofill.
  */
 export const canvaDuplicatePage = async (
-  designId: string,
-  pageIndex: number = 1
+  _designId: string,
+  _pageIndex: number = 1
 ): Promise<{
   success: boolean
   manual_required: boolean
@@ -484,56 +493,10 @@ export const canvaDuplicatePage = async (
   message: string
   transaction_id?: string
 }> => {
-  try {
-    // 1. Iniciar sessao de edicao
-    const session = await canvaStartEditingTransaction(designId)
-    const transactionId = session.id || session.editing_session?.id
-
-    if (!transactionId) {
-      throw new Error('Nao foi possivel obter ID da sessao de edicao')
-    }
-
-    // 2. Tentar operacao de duplicar pagina
-    try {
-      await canvaPerformEditingOperations(transactionId, [
-        { type: 'duplicate_page', page_index: pageIndex },
-      ], pageIndex)
-
-      // 3. Commit da transacao
-      await canvaCommitEditingTransaction(transactionId)
-
-      return {
-        success: true,
-        manual_required: false,
-        edit_url: `https://www.canva.com/design/${designId}/edit`,
-        message: 'Pagina duplicada com sucesso via API.',
-        transaction_id: transactionId,
-      }
-    } catch (opError: any) {
-      // Operacao nao suportada - cancelar transacao e retornar fallback
-      try {
-        await canvaCancelEditingTransaction(transactionId)
-      } catch {
-        // Ignora erro ao cancelar - transacao pode ja ter expirado
-      }
-
-      // Fallback: orientar duplicacao manual
-      return {
-        success: false,
-        manual_required: true,
-        edit_url: `https://www.canva.com/design/${designId}/edit`,
-        message: 'A Canva Connect API nao suporta duplicacao de paginas programaticamente. Abra o design no Canva, duplique a pagina desejada e volte para re-analisar.',
-      }
-    }
-  } catch (err: any) {
-    // Fallback geral - se nem a sessao de edicao abrir
-    return {
-      success: false,
-      manual_required: true,
-      edit_url: `https://www.canva.com/design/${designId}/edit`,
-      message: 'Nao foi possivel duplicar via API. Abra o design no Canva, duplique a pagina desejada e volte para re-analisar.',
-    }
-  }
+  throw createError({
+    statusCode: 501,
+    statusMessage: 'Funcionalidade nao disponivel via Canva Connect REST API. Requer MCP ou Canva Enterprise Autofill.',
+  })
 }
 
 // ── Design Pages (thumbnails) ───────────────────────────────────────────────
@@ -590,10 +553,8 @@ export const canvaCopyDesign = async (
     throw new Error('Timeout ao exportar design original')
   }
 
-  // 3. Importar a URL do PDF como novo design.
-  // A documentacao atual da Canva separa import binario (`/imports`)
-  // de import por URL publica (`/url-imports`).
-  const importResponse = await canvaFetch<any>('/url-imports', {
+  // 3. Importar a URL do PDF como novo design via /design-imports-url
+  const importResponse = await canvaFetch<any>('/design-imports-url', {
     method: 'POST',
     body: {
       url: exportUrl,
@@ -609,12 +570,12 @@ export const canvaCopyDesign = async (
 
   // 4. Polling ate import terminar
   for (let i = 0; i < 20; i++) {
-    const status = await canvaFetch<any>(`/url-imports/${importJobId}`)
+    const status = await canvaFetch<any>(`/design-imports-url/${importJobId}`)
     if (status.job?.status === 'completed' || status.job?.status === 'success') {
       const designId =
+        status.job?.result?.design?.id ||
         status.job?.result?.designs?.[0]?.id ||
         status.job?.design?.id ||
-        status.job?.result?.design?.id ||
         status.design?.id ||
         status.result?.design?.id
       if (!designId) throw new Error('Design ID nao encontrado na resposta')
