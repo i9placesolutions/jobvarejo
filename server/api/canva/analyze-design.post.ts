@@ -1,6 +1,8 @@
-// Analisar design - rota alternativa sem subpasta [id]
-import { canvaCancelEditingTransaction, canvaStartEditingTransaction } from '../../utils/canva-client'
-import { analyzeCanvaDesign } from '../../utils/canva-analyzer'
+// Analisar design — retorna informacoes do template pre-configuradas
+// A Canva Connect REST API nao tem endpoint de leitura de conteudo,
+// entao usamos os dados cadastrados no banco (canva_templates) pelo admin.
+
+import { canvaGetDesign, canvaGetDesignPages } from '../../utils/canva-client'
 import { requireBuilderTenant } from '../../utils/builder-auth'
 import { pgOneOrNull } from '../../utils/postgres'
 
@@ -13,56 +15,91 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'design_id e obrigatorio' })
   }
 
-  // Buscar canva_design_id no banco
+  // Buscar design local no banco com dados do template
   const localDesign = await pgOneOrNull<any>(
-    `SELECT canva_design_id FROM canva_designs
-     WHERE tenant_id = $1::uuid AND (id::text = $2 OR canva_design_id = $2)
+    `SELECT d.id, d.canva_design_id, d.title, d.template_id,
+            d.canva_edit_url, d.canva_view_url,
+            t.products_per_page, t.pattern, t.design_type,
+            t.page_count as template_page_count, t.category
+     FROM canva_designs d
+     LEFT JOIN canva_templates t ON t.id = d.template_id
+     WHERE d.tenant_id = $1::uuid AND (d.id::text = $2 OR d.canva_design_id = $2)
      LIMIT 1`,
     [tenant.id, designId]
   )
 
-  const canvaDesignId = localDesign?.canva_design_id || designId
+  if (!localDesign) {
+    throw createError({ statusCode: 404, message: 'Design nao encontrado' })
+  }
+
+  const canvaDesignId = localDesign.canva_design_id
+
+  // Obter info atualizada do Canva (metadata + paginas)
+  let designInfo: any = null
+  let pages: any[] = []
+  let thumbnail: string | null = null
 
   try {
-    const txnResponse = await canvaStartEditingTransaction(canvaDesignId)
-    const txn = txnResponse.transaction
-
-    const richtexts = txn.richtexts || []
-    const fills = txn.fills || []
-    const pages = txn.pages || []
-
-    const structuralAnalysis = analyzeCanvaDesign(canvaDesignId, richtexts, fills, pages)
-    let smartAnalysis: any = {}
-
-    try {
-      const { analyzeDesignWithAI } = await import('../../utils/canva-ai-analyzer')
-      smartAnalysis = await analyzeDesignWithAI(canvaDesignId, richtexts, fills, pages)
-    } catch (smartErr: any) {
-      console.error('[canva/analyze-design] Analise inteligente falhou, seguindo com analise estrutural:', smartErr?.message || smartErr)
-      smartAnalysis = {
-        pages: [],
-        design_type: 'offer',
-        summary: '',
-      }
-    }
-
-    await canvaCancelEditingTransaction(txn.transaction_id)
-
-    return {
-      ...structuralAnalysis,
-      ...smartAnalysis,
-      products: structuralAnalysis.products || [],
-      products_per_page: structuralAnalysis.products_per_page || {},
-      pages: smartAnalysis.pages || [],
-      design_type: smartAnalysis.design_type || 'offer',
-      summary: smartAnalysis.summary || '',
-      thumbnail: txn.thumbnails?.[0]?.url || smartAnalysis.thumbnail || null,
-    }
+    designInfo = await canvaGetDesign(canvaDesignId)
+    thumbnail = designInfo.thumbnail?.url || null
   } catch (err: any) {
-    console.error('[canva/analyze-design] Erro:', err.message || err)
-    throw createError({
-      statusCode: err.statusCode || 500,
-      statusMessage: err.statusMessage || err.message || 'Erro ao analisar design',
-    })
+    console.warn('[analyze-design] Erro ao obter design do Canva:', err.message)
+  }
+
+  try {
+    const pagesResponse = await canvaGetDesignPages(canvaDesignId)
+    pages = (pagesResponse.items || []).map((p: any) => ({
+      index: p.index,
+      thumbnail: p.thumbnail?.url || null,
+    }))
+  } catch (err: any) {
+    console.warn('[analyze-design] Erro ao obter paginas:', err.message)
+  }
+
+  const productsPerPage = localDesign.products_per_page || {}
+  const designType = localDesign.design_type || 'offer'
+  const totalPages = designInfo?.page_count || localDesign.template_page_count || 1
+
+  // Criar slots de produtos vazios baseado no products_per_page do template
+  const products: any[] = []
+  let productIndex = 0
+  for (let pageIdx = 1; pageIdx <= totalPages; pageIdx++) {
+    const count = productsPerPage[String(pageIdx)] || 0
+    for (let i = 0; i < count; i++) {
+      products.push({
+        index: productIndex++,
+        page_index: pageIdx,
+        page_id: `page_${pageIdx}`,
+        name: null,
+        price: null,
+        currency: null,
+        images: [],
+        unit: 'UN',
+      })
+    }
+  }
+
+  return {
+    design_id: canvaDesignId,
+    local_design_id: localDesign.id,
+    design_type: designType,
+    total_pages: totalPages,
+    products_per_page: productsPerPage,
+    products,
+    pattern: localDesign.pattern || 'unknown',
+    has_unit_in_name: true,
+    has_images: false,
+    fixed_elements: [],
+    pages: pages.length > 0 ? pages : Array.from({ length: totalPages }, (_, i) => ({
+      index: i + 1,
+      thumbnail: i === 0 ? thumbnail : null,
+    })),
+    thumbnail,
+    category: localDesign.category,
+    summary: `Design ${designType} com ${products.length} slots em ${totalPages} paginas`,
+    // Edicao de conteudo requer edicao manual no Canva
+    editing_mode: 'manual',
+    edit_url: localDesign.canva_edit_url || designInfo?.urls?.edit_url || null,
+    view_url: localDesign.canva_view_url || designInfo?.urls?.view_url || null,
   }
 })

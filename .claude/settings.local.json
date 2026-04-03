@@ -11,7 +11,8 @@
       "Bash(xargs ls:*)",
       "Bash(grep -n \"interface CropRect\\\\|getCachedS3Objects\\\\|normalizeSearchTerm\" /workspace/projetos/jobvarejo/server/utils/*.ts)",
       "Bash(ls /workspace/projetos/jobvarejo/server/utils/canva-*.ts)",
-      "Bash(npx nuxi:*)"
+      "Bash(npx nuxi:*)",
+      "WebFetch(domain:www.canva.dev)"
     ]
   }
 }
