@@ -27,6 +27,9 @@ const {
   setCurrentPage,
   updateFlyer,
   saveFlyer,
+  cardTemplates,
+  headerTemplates,
+  footerTemplates,
 } = useBuilderFlyer()
 
 const { isAuto } = useBuilderLayout()
@@ -36,46 +39,25 @@ const emit = defineEmits<{
   preview: []
 }>()
 
-// Zoom controls
 const zoomIn = () => setZoom(zoom.value + 0.1)
 const zoomOut = () => setZoom(zoom.value - 0.1)
-const zoomPercent = computed(() => `${Math.round(zoom.value * 100)}%`)
 
 const ZOOM_OPTIONS = [
   { value: -1, label: 'Auto' },
-  { value: 0.3, label: '30%' },
-  { value: 0.4, label: '40%' },
-  { value: 0.5, label: '50%' },
-  { value: 0.6, label: '60%' },
-  { value: 0.7, label: '70%' },
-  { value: 0.8, label: '80%' },
-  { value: 0.9, label: '90%' },
-  { value: 1, label: '100%' },
+  { value: 0.3, label: '30%' }, { value: 0.5, label: '50%' },
+  { value: 0.7, label: '70%' }, { value: 1, label: '100%' },
 ]
 
 const TEXT_SIZE_MODES = [
-  { value: 'MAXIMUM', label: 'Texto Maior' },
-  { value: 'MINIMUM', label: 'Texto Menor' },
-  { value: 'MEDIUM', label: 'Texto Medio' },
-]
-
-const FOOTER_STYLES = [
-  { value: 'rounded-large', label: 'Redondo Grande' },
-  { value: 'square-large', label: 'Quadrado Grande' },
-  { value: 'square-compact', label: 'Quadrado Compacto' },
+  { value: 'MAXIMUM', label: 'Maior' },
+  { value: 'MINIMUM', label: 'Menor' },
+  { value: 'MEDIUM', label: 'Medio' },
 ]
 
 const FOOTER_MODE_OPTIONS = [
   { value: 'premium', label: 'Premium' },
   { value: 'simples', label: 'Simples' },
   { value: 'nenhum', label: 'Nenhum' },
-]
-
-const TEXT_TRANSFORM_OPTIONS = [
-  { value: 'uppercase', label: 'ABC' },
-  { value: 'capitalize', label: 'Abc' },
-  { value: 'lowercase', label: 'abc' },
-  { value: 'none', label: 'Aa' },
 ]
 
 const FONT_FAMILY_OPTIONS = [
@@ -87,16 +69,11 @@ const FONT_FAMILY_OPTIONS = [
   { value: "'Montserrat', sans-serif", label: 'Montserrat' },
   { value: "'Poppins', sans-serif", label: 'Poppins' },
   { value: "'Roboto', sans-serif", label: 'Roboto' },
-  { value: "'Barlow Condensed', sans-serif", label: 'Barlow Condensed' },
-  { value: "'Nunito', sans-serif", label: 'Nunito' },
-  { value: "'Lato', sans-serif", label: 'Lato' },
+  { value: "'Barlow Condensed', sans-serif", label: 'Barlow' },
   { value: "'Open Sans', sans-serif", label: 'Open Sans' },
 ]
 
-// Font config helpers
 const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
-
-// Helper para atualizar font_config sem perder dados existentes
 const setFc = (changes: Record<string, any>) => {
   updateFlyer({ font_config: { ...fontConfig.value, ...changes } })
 }
@@ -104,502 +81,241 @@ const setFc = (changes: Record<string, any>) => {
 const handleFontFamilyChange = (e: Event) => {
   const val = (e.target as HTMLSelectElement).value
   setFc({ name_font_family: val })
-  // Carregar Google Font se necessário
   const family = val.replace(/'.+?'/g, m => m.slice(1, -1)).split(',')[0]?.trim()
   if (family && family !== 'inherit' && family !== 'Arial' && family !== 'Impact') {
-    loadGoogleFont(family)
+    const id = `gfont-${family.replace(/\s+/g, '-')}`
+    if (!document.getElementById(id)) {
+      const link = document.createElement('link')
+      link.id = id; link.rel = 'stylesheet'
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400;700;800;900&display=swap`
+      document.head.appendChild(link)
+    }
   }
 }
 
-const handleTextTransformChange = (e: Event) => {
-  const val = (e.target as HTMLSelectElement).value
-  setFc({ name_text_transform: val })
-}
-
-const loadGoogleFont = (family: string) => {
-  const id = `gfont-${family.replace(/\s+/g, '-')}`
-  if (document.getElementById(id)) return
-  const link = document.createElement('link')
-  link.id = id
-  link.rel = 'stylesheet'
-  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400;700;800;900&display=swap`
-  document.head.appendChild(link)
-}
-
-// Carregar fonte ao iniciar se já tiver uma configurada
 onMounted(() => {
   const family = fontConfig.value.name_font_family
   if (family && family !== 'inherit') {
     const name = family.replace(/'.+?'/g, (m: string) => m.slice(1, -1)).split(',')[0]?.trim()
-    if (name && name !== 'Arial' && name !== 'Impact') loadGoogleFont(name)
+    if (name && name !== 'Arial' && name !== 'Impact') handleFontFamilyChange({ target: { value: family } } as any)
   }
 })
 
-const handleModelChange = (e: Event) => {
+const handleCardTemplateChange = (e: Event) => {
   const val = (e.target as HTMLSelectElement).value
-  if (val) setModel(val)
+  if (!val) {
+    updateFlyer({ card_template_id: null })
+    return
+  }
+  const isUuid = val.length === 36 && val.includes('-')
+  if (isUuid) { updateFlyer({ card_template_id: val } as any); setFc({ card_layout: null }) }
+  else { updateFlyer({ card_template_id: null } as any); setFc({ card_layout: val }) }
 }
 
-const handleLayoutChange = (e: Event) => {
+const handleFooterTemplateChange = (e: Event) => {
   const val = (e.target as HTMLSelectElement).value
-  if (val === '__auto__') {
-    // Clear layout → auto mode
-    updateFlyer({ layout_id: null })
-  } else if (val) {
-    setLayout(val)
-  }
+  if (!val) return
+  const isUuid = val.length === 36 && val.includes('-')
+  if (isUuid) { updateFlyer({ footer_template_id: val } as any); setFc({ footer_mode: null }) }
+  else { updateFlyer({ footer_template_id: null } as any); setFc({ footer_mode: val }) }
 }
 
-const handleZoomChange = (e: Event) => {
-  const val = parseFloat((e.target as HTMLSelectElement).value)
-  if (val === -1) {
-    // Auto zoom — fit canvas to viewport
-    setZoom(0.5)
-  } else {
-    setZoom(val)
-  }
-}
-
-const handleTextModeChange = (e: Event) => {
-  updateFlyer({ text_size_mode: (e.target as HTMLSelectElement).value as any })
-}
-
-const handleFooterStyleChange = (e: Event) => {
-  updateFlyer({ footer_style: (e.target as HTMLSelectElement).value })
-}
-
+const handleModelChange = (e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) setModel(v) }
+const handleLayoutChange = (e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v === '__auto__') updateFlyer({ layout_id: null }); else if (v) setLayout(v) }
+const handleZoomChange = (e: Event) => { const v = parseFloat((e.target as HTMLSelectElement).value); if (v === -1) setZoom(0.5); else setZoom(v) }
+const handleTextModeChange = (e: Event) => { updateFlyer({ text_size_mode: (e.target as HTMLSelectElement).value as any }) }
 const prevPage = () => setCurrentPage(currentPage.value - 1)
 const nextPage = () => setCurrentPage(currentPage.value + 1)
+const handleSave = async () => { try { await saveFlyer() } catch {} }
 
-const handleSave = async () => {
-  try { await saveFlyer() } catch {}
-}
+// Classes reutilizaveis
+const S = 'bg-gray-100 text-[11px] text-gray-700 rounded px-1.5 py-0.5 border border-gray-200 outline-none focus:border-emerald-500/50'
+const L = 'text-[9px] text-gray-400 font-medium'
+const D = 'w-px h-4 bg-gray-200 mx-0.5'
 </script>
 
 <template>
-  <div class="h-10 shrink-0 bg-gray-50 border-b border-gray-200 flex items-center px-2 gap-1 overflow-x-auto">
-    <!-- Modelo -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Modelo</label>
-      <select
-        :value="model?.id || ''"
-        @change="handleModelChange"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option v-for="m in models" :key="m.id" :value="m.id">
-          {{ m.name }}
-        </option>
+  <div class="shrink-0 bg-gray-50 border-b border-gray-200">
+    <!-- LINHA 1: Layout + Acoes -->
+    <div class="h-9 flex items-center px-2 gap-1 flex-wrap">
+      <!-- Modelo -->
+      <label :class="L">Modelo</label>
+      <select :value="model?.id || ''" @change="handleModelChange" :class="S">
+        <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Grade -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Grade</label>
-      <select
-        :value="isAuto ? '__auto__' : (layout?.id || '__auto__')"
-        @change="handleLayoutChange"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option value="__auto__">Automatica</option>
-        <option v-for="l in layouts" :key="l.id" :value="l.id">
-          {{ l.name }}
-        </option>
+      <!-- Grade -->
+      <label :class="L">Grade</label>
+      <select :value="isAuto ? '__auto__' : (layout?.id || '__auto__')" @change="handleLayoutChange" :class="S">
+        <option value="__auto__">Auto</option>
+        <option v-for="l in layouts" :key="l.id" :value="l.id">{{ l.name }}</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Produtos por pagina -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Qtd/Pag</label>
-      <select
-        :value="(flyer as any)?.custom_products_per_page || 0"
-        @change="updateFlyer({ custom_products_per_page: Number(($event.target as HTMLSelectElement).value) } as any)"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50 w-16"
-      >
+      <!-- Qtd/Pag -->
+      <label :class="L">Qtd</label>
+      <select :value="(flyer as any)?.custom_products_per_page || 0" @change="updateFlyer({ custom_products_per_page: Number(($event.target as HTMLSelectElement).value) } as any)" :class="S + ' w-14'">
         <option :value="0">Auto</option>
-        <option v-for="n in [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 20, 24, 25, 30, 36, 40, 48, 50]" :key="n" :value="n">{{ n }}</option>
+        <option v-for="n in [1,2,3,4,5,6,8,9,10,12,15,16,20,24,30]" :key="n" :value="n">{{ n }}</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Texto -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Texto</label>
-      <select
-        :value="flyer?.text_size_mode || 'MEDIUM'"
-        @change="handleTextModeChange"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option v-for="t in TEXT_SIZE_MODES" :key="t.value" :value="t.value">
-          {{ t.label }}
-        </option>
+      <!-- Texto -->
+      <label :class="L">Texto</label>
+      <select :value="flyer?.text_size_mode || 'MEDIUM'" @change="handleTextModeChange" :class="S">
+        <option v-for="t in TEXT_SIZE_MODES" :key="t.value" :value="t.value">{{ t.label }}</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
+      <!-- Card (so aparece se tiver templates no banco) -->
+      <template v-if="cardTemplates.length">
+        <label :class="L">Card</label>
+        <select :value="(flyer as any)?.card_template_id || ''" @change="handleCardTemplateChange" :class="S">
+          <option value="">Padrao</option>
+          <option v-for="tpl in cardTemplates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
+        </select>
+        <div :class="D" />
+      </template>
 
-    <!-- Layout do Card -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Card</label>
-      <select
-        :value="fontConfig.card_layout || 'classico'"
-        @change="setFc({ card_layout: ($event.target as HTMLSelectElement).value })"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <optgroup label="Basicos">
-          <option value="classico">Classico</option>
-          <option value="lateral">Lateral</option>
-          <option value="premium">Premium</option>
+      <!-- Rodape -->
+      <label :class="L">Rodape</label>
+      <select :value="(flyer as any)?.footer_template_id || fontConfig.footer_mode || 'premium'" @change="handleFooterTemplateChange" :class="S">
+        <optgroup v-if="footerTemplates.length" label="Templates">
+          <option v-for="t in footerTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
         </optgroup>
-        <optgroup label="Compactos">
-          <option value="compacto">Compacto</option>
-          <option value="mini">Mini Lista</option>
-          <option value="grade">Grade/Atacadao</option>
-        </optgroup>
-        <optgroup label="Destaque">
-          <option value="vitrine">Vitrine</option>
-          <option value="splash">Splash</option>
-        </optgroup>
-        <optgroup label="Modernos">
-          <option value="minimalista">Minimalista</option>
-          <option value="flat">Flat Design</option>
-          <option value="card3d">Card 3D</option>
-          <option value="glassmorphism">Vidro/Glass</option>
-        </optgroup>
-        <optgroup label="Tradicionais">
-          <option value="tabloide">Tabloide</option>
-          <option value="etiqueta">Etiqueta</option>
-        </optgroup>
-        <optgroup label="Elegantes">
-          <option value="elegante">Elegante/Gourmet</option>
-          <option value="dark">Dark/Noturno</option>
-        </optgroup>
+        <option v-for="f in FOOTER_MODE_OPTIONS" :key="f.value" :value="f.value">{{ f.label }}</option>
       </select>
-    </div>
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
+      <!-- Header (se tiver templates) -->
+      <template v-if="headerTemplates.length">
+        <div :class="D" />
+        <label :class="L">Header</label>
+        <select :value="(flyer as any)?.header_template_id || ''" @change="updateFlyer({ header_template_id: ($event.target as HTMLSelectElement).value || null } as any)" :class="S">
+          <option value="">Padrao</option>
+          <option v-for="t in headerTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+        </select>
+      </template>
 
-    <!-- Fonte -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Fonte</label>
-      <select
-        :value="fontConfig.name_font_family || 'inherit'"
-        @change="handleFontFamilyChange"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option v-for="f in FONT_FAMILY_OPTIONS" :key="f.value" :value="f.value">
-          {{ f.label }}
-        </option>
+      <!-- Spacer -->
+      <div class="flex-1 min-w-2" />
+
+      <!-- Zoom -->
+      <button @click="zoomOut" class="p-0.5 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-700"><ZoomOut class="w-3.5 h-3.5" /></button>
+      <select :value="zoom" @change="handleZoomChange" :class="S + ' w-12 text-center'">
+        <option v-for="z in ZOOM_OPTIONS" :key="z.value" :value="z.value">{{ z.label }}</option>
       </select>
+      <button @click="zoomIn" class="p-0.5 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-700"><ZoomIn class="w-3.5 h-3.5" /></button>
+
+      <!-- Pagination -->
+      <template v-if="totalPages > 1">
+        <div :class="D" />
+        <button @click="prevPage" :disabled="currentPage <= 1" class="p-0.5 hover:bg-gray-100 rounded text-gray-400 disabled:opacity-30"><ChevronLeft class="w-3.5 h-3.5" /></button>
+        <span class="text-[10px] text-gray-500 min-w-6 text-center">{{ currentPage }}/{{ totalPages }}</span>
+        <button @click="nextPage" :disabled="currentPage >= totalPages" class="p-0.5 hover:bg-gray-100 rounded text-gray-400 disabled:opacity-30"><ChevronRight class="w-3.5 h-3.5" /></button>
+      </template>
+
+      <div :class="D" />
+
+      <!-- Status + Actions -->
+      <span v-if="isDirty && !isSaving" class="text-[9px] text-amber-500">*</span>
+      <Loader2 v-if="isSaving" class="w-3 h-3 text-blue-400 animate-spin" />
+      <button @click="emit('preview')" class="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 border border-gray-200"><Eye class="w-3 h-3 inline mr-0.5" />Preview</button>
+      <button @click="emit('export')" class="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 border border-gray-200"><Download class="w-3 h-3 inline mr-0.5" />Exportar</button>
+      <button @click="handleSave" :disabled="isSaving || !isDirty" class="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40"><Save class="w-3 h-3 inline mr-0.5" />Salvar</button>
     </div>
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Caixa (text-transform) -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Caixa</label>
-      <select
-        :value="fontConfig.name_text_transform || 'uppercase'"
-        @change="handleTextTransformChange"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option v-for="t in TEXT_TRANSFORM_OPTIONS" :key="t.value" :value="t.value">
-          {{ t.label }}
-        </option>
+    <!-- LINHA 2: Ajustes finos -->
+    <div class="h-7 flex items-center px-2 gap-1 overflow-x-auto border-t border-gray-100">
+      <!-- Fonte -->
+      <label :class="L">Fonte</label>
+      <select :value="fontConfig.name_font_family || 'inherit'" @change="handleFontFamilyChange" :class="S">
+        <option v-for="f in FONT_FAMILY_OPTIONS" :key="f.value" :value="f.value">{{ f.label }}</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Imagem (escala - so reduz, 100% é o maximo que cabe no card) -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Imagem</label>
-      <select
-        :value="fontConfig.image_scale || 1"
-        @change="setFc({ image_scale: parseFloat(($event.target as HTMLSelectElement).value) })"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option :value="0.5">50%</option>
-        <option :value="0.6">60%</option>
-        <option :value="0.7">70%</option>
-        <option :value="0.8">80%</option>
-        <option :value="0.9">90%</option>
-        <option :value="1">100%</option>
+      <!-- Caixa -->
+      <label :class="L">Caixa</label>
+      <select :value="fontConfig.name_text_transform || 'uppercase'" @change="setFc({ name_text_transform: ($event.target as HTMLSelectElement).value })" :class="S + ' w-12'">
+        <option value="uppercase">ABC</option>
+        <option value="capitalize">Abc</option>
+        <option value="lowercase">abc</option>
+        <option value="none">Aa</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Etiqueta (escala do preco) -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Etiqueta</label>
-      <select
-        :value="fontConfig.price_scale || 1"
-        @change="setFc({ price_scale: parseFloat(($event.target as HTMLSelectElement).value) })"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option :value="0.7">70%</option>
-        <option :value="0.8">80%</option>
-        <option :value="0.9">90%</option>
-        <option :value="1">100%</option>
-        <option :value="1.1">110%</option>
-        <option :value="1.2">120%</option>
-        <option :value="1.3">130%</option>
-        <option :value="1.5">150%</option>
-        <option :value="1.8">180%</option>
-        <option :value="2">200%</option>
+      <!-- Imagem -->
+      <label :class="L">Img</label>
+      <select :value="Math.min(Number(fontConfig.image_scale || 1), 1)" @change="setFc({ image_scale: Math.min(parseFloat(($event.target as HTMLSelectElement).value), 1) })" :class="S + ' w-14'">
+        <option v-for="v in [0.7,0.8,0.9,1]" :key="v" :value="v">{{ v * 100 }}%</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Estilo da Etiqueta -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Etiq.</label>
-      <select
-        :value="fontConfig.price_visual_style || 'padrao'"
-        @change="setFc({ price_visual_style: ($event.target as HTMLSelectElement).value })"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <optgroup label="Classicas">
-          <option value="padrao">Padrao</option>
-          <option value="bandeira">Bandeira</option>
-          <option value="explodir">Explosao</option>
-          <option value="circulo">Circulo</option>
-          <option value="oval">Oval</option>
-          <option value="selo">Selo/Carimbo</option>
-        </optgroup>
-        <optgroup label="Modernas">
-          <option value="minimal">Minimalista</option>
-          <option value="tag">Tag</option>
-          <option value="pill">Pilula</option>
-          <option value="neon">Neon</option>
-          <option value="glass">Vidro</option>
-          <option value="gradient">Gradiente</option>
-        </optgroup>
-        <optgroup label="Promocionais">
-          <option value="oferta">Mega Oferta</option>
-          <option value="queima">Queima</option>
-          <option value="flash">Flash</option>
-        </optgroup>
-        <optgroup label="Premium">
-          <option value="gold">Dourado</option>
-          <option value="darkprice">Dark</option>
-          <option value="outline">Contorno</option>
-        </optgroup>
+      <!-- Etiqueta escala -->
+      <label :class="L">Etiq</label>
+      <select :value="fontConfig.price_scale || 1" @change="setFc({ price_scale: parseFloat(($event.target as HTMLSelectElement).value) })" :class="S + ' w-14'">
+        <option v-for="v in [0.7,0.8,0.9,1,1.2,1.5,2]" :key="v" :value="v">{{ v * 100 }}%</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
+      <!-- Estilo etiqueta -->
+      <label :class="L">Estilo</label>
+      <select :value="fontConfig.price_visual_style || 'padrao'" @change="setFc({ price_visual_style: ($event.target as HTMLSelectElement).value })" :class="S">
+        <option value="padrao">Padrao</option>
+        <option value="bandeira">Bandeira</option>
+        <option value="explodir">Explosao</option>
+        <option value="circulo">Circulo</option>
+        <option value="minimal">Minimal</option>
+        <option value="pill">Pilula</option>
+        <option value="neon">Neon</option>
+        <option value="oferta">Oferta</option>
+        <option value="gold">Dourado</option>
+      </select>
+      <div :class="D" />
 
-    <!-- Cor do Card -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Card</label>
-      <input
-        type="color"
-        :value="fontConfig.card_bg_color || '#ffffff'"
-        @input="setFc({ card_bg_color: ($event.target as HTMLInputElement).value })"
-        class="w-5 h-5 rounded cursor-pointer border border-gray-200 bg-transparent"
-      />
-    </div>
+      <!-- Cor Card -->
+      <label :class="L">Cor</label>
+      <input type="color" :value="fontConfig.card_bg_color || '#ffffff'" @input="setFc({ card_bg_color: ($event.target as HTMLInputElement).value })" class="w-5 h-5 rounded cursor-pointer border border-gray-200 bg-transparent" />
+      <div :class="D" />
 
-    <!-- Borda do Card -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Borda</label>
-      <select
-        :value="fontConfig.card_border_radius || '8px'"
-        @change="setFc({ card_border_radius: ($event.target as HTMLSelectElement).value })"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option value="0px">Nenhum</option>
+      <!-- Borda -->
+      <label :class="L">Borda</label>
+      <select :value="fontConfig.card_border_radius || '8px'" @change="setFc({ card_border_radius: ($event.target as HTMLSelectElement).value })" :class="S + ' w-16'">
+        <option value="0px">Sem</option>
         <option value="8px">Suave</option>
-        <option value="16px">Arredondado</option>
+        <option value="16px">Redondo</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Gap entre cards -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Gap</label>
-      <select
-        :value="fontConfig.card_gap ?? 8"
-        @change="setFc({ card_gap: parseInt(($event.target as HTMLSelectElement).value) })"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option :value="0">Nenhum</option>
-        <option :value="2">Fino</option>
-        <option :value="4">Medio</option>
-        <option :value="8">Grande</option>
+      <!-- Gap -->
+      <label :class="L">Gap</label>
+      <select :value="fontConfig.card_gap ?? 8" @change="setFc({ card_gap: parseInt(($event.target as HTMLSelectElement).value) })" :class="S + ' w-14'">
+        <option :value="0">0</option>
+        <option :value="2">2</option>
+        <option :value="4">4</option>
+        <option :value="8">8</option>
       </select>
-    </div>
 
-    <!-- Padding do grid -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Pad</label>
-      <select
-        :value="fontConfig.card_padding ?? 12"
-        @change="setFc({ card_padding: parseInt(($event.target as HTMLSelectElement).value) })"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option :value="0">Nenhum</option>
-        <option :value="4">Fino</option>
-        <option :value="8">Medio</option>
-        <option :value="12">Grande</option>
+      <!-- Pad -->
+      <label :class="L">Pad</label>
+      <select :value="fontConfig.card_padding ?? 12" @change="setFc({ card_padding: parseInt(($event.target as HTMLSelectElement).value) })" :class="S + ' w-14'">
+        <option :value="0">0</option>
+        <option :value="4">4</option>
+        <option :value="8">8</option>
+        <option :value="12">12</option>
       </select>
-    </div>
+      <div :class="D" />
 
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- QR Code toggle -->
-    <label class="flex items-center gap-1 shrink-0 cursor-pointer">
-      <span class="text-[10px] text-gray-500 font-medium">QR</span>
-      <button
-        type="button"
-        role="switch"
-        :aria-checked="fontConfig.show_qr_code ?? false"
-        @click="setFc({ show_qr_code: !(fontConfig.show_qr_code ?? false) })"
-        :class="[
-          'relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors',
-          fontConfig.show_qr_code ? 'bg-emerald-600' : 'bg-gray-300'
-        ]"
-      >
-        <span
-          :class="[
-            'pointer-events-none inline-block h-3 w-3 rounded-full bg-white shadow transform transition-transform mt-0.5',
-            fontConfig.show_qr_code ? 'translate-x-3.5 ml-px' : 'translate-x-0.5'
-          ]"
-        />
-      </button>
-    </label>
-
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Capa toggle -->
-    <label class="flex items-center gap-1 shrink-0 cursor-pointer">
-      <span class="text-[10px] text-gray-500 font-medium">Capa</span>
-      <button
-        type="button"
-        role="switch"
-        :aria-checked="flyer?.show_cover ?? false"
-        @click="updateFlyer({ show_cover: !(flyer?.show_cover ?? false) })"
-        :class="[
-          'relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors',
-          flyer?.show_cover ? 'bg-emerald-600' : 'bg-gray-300'
-        ]"
-      >
-        <span
-          :class="[
-            'pointer-events-none inline-block h-3 w-3 rounded-full bg-white shadow transform transition-transform mt-0.5',
-            flyer?.show_cover ? 'translate-x-3.5 ml-px' : 'translate-x-0.5'
-          ]"
-        />
-      </button>
-    </label>
-
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Rodape -->
-    <div class="flex items-center gap-1 shrink-0">
-      <label class="text-[10px] text-gray-500 font-medium">Rodape</label>
-      <select
-        :value="fontConfig.footer_mode || 'premium'"
-        @change="setFc({ footer_mode: ($event.target as HTMLSelectElement).value })"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-2 py-1 border border-gray-200 outline-none focus:border-emerald-500/50"
-      >
-        <option v-for="f in FOOTER_MODE_OPTIONS" :key="f.value" :value="f.value">
-          {{ f.label }}
-        </option>
-      </select>
-    </div>
-
-    <!-- Spacer -->
-    <div class="flex-1" />
-
-    <!-- Zoom -->
-    <div class="flex items-center gap-1 shrink-0">
-      <button
-        @click="zoomOut"
-        class="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 transition-colors"
-      >
-        <ZoomOut class="w-3.5 h-3.5" />
-      </button>
-      <select
-        :value="zoom"
-        @change="handleZoomChange"
-        class="bg-gray-100 text-[11px] text-gray-700 rounded px-1 py-1 border border-gray-200 outline-none w-14 text-center"
-      >
-        <option v-for="z in ZOOM_OPTIONS" :key="z.value" :value="z.value">
-          {{ z.label }}
-        </option>
-      </select>
-      <button
-        @click="zoomIn"
-        class="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 transition-colors"
-      >
-        <ZoomIn class="w-3.5 h-3.5" />
-      </button>
-    </div>
-
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Pagination -->
-    <div v-if="totalPages > 1" class="flex items-center gap-1 shrink-0">
-      <button
-        @click="prevPage"
-        :disabled="currentPage <= 1"
-        class="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
-      >
-        <ChevronLeft class="w-3.5 h-3.5" />
-      </button>
-      <span class="text-[11px] text-gray-600 min-w-8 text-center">
-        {{ currentPage }}/{{ totalPages }}
-      </span>
-      <button
-        @click="nextPage"
-        :disabled="currentPage >= totalPages"
-        class="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
-      >
-        <ChevronRight class="w-3.5 h-3.5" />
-      </button>
-    </div>
-
-    <div class="w-px h-5 bg-gray-200 mx-1" />
-
-    <!-- Actions -->
-    <div class="flex items-center gap-1.5 shrink-0">
-      <span v-if="isDirty && !isSaving" class="text-[9px] text-amber-400">Nao salvo</span>
-      <span v-if="isSaving" class="text-[9px] text-blue-400 flex items-center gap-1">
-        <Loader2 class="w-3 h-3 animate-spin" />
-      </span>
-
-      <button
-        @click="emit('preview')"
-        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 border border-gray-200 transition-colors"
-      >
-        <Eye class="w-3 h-3" />
-        Preview
+      <!-- QR -->
+      <label :class="L">QR</label>
+      <button type="button" @click="setFc({ show_qr_code: !(fontConfig.show_qr_code ?? false) })" :class="['w-6 h-4 rounded-full transition-colors', fontConfig.show_qr_code ? 'bg-emerald-500' : 'bg-gray-300']">
+        <span :class="['block w-3 h-3 rounded-full bg-white shadow transition-transform', fontConfig.show_qr_code ? 'translate-x-2.5' : 'translate-x-0.5']" />
       </button>
 
-      <button
-        @click="emit('export')"
-        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 border border-gray-200 transition-colors"
-      >
-        <Download class="w-3 h-3" />
-        Exportar
-      </button>
-
-      <button
-        @click="handleSave"
-        :disabled="isSaving || !isDirty"
-        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40 transition-colors"
-      >
-        <Save class="w-3 h-3" />
-        Salvar
+      <!-- Capa -->
+      <label :class="L">Capa</label>
+      <button type="button" @click="updateFlyer({ show_cover: !(flyer?.show_cover ?? false) })" :class="['w-6 h-4 rounded-full transition-colors', flyer?.show_cover ? 'bg-emerald-500' : 'bg-gray-300']">
+        <span :class="['block w-3 h-3 rounded-full bg-white shadow transition-transform', flyer?.show_cover ? 'translate-x-2.5' : 'translate-x-0.5']" />
       </button>
     </div>
   </div>

@@ -5,6 +5,9 @@ import type {
   BuilderModel,
   BuilderLayout,
   BuilderPriceTagStyle,
+  BuilderCardTemplate,
+  BuilderHeaderTemplate,
+  BuilderFooterTemplate,
   BuilderThemeCssConfig,
 } from '~/types/builder'
 
@@ -18,6 +21,9 @@ interface BuilderFlyerState {
   models: BuilderModel[]
   layouts: BuilderLayout[]
   priceTagStyles: BuilderPriceTagStyle[]
+  cardTemplates: BuilderCardTemplate[]
+  headerTemplates: BuilderHeaderTemplate[]
+  footerTemplates: BuilderFooterTemplate[]
   isDirty: boolean
   isSaving: boolean
   isLoading: boolean
@@ -38,6 +44,9 @@ export const useBuilderFlyer = () => {
     models: [],
     layouts: [],
     priceTagStyles: [],
+    cardTemplates: [],
+    headerTemplates: [],
+    footerTemplates: [],
     isDirty: false,
     isSaving: false,
     isLoading: false,
@@ -188,16 +197,23 @@ export const useBuilderFlyer = () => {
 
   const loadCatalog = async () => {
     try {
-      const [themesRes, modelsRes, layoutsRes, priceTagRes] = await Promise.all([
+      const [themesRes, modelsRes, layoutsRes, priceTagRes, cardTplRes, headerTplRes, footerTplRes] = await Promise.all([
         $fetch<any>('/api/builder/themes'),
         $fetch<any>('/api/builder/models'),
         $fetch<any>('/api/builder/layouts'),
         $fetch<any>('/api/builder/price-tag-styles').catch(() => ({ priceTagStyles: [] })),
+        $fetch<any>('/api/builder/card-templates').catch((err) => { console.warn('[loadCatalog] card-templates falhou:', err.message); return { cardTemplates: [] } }),
+        $fetch<any>('/api/builder/header-templates').catch(() => ({ headerTemplates: [] })),
+        $fetch<any>('/api/builder/footer-templates').catch(() => ({ footerTemplates: [] })),
       ])
       state.value.themes = (Array.isArray(themesRes) ? themesRes : themesRes?.themes) || []
       state.value.models = (Array.isArray(modelsRes) ? modelsRes : modelsRes?.models) || []
       state.value.layouts = (Array.isArray(layoutsRes) ? layoutsRes : layoutsRes?.layouts) || []
       state.value.priceTagStyles = (Array.isArray(priceTagRes) ? priceTagRes : priceTagRes?.priceTagStyles) || []
+      state.value.cardTemplates = (Array.isArray(cardTplRes) ? cardTplRes : cardTplRes?.cardTemplates) || []
+      console.log('[loadCatalog] cardTemplates carregados:', state.value.cardTemplates.length, state.value.cardTemplates.map((t: any) => t.name))
+      state.value.headerTemplates = (Array.isArray(headerTplRes) ? headerTplRes : headerTplRes?.headerTemplates) || []
+      state.value.footerTemplates = (Array.isArray(footerTplRes) ? footerTplRes : footerTplRes?.footerTemplates) || []
     } catch (error) {
       console.error('[useBuilderFlyer] loadCatalog error:', error)
     }
@@ -310,6 +326,11 @@ export const useBuilderFlyer = () => {
       custom_lines: [],
       price_tag_style_id: null,
       badge_style_id: null,
+      image_zoom: 100,
+      image_x: 0,
+      image_y: 0,
+      extra_images: [],
+      extra_images_layout: 'auto',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       ...product,
@@ -334,6 +355,11 @@ export const useBuilderFlyer = () => {
     state.value.products.splice(index, 1)
     // Reindex positions
     state.value.products.forEach((p, i) => { p.position = i })
+    markDirty()
+  }
+
+  const removeAllProducts = () => {
+    state.value.products = []
     markDirty()
   }
 
@@ -376,6 +402,9 @@ export const useBuilderFlyer = () => {
     models,
     layouts,
     priceTagStyles,
+    cardTemplates: computed(() => state.value.cardTemplates),
+    headerTemplates: computed(() => state.value.headerTemplates),
+    footerTemplates: computed(() => state.value.footerTemplates),
     isDirty,
     isSaving,
     isLoading,
@@ -398,6 +427,7 @@ export const useBuilderFlyer = () => {
     addProduct,
     updateProduct,
     removeProduct,
+    removeAllProducts,
     reorderProducts,
     setZoom,
     setCurrentPage,

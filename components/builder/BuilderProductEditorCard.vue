@@ -580,6 +580,17 @@ onUnmounted(() => {
         <button @click.stop="duplicateMainImage" class="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] text-zinc-400 hover:text-emerald-400 bg-white/5 hover:bg-white/10 border border-dashed border-white/10 transition-colors" title="Duplicar imagem principal">
           <span>Duplicar</span>
         </button>
+        <!-- Layout das duplicatas -->
+        <select
+          v-if="(product.extra_images || []).length > 0"
+          :value="product.extra_images_layout || 'auto'"
+          @change="update({ extra_images_layout: ($event.target as HTMLSelectElement).value as 'auto' | 'horizontal' | 'vertical' })"
+          class="px-1 py-0.5 rounded text-[8px] text-zinc-400 bg-white/5 border border-white/10 outline-none"
+        >
+          <option value="auto">Auto</option>
+          <option value="horizontal">Horizontal</option>
+          <option value="vertical">Vertical</option>
+        </select>
         <label class="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] text-zinc-400 hover:text-yellow-400 bg-white/5 hover:bg-white/10 border border-dashed border-white/10 cursor-pointer transition-colors">
           <Loader2 v-if="isUploadingExtra" class="w-2.5 h-2.5 animate-spin" />
           <ImagePlus v-else class="w-2.5 h-2.5" />

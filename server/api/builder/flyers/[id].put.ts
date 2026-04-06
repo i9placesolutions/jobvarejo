@@ -48,6 +48,7 @@ export default defineEventHandler(async (event) => {
     color_mode: 'text',
     footer_style: 'text',
     ink_economy: 'int',
+    custom_products_per_page: 'int',
     // JSON configs (font_config armazena TODAS as customizacoes visuais)
     font_config: 'jsonb',
     logo_position: 'jsonb',
@@ -58,6 +59,9 @@ export default defineEventHandler(async (event) => {
     layout_id: 'uuid',
     price_tag_style_id: 'uuid',
     badge_style_id: 'uuid',
+    card_template_id: 'uuid',
+    header_template_id: 'uuid',
+    footer_template_id: 'uuid',
     snapshot_url: 'text',
   }
 

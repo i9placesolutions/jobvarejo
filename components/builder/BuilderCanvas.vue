@@ -5,7 +5,21 @@ const {
   cssVariables,
   theme,
   flyer,
+  headerTemplates,
+  footerTemplates,
 } = useBuilderFlyer()
+
+// Templates dinamicos ativos
+const activeHeaderTemplate = computed(() => {
+  const id = (flyer.value as any)?.header_template_id
+  if (!id) return null
+  return headerTemplates.value.find((t: any) => t.id === id) || null
+})
+const activeFooterTemplate = computed(() => {
+  const id = (flyer.value as any)?.footer_template_id
+  if (!id) return null
+  return footerTemplates.value.find((t: any) => t.id === id) || null
+})
 
 const canvasRef = ref<HTMLElement | null>(null)
 
@@ -108,9 +122,15 @@ defineExpose({ canvasRef })
 
       <!-- Content layers -->
       <div class="relative z-10 flex flex-col h-full">
-        <BuilderFlyerHeader />
+        <!-- Header: template dinamico ou legado -->
+        <BuilderDynamicSection v-if="activeHeaderTemplate" :template="activeHeaderTemplate" section="header" />
+        <BuilderFlyerHeader v-else />
+
         <BuilderFlyerProductGrid class="flex-1 min-h-0" />
-        <BuilderFlyerFooter />
+
+        <!-- Footer: template dinamico ou legado -->
+        <BuilderDynamicSection v-if="activeFooterTemplate" :template="activeFooterTemplate" section="footer" />
+        <BuilderFlyerFooter v-else />
       </div>
 
       <!-- Overlay images (na frente do conteudo) -->

@@ -209,6 +209,121 @@ export interface BuilderBadgeStyle {
     sort_order: number
 }
 
+// ── Card Templates (templates dinamicos de produto) ──
+
+// ── Card Templates v2 (flexbox-based) ──
+
+export interface CardTemplateElement {
+    id: string
+    type: 'image' | 'text' | 'price' | 'badge' | 'unit' | 'observation' | 'separator' | 'shape' | 'icon'
+    slot: string
+    // Posicao (usado no editor visual e renderizacao absolute)
+    x: string
+    y: string
+    w: string
+    h: string
+    // Flexbox (para renderizacao adaptativa no builder)
+    flex?: number          // proporcao no flex container (1, 2, 3...)
+    order?: number         // ordem no flex
+    // Tipografia
+    fontSize?: string
+    fontWeight?: number
+    fontFamily?: string
+    textAlign?: string
+    textTransform?: string
+    color?: string
+    // Visual
+    bg?: string
+    borderRadius?: string
+    objectFit?: string
+    overflow?: string
+    rotation?: number
+    zIndex?: number
+    opacity?: number
+    boxShadow?: string
+    padding?: string
+    // Condicional
+    showIf?: 'always' | 'has_value' | 'is_highlight'
+}
+
+export interface CardTemplateStyle {
+    bg?: string
+    border?: string
+    borderRadius?: string
+    boxShadow?: string
+    overflow?: string
+    padding?: string
+    // Layout do card
+    direction?: 'column' | 'row'   // flex-direction principal
+    imagePosition?: 'top' | 'left' | 'right' | 'bottom'  // onde a imagem fica
+    imageSize?: string             // '50%', '60%' — proporcao da imagem
+    gap?: string                   // gap entre elementos
+    namePadding?: string           // padding ao redor do nome
+    pricePadding?: string          // padding ao redor do preco
+    // Nome do produto
+    nameScale?: number             // escala do nome (1 = normal, 1.5 = 50% maior)
+    nameMaxLines?: number          // maximo de linhas do nome (1-5)
+    nameFontWeight?: number        // peso da fonte (400-900)
+    nameTextAlign?: string         // alinhamento: left, center, right
+    nameTextTransform?: string     // uppercase, lowercase, capitalize, none
+    nameFontFamily?: string        // familia da fonte
+    nameColor?: string             // cor do texto do nome
+    nameMarginBottom?: number      // espaco abaixo do nome (px)
+    // Imagem
+    imageMarginTop?: number        // espaco acima da imagem (px)
+    imageMarginBottom?: number     // espaco abaixo da imagem (px)
+    imageObjectFit?: string        // contain, cover, fill
+    imageLift?: number             // translateY negativo da imagem unica (%)
+    // Etiqueta de preco
+    priceScale?: number            // escala do preco (1 = normal, 5 = 5x maior)
+    pricePosition?: string         // 'below' | 'overlay-bottom' | 'overlay-center' | 'overlay-top'
+    priceMarginTop?: number        // espaco acima do preco (px)
+    priceMarginBottom?: number     // espaco abaixo do preco (px)
+    priceOffsetX?: number          // deslocamento horizontal da etiqueta (%)
+    priceOffsetY?: number          // deslocamento vertical da etiqueta (%)
+    priceWidth?: string            // largura da etiqueta (ex: '80%', 'auto')
+    priceHeight?: number           // altura minima da etiqueta (px)
+    priceBg?: string               // cor de fundo da etiqueta
+    priceBorderRadius?: string     // border radius da etiqueta
+    priceColor?: string            // cor do texto do preco
+    priceAlign?: string            // left, center, right
+    // Imagem duplicada (configuracoes de layout quando produto tem extra_images)
+    dupHorizontalStep?: number     // distancia horizontal entre imagens lado a lado (%)
+    dupHorizontalLift?: number     // elevacao das imagens horizontais (%)
+    dupVerticalStep?: number       // distancia vertical entre imagens empilhadas (%)
+    dupVerticalLift?: number       // quanto sobe as imagens verticais (translateY negativo %)
+    dupImageWidth?: number         // largura das imagens duplicadas (%)
+    // Grade sugerida
+    suggestedPerPage?: number      // produtos por pagina recomendado
+    suggestedColumns?: number      // colunas recomendadas
+}
+
+export interface BuilderCardTemplate {
+    id: string
+    name: string
+    thumbnail: string | null
+    category: string
+    elements: CardTemplateElement[]
+    card_style: CardTemplateStyle
+    is_active: boolean
+    sort_order: number
+}
+
+export interface BuilderSectionTemplate {
+    id: string
+    name: string
+    thumbnail: string | null
+    category: string
+    height: number
+    elements: CardTemplateElement[]
+    container_style: CardTemplateStyle
+    is_active: boolean
+    sort_order: number
+}
+
+export type BuilderHeaderTemplate = BuilderSectionTemplate
+export type BuilderFooterTemplate = BuilderSectionTemplate
+
 export interface BuilderFontConfig {
     id: string
     name: string
@@ -278,6 +393,7 @@ export interface BuilderFlyer {
     footer_style: string
     ink_economy: number
     show_cover: boolean
+    custom_products_per_page: number | null
 
     // JSON configs
     font_config: Record<string, any>
@@ -290,6 +406,9 @@ export interface BuilderFlyer {
     layout_id: string | null
     price_tag_style_id: string | null
     badge_style_id: string | null
+    card_template_id: string | null
+    header_template_id: string | null
+    footer_template_id: string | null
 
     snapshot_url: string | null
     created_at: string
@@ -336,6 +455,7 @@ export interface BuilderFlyerProduct {
     image_x: number
     image_y: number
     extra_images: string[]
+    extra_images_layout: 'auto' | 'horizontal' | 'vertical' | null
 
     created_at: string
     updated_at: string

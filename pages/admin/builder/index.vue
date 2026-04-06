@@ -10,6 +10,9 @@ import {
   Building2,
   ArrowLeft,
   Image,
+  CreditCard,
+  PanelTop,
+  PanelBottom,
 } from 'lucide-vue-next'
 
 definePageMeta({
@@ -87,6 +90,30 @@ const sections = ref<SectionItem[]>([
     count: null
   },
   {
+    title: 'Card Templates',
+    description: 'Templates visuais de produto (admin cria, cliente escolhe)',
+    href: '/admin/builder/card-templates',
+    icon: CreditCard,
+    countKey: 'cardTemplates',
+    count: null
+  },
+  {
+    title: 'Header Templates',
+    description: 'Templates de cabecalho do encarte',
+    href: '/admin/builder/header-templates',
+    icon: PanelTop,
+    countKey: 'headerTemplates',
+    count: null
+  },
+  {
+    title: 'Footer Templates',
+    description: 'Templates de rodape do encarte',
+    href: '/admin/builder/footer-templates',
+    icon: PanelBottom,
+    countKey: 'footerTemplates',
+    count: null
+  },
+  {
     title: 'Templates Canva',
     description: 'Gerenciar templates do Canva disponíveis para os clientes',
     href: '/admin/canva/templates',
@@ -109,7 +136,10 @@ const fetchCounts = async () => {
     priceTagStyles: '/api/admin/builder/price-tag-styles',
     badgeStyles: '/api/admin/builder/badge-styles',
     fontConfigs: '/api/admin/builder/font-configs',
-    tenants: '/api/admin/builder/tenants'
+    tenants: '/api/admin/builder/tenants',
+    cardTemplates: '/api/admin/builder/card-templates',
+    headerTemplates: '/api/admin/builder/header-templates',
+    footerTemplates: '/api/admin/builder/footer-templates'
   }
 
   const results = await Promise.allSettled(

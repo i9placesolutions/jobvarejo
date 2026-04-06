@@ -2,6 +2,7 @@
 import { Plus } from 'lucide-vue-next'
 
 const {
+  flyer,
   layout,
   theme,
   paginatedProducts,
@@ -11,7 +12,17 @@ const {
   updateProduct,
   reorderProducts,
   productEditorOpen,
+  cardTemplates,
 } = useBuilderFlyer()
+
+// Template de card ativo (do banco, se selecionado)
+const activeCardTemplate = computed(() => {
+  const tplId = (flyer.value as any)?.card_template_id
+  if (tplId) {
+    return cardTemplates.value.find((t: any) => t.id === tplId) || null
+  }
+  return cardTemplates.value[0] || null
+})
 
 // Duplo clique alterna destaque
 const toggleHighlight = (idx: number) => {
@@ -66,7 +77,6 @@ const {
   getCellAreaName,
 } = useBuilderLayout()
 
-const { flyer } = useBuilderFlyer()
 const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
 const gap = computed(() => fontConfig.value.card_gap ?? theme.value?.body_config?.gap ?? 8)
 const padding = computed(() => fontConfig.value.card_padding ?? theme.value?.body_config?.padding ?? 12)
@@ -147,6 +157,7 @@ const cells = computed(() => {
 })
 
 const columns = computed(() => effectiveGrid.value.columns)
+const pageProductCount = computed(() => Math.max(1, paginatedProducts.value.length))
 
 const hasProducts = computed(() => paginatedProducts.value.length > 0)
 
@@ -190,12 +201,41 @@ const handleOpenEditor = () => {
   <!-- Grid with products -->
   <div v-else :style="gridStyle" class="w-full h-full overflow-hidden">
     <template v-for="cell in cells" :key="cell.index">
+      <!-- Card dinamico (template do banco) ou card legado -->
+      <BuilderDynamicCard
+        v-if="cell.product && activeCardTemplate"
+        :product="cell.product"
+        :template="activeCardTemplate"
+        :is-highlight="cell.isHighlight"
+        :columns="columns"
+        :page-product-count="pageProductCount"
+        draggable="true"
+        :style="{
+          minHeight: 0,
+          cursor: dragFromIndex !== null ? 'grabbing' : 'grab',
+          opacity: dragFromIndex === cell.index ? 0.4 : 1,
+          outline: dragOverIndex === cell.index && dragFromIndex !== cell.index ? '3px dashed var(--builder-accent, #10b981)' : 'none',
+          outlineOffset: '-3px',
+          transition: 'opacity 0.15s, outline 0.15s',
+          ...(hasHighlightLayout ? { gridArea: cell.areaName } : {}),
+          ...(cell.colSpan > 1 ? { gridColumn: `span ${cell.colSpan}` } : {}),
+        }"
+        @dragstart="onDragStart($event, cell.index)"
+        @dragover="onDragOver($event, cell.index)"
+        @dragleave="onDragLeave"
+        @drop="onDrop($event, cell.index)"
+        @dragend="onDragEnd"
+        @dblclick="toggleHighlight(cell.index)"
+      />
+
+      <!-- Card legado (fallback quando sem template dinamico) -->
       <BuilderFlyerProductCard
-        v-if="cell.product"
+        v-else-if="cell.product && !activeCardTemplate"
         :product="cell.product"
         :is-highlight="cell.isHighlight"
         :columns="columns"
         :box-index="cell.index"
+        :page-product-count="pageProductCount"
         draggable="true"
         :style="{
           minHeight: 0,

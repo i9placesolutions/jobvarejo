@@ -67,14 +67,14 @@ const backgroundStyle = computed(() => {
 })
 
 // ── Padding ─────────────────────────────────────────────────────────────────
-const paddingStyle = computed(() => {
+const paddingStyle = computed<string>(() => {
   const p = props.tagStyle?.css_config?.padding || 'normal'
   const map: Record<string, string> = {
     compact: '0.15em 0.4em',
     normal: '0.25em 0.5em',
     spacious: '0.4em 0.8em',
   }
-  return map[p] || map.normal
+  return map[p] || map.normal || '0.25em 0.5em'
 })
 
 // ── Price scale ─────────────────────────────────────────────────────────────
@@ -304,6 +304,7 @@ const discountPercent = computed(() => {
   if (!orig || !offer || orig <= 0) return null
   return Math.round(((orig - offer) / orig) * 100)
 })
+const barcodeValue = computed(() => (props.product as BuilderFlyerProduct & { barcode?: string }).barcode || '')
 
 // ── Symbolic price: realistic Brazilian coins & notes ───────────────────────
 const symbolicItems = computed(() => {
@@ -371,12 +372,14 @@ const priceFormatted = computed(() => priceParts.value ? `${priceParts.value.int
   <!-- none: no price tag -->
   <div v-if="mode === 'none'" />
 
+  <BuilderAutoScaleBox v-else class="w-full h-full">
+
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- ESTILOS CUSTOMIZADOS DE ETIQUETA (intercepta antes dos modos)      -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
 
   <!-- EXPLOSAO: estrela irregular -->
-  <div v-else-if="priceVisualStyle === 'explodir' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: bgColor, border: `2px solid ${textColor}`, borderRadius: '50% 40% 55% 45% / 45% 55% 40% 50%', padding: `${0.2*s}em ${0.4*s}em`, transform: 'rotate(-2deg)', boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }">
+  <div v-if="priceVisualStyle === 'explodir' && priceParts" class="inline-flex items-baseline justify-center relative overflow-hidden" :style="{ background: bgColor, border: `2px solid ${textColor}`, borderRadius: '50% 40% 55% 45% / 45% 55% 40% 50%', padding: `${0.2*s}em ${0.4*s}em`, transform: 'rotate(-2deg)', boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }">
     <div v-if="bgImageStyle" :style="bgImageStyle" />
     <span class="font-bold relative z-1" :style="{ fontSize: `${0.45*s}em`, color: textColor }">R$</span>
     <span class="font-black relative z-1" :style="{ fontSize: `${1.3*s}em`, color: textColor, lineHeight: '1' }">{{ priceInt }}</span>
@@ -784,13 +787,13 @@ const priceFormatted = computed(() => priceParts.value ? `${priceParts.value.int
 
     <!-- ── Gondola: barcode ── -->
     <div
-      v-if="showBarcode && product.barcode"
+      v-if="showBarcode && barcodeValue"
       class="mt-1 flex flex-col items-center"
     >
       <div class="flex items-end gap-px" :style="{ height: `${0.6 * s}em` }">
         <div v-for="i in 20" :key="i" class="bg-current" :style="{ width: i % 3 === 0 ? '2px' : '1px', height: `${40 + (i * 7) % 30}%`, opacity: 0.7 }" />
       </div>
-      <span class="font-mono opacity-50 leading-none mt-0.5" :style="{ fontSize: `${0.25 * s}em` }">{{ product.barcode }}</span>
+      <span class="font-mono opacity-50 leading-none mt-0.5" :style="{ fontSize: `${0.25 * s}em` }">{{ barcodeValue }}</span>
     </div>
 
     <!-- ── Gondola: validity ── -->
@@ -809,6 +812,7 @@ const priceFormatted = computed(() => priceParts.value ? `${priceParts.value.int
       :style="{ borderColor: bgColor }"
     />
   </div>
+  </BuilderAutoScaleBox>
 </template>
 
 <style scoped>
