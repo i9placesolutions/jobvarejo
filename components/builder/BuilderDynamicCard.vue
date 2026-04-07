@@ -4,7 +4,7 @@
  * O template define a direcao (column/row), proporcao da imagem, e estilo visual.
  * O layout se adapta a qualquer tamanho de box no grid automaticamente.
  */
-import type { BuilderFlyerProduct, BuilderCardTemplate, BuilderBadgeStyle, CardTemplateElement } from '~/types/builder'
+import type { BuilderFlyerProduct, BuilderCardTemplate, BuilderBadgeStyle, CardTemplateElement, BuilderPriceTagStyle } from '~/types/builder'
 import { getBuilderCardAdaptiveBudget, getBuilderCardBaseFont } from '~/utils/builder-card-responsive'
 
 const props = defineProps<{
@@ -15,7 +15,7 @@ const props = defineProps<{
   pageProductCount?: number
 }>()
 
-const { flyer } = useBuilderFlyer()
+const { flyer, priceTagStyles } = useBuilderFlyer()
 const fc = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
 const cardBg = computed(() => fc.value.card_bg_color || '#ffffff')
 const cardText = computed(() => fc.value.card_text_color || '#000000')
@@ -23,12 +23,45 @@ const imageScale = computed(() => {
   const raw = Number(fc.value.image_scale || 1)
   return Math.min(Math.max(raw, 0.5), 2.2)
 })
+const priceTagStyle = computed<BuilderPriceTagStyle | null>(() => {
+  const styleId = props.product.price_tag_style_id || flyer.value?.price_tag_style_id
+  if (!styleId) return null
+  return priceTagStyles.value.find(s => s.id === styleId) || null
+})
 
 // ── Config do template ──
 const style = computed(() => props.template.card_style || {})
-const direction = computed(() => style.value.direction || 'column')
-const imagePosition = computed(() => style.value.imagePosition || 'top')
-const imageSize = computed(() => style.value.imageSize || '55%')
+const direction = computed(() => {
+    const d = style.value.direction
+    if (d) return d
+    const layout = style.value.layout
+    if (layout === 'horizontal') return 'row'
+    if (layout === 'vertical') return 'column'
+    return 'column'
+  })
+const imagePosition = computed(() => {
+    if (style.value.imagePosition) return style.value.imagePosition
+    const imgEl = props.template.elements?.find(e => e.type === 'image')
+    if (imgEl?.slot) {
+      if (imgEl.slot === 'left') return 'left'
+      if (imgEl.slot === 'right') return 'right'
+      if (imgEl.slot === 'background') return 'top'
+    }
+    return 'top'
+  })
+const imageSize = computed(() => {
+    if (style.value.imageSize) return style.value.imageSize
+    const imgEl = props.template.elements?.find(e => e.type === 'image')
+    if (imgEl) {
+      if (isHorizontal.value) {
+        const w = (imgEl as any).width || imgEl.w
+        if (w && w !== 'auto' && w !== '100%') return w
+      }
+      const h = (imgEl as any).height || imgEl.h
+      if (h && h !== 'auto' && h !== '100%') return h
+    }
+    return '55%'
+  })
 const rawImageSize = computed(() => {
   const parsed = Number.parseInt(String(imageSize.value || '55%'), 10)
   return Number.isFinite(parsed) ? parsed : 55
@@ -67,6 +100,9 @@ const resolveImgUrl = (img: string | null | undefined) => {
 }
 
 const imageUrl = computed(() => resolveImgUrl(props.product.custom_image))
+const imageLoadFailed = ref(false)
+const onImageError = () => { imageLoadFailed.value = true }
+watch(() => props.product.custom_image, () => { imageLoadFailed.value = false })
 const extraImageUrls = computed(() => {
   const extras = props.product.extra_images || []
   return extras.map((img: string) => resolveImgUrl(img)).filter(Boolean) as string[]
@@ -262,80 +298,97 @@ const hasEl = (type: string): boolean => {
   return true
 }
 
+// ── Contraste adaptativo (WCAG) ──
+const getContrastColor = (bgHex: string): string => {
+  const hex = (bgHex || '#ffffff').replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16) || 0
+  const g = parseInt(hex.substring(2, 4), 16) || 0
+  const b = parseInt(hex.substring(4, 6), 16) || 0
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.5 ? '#1a1f3a' : '#ffffff'
+}
+const resolvedCardBg = computed(() => style.value.bg || cardBg.value || '#ffffff')
+const adaptiveTextColor = computed(() => getContrastColor(resolvedCardBg.value))
+
 // ── Estilos ──
-const containerStyle = computed(() => ({
-  display: 'flex',
-  flexDirection: (isHorizontal.value ? 'row' : 'column') as any,
-  width: '100%',
-  height: '100%',
-  background: style.value.bg?.includes('var(') ? cardBg.value : (style.value.bg || cardBg.value),
-  border: props.isHighlight ? '3px solid var(--builder-accent, #10b981)' : (style.value.border || 'none'),
-  borderRadius: style.value.borderRadius || fc.value.card_border_radius || '8px',
-  boxShadow: style.value.boxShadow || '0 1px 4px rgba(0,0,0,0.08)',
-  overflow: style.value.overflow || 'hidden',
-  color: cardText.value,
-  position: 'relative' as const,
-  gap: style.value.gap || '0',
-}))
+const containerStyle = computed(() => {
+  const bg = resolvedCardBg.value
+  const base = {
+    display: 'flex',
+    width: '100%',
+    height: '100%',
+    minHeight: 0,
+    alignSelf: 'stretch',
+    fontSize: `${baseFontSize.value}px`,
+    background: bg,
+    border: props.isHighlight ? '3px solid var(--builder-accent, #10b981)' : (style.value.border || 'none'),
+    borderRadius: style.value.borderRadius || fc.value.card_border_radius || '8px',
+    boxShadow: style.value.boxShadow || '0 2px 8px rgba(0,0,0,0.15)',
+    overflow: 'hidden' as const,
+    color: adaptiveTextColor.value,
+    position: 'relative' as const,
+  }
+  if (!isHorizontal.value) {
+    return { ...base, flexDirection: 'column' as const, gap: '0' }
+  }
+  return { ...base, flexDirection: 'row' as const, gap: style.value.gap || '0' }
+})
 
 const imageSectionStyle = computed(() => {
   if (isHorizontal.value) {
-    const pct = imageSectionPercent.value
     return {
-      width: `${pct}%`,
+      width: `${imageSectionPercent.value}%`,
       height: '100%',
-      flexShrink: 0,
-      flexGrow: 0,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexShrink: 0, flexGrow: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
       overflow: 'hidden' as const,
-      position: 'relative' as const,
+      position: 'relative' as const, zIndex: 1,
     }
   }
-  // Vertical: imageSize controla quanto do card a imagem ocupa.
-  // flex-grow proporcional ao %, sem maxHeight — o flex distribui naturalmente.
-  // Nome e preco tem flexShrink:0, entao a imagem pega o que sobra.
-  const pct = imageSectionPercent.value
-  const flexGrow = Math.max(1, Math.round(pct / 10))
-  const basePadding = imageStagePadding.value
   return {
     width: '100%',
-    flex: `${flexGrow} 1 0%`,
+    flex: '1 1 0%',
     minHeight: 0,
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    overflow: 'visible' as const,
-    padding: basePadding !== '0' ? basePadding : '0',
-    marginTop: style.value.imageMarginTop ? `${style.value.imageMarginTop}px` : undefined,
-    marginBottom: style.value.imageMarginBottom ? `${style.value.imageMarginBottom}px` : undefined,
-    position: 'relative' as const,
-    zIndex: shouldOverlayPrice.value ? 1 : undefined,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden' as const,
+    padding: shouldOverlayPrice.value ? imageStagePadding.value : '2% 8%',
+    position: 'relative' as const, zIndex: 1,
   }
 })
 
-const infoSectionStyle = computed(() => {
+const getInfoSectionStyle = (isAfter: boolean) => {
   if (isHorizontal.value) {
-    return { flex: 1, display: 'flex', flexDirection: 'column' as const, justifyContent: 'center', alignItems: 'stretch', overflow: 'hidden' as const, minWidth: 0, padding: style.value.padding || '2% 3%', gap: style.value.gap || '0' }
+    return { flex: 1, display: 'flex', flexDirection: 'column' as const, justifyContent: 'center', alignItems: 'stretch', overflow: 'hidden' as const, minWidth: 0, padding: style.value.padding || '2% 3%', gap: style.value.gap || '0', position: 'relative' as const, zIndex: 5 }
   }
-  // Vertical: info nao cresce, so ocupa o espaco do conteudo
+  if (isAfter) {
+    return {
+      position: 'absolute' as const,
+      bottom: '2%',
+      left: '5%',
+      right: '5%',
+      width: 'auto',
+      zIndex: 10,
+      display: 'flex',
+      flexDirection: 'column' as const,
+      alignItems: 'center',
+      overflow: 'visible' as const,
+      background: 'transparent',
+    }
+  }
   return {
     width: '100%',
-    flexShrink: 0,
-    flexGrow: 0,
+    flex: '0 0 auto',
     display: 'flex',
     flexDirection: 'column' as const,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'stretch',
-    overflow: 'hidden' as const,
-    minWidth: 0,
-    padding: style.value.padding || '2% 3%',
-    gap: style.value.gap || '0',
+    overflow: 'visible' as const,
     position: 'relative' as const,
-    zIndex: 2,
+    zIndex: 3,
   }
-})
+}
+const infoSectionStyle = computed(() => getInfoSectionStyle(false))
+const infoSectionAfterStyle = computed(() => getInfoSectionStyle(true))
 
 // ── Estilos dos elementos individuais ──
 const nameEl = computed(() => getEl('text'))
@@ -347,30 +400,13 @@ const imgEl = computed(() => getEl('image'))
 const imageStyle = computed(() => ({
   width: '100%',
   height: '100%',
-  maxWidth: isHorizontal.value ? '100%' : shouldOverlayPrice.value
-    ? (isVeryTallVerticalCard.value ? '122%' : isTallVerticalCard.value ? '116%' : '112%')
-    : (isTallVerticalCard.value ? '108%' : '104%'),
-  maxHeight: isHorizontal.value ? '100%' : shouldOverlayPrice.value
-    ? (isVeryTallVerticalCard.value ? '140%' : isTallVerticalCard.value ? '134%' : '128%')
-    : (isTallVerticalCard.value ? '126%' : '120%'),
-  minWidth: 0,
-  minHeight: 0,
+  maxWidth: '100%',
+  maxHeight: '100%',
   display: 'block',
   objectFit: (style.value.imageObjectFit || imgEl.value?.objectFit || 'contain') as any,
-  objectPosition: isHorizontal.value
-    ? 'center center'
-    : imagePosition.value === 'bottom'
-      ? 'center bottom'
-      : 'center top',
+  objectPosition: 'center center',
   borderRadius: imgEl.value?.borderRadius || '0',
-  transform: `${!isHorizontal.value && isNameBeforeImage.value && imagePosition.value !== 'bottom'
-    ? `translateY(-${style.value.imageLift || Math.min(18, Math.max(6, Math.round((imageSectionPercent.value - 35) / 4)))}%) `
-    : ''}scale(${effectiveImageScale.value})`,
-  transformOrigin: isHorizontal.value
-    ? 'center center'
-    : imagePosition.value === 'bottom'
-      ? 'center bottom'
-      : 'center top',
+  filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
 }))
 const duplicateImageSharedStyle = computed(() => ({
   objectFit: (imgEl.value?.objectFit || 'contain') as const,
@@ -532,22 +568,21 @@ const getGridDuplicateStyle = (index: number) => {
 
 const nameStyle = computed(() => {
   const el = nameEl.value
+  const nameColor = style.value.nameColor || ((el?.color && el.color !== 'inherit') ? el.color : adaptiveTextColor.value)
   return {
-    fontWeight: style.value.nameFontWeight || el?.fontWeight || 800,
-    fontFamily: style.value.nameFontFamily || el?.fontFamily || fc.value.name_font_family || 'inherit',
+    fontWeight: style.value.nameFontWeight || el?.fontWeight || 900,
+    fontFamily: style.value.nameFontFamily || el?.fontFamily || fc.value.name_font_family || "'Montserrat', 'Anton', sans-serif",
     textAlign: (style.value.nameTextAlign || el?.textAlign || 'center') as any,
     textTransform: (style.value.nameTextTransform || el?.textTransform || fc.value.name_text_transform || 'uppercase') as any,
-    color: style.value.nameColor || ((el?.color && el.color !== 'inherit') ? el.color : 'inherit'),
-    lineHeight: String(nameLineHeight.value),
-    padding: el?.padding || style.value.namePadding || (!isHorizontal.value && isNameBeforeImage.value ? '1% 3% 2.5%' : '1% 3% 2.5%'),
-    marginBottom: style.value.nameMarginBottom ? `${style.value.nameMarginBottom}px` : undefined,
+    color: nameColor,
+    background: 'transparent',
+    lineHeight: '1.05',
+    padding: el?.padding || style.value.namePadding || '3% 5% 1%',
     minWidth: 0,
-    minHeight: 0,
-    height: 'auto',
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'stretch',
-    justifyContent: !isHorizontal.value && isNameBeforeImage.value ? 'flex-start' : 'center',
+    justifyContent: 'center',
     flexShrink: 0,
     flexGrow: 0,
   }
@@ -559,33 +594,24 @@ const nameTextStyle = computed(() => ({
   textAlign: nameStyle.value.textAlign,
   textTransform: nameStyle.value.textTransform,
   color: nameStyle.value.color,
-  display: '-webkit-box',
-  WebkitLineClamp: adaptiveNameMaxLines.value,
-  WebkitBoxOrient: 'vertical',
-  overflow: 'hidden',
+  lineHeight: '1.05',
+  wordBreak: 'break-word' as const,
+  letterSpacing: '-0.02em',
 }))
 
 const priceStyle = computed(() => {
-  const el = priceEl.value
-  const hasOffset = style.value.priceOffsetX || style.value.priceOffsetY
+  // Container de dimensoes para o BuilderAutoScaleBox — SEM background proprio
+  const w = cardWidth.value || 300
+  const tagWidth = Math.max(240, Math.round(w * 0.90))
+  const tagHeight = Math.max(100, Math.round(tagWidth * 0.35))
   return {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: style.value.priceAlign || 'center',
-    padding: el?.padding || style.value.pricePadding || '0 3%',
-    flexShrink: 0,
-    flexGrow: 0,
-    width: style.value.priceWidth || '100%',
-    minWidth: 0,
-    minHeight: style.value.priceHeight ? `${style.value.priceHeight}px` : `${priceSlotHeight.value}px`,
-    height: 'auto',
-    marginTop: style.value.priceMarginTop ? `${style.value.priceMarginTop}px` : undefined,
-    marginBottom: style.value.priceMarginBottom ? `${style.value.priceMarginBottom}px` : undefined,
-    background: style.value.priceBg || el?.bg || undefined,
-    borderRadius: style.value.priceBorderRadius || el?.borderRadius || undefined,
-    position: hasOffset ? 'relative' as const : undefined,
-    left: style.value.priceOffsetX ? `${style.value.priceOffsetX}%` : undefined,
-    top: style.value.priceOffsetY ? `${style.value.priceOffsetY}%` : undefined,
+    justifyContent: 'center',
+    width: `${tagWidth}px`,
+    height: `${tagHeight}px`,
+    background: 'transparent',
+    fontSize: priceScale.value !== 1 ? `${priceScale.value}em` : undefined,
   }
 })
 
@@ -618,11 +644,9 @@ const unitStyle = computed(() => {
 })
 const priceTagWrapperStyle = computed(() => ({
   width: '100%',
-  height: '100%',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: priceScale.value !== 1 ? `${priceScale.value}em` : undefined,
 }))
 
 // ── Determinar ordem visual real do template ──
@@ -644,6 +668,7 @@ const makeFallbackElement = (
 const flowElements = computed<CardTemplateElement[]>(() => {
   const configured = (props.template.elements || [])
     .filter(e => e.type !== 'shape' && e.type !== 'separator' && e.type !== 'badge')
+    .map(e => (e.type as string) === 'name' ? { ...e, type: 'text' as const } : e)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   if (configured.length) return configured
@@ -715,6 +740,21 @@ const infoTypesAfterImage = computed(() => {
 <template>
   <div ref="rootRef" :style="containerStyle">
 
+    <!-- Marca dagua sutil repetida no fundo -->
+    <div
+      v-if="!isHorizontal"
+      :style="{
+        position: 'absolute', inset: '0', zIndex: 0, overflow: 'hidden',
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center',
+        gap: '8px', padding: '10px', pointerEvents: 'none', opacity: 0.035,
+      }"
+    >
+      <span
+        v-for="i in 30" :key="`wm-${i}`"
+        :style="{ fontSize: '14px', fontWeight: 900, color: adaptiveTextColor, whiteSpace: 'nowrap', letterSpacing: '0.1em' }"
+      >OFERTAS</span>
+    </div>
+
     <!-- Badge (sempre absoluto no canto) -->
     <div
       v-if="hasEl('badge') && product.badge_style_id"
@@ -756,9 +796,10 @@ const infoTypesAfterImage = computed(() => {
           />
         </div>
 
-        <div v-else-if="elType === 'price' && product.price_mode !== 'none' && !shouldOverlayPrice" :style="priceStyle">
+        <div v-else-if="elType === 'price' && (!product.price_mode || product.price_mode !== 'none') && !shouldOverlayPrice" :style="priceStyle">
           <BuilderFlyerPriceTag
             :product="product"
+            :tag-style="priceTagStyle"
             :is-highlight="isHighlight"
             :style="priceTagWrapperStyle"
           />
@@ -809,15 +850,18 @@ const infoTypesAfterImage = computed(() => {
         </div>
       </template>
       <img
-        v-else
+        v-else-if="!imageLoadFailed"
         :src="imageUrl"
         @load="onProductImageLoad"
+        @error="onImageError"
         alt=""
         :style="imageStyle"
       />
+      <span v-else :style="{ fontSize: '10px', color: '#ccc', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }">Erro img</span>
       <div v-if="shouldOverlayPrice" :style="overlayPriceStyle">
         <BuilderFlyerPriceTag
           :product="product"
+          :tag-style="priceTagStyle"
           :is-highlight="isHighlight"
           :style="priceTagWrapperStyle"
         />
@@ -825,19 +869,20 @@ const infoTypesAfterImage = computed(() => {
     </div>
 
     <!-- Imagem placeholder quando nao tem -->
-    <div v-else :style="{ ...imageSectionStyle, background: '#f5f5f5', alignItems: 'center', justifyContent: 'center' }">
-      <span :style="{ fontSize: '10px', color: '#ccc' }">Sem imagem</span>
+    <div v-else :style="{ ...imageSectionStyle, background: 'rgba(0,0,0,0.03)', alignItems: 'center', justifyContent: 'center' }">
+      <span :style="{ fontSize: '11px', color: '#aaa', fontWeight: 500, opacity: 0.6 }">Sem imagem</span>
       <div v-if="shouldOverlayPrice" :style="overlayPriceStyle">
         <BuilderFlyerPriceTag
           :product="product"
+          :tag-style="priceTagStyle"
           :is-highlight="isHighlight"
           :style="priceTagWrapperStyle"
         />
       </div>
     </div>
 
-    <!-- BLOCO DE INFORMACOES DEPOIS DA IMAGEM -->
-    <div v-if="infoTypesAfterImage.length" :style="infoSectionStyle">
+    <!-- BLOCO DE INFORMACOES DEPOIS DA IMAGEM (etiqueta absolute no rodape) -->
+    <div v-if="infoTypesAfterImage.length" :style="infoSectionAfterStyle">
       <template v-for="elType in infoTypesAfterImage" :key="`after-${elType}`">
         <div v-if="elType === 'text' && product.custom_name" :style="nameStyle">
           <BuilderAdaptiveText
@@ -851,9 +896,10 @@ const infoTypesAfterImage = computed(() => {
           />
         </div>
 
-        <div v-else-if="elType === 'price' && product.price_mode !== 'none' && !shouldOverlayPrice" :style="priceStyle">
+        <div v-else-if="elType === 'price' && (!product.price_mode || product.price_mode !== 'none') && !shouldOverlayPrice" :style="priceStyle">
           <BuilderFlyerPriceTag
             :product="product"
+            :tag-style="priceTagStyle"
             :is-highlight="isHighlight"
             :style="priceTagWrapperStyle"
           />

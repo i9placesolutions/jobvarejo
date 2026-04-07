@@ -22,12 +22,7 @@ const activeCardTemplate = computed(() => {
   if (cardTemplates.value.length > 0) return cardTemplates.value[0] || null
   return null
 })
-const tplStyle = computed(() => {
-  const tpl = activeCardTemplate.value
-  const s = tpl?.card_style || {}
-  console.log('[Card] activeCardTemplate:', tpl?.name || 'NENHUM', '| cardTemplates.length:', cardTemplates.value.length, '| tplStyle:', JSON.stringify(s))
-  return s
-})
+const tplStyle = computed(() => activeCardTemplate.value?.card_style || {})
 
 // Badge text: usa badge_style_id como texto do badge
 const badgeText = computed(() => props.product.badge_style_id || '')
@@ -247,7 +242,7 @@ const classicoImageAreaStyle = computed(() => ({
   justifyContent: 'center',
 }))
 const classicoImageStageStyle = computed(() => ({
-  width: isVeryTallVerticalCard.value ? '120%' : isTallVerticalCard.value ? '114%' : '108%',
+  width: '100%',
   height: '100%',
   display: 'flex',
   alignItems: 'flex-start',
@@ -258,8 +253,8 @@ const classicoImageStageStyle = computed(() => ({
 const classicoSingleImageStyle = computed(() => ({
   width: '100%',
   height: '100%',
-  maxWidth: isVeryTallVerticalCard.value ? '118%' : isTallVerticalCard.value ? '114%' : '108%',
-  maxHeight: isVeryTallVerticalCard.value ? '132%' : isTallVerticalCard.value ? '126%' : '120%',
+  maxWidth: '100%',
+  maxHeight: '100%',
   objectFit: 'contain' as const,
   display: 'block',
 }))

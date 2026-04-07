@@ -13,6 +13,8 @@ import {
   CreditCard,
   PanelTop,
   PanelBottom,
+  Target,
+  HelpCircle,
 } from 'lucide-vue-next'
 
 definePageMeta({
@@ -119,6 +121,22 @@ const sections = ref<SectionItem[]>([
     href: '/admin/canva/templates',
     icon: Image,
     countKey: 'canvaTemplates',
+    count: null
+  },
+  {
+    title: 'Segmentos',
+    description: 'Segmentos de mercado para recomendacao de temas (Supermercado, Padaria, etc)',
+    href: '/admin/builder/segments',
+    icon: Target,
+    countKey: 'segments',
+    count: null
+  },
+  {
+    title: 'QR Academy',
+    description: 'Central de ajuda e tutoriais internos do QROfertas',
+    href: '/admin/builder/qr-academy',
+    icon: HelpCircle,
+    countKey: 'qrAcademy',
     count: null
   }
 ])

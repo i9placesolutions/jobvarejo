@@ -1,723 +1,638 @@
 <script setup lang="ts">
-import type { CardTemplateElement, CardTemplateStyle } from '~/types/builder'
+import type { CardTemplateElement } from '~/types/builder'
+import { useElementDragResize, type ResizeHandle } from '~/composables/useElementDragResize'
 
 definePageMeta({ layout: false, middleware: ['auth', 'admin'], ssr: false })
-const { getApiAuthHeaders } = useApiAuth()
 
-type CardTemplate = {
-  id: string; name: string; thumbnail: string | null; category: string
-  elements: CardTemplateElement[]; card_style: CardTemplateStyle
-  is_active: boolean; sort_order: number
-}
+const {
+  items, isLoading, error,
+  editingId, formName, formCategory, formIsActive,
+  elements, cardStyle,
+  selectedElementId, selectedElement,
+  liveTemplate,
+  fetchTemplates, saveTemplate, deleteTemplate,
+  openEditor, addElement, removeElement, duplicateElement,
+  updateElement, updateSelectedElement, selectElement,
+  applyPreset, presets, mockProducts,
+} = useCardTemplateEditor()
 
-const items = ref<CardTemplate[]>([])
-const isLoading = ref(false)
-const error = ref('')
-const editingId = ref<string | null>(null)
+// ── Modo: lista ou editor ──
 const mode = ref<'list' | 'editor'>('list')
+const previewMode = ref<'1' | '2x2' | '3x3'>('2x2')
+const showPreview = ref(true)
 
-// ── Form ──
-const formName = ref('')
-const formCategory = ref('geral')
-const formIsActive = ref(true)
-const formSortOrder = ref(0)
+// ── Canvas drag/resize ──
+const canvasRef = ref<HTMLElement | null>(null)
+const { startDrag, startResize, isDragging, isResizing } = useElementDragResize(
+  canvasRef, elements, selectedElementId
+)
 
-// ── Card style ──
-const cardStyle = ref<CardTemplateStyle>({
-  bg: '#ffffff', borderRadius: '8px', overflow: 'hidden',
-  boxShadow: '0 1px 4px rgba(0,0,0,0.08)', border: 'none', padding: '4%',
-  direction: 'column', imagePosition: 'top', imageSize: '55%', gap: '2px',
+// ── Helpers ──
+const pct = (v: string | undefined) => parseInt(v || '0') || 0
+const categories = ['geral', 'basico', 'compacto', 'destaque', 'moderno', 'tradicional', 'premium']
+const elMeta: Record<string, { icon: string; label: string; color: string; border: string }> = {
+  text:        { icon: 'T',  label: 'Nome',    color: '#3b82f6', border: '#93c5fd' },
+  image:       { icon: '◻', label: 'Imagem',  color: '#10b981', border: '#6ee7b7' },
+  price:       { icon: '$',  label: 'Preco',   color: '#ef4444', border: '#fca5a5' },
+  badge:       { icon: '★',  label: 'Selo',    color: '#f59e0b', border: '#fcd34d' },
+  unit:        { icon: 'g',  label: 'Unidade', color: '#8b5cf6', border: '#c4b5fd' },
+  observation: { icon: '…',  label: 'Obs',     color: '#6366f1', border: '#a5b4fc' },
+  shape:       { icon: '◆',  label: 'Forma',   color: '#ec4899', border: '#f9a8d4' },
+}
+// ── Formatos de card (aspect ratio) ──
+const CARD_FORMATS = [
+  { id: 'feed',     label: 'Feed',     w: 340, h: 340, desc: '1:1' },
+  { id: 'story',    label: 'Story',    w: 260, h: 460, desc: '9:16' },
+  { id: 'reels',    label: 'Reels',    w: 260, h: 460, desc: '9:16' },
+  { id: 'vertical', label: 'Vertical', w: 340, h: 460, desc: '3:4' },
+  { id: 'tv-h',     label: 'TV Horiz', w: 460, h: 260, desc: '16:9' },
+  { id: 'tv-v',     label: 'TV Vert',  w: 260, h: 460, desc: '9:16' },
+  { id: 'a4',       label: 'A4',       w: 320, h: 450, desc: '210x297' },
+  { id: 'a4-h',     label: 'A4 Horiz', w: 450, h: 320, desc: '297x210' },
+  { id: 'cartaz',   label: 'Cartaz',   w: 340, h: 480, desc: 'Poster' },
+  { id: 'livre',    label: 'Livre',    w: 340, h: 460, desc: 'Custom' },
+]
+const activeFormat = ref(CARD_FORMATS[3]!) // Vertical como padrao
+const canvasWidth = computed(() => activeFormat.value.w)
+const canvasHeight = computed(() => activeFormat.value.h)
+
+// Preview: tamanho proporcional ao formato ativo, cabe na sidebar de 320px
+const pvMaxW = 280
+const pvMaxH = 500
+const pvSingle = computed(() => {
+  const ratio = activeFormat.value.w / activeFormat.value.h
+  let w: number, h: number
+  if (ratio >= 1) {
+    // Horizontal ou quadrado
+    w = Math.min(pvMaxW, activeFormat.value.w * 0.6)
+    h = w / ratio
+  } else {
+    // Vertical (story, reels, etc)
+    h = Math.min(pvMaxH, activeFormat.value.h * 0.7)
+    w = h * ratio
+  }
+  // Garantir que cabe
+  if (w > pvMaxW) { w = pvMaxW; h = w / ratio }
+  if (h > pvMaxH) { h = pvMaxH; w = h * ratio }
+  return { w: Math.round(w), h: Math.round(h) }
+})
+const pvGrid = computed(() => {
+  // Grid usa mesma proporcao mas um pouco maior
+  const ratio = activeFormat.value.w / activeFormat.value.h
+  let w: number, h: number
+  if (ratio >= 1) {
+    w = Math.min(pvMaxW, activeFormat.value.w * 0.7)
+    h = w / ratio
+  } else {
+    h = Math.min(pvMaxH, activeFormat.value.h * 0.78)
+    w = h * ratio
+  }
+  if (w > pvMaxW) { w = pvMaxW; h = w / ratio }
+  if (h > pvMaxH) { h = pvMaxH; w = h * ratio }
+  return { w: Math.round(w), h: Math.round(h) }
 })
 
-// ── Elementos ──
-const elements = ref<CardTemplateElement[]>([])
-const showJsonEditor = ref(false)
-const jsonText = ref('')
-
-const categories = ['geral', 'basico', 'compacto', 'destaque', 'moderno', 'tradicional', 'premium']
-
-// ── Presets rapidos ──
-const PRESETS: Record<string, { style: Partial<CardTemplateStyle>; elements: Partial<CardTemplateElement>[] }> = {
-  'Classico (Nome/Imagem/Preco)': {
-    style: { direction: 'column', imagePosition: 'top', imageSize: '55%', padding: '4%' },
-    elements: [
-      { id: 'name', type: 'text', slot: 'product_name', order: 0, fontWeight: 800, textAlign: 'center', textTransform: 'uppercase' },
-      { id: 'img', type: 'image', slot: 'product_image', order: 1, objectFit: 'contain' },
-      { id: 'price', type: 'price', slot: 'offer_price', order: 2 },
-      { id: 'unit', type: 'unit', slot: 'unit', order: 3, showIf: 'has_value' },
-    ],
-  },
-  'Lateral (Imagem Esquerda)': {
-    style: { direction: 'row', imagePosition: 'left', imageSize: '40%', padding: '3%' },
-    elements: [
-      { id: 'img', type: 'image', slot: 'product_image', order: 0, objectFit: 'contain' },
-      { id: 'name', type: 'text', slot: 'product_name', order: 1, fontWeight: 700, textAlign: 'left', textTransform: 'uppercase' },
-      { id: 'price', type: 'price', slot: 'offer_price', order: 2 },
-      { id: 'obs', type: 'observation', slot: 'observation', order: 3, showIf: 'has_value' },
-    ],
-  },
-  'Premium (Imagem Grande)': {
-    style: { direction: 'column', imagePosition: 'top', imageSize: '65%', padding: '3%', gap: '0' },
-    elements: [
-      { id: 'img', type: 'image', slot: 'product_image', order: 0, objectFit: 'cover' },
-      { id: 'name', type: 'text', slot: 'product_name', order: 1, fontWeight: 800, textAlign: 'left' },
-      { id: 'price', type: 'price', slot: 'offer_price', order: 2 },
-    ],
-  },
-  'Vitrine (Imagem + Overlay Escuro)': {
-    style: { direction: 'column', imagePosition: 'top', imageSize: '70%', padding: '0', bg: '#111', gap: '0' },
-    elements: [
-      { id: 'img', type: 'image', slot: 'product_image', order: 0, objectFit: 'cover' },
-      { id: 'gradient', type: 'shape', slot: '', x: '0%', y: '45%', w: '100%', h: '25%', bg: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.9))' },
-      { id: 'name', type: 'text', slot: 'product_name', order: 1, fontWeight: 800, textAlign: 'center', color: '#ffffff' },
-      { id: 'price', type: 'price', slot: 'offer_price', order: 2, bg: 'rgba(0,0,0,0.5)' },
-    ],
-  },
-  'Etiqueta (Horizontal Compacta)': {
-    style: { direction: 'row', imagePosition: 'left', imageSize: '22%', padding: '2%', border: '2px solid #E53935' },
-    elements: [
-      { id: 'img', type: 'image', slot: 'product_image', order: 0, objectFit: 'contain' },
-      { id: 'name', type: 'text', slot: 'product_name', order: 1, fontWeight: 700, textAlign: 'left', textTransform: 'uppercase' },
-      { id: 'obs', type: 'observation', slot: 'observation', order: 2, showIf: 'has_value' },
-      { id: 'price', type: 'price', slot: 'offer_price', order: 3 },
-      { id: 'unit', type: 'unit', slot: 'unit', order: 4, showIf: 'has_value' },
-    ],
-  },
-  'Dark (Fundo Escuro + Neon)': {
-    style: { direction: 'column', imagePosition: 'top', imageSize: '55%', padding: '4%', bg: '#1a1a2e', borderRadius: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.3)' },
-    elements: [
-      { id: 'img', type: 'image', slot: 'product_image', order: 0, objectFit: 'contain' },
-      { id: 'name', type: 'text', slot: 'product_name', order: 1, fontWeight: 800, textAlign: 'center', color: '#ffffff' },
-      { id: 'price', type: 'price', slot: 'offer_price', order: 2, color: '#00E5FF' },
-    ],
-  },
-  'Minimalista': {
-    style: { direction: 'column', imagePosition: 'top', imageSize: '50%', padding: '8%', bg: '#fafafa', borderRadius: '14px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: 'none' },
-    elements: [
-      { id: 'img', type: 'image', slot: 'product_image', order: 0, objectFit: 'contain' },
-      { id: 'name', type: 'text', slot: 'product_name', order: 1, fontWeight: 600, textAlign: 'center' },
-      { id: 'price', type: 'price', slot: 'offer_price', order: 2 },
-    ],
-  },
-  'Splash Promocional': {
-    style: { direction: 'column', imagePosition: 'top', imageSize: '50%', padding: '4%', bg: '#E53935', borderRadius: '12px', boxShadow: '0 4px 12px rgba(229,57,53,0.3)' },
-    elements: [
-      { id: 'badge', type: 'badge', slot: 'badge', showIf: 'has_value', x: '60%', y: '0%' },
-      { id: 'name', type: 'text', slot: 'product_name', order: 0, fontWeight: 900, textAlign: 'center', color: '#ffffff' },
-      { id: 'img', type: 'image', slot: 'product_image', order: 1, objectFit: 'contain' },
-      { id: 'price', type: 'price', slot: 'offer_price', order: 2 },
-    ],
-  },
+const HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
+const handleCursor: Record<ResizeHandle, string> = {
+  n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize',
+  nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize',
+}
+const handlePos: Record<ResizeHandle, string> = {
+  nw: 'top: -4px; left: -4px;',
+  n:  'top: -4px; left: 50%; transform: translateX(-50%);',
+  ne: 'top: -4px; right: -4px;',
+  e:  'top: 50%; right: -4px; transform: translateY(-50%);',
+  se: 'bottom: -4px; right: -4px;',
+  s:  'bottom: -4px; left: 50%; transform: translateX(-50%);',
+  sw: 'bottom: -4px; left: -4px;',
+  w:  'top: 50%; left: -4px; transform: translateY(-50%);',
 }
 
-const applyPreset = (name: string) => {
-  const p = PRESETS[name]
-  if (!p) return
-  cardStyle.value = { ...cardStyle.value, ...p.style }
-  elements.value = p.elements.map(e => ({
-    x: '0%', y: '0%', w: '100%', h: 'auto',
-    ...e,
-  } as CardTemplateElement))
-  if (!formName.value) formName.value = name
+// ── Acoes ──
+const goEdit = (item?: any) => { openEditor(item); mode.value = 'editor' }
+const goList = () => { mode.value = 'list' }
+const handleSave = async () => {
+  try { await saveTemplate(); goList() }
+  catch {}
 }
-
-const buildDefaultElements = (style: CardTemplateStyle): CardTemplateElement[] => {
-  const direction = style.direction || 'column'
-  const imagePosition = style.imagePosition || (direction === 'row' ? 'left' : 'top')
-
-  if (direction === 'row') {
-    if (imagePosition === 'right') {
-      return [
-        { id: 'name', type: 'text', slot: 'product_name', x: '0%', y: '0%', w: '100%', h: 'auto', order: 0, fontWeight: 800, textAlign: 'left', textTransform: 'uppercase' },
-        { id: 'price', type: 'price', slot: 'offer_price', x: '0%', y: '0%', w: '100%', h: 'auto', order: 1 },
-        { id: 'unit', type: 'unit', slot: 'unit', x: '0%', y: '0%', w: '100%', h: 'auto', order: 2, showIf: 'has_value' },
-        { id: 'observation', type: 'observation', slot: 'observation', x: '0%', y: '0%', w: '100%', h: 'auto', order: 3, showIf: 'has_value' },
-        { id: 'image', type: 'image', slot: 'product_image', x: '0%', y: '0%', w: '100%', h: 'auto', order: 4, objectFit: 'contain' },
-      ] as CardTemplateElement[]
-    }
-    return [
-      { id: 'image', type: 'image', slot: 'product_image', x: '0%', y: '0%', w: '100%', h: 'auto', order: 0, objectFit: 'contain' },
-      { id: 'name', type: 'text', slot: 'product_name', x: '0%', y: '0%', w: '100%', h: 'auto', order: 1, fontWeight: 800, textAlign: 'left', textTransform: 'uppercase' },
-      { id: 'price', type: 'price', slot: 'offer_price', x: '0%', y: '0%', w: '100%', h: 'auto', order: 2 },
-      { id: 'unit', type: 'unit', slot: 'unit', x: '0%', y: '0%', w: '100%', h: 'auto', order: 3, showIf: 'has_value' },
-      { id: 'observation', type: 'observation', slot: 'observation', x: '0%', y: '0%', w: '100%', h: 'auto', order: 4, showIf: 'has_value' },
-    ] as CardTemplateElement[]
-  }
-
-  if (imagePosition === 'bottom') {
-    return [
-      { id: 'name', type: 'text', slot: 'product_name', x: '0%', y: '0%', w: '100%', h: 'auto', order: 0, fontWeight: 800, textAlign: 'center', textTransform: 'uppercase' },
-      { id: 'price', type: 'price', slot: 'offer_price', x: '0%', y: '0%', w: '100%', h: 'auto', order: 1 },
-      { id: 'unit', type: 'unit', slot: 'unit', x: '0%', y: '0%', w: '100%', h: 'auto', order: 2, showIf: 'has_value' },
-      { id: 'observation', type: 'observation', slot: 'observation', x: '0%', y: '0%', w: '100%', h: 'auto', order: 3, showIf: 'has_value' },
-      { id: 'image', type: 'image', slot: 'product_image', x: '0%', y: '0%', w: '100%', h: 'auto', order: 4, objectFit: 'contain' },
-    ] as CardTemplateElement[]
-  }
-
-  return [
-    { id: 'name', type: 'text', slot: 'product_name', x: '0%', y: '0%', w: '100%', h: 'auto', order: 0, fontWeight: 800, textAlign: 'center', textTransform: 'uppercase' },
-    { id: 'image', type: 'image', slot: 'product_image', x: '0%', y: '0%', w: '100%', h: 'auto', order: 1, objectFit: 'contain' },
-    { id: 'price', type: 'price', slot: 'offer_price', x: '0%', y: '0%', w: '100%', h: 'auto', order: 2 },
-    { id: 'unit', type: 'unit', slot: 'unit', x: '0%', y: '0%', w: '100%', h: 'auto', order: 3, showIf: 'has_value' },
-    { id: 'observation', type: 'observation', slot: 'observation', x: '0%', y: '0%', w: '100%', h: 'auto', order: 4, showIf: 'has_value' },
-  ] as CardTemplateElement[]
-}
-
-// ── CRUD ──
-const fetchData = async () => {
-  isLoading.value = true; error.value = ''
-  try {
-    const data = await $fetch<any>('/api/admin/builder/card-templates', { headers: await getApiAuthHeaders() })
-    items.value = (Array.isArray(data) ? data : data?.cardTemplates ?? [])
-  } catch (err: any) { error.value = err.message || 'Erro ao carregar' }
-  finally { isLoading.value = false }
-}
-
-const saveItem = async () => {
-  error.value = ''
-  try {
-    const normalizedElements = elements.value.length
-      ? elements.value
-      : buildDefaultElements(cardStyle.value)
-    const payload = {
-      name: formName.value.trim(), category: formCategory.value,
-      elements: normalizedElements, card_style: cardStyle.value,
-      is_active: formIsActive.value, sort_order: formSortOrder.value,
-    }
-    if (!payload.name) throw new Error('Nome e obrigatorio')
-    if (editingId.value) {
-      await $fetch(`/api/admin/builder/card-templates/${editingId.value}`, { method: 'PUT', body: payload, headers: await getApiAuthHeaders() })
-    } else {
-      await $fetch('/api/admin/builder/card-templates', { method: 'POST', body: payload, headers: await getApiAuthHeaders() })
-    }
-    mode.value = 'list'; await fetchData()
-  } catch (err: any) { error.value = err.message || 'Erro ao salvar' }
-}
-
-const deleteItem = async (id: string) => {
+const handleDelete = async (id: string) => {
   if (!confirm('Excluir este template?')) return
-  try { await $fetch(`/api/admin/builder/card-templates/${id}`, { method: 'DELETE', headers: await getApiAuthHeaders() }); await fetchData() }
-  catch (err: any) { error.value = err.message || 'Erro ao excluir' }
+  try { await deleteTemplate(id) } catch {}
 }
 
-const openEditor = (item?: CardTemplate) => {
-  if (item) {
-    editingId.value = item.id; formName.value = item.name; formCategory.value = item.category || 'geral'
-    formSortOrder.value = item.sort_order; formIsActive.value = item.is_active
-    cardStyle.value = { direction: 'column', imagePosition: 'top', imageSize: '55%', gap: '2px', padding: '4%', bg: '#ffffff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', border: 'none', ...item.card_style }
-    elements.value = (item.elements || []).map(e => ({ ...e }))
-  } else {
-    editingId.value = null; formName.value = ''; formCategory.value = 'geral'
-    formSortOrder.value = 0; formIsActive.value = true
-    cardStyle.value = { bg: '#ffffff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', border: 'none', padding: '4%', direction: 'column', imagePosition: 'top', imageSize: '55%', gap: '2px' }
-    elements.value = []
+// ── Keyboard shortcuts ──
+const onKeyDown = (e: KeyboardEvent) => {
+  if (mode.value !== 'editor') return
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selectedElementId.value && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLSelectElement)) {
+      removeElement(selectedElementId.value)
+    }
   }
-  mode.value = 'editor'; showJsonEditor.value = false
+  if (e.key === 'Escape') selectElement(null)
+  // Setas para nudge 1%
+  if (selectedElement.value && !isDragging.value && !isResizing.value) {
+    const el = selectedElement.value
+    if (e.key === 'ArrowLeft')  { updateSelectedElement({ x: `${Math.max(0, pct(el.x) - 1)}%` }); e.preventDefault() }
+    if (e.key === 'ArrowRight') { updateSelectedElement({ x: `${Math.min(100 - pct(el.w), pct(el.x) + 1)}%` }); e.preventDefault() }
+    if (e.key === 'ArrowUp')    { updateSelectedElement({ y: `${Math.max(0, pct(el.y) - 1)}%` }); e.preventDefault() }
+    if (e.key === 'ArrowDown')  { updateSelectedElement({ y: `${Math.min(100 - pct(el.h), pct(el.y) + 1)}%` }); e.preventDefault() }
+  }
 }
+onMounted(() => { fetchTemplates(); document.addEventListener('keydown', onKeyDown) })
+onUnmounted(() => { document.removeEventListener('keydown', onKeyDown) })
 
-const openJson = () => {
-  jsonText.value = JSON.stringify({ card_style: cardStyle.value, elements: elements.value }, null, 2)
-  showJsonEditor.value = true
-}
-
-const applyJson = () => {
-  try {
-    const parsed = JSON.parse(jsonText.value)
-    if (parsed.card_style) cardStyle.value = { ...cardStyle.value, ...parsed.card_style }
-    if (parsed.elements) elements.value = parsed.elements
-    showJsonEditor.value = false
-  } catch { error.value = 'JSON invalido' }
-}
-
-// ── Elementos ──
-const addElement = (type: string, slot: string) => {
-  elements.value.push({
-    id: crypto.randomUUID().slice(0, 8), type: type as any, slot,
-    x: '0%', y: '0%', w: '100%', h: 'auto',
-    order: elements.value.length,
-    fontWeight: type === 'text' ? 800 : undefined,
-    textAlign: 'center',
-    textTransform: type === 'text' ? 'uppercase' : undefined,
-    showIf: slot ? 'has_value' : 'always',
-  } as CardTemplateElement)
-}
-const removeElement = (id: string) => { elements.value = elements.value.filter(e => e.id !== id) }
-const moveEl = (idx: number, dir: number) => {
-  const n = idx + dir; if (n < 0 || n >= elements.value.length) return
-  const c = [...elements.value]; [c[idx], c[n]] = [c[n]!, c[idx]!]; elements.value = c
-}
-
-// Produtos mock para preview real com BuilderDynamicCard
-const mockImg = '/img/placeholder-product.svg'
-const mkProduct = (id: string, name: string, price: number, unit = 'UN', obs = '', badge = '') => ({
-  id, flyer_id: '', product_id: null, custom_name: name, custom_image: mockImg,
-  offer_price: price, original_price: null, price_mode: 'simple' as const, unit, observation: obs,
-  badge_style_id: badge, is_highlight: false, is_adult: false, sort_order: Number(id),
-  colspan: 1, image_zoom: 100, image_x: 50, image_y: 50, extra_images: [] as string[], extra_images_layout: null,
-  position: Number(id), purchase_limit: null, take_quantity: null, pay_quantity: null,
-  installment_count: null, installment_price: null, no_interest: false, club_name: null,
-  anticipation_text: null, show_discount: false, quantity_unit: null, price_label: null,
-  tag_style_id: null, highlight_color: null,
+// Mock para preview do BuilderDynamicCard
+const buildMockProduct = (m: typeof mockProducts[0]) => ({
+  id: m.id, flyer_id: '', product_id: null, custom_name: m.name,
+  custom_image: m.image || '/img/placeholder-product.svg',
+  offer_price: m.offer_price, original_price: m.original_price, price_mode: 'simple' as const,
+  unit: m.unit as any, observation: m.observation || '', badge_style_id: '', is_highlight: false,
+  is_adult: false, sort_order: Number(m.id), colspan: 1, image_zoom: 100, image_x: 50, image_y: 50,
+  extra_images: [] as string[], extra_images_layout: null, position: Number(m.id),
+  purchase_limit: null, take_quantity: null, pay_quantity: null, installment_count: null,
+  installment_price: null, no_interest: false, club_name: null, anticipation_text: null,
+  show_discount: false, quantity_unit: null, price_label: null, tag_style_id: null, highlight_color: null,
 } as any)
-const MOCK_PRODUCTS = [
-  mkProduct('1', 'PICANHA BOVINA KG', 49.90, 'KG', '', 'OFERTA'),
-  mkProduct('2', 'ARROZ CRISTAL 5KG', 22.99),
-  mkProduct('3', 'FEIJAO CARIOCA 1KG', 8.49),
-  mkProduct('4', 'OLEO SOJA 900ML', 6.99),
-  mkProduct('5', 'LEITE INTEGRAL 1LT', 5.49),
-  mkProduct('6', 'CAFE MELITTA 500G', 18.90),
-  mkProduct('7', 'ACUCAR CRISTAL 1KG', 4.99),
-  mkProduct('8', 'FARINHA DE TRIGO 1KG', 3.99),
-  mkProduct('9', 'SAL REFINADO 1KG', 2.49),
-]
-
-// Controle do preview
-const previewMode = ref<'single' | '2x2' | '3x3'>('2x2')
-
-// Template reativo para preview
-const liveTemplate = computed<import('~/types/builder').BuilderCardTemplate>(() => ({
-  id: editingId.value || 'preview',
-  name: formName.value || 'Preview',
-  thumbnail: null,
-  category: formCategory.value,
-  elements: elements.value.length ? elements.value : buildDefaultElements(cardStyle.value),
-  card_style: cardStyle.value,
-  is_active: true,
-  sort_order: 0,
-}))
-
-onMounted(fetchData)
+const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockProduct))
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen bg-gray-50 text-gray-900">
 
-    <!-- LISTA -->
+    <!-- ═══ LISTA ═══ -->
     <template v-if="mode === 'list'">
       <div class="p-6 max-w-6xl mx-auto">
         <div class="flex items-center justify-between mb-6">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Card Templates</h1>
-            <p class="text-sm text-gray-500 mt-1">Templates visuais de produto. Crie layouts, o cliente apenas escolhe.</p>
+            <h1 class="text-xl font-bold text-gray-800">Card Templates</h1>
+            <p class="text-sm text-gray-500 mt-0.5">Crie layouts visuais para os cards de produto do encarte</p>
           </div>
           <div class="flex gap-2">
-            <NuxtLink to="/admin/builder" class="px-4 py-2 rounded-lg text-sm bg-gray-200 text-gray-700 hover:bg-gray-300">Voltar</NuxtLink>
-            <button @click="openEditor()" class="px-4 py-2 rounded-lg text-sm bg-emerald-600 text-white hover:bg-emerald-500 font-medium">+ Novo Template</button>
+            <NuxtLink to="/admin/builder" class="px-4 py-2 rounded-lg text-sm bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Voltar</NuxtLink>
+            <button @click="goEdit()" class="px-4 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm">+ Novo Template</button>
           </div>
         </div>
-
-        <div v-if="error" class="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{{ error }}</div>
-        <div v-if="isLoading" class="text-center py-12 text-gray-400">Carregando...</div>
-
+        <div v-if="error" class="mb-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm border border-red-200">{{ error }}</div>
+        <div v-if="isLoading" class="text-center py-16 text-gray-400">Carregando...</div>
         <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          <div v-for="item in items" :key="item.id" class="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all group cursor-pointer" @click="openEditor(item)">
-            <!-- Preview mini -->
+          <div v-for="item in items" :key="item.id" @click="goEdit(item)" class="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
             <div class="bg-gray-100 p-4 flex items-center justify-center" style="aspect-ratio: 3/4">
-              <div class="w-full h-full rounded-lg flex flex-col items-center justify-center text-center p-2" :style="{ background: item.card_style?.bg || '#fff', borderRadius: item.card_style?.borderRadius || '8px', border: item.card_style?.border || 'none' }">
-                <div class="w-12 h-12 bg-gray-200 rounded mb-2" />
-                <div class="w-16 h-2 bg-gray-300 rounded mb-1" />
-                <div class="w-10 h-3 bg-red-200 rounded" />
+              <div class="w-full h-full rounded flex flex-col items-center justify-center p-2" :style="{ background: item.card_style?.bg || '#fff', borderRadius: item.card_style?.borderRadius || '8px', border: item.card_style?.border || '1px solid #eee' }">
+                <div class="w-10 h-10 bg-gray-200 rounded mb-1.5" />
+                <div class="w-14 h-1.5 bg-gray-300 rounded mb-1" />
+                <div class="w-10 h-2.5 bg-red-200 rounded" />
               </div>
             </div>
             <div class="p-3">
-              <span class="font-medium text-sm text-gray-900 truncate block">{{ item.name }}</span>
-              <div class="flex items-center gap-2 mt-1">
-                <span class="text-[10px] text-gray-400">{{ item.category }}</span>
-                <span :class="item.is_active ? 'text-emerald-600' : 'text-gray-400'" class="text-[10px]">{{ item.is_active ? 'Ativo' : 'Off' }}</span>
+              <span class="font-medium text-sm truncate block text-gray-800">{{ item.name }}</span>
+              <div class="flex items-center gap-2 mt-1 text-[10px]">
+                <span class="text-gray-400">{{ item.category }}</span>
+                <span :class="item.is_active ? 'text-emerald-600' : 'text-gray-400'">{{ item.is_active ? 'Ativo' : 'Inativo' }}</span>
               </div>
-              <div class="flex gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
-                <button @click="openEditor(item)" class="text-[10px] text-blue-600">Editar</button>
-                <button @click="deleteItem(item.id)" class="text-[10px] text-red-500">Excluir</button>
+              <div class="flex gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
+                <button @click="goEdit(item)" class="text-xs text-blue-600 hover:underline">Editar</button>
+                <button @click="handleDelete(item.id)" class="text-xs text-red-500 hover:underline">Excluir</button>
               </div>
             </div>
           </div>
-          <button @click="openEditor()" class="rounded-xl border-2 border-dashed border-gray-300 hover:border-emerald-400 flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-emerald-500" style="aspect-ratio: 3/5">
-            <span class="text-3xl">+</span><span class="text-xs">Novo</span>
+          <button @click="goEdit()" class="rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-400 flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-blue-500 transition-colors" style="aspect-ratio: 3/5">
+            <span class="text-3xl font-light">+</span><span class="text-xs">Novo</span>
           </button>
         </div>
       </div>
     </template>
 
-    <!-- EDITOR -->
+    <!-- ═══ EDITOR ═══ -->
     <template v-else>
-      <div class="h-screen flex flex-col overflow-hidden">
-        <!-- Top bar -->
-        <header class="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shrink-0">
-          <button @click="mode = 'list'" class="text-sm text-gray-500 hover:text-gray-700">← Voltar</button>
+      <div class="h-screen flex flex-col overflow-hidden bg-white">
+
+        <!-- Toolbar -->
+        <header class="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shrink-0 shadow-sm">
+          <button @click="goList" class="text-sm text-gray-500 hover:text-gray-800 font-medium">← Voltar</button>
           <div class="w-px h-6 bg-gray-200" />
-          <input v-model="formName" placeholder="Nome do template" class="text-sm font-medium text-gray-900 bg-transparent outline-none flex-1" />
-          <select v-model="formCategory" class="text-xs bg-gray-100 rounded px-2 py-1 border border-gray-200">
+
+          <!-- Nome -->
+          <input v-model="formName" placeholder="Nome do template..." class="text-sm font-semibold bg-transparent outline-none text-gray-800 placeholder-gray-400 w-44" />
+
+          <!-- Categoria -->
+          <select v-model="formCategory" class="text-xs bg-gray-50 rounded-md px-2 py-1.5 border border-gray-200 text-gray-600 outline-none">
             <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
           </select>
-          <label class="flex items-center gap-1.5 text-xs text-gray-500">
-            <input v-model="formIsActive" type="checkbox" class="rounded accent-emerald-500" /> Ativo
+
+          <!-- Ativo -->
+          <label class="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+            <input v-model="formIsActive" type="checkbox" class="rounded accent-blue-600" /> Ativo
           </label>
-          <button @click="openJson" class="px-3 py-1 rounded text-xs bg-gray-100 hover:bg-gray-200 text-gray-600">JSON</button>
-          <div v-if="error" class="text-xs text-red-500 truncate max-w-40">{{ error }}</div>
-          <button @click="saveItem" class="px-4 py-1.5 rounded-lg text-sm bg-emerald-600 text-white hover:bg-emerald-500 font-medium">Salvar</button>
+
+          <div class="w-px h-6 bg-gray-200" />
+
+          <!-- Formato do card -->
+          <div class="flex items-center gap-1">
+            <span class="text-[10px] text-gray-400 font-medium">Formato:</span>
+            <div class="flex gap-0.5">
+              <button
+                v-for="f in CARD_FORMATS" :key="f.id"
+                @click="activeFormat = f"
+                :title="f.desc"
+                :class="['px-2 py-1 rounded text-[10px] font-medium border transition-all',
+                  activeFormat.id === f.id
+                    ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300']"
+              >{{ f.label }}</button>
+            </div>
+          </div>
+
+          <div class="flex-1" />
+
+          <!-- Presets -->
+          <div class="relative group">
+            <button class="px-3 py-1.5 rounded-md text-xs bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100">Presets</button>
+            <div class="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-1.5 hidden group-hover:block z-50 w-44">
+              <button v-for="(p, key) in presets" :key="key" @click="applyPreset(String(key))" class="w-full text-left px-3 py-1.5 rounded text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                {{ p.name }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Adicionar -->
+          <div class="relative group">
+            <button class="px-3 py-1.5 rounded-md text-xs bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100">+ Elemento</button>
+            <div class="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-1.5 hidden group-hover:block z-50 w-40">
+              <button @click="addElement('text')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-blue-500 font-bold mr-1.5">T</span> Nome</button>
+              <button @click="addElement('image')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-emerald-500 font-bold mr-1.5">◻</span> Imagem</button>
+              <button @click="addElement('price')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-red-500 font-bold mr-1.5">$</span> Preco</button>
+              <button @click="addElement('badge')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-amber-500 font-bold mr-1.5">★</span> Selo</button>
+              <button @click="addElement('unit')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-violet-500 font-bold mr-1.5">g</span> Unidade</button>
+              <button @click="addElement('observation')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-indigo-500 font-bold mr-1.5">…</span> Obs</button>
+              <button @click="addElement('shape')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-pink-500 font-bold mr-1.5">◆</span> Forma</button>
+            </div>
+          </div>
+
+          <!-- Preview toggle -->
+          <button @click="showPreview = !showPreview" :class="['px-3 py-1.5 rounded-md text-xs border', showPreview ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-500']">
+            Preview
+          </button>
+
+          <div v-if="error" class="text-xs text-red-500 max-w-32 truncate">{{ error }}</div>
+
+          <button @click="handleSave" :disabled="isLoading || !formName" class="px-5 py-1.5 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm disabled:opacity-40">
+            Salvar
+          </button>
         </header>
 
+        <!-- Conteudo principal -->
         <div class="flex-1 flex min-h-0 overflow-hidden">
-          <!-- SIDEBAR ESQUERDA -->
-          <div class="w-60 shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
-            <!-- Presets -->
-            <div class="p-3 border-b border-gray-100">
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Presets (ponto de partida)</p>
-              <div class="space-y-1">
-                <button v-for="(_, name) in PRESETS" :key="name" @click="applyPreset(name)" class="w-full text-left px-2 py-1.5 rounded text-[10px] bg-gray-50 hover:bg-emerald-50 hover:text-emerald-700 text-gray-600 border border-gray-100 hover:border-emerald-200 transition-all truncate">
-                  {{ name }}
-                </button>
-              </div>
-            </div>
 
-            <!-- Adicionar elemento -->
-            <div class="p-3 border-b border-gray-100">
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Adicionar</p>
-              <div class="grid grid-cols-2 gap-1">
-                <button @click="addElement('text', 'product_name')" class="px-2 py-1 rounded text-[10px] bg-gray-50 hover:bg-blue-50 text-gray-600 border border-gray-100">📝 Nome</button>
-                <button @click="addElement('image', 'product_image')" class="px-2 py-1 rounded text-[10px] bg-gray-50 hover:bg-blue-50 text-gray-600 border border-gray-100">🖼️ Imagem</button>
-                <button @click="addElement('price', 'offer_price')" class="px-2 py-1 rounded text-[10px] bg-gray-50 hover:bg-blue-50 text-gray-600 border border-gray-100">💰 Preco</button>
-                <button @click="addElement('badge', 'badge')" class="px-2 py-1 rounded text-[10px] bg-gray-50 hover:bg-blue-50 text-gray-600 border border-gray-100">🏷️ Selo</button>
-                <button @click="addElement('unit', 'unit')" class="px-2 py-1 rounded text-[10px] bg-gray-50 hover:bg-blue-50 text-gray-600 border border-gray-100">⚖️ Unidade</button>
-                <button @click="addElement('observation', 'observation')" class="px-2 py-1 rounded text-[10px] bg-gray-50 hover:bg-blue-50 text-gray-600 border border-gray-100">💬 Obs</button>
-                <button @click="addElement('shape', '')" class="px-2 py-1 rounded text-[10px] bg-gray-50 hover:bg-blue-50 text-gray-600 border border-gray-100 col-span-2">🔶 Forma decorativa</button>
-              </div>
-            </div>
+          <!-- ══ CANVAS DE EDICAO (centro) ══ -->
+          <div class="flex-1 bg-gray-100 flex items-center justify-center p-8 overflow-auto" @click="selectElement(null)">
+            <div class="flex flex-col items-center gap-3">
+              <span class="text-[10px] text-gray-400 font-medium tracking-wide uppercase">Arraste e redimensione os elementos</span>
 
-            <!-- Lista de elementos -->
-            <div class="p-3">
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Elementos (ordem)</p>
-              <div class="space-y-1">
-                <div v-for="(el, idx) in elements" :key="el.id" class="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-gray-50 border border-gray-100">
-                  <span class="flex-1 truncate text-gray-600">{{ el.type === 'text' ? '📝' : el.type === 'image' ? '🖼️' : el.type === 'price' ? '💰' : el.type === 'badge' ? '🏷️' : el.type === 'unit' ? '⚖️' : el.type === 'observation' ? '💬' : '🔶' }} {{ el.type }}</span>
-                  <button @click="moveEl(idx, -1)" class="text-gray-300 hover:text-gray-600">↑</button>
-                  <button @click="moveEl(idx, 1)" class="text-gray-300 hover:text-gray-600">↓</button>
-                  <button @click="removeElement(el.id)" class="text-gray-300 hover:text-red-500">✕</button>
+              <!-- Card canvas -->
+              <div
+                ref="canvasRef"
+                class="relative shadow-xl transition-all duration-200"
+                :style="{
+                  width: canvasWidth + 'px',
+                  height: canvasHeight + 'px',
+                  background: cardStyle.bg || '#ffffff',
+                  borderRadius: cardStyle.borderRadius || '8px',
+                  border: cardStyle.border || '1px solid #e5e7eb',
+                  boxShadow: cardStyle.boxShadow || '0 4px 24px rgba(0,0,0,0.12)',
+                  overflow: 'hidden',
+                }"
+                @click.stop="selectElement(null)"
+              >
+                <!-- Grid de referencia sutil -->
+                <div class="absolute inset-0 pointer-events-none opacity-[0.04]" style="background-image: linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px); background-size: 10% 10%;" />
+
+                <!-- Elementos arrastáveis -->
+                <div
+                  v-for="el in elements" :key="el.id"
+                  class="absolute select-none"
+                  :class="[
+                    isDragging || isResizing ? '' : 'transition-[left,top,width,height] duration-75',
+                  ]"
+                  :style="{
+                    left: el.x || '0%',
+                    top: el.y || '0%',
+                    width: el.w || '100%',
+                    height: el.h || '20%',
+                    zIndex: el.zIndex || (el.type === 'image' ? 1 : el.type === 'shape' ? 0 : 3),
+                    cursor: isDragging ? 'grabbing' : 'grab',
+                  }"
+                  @pointerdown="startDrag(el.id, $event)"
+                  @click.stop="selectElement(el.id)"
+                >
+                  <!-- Conteudo visual do elemento -->
+                  <div
+                    class="w-full h-full flex items-center justify-center overflow-hidden text-[10px] font-medium"
+                    :style="{
+                      background: el.bg || (el.type === 'shape' ? '#e5e7eb' : 'transparent'),
+                      borderRadius: el.borderRadius || '0',
+                      opacity: el.opacity ?? 1,
+                      border: selectedElementId === el.id
+                        ? `2px solid ${elMeta[el.type]?.color || '#3b82f6'}`
+                        : `1px dashed ${elMeta[el.type]?.border || '#d1d5db'}`,
+                    }"
+                  >
+                    <!-- Preview do tipo -->
+                    <div v-if="el.type === 'text'" class="text-center px-1" :style="{ fontWeight: el.fontWeight || 800, textTransform: (el.textTransform || 'uppercase') as any, color: el.color || '#1f2937', textAlign: (el.textAlign || 'center') as any }">
+                      NOME PRODUTO
+                    </div>
+                    <div v-else-if="el.type === 'image'" class="flex flex-col items-center justify-center text-gray-300 gap-0.5">
+                      <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      <span class="text-[8px]">Imagem</span>
+                    </div>
+                    <div v-else-if="el.type === 'price'" class="text-red-500 font-black text-sm">
+                      R$ 49,90
+                    </div>
+                    <div v-else-if="el.type === 'badge'" class="bg-red-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">
+                      OFERTA
+                    </div>
+                    <div v-else-if="el.type === 'unit'" class="text-gray-400 text-[8px]">KG</div>
+                    <div v-else-if="el.type === 'observation'" class="text-gray-400 text-[8px]">Obs texto</div>
+                    <div v-else class="w-full h-full" :style="{ background: el.bg || '#e5e7eb' }" />
+                  </div>
+
+                  <!-- Label do tipo -->
+                  <span
+                    v-if="selectedElementId === el.id"
+                    class="absolute -top-4 left-0 text-[8px] font-bold px-1 rounded-sm"
+                    :style="{ background: elMeta[el.type]?.color, color: '#fff' }"
+                  >
+                    {{ elMeta[el.type]?.label }}
+                  </span>
+
+                  <!-- Resize handles -->
+                  <template v-if="selectedElementId === el.id">
+                    <div
+                      v-for="h in HANDLES" :key="h"
+                      class="absolute w-2 h-2 bg-white border-2 rounded-full z-10"
+                      :style="`${handlePos[h]} cursor: ${handleCursor[h]}; border-color: ${elMeta[el.type]?.color || '#3b82f6'};`"
+                      @pointerdown.stop="startResize(el.id, h, $event)"
+                    />
+                  </template>
                 </div>
-                <p v-if="!elements.length" class="text-[10px] text-gray-300 text-center py-2">Use um preset ou adicione elementos</p>
+              </div>
+
+              <!-- Info -->
+              <div class="text-[10px] text-gray-400 flex gap-4">
+                <span>Setas: mover 1%</span>
+                <span>Delete: remover</span>
+                <span>Esc: deselecionar</span>
               </div>
             </div>
           </div>
 
-          <!-- CANVAS CENTRAL — preview REAL em tempo real -->
-          <div class="flex-1 bg-gray-800 flex flex-col overflow-hidden">
-            <!-- Barra de controle do preview -->
-            <div class="h-10 bg-gray-900 border-b border-gray-700 flex items-center px-4 gap-3 shrink-0">
-              <span class="text-[10px] text-gray-500 font-medium">PREVIEW</span>
-              <div class="flex gap-1 ml-2">
-                <button @click="previewMode = 'single'" :class="['px-3 py-1 rounded text-[10px] font-medium transition-all', previewMode === 'single' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-400 hover:text-white']">1 Produto</button>
-                <button @click="previewMode = '2x2'" :class="['px-3 py-1 rounded text-[10px] font-medium transition-all', previewMode === '2x2' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-400 hover:text-white']">2x2</button>
-                <button @click="previewMode = '3x3'" :class="['px-3 py-1 rounded text-[10px] font-medium transition-all', previewMode === '3x3' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-400 hover:text-white']">3x3</button>
+          <!-- ══ PAINEL DIREITO ══ -->
+          <div class="w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto">
+
+            <!-- Nada selecionado: card style -->
+            <template v-if="!selectedElement">
+              <div class="p-4 border-b border-gray-100">
+                <p class="text-xs font-bold text-gray-800 mb-3">Aparencia do Card</p>
+                <div class="space-y-2.5">
+                  <label class="flex items-center gap-2">
+                    <span class="text-[11px] text-gray-500 w-14">Fundo</span>
+                    <input type="color" :value="cardStyle.bg || '#ffffff'" @input="cardStyle.bg = ($event.target as HTMLInputElement).value" class="w-6 h-6 rounded cursor-pointer border border-gray-200" />
+                    <input :value="cardStyle.bg || '#ffffff'" @input="cardStyle.bg = ($event.target as HTMLInputElement).value" class="flex-1 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" />
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <span class="text-[11px] text-gray-500 w-14">Borda</span>
+                    <input :value="cardStyle.border || 'none'" @input="cardStyle.border = ($event.target as HTMLInputElement).value" class="flex-1 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" />
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <span class="text-[11px] text-gray-500 w-14">Raio</span>
+                    <input :value="cardStyle.borderRadius || '8px'" @input="cardStyle.borderRadius = ($event.target as HTMLInputElement).value" class="flex-1 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" />
+                  </label>
+                </div>
+              </div>
+
+              <!-- Lista de camadas -->
+              <div class="p-4">
+                <p class="text-xs font-bold text-gray-800 mb-2">Camadas</p>
+                <div class="space-y-1">
+                  <div
+                    v-for="el in elements" :key="el.id"
+                    @click="selectElement(el.id)"
+                    class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs cursor-pointer hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-colors"
+                  >
+                    <span class="w-4 h-4 rounded flex items-center justify-center text-[9px] font-bold text-white" :style="{ background: elMeta[el.type]?.color }">{{ elMeta[el.type]?.icon }}</span>
+                    <span class="flex-1 text-gray-700">{{ elMeta[el.type]?.label }}</span>
+                    <span class="text-[9px] text-gray-400">{{ el.w }} x {{ el.h }}</span>
+                    <button @click.stop="removeElement(el.id)" class="text-gray-300 hover:text-red-500 text-sm leading-none">&times;</button>
+                  </div>
+                  <p v-if="!elements.length" class="text-xs text-gray-400 text-center py-4">Adicione elementos pelo botao + Elemento</p>
+                </div>
+              </div>
+            </template>
+
+            <!-- Elemento selecionado -->
+            <template v-else>
+              <div class="p-4 border-b border-gray-100">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2">
+                    <span class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white" :style="{ background: elMeta[selectedElement.type]?.color }">{{ elMeta[selectedElement.type]?.icon }}</span>
+                    <span class="text-sm font-bold text-gray-800">{{ elMeta[selectedElement.type]?.label }}</span>
+                  </div>
+                  <button @click="selectElement(null)" class="text-xs text-gray-400 hover:text-gray-600">&times; Fechar</button>
+                </div>
+
+                <!-- Posicao e tamanho -->
+                <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Posicao e Tamanho</p>
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                  <label>
+                    <span class="text-[10px] text-gray-500">X</span>
+                    <div class="flex items-center gap-1">
+                      <input type="number" :value="pct(selectedElement.x)" @input="updateSelectedElement({ x: ($event.target as HTMLInputElement).value + '%' })" class="w-full text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" min="0" max="100" />
+                      <span class="text-[10px] text-gray-400">%</span>
+                    </div>
+                  </label>
+                  <label>
+                    <span class="text-[10px] text-gray-500">Y</span>
+                    <div class="flex items-center gap-1">
+                      <input type="number" :value="pct(selectedElement.y)" @input="updateSelectedElement({ y: ($event.target as HTMLInputElement).value + '%' })" class="w-full text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" min="0" max="100" />
+                      <span class="text-[10px] text-gray-400">%</span>
+                    </div>
+                  </label>
+                  <label>
+                    <span class="text-[10px] text-gray-500">Largura</span>
+                    <div class="flex items-center gap-1">
+                      <input type="number" :value="pct(selectedElement.w)" @input="updateSelectedElement({ w: ($event.target as HTMLInputElement).value + '%' })" class="w-full text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" min="2" max="100" />
+                      <span class="text-[10px] text-gray-400">%</span>
+                    </div>
+                  </label>
+                  <label>
+                    <span class="text-[10px] text-gray-500">Altura</span>
+                    <div class="flex items-center gap-1">
+                      <input type="number" :value="pct(selectedElement.h)" @input="updateSelectedElement({ h: ($event.target as HTMLInputElement).value + '%' })" class="w-full text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" min="2" max="100" />
+                      <span class="text-[10px] text-gray-400">%</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Propriedades por tipo -->
+              <div class="p-4 space-y-3">
+
+                <!-- TEXTO -->
+                <template v-if="selectedElement.type === 'text'">
+                  <p class="text-[10px] font-semibold text-gray-400 uppercase">Texto</p>
+
+                  <!-- Tamanho da fonte -->
+                  <label class="block">
+                    <div class="flex items-center justify-between">
+                      <span class="text-[10px] text-gray-500">Tamanho da fonte</span>
+                      <span class="text-[10px] text-blue-500 font-medium">{{ selectedElement.fontSize || 'Auto' }}</span>
+                    </div>
+                    <div class="flex gap-1 mt-0.5">
+                      <input
+                        type="range" min="0" max="60" step="1"
+                        :value="parseInt(selectedElement.fontSize || '0')"
+                        @input="updateSelectedElement({ fontSize: parseInt(($event.target as HTMLInputElement).value) > 0 ? ($event.target as HTMLInputElement).value + 'px' : undefined })"
+                        class="flex-1 accent-blue-500"
+                      />
+                      <button @click="updateSelectedElement({ fontSize: undefined })" class="text-[9px] text-gray-400 hover:text-red-500 px-1">Auto</button>
+                    </div>
+                    <p class="text-[9px] text-gray-400 mt-0.5">0 = automatico (ajusta por qtd de produtos)</p>
+                  </label>
+
+                  <label class="block">
+                    <span class="text-[10px] text-gray-500">Peso da fonte</span>
+                    <select :value="selectedElement.fontWeight || 800" @change="updateSelectedElement({ fontWeight: parseInt(($event.target as HTMLSelectElement).value) })" class="w-full text-xs bg-gray-50 rounded px-2 py-1.5 border border-gray-200 outline-none mt-0.5">
+                      <option :value="400">Normal</option><option :value="600">Semibold</option><option :value="700">Bold</option><option :value="800">Extra Bold</option><option :value="900">Black</option>
+                    </select>
+                  </label>
+                  <label class="block">
+                    <span class="text-[10px] text-gray-500">Alinhamento</span>
+                    <div class="flex gap-1 mt-0.5">
+                      <button v-for="a in ['left','center','right']" :key="a" @click="updateSelectedElement({ textAlign: a })" :class="['flex-1 py-1 rounded text-xs border', selectedElement.textAlign === a ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-500']">
+                        {{ a === 'left' ? '←' : a === 'right' ? '→' : '↔' }}
+                      </button>
+                    </div>
+                  </label>
+                  <label class="block">
+                    <span class="text-[10px] text-gray-500">Transformacao</span>
+                    <select :value="selectedElement.textTransform || 'uppercase'" @change="updateSelectedElement({ textTransform: ($event.target as HTMLSelectElement).value })" class="w-full text-xs bg-gray-50 rounded px-2 py-1.5 border border-gray-200 outline-none mt-0.5">
+                      <option value="uppercase">MAIUSCULAS</option><option value="capitalize">Capitalizar</option><option value="none">Normal</option>
+                    </select>
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-500">Cor</span>
+                    <input type="color" :value="selectedElement.color || '#000000'" @input="updateSelectedElement({ color: ($event.target as HTMLInputElement).value })" class="w-5 h-5 rounded cursor-pointer border border-gray-200" />
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-500">Fundo</span>
+                    <input :value="selectedElement.bg || ''" @input="updateSelectedElement({ bg: ($event.target as HTMLInputElement).value || undefined })" placeholder="transparente" class="flex-1 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" />
+                  </label>
+                </template>
+
+                <!-- IMAGEM -->
+                <template v-if="selectedElement.type === 'image'">
+                  <p class="text-[10px] font-semibold text-gray-400 uppercase">Imagem</p>
+                  <label class="block">
+                    <span class="text-[10px] text-gray-500">Ajuste</span>
+                    <select :value="selectedElement.objectFit || 'contain'" @change="updateSelectedElement({ objectFit: ($event.target as HTMLSelectElement).value })" class="w-full text-xs bg-gray-50 rounded px-2 py-1.5 border border-gray-200 outline-none mt-0.5">
+                      <option value="contain">Contain (inteira)</option><option value="cover">Cover (preenche)</option>
+                    </select>
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-500">Borda arredondada</span>
+                    <input :value="selectedElement.borderRadius || ''" @input="updateSelectedElement({ borderRadius: ($event.target as HTMLInputElement).value || undefined })" placeholder="0 ou 50%" class="flex-1 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" />
+                  </label>
+                </template>
+
+                <!-- PRECO -->
+                <template v-if="selectedElement.type === 'price'">
+                  <p class="text-[10px] font-semibold text-gray-400 uppercase">Etiqueta de Preco</p>
+
+                  <!-- Escala da etiqueta -->
+                  <label class="block">
+                    <div class="flex items-center justify-between">
+                      <span class="text-[10px] text-gray-500">Tamanho da etiqueta</span>
+                      <span class="text-[10px] text-red-500 font-medium">{{ (selectedElement.fontScale || 1).toFixed(1) }}x</span>
+                    </div>
+                    <input
+                      type="range" min="0.3" max="3" step="0.1"
+                      :value="selectedElement.fontScale || 1"
+                      @input="updateSelectedElement({ fontScale: parseFloat(($event.target as HTMLInputElement).value) })"
+                      class="w-full accent-red-500 mt-0.5"
+                    />
+                    <div class="flex justify-between text-[8px] text-gray-400 mt-0.5">
+                      <span>Pequena</span><span>Normal</span><span>Grande</span>
+                    </div>
+                  </label>
+
+                  <label class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-500">Fundo</span>
+                    <input :value="selectedElement.bg || ''" @input="updateSelectedElement({ bg: ($event.target as HTMLInputElement).value || undefined })" placeholder="transparente" class="flex-1 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" />
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-500">Borda</span>
+                    <input :value="selectedElement.borderRadius || ''" @input="updateSelectedElement({ borderRadius: ($event.target as HTMLInputElement).value || undefined })" placeholder="8px" class="flex-1 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" />
+                  </label>
+                </template>
+
+                <!-- SHAPE -->
+                <template v-if="selectedElement.type === 'shape'">
+                  <p class="text-[10px] font-semibold text-gray-400 uppercase">Forma Decorativa</p>
+                  <label class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-500">Cor/Gradient</span>
+                    <input :value="selectedElement.bg || ''" @input="updateSelectedElement({ bg: ($event.target as HTMLInputElement).value || undefined })" placeholder="#ccc ou gradient" class="flex-1 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" />
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-500">Opacidade</span>
+                    <input type="range" min="0" max="1" step="0.1" :value="selectedElement.opacity ?? 1" @input="updateSelectedElement({ opacity: parseFloat(($event.target as HTMLInputElement).value) })" class="flex-1 accent-pink-500" />
+                    <span class="text-[10px] text-gray-400 w-6">{{ selectedElement.opacity ?? 1 }}</span>
+                  </label>
+                </template>
+
+                <!-- Z-Index (todos) -->
+                <label class="flex items-center gap-2 pt-2 border-t border-gray-100">
+                  <span class="text-[10px] text-gray-500">z-Index</span>
+                  <input type="number" :value="selectedElement.zIndex || 2" @input="updateSelectedElement({ zIndex: parseInt(($event.target as HTMLInputElement).value) || 2 })" class="w-16 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200 outline-none" />
+                </label>
+
+                <!-- Acoes -->
+                <div class="flex gap-2 pt-2 border-t border-gray-100">
+                  <button @click="duplicateElement(selectedElement.id)" class="flex-1 text-xs py-1.5 rounded bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100">Duplicar</button>
+                  <button @click="removeElement(selectedElement.id)" class="flex-1 text-xs py-1.5 rounded bg-red-50 border border-red-200 text-red-600 hover:bg-red-100">Remover</button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- ══ PREVIEW AO VIVO — formato real ══ -->
+          <div v-if="showPreview" class="w-80 shrink-0 bg-gray-50 border-l border-gray-200 flex flex-col overflow-hidden">
+            <div class="h-9 flex items-center justify-between px-3 border-b border-gray-200 shrink-0">
+              <span class="text-[10px] text-gray-400 font-medium">{{ activeFormat.label }} {{ activeFormat.desc }}</span>
+              <div class="flex gap-1">
+                <button v-for="m in ['1', '2x2', '3x3']" :key="m" @click="previewMode = m as any" :class="['px-2.5 py-0.5 rounded text-[10px] font-medium', previewMode === m ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200']">{{ m }}</button>
               </div>
             </div>
-
-            <!-- Area do preview -->
-            <div class="flex-1 flex items-center justify-center p-6 overflow-auto">
-
-              <!-- 1 produto grande -->
-              <div v-if="previewMode === 'single'" style="width: 380px; height: 540px" class="shadow-2xl rounded-xl overflow-hidden">
-                <BuilderDynamicCard
-                  :product="MOCK_PRODUCTS[0]!"
-                  :template="liveTemplate"
-                  :columns="1"
-                  :page-product-count="1"
-                />
+            <div class="flex-1 flex items-center justify-center p-3 overflow-auto">
+              <!-- 1 produto — proporcao real do formato -->
+              <div v-if="previewMode === '1'" class="rounded-lg overflow-hidden shadow-lg" :style="{ width: pvSingle.w + 'px', height: pvSingle.h + 'px' }">
+                <BuilderDynamicCard :product="previewProducts[0]" :template="liveTemplate" :columns="1" :page-product-count="1" />
               </div>
-
-              <!-- 2x2 -->
-              <div v-else-if="previewMode === '2x2'" style="width: 520px; height: 680px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 6px; background: #374151; border-radius: 14px; padding: 6px" class="shadow-2xl">
-                <div v-for="(p, i) in MOCK_PRODUCTS.slice(0, 4)" :key="i" style="overflow: hidden; border-radius: 8px">
-                  <BuilderDynamicCard
-                    :product="p"
-                    :template="liveTemplate"
-                    :columns="2"
-                    :page-product-count="4"
-                  />
+              <!-- 2x2 — proporcao real do formato -->
+              <div v-else-if="previewMode === '2x2'" class="shadow-lg" :style="{ width: pvGrid.w + 'px', height: pvGrid.h + 'px', display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: '2px', background: '#e5e7eb', borderRadius: '8px', padding: '2px' }">
+                <div v-for="i in 4" :key="i" style="overflow: hidden; border-radius: 4px">
+                  <BuilderDynamicCard :product="previewProducts[i - 1]" :template="liveTemplate" :columns="2" :page-product-count="4" />
                 </div>
               </div>
-
-              <!-- 3x3 -->
-              <div v-else style="width: 560px; height: 720px; display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; gap: 4px; background: #374151; border-radius: 14px; padding: 4px" class="shadow-2xl">
-                <div v-for="(p, i) in MOCK_PRODUCTS.slice(0, 9)" :key="i" style="overflow: hidden; border-radius: 6px">
-                  <BuilderDynamicCard
-                    :product="p"
-                    :template="liveTemplate"
-                    :columns="3"
-                    :page-product-count="9"
-                  />
+              <!-- 3x3 — proporcao real do formato -->
+              <div v-else class="shadow-lg" :style="{ width: pvGrid.w + 'px', height: pvGrid.h + 'px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gridTemplateRows: '1fr 1fr 1fr', gap: '2px', background: '#e5e7eb', borderRadius: '8px', padding: '2px' }">
+                <div v-for="i in 9" :key="i" style="overflow: hidden; border-radius: 3px">
+                  <BuilderDynamicCard :product="previewProducts[i - 1]" :template="liveTemplate" :columns="3" :page-product-count="9" />
                 </div>
               </div>
-
             </div>
           </div>
 
-          <!-- SIDEBAR DIREITA (configuracoes) -->
-          <div class="w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto p-3 space-y-4">
-            <div>
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Layout do Card</p>
-              <!-- Direcao -->
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Direcao</span>
-                <div class="flex gap-1 mt-1">
-                  <button @click="cardStyle.direction = 'column'; cardStyle.imagePosition = 'top'" :class="['flex-1 py-1.5 rounded text-[10px] font-medium', cardStyle.direction === 'column' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-400']">↕ Vertical</button>
-                  <button @click="cardStyle.direction = 'row'; cardStyle.imagePosition = 'left'" :class="['flex-1 py-1.5 rounded text-[10px] font-medium', cardStyle.direction === 'row' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-400']">↔ Horizontal</button>
-                </div>
-              </label>
-              <!-- Posicao da imagem -->
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Posicao da imagem</span>
-                <div class="flex gap-1 mt-1">
-                  <button v-for="pos in (cardStyle.direction === 'row' ? ['left', 'right'] : ['top', 'bottom'])" :key="pos" @click="cardStyle.imagePosition = pos as any" :class="['flex-1 py-1 rounded text-[10px]', cardStyle.imagePosition === pos ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-400']">
-                    {{ pos === 'top' ? '⬆ Topo' : pos === 'bottom' ? '⬇ Base' : pos === 'left' ? '⬅ Esq' : '➡ Dir' }}
-                  </button>
-                </div>
-              </label>
-              <!-- Tamanho imagem -->
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Tamanho imagem</span><span class="text-[9px] text-gray-400">{{ cardStyle.imageSize }}</span></div>
-                <input type="range" min="20" max="100" :value="parseInt(cardStyle.imageSize || '55')" @input="cardStyle.imageSize = ($event.target as HTMLInputElement).value + '%'" class="w-full mt-1 accent-emerald-500" />
-              </label>
-            </div>
-
-            <!-- Aparencia -->
-            <div>
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Aparencia</p>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Fundo</span>
-                <input v-model="cardStyle.bg" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Borda</span>
-                <input v-model="cardStyle.border" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Border Radius</span>
-                <input v-model="cardStyle.borderRadius" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Sombra</span>
-                <input v-model="cardStyle.boxShadow" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Padding interno</span>
-                <input v-model="cardStyle.padding" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Gap entre elementos</span>
-                <input v-model="cardStyle.gap" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-              </label>
-            </div>
-
-            <!-- Nome do Produto -->
-            <div>
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Nome do Produto</p>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Escala do nome</span><span class="text-[9px] text-gray-400">{{ cardStyle.nameScale || 1 }}x</span></div>
-                <input type="range" min="0.5" max="2" step="0.1" :value="cardStyle.nameScale || 1" @input="cardStyle.nameScale = parseFloat(($event.target as HTMLInputElement).value)" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Maximo de linhas</span>
-                <select :value="cardStyle.nameMaxLines || 3" @change="cardStyle.nameMaxLines = parseInt(($event.target as HTMLSelectElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none">
-                  <option :value="1">1 linha</option><option :value="2">2 linhas</option><option :value="3">3 linhas</option><option :value="4">4 linhas</option><option :value="5">5 linhas</option>
-                </select>
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Peso da fonte</span>
-                <select :value="cardStyle.nameFontWeight || 800" @change="cardStyle.nameFontWeight = parseInt(($event.target as HTMLSelectElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none">
-                  <option :value="400">Normal</option><option :value="600">Semibold</option><option :value="700">Bold</option><option :value="800">Extra Bold</option><option :value="900">Black</option>
-                </select>
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Alinhamento</span>
-                <div class="flex gap-1 mt-1">
-                  <button v-for="a in ['left','center','right']" :key="a" @click="cardStyle.nameTextAlign = a" :class="['flex-1 py-1 rounded text-[10px]', (cardStyle.nameTextAlign || 'center') === a ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-400']">{{ a === 'left' ? '⬅' : a === 'right' ? '➡' : '⬌' }}</button>
-                </div>
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Transformacao</span>
-                <select :value="cardStyle.nameTextTransform || 'uppercase'" @change="cardStyle.nameTextTransform = ($event.target as HTMLSelectElement).value" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none">
-                  <option value="uppercase">MAIUSCULAS</option><option value="capitalize">Capitalizar</option><option value="lowercase">minusculas</option><option value="none">Normal</option>
-                </select>
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Cor do nome</span>
-                <div class="flex gap-1 mt-1">
-                  <input type="color" :value="cardStyle.nameColor || '#000000'" @input="cardStyle.nameColor = ($event.target as HTMLInputElement).value" class="w-8 h-6 rounded border border-gray-200 cursor-pointer" />
-                  <input :value="cardStyle.nameColor || ''" @input="cardStyle.nameColor = ($event.target as HTMLInputElement).value || undefined" placeholder="inherit" class="flex-1 text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-                </div>
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Padding do nome</span>
-                <input :value="cardStyle.namePadding || ''" @input="cardStyle.namePadding = ($event.target as HTMLInputElement).value || undefined" placeholder="1% 3% 2.5%" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Espaco abaixo do nome (px)</span><span class="text-[9px] text-gray-400">{{ cardStyle.nameMarginBottom || 0 }}</span></div>
-                <input type="range" min="0" max="40" step="1" :value="cardStyle.nameMarginBottom || 0" @input="cardStyle.nameMarginBottom = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-            </div>
-
-            <!-- Imagem -->
-            <div>
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Imagem</p>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Object Fit</span>
-                <select :value="cardStyle.imageObjectFit || 'contain'" @change="cardStyle.imageObjectFit = ($event.target as HTMLSelectElement).value" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none">
-                  <option value="contain">Contain (inteira)</option><option value="cover">Cover (preenche)</option><option value="fill">Fill (estica)</option>
-                </select>
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Subir imagem (%)</span><span class="text-[9px] text-gray-400">{{ cardStyle.imageLift || 'Auto' }}</span></div>
-                <input type="range" min="0" max="40" step="1" :value="cardStyle.imageLift || 0" @input="cardStyle.imageLift = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Margem acima (px)</span><span class="text-[9px] text-gray-400">{{ cardStyle.imageMarginTop || 0 }}</span></div>
-                <input type="range" min="-20" max="40" step="1" :value="cardStyle.imageMarginTop || 0" @input="cardStyle.imageMarginTop = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Margem abaixo (px)</span><span class="text-[9px] text-gray-400">{{ cardStyle.imageMarginBottom || 0 }}</span></div>
-                <input type="range" min="-20" max="40" step="1" :value="cardStyle.imageMarginBottom || 0" @input="cardStyle.imageMarginBottom = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-            </div>
-
-            <!-- Etiqueta de Preco -->
-            <div>
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Etiqueta de Preco</p>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Escala do preco</span><span class="text-[9px] text-gray-400">{{ cardStyle.priceScale || 1 }}x</span></div>
-                <input type="range" min="0.3" max="5" step="0.1" :value="cardStyle.priceScale || 1" @input="cardStyle.priceScale = parseFloat(($event.target as HTMLInputElement).value)" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Posicao do preco</span>
-                <select :value="cardStyle.pricePosition || 'below'" @change="cardStyle.pricePosition = ($event.target as HTMLSelectElement).value" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none">
-                  <option value="below">Abaixo da imagem</option><option value="overlay-bottom">Overlay embaixo</option><option value="overlay-center">Overlay centro</option><option value="overlay-top">Overlay topo</option>
-                </select>
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Alinhamento</span>
-                <div class="flex gap-1 mt-1">
-                  <button v-for="a in ['flex-start','center','flex-end']" :key="a" @click="cardStyle.priceAlign = a" :class="['flex-1 py-1 rounded text-[10px]', (cardStyle.priceAlign || 'center') === a ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-400']">{{ a === 'flex-start' ? '⬅' : a === 'flex-end' ? '➡' : '⬌' }}</button>
-                </div>
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Mover horizontal (%)</span><span class="text-[9px] text-gray-400">{{ cardStyle.priceOffsetX || 0 }}</span></div>
-                <input type="range" min="-50" max="50" step="1" :value="cardStyle.priceOffsetX || 0" @input="cardStyle.priceOffsetX = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Mover vertical (%)</span><span class="text-[9px] text-gray-400">{{ cardStyle.priceOffsetY || 0 }}</span></div>
-                <input type="range" min="-50" max="50" step="1" :value="cardStyle.priceOffsetY || 0" @input="cardStyle.priceOffsetY = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Margem acima (px)</span><span class="text-[9px] text-gray-400">{{ cardStyle.priceMarginTop || 0 }}</span></div>
-                <input type="range" min="-40" max="60" step="1" :value="cardStyle.priceMarginTop || 0" @input="cardStyle.priceMarginTop = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Margem abaixo (px)</span><span class="text-[9px] text-gray-400">{{ cardStyle.priceMarginBottom || 0 }}</span></div>
-                <input type="range" min="-40" max="60" step="1" :value="cardStyle.priceMarginBottom || 0" @input="cardStyle.priceMarginBottom = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Altura da etiqueta (px)</span><span class="text-[9px] text-gray-400">{{ cardStyle.priceHeight || 'Auto' }}</span></div>
-                <input type="range" min="0" max="300" step="5" :value="cardStyle.priceHeight || 0" @input="cardStyle.priceHeight = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Largura da etiqueta</span>
-                <select :value="cardStyle.priceWidth || '100%'" @change="cardStyle.priceWidth = ($event.target as HTMLSelectElement).value" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none">
-                  <option value="100%">100% (toda largura)</option><option value="90%">90%</option><option value="80%">80%</option><option value="70%">70%</option><option value="60%">60%</option><option value="50%">50%</option><option value="auto">Auto (tamanho do conteudo)</option>
-                </select>
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Padding da etiqueta</span>
-                <input :value="cardStyle.pricePadding || ''" @input="cardStyle.pricePadding = ($event.target as HTMLInputElement).value || undefined" placeholder="0 3%" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Fundo da etiqueta</span>
-                <div class="flex gap-1 mt-1">
-                  <input type="color" :value="cardStyle.priceBg || '#dc2626'" @input="cardStyle.priceBg = ($event.target as HTMLInputElement).value" class="w-8 h-6 rounded border border-gray-200 cursor-pointer" />
-                  <input :value="cardStyle.priceBg || ''" @input="cardStyle.priceBg = ($event.target as HTMLInputElement).value || undefined" placeholder="transparente" class="flex-1 text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-                </div>
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Border radius etiqueta</span>
-                <input :value="cardStyle.priceBorderRadius || ''" @input="cardStyle.priceBorderRadius = ($event.target as HTMLInputElement).value || undefined" placeholder="8px" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none" />
-              </label>
-            </div>
-
-            <!-- Imagem Duplicada -->
-            <div>
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Imagem Duplicada</p>
-              <p class="text-[8px] text-gray-300 mb-2">Controles para quando o produto tem imagens extras (duplicar horizontal/vertical)</p>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Largura da imagem (%)</span><span class="text-[9px] text-gray-400">{{ cardStyle.dupImageWidth || 'Auto' }}</span></div>
-                <input type="range" min="0" max="120" step="1" :value="cardStyle.dupImageWidth || 0" @input="cardStyle.dupImageWidth = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Distancia horizontal (%)</span><span class="text-[9px] text-gray-400">{{ cardStyle.dupHorizontalStep || 'Auto' }}</span></div>
-                <input type="range" min="0" max="50" step="1" :value="cardStyle.dupHorizontalStep || 0" @input="cardStyle.dupHorizontalStep = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Elevacao horizontal (%)</span><span class="text-[9px] text-gray-400">{{ cardStyle.dupHorizontalLift || 'Auto' }}</span></div>
-                <input type="range" min="0" max="20" step="0.5" :value="cardStyle.dupHorizontalLift || 0" @input="cardStyle.dupHorizontalLift = parseFloat(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Distancia vertical (%)</span><span class="text-[9px] text-gray-400">{{ cardStyle.dupVerticalStep || 'Auto' }}</span></div>
-                <input type="range" min="0" max="80" step="1" :value="cardStyle.dupVerticalStep || 0" @input="cardStyle.dupVerticalStep = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-              <label class="block mb-2">
-                <div class="flex justify-between"><span class="text-[9px] text-gray-400">Subir imagem vertical (%)</span><span class="text-[9px] text-gray-400">{{ cardStyle.dupVerticalLift || 'Auto' }}</span></div>
-                <input type="range" min="0" max="50" step="1" :value="cardStyle.dupVerticalLift || 0" @input="cardStyle.dupVerticalLift = parseInt(($event.target as HTMLInputElement).value) || undefined" class="w-full mt-1 accent-emerald-500" />
-              </label>
-            </div>
-
-            <!-- Grade Sugerida -->
-            <div>
-              <p class="text-[10px] font-semibold text-gray-400 uppercase mb-2">Grade Sugerida</p>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Produtos por pagina (recomendado)</span>
-                <select :value="cardStyle.suggestedPerPage || 0" @change="cardStyle.suggestedPerPage = parseInt(($event.target as HTMLSelectElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none">
-                  <option :value="0">Qualquer (flexivel)</option>
-                  <option :value="1">1 produto (destaque)</option>
-                  <option :value="2">2 produtos</option>
-                  <option :value="4">4 produtos (2x2)</option>
-                  <option :value="6">6 produtos (3x2)</option>
-                  <option :value="8">8 produtos (4x2)</option>
-                  <option :value="9">9 produtos (3x3)</option>
-                  <option :value="12">12 produtos (4x3)</option>
-                  <option :value="16">16 produtos (4x4)</option>
-                  <option :value="20">20 produtos (5x4)</option>
-                </select>
-              </label>
-              <label class="block mb-2">
-                <span class="text-[9px] text-gray-400">Colunas recomendadas</span>
-                <select :value="cardStyle.suggestedColumns || 0" @change="cardStyle.suggestedColumns = parseInt(($event.target as HTMLSelectElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none">
-                  <option :value="0">Auto</option>
-                  <option :value="1">1 coluna</option>
-                  <option :value="2">2 colunas</option>
-                  <option :value="3">3 colunas</option>
-                  <option :value="4">4 colunas</option>
-                  <option :value="5">5 colunas</option>
-                  <option :value="6">6 colunas</option>
-                </select>
-              </label>
-            </div>
-          </div>
         </div>
       </div>
-
-      <!-- JSON Editor Modal -->
-      <Teleport to="body">
-        <div v-if="showJsonEditor" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="showJsonEditor = false">
-          <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col">
-            <div class="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 class="font-semibold text-gray-900">Editor JSON</h3>
-              <button @click="showJsonEditor = false" class="text-gray-400 hover:text-gray-600">✕</button>
-            </div>
-            <textarea v-model="jsonText" class="flex-1 p-4 text-xs font-mono outline-none resize-none min-h-80" />
-            <div class="p-4 border-t border-gray-200 flex gap-2 justify-end">
-              <button @click="showJsonEditor = false" class="px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-700">Cancelar</button>
-              <button @click="applyJson" class="px-4 py-2 rounded-lg text-sm bg-emerald-600 text-white font-medium">Aplicar JSON</button>
-            </div>
-          </div>
-        </div>
-      </Teleport>
     </template>
   </div>
 </template>

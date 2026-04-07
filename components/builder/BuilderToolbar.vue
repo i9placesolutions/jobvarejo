@@ -9,6 +9,7 @@ import {
   Loader2,
   Eye,
 } from 'lucide-vue-next'
+import { getQroCardTemplateById, isQroCardTemplateId, QRO_CARD_TEMPLATES } from '~/utils/qro-card-templates'
 
 const {
   flyer,
@@ -34,6 +35,9 @@ const {
 
 const { isAuto } = useBuilderLayout()
 
+const showCardCarousel = ref(false)
+const selectedQroTemplate = ref('')
+
 const emit = defineEmits<{
   export: []
   preview: []
@@ -52,6 +56,22 @@ const TEXT_SIZE_MODES = [
   { value: 'MAXIMUM', label: 'Maior' },
   { value: 'MINIMUM', label: 'Menor' },
   { value: 'MEDIUM', label: 'Medio' },
+]
+
+const BOX_MODES = [
+  { value: 'smart', label: 'Inteligente' },
+  { value: 'standard', label: 'Padrao' },
+]
+
+const COLOR_MODES = [
+  { value: 'smart', label: 'Inteligente' },
+  { value: 'standard', label: 'Padrao' },
+]
+
+const FOOTER_SHAPE_OPTIONS = [
+  { value: 'round-lg', label: 'Redondo Grande' },
+  { value: 'square.lg', label: 'Quadrado Grande' },
+  { value: 'square.sm', label: 'Quadrado Compacto' },
 ]
 
 const FOOTER_MODE_OPTIONS = [
@@ -74,8 +94,54 @@ const FONT_FAMILY_OPTIONS = [
 ]
 
 const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
+const activeLocalCardLayout = computed(() => {
+  const raw = String(fontConfig.value.card_layout || '').trim()
+  return isQroCardTemplateId(raw) ? raw : ''
+})
+const activeCardTemplateValue = computed(() => activeLocalCardLayout.value || ((flyer.value as any)?.card_template_id || ''))
+const hasVisualCardTemplates = computed(() => QRO_CARD_TEMPLATES.length > 0 || cardTemplates.length > 0)
 const setFc = (changes: Record<string, any>) => {
   updateFlyer({ font_config: { ...fontConfig.value, ...changes } })
+}
+
+const applyCardTemplateSelection = (value: string) => {
+  if (!value) {
+    selectedQroTemplate.value = ''
+    updateFlyer({
+      card_template_id: null,
+      font_config: {
+        ...fontConfig.value,
+        card_layout: null,
+      },
+    } as any)
+    return
+  }
+
+  if (isQroCardTemplateId(value)) {
+    selectedQroTemplate.value = value
+    updateFlyer({
+      card_template_id: null,
+      font_config: {
+        ...fontConfig.value,
+        card_layout: value,
+      },
+    } as any)
+    return
+  }
+
+  selectedQroTemplate.value = ''
+  updateFlyer({
+    card_template_id: value,
+    font_config: {
+      ...fontConfig.value,
+      card_layout: null,
+    },
+  } as any)
+}
+
+function handleQroTemplateSelect(tpl: any) {
+  if (!tpl?.id) return
+  applyCardTemplateSelection(tpl.id)
 }
 
 const handleFontFamilyChange = (e: Event) => {
@@ -101,15 +167,14 @@ onMounted(() => {
   }
 })
 
+watch(activeCardTemplateValue, (value) => {
+  const qroTemplate = getQroCardTemplateById(value)
+  selectedQroTemplate.value = qroTemplate?.id || ''
+}, { immediate: true })
+
 const handleCardTemplateChange = (e: Event) => {
   const val = (e.target as HTMLSelectElement).value
-  if (!val) {
-    updateFlyer({ card_template_id: null })
-    return
-  }
-  const isUuid = val.length === 36 && val.includes('-')
-  if (isUuid) { updateFlyer({ card_template_id: val } as any); setFc({ card_layout: null }) }
-  else { updateFlyer({ card_template_id: null } as any); setFc({ card_layout: val }) }
+  applyCardTemplateSelection(val)
 }
 
 const handleFooterTemplateChange = (e: Event) => {
@@ -168,13 +233,27 @@ const D = 'w-px h-4 bg-gray-200 mx-0.5'
       </select>
       <div :class="D" />
 
-      <!-- Card (so aparece se tiver templates no banco) -->
-      <template v-if="cardTemplates.length">
+      <!-- Card -->
+      <template v-if="hasVisualCardTemplates">
         <label :class="L">Card</label>
-        <select :value="(flyer as any)?.card_template_id || ''" @change="handleCardTemplateChange" :class="S">
+        <select :value="activeCardTemplateValue" @change="handleCardTemplateChange" :class="S">
           <option value="">Padrao</option>
-          <option v-for="tpl in cardTemplates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
+          <optgroup label="QROfertas">
+            <option v-for="tpl in QRO_CARD_TEMPLATES" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
+          </optgroup>
+          <optgroup v-if="cardTemplates.length" label="Biblioteca">
+            <option v-for="tpl in cardTemplates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
+          </optgroup>
         </select>
+        <div :class="D" />
+        <!-- Modelos visuais de card -->
+        <button
+          @click="showCardCarousel = !showCardCarousel"
+          class="px-2 py-1 text-xs rounded-md transition-colors"
+          :class="showCardCarousel ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+        >
+          {{ showCardCarousel ? 'Fechar Modelos' : 'Ver Modelos' }}
+        </button>
         <div :class="D" />
       </template>
 
@@ -199,6 +278,34 @@ const D = 'w-px h-4 bg-gray-200 mx-0.5'
 
       <!-- Spacer -->
       <div class="flex-1 min-w-2" />
+
+      <!-- Boxes -->
+      <label :class="L">Boxes</label>
+      <select :value="fontConfig.box_mode || 'smart'" @change="setFc({ box_mode: ($event.target as HTMLSelectElement).value })" :class="S">
+        <option v-for="b in BOX_MODES" :key="b.value" :value="b.value">{{ b.label }}</option>
+      </select>
+      <div :class="D" />
+
+      <!-- Cores -->
+      <label :class="L">Cores</label>
+      <select :value="fontConfig.color_mode || 'smart'" @change="setFc({ color_mode: ($event.target as HTMLSelectElement).value })" :class="S + ' w-20'">
+        <option v-for="c in COLOR_MODES" :key="c.value" :value="c.value">{{ c.label }}</option>
+      </select>
+      <div :class="D" />
+
+      <!-- Rodape visual -->
+      <label :class="L">Rodape</label>
+      <select :value="fontConfig.footer_shape || 'round-lg'" @change="setFc({ footer_shape: ($event.target as HTMLSelectElement).value })" :class="S">
+        <option v-for="f in FOOTER_SHAPE_OPTIONS" :key="f.value" :value="f.value">{{ f.label }}</option>
+      </select>
+      <div :class="D" />
+
+      <!-- Modo Leve -->
+      <label :class="L">Leve</label>
+      <button type="button" @click="setFc({ light_mode: !(fontConfig.light_mode ?? false) })" :class="['px-2 py-0.5 rounded text-[10px] font-medium transition-colors border', fontConfig.light_mode ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200']">
+        {{ fontConfig.light_mode ? 'ON' : 'OFF' }}
+      </button>
+      <div :class="D" />
 
       <!-- Zoom -->
       <button @click="zoomOut" class="p-0.5 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-700"><ZoomOut class="w-3.5 h-3.5" /></button>
@@ -318,5 +425,13 @@ const D = 'w-px h-4 bg-gray-200 mx-0.5'
         <span :class="['block w-3 h-3 rounded-full bg-white shadow transition-transform', flyer?.show_cover ? 'translate-x-2.5' : 'translate-x-0.5']" />
       </button>
     </div>
-  </div>
+  
+    <!-- LINHA 2: Carrossel de modelos de card (colapsavel) -->
+    <div v-if="showCardCarousel" class="border-t border-gray-200 bg-white px-3 py-2">
+      <BuilderTemplateCarousel
+        v-model="selectedQroTemplate"
+        @select="handleQroTemplateSelect"
+      />
+    </div>
+</div>
 </template>

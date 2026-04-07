@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Plus } from 'lucide-vue-next'
+import { QRO_CARD_TEMPLATES, getQroCardTemplateById } from '~/utils/qro-card-templates'
 
 const {
   flyer,
@@ -12,16 +13,22 @@ const {
   updateProduct,
   reorderProducts,
   productEditorOpen,
-  cardTemplates,
 } = useBuilderFlyer()
 
-// Template de card ativo (do banco, se selecionado)
+const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
+
+// Template de card ativo — SEMPRE QRO local, NUNCA admin
+const DEFAULT_QRO_TEMPLATE = 'qro-vertical-classic'
+
 const activeCardTemplate = computed(() => {
-  const tplId = (flyer.value as any)?.card_template_id
-  if (tplId) {
-    return cardTemplates.value.find((t: any) => t.id === tplId) || null
+  // 1. Se o usuario escolheu um layout QRO no font_config
+  const localLayoutId = String(fontConfig.value.card_layout || '').trim()
+  if (localLayoutId) {
+    const tpl = getQroCardTemplateById(localLayoutId)
+    if (tpl) return tpl
   }
-  return cardTemplates.value[0] || null
+  // 2. Fallback: template padrao QRO
+  return getQroCardTemplateById(DEFAULT_QRO_TEMPLATE) || QRO_CARD_TEMPLATES[0] || null
 })
 
 // Duplo clique alterna destaque
@@ -77,7 +84,6 @@ const {
   getCellAreaName,
 } = useBuilderLayout()
 
-const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
 const gap = computed(() => fontConfig.value.card_gap ?? theme.value?.body_config?.gap ?? 8)
 const padding = computed(() => fontConfig.value.card_padding ?? theme.value?.body_config?.padding ?? 12)
 
@@ -85,9 +91,11 @@ const padding = computed(() => fontConfig.value.card_padding ?? theme.value?.bod
 const standardGridStyle = computed(() => ({
   display: 'grid',
   gridTemplateColumns: `repeat(${effectiveGrid.value.columns}, minmax(0, 1fr))`,
-  gridTemplateRows: `repeat(${effectiveGrid.value.rows}, minmax(0, 1fr))`,
+  gridTemplateRows: `repeat(${effectiveGrid.value.rows}, 1fr)`,
   gap: `${gap.value}px`,
   padding: `${padding.value}px`,
+  height: '100%',
+  width: '100%',
   backgroundColor: 'var(--builder-body-bg, transparent)',
 }))
 
@@ -199,7 +207,7 @@ const handleOpenEditor = () => {
   </div>
 
   <!-- Grid with products -->
-  <div v-else :style="gridStyle" class="w-full h-full overflow-hidden">
+  <div v-else :style="gridStyle" class="flex-1 min-h-0 overflow-hidden">
     <template v-for="cell in cells" :key="cell.index">
       <!-- Card dinamico (template do banco) ou card legado -->
       <BuilderDynamicCard

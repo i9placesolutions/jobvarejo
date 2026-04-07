@@ -226,7 +226,8 @@ export interface CardTemplateElement {
     flex?: number          // proporcao no flex container (1, 2, 3...)
     order?: number         // ordem no flex
     // Tipografia
-    fontSize?: string
+    fontSize?: string      // tamanho fixo do texto (ex: '18px', '1.2em')
+    fontScale?: number     // escala do preco (1 = normal, 2 = dobro)
     fontWeight?: number
     fontFamily?: string
     textAlign?: string
@@ -254,6 +255,7 @@ export interface CardTemplateStyle {
     overflow?: string
     padding?: string
     // Layout do card
+    layout?: 'vertical' | 'horizontal' | 'overlay'  // alias amigavel para direction
     direction?: 'column' | 'row'   // flex-direction principal
     imagePosition?: 'top' | 'left' | 'right' | 'bottom'  // onde a imagem fica
     imageSize?: string             // '50%', '60%' — proporcao da imagem
@@ -268,6 +270,8 @@ export interface CardTemplateStyle {
     nameTextTransform?: string     // uppercase, lowercase, capitalize, none
     nameFontFamily?: string        // familia da fonte
     nameColor?: string             // cor do texto do nome
+    textAlign?: string             // alinhamento geral do card
+    fontSize?: string              // tamanho base: 'normal' | 'large' | 'small'
     nameMarginBottom?: number      // espaco abaixo do nome (px)
     // Imagem
     imageMarginTop?: number        // espaco acima da imagem (px)
@@ -301,12 +305,13 @@ export interface CardTemplateStyle {
 export interface BuilderCardTemplate {
     id: string
     name: string
-    thumbnail: string | null
+    description?: string
+    thumbnail?: string | null
     category: string
     elements: CardTemplateElement[]
     card_style: CardTemplateStyle
-    is_active: boolean
-    sort_order: number
+    is_active?: boolean
+    sort_order?: number
 }
 
 export interface BuilderSectionTemplate {

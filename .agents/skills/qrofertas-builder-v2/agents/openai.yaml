@@ -1,0 +1,4 @@
+interface:
+  display_name: "QROfertas Builder V2"
+  short_description: "Audita e replica fluxos do QROfertas"
+  default_prompt: "Use $qrofertas-builder-v2 para auditar, comparar ou implementar no JobVarejo fluxos especificos do QROfertas Builder V2."

@@ -3,8 +3,8 @@ const props = withDefaults(defineProps<{
   maxScale?: number
   minScale?: number
 }>(), {
-  maxScale: 1,
-  minScale: 0.34,
+  maxScale: 1.5,
+  minScale: 0.25,
 })
 
 const outerRef = ref<HTMLElement | null>(null)

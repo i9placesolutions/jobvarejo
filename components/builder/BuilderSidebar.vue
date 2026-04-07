@@ -17,6 +17,11 @@ import {
   ImagePlus,
   Loader2,
   Trash2,
+  Type as TypeIcon,
+  Percent,
+  LayoutTemplate,
+  CreditCard,
+  Target,
 } from 'lucide-vue-next'
 
 const {
@@ -43,11 +48,16 @@ const { isAuto } = useBuilderLayout()
 // Active panel
 const activePanel = ref<string | null>(null)
 
+// Modal states para novas funcionalidades QROfertas
+const showTitleStructureModal = ref(false)
+const showDiscountBubbleModal = ref(false)
+const showProductLayoutModal = ref(false)
+
 const togglePanel = (id: string) => {
   activePanel.value = activePanel.value === id ? null : id
 }
 
-// Sidebar tabs (spec: 10 panels)
+// Sidebar tabs (spec: 12 panels — QROfertas aligned)
 const tabs = [
   { id: 'products', label: 'Produtos', icon: ShoppingCart },
   { id: 'themes', label: 'Temas', icon: Palette },
@@ -55,6 +65,8 @@ const tabs = [
   { id: 'styles', label: 'Estilos', icon: Sparkles },
   { id: 'fonts', label: 'Fontes', icon: Type },
   { id: 'company', label: 'Empresa', icon: Building2 },
+  { id: 'payments', label: 'Pagamento', icon: CreditCard },
+  { id: 'interests', label: 'Segmento', icon: Target },
   { id: 'dates', label: 'Datas', icon: Calendar },
   { id: 'postar', label: 'Postar', icon: Share2 },
   { id: 'encarte', label: 'Encarte', icon: FileEdit },
@@ -452,6 +464,42 @@ const clearAllPayments = () => {
   updateFlyer({ payment_methods: [] } as any)
 }
 
+// ── Interesses / Segmentos (QROfertas aligned) ─────────────────────────────
+const SEGMENT_OPTIONS = [
+  { value: 'supermercado', label: 'Supermercado', icon: '🛒' },
+  { value: 'hortifruti', label: 'Hortifruti', icon: '🥬' },
+  { value: 'acougue', label: 'Açougue', icon: '🥩' },
+  { value: 'padaria', label: 'Padaria', icon: '🍞' },
+  { value: 'farmacia', label: 'Farmácia', icon: '💊' },
+  { value: 'bebidas', label: 'Bebidas', icon: '🍺' },
+  { value: 'eletronicos', label: 'Eletrônicos', icon: '📱' },
+  { value: 'material-construcao', label: 'Material Construção', icon: '🧱' },
+  { value: 'pet-shop', label: 'Pet Shop', icon: '🐾' },
+  { value: 'cosmeticos', label: 'Cosméticos', icon: '💄' },
+  { value: 'restaurante', label: 'Restaurante', icon: '🍽️' },
+  { value: 'moda', label: 'Moda / Vestuário', icon: '👗' },
+  { value: 'brinquedos', label: 'Brinquedos', icon: '🧸' },
+  { value: 'casa-decoracao', label: 'Casa & Decoração', icon: '🏠' },
+  { value: 'papelaria', label: 'Papelaria', icon: '📝' },
+  { value: 'outros', label: 'Outros', icon: '📦' },
+]
+
+const getSegments = (): string[] => {
+  return (flyer.value as any)?.segments || []
+}
+
+const isSegmentSelected = (value: string): boolean => {
+  return getSegments().includes(value)
+}
+
+const toggleSegment = (value: string) => {
+  const current = getSegments()
+  const updated = current.includes(value)
+    ? current.filter((s: string) => s !== value)
+    : [...current, value]
+  updateFlyer({ segments: updated } as any)
+}
+
 // ── Dates panel ─────────────────────────────────────────────────────────────
 const datesShortcuts = [
   { label: 'Esta Semana', days: 7, fromMonday: true },
@@ -694,6 +742,22 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
               <option value="standard">Padrao</option>
             </select>
           </label>
+
+          <!-- Botoes de atalho para modais avancados (QROfertas) -->
+          <div class="grid grid-cols-3 gap-2">
+            <button @click="showTitleStructureModal = true" class="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors">
+              <TypeIcon class="w-4 h-4 text-gray-500" />
+              <span class="text-[8px] text-gray-500">Titulo</span>
+            </button>
+            <button @click="showDiscountBubbleModal = true" class="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors">
+              <Percent class="w-4 h-4 text-gray-500" />
+              <span class="text-[8px] text-gray-500">Bubble</span>
+            </button>
+            <button @click="showProductLayoutModal = true" class="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors">
+              <LayoutTemplate class="w-4 h-4 text-gray-500" />
+              <span class="text-[8px] text-gray-500">Layout</span>
+            </button>
+          </div>
 
           <!-- Card colors -->
           <div class="border-t border-gray-200 pt-3">
@@ -1382,6 +1446,140 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
         </div>
       </template>
 
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- PAGAMENTOS (novo painel dedicado — QROfertas aligned) -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <template v-else-if="activePanel === 'payments'">
+        <div class="p-3 space-y-4">
+          <h3 class="text-xs font-semibold text-gray-600">Formas de Pagamento</h3>
+          <p class="text-[9px] text-gray-400">Selecione as formas de pagamento aceitas no encarte.</p>
+
+          <!-- Acoes rapidas -->
+          <div class="flex gap-2">
+            <button @click="selectAllPayments" class="flex-1 py-1.5 rounded text-[10px] font-medium bg-emerald-600/15 text-emerald-400 hover:bg-emerald-600/25 transition-colors">Selecionar Todas</button>
+            <button @click="clearAllPayments" class="flex-1 py-1.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors">Limpar Todas</button>
+          </div>
+
+          <!-- PIX e Dinheiro -->
+          <div>
+            <p class="text-[10px] text-gray-400 font-medium mb-1.5">Instantaneo e Dinheiro</p>
+            <div class="grid grid-cols-4 gap-2">
+              <button v-for="opt in PAYMENT_OPTIONS.filter(o => ['pix', 'dinheiro'].includes(o.id))" :key="opt.id"
+                @click="togglePaymentMethod(opt.id)"
+                :class="['flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all',
+                  isPaymentSelected(opt.id) ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 bg-gray-50 hover:bg-gray-100']">
+                <div class="w-7 h-7 rounded-full flex items-center justify-center" :style="{ backgroundColor: opt.color }">
+                  <span class="text-[7px] font-bold text-white">{{ opt.label.charAt(0) }}</span>
+                </div>
+                <span class="text-[8px] text-gray-500 text-center leading-tight">{{ opt.label }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Cartoes de Credito/Debito -->
+          <div>
+            <p class="text-[10px] text-gray-400 font-medium mb-1.5">Cartoes</p>
+            <div class="grid grid-cols-4 gap-2">
+              <button v-for="opt in PAYMENT_OPTIONS.filter(o => ['visa', 'mastercard', 'elo', 'hipercard', 'amex'].includes(o.id))" :key="opt.id"
+                @click="togglePaymentMethod(opt.id)"
+                :class="['flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all',
+                  isPaymentSelected(opt.id) ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 bg-gray-50 hover:bg-gray-100']">
+                <div class="w-7 h-7 rounded flex items-center justify-center overflow-hidden" :style="{ backgroundColor: opt.color }">
+                  <svg v-if="paymentBrandSvgs[opt.id]" v-html="paymentBrandSvgs[opt.id]" class="w-5 h-5" />
+                  <span v-else class="text-[7px] font-bold text-white">{{ opt.label.substring(0, 2) }}</span>
+                </div>
+                <span class="text-[8px] text-gray-500 text-center leading-tight">{{ opt.label }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Voucher/Refeicao/Alimentacao -->
+          <div>
+            <p class="text-[10px] text-gray-400 font-medium mb-1.5">Voucher / Alimentacao</p>
+            <div class="grid grid-cols-4 gap-2">
+              <button v-for="opt in PAYMENT_OPTIONS.filter(o => ['alelo', 'sodexo', 'ticket', 'vr', 'greencard'].includes(o.id))" :key="opt.id"
+                @click="togglePaymentMethod(opt.id)"
+                :class="['flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all',
+                  isPaymentSelected(opt.id) ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 bg-gray-50 hover:bg-gray-100']">
+                <div class="w-7 h-7 rounded flex items-center justify-center overflow-hidden" :style="{ backgroundColor: opt.color }">
+                  <span class="text-[7px] font-bold text-white">{{ opt.label.substring(0, 2) }}</span>
+                </div>
+                <span class="text-[8px] text-gray-500 text-center leading-tight">{{ opt.label }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Outros -->
+          <div>
+            <p class="text-[10px] text-gray-400 font-medium mb-1.5">Outros</p>
+            <div class="grid grid-cols-4 gap-2">
+              <button v-for="opt in PAYMENT_OPTIONS.filter(o => ['ben', 'goodcard', 'cabal', 'banescard'].includes(o.id))" :key="opt.id"
+                @click="togglePaymentMethod(opt.id)"
+                :class="['flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all',
+                  isPaymentSelected(opt.id) ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 bg-gray-50 hover:bg-gray-100']">
+                <div class="w-7 h-7 rounded flex items-center justify-center overflow-hidden" :style="{ backgroundColor: opt.color }">
+                  <span class="text-[7px] font-bold text-white">{{ opt.label.substring(0, 2) }}</span>
+                </div>
+                <span class="text-[8px] text-gray-500 text-center leading-tight">{{ opt.label }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Observacao de pagamento -->
+          <div class="border-t border-gray-200 pt-3">
+            <label class="block">
+              <span class="text-[10px] text-gray-400 font-medium">Observacao de Pagamento</span>
+              <textarea :value="(flyer as any)?.payment_notes || ''" @input="updateFlyer({ payment_notes: ($event.target as HTMLTextAreaElement).value } as any)" placeholder="Ex: Aceitamos apenas ate 2 cartoes..." class="w-full mt-1 h-14 bg-gray-100 text-[11px] text-gray-900 rounded px-2 py-1.5 border border-gray-200 outline-none resize-none placeholder-gray-400" />
+            </label>
+          </div>
+
+          <!-- Contador de selecionados -->
+          <div class="flex items-center justify-between text-[10px] text-gray-400 border-t border-gray-200 pt-3">
+            <span>{{ getPaymentMethods().length }} forma(s) selecionada(s)</span>
+            <span class="text-gray-300">•</span>
+            <span>Total: {{ PAYMENT_OPTIONS.length }} disponiveis</span>
+          </div>
+        </div>
+      </template>
+
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- INTERESSES / SEGMENTOS (QROfertas aligned — escolher-interesses) -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <template v-else-if="activePanel === 'interests'">
+        <div class="p-3 space-y-4">
+          <h3 class="text-xs font-semibold text-gray-600">Segmentos e Interesses</h3>
+          <p class="text-[9px] text-gray-400">Selecione os segmentos do seu negocio. Isso ajuda na recomendacao de temas adequados.</p>
+
+          <!-- Segmento principal -->
+          <label class="block">
+            <span class="text-[10px] text-gray-400 font-medium">Segmento Principal</span>
+            <select :value="(flyer as any)?.segment || ''" @change="updateFlyer({ segment: ($event.target as HTMLSelectElement).value } as any)" class="w-full mt-1 bg-gray-100 text-[11px] text-gray-600 rounded px-2 py-1.5 border border-gray-200 outline-none">
+              <option value="">Selecione...</option>
+              <option v-for="seg in SEGMENT_OPTIONS" :key="seg.value" :value="seg.value">{{ seg.label }}</option>
+            </select>
+          </label>
+
+          <!-- Segmentos grid -->
+          <div>
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Segmentos Ativos</p>
+            <div class="grid grid-cols-2 gap-2">
+              <button v-for="seg in SEGMENT_OPTIONS" :key="seg.value"
+                @click="toggleSegment(seg.value)"
+                :class="['flex items-center gap-2 p-2 rounded-lg border-2 transition-all text-left',
+                  isSegmentSelected(seg.value) ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 bg-gray-50 hover:bg-gray-100']">
+                <span class="text-lg">{{ seg.icon }}</span>
+                <span class="text-[10px] text-gray-600 font-medium leading-tight">{{ seg.label }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Contador -->
+          <div class="flex items-center justify-between text-[10px] text-gray-400 border-t border-gray-200 pt-3">
+            <span>{{ getSegments().length }} segmento(s) selecionado(s)</span>
+          </div>
+        </div>
+      </template>
+
       <!-- DATAS -->
       <template v-else-if="activePanel === 'dates'">
         <div class="p-3">
@@ -1403,6 +1601,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
               { key: 'show_stock_warning', label: 'Enquanto durarem estoques', def: false },
               { key: 'show_illustrative_note', label: 'Imagens Ilustrativas', def: true },
               { key: 'show_medicine_warning', label: 'Advertencia Medicamento', def: false },
+              { key: 'show_discount_percent', label: 'Mostrar % desconto', def: false },
               { key: 'show_promo_phrase', label: 'Frase Promocional', def: false },
             ]" :key="tog.key" class="flex items-center justify-between gap-2 cursor-pointer">
               <span class="text-[11px] text-gray-500">{{ tog.label }}</span>
@@ -1559,4 +1758,21 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
       </template>
     </div>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- MODAIS AVANCADOS (QROfertas) -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <BuilderTitleStructureModal
+    :open="showTitleStructureModal"
+    @close="showTitleStructureModal = false"
+    @apply="updateFlyer({ font_config: { ...((flyer as any)?.font_config || {}), ...$event } } as any)"
+  />
+  <BuilderDiscountBubbleModal
+    :open="showDiscountBubbleModal"
+    @close="showDiscountBubbleModal = false"
+  />
+  <BuilderProductLayoutModal
+    :open="showProductLayoutModal"
+    @close="showProductLayoutModal = false"
+  />
 </template>
