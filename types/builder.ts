@@ -300,6 +300,14 @@ export interface CardTemplateStyle {
     // Grade sugerida
     suggestedPerPage?: number      // produtos por pagina recomendado
     suggestedColumns?: number      // colunas recomendadas
+    // ── Sistema QROfertas ──
+    contentType?: 'CONTENT_LINE' | 'CONTENT_ROW_BOTTOM'  // geometria do grid interno
+    ordem?: string                 // ex: 'TITULO-IMAGEM-ETIQUETA', 'IMAGEM-TITULO-ETIQUETA'
+    xWeight?: string               // ex: 'X_50-50', 'X_60-40', 'X_40-60', 'X_70-30', 'X_80-20'
+    yWeight?: string               // ex: 'Y_50-50', 'Y_60-40', 'Y_80-20', 'Y_20-80'
+    invadir?: string               // ex: 'NAO_INVADIR', 'INVADIR_20', 'INVADIR_50', 'INVADIR_100'
+    etiquetaOrientacao?: 'HORIZONTAL' | 'VERTICAL'  // orientacao da etiqueta de preco
+    nameBg?: string                // cor de fundo do nome
 }
 
 export interface BuilderCardTemplate {
@@ -356,7 +364,13 @@ export interface BuilderProduct {
 export type BuilderFlyerStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
 export type BuilderTextSizeMode = 'MAXIMUM' | 'MINIMUM' | 'MEDIUM'
 export type BuilderPriceMode = 'simple' | 'from_to' | 'x_per_y' | 'take_pay' | 'installment' | 'symbolic' | 'club_price' | 'anticipation' | 'none'
-export type BuilderProductUnit = 'UN' | 'KG' | 'G' | '100G' | '500G' | 'L' | 'ML' | 'PCT' | 'CX' | 'DZ' | 'BD' | 'FD' | 'SC'
+export type BuilderProductUnit =
+  | 'UN' | 'KG' | 'G' | '100G' | '500G' | 'L' | 'ML' | 'PCT' | 'CX' | 'DZ' | 'BD' | 'FD' | 'SC'
+  | 'BARRA' | 'BOLA' | 'CM' | 'CUBO' | 'FATIA' | 'GALAO' | 'GARRAFA' | 'JARRA'
+  | 'MACO' | 'METRO' | 'TAMBOR' | 'PARES' | 'PECA' | 'PORCAO' | 'KIT' | 'PRATO'
+  | 'M2' | 'TELA' | 'LATA' | 'VASO' | 'SACHE' | 'MILHEIRO' | 'ROLO' | 'CENTO'
+  | 'CADA' | 'LIBRA' | 'DISPLAY' | 'COMBO' | 'CARTELA' | 'TONELADA' | 'BALDE'
+  | 'POTE' | 'POLEGADA' | 'PE' | 'JARDA'
 
 export interface BuilderFlyer {
     id: string

@@ -17,6 +17,37 @@ const {
 
 const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
 
+// ── Modais de personalizacao por produto ──
+const priceOptionsModalIndex = ref<number | null>(null)
+const priceTagSelectorIndex = ref<number | null>(null)
+const bubbleModalIndex = ref<number | null>(null)
+
+const openPriceOptions = (idx: number) => { priceOptionsModalIndex.value = idx }
+const openPriceTagSelector = (idx: number) => { priceTagSelectorIndex.value = idx }
+const openBubbleModal = (idx: number) => { bubbleModalIndex.value = idx }
+
+const onSelectPriceMode = (mode: string, applyAll: boolean) => {
+  if (priceOptionsModalIndex.value != null) {
+    if (applyAll) {
+      paginatedProducts.value.forEach((_: any, i: number) => updateProduct(i, { price_mode: mode } as any))
+    } else {
+      updateProduct(priceOptionsModalIndex.value, { price_mode: mode } as any)
+    }
+  }
+  priceOptionsModalIndex.value = null
+}
+
+const onSelectPriceTag = (styleId: string, applyAll: boolean) => {
+  if (priceTagSelectorIndex.value != null) {
+    if (applyAll) {
+      paginatedProducts.value.forEach((_: any, i: number) => updateProduct(i, { price_tag_style_id: styleId } as any))
+    } else {
+      updateProduct(priceTagSelectorIndex.value, { price_tag_style_id: styleId } as any)
+    }
+  }
+  priceTagSelectorIndex.value = null
+}
+
 // Template de card ativo — SEMPRE QRO local, NUNCA admin
 const DEFAULT_QRO_TEMPLATE = 'qro-vertical-classic'
 
@@ -207,7 +238,7 @@ const handleOpenEditor = () => {
   </div>
 
   <!-- Grid with products -->
-  <div v-else :style="gridStyle" class="flex-1 min-h-0 overflow-hidden">
+  <div v-else :style="gridStyle" class="flex-1 min-h-0 overflow-hidden drag-row lista-de-produtos-sort">
     <template v-for="cell in cells" :key="cell.index">
       <!-- Card dinamico (template do banco) ou card legado -->
       <BuilderDynamicCard
@@ -218,6 +249,7 @@ const handleOpenEditor = () => {
         :columns="columns"
         :page-product-count="pageProductCount"
         draggable="true"
+        :class="[`layout-box-row-${cell.index}`, `produto-box-${cell.index}`]"
         :style="{
           minHeight: 0,
           cursor: dragFromIndex !== null ? 'grabbing' : 'grab',
@@ -234,6 +266,9 @@ const handleOpenEditor = () => {
         @drop="onDrop($event, cell.index)"
         @dragend="onDragEnd"
         @dblclick="toggleHighlight(cell.index)"
+        @open-price-options="openPriceOptions(cell.index)"
+        @open-price-tag="openPriceTagSelector(cell.index)"
+        @open-bubble="openBubbleModal(cell.index)"
       />
 
       <!-- Card legado (fallback quando sem template dinamico) -->
@@ -276,5 +311,27 @@ const handleOpenEditor = () => {
         <span class="text-3xl font-light" :style="{ color: 'var(--builder-text, #999)' }">+</span>
       </div>
     </template>
+
+    <!-- Modal Opcoes de Preco -->
+    <BuilderPriceOptionsModal
+      v-if="priceOptionsModalIndex != null && paginatedProducts[priceOptionsModalIndex]"
+      :current-mode="paginatedProducts[priceOptionsModalIndex].price_mode || 'simple'"
+      @select="onSelectPriceMode"
+      @close="priceOptionsModalIndex = null"
+    />
+
+    <!-- Modal Seletor de Etiqueta -->
+    <BuilderPriceTagSelectorModal
+      v-if="priceTagSelectorIndex != null && paginatedProducts[priceTagSelectorIndex]"
+      :current-style-id="paginatedProducts[priceTagSelectorIndex].price_tag_style_id"
+      @select="onSelectPriceTag"
+      @close="priceTagSelectorIndex = null"
+    />
+
+    <!-- Modal Balao de Desconto -->
+    <BuilderDiscountBubbleModal
+      :open="bubbleModalIndex != null"
+      @close="bubbleModalIndex = null"
+    />
   </div>
 </template>

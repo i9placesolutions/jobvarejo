@@ -777,6 +777,143 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
             </button>
           </div>
 
+          <!-- QROfertas: Controles de layout do card -->
+          <div class="border-t border-gray-200 pt-3">
+            <p class="text-[10px] text-gray-400 font-medium mb-2">Layout do Card (QROfertas)</p>
+
+            <!-- Content Type -->
+            <label class="block mb-2">
+              <span class="text-[9px] text-gray-400 block mb-1">Disposicao</span>
+              <select
+                :value="fontConfig.card_content_type || 'V3_TIE'"
+                @change="setFc({ card_content_type: ($event.target as HTMLSelectElement).value })"
+                class="w-full bg-gray-100 text-[10px] text-gray-600 rounded px-2 py-1 border border-gray-200 outline-none"
+              >
+                    <optgroup label="Vertical (3x1)">
+                      <option value="V3_TIE">Titulo / Imagem / Etiqueta</option>
+                      <option value="V3_TEI">Titulo / Etiqueta / Imagem</option>
+                      <option value="V3_ITE">Imagem / Titulo / Etiqueta</option>
+                      <option value="V3_IET">Imagem / Etiqueta / Titulo</option>
+                      <option value="V3_ETI">Etiqueta / Titulo / Imagem</option>
+                      <option value="V3_EIT">Etiqueta / Imagem / Titulo</option>
+                    </optgroup>
+                    <optgroup label="Horizontal (1x3)">
+                      <option value="H3_TIE">Titulo | Imagem | Etiqueta</option>
+                      <option value="H3_TEI">Titulo | Etiqueta | Imagem</option>
+                      <option value="H3_ITE">Imagem | Titulo | Etiqueta</option>
+                      <option value="H3_IET">Imagem | Etiqueta | Titulo</option>
+                      <option value="H3_ETI">Etiqueta | Titulo | Imagem</option>
+                      <option value="H3_EIT">Etiqueta | Imagem | Titulo</option>
+                    </optgroup>
+                    <optgroup label="Grade 2x2">
+                      <option value="G2_TT_II">Titulo+Titulo / Imagem+Imagem</option>
+                      <option value="G2_TT_EE">Titulo+Titulo / Etiqueta+Etiqueta</option>
+                      <option value="G2_TT_IE">Titulo+Titulo / Imagem+Etiqueta</option>
+                      <option value="G2_TT_EI">Titulo+Titulo / Etiqueta+Imagem</option>
+                      <option value="G2_II_TT">Imagem+Imagem / Titulo+Titulo</option>
+                      <option value="G2_II_EE">Imagem+Imagem / Etiqueta+Etiqueta</option>
+                      <option value="G2_II_TE">Imagem+Imagem / Titulo+Etiqueta</option>
+                      <option value="G2_II_ET">Imagem+Imagem / Etiqueta+Titulo</option>
+                      <option value="G2_EE_TT">Etiqueta+Etiqueta / Titulo+Titulo</option>
+                      <option value="G2_EE_II">Etiqueta+Etiqueta / Imagem+Imagem</option>
+                      <option value="G2_EE_TI">Etiqueta+Etiqueta / Titulo+Imagem</option>
+                      <option value="G2_EE_IT">Etiqueta+Etiqueta / Imagem+Titulo</option>
+                      <option value="G2_TI_TI">Titulo+Imagem / Titulo+Imagem</option>
+                      <option value="G2_TI_TE">Titulo+Imagem / Titulo+Etiqueta</option>
+                      <option value="G2_TI_EI">Titulo+Imagem / Etiqueta+Imagem</option>
+                      <option value="G2_TI_ET">Titulo+Imagem / Etiqueta+Titulo</option>
+                      <option value="G2_TE_TI">Titulo+Etiqueta / Titulo+Imagem</option>
+                      <option value="G2_TE_TE">Titulo+Etiqueta / Titulo+Etiqueta</option>
+                      <option value="G2_TE_EI">Titulo+Etiqueta / Etiqueta+Imagem</option>
+                      <option value="G2_TE_ET">Titulo+Etiqueta / Etiqueta+Titulo</option>
+                      <option value="G2_IT_IE">Imagem+Titulo / Imagem+Etiqueta</option>
+                      <option value="G2_IT_EI">Imagem+Titulo / Etiqueta+Imagem</option>
+                      <option value="G2_IE_IT">Imagem+Etiqueta / Imagem+Titulo</option>
+                      <option value="G2_IE_ET">Imagem+Etiqueta / Etiqueta+Titulo</option>
+                    </optgroup>
+                    </select>
+            </label>
+
+            <!-- Ordem -->
+            <label class="block mb-2">
+              <span class="text-[9px] text-gray-400 block mb-1">Ordem dos elementos</span>
+              <select
+                :value="fontConfig.card_ordem || 'TITULO-IMAGEM-ETIQUETA'"
+                @change="setFc({ card_ordem: ($event.target as HTMLSelectElement).value })"
+                class="w-full bg-gray-100 text-[10px] text-gray-600 rounded px-2 py-1 border border-gray-200 outline-none"
+              >
+                <option value="TITULO-IMAGEM-ETIQUETA">Titulo > Imagem > Etiqueta</option>
+                <option value="IMAGEM-TITULO-ETIQUETA">Imagem > Titulo > Etiqueta</option>
+                <option value="IMAGEM-ETIQUETA-TITULO">Imagem > Etiqueta > Titulo</option>
+                <option value="TITULO-ETIQUETA-IMAGEM">Titulo > Etiqueta > Imagem</option>
+                <option value="ETIQUETA-TITULO-IMAGEM">Etiqueta > Titulo > Imagem</option>
+                <option value="ETIQUETA-IMAGEM-TITULO">Etiqueta > Imagem > Titulo</option>
+              </select>
+            </label>
+
+            <!-- X Weight (proporcao) -->
+            <label class="block mb-2">
+              <span class="text-[9px] text-gray-400 block mb-1">Proporcao (Imagem vs Etiqueta)</span>
+              <select
+                :value="fontConfig.card_x_weight || 'X_60-40'"
+                @change="setFc({ card_x_weight: ($event.target as HTMLSelectElement).value })"
+                class="w-full bg-gray-100 text-[10px] text-gray-600 rounded px-2 py-1 border border-gray-200 outline-none"
+              >
+                <option value="X_80-20">Imagem 80% / Etiqueta 10%</option>
+                <option value="X_70-30">Imagem 70% / Etiqueta 15%</option>
+                <option value="X_60-40">Imagem 60% / Etiqueta 20%</option>
+                <option value="X_50-50">Imagem 50% / Etiqueta 25%</option>
+                <option value="X_40-60">Imagem 40% / Etiqueta 30%</option>
+              </select>
+            </label>
+
+            <!-- Y Weight -->
+            <label class="block mb-2">
+              <span class="text-[9px] text-gray-400 block mb-1">Proporcao vertical (Titulo vs Conteudo)</span>
+              <select
+                :value="fontConfig.card_y_weight || 'Y_50-50'"
+                @change="setFc({ card_y_weight: ($event.target as HTMLSelectElement).value })"
+                class="w-full bg-gray-100 text-[10px] text-gray-600 rounded px-2 py-1 border border-gray-200 outline-none"
+              >
+                <option value="Y_20-80">Titulo 30% / Conteudo 70%</option>
+                <option value="Y_50-50">Titulo 50% / Conteudo 50%</option>
+                <option value="Y_60-40">Titulo 60% / Conteudo 40%</option>
+                <option value="Y_80-20">Titulo 70% / Conteudo 30%</option>
+              </select>
+            </label>
+
+            <!-- Escala da Imagem -->
+            <label class="block mb-2">
+              <span class="text-[9px] text-gray-400 block mb-1">Ampliar Imagem: {{ Math.round((fontConfig.image_scale || 1) * 100) }}%</span>
+              <input
+                type="range"
+                min="50"
+                max="220"
+                :value="Math.round((fontConfig.image_scale || 1) * 100)"
+                @input="setFc({ image_scale: parseInt(($event.target as HTMLInputElement).value) / 100 })"
+                class="w-full"
+              />
+            </label>
+
+            <!-- INVADIR -->
+            <label class="block mb-2">
+              <span class="text-[9px] text-gray-400 block mb-1">Invasao da etiqueta sobre imagem</span>
+              <select
+                :value="fontConfig.card_invadir || 'NAO_INVADIR'"
+                @change="setFc({ card_invadir: ($event.target as HTMLSelectElement).value })"
+                class="w-full bg-gray-100 text-[10px] text-gray-600 rounded px-2 py-1 border border-gray-200 outline-none"
+              >
+                <option value="NAO_INVADIR">Sem invasao</option>
+                <option value="INVADIR_20">20% - Leve</option>
+                <option value="INVADIR_40">40% - Moderada</option>
+                <option value="INVADIR_50">50% - Metade</option>
+                <option value="INVADIR_60">60%</option>
+                <option value="INVADIR_80">80%</option>
+                <option value="INVADIR_100">100% - Total</option>
+              </select>
+            </label>
+          </div>
+
           <!-- Price tag style selector -->
           <div v-if="priceTagStyles.length" class="border-t border-gray-200 pt-3">
             <p class="text-[10px] text-gray-400 font-medium mb-2">Etiqueta de Preco</p>
@@ -837,6 +974,11 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
               <div>
                 <label class="text-[9px] text-gray-400">Nome da Empresa</label>
                 <input :value="fontConfig.footer_empresa_nome || ''" @input="setFc({ footer_empresa_nome: ($event.target as HTMLInputElement).value })" placeholder="Meu Supermercado" class="w-full bg-gray-100 text-[10px] text-gray-900 placeholder-gray-400 outline-none border border-gray-200 rounded px-1.5 py-1 mt-0.5" />
+              </div>
+              <!-- Slogan -->
+              <div>
+                <label class="text-[9px] text-gray-400">Slogan</label>
+                <input :value="fontConfig.footer_empresa_slogan || ''" @input="setFc({ footer_empresa_slogan: ($event.target as HTMLInputElement).value })" placeholder="Onde voce compra bem" class="w-full bg-gray-100 text-[10px] text-gray-900 placeholder-gray-400 outline-none border border-gray-200 rounded px-1.5 py-1 mt-0.5" />
               </div>
               <!-- WhatsApp -->
               <div>
@@ -1181,19 +1323,18 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
             <div class="grid grid-cols-2 gap-1.5">
               <button
                 v-for="fl in [
-                  { id: 'classico', label: 'Classico', desc: 'Tradicional' },
-                  { id: 'moderno', label: 'Moderno', desc: 'Clean e arredondado' },
-                  { id: 'elegante', label: 'Elegante', desc: 'Sofisticado' },
-                  { id: 'banner', label: 'Banner', desc: 'Impacto maximo' },
+                  { id: 'square.sm', label: 'V1 Compacto', desc: 'Barra horizontal' },
+                  { id: 'round-lg', label: 'V2 Redondo', desc: 'Grid arredondado' },
+                  { id: 'square.lg', label: 'V3 Quadrado', desc: 'Grid quadrado' },
                 ]"
                 :key="fl.id"
-                @click="updateFlyer({ footer_layout: fl.id } as any)"
+                @click="setFc({ footer_shape: fl.id })"
                 class="flex flex-col items-start p-2 rounded-lg border transition-all text-left"
-                :class="((flyer as any)?.footer_layout || 'classico') === fl.id
+                :class="(fontConfig.footer_shape || 'round-lg') === fl.id
                   ? 'border-emerald-500/50 bg-emerald-600/10 ring-1 ring-emerald-500/20'
                   : 'border-gray-200 bg-gray-50 hover:bg-gray-100'"
               >
-                <span class="text-[10px] font-semibold" :class="((flyer as any)?.footer_layout || 'classico') === fl.id ? 'text-emerald-400' : 'text-gray-600'">{{ fl.label }}</span>
+                <span class="text-[10px] font-semibold" :class="(fontConfig.footer_shape || 'round-lg') === fl.id ? 'text-emerald-400' : 'text-gray-600'">{{ fl.label }}</span>
                 <span class="text-[8px] text-gray-400">{{ fl.desc }}</span>
               </button>
             </div>

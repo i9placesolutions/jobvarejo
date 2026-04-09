@@ -103,7 +103,9 @@ export const useBuilderFlyer = () => {
   const cssVariables = computed(() => {
     const cfg: BuilderThemeCssConfig | undefined = state.value.theme?.css_config
     if (!cfg) return {} as Record<string, string>
+    const fc = (state.value.flyer?.font_config || {}) as Record<string, any>
     return {
+      // Variaveis do tema
       '--builder-primary': cfg.primaryColor || '',
       '--builder-secondary': cfg.secondaryColor || '',
       '--builder-bg': cfg.bgColor || '',
@@ -113,6 +115,19 @@ export const useBuilderFlyer = () => {
       '--builder-body-bg': cfg.bodyBg || '',
       '--builder-footer-bg': cfg.footerBg || '',
       '--builder-accent': cfg.accentColor || '',
+      // Variaveis globais QROfertas (secao 12/25 da doc)
+      '--margin-layout': `${fc.margin_layout ?? 10}px`,
+      '--footer-height': `${fc.footer_height ?? 200}px`,
+      '--footer-line-height': `${fc.footer_line_height ?? 100}px`,
+      '--footer-font-size': `${fc.footer_font_size ?? 50}px`,
+      '--footer-base-margin': `${fc.footer_base_margin ?? 15}px`,
+      '--chip-height': `${fc.chip_height ?? 100}px`,
+      '--observacao-fs': `${fc.observacao_fs ?? 20}px`,
+      '--observacao-h': `${fc.observacao_h ?? 10}%`,
+      '--mensagem-customizada-fontsize': `${fc.mensagem_fontsize ?? 75}px`,
+      '--mensagem-customizada-height': `${fc.mensagem_height ?? 200}px`,
+      '--bubble-font-size': `${fc.bubble_font_size ?? 35}px`,
+      '--bubble-desconto-size': `${fc.bubble_desconto_size ?? 139}px`,
     } as Record<string, string>
   })
 

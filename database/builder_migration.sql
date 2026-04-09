@@ -261,11 +261,16 @@ INSERT INTO builder_models (name, type, width, height, aspect_ratio, sort_order)
     ('Feed Facebook', 'SOCIAL', 1080, 1080, '1:1', 1),
     ('Stories', 'SOCIAL', 1080, 1920, '9:16', 2),
     ('Feed/Reels', 'SOCIAL', 1080, 1350, '4:5', 3),
-    ('A4 Vertical', 'PRINT', 794, 1123, '210:297', 4),
-    ('A4 Horizontal', 'PRINT', 1123, 794, '297:210', 5),
-    ('Grande', 'PRINT', 1200, 1600, '3:4', 6),
-    ('TV Horizontal', 'TV', 1920, 1080, '16:9', 7),
-    ('TV Vertical', 'TV', 1080, 1920, '9:16', 8)
+    ('Video Tabela Rede Social', 'SOCIAL', 1080, 1080, '1:1', 4),
+    ('Grande', 'PRINT', 1200, 1600, '3:4', 5),
+    ('A4 Vertical', 'PRINT', 794, 1123, '210:297', 6),
+    ('A4 Horizontal', 'PRINT', 1123, 794, '297:210', 7),
+    ('Cartaz A4 Vertical', 'PRINT', 794, 1123, '210:297', 8),
+    ('Cartaz A4 Horizontal', 'PRINT', 1123, 794, '297:210', 9),
+    ('TV Horizontal', 'TV', 1920, 1080, '16:9', 10),
+    ('TV Vertical', 'TV', 1080, 1920, '9:16', 11),
+    ('Video Tabela TV Horizontal', 'TV', 1920, 1080, '16:9', 12),
+    ('Video Tabela TV Vertical', 'TV', 1080, 1920, '9:16', 13)
 ON CONFLICT DO NOTHING;
 
 -- Layouts (grades) — vinculados ao modelo Feed (1:1) como default
@@ -294,7 +299,15 @@ INSERT INTO builder_layouts (name, products_per_page, columns, rows, sort_order,
     ('7 - 3 Dest. Topo', 7, 3, 3, 24, '{"columns":"1fr 1fr 1fr","rows":"1.4fr 1fr 1fr","areas":"\"d0 d1 d2\" \"p3 p4 p5\" \"p6 . .\""}'),
     ('8 - 2 Dest. Topo', 8, 3, 3, 25, '{"columns":"1fr 1fr 1fr","rows":"1.5fr 1fr 1fr","areas":"\"d0 d0 d1\" \"p2 p3 p4\" \"p5 p6 p7\""}'),
     ('9 - 1 Dest. Centro', 9, 3, 3, 26, '{"columns":"1fr 2fr 1fr","rows":"1fr 1fr 1fr","areas":"\"p1 d0 p2\" \"p3 d0 p4\" \"p5 p6 p7\""}'),
-    ('12 - 4 Dest. Topo', 12, 4, 3, 27, '{"columns":"1fr 1fr 1fr 1fr","rows":"1.5fr 1fr 1fr","areas":"\"d0 d1 d2 d3\" \"p4 p5 p6 p7\" \"p8 p9 p10 p11\""}')
+    ('12 - 4 Dest. Topo', 12, 4, 3, 27, '{"columns":"1fr 1fr 1fr 1fr","rows":"1.5fr 1fr 1fr","areas":"\"d0 d1 d2 d3\" \"p4 p5 p6 p7\" \"p8 p9 p10 p11\""}'),
+    -- Layouts TABELA (grades densas para listas de produtos)
+    ('3 Produtos (3x1)', 3, 3, 1, 30, '{}'),
+    ('3 Produtos (1x3)', 3, 1, 3, 31, '{}'),
+    ('10 Produtos - Tabela', 10, 5, 2, 40, '{"mode":"table"}'),
+    ('20 Produtos - Tabela', 20, 5, 4, 41, '{"mode":"table"}'),
+    ('30 Produtos - Tabela', 30, 6, 5, 42, '{"mode":"table"}'),
+    ('17 Produtos (1 Dest. + 4x4)', 17, 4, 5, 43, '{"columns":"1fr 1fr 1fr 1fr","rows":"1.5fr 1fr 1fr 1fr 1fr","areas":"\"d0 d0 d0 d0\" \"p1 p2 p3 p4\" \"p5 p6 p7 p8\" \"p9 p10 p11 p12\" \"p13 p14 p15 p16\""}'),
+    ('11 Produtos (3 Dest. + 8)', 11, 4, 3, 44, '{"columns":"1fr 1fr 1fr 1fr","rows":"1.3fr 1fr 1fr","areas":"\"d0 d1 d2 .\" \"p3 p4 p5 p6\" \"p7 p8 p9 p10\""}')
 ON CONFLICT DO NOTHING;
 
 -- Price tag styles

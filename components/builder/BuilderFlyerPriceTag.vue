@@ -739,25 +739,28 @@ const priceFormatted = computed(() => priceParts.value ? `${priceParts.value.int
         />
       </svg>
       <div v-if="bgImageStyle" :style="bgImageStyle" />
+      <!-- Unidade acima do preco (ex: kg) — estilo QROfertas -->
+      <span
+        v-if="unitAbbr && mode !== 'installment' && !tagStyle?.css_config?.hideUnit"
+        class="font-bold leading-none self-start relative z-1 opacity-80"
+        :style="{ fontSize: `${0.35 * s}em`, position: 'absolute', top: `${0.1 * s}em`, left: `${0.15 * s}em` }"
+      >{{ unitAbbr }}</span>
+      <!-- R$ (cifrao) — pequeno, alinhado ao topo do real -->
       <span
         class="font-bold leading-none self-start relative z-1"
-        :style="{ fontSize: `${currencyScale * s}em`, marginTop: currencyScale < 0.6 ? `${0.12 * s}em` : '0' }"
+        :style="{ fontSize: `${currencyScale * s}em`, marginTop: `${0.15 * s}em` }"
       >R$</span>
+      <!-- Parte inteira (real) — dominante -->
       <span
-        class="font-extrabold leading-none relative z-1"
-        :style="{ fontSize: `${1.2 * s}em` }"
+        class="font-black leading-none relative z-1"
+        :style="{ fontSize: `${1.4 * s}em` }"
       >{{ mode === 'installment' ? installmentParts?.integer : priceParts?.integer }}</span>
-      <div class="flex flex-col items-start relative z-1" :class="{ 'relative': decimalStyle === 'superscript' }">
+      <!-- Virgula + centavos — menores, alinhados ao topo -->
+      <div class="flex flex-col items-start self-start relative z-1" :style="{ marginTop: `${0.12 * s}em` }">
         <span
           class="font-bold leading-none"
-          :class="{ '-mt-1': decimalStyle === 'superscript' }"
           :style="{ fontSize: `${decimalSize * s}em` }"
         >,{{ mode === 'installment' ? installmentParts?.decimal : priceParts?.decimal }}</span>
-        <span
-          v-if="unitAbbr && mode !== 'installment' && !tagStyle?.css_config?.hideUnit"
-          class="font-medium leading-none opacity-80"
-          :style="{ fontSize: `${0.35 * s}em` }"
-        >/{{ unitAbbr }}</span>
       </div>
     </div>
 

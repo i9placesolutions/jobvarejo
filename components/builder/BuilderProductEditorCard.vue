@@ -11,6 +11,7 @@ import {
   ZoomIn,
   Move,
   RotateCcw,
+  Maximize2,
 } from 'lucide-vue-next'
 import type { BuilderFlyerProduct, BuilderPriceMode, BuilderProductUnit } from '~/types/builder'
 
@@ -29,6 +30,7 @@ const isUploadingExtra = ref(false)
 const isRemovingBg = ref(false)
 const isSearching = ref(false)
 const showPriceModal = ref(false)
+const showImageEditor = ref(false)
 const showDetails = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<Array<{ key: string; url: string; name?: string }>>([])
@@ -47,21 +49,58 @@ const priceModes: { value: BuilderPriceMode; label: string }[] = [
   { value: 'none', label: 'Sem Etiqueta' },
 ]
 
-// Unit options
+// Unit options (49 opcoes — compativel com QROfertas)
 const unitOptions: { value: BuilderProductUnit; label: string }[] = [
-  { value: 'UN', label: 'UN (sem unidade no preco)' },
-  { value: 'KG', label: 'KG - Quilo' },
-  { value: 'G', label: 'G - Grama' },
-  { value: '100G', label: '100G' },
-  { value: '500G', label: '500G' },
-  { value: 'L', label: 'L - Litro' },
-  { value: 'ML', label: 'ML - Mililitro' },
-  { value: 'PCT', label: 'PCT - Pacote' },
-  { value: 'CX', label: 'CX - Caixa' },
-  { value: 'DZ', label: 'DZ - Duzia' },
-  { value: 'BD', label: 'BD - Bandeja' },
-  { value: 'FD', label: 'FD - Fardo' },
-  { value: 'SC', label: 'SC - Saco' },
+  { value: 'UN', label: 'Escolha... (sem unidade)' },
+  { value: 'BARRA', label: 'Barra' },
+  { value: 'BOLA', label: 'Bola' },
+  { value: 'CX', label: 'Caixa' },
+  { value: 'CM', label: 'Centimetro' },
+  { value: 'CUBO', label: 'Cubo' },
+  { value: 'DZ', label: 'Duzia' },
+  { value: 'FD', label: 'Fardo' },
+  { value: 'FATIA', label: 'Fatia' },
+  { value: 'SC', label: 'Saco' },
+  { value: 'G', label: 'Grama' },
+  { value: '100G', label: '100 Gramas' },
+  { value: 'GALAO', label: 'Galao' },
+  { value: 'GARRAFA', label: 'Garrafa' },
+  { value: 'JARRA', label: 'Jarra' },
+  { value: 'KG', label: 'Kilo' },
+  { value: 'L', label: 'Litro' },
+  { value: 'MACO', label: 'Maco' },
+  { value: 'METRO', label: 'Metro' },
+  { value: 'PCT', label: 'Pacote' },
+  { value: 'TAMBOR', label: 'Tambor' },
+  { value: 'PARES', label: 'Pares' },
+  { value: 'PECA', label: 'Peca' },
+  { value: 'PORCAO', label: 'Porcao' },
+  { value: 'KIT', label: 'Kit' },
+  { value: 'PRATO', label: 'Prato' },
+  { value: 'KG', label: 'Quilo' },
+  { value: 'UN', label: 'Unidade' },
+  { value: 'ML', label: 'Ml' },
+  { value: 'M2', label: 'M2' },
+  { value: 'TELA', label: 'Tela' },
+  { value: 'LATA', label: 'Lata' },
+  { value: 'VASO', label: 'Vaso' },
+  { value: 'BD', label: 'Bandeja' },
+  { value: 'SACHE', label: 'Sache' },
+  { value: 'MILHEIRO', label: 'Milheiro' },
+  { value: 'ROLO', label: 'Rolo' },
+  { value: 'CENTO', label: 'Cento' },
+  { value: 'CADA', label: 'Cada' },
+  { value: 'LIBRA', label: 'Libra' },
+  { value: 'DISPLAY', label: 'Display' },
+  { value: 'COMBO', label: 'Combo' },
+  { value: 'CARTELA', label: 'Cartela' },
+  { value: 'TONELADA', label: 'Tonelada' },
+  { value: 'BALDE', label: 'Balde' },
+  { value: 'POTE', label: 'Pote' },
+  { value: 'POLEGADA', label: 'Polegada' },
+  { value: 'PE', label: 'Pe' },
+  { value: 'JARDA', label: 'Jarda' },
+  { value: '500G', label: '500 Gramas' },
 ]
 
 // Common price label options
@@ -429,6 +468,15 @@ const handlePriceModeSelected = (mode: BuilderPriceMode, applyAll: boolean) => {
   showPriceModal.value = false
 }
 
+const handleImageEditorSave = (data: { zoom: number; x: number; y: number; extraImagesLayout: 'auto' | 'horizontal' | 'vertical' | null }) => {
+  update({
+    image_zoom: data.zoom,
+    image_x: data.x,
+    image_y: data.y,
+    extra_images_layout: data.extraImagesLayout,
+  })
+}
+
 // ── Auto-search image when product name changes ──
 let autoSearchTimer: ReturnType<typeof setTimeout> | null = null
 const isAutoSearching = ref(false)
@@ -521,6 +569,9 @@ onUnmounted(() => {
           </button>
           <button @click.stop="showCropControls = !showCropControls" class="p-1 rounded transition-colors" :class="showCropControls ? 'text-emerald-400 bg-white/10' : 'text-zinc-400 hover:text-emerald-400 hover:bg-white/10'" title="Zoom e posicao">
             <ZoomIn class="w-3 h-3" />
+          </button>
+          <button @click.stop="showImageEditor = true" class="p-1 rounded text-zinc-400 hover:text-purple-400 hover:bg-white/10 transition-colors" title="Editar imagem">
+            <Maximize2 class="w-3 h-3" />
           </button>
           <button @click.stop="showSearchPanel = !showSearchPanel" class="p-1 rounded text-zinc-400 hover:text-blue-400 hover:bg-white/10 transition-colors" title="Buscar no banco">
             <Search class="w-3 h-3" />
@@ -819,7 +870,50 @@ onUnmounted(() => {
         </template>
 
         <template v-if="product.price_mode === 'symbolic'">
-          <p class="text-[8px] text-zinc-600 leading-tight">Moedas/notas baseadas no valor.</p>
+          <p class="text-[8px] text-zinc-600 leading-tight mb-1">Moedas/notas baseadas no valor.</p>
+          <div class="flex items-center gap-2 mb-1">
+            <label class="text-[9px] text-zinc-500 flex items-center gap-1 cursor-pointer">
+              <input
+                type="checkbox"
+                :checked="(product as any).symbolic_round_cents"
+                @change="update({ symbolic_round_cents: ($event.target as HTMLInputElement).checked } as any)"
+                class="w-3 h-3"
+              />
+              Arredondar centavos
+            </label>
+          </div>
+          <div class="flex items-center gap-2 mb-1">
+            <label class="text-[9px] text-zinc-500 flex items-center gap-1 cursor-pointer">
+              <input
+                type="checkbox"
+                :checked="(product as any).symbolic_reverse_order"
+                @change="update({ symbolic_reverse_order: ($event.target as HTMLInputElement).checked } as any)"
+                class="w-3 h-3"
+              />
+              Inverter ordem moedas
+            </label>
+          </div>
+          <div class="text-[8px] text-zinc-500 mb-0.5">Moedas permitidas:</div>
+          <div class="flex flex-wrap gap-1">
+            <label v-for="coin in [
+              { key: 'coin_1c', label: '1¢' },
+              { key: 'coin_5c', label: '5¢' },
+              { key: 'coin_10c', label: '10¢' },
+              { key: 'coin_25c', label: '25¢' },
+              { key: 'coin_50c', label: '50¢' },
+              { key: 'coin_1r', label: 'R$1' },
+              { key: 'coin_2r', label: 'R$2' },
+              { key: 'coin_5r', label: 'R$5+' },
+            ]" :key="coin.key" class="text-[8px] text-zinc-400 flex items-center gap-0.5 cursor-pointer">
+              <input
+                type="checkbox"
+                :checked="(product as any)[`symbolic_${coin.key}`] !== false"
+                @change="update({ [`symbolic_${coin.key}`]: ($event.target as HTMLInputElement).checked } as any)"
+                class="w-2.5 h-2.5"
+              />
+              {{ coin.label }}
+            </label>
+          </div>
         </template>
 
         <!-- Price label -->
@@ -892,6 +986,18 @@ onUnmounted(() => {
       :current-mode="product.price_mode"
       @select="handlePriceModeSelected"
       @close="showPriceModal = false"
+    />
+
+    <!-- Image Editor Modal -->
+    <BuilderImageEditorModal
+      v-model="showImageEditor"
+      :image-url="imagePreviewUrl"
+      :image-zoom="product.image_zoom ?? 100"
+      :image-x="product.image_x ?? 0"
+      :image-y="product.image_y ?? 0"
+      :extra-images="product.extra_images || []"
+      :extra-images-layout="product.extra_images_layout"
+      @save="handleImageEditorSave"
     />
   </div>
 </template>

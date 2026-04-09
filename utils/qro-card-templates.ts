@@ -23,25 +23,35 @@ function el(
     ...rest,
   }
 }
-// Card Template Presets Style
+// Card Template Presets Style — sistema QROfertas com CSS vars
 const baseStyle: Partial<CardTemplateStyle> = {
   bg: '#ffffff',
   borderRadius: '8px',
-  padding: '8px',
-  gap: '4px',
+  contentType: 'V3_TIE',
+  ordem: 'TITULO-IMAGEM-ETIQUETA',
+  xWeight: 'X_60-40',
+  yWeight: 'Y_50-50',
+  invadir: 'INVADIR_20',
 }
 
 // ========================================
 // VERTICAL TEMPLATES
 // ========================================
 
-// Nome no topo (fundo escuro), imagem grande no meio, preco embaixo — estilo QROfertas
+// Nome no topo, imagem grande no meio, preco embaixo — estilo QROfertas classico
 export const TEMPLATE_VERTICAL_CLASSIC: BuilderCardTemplate = {
   id: 'qro-vertical-classic',
   name: 'Vertical Classico',
   category: 'vertical',
   description: 'Nome no topo, imagem grande, preco embaixo',
-  card_style: { ...baseStyle, layout: 'vertical' } as CardTemplateStyle,
+  card_style: {
+    ...baseStyle,
+    layout: 'vertical',
+    contentType: 'V3_TIE',
+    ordem: 'TITULO-IMAGEM-ETIQUETA',
+    xWeight: 'X_50-50',
+    invadir: 'NAO_INVADIR',
+  } as CardTemplateStyle,
   elements: [
     el('badge', 'badge', 'top-left', { x: '4px', y: '4px', width: '40%', height: 'auto' }),
     el('name', 'text', 'top', { width: '100%', height: '15%' }),
@@ -56,7 +66,13 @@ export const TEMPLATE_VERTICAL_PRICE_TOP: BuilderCardTemplate = {
   name: 'Preco no Topo',
   category: 'vertical',
   description: 'Preco destacado no topo do card',
-  card_style: { ...baseStyle, layout: 'vertical' } as CardTemplateStyle,
+  card_style: {
+    ...baseStyle,
+    layout: 'vertical',
+    ordem: 'ETIQUETA-IMAGEM-TITULO',
+    xWeight: 'X_60-40',
+    invadir: 'NAO_INVADIR',
+  } as CardTemplateStyle,
   elements: [
     el('badge', 'badge', 'top-left', { x: '4px', y: '4px', width: '40%', height: 'auto' }),
     el('price', 'price', 'top', { width: '100%', height: '20%' }),
@@ -71,7 +87,13 @@ export const TEMPLATE_VERTICAL_IMAGE_FOCUS: BuilderCardTemplate = {
   name: 'Imagem Grande',
   category: 'vertical',
   description: 'Imagem dominante com nome sobreposto',
-  card_style: { ...baseStyle, layout: 'vertical' } as CardTemplateStyle,
+  card_style: {
+    ...baseStyle,
+    layout: 'vertical',
+    ordem: 'IMAGEM-TITULO-ETIQUETA',
+    xWeight: 'X_70-30',
+    invadir: 'INVADIR_50',
+  } as CardTemplateStyle,
   elements: [
     el('badge', 'badge', 'top-left', { x: '4px', y: '4px', width: '40%', height: 'auto' }),
     el('image', 'image', 'top', { width: '100%', height: '65%' }),
@@ -465,6 +487,7 @@ export const TEMPLATE_COMPACT_SIDE_PRICE: BuilderCardTemplate = {
     priceScale: 0.94,
     priceWidth: '100%',
     priceBorderRadius: '14px',
+      contentType: 'G2_IT_IE',
   } as CardTemplateStyle,
   elements: [
     el('image', 'image', 'left', { width: '24%', height: '100%' }),

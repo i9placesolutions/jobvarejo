@@ -150,20 +150,39 @@ onUnmounted(() => {
 
         <!-- Bottom: Pagination + Product editor -->
         <div class="shrink-0 border-t border-gray-200 bg-gray-50">
-          <!-- Pagination -->
-          <div v-if="totalPages > 1" class="flex items-center justify-center gap-2 py-2 border-b border-gray-200">
+          <!-- Pagination (QROfertas spec: Anterior / Pagina X de Y / Proximo) -->
+          <div v-if="totalPages > 1" class="flex items-center justify-center gap-3 py-2 border-b border-gray-200">
             <button
-              v-for="page in totalPages"
-              :key="page"
-              @click="setCurrentPage(page)"
-              :class="[
-                'w-8 h-8 rounded-lg text-xs font-medium transition-all',
-                page === currentPage
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
-              ]"
+              @click="setCurrentPage(currentPage - 1)"
+              :disabled="currentPage <= 1"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              {{ page }}
+              Anterior
+            </button>
+            <div class="flex items-center gap-1.5">
+              <button
+                v-for="page in totalPages"
+                :key="page"
+                @click="setCurrentPage(page)"
+                :class="[
+                  'w-7 h-7 rounded-lg text-xs font-medium transition-all',
+                  page === currentPage
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                ]"
+              >
+                {{ page }}
+              </button>
+            </div>
+            <span class="text-xs text-gray-500 font-medium">
+              Pagina {{ currentPage }} de {{ totalPages }}
+            </span>
+            <button
+              @click="setCurrentPage(currentPage + 1)"
+              :disabled="currentPage >= totalPages"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Proximo
             </button>
           </div>
 
