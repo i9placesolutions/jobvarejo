@@ -131,15 +131,21 @@ const v2NameScale = computed(() => {
   }
 })
 
-// Boxes Inteligente real: quando box_mode='smart' e o produto nao tem
-// imagem, colapsa o card para um bloco compacto (header + footer) em
-// vez de deixar a main area vazia ocupando o espaco inteiro.
-const v2IsCollapsed = computed(() => {
-  if (boxMode.value !== 'smart') return false
-  if (imageUrl.value) return false
-  if (hasMultipleImages.value) return false
-  return true
+// Boxes Inteligente real: colapsa card sem imagem pra bloco compacto.
+// FIX: a toolbar escreve em font_config.box_mode (NAO em product_box_style);
+// mantem fallback para product_box_style para compat.
+const v2SmartMode = computed(() => {
+  const fc = fontConfig.value.box_mode
+  if (fc) return fc === 'smart'
+  return (flyer.value?.product_box_style ?? 'smart') === 'smart'
 })
+const v2HasImage = computed(() => {
+  const raw = props.product.custom_image
+  if (raw && String(raw).trim() !== '') return true
+  const extras = props.product.extra_images || []
+  return extras.some((e: string) => e && String(e).trim() !== '')
+})
+const v2IsCollapsed = computed(() => v2SmartMode.value && !v2HasImage.value)
 
 // Layout do card: v2 tem prioridade; senao dispatcher decide a familia; fallback = classico
 const cardLayout = computed(() => {
@@ -611,8 +617,8 @@ const bottomRowStyle = computed(() => {
           <p v-if="product.observation" class="card-v2__obs">{{ product.observation }}</p>
         </header>
 
-        <!-- MAIN: imagem (ocupa 1fr) — removido no modo colapsado -->
-        <main v-if="!v2IsCollapsed" class="card-v2__image">
+        <!-- MAIN: imagem (ocupa 1fr) — escondida no modo colapsado -->
+        <main v-show="!v2IsCollapsed" class="card-v2__image">
           <img
             v-if="imageUrl"
             :src="imageUrl"
@@ -1116,12 +1122,17 @@ const bottomRowStyle = computed(() => {
   display: block;
 }
 /* Boxes Inteligente: quando nao ha imagem, colapsa o card em
-   um bloco compacto (header + footer) sem a main area. */
+   um bloco compacto (header + footer) sem a main area. Usa
+   grid-template-rows sem 1fr e align-content: center para puxar
+   o conteudo pro meio visualmente (o cell do grid pai mantem tamanho). */
 .card-v2--collapsed {
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto !important;
   align-content: center;
   row-gap: 2cqi;
   padding: 3cqi 0;
+}
+.card-v2--collapsed .card-v2__image {
+  display: none !important;
 }
 .card-v2--collapsed .card-v2__name {
   padding: 3cqi 5cqi 1cqi;
@@ -1129,7 +1140,7 @@ const bottomRowStyle = computed(() => {
 .card-v2--collapsed .card-v2__name-text {
   -webkit-line-clamp: 3;
   line-clamp: 3;
-  font-size: calc(clamp(10px, 9cqi, 32px) * var(--name-scale));
+  font-size: calc(clamp(12px, 11cqi, 38px) * var(--name-scale));
 }
 .card-v2--collapsed .card-v2__price {
   padding: 1cqi 4cqi 3cqi;
