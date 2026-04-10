@@ -4,7 +4,12 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 10 \"https://s3.wasabisys.com/jobvarejo\")",
       "Bash(PGPASSWORD=\"TmtOYyHbxxLathecYmziTRPta38cCLHYD7aAnplbkD9UcwnF34InIZQIfUXcbjFs\" psql \"postgresql://postgres@147.93.139.212:3000/postgres?sslmode=disable\" -c \"SELECT table_name FROM information_schema.tables WHERE table_schema=''public'' ORDER BY table_name;\")",
       "Bash(time PGPASSWORD=\"TmtOYyHbxxLathecYmziTRPta38cCLHYD7aAnplbkD9UcwnF34InIZQIfUXcbjFs\" psql \"postgresql://postgres@147.93.139.212:3000/postgres?sslmode=disable\" -c \"SELECT 1 as ping\")",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Bash(git commit -m ':*)",
+      "Bash(grep -l \"DATABASE_URL\\\\|connectionString\\\\|pg\\\\.Pool\\\\|postgres\\(\" /workspace/projetos/jobvarejo/server/utils/*.ts)",
+      "Bash(ls /workspace/projetos/jobvarejo/.env*)",
+      "Bash(node scripts/set-flyer-v2.mjs c9285b1f-e601-4e92-877e-2fe4fdb7a6a1)",
+      "Bash(netstat -tln)"
     ]
   },
   "enabledPlugins": {

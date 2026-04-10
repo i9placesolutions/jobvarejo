@@ -2,6 +2,7 @@
 import type { BuilderFlyerProduct, BuilderBadgeStyle, BuilderPriceTagStyle } from '~/types/builder'
 import { getLayoutForBox, parseXSplit, parseYSplit, parseInvasion, parseOrdem, type ProductBoxLayoutConfig } from '~/composables/useProductBoxLayout'
 import { getBuilderCardAdaptiveBudget, getBuilderCardBaseFont, getBuilderCardNameFont } from '~/utils/builder-card-responsive'
+import { getV2Preset, type V2Preset } from '~/utils/qro-card-v2-presets'
 
 const props = defineProps<{
   product: BuilderFlyerProduct
@@ -117,9 +118,45 @@ const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<str
 const nameFontFamily = computed(() => fontConfig.value.name_font_family || 'inherit')
 const nameTextTransform = computed(() => fontConfig.value.name_text_transform || 'uppercase')
 
-// Layout version v2: novo card estilo QROfertas (grid 3-rows, footer real).
+// Layout version v2: novo card estilo QROfertas (grid-driven, 25 presets).
 // Opt-in via font_config.card_layout_version === 'v2'. Flyers antigos continuam no legacy.
 const cardLayoutVersion = computed(() => fontConfig.value.card_layout_version || 'v1')
+
+// Preset ativo do v2 (vem de font_config.card_layout quando comeca com 'qro-').
+// Fallback: destaque-grande para isHighlight, vertical-classic caso contrario.
+const v2Preset = computed<V2Preset>(() => {
+  const id = fontConfig.value.card_layout
+  const presetId = typeof id === 'string' && id.startsWith('qro-') ? id : null
+  return getV2Preset(presetId, !!props.isHighlight)
+})
+
+// Inline style do root .card-v2 com grid-template-* do preset + vars de tuning.
+const v2RootStyle = computed(() => {
+  const p = v2Preset.value
+  const style: Record<string, string | number> = {
+    '--name-scale': v2NameScale.value * (p.nameScale ?? 1),
+    '--name-weight': p.nameWeight ?? 900,
+    '--price-scale': p.priceScale ?? 1,
+    '--img-fit': p.imageFit ?? 'contain',
+    '--v2-padding': p.padding ?? '2cqi',
+    '--name-align': p.align?.name ?? 'center',
+    '--price-align': p.align?.price ?? 'center',
+  }
+  if (p.layoutKind === 'grid') {
+    if (p.areas) style.gridTemplateAreas = p.areas
+    if (p.rows) style.gridTemplateRows = p.rows
+    if (p.cols) style.gridTemplateColumns = p.cols
+  }
+  return style
+})
+
+// Classes do root: flags de categoria + preset id + collapsed + exotic.
+const v2RootClasses = computed(() => ({
+  'card-v2--collapsed': v2IsCollapsed.value,
+  'card-v2--exotic': v2Preset.value.layoutKind === 'exotic',
+  [`card-v2--${v2Preset.value.category}`]: true,
+  [`card-v2--${v2Preset.value.id}`]: true,
+}))
 
 // Densidade de texto do nome (v2). Usa flyer.text_size_mode
 // (ja existente na toolbar: Maior/Medio/Menor) para setar --name-scale.
@@ -603,8 +640,8 @@ const bottomRowStyle = computed(() => {
     <!-- Container queries escalam fonte/padding com o tamanho da celula. -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <template v-if="cardLayout === 'v2'">
-      <div class="card-v2" :class="{ 'card-v2--collapsed': v2IsCollapsed }" :style="{ '--name-scale': v2NameScale }">
-        <!-- HEADER: nome -->
+      <div class="card-v2" :class="v2RootClasses" :style="v2RootStyle">
+        <!-- Slot NOME (grid-area: name) -->
         <header class="card-v2__name">
           <p
             v-if="product.custom_name"
@@ -617,7 +654,7 @@ const bottomRowStyle = computed(() => {
           <p v-if="product.observation" class="card-v2__obs">{{ product.observation }}</p>
         </header>
 
-        <!-- MAIN: imagem (ocupa 1fr) — escondida no modo colapsado -->
+        <!-- Slot IMAGEM (grid-area: image) — escondida no modo colapsado -->
         <main v-show="!v2IsCollapsed" class="card-v2__image">
           <img
             v-if="imageUrl"
@@ -634,7 +671,7 @@ const bottomRowStyle = computed(() => {
           </div>
         </main>
 
-        <!-- FOOTER: etiqueta de preco (linha propria, nao overlay) -->
+        <!-- Slot PRECO (grid-area: price) — linha/coluna propria, nao overlay -->
         <footer class="card-v2__price">
           <BuilderFlyerPriceTag
             :product="product"
@@ -1008,36 +1045,49 @@ const bottomRowStyle = computed(() => {
 </template>
 
 <style scoped>
-/* ═══ LAYOUT V2 — grid 3-rows estilo QROfertas Builder V2 ═══ */
+/* ═══ LAYOUT V2 — grid-driven QROfertas Builder V2 (25 presets) ═══ */
 .card-v2 {
   flex: 1 1 0%;
   width: 100%;
+  height: 100%;
   display: grid;
+  /* Defaults sobrescritos por inline style vindo de v2RootStyle */
   grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr;
+  grid-template-areas: "name" "image" "price";
   container-type: inline-size;
   container-name: card-v2;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  /* Escala dinamica do nome vem de text_size_mode (commit 2) */
+  position: relative;
+  /* Vars de tuning (sobrescritas por preset via inline style) */
   --name-scale: 1;
+  --name-weight: 900;
+  --price-scale: 1;
+  --img-fit: contain;
+  --v2-padding: 2cqi;
+  --name-align: center;
+  --price-align: center;
   --v2-primary: var(--builder-primary, #D32F2F);
 }
 
-/* HEADER: nome do produto */
+/* Slot NOME */
 .card-v2__name {
+  grid-area: name;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 4cqi 5cqi 2cqi;
-  text-align: center;
+  align-items: var(--name-align);
+  justify-content: center;
+  padding: 3cqi 4cqi 2cqi;
+  text-align: var(--name-align);
   min-width: 0;
+  min-height: 0;
 }
 .card-v2__name-text {
   margin: 0;
   font-family: 'Barlow Condensed', 'Barlow', 'Oswald', 'Arial Narrow', sans-serif;
-  font-weight: 900;
+  font-weight: var(--name-weight, 900);
   text-transform: uppercase;
   font-size: calc(clamp(9px, 8cqi, 28px) * var(--name-scale));
   line-height: 1.02;
@@ -1062,14 +1112,15 @@ const bottomRowStyle = computed(() => {
   max-width: 100%;
 }
 
-/* MAIN: imagem — ocupa 1fr, object-fit: contain */
+/* Slot IMAGEM */
 .card-v2__image {
+  grid-area: image;
   position: relative;
   min-height: 0;
   min-width: 0;
   display: grid;
   place-items: center;
-  padding: 2cqi 3cqi;
+  padding: var(--v2-padding);
   overflow: hidden;
 }
 .card-v2__img {
@@ -1077,9 +1128,9 @@ const bottomRowStyle = computed(() => {
   max-height: 100%;
   width: auto;
   height: auto;
-  object-fit: contain;
+  object-fit: var(--img-fit, contain);
   display: block;
-  /* Suporte a "Ampliar e Sobrepor" (commit futuro / Fase 2) */
+  /* Suporte a "Ampliar e Sobrepor" (Fase 2) */
   transform: scale(var(--img-scale, 1)) translateY(var(--img-offset-y, 0));
   transform-origin: center;
 }
@@ -1105,20 +1156,23 @@ const bottomRowStyle = computed(() => {
   text-transform: uppercase;
 }
 
-/* FOOTER: etiqueta de preco como linha propria (nao overlay) */
+/* Slot PRECO */
 .card-v2__price {
+  grid-area: price;
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: var(--price-align);
+  justify-content: center;
   gap: 0.6cqi;
-  padding: 1cqi 3cqi 3cqi;
+  padding: 1cqi 3cqi 2cqi;
   min-width: 0;
+  min-height: 0;
+  font-size: calc(1em * var(--price-scale, 1));
 }
 .card-v2__price-tag {
   width: 100%;
-  max-width: 96%;
+  max-width: 100%;
   display: block;
 }
 /* Boxes Inteligente: quando nao ha imagem, colapsa o card em
@@ -1127,6 +1181,8 @@ const bottomRowStyle = computed(() => {
    o conteudo pro meio visualmente (o cell do grid pai mantem tamanho). */
 .card-v2--collapsed {
   grid-template-rows: auto auto !important;
+  grid-template-columns: 1fr !important;
+  grid-template-areas: "name" "price" !important;
   align-content: center;
   row-gap: 2cqi;
   padding: 3cqi 0;
