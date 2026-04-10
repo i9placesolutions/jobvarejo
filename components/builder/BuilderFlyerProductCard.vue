@@ -131,6 +131,16 @@ const v2NameScale = computed(() => {
   }
 })
 
+// Boxes Inteligente real: quando box_mode='smart' e o produto nao tem
+// imagem, colapsa o card para um bloco compacto (header + footer) em
+// vez de deixar a main area vazia ocupando o espaco inteiro.
+const v2IsCollapsed = computed(() => {
+  if (boxMode.value !== 'smart') return false
+  if (imageUrl.value) return false
+  if (hasMultipleImages.value) return false
+  return true
+})
+
 // Layout do card: v2 tem prioridade; senao dispatcher decide a familia; fallback = classico
 const cardLayout = computed(() => {
   if (cardLayoutVersion.value === 'v2') return 'v2'
@@ -587,7 +597,7 @@ const bottomRowStyle = computed(() => {
     <!-- Container queries escalam fonte/padding com o tamanho da celula. -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <template v-if="cardLayout === 'v2'">
-      <div class="card-v2" :style="{ '--name-scale': v2NameScale }">
+      <div class="card-v2" :class="{ 'card-v2--collapsed': v2IsCollapsed }" :style="{ '--name-scale': v2NameScale }">
         <!-- HEADER: nome -->
         <header class="card-v2__name">
           <p
@@ -601,8 +611,8 @@ const bottomRowStyle = computed(() => {
           <p v-if="product.observation" class="card-v2__obs">{{ product.observation }}</p>
         </header>
 
-        <!-- MAIN: imagem (ocupa 1fr) -->
-        <main class="card-v2__image">
+        <!-- MAIN: imagem (ocupa 1fr) — removido no modo colapsado -->
+        <main v-if="!v2IsCollapsed" class="card-v2__image">
           <img
             v-if="imageUrl"
             :src="imageUrl"
@@ -1105,6 +1115,26 @@ const bottomRowStyle = computed(() => {
   max-width: 96%;
   display: block;
 }
+/* Boxes Inteligente: quando nao ha imagem, colapsa o card em
+   um bloco compacto (header + footer) sem a main area. */
+.card-v2--collapsed {
+  grid-template-rows: auto auto;
+  align-content: center;
+  row-gap: 2cqi;
+  padding: 3cqi 0;
+}
+.card-v2--collapsed .card-v2__name {
+  padding: 3cqi 5cqi 1cqi;
+}
+.card-v2--collapsed .card-v2__name-text {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  font-size: calc(clamp(10px, 9cqi, 32px) * var(--name-scale));
+}
+.card-v2--collapsed .card-v2__price {
+  padding: 1cqi 4cqi 3cqi;
+}
+
 .card-v2__limit {
   margin: 0;
   font-size: clamp(7px, 2.4cqi, 10px);
