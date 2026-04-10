@@ -70,6 +70,17 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // Semeia font_config com card_layout_version='v2' para flyers NOVOS.
+  // Flyers antigos (sem esse campo) continuam no layout legacy.
+  const seededFontConfig = {
+    ...(defaults.font_config || {}),
+    card_layout_version: 'v2',
+  }
+  defaultColumns.push('font_config')
+  defaultPlaceholders.push(`$${paramIdx}::jsonb`)
+  values.push(JSON.stringify(seededFontConfig))
+  paramIdx++
+
   const extraCols = defaultColumns.length > 0
     ? `, ${defaultColumns.join(', ')}`
     : ''

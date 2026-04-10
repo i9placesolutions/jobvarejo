@@ -117,8 +117,15 @@ const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<str
 const nameFontFamily = computed(() => fontConfig.value.name_font_family || 'inherit')
 const nameTextTransform = computed(() => fontConfig.value.name_text_transform || 'uppercase')
 
-// Layout do card: o dispatcher decide a família; fallback manual = classico
-const cardLayout = computed(() => fontConfig.value.card_layout || dispatchedCardLayout.value || 'classico')
+// Layout version v2: novo card estilo QROfertas (grid 3-rows, footer real).
+// Opt-in via font_config.card_layout_version === 'v2'. Flyers antigos continuam no legacy.
+const cardLayoutVersion = computed(() => fontConfig.value.card_layout_version || 'v1')
+
+// Layout do card: v2 tem prioridade; senao dispatcher decide a familia; fallback = classico
+const cardLayout = computed(() => {
+  if (cardLayoutVersion.value === 'v2') return 'v2'
+  return fontConfig.value.card_layout || dispatchedCardLayout.value || 'classico'
+})
 const isHorizontalCardLayout = computed(() =>
   cardLayout.value === 'lateral'
   || cardLayout.value === 'mini'
@@ -565,9 +572,61 @@ const bottomRowStyle = computed(() => {
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- LAYOUT V2 (QROfertas): grid 3-rows real (auto 1fr auto).         -->
+    <!-- Nome (header) / Imagem (main 1fr) / Etiqueta (footer real).     -->
+    <!-- Container queries escalam fonte/padding com o tamanho da celula. -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <template v-if="cardLayout === 'v2'">
+      <div class="card-v2">
+        <!-- HEADER: nome -->
+        <header class="card-v2__name">
+          <p
+            v-if="product.custom_name"
+            class="card-v2__name-text"
+            :style="{
+              fontFamily: nameFontFamily !== 'inherit' ? nameFontFamily : undefined,
+              textTransform: nameTextTransform,
+            }"
+          >{{ product.custom_name }}</p>
+          <p v-if="product.observation" class="card-v2__obs">{{ product.observation }}</p>
+        </header>
+
+        <!-- MAIN: imagem (ocupa 1fr) -->
+        <main class="card-v2__image">
+          <img
+            v-if="imageUrl"
+            :src="imageUrl"
+            class="card-v2__img"
+            alt=""
+            draggable="false"
+          />
+          <div v-else class="card-v2__img-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span>Sem imagem</span>
+          </div>
+        </main>
+
+        <!-- FOOTER: etiqueta de preco (linha propria, nao overlay) -->
+        <footer class="card-v2__price">
+          <BuilderFlyerPriceTag
+            :product="product"
+            :tag-style="priceTagStyle"
+            :is-highlight="isHighlight"
+            class="card-v2__price-tag"
+          />
+          <p v-if="product.purchase_limit" class="card-v2__limit">
+            Limite: {{ product.purchase_limit }} por cliente
+          </p>
+        </footer>
+      </div>
+    </template>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
     <!-- LAYOUT CLASSICO: Nome topo, Imagem centro, Preco embaixo          -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <template v-if="cardLayout === 'classico'">
+    <template v-else-if="cardLayout === 'classico'">
       <!-- 1. NOME (topo) -->
       <div class="shrink-0" :style="{ ...verticalNameAreaStyle, padding: '4px 6px 2px', margin: 0 }">
         <BuilderAdaptiveText
@@ -921,3 +980,128 @@ const bottomRowStyle = computed(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+/* ═══ LAYOUT V2 — grid 3-rows estilo QROfertas Builder V2 ═══ */
+.card-v2 {
+  flex: 1 1 0%;
+  width: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  container-type: inline-size;
+  container-name: card-v2;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  /* Escala dinamica do nome vem de text_size_mode (commit 2) */
+  --name-scale: 1;
+  --v2-primary: var(--builder-primary, #D32F2F);
+}
+
+/* HEADER: nome do produto */
+.card-v2__name {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 4cqi 5cqi 2cqi;
+  text-align: center;
+  min-width: 0;
+}
+.card-v2__name-text {
+  margin: 0;
+  font-family: 'Barlow Condensed', 'Barlow', 'Oswald', 'Arial Narrow', sans-serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: calc(clamp(9px, 8cqi, 28px) * var(--name-scale));
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  color: inherit;
+  /* max 2 linhas com ellipsis */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: normal;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+.card-v2__obs {
+  margin: 0.4cqi 0 0;
+  font-size: clamp(7px, 3cqi, 11px);
+  opacity: 0.55;
+  line-height: 1.1;
+  text-align: center;
+  max-width: 100%;
+}
+
+/* MAIN: imagem — ocupa 1fr, object-fit: contain */
+.card-v2__image {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  padding: 2cqi 3cqi;
+  overflow: hidden;
+}
+.card-v2__img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  /* Suporte a "Ampliar e Sobrepor" (commit futuro / Fase 2) */
+  transform: scale(var(--img-scale, 1)) translateY(var(--img-offset-y, 0));
+  transform-origin: center;
+}
+.card-v2__img-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1cqi;
+  color: currentColor;
+  opacity: 0.25;
+}
+.card-v2__img-empty svg {
+  width: 18cqi;
+  height: 18cqi;
+  max-width: 56px;
+  max-height: 56px;
+}
+.card-v2__img-empty span {
+  font-size: clamp(8px, 3cqi, 11px);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* FOOTER: etiqueta de preco como linha propria (nao overlay) */
+.card-v2__price {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6cqi;
+  padding: 1cqi 3cqi 3cqi;
+  min-width: 0;
+}
+.card-v2__price-tag {
+  width: 100%;
+  max-width: 96%;
+  display: block;
+}
+.card-v2__limit {
+  margin: 0;
+  font-size: clamp(7px, 2.4cqi, 10px);
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 1cqi 2.5cqi;
+  border-radius: 999px;
+  line-height: 1.1;
+}
+</style>
