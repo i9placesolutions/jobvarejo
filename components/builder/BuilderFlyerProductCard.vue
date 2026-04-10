@@ -2,7 +2,7 @@
 import type { BuilderFlyerProduct, BuilderBadgeStyle, BuilderPriceTagStyle } from '~/types/builder'
 import { getLayoutForBox, parseXSplit, parseYSplit, parseInvasion, parseOrdem, type ProductBoxLayoutConfig } from '~/composables/useProductBoxLayout'
 import { getBuilderCardAdaptiveBudget, getBuilderCardBaseFont, getBuilderCardNameFont } from '~/utils/builder-card-responsive'
-import { getV2Preset, type V2Preset } from '~/utils/qro-card-v2-presets'
+import { getV2Preset, V2_PRESETS, type V2Preset } from '~/utils/qro-card-v2-presets'
 
 const props = defineProps<{
   product: BuilderFlyerProduct
@@ -122,12 +122,37 @@ const nameTextTransform = computed(() => fontConfig.value.name_text_transform ||
 // Opt-in via font_config.card_layout_version === 'v2'. Flyers antigos continuam no legacy.
 const cardLayoutVersion = computed(() => fontConfig.value.card_layout_version || 'v1')
 
-// Preset ativo do v2 (vem de font_config.card_layout quando comeca com 'qro-').
-// Fallback: destaque-grande para isHighlight, vertical-classic caso contrario.
+// Mapa de promocao: quando produto eh isHighlight mas o preset do flyer
+// nao eh destaque/special, promove para o equivalente destaque da categoria.
+const DESTAQUE_PROMOTION: Record<string, string> = {
+  vertical: 'qro-destaque-grande',
+  horizontal: 'qro-destaque-split',
+  compact: 'qro-destaque-price-column',
+}
+
+// Preset ativo do v2. Prioridade:
+//   1. override por produto (product.card_layout)
+//   2. default do flyer (font_config.card_layout)
+//   3. auto-promocao para destaque quando isHighlight=true
+//   4. fallback: vertical-classic (ou destaque-grande se highlight)
 const v2Preset = computed<V2Preset>(() => {
-  const id = fontConfig.value.card_layout
-  const presetId = typeof id === 'string' && id.startsWith('qro-') ? id : null
-  return getV2Preset(presetId, !!props.isHighlight)
+  // 1. Per-product override
+  const productLayout = (props.product as any).card_layout
+  if (typeof productLayout === 'string' && productLayout.startsWith('qro-') && V2_PRESETS[productLayout]) {
+    return V2_PRESETS[productLayout]!
+  }
+  // 2. Flyer default
+  const flyerLayout = fontConfig.value.card_layout
+  const flyerPresetId = typeof flyerLayout === 'string' && flyerLayout.startsWith('qro-') ? flyerLayout : null
+  const basePreset = getV2Preset(flyerPresetId, !!props.isHighlight)
+  // 3. Auto-promocao para destaque quando isHighlight e o preset base nao eh destaque/special
+  if (props.isHighlight && basePreset.category !== 'destaque' && basePreset.category !== 'special') {
+    const promotedId = DESTAQUE_PROMOTION[basePreset.category]
+    if (promotedId && V2_PRESETS[promotedId]) {
+      return V2_PRESETS[promotedId]!
+    }
+  }
+  return basePreset
 })
 
 // Inline style do root .card-v2 com grid-template-* do preset + vars de tuning.
