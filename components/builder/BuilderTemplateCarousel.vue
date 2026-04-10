@@ -86,62 +86,64 @@ function selectTemplate(tpl: BuilderCardTemplate) {
 }
 </script>
 
-<!-- Mini preview sub-component -->
+<!-- Mini preview sub-component — usa V2 presets para thumbs fieis -->
 <script lang="ts">
+import { V2_PRESETS } from '~/utils/qro-card-v2-presets'
+
 const TemplatePreview = defineComponent({
   props: {
     template: { type: Object as PropType<BuilderCardTemplate>, required: true },
   },
   setup(props) {
-    const isHorizontal = computed(() => props.template.category === 'horizontal')
-    const hasOverlay = computed(() =>
-      props.template.card_style?.pricePosition?.startsWith('overlay')
-    )
-
-    const elements = computed(() => {
-      const els = props.template.elements || []
-      return els
-        .filter(e => ['image', 'text', 'price'].includes(e.type))
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    const v2Preset = computed(() => V2_PRESETS[props.template.id] || null)
+    const isExotic = computed(() => v2Preset.value?.layoutKind === 'exotic')
+    const exoticClass = computed(() => isExotic.value ? `thumb--${props.template.id}` : '')
+    const gridStyle = computed(() => {
+      const p = v2Preset.value
+      if (!p || p.layoutKind !== 'grid') return {}
+      return {
+        display: 'grid',
+        gridTemplateAreas: p.areas,
+        gridTemplateRows: p.rows,
+        gridTemplateColumns: p.cols || '1fr',
+        gap: '1px',
+      } as Record<string, string>
     })
-
-    return { isHorizontal, hasOverlay, elements }
+    return { v2Preset, isExotic, exoticClass, gridStyle }
   },
   template: `
     <div
-      class="w-full h-full flex gap-0.5 rounded overflow-hidden"
-      :class="isHorizontal ? 'flex-row' : 'flex-col'"
+      class="w-full h-full rounded overflow-hidden relative"
+      :class="[isExotic ? 'thumb-exotic' : '', exoticClass]"
+      :style="gridStyle"
     >
-      <template v-for="el in elements" :key="el.id">
-        <div
-          v-if="el.type === 'image'"
-          class="bg-blue-100 dark:bg-blue-900/30 rounded-sm flex items-center justify-center"
-          :class="hasOverlay ? 'relative' : ''"
-          :style="{ flex: el.flex || 2 }"
-        >
-          <svg class="w-4 h-4 text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      <!-- Layout grid: usa grid-area -->
+      <template v-if="v2Preset && v2Preset.layoutKind === 'grid'">
+        <div class="thumb-slot thumb-name" style="grid-area: name">
+          <div class="h-0.5 bg-gray-400 rounded-full w-3/4 mx-auto"></div>
+          <div class="h-0.5 bg-gray-300 rounded-full w-1/2 mx-auto mt-0.5"></div>
+        </div>
+        <div class="thumb-slot thumb-image" style="grid-area: image">
+          <svg class="w-3 h-3 text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-6-10h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
         </div>
-        <div
-          v-else-if="el.type === 'text'"
-          class="bg-gray-100 dark:bg-gray-700 rounded-sm flex items-center justify-center px-1"
-          :style="{ flex: el.flex || 1 }"
-        >
-          <div class="w-full space-y-0.5">
-            <div class="h-0.5 bg-gray-300 dark:bg-gray-500 rounded-full w-3/4 mx-auto"></div>
-            <div class="h-0.5 bg-gray-300 dark:bg-gray-500 rounded-full w-1/2 mx-auto"></div>
-          </div>
+        <div class="thumb-slot thumb-price" style="grid-area: price">
+          <span class="text-[7px] font-bold text-red-500">R$</span>
         </div>
-        <div
-          v-else-if="el.type === 'price'"
-          class="rounded-sm flex items-center justify-center"
-          :class="el.slot?.startsWith('overlay')
-            ? 'absolute bottom-0 left-0 right-0 bg-red-500/80 text-white'
-            : 'bg-red-50 dark:bg-red-900/20'"
-          :style="{ flex: el.flex || 1 }"
-        >
-          <span class="text-[8px] font-bold text-red-500">R$</span>
+      </template>
+      <!-- Layout exotico: imagem full-bleed + slots posicionados via class -->
+      <template v-else-if="isExotic">
+        <div class="thumb-image-full">
+          <svg class="w-4 h-4 text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-6-10h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <div class="thumb-name-abs">
+          <div class="h-0.5 bg-gray-400 rounded-full w-2/3"></div>
+        </div>
+        <div class="thumb-price-abs">
+          <span class="text-[6px] font-bold text-red-500">R$</span>
         </div>
       </template>
     </div>
@@ -163,5 +165,164 @@ const TemplatePreview = defineComponent({
 .builder-template-carousel .overflow-x-auto::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 2px;
+}
+
+/* ═══ Thumbs dos 25 presets v2 ═══ */
+.thumb-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+}
+.thumb-name {
+  background: #f3f4f6;
+  border-radius: 2px;
+  padding: 1px 2px;
+  flex-direction: column;
+}
+.thumb-image {
+  background: #dbeafe;
+  border-radius: 2px;
+}
+.thumb-price {
+  background: #fee2e2;
+  border-radius: 2px;
+}
+
+/* Thumb exotico base */
+.thumb-exotic {
+  background: #dbeafe;
+}
+.thumb-image-full {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #dbeafe;
+}
+.thumb-name-abs {
+  position: absolute;
+  z-index: 2;
+  left: 3px;
+  right: 3px;
+  top: 3px;
+  display: flex;
+  align-items: center;
+}
+.thumb-price-abs {
+  position: absolute;
+  z-index: 2;
+  bottom: 3px;
+  right: 3px;
+  background: #fee2e2;
+  padding: 1px 3px;
+  border-radius: 2px;
+  line-height: 1;
+}
+
+/* Variacoes exoticas por preset id */
+.thumb--qro-vertical-shelf .thumb-name-abs {
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #dc2626;
+  padding: 2px 3px;
+  border-radius: 0;
+}
+.thumb--qro-vertical-shelf .thumb-name-abs > div {
+  background: #fca5a5;
+}
+.thumb--qro-vertical-shelf .thumb-price-abs {
+  bottom: 3px;
+  left: 3px;
+  right: 3px;
+  text-align: center;
+  justify-content: center;
+  display: flex;
+}
+
+.thumb--qro-vertical-price-band .thumb-price-abs {
+  top: 50%;
+  left: 3px;
+  right: 3px;
+  transform: translateY(-50%);
+  text-align: center;
+  display: flex;
+  justify-content: center;
+}
+.thumb--qro-vertical-price-band .thumb-name-abs {
+  top: auto;
+  bottom: 3px;
+}
+
+.thumb--qro-destaque-overlay .thumb-price-abs {
+  right: 3px;
+  bottom: 3px;
+  width: 50%;
+  display: flex;
+  justify-content: center;
+}
+
+.thumb--qro-special-overlay::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 55%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+  z-index: 1;
+}
+.thumb--qro-special-overlay .thumb-name-abs {
+  top: auto;
+  bottom: 12px;
+  z-index: 3;
+}
+.thumb--qro-special-overlay .thumb-name-abs > div {
+  background: #f3f4f6;
+}
+.thumb--qro-special-overlay .thumb-price-abs {
+  z-index: 3;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  display: flex;
+  justify-content: center;
+}
+
+.thumb--qro-special-diagonal .thumb-image-full {
+  clip-path: polygon(0 0, 100% 0, 100% 68%, 0 100%);
+}
+.thumb--qro-special-diagonal .thumb-name-abs {
+  top: 3px;
+  display: flex;
+  justify-content: center;
+}
+
+.thumb--qro-special-price-stamp .thumb-price-abs {
+  top: 3px;
+  right: 3px;
+  bottom: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transform: rotate(-8deg);
+}
+.thumb--qro-special-price-stamp .thumb-price-abs > span {
+  color: #fff;
+  font-size: 6px;
+}
+.thumb--qro-special-price-stamp .thumb-name-abs {
+  top: auto;
+  bottom: 3px;
+  display: flex;
+  justify-content: center;
 }
 </style>
