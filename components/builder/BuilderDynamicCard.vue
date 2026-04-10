@@ -104,9 +104,8 @@ const badgeStyle = computed<BuilderBadgeStyle | null>(() => {
 // ── Layer decoration (cor de fundo por produto) ──
 const { updateProduct } = useBuilderFlyer()
 const productIndex = computed(() => {
-  const { flyer: f } = useBuilderFlyer()
-  const prods = f.value?.products || []
-  return prods.findIndex((p: any) => p.id === props.product.id)
+  const { products: prods } = useBuilderFlyer()
+  return (prods.value || []).findIndex((p: any) => p.id === props.product.id)
 })
 const layerBg = computed(() => (props.product as any).layer_bg || '')
 const layerTextColor = computed(() => (props.product as any).layer_text_color || '')
@@ -215,7 +214,7 @@ const adaptiveTextColor = computed(() => getContrastColor(resolvedCardBg.value))
 // ══════════════════════════════════════════════════════════════════
 
 // Config QROfertas: template > font_config do flyer > fallback
-const contentType = computed(() => fc.value.card_content_type || style.value.contentType || style.value.card_content_type || 'CONTENT_LINE')
+const contentType = computed(() => fc.value.card_content_type || style.value.contentType || 'CONTENT_LINE')
 const ordem = computed(() => style.value.ordem || fc.value.card_ordem || 'TITULO-IMAGEM-ETIQUETA')
 const xWeight = computed(() => style.value.xWeight || fc.value.card_x_weight || 'X_60-40')
 const yWeight = computed(() => style.value.yWeight || fc.value.card_y_weight || 'Y_50-50')
