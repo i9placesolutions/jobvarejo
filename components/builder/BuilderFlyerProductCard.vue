@@ -1202,6 +1202,179 @@ const bottomRowStyle = computed(() => {
   padding: 1cqi 4cqi 3cqi;
 }
 
+/* ═══ PRESETS EXOTICOS — absolute positioning sobre imagem full-bleed ═══ */
+.card-v2--exotic {
+  grid-template-areas: "image" !important;
+  grid-template-rows: 1fr !important;
+  grid-template-columns: 1fr !important;
+}
+.card-v2--exotic .card-v2__image {
+  grid-area: image;
+  padding: 0;
+}
+.card-v2--exotic .card-v2__name,
+.card-v2--exotic .card-v2__price {
+  position: absolute;
+  z-index: 2;
+}
+
+/* Vertical Vitrine: faixa de nome no topo (inverso de cor) +
+   preco como barra sobreposta na base da imagem. */
+.card-v2--qro-vertical-shelf .card-v2__image {
+  padding: 12cqi 2cqi 14cqi;
+}
+.card-v2--qro-vertical-shelf .card-v2__name {
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--v2-primary);
+  color: #fff;
+  padding: 2cqi 4cqi;
+  align-items: center;
+}
+.card-v2--qro-vertical-shelf .card-v2__name-text {
+  color: #fff;
+}
+.card-v2--qro-vertical-shelf .card-v2__price {
+  left: 4cqi;
+  right: 4cqi;
+  bottom: 3cqi;
+  align-items: center;
+}
+
+/* Preco na Imagem: etiqueta em faixa central dominante,
+   nome ancorado no rodape. */
+.card-v2--qro-vertical-price-band .card-v2__image {
+  padding: 2cqi 2cqi 14cqi;
+}
+.card-v2--qro-vertical-price-band .card-v2__price {
+  top: 45%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  padding: 1.5cqi 3cqi;
+}
+.card-v2--qro-vertical-price-band .card-v2__name {
+  bottom: 2cqi;
+  left: 3cqi;
+  right: 3cqi;
+  align-items: center;
+}
+
+/* Destaque Hero: imagem dominante + nome topo + etiqueta
+   ancorada no canto inferior direito. */
+.card-v2--qro-destaque-overlay .card-v2__image {
+  padding: 10cqi 3cqi 3cqi;
+}
+.card-v2--qro-destaque-overlay .card-v2__name {
+  top: 2cqi;
+  left: 3cqi;
+  right: 3cqi;
+  align-items: flex-start;
+}
+.card-v2--qro-destaque-overlay .card-v2__name-text {
+  text-align: left;
+  font-size: calc(clamp(12px, 10cqi, 42px) * var(--name-scale));
+}
+.card-v2--qro-destaque-overlay .card-v2__price {
+  right: 3cqi;
+  bottom: 3cqi;
+  width: 55%;
+  max-width: 55%;
+}
+
+/* Overlay Especial: imagem full-bleed + gradiente escuro bottom +
+   nome e preco empilhados sobre o gradiente. */
+.card-v2--qro-special-overlay::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 55%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 10%, rgba(0, 0, 0, 0.15) 70%, transparent 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+.card-v2--qro-special-overlay .card-v2__img {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+.card-v2--qro-special-overlay .card-v2__name {
+  left: 3cqi;
+  right: 3cqi;
+  bottom: 14cqi;
+  align-items: flex-start;
+}
+.card-v2--qro-special-overlay .card-v2__name-text {
+  color: #fff;
+  text-align: left;
+  text-shadow: 0 0.3cqi 1cqi rgba(0, 0, 0, 0.6);
+}
+.card-v2--qro-special-overlay .card-v2__price {
+  left: 3cqi;
+  right: 3cqi;
+  bottom: 3cqi;
+}
+
+/* Diagonal: imagem recortada em diagonal + nome no topo
+   e preco no rodape sobre a area branca. */
+.card-v2--qro-special-diagonal .card-v2__image {
+  clip-path: polygon(0 0, 100% 0, 100% 68%, 0 100%);
+  padding: 0;
+}
+.card-v2--qro-special-diagonal .card-v2__img {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+.card-v2--qro-special-diagonal .card-v2__name {
+  top: 4cqi;
+  left: 3cqi;
+  right: 3cqi;
+  align-items: center;
+}
+.card-v2--qro-special-diagonal .card-v2__name-text {
+  color: #fff;
+  text-shadow: 0 0.3cqi 0.8cqi rgba(0, 0, 0, 0.55);
+}
+.card-v2--qro-special-diagonal .card-v2__price {
+  left: 3cqi;
+  right: 3cqi;
+  bottom: 2cqi;
+}
+
+/* Selo de Preco: etiqueta como selo circular rotacionado
+   no canto superior direito sobre a imagem. */
+.card-v2--qro-special-price-stamp .card-v2__image {
+  padding: 3cqi;
+}
+.card-v2--qro-special-price-stamp .card-v2__price {
+  top: 4cqi;
+  right: 4cqi;
+  width: 36%;
+  aspect-ratio: 1 / 1;
+  background: var(--v2-primary);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2cqi;
+  transform: rotate(-8deg);
+  box-shadow: 0 1.5cqi 3cqi rgba(0, 0, 0, 0.28);
+}
+.card-v2--qro-special-price-stamp .card-v2__price :deep(*) {
+  color: #fff !important;
+}
+.card-v2--qro-special-price-stamp .card-v2__name {
+  bottom: 3cqi;
+  left: 3cqi;
+  right: 3cqi;
+  align-items: center;
+}
+
 .card-v2__limit {
   margin: 0;
   font-size: clamp(7px, 2.4cqi, 10px);
