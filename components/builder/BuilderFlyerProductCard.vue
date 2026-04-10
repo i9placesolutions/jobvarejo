@@ -121,6 +121,16 @@ const nameTextTransform = computed(() => fontConfig.value.name_text_transform ||
 // Opt-in via font_config.card_layout_version === 'v2'. Flyers antigos continuam no legacy.
 const cardLayoutVersion = computed(() => fontConfig.value.card_layout_version || 'v1')
 
+// Densidade de texto do nome (v2). Usa flyer.text_size_mode
+// (ja existente na toolbar: Maior/Medio/Menor) para setar --name-scale.
+const v2NameScale = computed(() => {
+  switch (flyer.value?.text_size_mode) {
+    case 'MAXIMUM': return 1.18
+    case 'MINIMUM': return 0.82
+    default: return 1
+  }
+})
+
 // Layout do card: v2 tem prioridade; senao dispatcher decide a familia; fallback = classico
 const cardLayout = computed(() => {
   if (cardLayoutVersion.value === 'v2') return 'v2'
@@ -577,7 +587,7 @@ const bottomRowStyle = computed(() => {
     <!-- Container queries escalam fonte/padding com o tamanho da celula. -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <template v-if="cardLayout === 'v2'">
-      <div class="card-v2">
+      <div class="card-v2" :style="{ '--name-scale': v2NameScale }">
         <!-- HEADER: nome -->
         <header class="card-v2__name">
           <p
