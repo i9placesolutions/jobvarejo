@@ -739,11 +739,21 @@ const priceFormatted = computed(() => priceParts.value ? `${priceParts.value.int
         />
       </svg>
       <div v-if="bgImageStyle" :style="bgImageStyle" />
-      <!-- Unidade acima do preco (ex: kg) — estilo QROfertas -->
+      <!-- Unidade (KG/UN/LT) — retângulo ancorado no canto superior direito (estilo QROfertas) -->
       <span
         v-if="unitAbbr && mode !== 'installment' && !tagStyle?.css_config?.hideUnit"
-        class="font-bold leading-none self-start relative z-1 opacity-80"
-        :style="{ fontSize: `${0.35 * s}em`, position: 'absolute', top: `${0.1 * s}em`, left: `${0.15 * s}em` }"
+        class="font-extrabold leading-none uppercase z-1"
+        :style="{
+          fontSize: `${0.32 * s}em`,
+          position: 'absolute',
+          top: `${0.18 * s}em`,
+          right: `${0.22 * s}em`,
+          padding: `${0.18 * s}em ${0.34 * s}em`,
+          backgroundColor: textColor,
+          color: bgColor,
+          borderRadius: `${0.16 * s}em`,
+          letterSpacing: '0.02em',
+        }"
       >{{ unitAbbr }}</span>
       <!-- R$ (cifrao) — pequeno, alinhado ao topo do real -->
       <span

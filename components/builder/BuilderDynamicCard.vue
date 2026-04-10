@@ -272,6 +272,13 @@ const invadirValue = computed(() => {
       overflow: 'hidden',
       color: adaptiveTextColor.value,
       position: 'relative',
+      // Container query context — habilita cqw/cqh/cqmin nos filhos
+      containerType: 'inline-size',
+      containerName: 'builder-product-card',
+      // Dimensoes reais da celula como CSS vars (fallback para clamp com px)
+      '--cell-w': `${cardWidth.value || 0}px`,
+      '--cell-h': `${cardHeight.value || 0}px`,
+      '--cell-min': `${Math.min(cardWidth.value || 0, cardHeight.value || 0)}px`,
       // CSS Variables QROfertas
       '--peso-1': xWeightVars.value.peso1,
       '--peso-2': xWeightVars.value.peso2,

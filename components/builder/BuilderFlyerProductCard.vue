@@ -117,8 +117,8 @@ const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<str
 const nameFontFamily = computed(() => fontConfig.value.name_font_family || 'inherit')
 const nameTextTransform = computed(() => fontConfig.value.name_text_transform || 'uppercase')
 
-// Layout do card: classico (1), lateral (2), premium (3)
-const cardLayout = computed(() => fontConfig.value.card_layout || 'classico')
+// Layout do card: o dispatcher decide a família; fallback manual = classico
+const cardLayout = computed(() => fontConfig.value.card_layout || dispatchedCardLayout.value || 'classico')
 const isHorizontalCardLayout = computed(() =>
   cardLayout.value === 'lateral'
   || cardLayout.value === 'mini'
@@ -268,7 +268,22 @@ const cardStyle = computed(() => ({
   color: cardText.value,
   opacity: props.product.bg_opacity ?? 1,
   boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+  // Container query context — habilita cqw/cqh/cqmin nos filhos
+  containerType: 'inline-size' as const,
+  containerName: 'builder-product-card',
+  // Dimensoes reais da celula como CSS vars
+  '--cell-w': `${cardWidth.value || 0}px`,
+  '--cell-h': `${cardHeight.value || 0}px`,
+  '--cell-min': `${Math.min(cardWidth.value || 0, cardHeight.value || 0)}px`,
 }))
+
+// Dispatcher: decide qual familia de template usar em funcao do tamanho real da celula.
+// Usado apenas quando fontConfig.card_layout nao esta explicitamente setado.
+const { cardLayout: dispatchedCardLayout } = useBoxTemplateDispatcher(
+  cardWidth,
+  cardHeight,
+  computed(() => !!props.isHighlight),
+)
 
 // Proxy URL for product images stored in Wasabi
 const imageUrl = computed(() => {
@@ -505,9 +520,10 @@ const bottomRowStyle = computed(() => {
 <template>
   <div
     ref="rootRef"
-    class="relative overflow-hidden min-h-0"
+    class="relative min-h-0"
     :class="[
       cardLayout === 'lateral' || cardLayout === 'mini' || cardLayout === 'etiqueta' ? 'flex flex-row' : 'flex flex-col',
+      cardLayout === 'lateral' ? 'overflow-visible' : 'overflow-hidden',
     ]"
     :style="{
       ...cardStyle,
@@ -516,6 +532,7 @@ const bottomRowStyle = computed(() => {
         : cardLayout === 'elegante' ? '1px solid #D4AF37'
         : cardLayout === 'glassmorphism' ? '1px solid rgba(255,255,255,0.3)'
         : cardLayout === 'minimalista' ? 'none'
+        : cardLayout === 'lateral' ? 'none'
         : '1px solid rgba(0,0,0,0.12)',
       fontSize: `${baseFontSize}px`,
       background: cardLayout === 'dark' ? '#1a1a2e'
@@ -598,13 +615,20 @@ const bottomRowStyle = computed(() => {
     </template>
 
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <!-- LAYOUT LATERAL: [IMAGEM esquerda] | [NOME + ETIQUETA direita]     -->
-    <!-- Flexbox row, imagem 45%, info 55% centralizada verticalmente      -->
+    <!-- LAYOUT LATERAL (padrão QROfertas): split 50/50, imagem esquerda    -->
+    <!-- com sangria permitida, nome bold condensed alinhado à direita,     -->
+    <!-- etiqueta grande ancorada no canto inferior direito.                -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <template v-else-if="cardLayout === 'lateral'">
-      <!-- Lado esquerdo: imagem 43% -->
-      <div style="width: 43%; flex-shrink: 0; padding: 10px; display: flex; align-items: center; justify-content: center; overflow: hidden; height: 100%">
-        <img v-if="imageUrl" :src="imageUrl" style="max-width: 100%; max-height: 100%; object-fit: contain" alt="" draggable="false" />
+      <!-- Lado esquerdo: imagem 50% com overflow visível (pode sangrar) -->
+      <div style="width: 50%; flex-shrink: 0; padding: 6px; display: flex; align-items: center; justify-content: center; overflow: visible; height: 100%; position: relative">
+        <img
+          v-if="imageUrl"
+          :src="imageUrl"
+          style="max-width: 112%; max-height: 112%; object-fit: contain; transform: translateX(4%)"
+          alt=""
+          draggable="false"
+        />
         <div v-else class="opacity-20">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -612,27 +636,35 @@ const bottomRowStyle = computed(() => {
         </div>
       </div>
 
-      <!-- Lado direito: nome + etiqueta GRANDE, centralizados verticalmente -->
-      <div style="width: 57%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 16px; gap: 6px">
+      <!-- Lado direito: nome topo-direita + etiqueta GRANDE ancorada no canto inferior direito -->
+      <div style="width: 50%; height: 100%; display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; padding: 10px 12px 10px 6px; gap: 6px; position: relative; z-index: 1">
         <BuilderAdaptiveText
           v-if="product.custom_name"
           tag="p"
-          class="font-extrabold text-center"
+          class="font-extrabold"
           :text="product.custom_name"
           :min-font-px="adaptiveNameMinFont"
-          :max-font-px="getAdaptiveNameMaxFont(1.02)"
+          :max-font-px="getAdaptiveNameMaxFont(1.12)"
           :max-lines="getAdaptiveNameMaxLines()"
-          :line-height="pageProductCount <= 2 ? 1.02 : 1.08"
-          :style="buildNameBaseStyle({ fontWeight: 800, textAlign: 'center' })"
+          :line-height="0.95"
+          :style="buildNameBaseStyle({
+            fontWeight: 900,
+            textAlign: 'right',
+            fontFamily: nameFontFamily !== 'inherit' ? nameFontFamily : `'Barlow Condensed', 'Oswald', 'Anton', 'Arial Narrow', sans-serif`,
+            letterSpacing: '-0.005em',
+            width: '100%',
+          })"
         />
         <p
           v-if="product.observation"
-          class="opacity-50 leading-tight text-center"
-          :style="{ fontSize: observationFontSize }"
+          class="opacity-50 leading-tight"
+          :style="{ fontSize: observationFontSize, textAlign: 'right' }"
         >
           {{ product.observation }}
         </p>
-        <div :style="{ width: '100%', height: `${Math.max(56, Math.round(verticalPriceSlotHeight * 0.9))}px` }">
+        <!-- Slot da etiqueta: ~30% da altura da celula via container query (cqh).
+             Fallback para JS: se a altura nao estiver medida, usa clamp com px. -->
+        <div style="width: 100%; height: clamp(72px, 30cqh, 240px); display: flex; justify-content: flex-end; align-items: flex-end">
           <BuilderFlyerPriceTag :product="product" :tag-style="priceTagStyle" :is-highlight="true" style="width: 100%; height: 100%" />
         </div>
       </div>

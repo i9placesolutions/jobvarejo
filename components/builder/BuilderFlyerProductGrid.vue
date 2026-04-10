@@ -159,6 +159,7 @@ const cells = computed(() => {
     isHighlight: boolean
     areaName: string
     colSpan: number
+    rowSpan: number
   }> = []
 
   // Rastrear posicoes consumidas por destaque (colSpan 2)
@@ -190,6 +191,7 @@ const cells = computed(() => {
       isHighlight: !!isHL,
       areaName: getCellAreaName(i, !!isHL),
       colSpan,
+      rowSpan: 1,
     })
   }
   return result
@@ -259,6 +261,7 @@ const handleOpenEditor = () => {
           transition: 'opacity 0.15s, outline 0.15s',
           ...(hasHighlightLayout ? { gridArea: cell.areaName } : {}),
           ...(cell.colSpan > 1 ? { gridColumn: `span ${cell.colSpan}` } : {}),
+          ...(cell.rowSpan > 1 ? { gridRow: `span ${cell.rowSpan}` } : {}),
         }"
         @dragstart="onDragStart($event, cell.index)"
         @dragover="onDragOver($event, cell.index)"
@@ -289,6 +292,7 @@ const handleOpenEditor = () => {
           transition: 'opacity 0.15s, outline 0.15s',
           ...(hasHighlightLayout ? { gridArea: cell.areaName } : {}),
           ...(cell.colSpan > 1 ? { gridColumn: `span ${cell.colSpan}` } : {}),
+          ...(cell.rowSpan > 1 ? { gridRow: `span ${cell.rowSpan}` } : {}),
         }"
         @dragstart="onDragStart($event, cell.index)"
         @dragover="onDragOver($event, cell.index)"
