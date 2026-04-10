@@ -62,3 +62,6 @@ tmp/
 
 # MCP config (contém tokens sensíveis)
 .mcp.json
+
+# Claude Code local settings (contém tokens e aprovações locais)
+.claude/
