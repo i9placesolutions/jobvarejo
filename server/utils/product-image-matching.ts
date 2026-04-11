@@ -177,8 +177,10 @@ const VARIANT_KEYWORDS = new Set([
 
 const extractWeightTokens = (words: Set<string>): string[] => {
   const weightParts: string[] = []
-  const unitTokens = new Set(['kg', 'kgs', 'g', 'gr', 'grs', 'mg', 'ml', 'mls', 'l', 'lt', 'lts', 'un'])
 
+  // So extrai pesos quando ja vem como TOKEN UNICO (5kg, 400g, 2x500ml).
+  // O branch antigo "digito solitario + unidade qualquer no set" gerava
+  // pesos fantasma quando o nome trazia coisas como "TP-1" + "und" → "1un".
   for (const w of words) {
     const token = String(w || '').trim().toLowerCase()
     if (!token) continue
@@ -191,15 +193,6 @@ const extractWeightTokens = (words: Set<string>): string[] => {
     if (/^\d+(?:[.,]\d+)?\s*(?:kg|kgs|g|gr|grs|mg|ml|mls|l|lt|lts|un)$/i.test(token)) {
       weightParts.push(normalizeWeightToken(token))
       continue
-    }
-
-    if (/^\d+(?:[.,]\d+)?$/.test(token)) {
-      for (const u of unitTokens) {
-        if (words.has(u)) {
-          weightParts.push(normalizeWeightToken(`${token}${u}`))
-          break
-        }
-      }
     }
   }
 
@@ -242,12 +235,16 @@ const isFuzzyMatchValid = (
   const matchWeights = extractWeightTokens(matchWords)
 
   if (searchWeights.length > 0 && matchWeights.length > 0) {
-    const searchWeightStr = searchWeights.join('|')
-    const matchWeightStr = matchWeights.join('|')
-    if (searchWeightStr !== matchWeightStr) {
+    // Aceita o match se PELO MENOS UM peso for comum entre busca e key.
+    // Antes a comparacao era stringificada exata, o que rejeitava casos
+    // onde a busca tinha pesos extras (ex: pacote "2x500ml" + volume total)
+    // mas a key tinha so um deles.
+    const matchSet = new Set(matchWeights)
+    const anyShared = searchWeights.some((w) => matchSet.has(w))
+    if (!anyShared) {
       onReject?.({
         reason: 'weight_mismatch',
-        message: `peso/gramatura difere - busca="${searchWeightStr}" vs match="${matchWeightStr}"`
+        message: `peso/gramatura difere - busca="${searchWeights.join('|')}" vs match="${matchWeights.join('|')}"`
       })
       return false
     }
