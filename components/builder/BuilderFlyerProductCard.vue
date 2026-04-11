@@ -2,6 +2,7 @@
 import type { BuilderFlyerProduct, BuilderBadgeStyle, BuilderPriceTagStyle } from '~/types/builder'
 import { getLayoutForBox, parseXSplit, parseYSplit, parseInvasion, parseOrdem, type ProductBoxLayoutConfig } from '~/composables/useProductBoxLayout'
 import { getBuilderCardAdaptiveBudget, getBuilderCardBaseFont, getBuilderCardNameFont } from '~/utils/builder-card-responsive'
+import { getV2Preset, V2_PRESETS, type V2Preset } from '~/utils/qro-card-v2-presets'
 
 const props = defineProps<{
   product: BuilderFlyerProduct
@@ -117,8 +118,102 @@ const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<str
 const nameFontFamily = computed(() => fontConfig.value.name_font_family || 'inherit')
 const nameTextTransform = computed(() => fontConfig.value.name_text_transform || 'uppercase')
 
-// Layout do card: o dispatcher decide a família; fallback manual = classico
-const cardLayout = computed(() => fontConfig.value.card_layout || dispatchedCardLayout.value || 'classico')
+// Layout version v2: novo card estilo QROfertas (grid-driven, 25 presets).
+// Opt-in via font_config.card_layout_version === 'v2'. Flyers antigos continuam no legacy.
+const cardLayoutVersion = computed(() => fontConfig.value.card_layout_version || 'v1')
+
+// Mapa de promocao: quando produto eh isHighlight mas o preset do flyer
+// nao eh destaque/special, promove para o equivalente destaque da categoria.
+const DESTAQUE_PROMOTION: Record<string, string> = {
+  vertical: 'qro-destaque-grande',
+  horizontal: 'qro-destaque-split',
+  compact: 'qro-destaque-price-column',
+}
+
+// Preset ativo do v2. Prioridade:
+//   1. override por produto (product.card_layout)
+//   2. default do flyer (font_config.card_layout)
+//   3. auto-promocao para destaque quando isHighlight=true
+//   4. fallback: vertical-classic (ou destaque-grande se highlight)
+const v2Preset = computed<V2Preset>(() => {
+  // 1. Per-product override
+  const productLayout = (props.product as any).card_layout
+  if (typeof productLayout === 'string' && productLayout.startsWith('qro-') && V2_PRESETS[productLayout]) {
+    return V2_PRESETS[productLayout]!
+  }
+  // 2. Flyer default
+  const flyerLayout = fontConfig.value.card_layout
+  const flyerPresetId = typeof flyerLayout === 'string' && flyerLayout.startsWith('qro-') ? flyerLayout : null
+  const basePreset = getV2Preset(flyerPresetId, !!props.isHighlight)
+  // 3. Auto-promocao para destaque quando isHighlight e o preset base nao eh destaque/special
+  if (props.isHighlight && basePreset.category !== 'destaque' && basePreset.category !== 'special') {
+    const promotedId = DESTAQUE_PROMOTION[basePreset.category]
+    if (promotedId && V2_PRESETS[promotedId]) {
+      return V2_PRESETS[promotedId]!
+    }
+  }
+  return basePreset
+})
+
+// Inline style do root .card-v2 com grid-template-* do preset + vars de tuning.
+const v2RootStyle = computed(() => {
+  const p = v2Preset.value
+  const style: Record<string, string | number> = {
+    '--name-scale': v2NameScale.value * (p.nameScale ?? 1),
+    '--name-weight': p.nameWeight ?? 900,
+    '--price-scale': p.priceScale ?? 1,
+    '--img-fit': p.imageFit ?? 'contain',
+    '--v2-padding': p.padding ?? '2cqi',
+    '--name-align': p.align?.name ?? 'center',
+    '--price-align': p.align?.price ?? 'center',
+  }
+  if (p.layoutKind === 'grid') {
+    if (p.areas) style.gridTemplateAreas = p.areas
+    if (p.rows) style.gridTemplateRows = p.rows
+    if (p.cols) style.gridTemplateColumns = p.cols
+  }
+  return style
+})
+
+// Classes do root: flags de categoria + preset id + collapsed + exotic.
+const v2RootClasses = computed(() => ({
+  'card-v2--collapsed': v2IsCollapsed.value,
+  'card-v2--exotic': v2Preset.value.layoutKind === 'exotic',
+  [`card-v2--${v2Preset.value.category}`]: true,
+  [`card-v2--${v2Preset.value.id}`]: true,
+}))
+
+// Densidade de texto do nome (v2). Usa flyer.text_size_mode
+// (ja existente na toolbar: Maior/Medio/Menor) para setar --name-scale.
+const v2NameScale = computed(() => {
+  switch (flyer.value?.text_size_mode) {
+    case 'MAXIMUM': return 1.18
+    case 'MINIMUM': return 0.82
+    default: return 1
+  }
+})
+
+// Boxes Inteligente real: colapsa card sem imagem pra bloco compacto.
+// FIX: a toolbar escreve em font_config.box_mode (NAO em product_box_style);
+// mantem fallback para product_box_style para compat.
+const v2SmartMode = computed(() => {
+  const fc = fontConfig.value.box_mode
+  if (fc) return fc === 'smart'
+  return (flyer.value?.product_box_style ?? 'smart') === 'smart'
+})
+const v2HasImage = computed(() => {
+  const raw = props.product.custom_image
+  if (raw && String(raw).trim() !== '') return true
+  const extras = props.product.extra_images || []
+  return extras.some((e: string) => e && String(e).trim() !== '')
+})
+const v2IsCollapsed = computed(() => v2SmartMode.value && !v2HasImage.value)
+
+// Layout do card: v2 tem prioridade; senao dispatcher decide a familia; fallback = classico
+const cardLayout = computed(() => {
+  if (cardLayoutVersion.value === 'v2') return 'v2'
+  return fontConfig.value.card_layout || dispatchedCardLayout.value || 'classico'
+})
 const isHorizontalCardLayout = computed(() =>
   cardLayout.value === 'lateral'
   || cardLayout.value === 'mini'
@@ -565,9 +660,61 @@ const bottomRowStyle = computed(() => {
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- LAYOUT V2 (QROfertas): grid 3-rows real (auto 1fr auto).         -->
+    <!-- Nome (header) / Imagem (main 1fr) / Etiqueta (footer real).     -->
+    <!-- Container queries escalam fonte/padding com o tamanho da celula. -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <template v-if="cardLayout === 'v2'">
+      <div class="card-v2" :class="v2RootClasses" :style="v2RootStyle">
+        <!-- Slot NOME (grid-area: name) -->
+        <header class="card-v2__name">
+          <p
+            v-if="product.custom_name"
+            class="card-v2__name-text"
+            :style="{
+              fontFamily: nameFontFamily !== 'inherit' ? nameFontFamily : undefined,
+              textTransform: nameTextTransform,
+            }"
+          >{{ product.custom_name }}</p>
+          <p v-if="product.observation" class="card-v2__obs">{{ product.observation }}</p>
+        </header>
+
+        <!-- Slot IMAGEM (grid-area: image) — escondida no modo colapsado -->
+        <main v-show="!v2IsCollapsed" class="card-v2__image">
+          <img
+            v-if="imageUrl"
+            :src="imageUrl"
+            class="card-v2__img"
+            alt=""
+            draggable="false"
+          />
+          <div v-else class="card-v2__img-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span>Sem imagem</span>
+          </div>
+        </main>
+
+        <!-- Slot PRECO (grid-area: price) — linha/coluna propria, nao overlay -->
+        <footer class="card-v2__price">
+          <BuilderFlyerPriceTag
+            :product="product"
+            :tag-style="priceTagStyle"
+            :is-highlight="isHighlight"
+            class="card-v2__price-tag"
+          />
+          <p v-if="product.purchase_limit" class="card-v2__limit">
+            Limite: {{ product.purchase_limit }} por cliente
+          </p>
+        </footer>
+      </div>
+    </template>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
     <!-- LAYOUT CLASSICO: Nome topo, Imagem centro, Preco embaixo          -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <template v-if="cardLayout === 'classico'">
+    <template v-else-if="cardLayout === 'classico'">
       <!-- 1. NOME (topo) -->
       <div class="shrink-0" :style="{ ...verticalNameAreaStyle, padding: '4px 6px 2px', margin: 0 }">
         <BuilderAdaptiveText
@@ -921,3 +1068,345 @@ const bottomRowStyle = computed(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+/* ═══ LAYOUT V2 — grid-driven QROfertas Builder V2 (25 presets) ═══ */
+.card-v2 {
+  flex: 1 1 0%;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  /* Defaults sobrescritos por inline style vindo de v2RootStyle */
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr;
+  grid-template-areas: "name" "image" "price";
+  container-type: inline-size;
+  container-name: card-v2;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  /* Vars de tuning (sobrescritas por preset via inline style) */
+  --name-scale: 1;
+  --name-weight: 900;
+  --price-scale: 1;
+  --img-fit: contain;
+  --v2-padding: 2cqi;
+  --name-align: center;
+  --price-align: center;
+  --v2-primary: var(--builder-primary, #D32F2F);
+}
+
+/* Slot NOME */
+.card-v2__name {
+  grid-area: name;
+  display: flex;
+  flex-direction: column;
+  align-items: var(--name-align);
+  justify-content: center;
+  padding: 3cqi 4cqi 2cqi;
+  text-align: var(--name-align);
+  min-width: 0;
+  min-height: 0;
+}
+.card-v2__name-text {
+  margin: 0;
+  font-family: 'Barlow Condensed', 'Barlow', 'Oswald', 'Arial Narrow', sans-serif;
+  font-weight: var(--name-weight, 900);
+  text-transform: uppercase;
+  font-size: calc(clamp(9px, 8cqi, 28px) * var(--name-scale));
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  color: inherit;
+  /* max 2 linhas com ellipsis */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: normal;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+.card-v2__obs {
+  margin: 0.4cqi 0 0;
+  font-size: clamp(7px, 3cqi, 11px);
+  opacity: 0.55;
+  line-height: 1.1;
+  text-align: center;
+  max-width: 100%;
+}
+
+/* Slot IMAGEM */
+.card-v2__image {
+  grid-area: image;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--v2-padding);
+  overflow: hidden;
+}
+.card-v2__img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: var(--img-fit, contain);
+  display: block;
+  /* Suporte a "Ampliar e Sobrepor" (Fase 2) */
+  transform: scale(var(--img-scale, 1)) translateY(var(--img-offset-y, 0));
+  transform-origin: center;
+}
+.card-v2__img-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1cqi;
+  color: currentColor;
+  opacity: 0.25;
+}
+.card-v2__img-empty svg {
+  width: 18cqi;
+  height: 18cqi;
+  max-width: 56px;
+  max-height: 56px;
+}
+.card-v2__img-empty span {
+  font-size: clamp(8px, 3cqi, 11px);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Slot PRECO */
+.card-v2__price {
+  grid-area: price;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: var(--price-align);
+  justify-content: center;
+  gap: 0.6cqi;
+  padding: 1cqi 3cqi 2cqi;
+  min-width: 0;
+  min-height: 0;
+  font-size: calc(1em * var(--price-scale, 1));
+}
+.card-v2__price-tag {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+}
+/* Boxes Inteligente: quando nao ha imagem, colapsa o card em
+   um bloco compacto (header + footer) sem a main area. Usa
+   grid-template-rows sem 1fr e align-content: center para puxar
+   o conteudo pro meio visualmente (o cell do grid pai mantem tamanho). */
+.card-v2--collapsed {
+  grid-template-rows: auto auto !important;
+  grid-template-columns: 1fr !important;
+  grid-template-areas: "name" "price" !important;
+  align-content: center;
+  row-gap: 2cqi;
+  padding: 3cqi 0;
+}
+.card-v2--collapsed .card-v2__image {
+  display: none !important;
+}
+.card-v2--collapsed .card-v2__name {
+  padding: 3cqi 5cqi 1cqi;
+}
+.card-v2--collapsed .card-v2__name-text {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  font-size: calc(clamp(12px, 11cqi, 38px) * var(--name-scale));
+}
+.card-v2--collapsed .card-v2__price {
+  padding: 1cqi 4cqi 3cqi;
+}
+
+/* ═══ PRESETS EXOTICOS — absolute positioning sobre imagem full-bleed ═══ */
+.card-v2--exotic {
+  grid-template-areas: "image" !important;
+  grid-template-rows: 1fr !important;
+  grid-template-columns: 1fr !important;
+}
+.card-v2--exotic .card-v2__image {
+  grid-area: image;
+  padding: 0;
+}
+.card-v2--exotic .card-v2__name,
+.card-v2--exotic .card-v2__price {
+  position: absolute;
+  z-index: 2;
+}
+
+/* Vertical Vitrine: faixa de nome no topo (inverso de cor) +
+   preco como barra sobreposta na base da imagem. */
+.card-v2--qro-vertical-shelf .card-v2__image {
+  padding: 12cqi 2cqi 14cqi;
+}
+.card-v2--qro-vertical-shelf .card-v2__name {
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--v2-primary);
+  color: #fff;
+  padding: 2cqi 4cqi;
+  align-items: center;
+}
+.card-v2--qro-vertical-shelf .card-v2__name-text {
+  color: #fff;
+}
+.card-v2--qro-vertical-shelf .card-v2__price {
+  left: 4cqi;
+  right: 4cqi;
+  bottom: 3cqi;
+  align-items: center;
+}
+
+/* Preco na Imagem: etiqueta em faixa central dominante,
+   nome ancorado no rodape. */
+.card-v2--qro-vertical-price-band .card-v2__image {
+  padding: 2cqi 2cqi 14cqi;
+}
+.card-v2--qro-vertical-price-band .card-v2__price {
+  top: 45%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  padding: 1.5cqi 3cqi;
+}
+.card-v2--qro-vertical-price-band .card-v2__name {
+  bottom: 2cqi;
+  left: 3cqi;
+  right: 3cqi;
+  align-items: center;
+}
+
+/* Destaque Hero: imagem dominante + nome topo + etiqueta
+   ancorada no canto inferior direito. */
+.card-v2--qro-destaque-overlay .card-v2__image {
+  padding: 10cqi 3cqi 3cqi;
+}
+.card-v2--qro-destaque-overlay .card-v2__name {
+  top: 2cqi;
+  left: 3cqi;
+  right: 3cqi;
+  align-items: flex-start;
+}
+.card-v2--qro-destaque-overlay .card-v2__name-text {
+  text-align: left;
+  font-size: calc(clamp(12px, 10cqi, 42px) * var(--name-scale));
+}
+.card-v2--qro-destaque-overlay .card-v2__price {
+  right: 3cqi;
+  bottom: 3cqi;
+  width: 55%;
+  max-width: 55%;
+}
+
+/* Overlay Especial: imagem full-bleed + gradiente escuro bottom +
+   nome e preco empilhados sobre o gradiente. */
+.card-v2--qro-special-overlay::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 55%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 10%, rgba(0, 0, 0, 0.15) 70%, transparent 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+.card-v2--qro-special-overlay .card-v2__img {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+.card-v2--qro-special-overlay .card-v2__name {
+  left: 3cqi;
+  right: 3cqi;
+  bottom: 14cqi;
+  align-items: flex-start;
+}
+.card-v2--qro-special-overlay .card-v2__name-text {
+  color: #fff;
+  text-align: left;
+  text-shadow: 0 0.3cqi 1cqi rgba(0, 0, 0, 0.6);
+}
+.card-v2--qro-special-overlay .card-v2__price {
+  left: 3cqi;
+  right: 3cqi;
+  bottom: 3cqi;
+}
+
+/* Diagonal: imagem recortada em diagonal + nome no topo
+   e preco no rodape sobre a area branca. */
+.card-v2--qro-special-diagonal .card-v2__image {
+  clip-path: polygon(0 0, 100% 0, 100% 68%, 0 100%);
+  padding: 0;
+}
+.card-v2--qro-special-diagonal .card-v2__img {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+.card-v2--qro-special-diagonal .card-v2__name {
+  top: 4cqi;
+  left: 3cqi;
+  right: 3cqi;
+  align-items: center;
+}
+.card-v2--qro-special-diagonal .card-v2__name-text {
+  color: #fff;
+  text-shadow: 0 0.3cqi 0.8cqi rgba(0, 0, 0, 0.55);
+}
+.card-v2--qro-special-diagonal .card-v2__price {
+  left: 3cqi;
+  right: 3cqi;
+  bottom: 2cqi;
+}
+
+/* Selo de Preco: etiqueta como selo circular rotacionado
+   no canto superior direito sobre a imagem. */
+.card-v2--qro-special-price-stamp .card-v2__image {
+  padding: 3cqi;
+}
+.card-v2--qro-special-price-stamp .card-v2__price {
+  top: 4cqi;
+  right: 4cqi;
+  width: 36%;
+  aspect-ratio: 1 / 1;
+  background: var(--v2-primary);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2cqi;
+  transform: rotate(-8deg);
+  box-shadow: 0 1.5cqi 3cqi rgba(0, 0, 0, 0.28);
+}
+.card-v2--qro-special-price-stamp .card-v2__price :deep(*) {
+  color: #fff !important;
+}
+.card-v2--qro-special-price-stamp .card-v2__name {
+  bottom: 3cqi;
+  left: 3cqi;
+  right: 3cqi;
+  align-items: center;
+}
+
+.card-v2__limit {
+  margin: 0;
+  font-size: clamp(7px, 2.4cqi, 10px);
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 1cqi 2.5cqi;
+  border-radius: 999px;
+  line-height: 1.1;
+}
+</style>
