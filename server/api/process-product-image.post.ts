@@ -3,7 +3,6 @@ import { requireAuthenticatedUser } from "../utils/auth";
 import { pgQuery } from "../utils/postgres";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { redisGet, redisSetex } from "../utils/redis";
-import { validateProductImageCandidatesWithAI } from "../utils/product-image-ai";
 import {
     findProductImageCacheHitByTerms,
     incrementProductImageCacheUsage,
@@ -354,9 +353,6 @@ export default defineEventHandler(async (event) => {
                 if (!strictMode) return undefined;
                 if (reasonText.includes('external_search_config_missing') || reasonText.includes('external_search_disabled')) {
                     return 'Ative a busca externa nas configurações e reprocessar, ou aplique imagem manualmente.';
-                }
-                if (reasonText.includes('openai_validation_missing') || reasonText.includes('ai_validation_failed')) {
-                    return 'Adicione EAN/código ou termos de peso/variante e reprocesse em modo preciso.';
                 }
                 if (reasonText.includes('no_candidates') || reasonText.includes('metadata_gate_rejected')) {
                     return 'Tente ajustar o termo principal (marca + peso) e reprocesse, ou use imagem manual.';

@@ -13,21 +13,39 @@ const UNIT_MAP: Record<string, string> = {
 }
 
 const TOKEN_ALIASES: Record<string, string> = {
-  // Beverage naming
+  // Bebidas
   refri: 'refrigerante',
   refrigerantes: 'refrigerante',
   coca: 'cocacola',
   cocacola: 'cocacola',
   cocacolaoriginal: 'cocacola',
+  guarana: 'guarana',
+  guaranaantarctica: 'guarana',
+  ant: 'antarctica',
 
-  // Variant canonicalization
+  // Marcas comuns (sub-marca -> marca principal quando ajuda a colar)
+  ninho: 'ninho',
+  leiteninho: 'ninho',
+  toddy: 'toddy',
+  nescau: 'nescau',
+  neston: 'neston',
+  danone: 'danone',
+  itambe: 'itambe',
+  parmalat: 'parmalat',
+  piracanjuba: 'piracanjuba',
+  nestle: 'nestle',
+  unilever: 'unilever',
+  bauducco: 'bauducco',
+  nestlebrasil: 'nestle',
+
+  // Variantes
   tradicional: 'original',
   classico: 'original',
   classic: 'original',
   regular: 'original',
   normal: 'original',
 
-  // Sugar-free variants
+  // Zero/sem acucar
   zeroacucar: 'zero',
   semacucar: 'zero',
   sugarfree: 'zero',
@@ -192,7 +210,18 @@ type FuzzyRejectReason = 'variant' | 'weight_mismatch' | 'weight_missing'
 type FuzzyRejectMeta = { reason: FuzzyRejectReason; message: string }
 type FuzzyRejectCollector = (meta: FuzzyRejectMeta) => void
 
-const isFuzzyMatchValid = (searchNormalized: string, matchSearchTerm: string, onReject?: FuzzyRejectCollector): boolean => {
+// Checa compatibilidade entre termo buscado e termo da key.
+// - Variante diferente (zero vs original): rejeita.
+// - Peso explicitamente diferente (500g vs 1kg): rejeita.
+// - Peso ausente na key (key nao traz gramatura no nome): ACEITA por default,
+//   porque a maioria das imagens internas nao tem gramatura no path. Passe
+//   requireWeightInKey=true para aplicar o gate duro (modo estrito).
+const isFuzzyMatchValid = (
+  searchNormalized: string,
+  matchSearchTerm: string,
+  onReject?: FuzzyRejectCollector,
+  opts?: { requireWeightInKey?: boolean }
+): boolean => {
   const searchWords = new Set(searchNormalized.split(' '))
   const matchNormalized = normalizeSearchTerm(matchSearchTerm)
   const matchWords = new Set(matchNormalized.split(' '))
@@ -224,7 +253,7 @@ const isFuzzyMatchValid = (searchNormalized: string, matchSearchTerm: string, on
     }
   }
 
-  if (searchWeights.length > 0 && matchWeights.length === 0) {
+  if (opts?.requireWeightInKey && searchWeights.length > 0 && matchWeights.length === 0) {
     onReject?.({
       reason: 'weight_missing',
       message: `busca tem peso "${searchWeights.join('|')}" mas match nao tem`
@@ -236,6 +265,94 @@ const isFuzzyMatchValid = (searchNormalized: string, matchSearchTerm: string, on
 }
 
 const tokenSet = (normalized: string): Set<string> => new Set(normalized.split(' ').filter(Boolean))
+
+// Distancia de Levenshtein com cap (corta cedo se passar do limite).
+const levenshteinCapped = (a: string, b: string, cap: number): number => {
+  if (a === b) return 0
+  const la = a.length
+  const lb = b.length
+  if (Math.abs(la - lb) > cap) return cap + 1
+  if (!la) return lb
+  if (!lb) return la
+
+  let prev = new Array(lb + 1)
+  let curr = new Array(lb + 1)
+  for (let j = 0; j <= lb; j++) prev[j] = j
+
+  for (let i = 1; i <= la; i++) {
+    curr[0] = i
+    let rowMin = curr[0]
+    for (let j = 1; j <= lb; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1
+      curr[j] = Math.min(
+        curr[j - 1] + 1,
+        prev[j] + 1,
+        prev[j - 1] + cost
+      )
+      if (curr[j] < rowMin) rowMin = curr[j]
+    }
+    if (rowMin > cap) return cap + 1
+    const tmp = prev
+    prev = curr
+    curr = tmp
+  }
+
+  return prev[lb]
+}
+
+// Retorna score 0..1 de quanto um token da query bate com algum token do set da key.
+// 1.0 = exato, 0.92 = substring forte, 0.88 = levenshtein 1, 0.72 = levenshtein 2 (len>=6).
+const fuzzyTokenScore = (token: string, keyTokens: Set<string>): number => {
+  if (!token) return 0
+  if (keyTokens.has(token)) return 1
+  if (token.length < 4) return 0
+
+  let best = 0
+  for (const kt of keyTokens) {
+    if (!kt || kt.length < 4) continue
+
+    // Substring em qualquer direcao (so quando a sobreposicao e grande).
+    if (kt.includes(token) || token.includes(kt)) {
+      const smaller = Math.min(kt.length, token.length)
+      const bigger = Math.max(kt.length, token.length)
+      if (smaller / bigger >= 0.7) {
+        if (best < 0.92) best = 0.92
+        if (best === 1) return 1
+        continue
+      }
+    }
+
+    // Levenshtein: tolera typos e pequenos plurais/prefixos.
+    if (Math.abs(kt.length - token.length) <= 2) {
+      const dist = levenshteinCapped(token, kt, 2)
+      if (dist <= 1 && best < 0.88) best = 0.88
+      else if (dist <= 2 && token.length >= 6 && best < 0.72) best = 0.72
+    }
+  }
+
+  return best
+}
+
+// Overlap com fuzzy: devolve ratio (0..1) combinando matches exatos + parciais,
+// alem do overlap exato (inteiro) para gates de quantidade minima.
+const computeFuzzyOverlap = (
+  queryTokens: string[],
+  keyTokens: Set<string>
+): { ratio: number; overlap: number; fuzzyOverlap: number } => {
+  if (!queryTokens.length) return { ratio: 0, overlap: 0, fuzzyOverlap: 0 }
+  let exact = 0
+  let fuzzy = 0
+  for (const t of queryTokens) {
+    if (keyTokens.has(t)) { exact++; continue }
+    fuzzy += fuzzyTokenScore(t, keyTokens)
+  }
+  const combined = exact + fuzzy
+  return {
+    ratio: combined / queryTokens.length,
+    overlap: exact,
+    fuzzyOverlap: combined
+  }
+}
 
 export const hasWeightInNormalized = (normalized: string): boolean => {
   const words = tokenSet(normalized)
@@ -486,13 +603,6 @@ const getCriticalNumericTokens = (normalized: string): string[] =>
     .filter((t) => /^\d{2,}$/.test(t))
     .filter((t, idx, arr) => arr.indexOf(t) === idx)
 
-const scoreKeyMatch = (queryTokens: string[], keyTokenSet: Set<string>) => {
-  if (!queryTokens.length) return { ratio: 0, overlap: 0 }
-  let overlap = 0
-  for (const t of queryTokens) if (keyTokenSet.has(t)) overlap++
-  return { ratio: overlap / queryTokens.length, overlap }
-}
-
 const getTokenOverlapCount = (tokens: string[], tokenSet: Set<string>): number => {
   let overlap = 0
   for (const token of tokens) {
@@ -515,30 +625,6 @@ const buildMetadataTokens = (value: string, minLen = 2): string[] =>
 const hasAnyToken = (tokens: string[], tokenSet: Set<string>): boolean => {
   for (const token of tokens) if (tokenSet.has(token)) return true
   return false
-}
-
-const buildStrongSignalTokens = (input: {
-  normalized: string
-  productCode?: string
-}): string[] => {
-  const set = new Set<string>();
-  const productCodeTokens = normalizeSearchTerm(String(input.productCode || ''))
-    .split(' ')
-    .map((token) => token.trim())
-    .filter((token) => /^\d{4,}$/.test(token))
-    .filter((token, idx, arr) => arr.indexOf(token) === idx);
-
-  for (const token of productCodeTokens) {
-    if (token) set.add(token);
-  }
-
-  for (const token of normalizeSearchTerm(input.normalized).split(' ').filter(Boolean)) {
-    if (!token) continue
-    if (VARIANT_KEYWORDS.has(token)) set.add(token)
-    if (/^\d{2,}$/.test(token)) set.add(token)
-  }
-
-  return Array.from(set)
 }
 
 export const findBestS3Match = async (opts: {
@@ -580,12 +666,10 @@ export const findBestS3Match = async (opts: {
   const requiredFlavorTokens = buildMetadataTokens(String(opts.flavor || ''))
     .filter((token) => !FLAVOR_NOISE_TOKENS.has(token))
   const requiredWeightTokens = extractWeightTokens(tokenSet(normalizeSearchTerm(String(opts.weight || ''))))
-  const requiredWeightSet = new Set(requiredWeightTokens)
   const requiredProductCodeTokens = normalizeSearchTerm(String(opts.productCode || ''))
     .split(' ')
     .filter(Boolean)
     .filter((token) => /^\d{4,}$/.test(token));
-  const hasStrictSignalContext = requiredWeightTokens.length > 0 || requiredFlavorTokens.length > 0 || requiredProductCodeTokens.length > 0
 
   let bestStrict: { key: string; ratio: number; overlap: number; score: number } | null = null
   let bestRelaxed: { key: string; ratio: number; overlap: number; score: number } | null = null
@@ -660,26 +744,30 @@ export const findBestS3Match = async (opts: {
     if (keyTokens.size < 1) continue
     const aliasTokens = tokenSet(aliasNormalized)
 
-    const hasQueryVariantSignal = requiredWeightTokens.length > 0 || requiredFlavorTokens.length > 0
     const hasRequiredProductCodeSignal = requiredProductCodeTokens.length > 0
 
-    if (requiredBrandTokens.length > 0 && !hasAnyToken(requiredBrandTokens, keyTokens)) {
-      continue
-    }
-    if (requiredFlavorTokens.length > 0 && !hasAnyToken(requiredFlavorTokens, keyTokens)) {
-      const hasVariantSignalInKey = Array.from(VARIANT_KEYWORDS).some((token) => keyTokens.has(token))
-      if (hasVariantSignalInKey) continue
-    }
+    // Sinais de marca/sabor/peso viram SOFT: nao descartamos a key,
+    // apenas penalizamos o score quando o sinal nao aparece.
+    const brandPresent = requiredBrandTokens.length === 0 || hasAnyToken(requiredBrandTokens, keyTokens)
+    const flavorPresent = requiredFlavorTokens.length === 0 || hasAnyToken(requiredFlavorTokens, keyTokens)
 
     const keyWeightTokens = extractWeightTokens(keyTokens)
     const keyWeightSet = new Set(keyWeightTokens)
-    if (requiredWeightTokens.length > 0) {
-      if (opts.strictOnly && keyWeightTokens.length === 0) {
-        continue
-      }
-      if (requiredWeightTokens.length > 0 && !requiredWeightTokens.some((token) => keyWeightSet.has(token))) {
-        continue
-      }
+    const weightPresent = requiredWeightTokens.length === 0 || requiredWeightTokens.some((token) => keyWeightSet.has(token))
+    const weightConflict = requiredWeightTokens.length > 0 && keyWeightTokens.length > 0 && !weightPresent
+    if (weightConflict) {
+      // Peso explicitamente diferente continua sendo erro DURO (500g != 1kg).
+      continue
+    }
+    if (opts.strictOnly && requiredWeightTokens.length > 0 && keyWeightTokens.length === 0) {
+      // Modo estrito exige gramatura no nome da key.
+      continue
+    }
+    if (opts.strictOnly && requiredBrandTokens.length > 0 && !brandPresent) {
+      continue
+    }
+    if (opts.strictOnly && requiredFlavorTokens.length > 0 && !flavorPresent) {
+      continue
     }
 
     if (hasRequiredProductCodeSignal && opts.strictOnly && !requiredProductCodeTokens.some((token) => keyTokens.has(token))) {
@@ -688,42 +776,28 @@ export const findBestS3Match = async (opts: {
 
     for (let idx = 0; idx < queryVariants.length; idx++) {
       const queryNormalized = queryVariants[idx]!.normalized
-      if (!isFuzzyMatchValid(queryNormalized, normalizedKey, collectFuzzyReject)) continue
+      if (!isFuzzyMatchValid(queryNormalized, normalizedKey, collectFuzzyReject, { requireWeightInKey: !!opts.strictOnly })) continue
 
       const queryTokens = queryVariants[idx]!.tokens
       const criticalNumericTokens = queryVariants[idx]!.criticalNumericTokens
-      const strictSignals = buildStrongSignalTokens({ normalized: queryNormalized, productCode: opts.productCode })
-      const hasStrongSignalFromQuery = strictSignals.some((token) => keyTokens.has(token))
-      const hasStrongWeightSignal = requiredWeightSet.size > 0 && requiredWeightTokens.some((token) => keyWeightSet.has(token))
-      const hasStrongFlavorSignal = requiredFlavorTokens.length > 0 && hasAnyToken(requiredFlavorTokens, keyTokens)
-      const hasStrongCodeSignal = requiredProductCodeTokens.length > 0 && requiredProductCodeTokens.some((token) => keyTokens.has(token))
-      const hasStrictFallbackSignal = hasStrongSignalFromQuery || hasStrongWeightSignal || hasStrongFlavorSignal || hasStrongCodeSignal
-      if (opts.strictOnly && (hasStrictSignalContext || hasQueryVariantSignal) && !hasStrictFallbackSignal) {
-        continue
-      }
 
       // Guard rail: códigos numéricos curtos (ex: 51, 29) são discriminadores fortes.
       if (criticalNumericTokens.length > 0 && criticalNumericTokens.some((token) => !keyTokens.has(token))) {
         continue
       }
 
-      const { ratio, overlap } = scoreKeyMatch(queryTokens, keyTokens)
+      const { ratio, overlap, fuzzyOverlap } = computeFuzzyOverlap(queryTokens, keyTokens)
       const aliasOverlap = aliasTokens.size > 0 ? getTokenOverlapCount(queryTokens, aliasTokens) : 0
       const pathOverlap = normalizedKeyPath ? getTokenOverlapCount(queryTokens, tokenSet(normalizedKeyPath)) : 0
-      const requiresWeightStrict = hasWeightInNormalized(queryNormalized)
-      const shouldEnforceStrictSignals = opts.strictOnly && (hasStrictSignalContext || hasQueryVariantSignal)
-      const minRatio = shouldEnforceStrictSignals
-        ? (queryTokens.length <= 3
-          ? 1
-          : queryTokens.length <= 5
-            ? 0.92
-            : 0.9)
-        : (requiresWeightStrict
-          ? (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.9 : 0.86)
-          : (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.86 : 0.8))
-      const minOverlap = queryTokens.length >= 6
-        ? (shouldEnforceStrictSignals ? 5 : 4)
-        : Math.min(shouldEnforceStrictSignals ? 4 : 3, queryTokens.length)
+
+      // Thresholds calibrados para tolerar nomes parciais/typos/falta de gramatura.
+      // Modo strict ainda exige bem mais.
+      const minRatio = opts.strictOnly
+        ? (queryTokens.length <= 3 ? 0.85 : queryTokens.length <= 5 ? 0.78 : 0.72)
+        : (queryTokens.length <= 2 ? 0.7 : queryTokens.length <= 4 ? 0.6 : queryTokens.length <= 6 ? 0.55 : 0.5)
+      const minOverlap = opts.strictOnly
+        ? Math.min(queryTokens.length, queryTokens.length <= 4 ? 2 : 3)
+        : Math.min(queryTokens.length, queryTokens.length <= 3 ? 1 : 2)
 
       if (ratio >= minRatio && overlap >= minOverlap) {
         const aliasBoost = aliasOverlap > 0
@@ -737,6 +811,11 @@ export const findBestS3Match = async (opts: {
           queryNormalized === normalizedKeyPath ? 0.34 :
           queryNormalized === normalizedKey ? 0.28 :
           0
+        // Penalidades por sinais ausentes (soft signals).
+        const brandPenalty = brandPresent ? 0 : 0.18
+        const flavorPenalty = flavorPresent ? 0 : 0.12
+        const weightPenalty = (requiredWeightTokens.length > 0 && keyWeightTokens.length === 0) ? 0.1 : 0
+        const fuzzyBonus = (fuzzyOverlap - overlap) * 0.04
         const strictScore =
           ratio +
           (overlap * 0.02) +
@@ -744,7 +823,11 @@ export const findBestS3Match = async (opts: {
           aliasBoost +
           pathBoost +
           prefixBoost +
-          exactishBoost
+          exactishBoost +
+          fuzzyBonus -
+          brandPenalty -
+          flavorPenalty -
+          weightPenalty
         if (
           !bestStrict ||
           strictScore > bestStrict.score ||
@@ -755,22 +838,29 @@ export const findBestS3Match = async (opts: {
         continue
       }
 
-      if (queryTokens.length >= 5) {
-        const relaxedMinRatio = requiresWeightStrict ? 0.72 : 0.68
-        const relaxedMinOverlap = queryTokens.length >= 7 ? 4 : 3
+      // Caminho relaxado para queries de tamanho medio com tokens parciais.
+      if (queryTokens.length >= 3) {
+        const relaxedMinRatio = opts.strictOnly ? 0.65 : 0.45
+        const relaxedMinOverlap = 1
         if (ratio >= relaxedMinRatio && overlap >= relaxedMinOverlap) {
-          const aliasBoost = aliasOverlap > 0
-            ? ((aliasOverlap / Math.max(1, queryTokens.length)) * 0.18)
-            : 0
+          const aliasBoost = aliasOverlap > 0 ? ((aliasOverlap / Math.max(1, queryTokens.length)) * 0.18) : 0
           const pathBoost = pathOverlap > 0 ? Math.min(0.1, pathOverlap * 0.018) : 0
           const prefixBoost = key.startsWith('uploads/') ? 0.05 : (key.startsWith('imagens/') ? 0.02 : 0)
+          const brandPenalty = brandPresent ? 0 : 0.22
+          const flavorPenalty = flavorPresent ? 0 : 0.14
+          const weightPenalty = (requiredWeightTokens.length > 0 && keyWeightTokens.length === 0) ? 0.12 : 0
+          const fuzzyBonus = (fuzzyOverlap - overlap) * 0.05
           const relaxedScore =
             ratio +
             (overlap * 0.015) +
             (Math.min(queryTokens.length, 8) * 0.02) +
             aliasBoost +
             pathBoost +
-            prefixBoost
+            prefixBoost +
+            fuzzyBonus -
+            brandPenalty -
+            flavorPenalty -
+            weightPenalty
           if (
             !bestRelaxed ||
             relaxedScore > bestRelaxed.score ||
@@ -855,12 +945,10 @@ export const findTopS3Matches = async (opts: {
   const requiredFlavorTokens = buildMetadataTokens(String(opts.flavor || ''))
     .filter((token) => !FLAVOR_NOISE_TOKENS.has(token))
   const requiredWeightTokens = extractWeightTokens(tokenSet(normalizeSearchTerm(String(opts.weight || ''))))
-  const requiredWeightSet = new Set(requiredWeightTokens)
   const requiredProductCodeTokens = normalizeSearchTerm(String(opts.productCode || ''))
     .split(' ')
     .filter(Boolean)
     .filter((token) => /^\d{4,}$/.test(token))
-  const hasStrictSignalContext = requiredWeightTokens.length > 0 || requiredFlavorTokens.length > 0 || requiredProductCodeTokens.length > 0
 
   const listedObjects = await getCachedS3Objects({
     s3: opts.s3,
@@ -941,24 +1029,18 @@ export const findTopS3Matches = async (opts: {
     if (!normalizedKey) continue
     if (keyTokens.size < 1) continue
 
-    if (requiredBrandTokens.length > 0 && !hasAnyToken(requiredBrandTokens, keyTokens)) {
-      continue
-    }
-    if (requiredFlavorTokens.length > 0 && !hasAnyToken(requiredFlavorTokens, keyTokens)) {
-      const hasVariantSignalInKey = Array.from(VARIANT_KEYWORDS).some((token) => keyTokens.has(token))
-      if (hasVariantSignalInKey) continue
-    }
+    // Soft signals (mesma logica do findBestS3Match).
+    const brandPresent = requiredBrandTokens.length === 0 || hasAnyToken(requiredBrandTokens, keyTokens)
+    const flavorPresent = requiredFlavorTokens.length === 0 || hasAnyToken(requiredFlavorTokens, keyTokens)
 
     const keyWeightTokens = extractWeightTokens(keyTokens)
     const keyWeightSet = new Set(keyWeightTokens)
-    if (requiredWeightTokens.length > 0) {
-      if (opts.strictOnly && keyWeightTokens.length === 0) {
-        continue
-      }
-      if (!requiredWeightTokens.some((token) => keyWeightSet.has(token))) {
-        continue
-      }
-    }
+    const weightPresent = requiredWeightTokens.length === 0 || requiredWeightTokens.some((token) => keyWeightSet.has(token))
+    const weightConflict = requiredWeightTokens.length > 0 && keyWeightTokens.length > 0 && !weightPresent
+    if (weightConflict) continue
+    if (opts.strictOnly && requiredWeightTokens.length > 0 && keyWeightTokens.length === 0) continue
+    if (opts.strictOnly && requiredBrandTokens.length > 0 && !brandPresent) continue
+    if (opts.strictOnly && requiredFlavorTokens.length > 0 && !flavorPresent) continue
 
     if (requiredProductCodeTokens.length > 0 && opts.strictOnly && !requiredProductCodeTokens.some((token) => keyTokens.has(token))) {
       continue
@@ -970,34 +1052,30 @@ export const findTopS3Matches = async (opts: {
 
     for (let idx = 0; idx < queryVariants.length; idx++) {
       const queryNormalized = queryVariants[idx]!.normalized
-      if (!isFuzzyMatchValid(queryNormalized, normalizedKey)) continue
+      if (!isFuzzyMatchValid(queryNormalized, normalizedKey, undefined, { requireWeightInKey: !!opts.strictOnly })) continue
 
       const queryTokens = queryVariants[idx]!.tokens
       const criticalNumericTokens = queryVariants[idx]!.criticalNumericTokens
-      const strictSignals = buildStrongSignalTokens({ normalized: queryNormalized, productCode: opts.productCode })
-      const hasStrongSignalFromQuery = strictSignals.some((token) => keyTokens.has(token))
-      const hasStrongWeightSignal = requiredWeightSet.size > 0 && requiredWeightTokens.some((token) => keyWeightSet.has(token))
-      const hasStrongFlavorSignal = requiredFlavorTokens.length > 0 && hasAnyToken(requiredFlavorTokens, keyTokens)
-      const hasStrongCodeSignal = requiredProductCodeTokens.length > 0 && requiredProductCodeTokens.some((token) => keyTokens.has(token))
-      const hasStrictFallbackSignal = hasStrongSignalFromQuery || hasStrongWeightSignal || hasStrongFlavorSignal || hasStrongCodeSignal
 
       if (criticalNumericTokens.length > 0 && criticalNumericTokens.some((token) => !keyTokens.has(token))) {
         continue
       }
 
-      const { ratio, overlap } = scoreKeyMatch(queryTokens, keyTokens)
+      const { ratio, overlap, fuzzyOverlap } = computeFuzzyOverlap(queryTokens, keyTokens)
       const aliasOverlap = aliasTokens.size > 0 ? getTokenOverlapCount(queryTokens, aliasTokens) : 0
       const pathOverlap = pathTokens.size > 0 ? getTokenOverlapCount(queryTokens, pathTokens) : 0
-      const requiresWeightStrict = hasWeightInNormalized(queryNormalized)
-      const shouldEnforceStrictSignals = !!opts.strictOnly && (hasStrictSignalContext || requiredFlavorTokens.length > 0 || requiredWeightTokens.length > 0)
-      const minRatio = shouldEnforceStrictSignals
-        ? (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.92 : 0.9)
-        : (requiresWeightStrict
-          ? (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.9 : 0.86)
-          : (queryTokens.length <= 3 ? 1 : queryTokens.length <= 5 ? 0.86 : 0.8))
-      const minOverlap = queryTokens.length >= 6
-        ? (shouldEnforceStrictSignals ? 5 : 4)
-        : Math.min(shouldEnforceStrictSignals ? 4 : 3, queryTokens.length)
+
+      const minRatio = opts.strictOnly
+        ? (queryTokens.length <= 3 ? 0.85 : queryTokens.length <= 5 ? 0.78 : 0.72)
+        : (queryTokens.length <= 2 ? 0.7 : queryTokens.length <= 4 ? 0.6 : queryTokens.length <= 6 ? 0.55 : 0.5)
+      const minOverlap = opts.strictOnly
+        ? Math.min(queryTokens.length, queryTokens.length <= 4 ? 2 : 3)
+        : Math.min(queryTokens.length, queryTokens.length <= 3 ? 1 : 2)
+
+      const brandPenaltyPts = brandPresent ? 0 : 18
+      const flavorPenaltyPts = flavorPresent ? 0 : 12
+      const weightPenaltyPts = (requiredWeightTokens.length > 0 && keyWeightTokens.length === 0) ? 10 : 0
+      const fuzzyBonusPts = (fuzzyOverlap - overlap) * 4
 
       let candidate: RankedS3MatchCandidate | null = null
 
@@ -1015,43 +1093,28 @@ export const findTopS3Matches = async (opts: {
           0
         candidate = {
           key,
-          score: 250 + (ratio * 100) + (overlap * 2) + aliasBoost + pathBoost + prefixBoost + exactishBoost,
+          score: 250 + (ratio * 100) + (overlap * 2) + aliasBoost + pathBoost + prefixBoost + exactishBoost + fuzzyBonusPts - brandPenaltyPts - flavorPenaltyPts - weightPenaltyPts,
           ratio,
           overlap,
           reason: 'Match interno forte por nome, metadata e sinais do produto',
           kind: 'strict',
           alias: alias || undefined
         }
-      } else if (queryTokens.length >= 5) {
-        const relaxedMinRatio = requiresWeightStrict ? 0.72 : 0.68
-        const relaxedMinOverlap = queryTokens.length >= 7 ? 4 : 3
-        if (ratio >= relaxedMinRatio && overlap >= relaxedMinOverlap) {
-          const aliasBoost = aliasOverlap > 0
-            ? ((aliasOverlap / Math.max(1, queryTokens.length)) * 14)
-            : 0
+      } else if (queryTokens.length >= 3) {
+        const relaxedMinRatio = opts.strictOnly ? 0.65 : 0.45
+        if (ratio >= relaxedMinRatio && overlap >= 1) {
+          const aliasBoost = aliasOverlap > 0 ? ((aliasOverlap / Math.max(1, queryTokens.length)) * 14) : 0
           const pathBoost = pathOverlap > 0 ? Math.min(8, pathOverlap * 1.1) : 0
           const prefixBoost = key.startsWith('uploads/') ? 5 : (key.startsWith('imagens/') ? 2 : 0)
           candidate = {
             key,
-            score: 150 + (ratio * 100) + (overlap * 1.8) + aliasBoost + pathBoost + prefixBoost,
+            score: 150 + (ratio * 100) + (overlap * 1.8) + aliasBoost + pathBoost + prefixBoost + fuzzyBonusPts - brandPenaltyPts - flavorPenaltyPts - weightPenaltyPts,
             ratio,
             overlap,
             reason: 'Match interno plausível; precisa de confirmação visual',
             kind: 'relaxed',
             alias: alias || undefined
           }
-        }
-      }
-
-      if (!candidate && hasStrictFallbackSignal && overlap >= Math.min(Math.max(2, queryTokens.length - 2), queryTokens.length) && ratio >= 0.58) {
-        candidate = {
-          key,
-          score: 90 + (ratio * 100) + (overlap * 1.4) + (hasStrongSignalFromQuery ? 10 : 0) + (key.startsWith('uploads/') ? 4 : 0),
-          ratio,
-          overlap,
-          reason: 'Sinais internos relevantes encontrados, mas ainda com dúvida',
-          kind: 'partial',
-          alias: alias || undefined
         }
       }
 
