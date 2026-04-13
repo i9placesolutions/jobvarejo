@@ -90,14 +90,14 @@ const priceTextColorPickerRef = ref<HTMLElement | null>(null);
 const priceCurrencyColorPickerRef = ref<HTMLElement | null>(null);
 
 const expandedSections = ref({
-  content: true,
+  content: false,
   presets: true,
-  layout: true,
+  layout: false,
   spacing: false,
   highlight: false,
-  cardStyle: false,
+  cardStyle: true,
   typography: false,
-  priceTag: false,
+  priceTag: true,
   diagnostics: false
 });
 
@@ -1381,10 +1381,10 @@ onBeforeUnmount(() => {
             </div>
             <div class="section-toggle__copy">
               <div class="section-toggle__title-row">
-                <span class="section-title">Card e moldura</span>
-                <span class="section-summary">Base visual da oferta</span>
+                <span class="section-title">Visual do Card</span>
+                <span class="section-summary">Aparência da oferta</span>
               </div>
-              <p class="section-description">Cor, raio e borda dos cards.</p>
+              <p class="section-description">Cores, cantos e borda dos cards.</p>
             </div>
           </div>
           <component :is="expandedSections.cardStyle ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -1394,7 +1394,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <div class="color-field">
               <div class="color-field__copy">
-                <label class="field-label">Fundo do card</label>
+                <label class="field-label">Cor de fundo</label>
                 <p class="field-hint">Cor de fundo dos cards.</p>
               </div>
               <div class="color-field__controls">
@@ -1452,7 +1452,7 @@ onBeforeUnmount(() => {
 
             <label class="switch-card">
               <div>
-                <span class="field-label">Produto sem fundo</span>
+                <span class="field-label">Fundo transparente</span>
                 <p class="field-hint">Remove o fundo atrás da imagem do produto.</p>
               </div>
               <span class="switch" :class="{ 'switch--checked': globalStyles?.isProdBgTransparent ?? false }">
@@ -1470,8 +1470,8 @@ onBeforeUnmount(() => {
             <div class="control-card">
               <div class="control-card__head">
                 <div>
-                  <label class="field-label">Raio dos cantos</label>
-                  <p class="field-hint">Arredondamento dos cantos.</p>
+                  <label class="field-label">Cantos arredondados</label>
+                  <p class="field-hint">Arredondamento dos cantos do card.</p>
                 </div>
                 <div class="value-editor">
                   <input
@@ -1501,7 +1501,7 @@ onBeforeUnmount(() => {
             <div class="control-card">
               <div class="control-card__head">
                 <div>
-                  <label class="field-label">Espessura da borda</label>
+                  <label class="field-label">Borda</label>
                   <p class="field-hint">Contorno ao redor do card.</p>
                 </div>
                 <div class="value-editor">
@@ -1529,10 +1529,10 @@ onBeforeUnmount(() => {
               />
             </div>
 
-            <div class="color-field">
+            <div v-if="(globalStyles?.cardBorderWidth ?? 0) > 0" class="color-field">
               <div class="color-field__copy">
                 <label class="field-label">Cor da borda</label>
-                <p class="field-hint">Visível quando a borda é > 0.</p>
+                <p class="field-hint">Cor do contorno do card.</p>
               </div>
               <div class="color-field__controls">
                 <ColorPicker
@@ -1569,10 +1569,10 @@ onBeforeUnmount(() => {
             </div>
             <div class="section-toggle__copy">
               <div class="section-toggle__title-row">
-                <span class="section-title">Nome do produto</span>
+                <span class="section-title">Texto do Produto</span>
                 <span class="section-summary">Tipografia e alinhamento</span>
               </div>
-              <p class="section-description">Fonte, cor e escala do nome.</p>
+              <p class="section-description">Fonte, cor e tamanho do nome.</p>
             </div>
           </div>
           <component :is="expandedSections.typography ? ChevronDown : ChevronRight" class="section-chevron" />
@@ -1581,7 +1581,7 @@ onBeforeUnmount(() => {
         <div v-show="expandedSections.typography" class="section-panel">
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Família tipográfica</label>
+              <label class="field-label">Fonte</label>
               <p class="field-hint">Fonte usada no nome do produto.</p>
             </div>
             <select :value="globalStyles?.prodNameFont ?? 'Inter'" class="field-select" @change="handleProdNameFontChange">
@@ -1619,7 +1619,7 @@ onBeforeUnmount(() => {
 
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Peso da fonte</label>
+              <label class="field-label">Espessura</label>
             </div>
             <select
               :value="globalStyles?.prodNameWeight ?? 700"
@@ -1635,7 +1635,7 @@ onBeforeUnmount(() => {
           <div class="control-card">
             <div class="control-card__head">
               <div>
-                <label class="field-label">Escala do texto</label>
+                <label class="field-label">Tamanho</label>
                 <p class="field-hint">Tamanho relativo do nome.</p>
               </div>
               <div class="value-editor">
@@ -1666,8 +1666,8 @@ onBeforeUnmount(() => {
           <div class="control-card">
             <div class="control-card__head">
               <div>
-                <label class="field-label">Altura de linha</label>
-                <p class="field-hint">Espaçamento entre linhas.</p>
+                <label class="field-label">Entrelinhas</label>
+                <p class="field-hint">Espaçamento entre linhas do texto.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -1697,8 +1697,8 @@ onBeforeUnmount(() => {
           <div class="control-card">
             <div class="control-card__head">
               <div>
-                <label class="field-label">Deslocamento Y</label>
-                <p class="field-hint">Posição vertical do nome no card.</p>
+                <label class="field-label">Posição vertical</label>
+                <p class="field-hint">Ajusta a posição vertical do nome no card.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -1727,7 +1727,7 @@ onBeforeUnmount(() => {
 
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Transformação</label>
+              <label class="field-label">Caixa do texto</label>
             </div>
             <select
               :value="globalStyles?.prodNameTransform ?? 'upper'"
@@ -1792,6 +1792,11 @@ onBeforeUnmount(() => {
         </button>
 
         <div v-show="expandedSections.priceTag" class="section-panel">
+          <!-- Sub-área 1: Modelo -->
+          <div class="section-divider">
+            <span class="section-divider__label">Modelo</span>
+          </div>
+
           <div class="template-card">
             <div class="template-card__head">
               <div>
@@ -1823,7 +1828,7 @@ onBeforeUnmount(() => {
           <template v-if="!globalStyles?.splashTemplateId">
             <div class="field-stack">
               <div class="field-stack__head">
-                <label class="field-label">Fallback da etiqueta</label>
+                <label class="field-label">Estilo base</label>
                 <p class="field-hint">Estilo padrão quando não há template.</p>
               </div>
               <select
@@ -1838,16 +1843,13 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
+          <!-- Sub-área 2: Cores da Etiqueta -->
           <div class="section-divider">
-            <span class="section-divider__label">Acabamento da etiqueta</span>
+            <span class="section-divider__label">Cores da Etiqueta</span>
           </div>
 
-          <div class="color-field">
-            <div class="color-field__copy">
-              <label class="field-label">Preenchimento da etiqueta</label>
-              <p class="field-hint">Cor principal do fundo da etiqueta.</p>
-            </div>
-            <div class="color-field__controls">
+          <div class="color-row">
+            <div class="color-row-item">
               <ColorPicker
                 :show="showSplashFillColorPicker"
                 :model-value="globalStyles?.splashFill ?? '#000000'"
@@ -1862,21 +1864,10 @@ onBeforeUnmount(() => {
                 :style="{ backgroundColor: globalStyles?.splashFill ?? '#000000' }"
                 @click="showSplashFillColorPicker = true"
               />
-              <input
-                type="text"
-                class="hex-input"
-                :value="(globalStyles?.splashFill ?? '#000000').replace('#', '').toUpperCase()"
-                @blur="updateGlobal('splashFill', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashFill ?? '#000000'))"
-              />
+              <span class="field-label">Preenchimento</span>
             </div>
-          </div>
 
-          <div class="color-field">
-            <div class="color-field__copy">
-              <label class="field-label">Acento da etiqueta</label>
-              <p class="field-hint">Borda, brilho ou contorno do splash.</p>
-            </div>
-            <div class="color-field__controls">
+            <div class="color-row-item">
               <ColorPicker
                 :show="showSplashColorPicker"
                 :model-value="globalStyles?.splashColor ?? '#dc2626'"
@@ -1891,21 +1882,10 @@ onBeforeUnmount(() => {
                 :style="{ backgroundColor: globalStyles?.splashColor ?? '#dc2626' }"
                 @click="showSplashColorPicker = true"
               />
-              <input
-                type="text"
-                class="hex-input"
-                :value="(globalStyles?.splashColor ?? '#dc2626').replace('#', '').toUpperCase()"
-                @blur="updateGlobal('splashColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashColor ?? '#dc2626'))"
-              />
+              <span class="field-label">Destaque</span>
             </div>
-          </div>
 
-          <div class="color-field">
-            <div class="color-field__copy">
-              <label class="field-label">Texto da etiqueta</label>
-              <p class="field-hint">Cor geral dos textos da etiqueta.</p>
-            </div>
-            <div class="color-field__controls">
+            <div class="color-row-item">
               <ColorPicker
                 :show="showSplashTextColorPicker"
                 :model-value="globalStyles?.splashTextColor ?? '#ffffff'"
@@ -1920,22 +1900,18 @@ onBeforeUnmount(() => {
                 :style="{ backgroundColor: globalStyles?.splashTextColor ?? '#ffffff' }"
                 @click="showSplashTextColorPicker = true"
               />
-              <input
-                type="text"
-                class="hex-input"
-                :value="(globalStyles?.splashTextColor ?? '#ffffff').replace('#', '').toUpperCase()"
-                @blur="updateGlobal('splashTextColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.splashTextColor ?? '#ffffff'))"
-              />
+              <span class="field-label">Texto</span>
             </div>
           </div>
 
+          <!-- Sub-área 3: Preço -->
           <div class="section-divider">
-            <span class="section-divider__label">Tipografia</span>
+            <span class="section-divider__label">Preço</span>
           </div>
 
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Fonte do preço</label>
+              <label class="field-label">Fonte</label>
             </div>
             <select :value="globalStyles?.priceFont ?? 'Arial'" class="field-select" @change="handlePriceFontChange">
               <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
@@ -1944,7 +1920,7 @@ onBeforeUnmount(() => {
 
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Peso do preço</label>
+              <label class="field-label">Espessura</label>
             </div>
             <select
               :value="globalStyles?.priceFontWeight ?? ''"
@@ -1958,41 +1934,31 @@ onBeforeUnmount(() => {
             </select>
           </div>
 
-          <div class="field-stack">
-            <div class="field-stack__head">
-              <label class="field-label">Estilo da fonte</label>
+          <label class="switch-card">
+            <div>
+              <span class="field-label">Itálico</span>
               <p class="field-hint">
-                {{ priceFontSupportsItalic ? 'Itálico disponível.' : 'Itálico indisponível nesta fonte.' }}
+                {{ priceFontSupportsItalic ? 'Inclinar o texto do preço.' : 'Indisponível nesta fonte.' }}
               </p>
             </div>
-            <div class="segmented-grid segmented-grid--2">
-              <button
-                type="button"
-                class="segmented-option segmented-option--compact"
-                :class="{ 'segmented-option--active': (globalStyles?.priceFontStyle ?? 'normal') !== 'italic' }"
-                @click="updateGlobal('priceFontStyle', 'normal')"
-              >
-                <strong>Normal</strong>
-                <span>Leitura estável</span>
-              </button>
-              <button
-                type="button"
-                class="segmented-option segmented-option--compact"
-                :class="{ 'segmented-option--active': (globalStyles?.priceFontStyle ?? 'normal') === 'italic' }"
+            <span class="switch" :class="{ 'switch--checked': (globalStyles?.priceFontStyle ?? 'normal') === 'italic' }">
+              <input
+                type="checkbox"
+                class="sr-only"
+                :checked="(globalStyles?.priceFontStyle ?? 'normal') === 'italic'"
                 :disabled="!priceFontSupportsItalic"
-                @click="updateGlobal('priceFontStyle', 'italic')"
-              >
-                <strong>Itálico</strong>
-                <span>{{ priceFontSupportsItalic ? 'Destaque promocional' : 'Indisponível nessa fonte' }}</span>
-              </button>
-            </div>
-          </div>
+                @change="updateGlobal('priceFontStyle', ($event.target as HTMLInputElement).checked ? 'italic' : 'normal')"
+              />
+              <span class="switch__track"></span>
+              <span class="switch__thumb"></span>
+            </span>
+          </label>
 
           <div class="control-card">
             <div class="control-card__head">
               <div>
-                <label class="field-label">Tamanho base do preço</label>
-                <p class="field-hint">Escala base da tipografia do preço preservando a proporção da etiqueta.</p>
+                <label class="field-label">Tamanho do preço</label>
+                <p class="field-hint">Tamanho base da tipografia do preço.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -2003,7 +1969,7 @@ onBeforeUnmount(() => {
                   inputmode="numeric"
                   class="value-input"
                   :value="Math.round(globalStyles?.priceFontSize ?? 60)"
-                  aria-label="Tamanho base do preço"
+                  aria-label="Tamanho do preço"
                   @input="_dUpdateGlobalInt('priceFontSize', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.priceFontSize ?? 60, 24, 160)"
                 />
                 <span class="value-suffix">px</span>
@@ -2021,8 +1987,8 @@ onBeforeUnmount(() => {
 
           <div class="field-stack">
             <div class="field-stack__head">
-              <label class="field-label">Símbolo monetário</label>
-              <p class="field-hint">Texto exibido no lugar de R$.</p>
+              <label class="field-label">Símbolo (R$)</label>
+              <p class="field-hint">Texto exibido como símbolo monetário.</p>
             </div>
             <div class="value-editor value-editor--full">
               <input
@@ -2039,7 +2005,7 @@ onBeforeUnmount(() => {
           <div v-if="!isActiveTemplateAtacarejo" class="control-card">
             <div class="control-card__head">
               <div>
-                <label class="field-label">Escala dos textos</label>
+                <label class="field-label">Escala geral</label>
                 <p class="field-hint">Escala de R$, valor e centavos.</p>
               </div>
               <div class="value-editor">
@@ -2051,7 +2017,7 @@ onBeforeUnmount(() => {
                   inputmode="numeric"
                   class="value-input"
                   :value="Math.round((globalStyles?.splashTextScale ?? 1) * 100)"
-                  aria-label="Escala dos textos da etiqueta"
+                  aria-label="Escala geral dos textos da etiqueta"
                   @input="_dUpdateGlobalFloat('splashTextScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashTextScale ?? 1, 0.6, 2.2, 2)"
                 />
                 <span class="value-suffix">%</span>
@@ -2067,10 +2033,15 @@ onBeforeUnmount(() => {
             />
           </div>
 
+          <!-- Sub-área 4: Formato da Etiqueta -->
+          <div class="section-divider">
+            <span class="section-divider__label">Formato da Etiqueta</span>
+          </div>
+
           <div class="control-card">
             <div class="control-card__head">
               <div>
-                <label class="field-label">Espessura da borda</label>
+                <label class="field-label">Borda da etiqueta</label>
                 <p class="field-hint">Intensidade do contorno da etiqueta.</p>
               </div>
               <div class="value-editor">
@@ -2082,7 +2053,7 @@ onBeforeUnmount(() => {
                   inputmode="numeric"
                   class="value-input"
                   :value="Math.round(globalStyles?.splashStrokeWidth ?? 0)"
-                  aria-label="Espessura da borda da etiqueta"
+                  aria-label="Borda da etiqueta"
                   @input="_dUpdateGlobalInt('splashStrokeWidth', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.splashStrokeWidth ?? 0, 0, 24)"
                 />
                 <span class="value-suffix">px</span>
@@ -2101,8 +2072,8 @@ onBeforeUnmount(() => {
           <div class="control-card">
             <div class="control-card__head">
               <div>
-                <label class="field-label">Arredondamento</label>
-                <p class="field-hint">Quanto a etiqueta fica reta ou mais pílula.</p>
+                <label class="field-label">Cantos</label>
+                <p class="field-hint">Quanto a etiqueta fica reta ou arredondada.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -2113,7 +2084,7 @@ onBeforeUnmount(() => {
                   inputmode="numeric"
                   class="value-input"
                   :value="Math.round((globalStyles?.splashRoundness ?? 1) * 100)"
-                  aria-label="Arredondamento da etiqueta"
+                  aria-label="Cantos da etiqueta"
                   @input="_dUpdateGlobalFloat('splashRoundness', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashRoundness ?? 1, 0, 1, 2)"
                 />
                 <span class="value-suffix">%</span>
@@ -2129,15 +2100,76 @@ onBeforeUnmount(() => {
             />
           </div>
 
-          <div class="section-divider">
-            <span class="section-divider__label">Cores do preço</span>
+          <!-- Escala e posição lado a lado -->
+          <div class="side-by-side-row">
+            <div class="control-card">
+              <div class="control-card__head">
+                <div>
+                  <label class="field-label">Escala da etiqueta</label>
+                </div>
+                <div class="value-editor">
+                  <input
+                    type="number"
+                    min="60"
+                    max="2000"
+                    step="1"
+                    inputmode="numeric"
+                    class="value-input"
+                    :value="Math.round((globalStyles?.splashScale ?? 1) * 100)"
+                    aria-label="Escala da etiqueta"
+                    @input="_dUpdateGlobalFloat('splashScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashScale ?? 1, 0.6, 20, 2)"
+                  />
+                  <span class="value-suffix">%</span>
+                </div>
+              </div>
+              <input
+                type="range"
+                min="60"
+                max="2000"
+                :value="Math.round((globalStyles?.splashScale ?? 1) * 100)"
+                class="slider text-fuchsia-400"
+                @input="updateGlobal('splashScale', Number(($event.target as HTMLInputElement).value) / 100)"
+              />
+            </div>
+
+            <div class="control-card">
+              <div class="control-card__head">
+                <div>
+                  <label class="field-label">Posição</label>
+                </div>
+                <div class="value-editor">
+                  <input
+                    type="number"
+                    min="-120"
+                    max="120"
+                    step="1"
+                    inputmode="numeric"
+                    class="value-input"
+                    :value="Math.round(globalStyles?.splashOffsetY ?? 0)"
+                    aria-label="Posição vertical da etiqueta"
+                    @input="_dUpdateGlobalInt('splashOffsetY', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.splashOffsetY ?? 0, -120, 120)"
+                  />
+                  <span class="value-suffix">px</span>
+                </div>
+              </div>
+              <input
+                type="range"
+                min="-120"
+                max="120"
+                :value="globalStyles?.splashOffsetY ?? 0"
+                class="slider text-fuchsia-400"
+                @input="updateGlobal('splashOffsetY', Number(($event.target as HTMLInputElement).value))"
+              />
+            </div>
           </div>
 
-          <div class="color-field">
-            <div class="color-field__copy">
-              <label class="field-label">Cor do valor</label>
-            </div>
-            <div class="color-field__controls">
+          <!-- Sub-área 5: Cores do Preço -->
+          <div class="section-divider">
+            <span class="section-divider__label">Cores do Preço</span>
+          </div>
+
+          <div class="color-row">
+            <div class="color-row-item">
               <ColorPicker
                 :show="showPriceTextColorPicker"
                 :model-value="globalStyles?.priceTextColor ?? '#111111'"
@@ -2152,20 +2184,10 @@ onBeforeUnmount(() => {
                 :style="{ backgroundColor: globalStyles?.priceTextColor ?? '#111111' }"
                 @click="showPriceTextColorPicker = true"
               />
-              <input
-                type="text"
-                class="hex-input"
-                :value="(globalStyles?.priceTextColor ?? '#111111').replace('#', '').toUpperCase()"
-                @blur="updateGlobal('priceTextColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.priceTextColor ?? '#111111'))"
-              />
+              <span class="field-label">Valor</span>
             </div>
-          </div>
 
-          <div class="color-field">
-            <div class="color-field__copy">
-              <label class="field-label">Cor do R$</label>
-            </div>
-            <div class="color-field__controls">
+            <div class="color-row-item">
               <ColorPicker
                 :show="showPriceCurrencyColorPicker"
                 :model-value="globalStyles?.priceCurrencyColor ?? '#111111'"
@@ -2180,79 +2202,8 @@ onBeforeUnmount(() => {
                 :style="{ backgroundColor: globalStyles?.priceCurrencyColor ?? '#111111' }"
                 @click="showPriceCurrencyColorPicker = true"
               />
-              <input
-                type="text"
-                class="hex-input"
-                :value="(globalStyles?.priceCurrencyColor ?? '#111111').replace('#', '').toUpperCase()"
-                @blur="updateGlobal('priceCurrencyColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.priceCurrencyColor ?? '#111111'))"
-              />
+              <span class="field-label">R$</span>
             </div>
-          </div>
-
-          <div class="section-divider">
-            <span class="section-divider__label">Posição e escala</span>
-          </div>
-
-          <div class="control-card">
-            <div class="control-card__head">
-              <div>
-                <label class="field-label">Escala da etiqueta</label>
-                <p class="field-hint">Tamanho geral da etiqueta.</p>
-              </div>
-              <div class="value-editor">
-                <input
-                  type="number"
-                  min="60"
-                  max="2000"
-                  step="1"
-                  inputmode="numeric"
-                  class="value-input"
-                  :value="Math.round((globalStyles?.splashScale ?? 1) * 100)"
-                  aria-label="Escala da etiqueta"
-                  @input="_dUpdateGlobalFloat('splashScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashScale ?? 1, 0.6, 20, 2)"
-                />
-                <span class="value-suffix">%</span>
-              </div>
-            </div>
-            <input
-              type="range"
-              min="60"
-              max="2000"
-              :value="Math.round((globalStyles?.splashScale ?? 1) * 100)"
-              class="slider text-fuchsia-400"
-              @input="updateGlobal('splashScale', Number(($event.target as HTMLInputElement).value) / 100)"
-            />
-          </div>
-
-          <div class="control-card">
-            <div class="control-card__head">
-              <div>
-                <label class="field-label">Deslocamento Y</label>
-                <p class="field-hint">Posição vertical da etiqueta.</p>
-              </div>
-              <div class="value-editor">
-                <input
-                  type="number"
-                  min="-120"
-                  max="120"
-                  step="1"
-                  inputmode="numeric"
-                  class="value-input"
-                  :value="Math.round(globalStyles?.splashOffsetY ?? 0)"
-                  aria-label="Deslocamento Y da etiqueta"
-                  @input="_dUpdateGlobalInt('splashOffsetY', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.splashOffsetY ?? 0, -120, 120)"
-                />
-                <span class="value-suffix">px</span>
-              </div>
-            </div>
-            <input
-              type="range"
-              min="-120"
-              max="120"
-              :value="globalStyles?.splashOffsetY ?? 0"
-              class="slider text-fuchsia-400"
-              @input="updateGlobal('splashOffsetY', Number(($event.target as HTMLInputElement).value))"
-            />
           </div>
         </div>
       </section>
@@ -3032,6 +2983,37 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
+/* Layout compacto de cores em linha */
+.color-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px;
+}
+
+.color-row-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.color-row-item .color-trigger {
+  width: 32px;
+  height: 32px;
+}
+
+.color-row-item .field-label {
+  font-size: 10px;
+  text-align: center;
+}
+
+/* Linha lado a lado para escala e posição */
+.side-by-side-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .diagnostic-list {
   display: flex;
   flex-direction: column;
@@ -3314,6 +3296,10 @@ input:focus-visible {
   .control-card__head {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .side-by-side-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .hex-input {

@@ -28138,7 +28138,10 @@ const LIGHTWEIGHT_GLOBAL_STYLE_PROPS = new Set<string>([
     'splashFill',
     'splashScale',
     'splashOffsetY',
-    'splashRoundness'
+    'splashRoundness',
+    'currencySymbol',
+    'priceFontSize',
+    'splashStrokeWidth'
 ]);
 
 const isLightweightGlobalStyleProp = (prop: string) => LIGHTWEIGHT_GLOBAL_STYLE_PROPS.has(String(prop || '').trim());
@@ -28518,6 +28521,8 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
     // Reposiciona o priceGroup dentro do card SEM tocar em título, imagem ou background.
     if ((p === 'splashScale' || p === 'splashOffsetY') && priceGroup && cardW > 0 && cardH > 0) {
         const halfH = cardH / 2;
+        // Usar dimensões de referência da zona se disponíveis, senão usar dimensões do card
+        // Isso garante que splashScale seja proporcional ao tamanho padrão do slot, não ao card individual
         const _refH = Number((styles as any)?.__refCellH) || cardH;
         const _refW = Number((styles as any)?.__refCellW) || cardW;
         const marginBottom = cardH * 0.05;
@@ -28601,7 +28606,7 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
 
     // ── Fast-apply: splashRoundness ──
     // Atualiza apenas o arredondamento do price_bg SEM tocar em outros elementos.
-    if (p === 'splashRoundness' && priceGroup && typeof styles.splashRoundness === 'number' && !preserveTemplateVisual) {
+    if (p === 'splashRoundness' && priceGroup && typeof styles.splashRoundness === 'number') {
         const parts = collectObjectsDeep(priceGroup);
         const priceBg = parts.find((o: any) => {
             const n = String(o?.name || '');
@@ -28617,6 +28622,69 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
                 priceBg.set({ rx: radius, ry: radius });
             }
             priceBg.dirty = true;
+            changed = true;
+        }
+    }
+
+    // ── Fast-apply: currencySymbol ──
+    // Altera o texto do símbolo monetário (ex: "R$") na etiqueta de preço.
+    if (p === 'currencySymbol' && priceGroup && styles.currencySymbol !== undefined) {
+        const parts = collectObjectsDeep(priceGroup);
+        const allCurrencyTexts = parts.filter((o: any) => {
+            const n = String(o?.name || '');
+            return (n === 'price_currency_text' || n === 'retail_currency_text' || n === 'wholesale_currency_text') && isTextLikeObject(o);
+        });
+        if (allCurrencyTexts.length > 0) {
+            allCurrencyTexts.forEach((ct: any) => {
+                ct.set('text', String(styles.currencySymbol));
+                if (typeof ct.initDimensions === 'function') ct.initDimensions();
+            });
+            changed = true;
+        }
+    }
+
+    // ── Fast-apply: priceFontSize ──
+    // Altera o tamanho base da fonte do preço (inteiro recebe tamanho cheio, decimal ~60%).
+    if (p === 'priceFontSize' && priceGroup && typeof styles.priceFontSize === 'number' && styles.priceFontSize > 0) {
+        const parts = collectObjectsDeep(priceGroup);
+        const integerTexts = parts.filter((o: any) => {
+            const n = String(o?.name || '');
+            return (n === 'price_integer_text' || n === 'retail_integer_text' || n === 'wholesale_integer_text') && isTextLikeObject(o);
+        });
+        const decimalTexts = parts.filter((o: any) => {
+            const n = String(o?.name || '');
+            return (n === 'price_decimal_text' || n === 'retail_decimal_text' || n === 'wholesale_decimal_text') && isTextLikeObject(o);
+        });
+        const baseFontSize = styles.priceFontSize;
+        integerTexts.forEach((txt: any) => {
+            txt.set('fontSize', baseFontSize);
+            if (typeof txt.initDimensions === 'function') txt.initDimensions();
+        });
+        decimalTexts.forEach((txt: any) => {
+            txt.set('fontSize', Math.round(baseFontSize * 0.6));
+            if (typeof txt.initDimensions === 'function') txt.initDimensions();
+        });
+        if (cardW > 0 && cardH > 0) {
+            layoutPriceGroup(priceGroup, cardW, cardH);
+        }
+        changed = true;
+    }
+
+    // ── Fast-apply: splashStrokeWidth ──
+    // Altera a largura da borda/stroke do fundo da etiqueta de preço (price_bg).
+    if (p === 'splashStrokeWidth' && priceGroup && typeof styles.splashStrokeWidth === 'number') {
+        const parts = collectObjectsDeep(priceGroup);
+        const allPriceBgs = parts.filter((o: any) => {
+            const n = String(o?.name || '');
+            return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
+        });
+        if (allPriceBgs.length > 0) {
+            const strokeVal = Math.max(0, styles.splashStrokeWidth);
+            allPriceBgs.forEach((bg: any) => {
+                bg.set('strokeWidth', strokeVal);
+                (bg as any).__strokeWidth = strokeVal;
+                bg.dirty = true;
+            });
             changed = true;
         }
     }
@@ -29185,7 +29253,9 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
             try {
                 const zCards = getZoneChildren(z);
                 if (zCards.length > 0) {
-                    recalculateZoneLayout(z, zCards, { save: false, requestRender: false, skipResize: true });
+                    // preserveStyles: reposiciona cards no grid correto e redimensiona se necessário,
+                    // sem reaplicar estilos globais (já foram aplicados acima).
+                    recalculateZoneLayout(z, zCards, { save: false, requestRender: false, preserveStyles: true });
                 }
             } catch (e) {
                 console.warn('[handleUpdateGlobalStyles] Re-grid failed:', e);
@@ -36723,8 +36793,11 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
              });
 
              if (styles) {
+                 // Só aplicar cor se o card já tinha uma cor definida (não forçar cor em cards transparentes)
+                 const currentFill = typeof bg.fill === 'string' ? bg.fill : '';
+                 const hadExplicitBg = currentFill && currentFill !== 'transparent' && currentFill !== '';
                  if (styles.isProdBgTransparent) bg.set('fill', 'transparent');
-                 else if (styles.cardColor) bg.set('fill', styles.cardColor);
+                 else if (styles.cardColor && hadExplicitBg) bg.set('fill', styles.cardColor);
                  if (typeof styles.cardBorderRadius === 'number') bg.set({ rx: styles.cardBorderRadius, ry: styles.cardBorderRadius });
 
                  // Apply border color and width.
