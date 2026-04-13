@@ -859,12 +859,14 @@ const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
 const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
 const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
 const BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID = 'tpl_oferta_amarela'
+const BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID = 'tpl_barlow_black'
 const BUILTIN_LABEL_TEMPLATE_IDS = new Set([
     BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
     BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
     BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID,
     BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
-    BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID
+    BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID,
+    BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID
 ])
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const BUILTIN_RED_BURST_SEED_VERSION = 2
@@ -1076,6 +1078,7 @@ const ensureLabelTemplatesReady = async () => {
     await ensureBuiltInBlackYellowLabelTemplate();
     await ensureBuiltInOfertaAmarelaLabelTemplate();
     await ensureBuiltInRedBurstLabelTemplate();
+    await ensureBuiltInBarlowBlackLabelTemplate();
 
     // Generate/refresh previews in-memory.
     // This self-heals stale/broken thumbnails after reload or renderer updates.
@@ -34540,6 +34543,33 @@ async function ensureBuiltInRedBurstLabelTemplate() {
     saveCurrentState();
 }
 
+async function ensureBuiltInBarlowBlackLabelTemplate() {
+    // Etiqueta preta com R$ amarelo e preço branco — fonte Barlow Black.
+    if (!fabric) return;
+    const exists = (labelTemplates.value || []).some(t => t.id === BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID);
+    if (exists) return;
+
+    const now = new Date().toISOString();
+    const pg = buildBarlowBlackPriceGroupForCard('18,99', 320, 450, 0);
+    pg.set({ name: 'priceGroup', subTargetCheck: true, interactive: true });
+    if (typeof pg.getObjects === 'function') {
+        pg.getObjects().forEach((child: any) => child.set({ selectable: true, evented: true, hasControls: true, hasBorders: true }));
+    }
+
+    const tpl: LabelTemplate = {
+        id: BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID,
+        name: 'Barlow Black',
+        kind: 'priceGroup-v1',
+        group: serializePriceGroupForTemplate(pg),
+        isBuiltIn: true,
+        createdAt: now,
+        updatedAt: now
+    };
+    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
+    saveCurrentState();
+}
+
 async function updateLabelTemplateFromSelection(templateId: string) {
     if (!canvas.value) return;
     const pg = getPriceGroupFromAny(canvas.value.getActiveObject());
@@ -35118,6 +35148,120 @@ function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _
     });
 
     // Mark as manual template so runtime preserves geometry and only fits values.
+    (pg as any).__preserveManualLayout = true;
+    (pg as any).__isCustomTemplate = true;
+    safeAddWithUpdate(pg);
+    return pg;
+}
+
+function buildBarlowBlackPriceGroupForCard(priceStr: string, _cardW: number, _cardH: number, top: number, unitText?: string) {
+    // Etiqueta preta com R$ amarelo e preço branco em fonte Barlow Black.
+    // Layout fixo, runtime usa layoutManualTemplateGroup + setPriceOnPriceGroup().
+    const labelW = 340;
+    const labelH = 130;
+    const corner = 32;
+
+    const priceBg = new fabric.Rect({
+        width: labelW,
+        height: labelH,
+        rx: corner,
+        ry: corner,
+        fill: '#000000',
+        stroke: 'rgba(0,0,0,0)',
+        strokeWidth: 0,
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top: 0,
+        name: 'price_bg',
+        __roundness: (corner * 2) / labelH,
+        __strokeWidth: 0
+    });
+
+    // Círculo invisível (mesmo fill do bg) para manter compatibilidade com layoutPriceGroup
+    const circleSize = labelH * 0.5;
+    const circleCenterX = -(labelW / 2) + 38;
+    const currencyCircle = new fabric.Circle({
+        radius: circleSize / 2,
+        fill: '#000000',
+        originX: 'center',
+        originY: 'center',
+        left: circleCenterX,
+        top: 0,
+        name: 'price_currency_bg',
+        visible: false
+    });
+
+    const currencyText = new fabric.Text('R$', {
+        fontSize: 38,
+        fontFamily: 'Barlow',
+        fontWeight: '900',
+        fill: '#FFD600',
+        originX: 'center',
+        originY: 'center',
+        left: -108,
+        top: -6,
+        name: 'price_currency_text'
+    });
+
+    const parts = splitPriceParts(priceStr);
+    const integer = parts.integer;
+    const dec = parts.dec;
+
+    const priceInteger = new fabric.IText(integer, {
+        fontSize: 100,
+        fontFamily: 'Barlow',
+        fontWeight: '900',
+        fill: '#ffffff',
+        originX: 'left',
+        originY: 'center',
+        left: -60,
+        top: 4,
+        name: 'price_integer_text'
+    });
+
+    const priceDecimal = new fabric.IText(`,${dec}`, {
+        fontSize: 60,
+        fontFamily: 'Barlow',
+        fontWeight: '900',
+        fill: '#ffffff',
+        originX: 'left',
+        originY: 'center',
+        left: 68,
+        top: -12,
+        name: 'price_decimal_text'
+    });
+
+    const u = normalizeUnitForLabel(unitText);
+    const priceUnit = new fabric.IText(u || '', {
+        fontSize: 22,
+        fontFamily: 'Barlow',
+        fontWeight: '800',
+        fill: '#ffffff',
+        originX: 'left',
+        originY: 'center',
+        left: 68,
+        top: 34,
+        name: 'price_unit_text',
+        visible: false
+    });
+
+    const pg = new fabric.Group([
+        priceBg,
+        currencyCircle,
+        currencyText,
+        priceInteger,
+        priceDecimal,
+        priceUnit
+    ], {
+        originX: 'center',
+        originY: 'center',
+        left: 0,
+        top,
+        name: 'priceGroup'
+    });
+
+    // Template manual — runtime preserva geometria e só ajusta valores.
     (pg as any).__preserveManualLayout = true;
     (pg as any).__isCustomTemplate = true;
     safeAddWithUpdate(pg);
