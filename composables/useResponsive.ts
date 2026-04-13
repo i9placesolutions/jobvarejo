@@ -40,9 +40,11 @@ export const useResponsive = () => {
 
     // MediaQuery listeners for instant breakpoint changes
     const onMqChange = () => update()
+    // FIX #41: Referência nomeada para permitir remoção no cleanup
+    const onTouchChange = (e: MediaQueryListEvent) => { isTouchDevice.value = e.matches }
     mqMobile.addEventListener('change', onMqChange)
     mqTablet.addEventListener('change', onMqChange)
-    mqTouch.addEventListener('change', (e) => { isTouchDevice.value = e.matches })
+    mqTouch.addEventListener('change', onTouchChange)
 
     window.addEventListener('resize', onResize, { passive: true })
 
@@ -50,6 +52,7 @@ export const useResponsive = () => {
       window.removeEventListener('resize', onResize)
       mqMobile.removeEventListener('change', onMqChange)
       mqTablet.removeEventListener('change', onMqChange)
+      mqTouch.removeEventListener('change', onTouchChange)
       if (resizeTimer) clearTimeout(resizeTimer)
     })
   }

@@ -16,7 +16,8 @@ export default defineEventHandler(async (event) => {
        from public.label_templates
        where user_id = $1
           or user_id is null
-       order by updated_at desc`,
+       order by updated_at desc
+       limit 500`,
       [user.id]
     )
 

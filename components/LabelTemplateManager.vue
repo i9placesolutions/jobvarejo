@@ -50,6 +50,21 @@ const onFileChange = (e: Event) => {
   imageTargetId.value = null
 }
 
+// Limpa imageTargetId quando o usuário cancela o file picker (nenhum arquivo selecionado)
+const onFileCancel = () => {
+  imageTargetId.value = null
+}
+
+// Emite delete e limpa pendingDeleteId somente após nextTick para evitar inconsistência
+// com processamento assíncrono no componente pai
+const confirmDelete = async () => {
+  const id = pendingDeleteId.value
+  if (!id) return
+  emit('delete', id)
+  await nextTick()
+  pendingDeleteId.value = null
+}
+
 const handleMiniEditorSave = (
   id: string,
   updates: { group: any; previewDataUrl?: string; name?: string },
@@ -81,7 +96,7 @@ const formatDate = (dateStr: string) => {
 
 <template>
   <div class="label-template-manager">
-    <input ref="fileInput" type="file" class="hidden" accept="image/*" @change="onFileChange" />
+    <input ref="fileInput" type="file" class="hidden" accept="image/*" @change="onFileChange" @cancel="onFileCancel" />
 
     <!-- Header -->
     <div class="ltm-header">
@@ -323,7 +338,7 @@ const formatDate = (dateStr: string) => {
             </button>
             <button
               class="ltm-delete-btn ltm-delete-btn--confirm"
-              @click="emit('delete', pendingDeleteId); pendingDeleteId = null"
+              @click="confirmDelete"
             >
               Sim, Excluir
             </button>

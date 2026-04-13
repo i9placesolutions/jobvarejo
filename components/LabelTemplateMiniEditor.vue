@@ -140,6 +140,7 @@ const applyPresetColor = (color: string, property: 'fill' | 'stroke') => {
 const TEMPLATE_EXTRA_PROPS = [
   'name',
   'fontFamily',
+  'visible',
   '__preserveManualLayout',
   '__forceAtacarejoCanonical',
   '__atacValueVariants',
@@ -2764,6 +2765,7 @@ const loadTemplate = async () => {
   historyFingerprint.value = ''
   editorName.value = props.template.name || ''
   selectedObj.value = null
+  cornersLinked.value = true
   atacPreviewMode.value = 'current'
   atacPreviewSnapshot.value = {}
   atacBaseGroupSnapshot.value = null

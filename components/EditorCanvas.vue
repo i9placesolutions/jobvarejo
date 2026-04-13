@@ -871,7 +871,7 @@ const BUILTIN_LABEL_TEMPLATE_IDS = new Set([
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const BUILTIN_RED_BURST_SEED_VERSION = 2
 const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
-const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors', '__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR', '__originalCornerTL', '__originalCornerTR', '__originalCornerBL', '__originalCornerBR']
+const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', 'visible', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors', '__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR', '__originalCornerTL', '__originalCornerTR', '__originalCornerBL', '__originalCornerBR']
 const MANUAL_TEMPLATE_STABLE_PROPS = ['__manualTemplateBaseW', '__manualTemplateBaseH'] as const;
 const MANUAL_TEMPLATE_DERIVED_PROPS = ['__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors'] as const;
 const autoHealedLabelTemplateIds = new Set<string>()
@@ -5811,6 +5811,9 @@ const isPriceGroupVisualShellNode = (node: any): boolean => {
     const type = String(node?.type || '').toLowerCase();
     if (!type || PRICE_GROUP_TEXT_TYPES.has(type)) return false;
     if (type === 'group') return false;
+    // Não forçar visibilidade do círculo de moeda — pode ser intencionalmente oculto (ex: Barlow Black)
+    const name = String(node?.name || '');
+    if (name === 'price_currency_bg') return false;
     return true;
 };
 
@@ -5894,6 +5897,8 @@ function repairHiddenPriceGroupTexts(json: any): number {
             if (o.visible !== false) return false;
             const name = String(o?.name || '');
             const type = String(o?.type || '');
+            // Não forçar visibilidade do círculo de moeda — pode ser intencionalmente oculto
+            if (name === 'price_currency_bg') return false;
             return PRICE_BG_NAMES.has(name) || (isBackgroundType(type) && !isTextType(type));
         });
 
@@ -6586,12 +6591,17 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
         });
     };
 
-    const onMouseUp = () => {
+    // FIX #21: Cleanup centralizado - evita vazamento de listeners de drag
+    const cleanupFrameDrag = () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        window.removeEventListener('blur', cleanupFrameDrag);
+    };
+
+    const onMouseUp = () => {
+        cleanupFrameDrag();
         descendants.forEach((d: any) => { delete (d as any).__dragStart; });
         if (moved) {
-            // Sync clips after move
             if (frame.clipContent) {
                 syncFrameClips(frame, { includeSpatialChildren: false, requestRender: false });
             }
@@ -6601,11 +6611,13 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
         }
     };
 
-    // Store initial positions
+    // Armazena posições iniciais
     descendants.forEach((d: any) => { (d as any).__dragStart = { left: d.left, top: d.top }; });
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+    // Fallback: remove listeners caso mouseup não dispare (ex: perda de foco)
+    window.addEventListener('blur', cleanupFrameDrag);
 };
 
 // Virtual Scrollbars State
@@ -7239,14 +7251,21 @@ const handleVerticalScrollbarDrag = (e: MouseEvent) => {
         scheduleViewportStateSave('scrollbar-vertical');
     };
     
-    const onMouseUp = () => {
+    // FIX #21: Cleanup centralizado - evita vazamento de listeners do scrollbar vertical
+    const cleanupVDrag = () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        window.removeEventListener('blur', cleanupVDrag);
+    };
+
+    const onMouseUp = () => {
+        cleanupVDrag();
         flushViewportStateSave('scrollbar-vertical-end');
     };
-    
+
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('blur', cleanupVDrag);
 };
 
 const handleHorizontalScrollbarDrag = (e: MouseEvent) => {
@@ -7294,14 +7313,21 @@ const handleHorizontalScrollbarDrag = (e: MouseEvent) => {
         scheduleViewportStateSave('scrollbar-horizontal');
     };
     
-    const onMouseUp = () => {
+    // FIX #21: Cleanup centralizado - evita vazamento de listeners do scrollbar horizontal
+    const cleanupHDrag = () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        window.removeEventListener('blur', cleanupHDrag);
+    };
+
+    const onMouseUp = () => {
+        cleanupHDrag();
         flushViewportStateSave('scrollbar-horizontal-end');
     };
-    
+
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('blur', cleanupHDrag);
 };
 
 // View Controls
@@ -7609,18 +7635,32 @@ const resolveZoneQuickActionsAnchor = () => {
 
 // Debounced save for properties panel (prevents lag during rapid input changes)
 let propertySaveTimer: ReturnType<typeof setTimeout> | null = null;
+// Guarda contra saves sobrepostos — evita race condition em mudanças rápidas
+let propertySaveInFlight = false;
 const debouncedSaveCurrentState = () => {
     if (propertySaveTimer) clearTimeout(propertySaveTimer);
-    propertySaveTimer = setTimeout(() => {
-        saveCurrentState({ reason: 'properties-panel' });
+    propertySaveTimer = setTimeout(async () => {
+        if (propertySaveInFlight) return; // save anterior ainda em andamento, ignorar
+        propertySaveInFlight = true;
+        try {
+            await saveCurrentState({ reason: 'properties-panel' });
+        } finally {
+            propertySaveInFlight = false;
+        }
     }, 150); // 150ms debounce for snappy feel but coalesces rapid changes
 };
-const flushPropertySave = () => {
+const flushPropertySave = async () => {
     if (propertySaveTimer) {
         clearTimeout(propertySaveTimer);
         propertySaveTimer = null;
     }
-    saveCurrentState({ reason: 'properties-panel-flush' });
+    if (propertySaveInFlight) return; // save anterior ainda em andamento
+    propertySaveInFlight = true;
+    try {
+        await saveCurrentState({ reason: 'properties-panel-flush' });
+    } finally {
+        propertySaveInFlight = false;
+    }
 };
 
 // Debounced save for text editing (typing in i-text/textbox does not always emit object:modified).
@@ -9303,6 +9343,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	        isHistoryProcessing.value = false;
 	    }
     
+    // FIX #22: Verificar se o watch re-disparou enquanto operações assíncronas executavam
+    if (isStaleLoad()) return;
+
     // 4. Reset History for this page context
     historyStack.value = [];
     historyIndex.value = -1;
@@ -9333,6 +9376,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             zoomToFit();
         }, 50);
     }
+
+    // FIX #22: Verificar staleness antes de manipular objetos do canvas
+    if (isStaleLoad() || !canvas.value) return;
 
     // 6. Refresh Reactivity and ensure no duplicates
     const objs = canvas.value.getObjects();
@@ -10073,6 +10119,14 @@ onMounted(async () => {
 	        addCustomProps((fabric as any).Object, stickerProps);
 	        addCustomProps((fabric as any).Image, stickerProps);
 	        addCustomProps((fabric as any).FabricImage, stickerProps);
+
+	        // CRITICAL: Registrar TODAS as custom props usadas em zonas, cards e etiquetas
+	        // para que loadFromJSON() as restaure corretamente na desserialização.
+	        // Sem isso, toJSON() salva mas loadFromJSON() descarta propriedades desconhecidas.
+	        addCustomProps((fabric as any).FabricObject, CANVAS_CUSTOM_PROPS);
+	        addCustomProps((fabric as any).Object, CANVAS_CUSTOM_PROPS);
+	        addCustomProps((fabric as any).Group, CANVAS_CUSTOM_PROPS);
+	        addCustomProps((fabric as any).Rect, [...LABEL_TEMPLATE_EXTRA_PROPS]);
 	    } catch (e) {
 	        console.warn('⚠️ Falha ao registrar customProperties do Fabric (StickerOutline):', e);
 	    }
@@ -12385,6 +12439,8 @@ const removeImageObjectsDeep = (node: any): any => {
     let pendingCoalescedSaveOpts: SaveStateOptions | null = null;
     let pendingCoalescedSavePageId = '';
     let invokeSaveStateSafely: (opts?: SaveStateOptions) => Promise<boolean> = async () => false;
+    // BUG #30 FIX: Mutex para evitar saves concorrentes no historyStack
+    let _isSaveInProgress = false;
     const clearPendingCoalescedSave = () => {
         if (pendingCoalescedSaveTimer) {
             clearTimeout(pendingCoalescedSaveTimer)
@@ -12652,6 +12708,10 @@ const removeImageObjectsDeep = (node: any): any => {
                     restoreZoneClipPaths?.()
                     saveLastError.value = 'Falha ao serializar canvas. Salve manualmente ou recarregue a página.'
                     saveStatus.value = 'error'
+                    // Garantir que a página permanece marcada como dirty para que o usuário saiba que os dados não foram salvos
+                    hasUnsavedChanges.value = true
+                    const failedPage = targetPageIndexStart >= 0 ? project.pages?.[targetPageIndexStart] : null
+                    if (failedPage) failedPage.dirty = true
                     return
                 }
             }
@@ -12733,7 +12793,19 @@ const removeImageObjectsDeep = (node: any): any => {
         if (json && typeof json === 'object') {
             (json as any).__savedAt = saveStamp
         }
-        const jsonStr = JSON.stringify(json);
+        let jsonStr: string;
+        try {
+            jsonStr = JSON.stringify(json);
+        } catch (stringifyErr: any) {
+            // Referências circulares ou objetos não serializáveis podem causar falha aqui
+            console.error('[saveState] JSON.stringify falhou — possível referência circular:', stringifyErr);
+            saveLastError.value = 'Falha ao converter canvas para JSON. Verifique objetos com referências circulares.';
+            saveStatus.value = 'error';
+            hasUnsavedChanges.value = true;
+            const errorPage = targetPageIndexStart >= 0 ? project.pages?.[targetPageIndexStart] : null;
+            if (errorPage) errorPage.dirty = true;
+            return;
+        }
         const serializedBytes = typeof TextEncoder !== 'undefined'
             ? new TextEncoder().encode(jsonStr).length
             : jsonStr.length
@@ -12835,11 +12907,18 @@ const removeImageObjectsDeep = (node: any): any => {
             return false
         }
 
+        // BUG #30 FIX: Evitar saves concorrentes que mutam historyStack em paralelo.
+        // Se um save já está em andamento, ignorar esta chamada para prevenir corrupção.
+        if (_isSaveInProgress) {
+            return false
+        }
+
         const nextOpts: SaveStateOptions = { ...(opts || {}) };
         if (!nextOpts.expectedPageId) {
             const pageId = getActiveProjectPageId();
             if (pageId) nextOpts.expectedPageId = pageId;
         }
+        _isSaveInProgress = true;
         try {
             await saveState(nextOpts);
             return true;
@@ -12847,6 +12926,8 @@ const removeImageObjectsDeep = (node: any): any => {
             console.error('❌ [saveState] Falha ao salvar estado:', err);
             if (canvas.value) sanitizeCanvasObjectStack(canvas.value as any, 'saveState-catch');
             return false;
+        } finally {
+            _isSaveInProgress = false;
         }
     };
 
@@ -13405,7 +13486,8 @@ const undo = async () => {
         // Deferred canvas events (rehydration, text recalc) can fire after
         // isHistoryProcessing is cleared, marking the page dirty and saving
         // the undo state as a "new" change.
-        _historyRestoreCooldownUntil = Date.now() + 500;
+        // BUG #29 FIX: Aumentado de 500ms para 1000ms para cobrir relayout assíncrono de zonas
+        _historyRestoreCooldownUntil = Date.now() + 1000;
     }
 }
 
@@ -13423,7 +13505,8 @@ const redo = async () => {
     } finally {
         isHistoryProcessing.value = false;
         // FIX: Same cooldown as undo — suppress deferred saves after redo.
-        _historyRestoreCooldownUntil = Date.now() + 500;
+        // BUG #29 FIX: Aumentado de 500ms para 1000ms para cobrir relayout assíncrono de zonas
+        _historyRestoreCooldownUntil = Date.now() + 1000;
     }
 }
 
@@ -14530,6 +14613,22 @@ const deleteActiveSelectionFromCanvas = (): boolean => {
             deleteTargets.add(target);
         });
     });
+
+    // BUG #7: Ao remover uma zona de produtos, remover em cascata todos os cards filhos.
+    active.forEach((obj: any) => {
+        if (!obj || !isLikelyProductZone(obj)) return;
+        const zoneId = String((obj as any)._customId || '').trim();
+        if (!zoneId) return;
+        const allObjects = canvas.value!.getObjects() || [];
+        allObjects.forEach((child: any) => {
+            if (!child) return;
+            const childZoneId = String((child as any).parentZoneId || '').trim();
+            if (childZoneId === zoneId) {
+                deleteTargets.add(child);
+            }
+        });
+    });
+
     const activeWithCascade = Array.from(deleteTargets);
 
     // Collect objects to delete - separate those in real groups vs canvas root
@@ -28311,16 +28410,17 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             const n = String(o?.name || '');
             return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
         });
-        if ((p === 'splashColor' || p === 'accentColor') && allPriceBgs.length > 0) {
+        // Templates manuais preservam suas cores autorais — estilos globais não sobrescrevem
+        if ((p === 'splashColor' || p === 'accentColor') && allPriceBgs.length > 0 && !preserveTemplateVisual) {
             const accent = styles.splashColor ?? styles.accentColor;
             if (accent) allPriceBgs.forEach((bg: any) => bg.set('stroke', accent));
             changed = true;
         }
-        if (p === 'splashFill' && allPriceBgs.length > 0) {
+        if (p === 'splashFill' && allPriceBgs.length > 0 && !preserveTemplateVisual) {
             if (styles.splashFill) allPriceBgs.forEach((bg: any) => bg.set('fill', styles.splashFill));
             changed = true;
         }
-        if (p === 'priceCurrencyColor') {
+        if (p === 'priceCurrencyColor' && !preserveTemplateVisual) {
             // FIX: Aplicar em todos os currency texts (atacarejo tem retail + wholesale)
             const allCurrencyTexts = parts.filter((o: any) => {
                 const n = String(o?.name || '');
@@ -28335,7 +28435,7 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
                 changed = true;
             }
         }
-        if (p === 'priceTextColor' || p === 'splashTextColor') {
+        if ((p === 'priceTextColor' || p === 'splashTextColor') && !preserveTemplateVisual) {
             const nextTextColor = styles.priceTextColor ?? styles.splashTextColor;
             if (nextTextColor) {
                 priceTexts.forEach((txt: any) => {
@@ -28351,13 +28451,14 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             const allPriceTexts = [currencyText, ...priceTexts];
             allPriceTexts.forEach((txt: any) => {
                 if (!isTextLikeObject(txt)) return;
-                if (p === 'priceFont' && styles.priceFont) {
+                // Templates manuais preservam fonte/peso autorais
+                if (p === 'priceFont' && styles.priceFont && !preserveTemplateVisual) {
                     txt.set('fontFamily', styles.priceFont);
                 }
-                if (p === 'priceFontWeight' && styles.priceFontWeight !== undefined) {
+                if (p === 'priceFontWeight' && styles.priceFontWeight !== undefined && !preserveTemplateVisual) {
                     txt.set('fontWeight', styles.priceFontWeight as any);
                 }
-                if (p === 'priceFontStyle') {
+                if (p === 'priceFontStyle' && !preserveTemplateVisual) {
                     txt.set('fontStyle', styles.priceFontStyle === 'italic' ? 'italic' : 'normal');
                 }
 
@@ -28500,7 +28601,7 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
 
     // ── Fast-apply: splashRoundness ──
     // Atualiza apenas o arredondamento do price_bg SEM tocar em outros elementos.
-    if (p === 'splashRoundness' && priceGroup && typeof styles.splashRoundness === 'number') {
+    if (p === 'splashRoundness' && priceGroup && typeof styles.splashRoundness === 'number' && !preserveTemplateVisual) {
         const parts = collectObjectsDeep(priceGroup);
         const priceBg = parts.find((o: any) => {
             const n = String(o?.name || '');
@@ -29189,7 +29290,8 @@ const formatCentsToPrice = (cents: number | null): string | null => {
 
 const splitPriceParts = (raw: any): { integer: string; dec: string } => {
     const parsed = parsePriceBR(String(raw ?? ''));
-    return { integer: parsed.inteiro, dec: parsed.centavos };
+    // Garantir que centavos nunca seja undefined/vazio (ex: preço "0" retornava "0,undefined")
+    return { integer: parsed.inteiro || '0', dec: parsed.centavos || '00' };
 };
 
 type AtacVariantKey = 'tiny' | 'normal' | 'large';
@@ -32517,7 +32619,7 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         // Apply scaled font size and preserve fontFamily
         // Position will be set later for price elements
         obj.set({
-            fontFamily: originalFontFamily || undefined,
+            fontFamily: originalFontFamily || 'Inter',
             fontSize: originalFontSize * scale * textScaleMult,
             scaleX: 1,
             scaleY: 1,
@@ -33254,6 +33356,26 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         top: 0
     });
 
+    // Escalar cantos individuais proporcionalmente ao novo pillH (se definidos)
+    const cornerKeysLp = ['__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR'] as const;
+    const hasAnyCornerLp = cornerKeysLp.some(k => typeof (priceBg as any)[k] === 'number' && (priceBg as any)[k] >= 0);
+    if (hasAnyCornerLp) {
+        cornerKeysLp.forEach(key => {
+            const origKey = `__original${key.slice(2)}` as string;
+            const origVal = typeof (priceBg as any)[origKey] === 'number' ? (priceBg as any)[origKey] : -1;
+            const curVal = typeof (priceBg as any)[key] === 'number' ? (priceBg as any)[key] : -1;
+            if (curVal >= 0 && origVal < 0) {
+                (priceBg as any)[origKey] = curVal;
+            }
+            const base = origVal >= 0 ? origVal : curVal;
+            if (base >= 0) {
+                const origH = typeof (priceBg as any).__originalHeight === 'number' ? (priceBg as any).__originalHeight : pillH;
+                const scaleFactor = origH > 0 ? pillH / origH : 1;
+                (priceBg as any)[key] = base * scaleFactor;
+            }
+        });
+    }
+
     // Keep the "neon" border/glow proportional to the pill size (prevents losing the pattern on resize).
     const customStrokeW = Number((priceBg as any).__strokeWidth);
     const strokeW = Number.isFinite(customStrokeW) ? clamp(customStrokeW, 0, Math.max(0, pillH * 0.2)) : Math.max(1, Math.min(4, pillH * 0.04));
@@ -33722,7 +33844,9 @@ const shouldUseAtacVariantSnapshotsForTemplate = (_snapshot: any) => {
 async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { atacVariantKey?: AtacVariantKey }): Promise<any> {
     const preferredVariantKey = opts?.atacVariantKey;
     const baseGroupJson: any = tpl?.group;
-    const groupJson: any = pickRenderableTemplateGroupJson(tpl, preferredVariantKey);
+    // BUG #13 FIX: clonar o JSON para evitar que múltiplas instâncias compartilhem o mesmo objeto
+    const rawGroupJson: any = pickRenderableTemplateGroupJson(tpl, preferredVariantKey);
+    const groupJson: any = cloneTemplateGroupJson(rawGroupJson) ?? rawGroupJson;
     sanitizeRedBurstTemplateGroupJson(baseGroupJson);
     if (groupJson && groupJson !== baseGroupJson) sanitizeRedBurstTemplateGroupJson(groupJson);
     if (!fabric || !groupJson) throw new Error('Template missing group JSON');
@@ -33738,7 +33862,14 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
     // Never restore layoutManager from plain JSON (Fabric v7 expects class instance).
     delete (groupOpts as any).layoutManager;
     delete (groupOpts as any).layout;
-    const enlivened = await enlivenObjectsAsync(objectsJson);
+    let enlivened: any[];
+    try {
+        enlivened = await enlivenObjectsAsync(objectsJson);
+    } catch (enlivenErr: any) {
+        // Fontes inválidas ou objetos corrompidos podem causar falha no enliven
+        console.error('[instantiatePriceGroupFromTemplate] Falha ao reconstruir objetos do template (possível fonte inválida):', enlivenErr?.message || enlivenErr);
+        throw new Error(`Falha ao reconstruir objetos do template: ${enlivenErr?.message || 'erro desconhecido'}`);
+    }
     if (!Array.isArray(enlivened) || enlivened.length === 0) throw new Error('Template group failed to enliven objects');
 
     // FIX: Fabric v7 enlivenObjects does NOT restore `name` and custom props on children.
@@ -34023,6 +34154,10 @@ function serializePriceGroupForTemplate(pg: any) {
                 }
                 if (obj.shadow && typeof obj.shadow.blur === 'number') {
                     obj.__shadowBlur = obj.shadow.blur;
+                }
+                // Preservar fill original para restaurar após ciclo splash/transparent
+                if (typeof obj.fill === 'string' && obj.fill !== 'transparent') {
+                    obj.__originalFill = obj.fill;
                 }
             }
         }
@@ -35878,12 +36013,31 @@ async function resetCardPriceGroupToDefault(card: any) {
 
 const cloneTemplateGroupJson = (group: any) => {
     if (!group || typeof group !== 'object') return null;
+    // Tenta clone profundo; se falhar (referências circulares), faz clone raso como último recurso
     try {
         return (typeof structuredClone === 'function')
             ? structuredClone(group)
             : JSON.parse(JSON.stringify(group));
     } catch {
-        return null;
+        try {
+            return JSON.parse(JSON.stringify(group));
+        } catch {
+            // Último recurso: clone raso preservando a estrutura mínima necessária
+            console.warn('[cloneTemplateGroupJson] Clone profundo falhou (possível referência circular). Usando clone raso.');
+            const shallow: any = { ...group };
+            if (Array.isArray(group.objects)) {
+                shallow.objects = group.objects.map((o: any) => {
+                    if (!o || typeof o !== 'object') return o;
+                    const clone: any = { ...o };
+                    // Preservar sub-objetos aninhados (ex: nested groups com objects[])
+                    if (Array.isArray(o.objects)) {
+                        clone.objects = o.objects.map((c: any) => (c && typeof c === 'object' ? { ...c } : c));
+                    }
+                    return clone;
+                });
+            }
+            return shallow;
+        }
     }
 };
 
@@ -38347,7 +38501,8 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                 );
 
                 const normRowCount = Math.max(1, Math.ceil(normCards.length / normalCols));
-                const totalGapsY = normRowCount * gapY; // normal rows + separator between sections
+                // Gaps já são descontados em normSectionH e normCardH; não pré-descontar para evitar contagem dupla
+                const totalGapsY = 0;
                 const totalUnitsY = normRowCount + hl.mult;
                 const unitH = (usableH - totalGapsY) / Math.max(1, totalUnitsY);
 
@@ -39088,7 +39243,11 @@ const rehydrateCanvasZones = (
                 const current = getCurrentZoneObject();
                 if (current && zones.includes(current)) return current;
                 if (zones.length === 1) return zones[0];
-                return null;
+                // Fallback: usar a primeira zona que tenha estilos persistidos
+                const withStyles = zones.find((z: any) => z._zoneGlobalStyles && typeof z._zoneGlobalStyles === 'object');
+                if (withStyles) return withStyles;
+                // Último fallback: primeira zona disponível (NUNCA retornar null se há zonas)
+                return zones[0];
             })();
 
             if (resolvedZoneForSync) {
@@ -39118,10 +39277,8 @@ const rehydrateCanvasZones = (
                 };
                 productZoneState.globalStyles.value = getZoneGlobalStyles(resolvedZoneForSync);
                 productZoneState.productZone.value = zoneConfig;
-            } else {
-                productZoneState.globalStyles.value = { ...DEFAULT_GLOBAL_STYLES };
-                productZoneState.productZone.value = { ...DEFAULT_PRODUCT_ZONE };
             }
+            // NUNCA resetar para defaults quando há zonas — preservar estado existente do composable
         }
 
         const zonesById = new Map<string, any>();
