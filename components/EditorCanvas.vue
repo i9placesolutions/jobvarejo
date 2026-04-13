@@ -871,7 +871,7 @@ const BUILTIN_LABEL_TEMPLATE_IDS = new Set([
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const BUILTIN_RED_BURST_SEED_VERSION = 2
 const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
-const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors']
+const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors', '__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR', '__originalCornerTL', '__originalCornerTR', '__originalCornerBL', '__originalCornerBR']
 const MANUAL_TEMPLATE_STABLE_PROPS = ['__manualTemplateBaseW', '__manualTemplateBaseH'] as const;
 const MANUAL_TEMPLATE_DERIVED_PROPS = ['__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors'] as const;
 const autoHealedLabelTemplateIds = new Set<string>()
@@ -10112,7 +10112,57 @@ onMounted(async () => {
     } catch (e) {
         console.warn('⚠️ Falha ao aplicar patch do Fabric (_drawClipPath):', e);
     }
-    
+
+    // PATCH: Suporte a cantos arredondados individuais (TL, TR, BL, BR) no Rect.
+    // Quando __cornerTL/__cornerTR/__cornerBL/__cornerBR estão definidos, renderiza
+    // um path com raios distintos por canto ao invés do rx/ry uniforme padrão.
+    try {
+        const RectClass = (fabric as any).Rect;
+        if (RectClass?.prototype && !(RectClass.prototype as any).__patchedIndividualCorners) {
+            const originalRender = RectClass.prototype._render;
+            RectClass.prototype._render = function (ctx: CanvasRenderingContext2D) {
+                const tl = typeof this.__cornerTL === 'number' ? this.__cornerTL : -1;
+                const tr = typeof this.__cornerTR === 'number' ? this.__cornerTR : -1;
+                const bl = typeof this.__cornerBL === 'number' ? this.__cornerBL : -1;
+                const br = typeof this.__cornerBR === 'number' ? this.__cornerBR : -1;
+                const hasIndividual = tl >= 0 || tr >= 0 || bl >= 0 || br >= 0;
+                if (!hasIndividual) {
+                    return originalRender.call(this, ctx);
+                }
+                // Fallback: usa rx como padrão quando canto individual não definido
+                const fallback = Number(this.rx || 0);
+                const rTL = tl >= 0 ? tl : fallback;
+                const rTR = tr >= 0 ? tr : fallback;
+                const rBL = bl >= 0 ? bl : fallback;
+                const rBR = br >= 0 ? br : fallback;
+                const w = this.width;
+                const h = this.height;
+                const x = -w / 2;
+                const y = -h / 2;
+                ctx.beginPath();
+                ctx.moveTo(x + rTL, y);
+                ctx.lineTo(x + w - rTR, y);
+                if (rTR > 0) ctx.arcTo(x + w, y, x + w, y + rTR, rTR);
+                else ctx.lineTo(x + w, y);
+                ctx.lineTo(x + w, y + h - rBR);
+                if (rBR > 0) ctx.arcTo(x + w, y + h, x + w - rBR, y + h, rBR);
+                else ctx.lineTo(x + w, y + h);
+                ctx.lineTo(x + rBL, y + h);
+                if (rBL > 0) ctx.arcTo(x, y + h, x, y + h - rBL, rBL);
+                else ctx.lineTo(x, y + h);
+                ctx.lineTo(x, y + rTL);
+                if (rTL > 0) ctx.arcTo(x, y, x + rTL, y, rTL);
+                else ctx.lineTo(x, y);
+                ctx.closePath();
+                this._renderPaintInOrder(ctx);
+            };
+            (RectClass.prototype as any).__patchedIndividualCorners = true;
+            console.log('🩹 Fabric patch aplicado: cantos arredondados individuais no Rect');
+        }
+    } catch (e) {
+        console.warn('⚠️ Falha ao aplicar patch do Fabric (cantos individuais):', e);
+    }
+
 	    if (canvasEl.value && wrapperEl.value) {
 	      try {
 	        // Init Infinite Canvas (Full Wrapper Size)
@@ -32338,6 +32388,22 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         top: 0
     });
 
+    // Escalar cantos individuais proporcionalmente (usa valor original como referência)
+    const cornerKeys = ['__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR'] as const;
+    cornerKeys.forEach(key => {
+        const origKey = `__original${key.slice(2)}` as string; // ex: __originalCornerTL
+        const origVal = typeof (priceBg as any)[origKey] === 'number' ? (priceBg as any)[origKey] : -1;
+        const curVal = typeof (priceBg as any)[key] === 'number' ? (priceBg as any)[key] : -1;
+        // Armazena valor original na primeira vez
+        if (curVal >= 0 && origVal < 0) {
+            (priceBg as any)[origKey] = curVal;
+        }
+        const base = origVal >= 0 ? origVal : curVal;
+        if (base >= 0) {
+            (priceBg as any)[key] = base * scale;
+        }
+    });
+
     // Scale stroke proportionally
     const originalStrokeW = typeof (priceBg as any)?.__strokeWidth === 'number'
         ? (priceBg as any).__strokeWidth
@@ -32381,7 +32447,7 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             }
         }
 
-        // Clip to pill shape
+        // Clip to pill shape (com suporte a cantos individuais)
         if (fabric?.Rect) {
             const clip = new fabric.Rect({
                 width: newW,
@@ -32392,6 +32458,12 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
                 originY: 'center',
                 left: 0,
                 top: 0
+            });
+            // Propagar cantos individuais para o clip
+            (['__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR'] as const).forEach(k => {
+                if (typeof (priceBg as any)[k] === 'number' && (priceBg as any)[k] >= 0) {
+                    (clip as any)[k] = (priceBg as any)[k];
+                }
             });
             img.set({ clipPath: clip });
         }
@@ -33228,7 +33300,7 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             // This prevents a giant selection box until the real image dimensions are available.
             img.set({ cropX: 0, cropY: 0, width: pillW, height: pillH, scaleX: 1, scaleY: 1 });
         }
-        // Clip to pill shape
+        // Clip to pill shape (com suporte a cantos individuais)
         if (fabric?.Rect) {
             const clip = new fabric.Rect({
                 width: pillW,
@@ -33239,6 +33311,12 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
                 originY: 'center',
                 left: 0,
                 top: 0
+            });
+            // Propagar cantos individuais para o clip
+            (['__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR'] as const).forEach(k => {
+                if (typeof (priceBg as any)[k] === 'number' && (priceBg as any)[k] >= 0) {
+                    (clip as any)[k] = (priceBg as any)[k];
+                }
             });
             img.set({ clipPath: clip });
         }

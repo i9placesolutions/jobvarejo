@@ -86,7 +86,10 @@ const fillColorTrigger2 = ref<HTMLElement | null>(null)
 const strokeColorTrigger = ref<HTMLElement | null>(null)
 const textStrokeColorTrigger = ref<HTMLElement | null>(null)
 
-// Collapsible sections state (Figma-inspired accordion)
+// Controle de cantos individuais (vinculados ou independentes)
+const cornersLinked = ref(true)
+
+// Controle de cantos individuais no MiniEditor
 const collapsedSections = ref<Set<string>>(new Set())
 
 const toggleSection = (sectionId: string) => {
@@ -164,7 +167,15 @@ const TEMPLATE_EXTRA_PROPS = [
   '__manualGapSingle',
   '__manualGapRetail',
   '__manualGapWholesale',
-  '__manualSingleAnchors'
+  '__manualSingleAnchors',
+  '__cornerTL',
+  '__cornerTR',
+  '__cornerBL',
+  '__cornerBR',
+  '__originalCornerTL',
+  '__originalCornerTR',
+  '__originalCornerBL',
+  '__originalCornerBR'
 ]
 const MANUAL_TEMPLATE_STABLE_PROPS = [
   '__manualTemplateBaseW',
@@ -2872,6 +2883,16 @@ const patch = (prop: string, value: any) => {
     if (Number.isFinite(n)) (proxyTarget as any)[`__${prop}`] = n
   }
 
+  // Cantos individuais: ao setar __cornerTL/TR/BL/BR, marca dirty e persiste.
+  if (proxyTarget?.name === 'price_bg' && prop.startsWith('__corner')) {
+    const n = Number(value)
+    if (Number.isFinite(n) && n >= 0) {
+      (proxyTarget as any)[prop] = n
+    } else {
+      delete (proxyTarget as any)[prop]
+    }
+  }
+
   // Force dirty flag for proper re-rendering
   proxyTarget.dirty = true
 
@@ -2915,6 +2936,46 @@ const patch = (prop: string, value: any) => {
   const actualValue = typeof proxyTarget.get === 'function' ? proxyTarget.get(prop) : proxyTarget[prop]
   console.log('[MiniEditor] after patch:', prop, '=', actualValue, 'expected:', value, 'match:', actualValue === value)
   recordHistorySnapshot(`patch:${prop}`)
+}
+
+// Helper: obtém o target price_bg (com proxy de splash/group)
+const getPriceBgTarget = () => {
+  const obj = selectedObj.value
+  if (!obj) return null
+  const isSplashImage = obj?.type === 'image' && (obj?.name === 'price_bg_image' || obj?.name === 'splash_image')
+  const isPriceGroup = obj?.type === 'group' && (obj === group || obj?.name === 'priceGroup')
+  if (isSplashImage || isPriceGroup) {
+    return group ? findObjectByNameDeep(group, 'price_bg') : null
+  }
+  if (obj?.name === 'price_bg') return obj
+  return null
+}
+
+// Lê o valor de um canto individual do price_bg
+const getCornerValue = (cornerProp: string): number => {
+  updateKey.value // Track for reactivity
+  const bg = getPriceBgTarget()
+  if (!bg) return Number(current('rx', 0))
+  const val = (bg as any)[cornerProp]
+  if (typeof val === 'number' && val >= 0) return val
+  // Fallback: usa rx uniforme
+  return Number(bg.rx || 0)
+}
+
+// Aplica canto individual no price_bg
+const patchCorner = (cornerProp: string, value: number) => {
+  const bg = getPriceBgTarget()
+  if (!bg || !canvas) return
+  const n = Math.max(0, Number(value) || 0);
+  (bg as any)[cornerProp] = n
+  bg.dirty = true
+  if (group) {
+    safeAddWithUpdate(group)
+    if (typeof group.setCoords === 'function') group.setCoords()
+  }
+  canvas.requestRenderAll()
+  updateKey.value++
+  recordHistorySnapshot(`patchCorner:${cornerProp}`)
 }
 
 const patchCustom = (prop: string, value: any) => {
@@ -4332,25 +4393,86 @@ watch(
                 </div>
               </div>
 
-              <!-- Border Radius for Rects -->
+              <!-- Border Radius for Rects — cantos individuais -->
               <div v-if="isRect">
-                <label class="me-prop-label">Arredondamento dos Cantos</label>
-                <div class="me-radius-control">
+                <div class="me-corners-header">
+                  <label class="me-prop-label" style="margin-bottom:0">Cantos</label>
+                  <button
+                    class="me-corners-link-btn"
+                    :class="{ 'me-corners-linked': cornersLinked }"
+                    :title="cornersLinked ? 'Desvincular cantos (definir individualmente)' : 'Vincular cantos (todos iguais)'"
+                    @click="cornersLinked = !cornersLinked"
+                  >
+                    <svg v-if="cornersLinked" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                  </button>
+                </div>
+
+                <!-- Modo vinculado: um slider para todos -->
+                <div v-if="cornersLinked" class="me-radius-control">
                   <input
                     type="range"
                     min="0"
                     max="100"
                     class="me-range-slider"
                     :value="Math.round(current('rx', 0))"
-                    @input="patch('rx', Number(($event.target as HTMLInputElement).value)); patch('ry', Number(($event.target as HTMLInputElement).value))"
+                    @input="(() => { const v = Number(($event.target as HTMLInputElement).value); patch('rx', v); patch('ry', v); patchCorner('__cornerTL', v); patchCorner('__cornerTR', v); patchCorner('__cornerBL', v); patchCorner('__cornerBR', v); })()"
                   />
                   <input
                     type="number"
                     min="0"
                     class="me-radius-number"
                     :value="Math.round(current('rx', 0))"
-                    @input="patch('rx', Number(($event.target as HTMLInputElement).value)); patch('ry', Number(($event.target as HTMLInputElement).value))"
+                    @input="(() => { const v = Number(($event.target as HTMLInputElement).value); patch('rx', v); patch('ry', v); patchCorner('__cornerTL', v); patchCorner('__cornerTR', v); patchCorner('__cornerBL', v); patchCorner('__cornerBR', v); })()"
                   />
+                </div>
+
+                <!-- Modo desvinculado: 4 inputs individuais -->
+                <div v-else class="me-corners-grid">
+                  <div class="me-corner-item">
+                    <label class="me-corner-label">↖ Sup. Esq.</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="200"
+                      class="me-corner-input"
+                      :value="Math.round(getCornerValue('__cornerTL'))"
+                      @input="patchCorner('__cornerTL', Number(($event.target as HTMLInputElement).value))"
+                    />
+                  </div>
+                  <div class="me-corner-item">
+                    <label class="me-corner-label">↗ Sup. Dir.</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="200"
+                      class="me-corner-input"
+                      :value="Math.round(getCornerValue('__cornerTR'))"
+                      @input="patchCorner('__cornerTR', Number(($event.target as HTMLInputElement).value))"
+                    />
+                  </div>
+                  <div class="me-corner-item">
+                    <label class="me-corner-label">↙ Inf. Esq.</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="200"
+                      class="me-corner-input"
+                      :value="Math.round(getCornerValue('__cornerBL'))"
+                      @input="patchCorner('__cornerBL', Number(($event.target as HTMLInputElement).value))"
+                    />
+                  </div>
+                  <div class="me-corner-item">
+                    <label class="me-corner-label">↘ Inf. Dir.</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="200"
+                      class="me-corner-input"
+                      :value="Math.round(getCornerValue('__cornerBR'))"
+                      @input="patchCorner('__cornerBR', Number(($event.target as HTMLInputElement).value))"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -5225,6 +5347,35 @@ input[type="checkbox"] {
 
 .me-radius-number {
   @apply w-16 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-violet-500/50;
+}
+
+/* Cantos individuais */
+.me-corners-header {
+  @apply flex items-center justify-between mb-1.5;
+}
+
+.me-corners-link-btn {
+  @apply p-1 rounded transition-colors text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50;
+}
+
+.me-corners-link-btn.me-corners-linked {
+  @apply text-violet-400 hover:text-violet-300;
+}
+
+.me-corners-grid {
+  @apply grid grid-cols-2 gap-2;
+}
+
+.me-corner-item {
+  @apply flex flex-col gap-0.5;
+}
+
+.me-corner-label {
+  @apply text-[9px] text-zinc-500 leading-none;
+}
+
+.me-corner-input {
+  @apply w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-violet-500/50;
 }
 
 /* Layer Controls */
