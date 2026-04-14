@@ -28413,18 +28413,18 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             const n = String(o?.name || '');
             return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
         });
-        // Templates manuais preservam suas cores autorais — estilos globais não sobrescrevem
-        if ((p === 'splashColor' || p === 'accentColor') && allPriceBgs.length > 0 && !preserveTemplateVisual) {
+        // Aplicar cores e estilos da etiqueta — fast-path é chamado apenas por ação explícita
+        // do usuário (handleUpdateGlobalStyles), então SEMPRE deve aplicar.
+        if ((p === 'splashColor' || p === 'accentColor') && allPriceBgs.length > 0) {
             const accent = styles.splashColor ?? styles.accentColor;
             if (accent) allPriceBgs.forEach((bg: any) => bg.set('stroke', accent));
             changed = true;
         }
-        if (p === 'splashFill' && allPriceBgs.length > 0 && !preserveTemplateVisual) {
+        if (p === 'splashFill' && allPriceBgs.length > 0) {
             if (styles.splashFill) allPriceBgs.forEach((bg: any) => bg.set('fill', styles.splashFill));
             changed = true;
         }
-        if (p === 'priceCurrencyColor' && !preserveTemplateVisual) {
-            // FIX: Aplicar em todos os currency texts (atacarejo tem retail + wholesale)
+        if (p === 'priceCurrencyColor') {
             const allCurrencyTexts = parts.filter((o: any) => {
                 const n = String(o?.name || '');
                 return (n === 'price_currency_text' || n === 'retail_currency_text' || n === 'wholesale_currency_text') && isTextLikeObject(o);
@@ -28438,7 +28438,7 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
                 changed = true;
             }
         }
-        if ((p === 'priceTextColor' || p === 'splashTextColor') && !preserveTemplateVisual) {
+        if (p === 'priceTextColor' || p === 'splashTextColor') {
             const nextTextColor = styles.priceTextColor ?? styles.splashTextColor;
             if (nextTextColor) {
                 priceTexts.forEach((txt: any) => {
@@ -28454,14 +28454,13 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             const allPriceTexts = [currencyText, ...priceTexts];
             allPriceTexts.forEach((txt: any) => {
                 if (!isTextLikeObject(txt)) return;
-                // Templates manuais preservam fonte/peso autorais
-                if (p === 'priceFont' && styles.priceFont && !preserveTemplateVisual) {
+                if (p === 'priceFont' && styles.priceFont) {
                     txt.set('fontFamily', styles.priceFont);
                 }
-                if (p === 'priceFontWeight' && styles.priceFontWeight !== undefined && !preserveTemplateVisual) {
+                if (p === 'priceFontWeight' && styles.priceFontWeight !== undefined) {
                     txt.set('fontWeight', styles.priceFontWeight as any);
                 }
-                if (p === 'priceFontStyle' && !preserveTemplateVisual) {
+                if (p === 'priceFontStyle') {
                     txt.set('fontStyle', styles.priceFontStyle === 'italic' ? 'italic' : 'normal');
                 }
 
