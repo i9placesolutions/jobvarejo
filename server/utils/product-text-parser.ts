@@ -72,7 +72,17 @@ export const parseNumber = (v: any): number | null => {
 }
 
 export const normalizePrice = (v: any): string | null => {
-  const n = parseNumber(v)
+  if (v === null || v === undefined) return null
+  const raw = String(v).trim()
+  if (!raw) return null
+  // Se o valor contem palavras que claramente nao sao preco, rejeitar
+  // Exemplos: "ACIMA DE 10 CX", "PREÇO IMBATIVEL", "LIMITE 5 UN"
+  const cleaned = raw.replace(/^r\$\s*/i, '').trim()
+  // Um preco valido e basicamente numerico (opcionalmente com R$, pontos de milhar, virgula decimal)
+  // Rejeitar se tem letras que nao sao parte de formatacao monetaria
+  const withoutFormatting = cleaned.replace(/[\d.,\s]/g, '')
+  if (withoutFormatting.length > 0) return null
+  const n = parseNumber(cleaned)
   if (n === null) return null
   return n.toFixed(2).replace('.', ',')
 }
@@ -320,6 +330,8 @@ type FieldMapping =
   | 'specialCondition'
 
 const HEADER_ALIASES: { match: RegExp; field: FieldMapping }[] = [
+  // ── ORDEM IMPORTA: padroes mais especificos ANTES dos genericos ──
+
   // Nome
   { match: /^(produto|descric[aã]o|descri[cç][aã]o\s*do\s*produto|nome|item|mercadoria)$/i, field: 'name' },
   // Marca
@@ -334,18 +346,31 @@ const HEADER_ALIASES: { match: RegExp; field: FieldMapping }[] = [
   { match: /^(embalag(em|e)?(\s*[/]?\s*(caixa|cx))?|tipo\s*emb(alagem)?|emb\.?)$/i, field: 'packageLabel' },
   // Quantidade na embalagem (aceita "quant.", "qtd.", "qtde." sozinhos ou com "emb")
   { match: /^(quant\.?(\s*emb\.?)?|qtd\.?(\s*emb\.?)?|qtde\.?(\s*emb\.?)?|qt\.?\s*emb\.?|quantidade)$/i, field: 'packQuantity' },
+
+  // ── PRECOS ESPECIAIS (devem vir ANTES dos genericos pricePack/priceUnit) ──
+
+  // Preco especial caixa: "preço cx especial", "preço cx acima", "preço esp cx", etc.
+  { match: /^pre[cç]o\s*cx\.?\s*(especial|esp\.?|acima|promo)(\s+\S+)*$/i, field: 'priceSpecial' },
+  { match: /^pre[cç]o\s*caixa\s*(especial|esp\.?|acima|promo)(\s+\S+)*$/i, field: 'priceSpecial' },
+  { match: /^(pre[cç]o\s*esp\.?\s*cx|pre[cç]o\s*promo(c|ç)[aã]o\s*cx|promo\s*cx|prc?\s*esp\s*cx)$/i, field: 'priceSpecial' },
+  // Preco especial unidade: "preço un especial", "preço und acima", "preço esp un", etc.
+  { match: /^pre[cç]o\s*und?\.?\s*(especial|esp\.?|acima|promo)(\s+\S+)*$/i, field: 'priceSpecialUnit' },
+  { match: /^pre[cç]o\s*unidade\s*(especial|esp\.?|acima|promo)(\s+\S+)*$/i, field: 'priceSpecialUnit' },
+  { match: /^(pre[cç]o\s*esp\.?\s*un|pre[cç]o\s*promo(c|ç)[aã]o\s*un|promo\s*un|prc?\s*esp\s*un|pre[cç]o\s*promocional|oferta)$/i, field: 'priceSpecialUnit' },
+  // Preco especial generico (sem cx/un)
+  { match: /^(pre[cç]o\s*especial(\s+\S+)*|condi[cç][aã]o\s*especial)$/i, field: 'priceSpecial' },
+
+  // ── PRECOS REGULARES (genericos, apos os especiais) ──
+
   // Preco caixa avulsa (aceita palavras extras apos cx/caixa, ex: "preço cx. avé. avls")
   { match: /^(pre[cç]o\s*cx\.?(\s+\S+)*|pre[cç]o\s*caixa(\s+\S+)*|pre[cç]o\s*pacote|pre[cç]o\s*fardo|prc?\s*cx)$/i, field: 'pricePack' },
   // Preco unidade avulsa (aceita palavras extras apos un/und, ex: "preço und. avé. avls")
   { match: /^(pre[cç]o\s*und?\.?(\s+\S+)*|pre[cç]o\s*unidade(\s+\S+)*|pre[cç]o\s*unit[aá]rio(\s+\S+)*|prc?\s*un)$/i, field: 'priceUnit' },
-  // Preco especial (sem cx/un = detecta pelo conteudo; DEVE vir antes do generico "preço")
-  { match: /^(pre[cç]o\s*especial(\s+\S+)*|condi[cç][aã]o\s*especial)$/i, field: 'priceSpecial' },
-  // Preco especial caixa
-  { match: /^(pre[cç]o\s*esp\.?\s*cx|pre[cç]o\s*promo(c|ç)[aã]o\s*cx|promo\s*cx|prc?\s*esp\s*cx)$/i, field: 'priceSpecial' },
-  // Preco especial unidade
-  { match: /^(pre[cç]o\s*esp\.?\s*un|pre[cç]o\s*promo(c|ç)[aã]o\s*un|promo\s*un|prc?\s*esp\s*un|pre[cç]o\s*promocional|oferta)$/i, field: 'priceSpecialUnit' },
   // Preco generico (fallback - "preço", "preço venda", "valor")
   { match: /^(pre[cç]o|pre[cç]o\s*venda|valor)$/i, field: 'priceUnit' },
+
+  // ── CONDICAO / OBS ──
+
   // Observacao / condicao
   { match: /^(observa[cç][aã]o|observa[cç][oõ]es|obs\.?|condi[cç][aã]o|nota|notas|condition|observation)$/i, field: 'specialCondition' },
   // Limite
@@ -408,14 +433,23 @@ const matchHeaderToField = (header: string): FieldMapping | null => {
   for (const { match, field } of HEADER_ALIASES) {
     if (match.test(cleaned)) return field
   }
-  // Fallback: busca parcial — se o header contem palavras-chave de preco
+  // Fallback: busca parcial por palavras-chave (ordem: especificos antes de genericos)
   const norm = cleaned.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim()
-  if (/\bPRE[CÇ]?O\b.*\b(CX|CAIXA)\b/i.test(norm)) return 'pricePack'
-  if (/\bPRE[CÇ]?O\b.*\b(UN[D.]?|UNIDADE)\b/i.test(norm)) return 'priceUnit'
-  if (/\bPRE[CÇ]?O\b.*\bESPECIAL\b/i.test(norm)) return 'priceSpecial'
-  if (/\bPRE[CÇ]?O\b.*\bPROMO/i.test(norm)) return 'priceSpecial'
+  const hasPreco = /\bPRE[CÇ]?O\b/.test(norm)
+  const hasCx = /\b(CX|CAIXA)\b/.test(norm)
+  const hasUn = /\b(UN[D.]?|UNIDADE|UNITARIO)\b/.test(norm)
+  const hasEspecial = /\b(ESPECIAL|ESP\.?|ACIMA|PROMO)\b/.test(norm)
+  // Preco + CX/UN + ESPECIAL → campo especial (DEVE vir antes do generico)
+  if (hasPreco && hasCx && hasEspecial) return 'priceSpecial'
+  if (hasPreco && hasUn && hasEspecial) return 'priceSpecialUnit'
+  if (hasPreco && hasEspecial) return 'priceSpecial'
+  // Preco + CX/UN sem especial → campo regular
+  if (hasPreco && hasCx) return 'pricePack'
+  if (hasPreco && hasUn) return 'priceUnit'
   if (/\bEMBAL/i.test(norm)) return 'packageLabel'
   if (/\bQU?A?NT/i.test(norm)) return 'packQuantity'
+  // Condicao / observacao
+  if (/\b(CONDICAO|OBSERVACAO|OBS)\b/.test(norm)) return 'specialCondition'
   return null
 }
 
@@ -491,6 +525,32 @@ export const parseProductsFromTable = (raw: string): ParsedProduct[] => {
   if (!headerResult) return []
 
   const { headerIdx, dataStartIdx, headerCells, fieldMap } = headerResult
+
+  // Deduplicacao: se 2 colunas mapeiam pro mesmo campo, a segunda vira versao especial
+  for (let c = 0; c < fieldMap.length; c++) {
+    const f = fieldMap[c]
+    if (!f) continue
+    const firstIdx = fieldMap.indexOf(f)
+    if (firstIdx < c) {
+      if (f === 'pricePack') fieldMap[c] = 'priceSpecial'
+      else if (f === 'priceUnit') fieldMap[c] = 'priceSpecialUnit'
+    }
+  }
+
+  // Detectar colunas nao mapeadas que podem ser specialCondition (ultima coluna com texto)
+  const hasMappedCondition = fieldMap.includes('specialCondition')
+  if (!hasMappedCondition) {
+    // Procura a ultima coluna nao mapeada — provavel condicao
+    for (let c = fieldMap.length - 1; c >= 0; c--) {
+      if (fieldMap[c] !== null) continue
+      const headerText = (headerCells[c] || '').trim()
+      // Se o header nao esta vazio e nao parece numerico, assumir que e condicao
+      if (headerText && !/^\d/.test(headerText)) {
+        fieldMap[c] = 'specialCondition'
+        break
+      }
+    }
+  }
 
   if (process.dev) {
     console.log('[parse-table] separator:', JSON.stringify(sep))
