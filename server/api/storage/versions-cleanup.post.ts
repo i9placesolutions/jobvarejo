@@ -90,9 +90,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const rawPrefix = String(body?.prefix || '').trim()
+  // Prefixos padrao: apenas projects/ e logo/ (backups de design)
+  // imagens/ e uploads/ sao excluidos pois contem imagens de produto que nao devem ser purgadas
   const prefixes = rawPrefix
     ? [rawPrefix.endsWith('/') ? rawPrefix : `${rawPrefix}/`]
-    : ['projects/', 'imagens/', 'uploads/', 'logo/']
+    : ['projects/', 'logo/']
 
   const s3 = getS3Client()
   const cutoffMs = Date.now() - olderThanDays * 24 * 60 * 60 * 1000
