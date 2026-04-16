@@ -2339,13 +2339,13 @@ const detectImageTrimBounds = (fabricImg: any): { left: number; top: number; wid
         if (!el) return null;
         const w = (el as any).naturalWidth || el.width || fabricImg.width;
         const h = (el as any).naturalHeight || el.height || fabricImg.height;
-        if (!w || !h || w < 4 || h < 4) return null;
+        if (!w || !h || w < 2 || h < 2) return null;
 
         // Amostragem reduzida para performance
         const maxDim = 512;
         const scale = Math.min(1, maxDim / Math.max(w, h));
-        const sw = Math.ceil(w * scale);
-        const sh = Math.ceil(h * scale);
+        const sw = Math.max(1, Math.ceil(w * scale));
+        const sh = Math.max(1, Math.ceil(h * scale));
 
         const oc = document.createElement('canvas');
         oc.width = sw;
@@ -2353,58 +2353,110 @@ const detectImageTrimBounds = (fabricImg: any): { left: number; top: number; wid
         const ctx = oc.getContext('2d', { willReadFrequently: true });
         if (!ctx) return null;
 
+        ctx.clearRect(0, 0, sw, sh);
         ctx.drawImage(el, 0, 0, sw, sh);
         const data = ctx.getImageData(0, 0, sw, sh).data;
 
-        // Limiar: pixel é "conteúdo" se alpha > 10 E não é branco puro (R+G+B < 740)
-        const isContent = (i: number) => {
-            const a = data[i + 3]!;
-            if (a < 10) return false; // transparente
-            const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
-            // Branco ou quase-branco com alpha alto = background
-            if (a > 240 && r > 245 && g > 245 && b > 245) return false;
-            return true;
-        };
+        // O trim do produto deve considerar SOMENTE pixels visíveis.
+        // Qualquer alpha > 0 conta como conteúdo, independentemente da cor.
+        const isContent = (i: number) => data[i + 3]! > 0;
 
-        let minX = sw, minY = sh, maxX = 0, maxY = 0;
+        let minX = sw;
+        let minY = sh;
+        let maxX = -1;
+        let maxY = -1;
         for (let y = 0; y < sh; y++) {
             for (let x = 0; x < sw; x++) {
                 const i = (y * sw + x) * 4;
-                if (isContent(i)) {
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
-                    if (y < minY) minY = y;
-                    if (y > maxY) maxY = y;
-                }
+                if (!isContent(i)) continue;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
             }
         }
 
-        // Se não encontrou conteúdo ou trim é insignificante (< 5% de cada lado), não cortar
-        if (maxX <= minX || maxY <= minY) return null;
-        const trimW = maxX - minX + 1;
-        const trimH = maxY - minY + 1;
-        const marginRatio = 0.05;
-        if (minX < sw * marginRatio && minY < sh * marginRatio &&
-            trimW > sw * (1 - marginRatio * 2) && trimH > sh * (1 - marginRatio * 2)) {
-            return null; // Trim insignificante
-        }
+        if (maxX < minX || maxY < minY) return null;
 
-        // Adicionar margem de segurança (2px na escala original)
-        const pad = Math.ceil(2 / scale);
-        const finalLeft = Math.max(0, Math.floor(minX / scale) - pad);
-        const finalTop = Math.max(0, Math.floor(minY / scale) - pad);
-        const finalRight = Math.min(w, Math.ceil((maxX + 1) / scale) + pad);
-        const finalBottom = Math.min(h, Math.ceil((maxY + 1) / scale) + pad);
+        const finalLeft = Math.max(0, Math.floor(minX / scale));
+        const finalTop = Math.max(0, Math.floor(minY / scale));
+        const finalRight = Math.min(w, Math.ceil((maxX + 1) / scale));
+        const finalBottom = Math.min(h, Math.ceil((maxY + 1) / scale));
+        const finalWidth = Math.max(1, finalRight - finalLeft);
+        const finalHeight = Math.max(1, finalBottom - finalTop);
+
+        if (finalLeft === 0 && finalTop === 0 && finalWidth >= w && finalHeight >= h) {
+            return null;
+        }
 
         return {
             left: finalLeft,
             top: finalTop,
-            width: finalRight - finalLeft,
-            height: finalBottom - finalTop,
+            width: finalWidth,
+            height: finalHeight,
         };
     } catch {
         return null;
     }
+};
+
+const getImageTrimmedDimensions = (img: any) => {
+    const currentWidth = Math.max(1, Number(img?.width || 0) || 1);
+    const currentHeight = Math.max(1, Number(img?.height || 0) || 1);
+    const hasCrop = Number(img?.cropX ?? 0) > 0 || Number(img?.cropY ?? 0) > 0;
+    if (hasCrop) {
+        return { width: currentWidth, height: currentHeight };
+    }
+    const naturalWidth = Math.max(1, Number(img?.getElement?.()?.naturalWidth || 0) || currentWidth);
+    const naturalHeight = Math.max(1, Number(img?.getElement?.()?.naturalHeight || 0) || currentHeight);
+    return { width: naturalWidth, height: naturalHeight };
+};
+
+const applyAutoTrimToProductImage = (img: any) => {
+    if (!img) return null;
+    const trimBounds = detectImageTrimBounds(img);
+    if (!trimBounds) return null;
+    img.set({
+        cropX: trimBounds.left,
+        cropY: trimBounds.top,
+        width: trimBounds.width,
+        height: trimBounds.height,
+        dirty: true
+    });
+    return trimBounds;
+};
+
+const fitProductImageIntoSlot = (
+    img: any,
+    slot: { width?: number; height?: number; left?: number; top?: number; originX?: string; originY?: string; name?: string },
+    opts: { maxScale?: number } = {}
+) => {
+    if (!img) return;
+    const slotWidth = Math.max(1, Number(slot?.width || 0) || 1);
+    const slotHeight = Math.max(1, Number(slot?.height || 0) || 1);
+    const trimmed = getImageTrimmedDimensions(img);
+    const scale = Math.min(
+        slotWidth / trimmed.width,
+        slotHeight / trimmed.height,
+        Math.max(1, Number(opts.maxScale ?? 3) || 3)
+    );
+
+    img.set({
+        scaleX: scale,
+        scaleY: scale,
+        originX: slot?.originX || 'center',
+        originY: slot?.originY || 'center',
+        left: Number(slot?.left || 0),
+        top: Number(slot?.top || 0),
+        name: slot?.name || 'smart_image',
+        visible: true,
+        opacity: 1,
+        lockScalingFlip: true,
+        lockSkewingX: true,
+        lockSkewingY: true,
+        dirty: true
+    });
+    img.setCoords?.();
 };
 
 /**
@@ -12901,7 +12953,6 @@ const removeImageObjectsDeep = (node: any): any => {
         const isUserInitiated = reason.startsWith('global-style:')
             || reason.startsWith('properties-panel')
             || reason.startsWith('layers-drag')
-            || reason === 'object:modified(zone)'
             || opts.skipIfUnchanged === false
         if (!isUserInitiated && Date.now() < _historyRestoreCooldownUntil && reason !== 'initial-history-capture') {
             return false
@@ -13364,7 +13415,12 @@ const repairZoneCardsAfterHistoryRestore = () => {
     zones.forEach((zone: any) => {
         const zoneId = String((zone as any)?._customId || '').trim();
         if (!zoneId) return;
-        const cards = objs.filter((o: any) => cardLike(o) && String((o as any)?.parentZoneId || '').trim() === zoneId);
+        const cards = objs.filter((o: any) => {
+            if (!cardLike(o)) return false;
+            const parentZoneId = String((o as any)?.parentZoneId || '').trim();
+            const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
+            return parentZoneId === zoneId || slotZoneId === zoneId;
+        });
         if (!cards.length) return;
 
         cards.forEach((card: any) => {
@@ -25596,36 +25652,17 @@ const createSmartObject = async (
                     console.warn('[createSmartObject] Imagem carregada com dimensões inválidas:', imgW, imgH);
                     imgObj = null;
                 } else {
-                    // Trim automático: usar cropX/cropY para cortar whitespace/transparência
-                    const trimBounds = detectImageTrimBounds(imgObj);
-                    if (trimBounds) {
-                        imgObj.set({
-                            cropX: trimBounds.left,
-                            cropY: trimBounds.top,
-                            width: trimBounds.width,
-                            height: trimBounds.height,
-                        });
-                    }
-
-                    // Recalcular dimensões após trim
-                    const trimmedW = imgObj.width || imgW;
-                    const trimmedH = imgObj.height || imgH;
-                    const availW = width * 0.85;
-                    const availH = cardHeight * 0.5;
-                    const scale = Math.min(availW / trimmedW, availH / trimmedH, 3);
-
-                    imgObj.set({
-                        scaleX: scale,
-                        scaleY: scale,
-                        originX: 'center',
-                        originY: 'center',
+                    // Auto-trim pelo alpha visível e fit seguro no slot da imagem.
+                    applyAutoTrimToProductImage(imgObj);
+                    fitProductImageIntoSlot(imgObj, {
+                        width: width * 0.85,
+                        height: cardHeight * 0.5,
                         left: 0,
                         top: imageY,
-                        name: 'smart_image',
-                        lockScalingFlip: true,
-                        lockSkewingX: true,
-                        lockSkewingY: true
-                    });
+                        originX: 'center',
+                        originY: 'center',
+                        name: 'smart_image'
+                    }, { maxScale: 3 });
                 }
             }
         } catch (e) {
@@ -27160,27 +27197,20 @@ const simulateSmartGrid = async (
                              }
                              const newImg = await fabric.Image.fromURL(imgUrl, { crossOrigin: 'anonymous' });
                              if (newImg && newImg.width > 2 && newImg.height > 2) {
-                                 // Trim whitespace/transparência
-                                 const trimBounds = detectImageTrimBounds(newImg);
-                                 if (trimBounds) {
-                                     newImg.set({ cropX: trimBounds.left, cropY: trimBounds.top, width: trimBounds.width, height: trimBounds.height });
-                                 }
-                                 // Calcular escala para caber no espaço do template
-                                 const oldW = existingImg.getScaledWidth?.() || existingImg.width || itemWidth * 0.5;
-                                 const oldH = existingImg.getScaledHeight?.() || existingImg.height || itemHeight * 0.4;
-                                 const newScale = Math.min(oldW / (newImg.width || 1), oldH / (newImg.height || 1), 3);
-                                 newImg.set({
-                                     scaleX: newScale,
-                                     scaleY: newScale,
+                                 applyAutoTrimToProductImage(newImg);
+                                 const existingDisplayW = Math.abs(Number(existingImg.getScaledWidth?.() || 0));
+                                 const existingDisplayH = Math.abs(Number(existingImg.getScaledHeight?.() || 0));
+                                 const fallbackSlotW = Math.max(itemWidth * 0.5, Number(existingImg.width || 0) || 0, existingDisplayW || 0);
+                                 const fallbackSlotH = Math.max(itemHeight * 0.4, Number(existingImg.height || 0) || 0, existingDisplayH || 0);
+                                 fitProductImageIntoSlot(newImg, {
+                                     width: fallbackSlotW,
+                                     height: fallbackSlotH,
                                      originX: existingImg.originX || 'center',
                                      originY: existingImg.originY || 'center',
                                      left: existingImg.left || 0,
                                      top: existingImg.top || 0,
-                                     name: existingImg.name || 'smart_image',
-                                     lockScalingFlip: true,
-                                     lockSkewingX: true,
-                                     lockSkewingY: true,
-                                 });
+                                     name: existingImg.name || 'smart_image'
+                                 }, { maxScale: 3 });
                                  // Substituir a imagem antiga pela nova
                                  const imgIndex = objects.indexOf(existingImg);
                                  cloned.remove(existingImg);
@@ -34916,23 +34946,34 @@ async function duplicateLabelTemplateById(templateId: string) {
 
 async function applyLabelTemplateToCard(card: any, templateId: string) {
     if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') return;
-    let tpl = labelTemplates.value.find(t => t.id === templateId);
+    const zoneId = String((card as any)?.parentZoneId || (card as any)?._zoneSlot?.zoneId || '').trim();
+    const zone = zoneId && canvas.value
+        ? canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String((o as any)?._customId || '').trim() === zoneId)
+        : null;
+    const snapshotTemplateId = String((zone as any)?._zoneTemplateSnapshotId || '').trim();
+    const snapshotGroup = zone ? (zone as any)?._zoneTemplateSnapshot : null;
+
+    let tpl: LabelTemplate | undefined = undefined;
+    if (snapshotGroup && typeof snapshotGroup === 'object' && snapshotTemplateId && snapshotTemplateId === String(templateId || '').trim()) {
+        tpl = {
+            id: snapshotTemplateId,
+            name: 'Zone Template Snapshot',
+            kind: 'priceGroup-v1',
+            group: snapshotGroup
+        } as any as LabelTemplate;
+    }
     if (!tpl) {
+        tpl = labelTemplates.value.find(t => t.id === templateId);
+    }
+    if (!tpl && snapshotGroup && typeof snapshotGroup === 'object') {
         // Fallback for reload/race conditions: use the immutable snapshot already
         // stored on the zone so cards always follow the Mini Editor template.
-        const zoneId = String((card as any)?.parentZoneId || '').trim();
-        const zone = zoneId && canvas.value
-            ? canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String((o as any)?._customId || '').trim() === zoneId)
-            : null;
-        const snapshotGroup = zone ? (zone as any)?._zoneTemplateSnapshot : null;
-        if (snapshotGroup && typeof snapshotGroup === 'object') {
-            tpl = {
-                id: String(templateId || (zone as any)?._zoneTemplateSnapshotId || 'zone-template-snapshot'),
-                name: 'Zone Template Snapshot',
-                kind: 'priceGroup-v1',
-                group: snapshotGroup
-            } as any as LabelTemplate;
-        }
+        tpl = {
+            id: String(templateId || snapshotTemplateId || 'zone-template-snapshot'),
+            name: 'Zone Template Snapshot',
+            kind: 'priceGroup-v1',
+            group: snapshotGroup
+        } as any as LabelTemplate;
     }
     if (!tpl) return;
 
@@ -34946,6 +34987,10 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
     const oldDec = oldParts.find((o: any) => o.name === 'price_decimal_text');
     const oldUnit = oldParts.find((o: any) => o.name === 'price_unit_text');
     const oldCurrency = oldParts.find((o: any) => o.name === 'price_currency_text');
+    const oldRetailInt = oldParts.find((o: any) => o.name === 'retail_integer_text');
+    const oldRetailDec = oldParts.find((o: any) => o.name === 'retail_decimal_text');
+    const oldWholesaleInt = oldParts.find((o: any) => o.name === 'wholesale_integer_text');
+    const oldWholesaleDec = oldParts.find((o: any) => o.name === 'wholesale_decimal_text');
     const isVisibleNode = (obj: any): boolean => {
         if (!obj) return false;
         if (obj.visible === false) return false;
@@ -34961,9 +35006,13 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
             !isVisibleNode(oldPrice)
         )
     );
+    const hasVisibleAtacarejoTier = (
+        (oldRetailInt && oldRetailDec && isVisibleNode(oldRetailInt) && isVisibleNode(oldRetailDec)) ||
+        (oldWholesaleInt && oldWholesaleDec && isVisibleNode(oldWholesaleInt) && isVisibleNode(oldWholesaleDec))
+    );
     const oldPriceText = shouldReadSplitPrice
         ? `${oldInt.text || '0'}${oldDec.text || ',00'}`
-        : oldPrice?.text;
+        : (hasVisibleAtacarejoTier ? undefined : oldPrice?.text);
     const oldCurrencyText = oldCurrency?.text;
     const oldUnitText = oldUnit?.text;
     const inferredUnit = (typeof oldUnitText === 'string' && oldUnitText.trim().length)
@@ -35006,7 +35055,12 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
     if (isRedBurst) tuneRedBurstPriceGroupLayout(newPg);
     // Apply wholesale/pack metadata when the template supports it (no-op otherwise).
     applyAtacarejoPricingToPriceGroup(newPg, {
-        price: typeof oldPriceText === 'string' ? oldPriceText : null,
+        price: (card as any).price ?? (typeof oldPriceText === 'string' ? oldPriceText : null),
+        pricePack: (card as any).pricePack ?? null,
+        priceUnit: (card as any).priceUnit ?? null,
+        priceSpecial: (card as any).priceSpecial ?? null,
+        priceSpecialUnit: (card as any).priceSpecialUnit ?? null,
+        specialCondition: (card as any).specialCondition ?? null,
         priceWholesale: (card as any).priceWholesale ?? null,
         wholesaleTrigger: (card as any).wholesaleTrigger ?? null,
         wholesaleTriggerUnit: (card as any).wholesaleTriggerUnit ?? null,
@@ -36110,6 +36164,34 @@ const cloneTemplateGroupJson = (group: any) => {
     }
 };
 
+
+const clonePriceGroupForRollback = async (priceGroup: any) => {
+    if (!priceGroup || typeof priceGroup.toObject !== 'function') return null;
+    const json = priceGroup.toObject([...CANVAS_CUSTOM_PROPS]);
+    const clone = await enlivenObjectsAsync([json]);
+    const restored = Array.isArray(clone) ? clone[0] : null;
+    if (!restored) return null;
+    restoreMissingManualTemplateFlags(restored);
+    if (!(restored as any)._customId) (restored as any)._customId = makeCanvasObjectId();
+    return restored;
+};
+
+const restoreCardPriceGroup = (card: any, currentPriceGroup: any, rollbackPriceGroup: any) => {
+    if (!card || typeof card.getObjects !== 'function' || !rollbackPriceGroup) return false;
+    try {
+        if (currentPriceGroup) card.remove(currentPriceGroup);
+    } catch {
+        // ignore
+    }
+    safeAddWithUpdate(card, rollbackPriceGroup);
+    const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0;
+    const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0;
+    if (cardW && cardH) card.set({ width: cardW, height: cardH });
+    card.dirty = true;
+    card.setCoords?.();
+    return true;
+};
+
 type ApplyLabelTemplateToZoneOptions = {
     applyToExisting?: boolean;
     requestRender?: boolean;
@@ -36143,6 +36225,14 @@ async function applyLabelTemplateToZone(
         const cards = applyOptions.cards && applyOptions.cards.length > 0
             ? applyOptions.cards
             : getZoneChildren(zone);
+        const rollbackMap = new Map<any, any>();
+        for (const card of cards) {
+            const oldPg = typeof card?.getObjects === 'function'
+                ? card.getObjects().find((o: any) => o && o.type === 'group' && o.name === 'priceGroup')
+                : null;
+            const rollbackClone = oldPg ? await clonePriceGroupForRollback(oldPg) : null;
+            if (rollbackClone) rollbackMap.set(card, rollbackClone);
+        }
         let failedCards = 0;
         for (const card of cards) {
             try {
@@ -36154,6 +36244,15 @@ async function applyLabelTemplateToZone(
             }
         }
         if (failedCards > 0) {
+            for (const card of cards) {
+                const rollbackPriceGroup = rollbackMap.get(card);
+                if (!rollbackPriceGroup) continue;
+                const currentPg = typeof card?.getObjects === 'function'
+                    ? card.getObjects().find((o: any) => o && o.type === 'group' && o.name === 'priceGroup')
+                    : null;
+                restoreCardPriceGroup(card, currentPg, rollbackPriceGroup);
+            }
+            if (applyOptions.requestRender) canvas.value.requestRenderAll();
             console.warn(`[labelTemplates] Aborting zone template persistence because ${failedCards} card(s) failed`);
             return false;
         }
@@ -37930,10 +38029,17 @@ const getZoneChildCandidates = (zone: any) => {
         return true;
     };
 
-    const topCandidates = topLevel.filter(isCandidateGroup);
-    if (topCandidates.length > 0) return topCandidates;
+    const appendUnique = (target: any[], list: any[]) => {
+        list.forEach((item: any) => {
+            if (!item || target.includes(item)) return;
+            target.push(item);
+        });
+    };
 
-    // Legacy fallback: in rare old states cards can be nested. Scan only group nodes.
+    const topCandidates = topLevel.filter(isCandidateGroup);
+
+    // Legacy states can mix top-level cards with nested product cards.
+    // Merge both sets instead of short-circuiting on the first top-level match.
     const deepCandidates: any[] = [];
     const seen = new Set<any>();
     const stack = [...topLevel];
@@ -37949,7 +38055,11 @@ const getZoneChildCandidates = (zone: any) => {
             }
         }
     }
-    return deepCandidates;
+
+    const mergedCandidates: any[] = [];
+    appendUnique(mergedCandidates, topCandidates);
+    appendUnique(mergedCandidates, deepCandidates);
+    return mergedCandidates;
 };
 
 const getZoneChildren = (zone: any) => {
@@ -37959,13 +38069,67 @@ const getZoneChildren = (zone: any) => {
     const zoneBounds = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
     const zoneFrameId = getResolvedZoneFrameId(zone);
     const zoneId = String((zone as any)?._customId || '').trim();
-    const margin = (() => {
+    const recoveryCenterMargin = (() => {
         const pad = typeof (zone as any)._zonePadding === 'number' ? (zone as any)._zonePadding : 20;
         const base = Math.min(zoneBounds.width || 0, zoneBounds.height || 0);
-        // Small tolerance to keep legacy cards attached after reload (prevents "zone moves alone").
-        return Math.max(60, Math.min(220, pad + base * 0.12));
+        // Keep a small snap tolerance for legacy cards without stealing neighbors from adjacent zones.
+        return Math.max(20, Math.min(72, pad * 0.5 + base * 0.04));
     })();
-    
+
+    const getZoneAssociation = (o: any) => {
+        const objBounds = o.getBoundingRect();
+        const center = typeof o.getCenterPoint === 'function'
+            ? o.getCenterPoint()
+            : { x: (o.left ?? 0), y: (o.top ?? 0) };
+        const isInside =
+            objBounds.left >= zoneBounds.left &&
+            objBounds.top >= zoneBounds.top &&
+            objBounds.left + objBounds.width <= zoneBounds.left + zoneBounds.width &&
+            objBounds.top + objBounds.height <= zoneBounds.top + zoneBounds.height;
+        const centerInside =
+            center.x >= zoneBounds.left &&
+            center.x <= (zoneBounds.left + zoneBounds.width) &&
+            center.y >= zoneBounds.top &&
+            center.y <= (zoneBounds.top + zoneBounds.height);
+        const centerNearZone =
+            center.x >= (zoneBounds.left - recoveryCenterMargin) &&
+            center.x <= (zoneBounds.left + zoneBounds.width + recoveryCenterMargin) &&
+            center.y >= (zoneBounds.top - recoveryCenterMargin) &&
+            center.y <= (zoneBounds.top + zoneBounds.height + recoveryCenterMargin);
+
+        const overlapLeft = Math.max(zoneBounds.left, objBounds.left);
+        const overlapTop = Math.max(zoneBounds.top, objBounds.top);
+        const overlapRight = Math.min(zoneBounds.left + zoneBounds.width, objBounds.left + objBounds.width);
+        const overlapBottom = Math.min(zoneBounds.top + zoneBounds.height, objBounds.top + objBounds.height);
+        const overlapWidth = Math.max(0, overlapRight - overlapLeft);
+        const overlapHeight = Math.max(0, overlapBottom - overlapTop);
+        const overlapArea = overlapWidth * overlapHeight;
+        const objArea = Math.max(1, (objBounds.width || 0) * (objBounds.height || 0));
+        const overlapRatio = overlapArea / objArea;
+
+        let intersects = false;
+        try {
+            intersects = !!zone.intersectsWithObject(o);
+        } catch {
+            intersects = false;
+        }
+
+        return {
+            centerInside,
+            centerNearZone,
+            intersects,
+            isInside,
+            overlapRatio
+        };
+    };
+
+    const canSafelyRecoverCard = (o: any) => {
+        const assoc = getZoneAssociation(o);
+        if (assoc.isInside || assoc.centerInside) return true;
+        if (assoc.intersects && assoc.overlapRatio >= 0.35) return true;
+        return assoc.centerNearZone && assoc.overlapRatio >= 0.2;
+    };
+
     const normalizeLegacyCard = (o: any, explicitCard: boolean) => {
         if (!explicitCard) {
             // Upgrade legacy card objects (old saves) so the rest of the engine can rely on flags.
@@ -38014,33 +38178,6 @@ const getZoneChildren = (zone: any) => {
         return hasPriceGroup && hasImage;
     };
 
-    const canBelongToZone = (o: any) => {
-        const objBounds = o.getBoundingRect();
-        const isInside =
-            objBounds.left >= zoneBounds.left &&
-            objBounds.top >= zoneBounds.top &&
-            objBounds.left + objBounds.width <= zoneBounds.left + zoneBounds.width &&
-            objBounds.top + objBounds.height <= zoneBounds.top + zoneBounds.height;
-
-        const center = typeof o.getCenterPoint === 'function'
-            ? o.getCenterPoint()
-            : { x: (o.left ?? 0), y: (o.top ?? 0) };
-        const nearInside =
-            center.x >= (zoneBounds.left - margin) &&
-            center.x <= (zoneBounds.left + zoneBounds.width + margin) &&
-            center.y >= (zoneBounds.top - margin) &&
-            center.y <= (zoneBounds.top + zoneBounds.height + margin);
-
-        let intersects = false;
-        try {
-            intersects = !!zone.intersectsWithObject(o);
-        } catch {
-            intersects = false;
-        }
-
-        return isInside || intersects || nearInside;
-    };
-
     candidates.forEach((o: any) => {
         const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
         const likelyCard = explicitCard ? true : isLikelyProductCard(o);
@@ -38079,7 +38216,7 @@ const getZoneChildren = (zone: any) => {
         const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
         if (boundId || slotZoneId) return false;
         if (!hasStrongCardSignature(o)) return false;
-        if (!canBelongToZone(o)) return false;
+        if (!canSafelyRecoverCard(o)) return false;
 
         const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
         normalizeLegacyCard(o, explicitCard);
@@ -38096,19 +38233,18 @@ const getZoneChildren = (zone: any) => {
 
     // Legacy rescue mode: only when no explicit cards exist for the zone.
     return legacyCandidates.filter((o: any) => {
-        // Legacy rescue should only capture truly unbound cards.
+        // Legacy rescue should only capture truly unbound cards with a strong card signature.
         const boundId = String((o as any)?.parentZoneId || '').trim();
         const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
         if (boundId || slotZoneId) return false;
-        if (canBelongToZone(o)) {
-            const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
-            normalizeLegacyCard(o, explicitCard);
-            o.parentZoneId = zoneId || zone._customId;
-            applyCardFrameBinding(o, zoneFrameId);
-            return true;
-        }
+        if (!hasStrongCardSignature(o)) return false;
+        if (!canSafelyRecoverCard(o)) return false;
 
-        return false;
+        const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
+        normalizeLegacyCard(o, explicitCard);
+        o.parentZoneId = zoneId || zone._customId;
+        applyCardFrameBinding(o, zoneFrameId);
+        return true;
     });
 }
 
@@ -38986,7 +39122,11 @@ const rehydrateCanvasZones = (
                 // Ensure internal elements are selectable with controls
                 if (typeof o.getObjects === 'function') {
                     o.getObjects().forEach((child: any) => {
-                        const isBackground = child.name === 'offerBackground' || child.name === 'price_bg';
+                        const childName = String(child?.name || '');
+                        const isBackground = childName === 'offerBackground'
+                            || childName === 'price_bg'
+                            || childName === 'price_bg_image'
+                            || childName === 'splash_image';
                         child.selectable = !isBackground;
                         child.evented = !isBackground;
                         child.hasControls = !isBackground;

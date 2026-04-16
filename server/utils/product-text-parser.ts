@@ -330,18 +330,22 @@ const HEADER_ALIASES: { match: RegExp; field: FieldMapping }[] = [
   { match: /^(peso|gramatura|volume|conte[uú]do|tamanho)$/i, field: 'weight' },
   // Sabor
   { match: /^(sabor(es)?|fragr[aã]ncia[s]?|aroma|tipo|variante|ess[eê]ncia)$/i, field: 'flavor' },
-  // Embalagem
-  { match: /^(embalagem|tipo\s*emb(alagem)?|emb\.?)$/i, field: 'packageLabel' },
-  // Quantidade na embalagem
-  { match: /^(quant\.?\s*emb\.?|qtd\.?\s*emb\.?|qtde\.?\s*emb\.?|qt\.?\s*emb\.?|quantidade)$/i, field: 'packQuantity' },
-  // Preco caixa avulsa
-  { match: /^(pre[cç]o\s*cx\.?\s*avulsa|pre[cç]o\s*caixa\s*avulsa|pre[cç]o\s*cx\.?|pre[cç]o\s*caixa|pre[cç]o\s*pacote|pre[cç]o\s*fardo|prc?\s*cx)$/i, field: 'pricePack' },
-  // Preco unidade avulsa
-  { match: /^(pre[cç]o\s*und?\.?\s*avulsa|pre[cç]o\s*unidade|pre[cç]o\s*unit[aá]rio|pre[cç]o\s*un\.?|prc?\s*un|pre[cç]o|pre[cç]o\s*venda|valor)$/i, field: 'priceUnit' },
+  // Embalagem (aceita "embalagem caixa", "embalagem/caixa", "embalage caixa", etc.)
+  { match: /^(embalag(em|e)?(\s*[/]?\s*(caixa|cx))?|tipo\s*emb(alagem)?|emb\.?)$/i, field: 'packageLabel' },
+  // Quantidade na embalagem (aceita "quant.", "qtd.", "qtde." sozinhos ou com "emb")
+  { match: /^(quant\.?(\s*emb\.?)?|qtd\.?(\s*emb\.?)?|qtde\.?(\s*emb\.?)?|qt\.?\s*emb\.?|quantidade)$/i, field: 'packQuantity' },
+  // Preco caixa avulsa (aceita palavras extras apos cx/caixa, ex: "preço cx. avé. avls")
+  { match: /^(pre[cç]o\s*cx\.?(\s+\S+)*|pre[cç]o\s*caixa(\s+\S+)*|pre[cç]o\s*pacote|pre[cç]o\s*fardo|prc?\s*cx)$/i, field: 'pricePack' },
+  // Preco unidade avulsa (aceita palavras extras apos un/und, ex: "preço und. avé. avls")
+  { match: /^(pre[cç]o\s*und?\.?(\s+\S+)*|pre[cç]o\s*unidade(\s+\S+)*|pre[cç]o\s*unit[aá]rio(\s+\S+)*|prc?\s*un)$/i, field: 'priceUnit' },
+  // Preco especial (sem cx/un = detecta pelo conteudo; DEVE vir antes do generico "preço")
+  { match: /^(pre[cç]o\s*especial(\s+\S+)*|condi[cç][aã]o\s*especial)$/i, field: 'priceSpecial' },
   // Preco especial caixa
-  { match: /^(pre[cç]o\s*especial\s*cx\.?|pre[cç]o\s*esp\.?\s*cx|pre[cç]o\s*promo(c|ç)[aã]o\s*cx|promo\s*cx|prc?\s*esp\s*cx)$/i, field: 'priceSpecial' },
+  { match: /^(pre[cç]o\s*esp\.?\s*cx|pre[cç]o\s*promo(c|ç)[aã]o\s*cx|promo\s*cx|prc?\s*esp\s*cx)$/i, field: 'priceSpecial' },
   // Preco especial unidade
-  { match: /^(pre[cç]o\s*especial\s*und?\.?|pre[cç]o\s*esp\.?\s*un|pre[cç]o\s*promo(c|ç)[aã]o\s*un|promo\s*un|prc?\s*esp\s*un|pre[cç]o\s*promocional|oferta)$/i, field: 'priceSpecialUnit' },
+  { match: /^(pre[cç]o\s*esp\.?\s*un|pre[cç]o\s*promo(c|ç)[aã]o\s*un|promo\s*un|prc?\s*esp\s*un|pre[cç]o\s*promocional|oferta)$/i, field: 'priceSpecialUnit' },
+  // Preco generico (fallback - "preço", "preço venda", "valor")
+  { match: /^(pre[cç]o|pre[cç]o\s*venda|valor)$/i, field: 'priceUnit' },
   // Observacao / condicao
   { match: /^(observa[cç][aã]o|observa[cç][oõ]es|obs\.?|condi[cç][aã]o|nota|notas|condition|observation)$/i, field: 'specialCondition' },
   // Limite
@@ -468,9 +472,17 @@ export const parseProductsFromTable = (raw: string): ParsedProduct[] => {
         case 'priceUnit':
           product.priceUnit = normalizePrice(value)
           break
-        case 'priceSpecial':
-          product.priceSpecial = normalizePrice(value)
+        case 'priceSpecial': {
+          // Coluna "preço especial" pode conter um valor numerico OU texto de condicao
+          const priceAttempt = normalizePrice(value)
+          if (priceAttempt) {
+            product.priceSpecial = priceAttempt
+          } else if (!product.specialCondition) {
+            // Valor nao numerico = condicao especial (ex: "PREÇO IMBATIVEL", "ACIMA DE 20 FD")
+            product.specialCondition = value
+          }
           break
+        }
         case 'priceSpecialUnit':
           product.priceSpecialUnit = normalizePrice(value)
           break

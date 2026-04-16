@@ -101,13 +101,11 @@ export const buildProductZoneDiagnostics = (opts: {
     });
   }
 
-  const hasAtacarejo = zoneCards.some((card) => (
-    hasValue(card?.pricePack) ||
-    hasValue(card?.priceUnit) ||
-    hasValue(card?.priceSpecial) ||
-    hasValue(card?.priceSpecialUnit) ||
-    hasValue(card?.specialCondition)
-  ));
+  const hasAtacarejo = zoneCards.some((card) => {
+    const hasSpecial = hasValue(card?.priceSpecial) || hasValue(card?.priceSpecialUnit);
+    const hasPackPair = hasValue(card?.pricePack) && hasValue(card?.priceUnit);
+    return hasSpecial || hasPackPair || hasValue(card?.specialCondition);
+  });
   const templateId = String(opts.globalStyles?.splashTemplateId || '').trim().toLowerCase();
   const looksLikeSimpleTemplate = !templateId || (!templateId.includes('atac') && !templateId.includes('pack') && !templateId.includes('unit'));
   if (hasAtacarejo && looksLikeSimpleTemplate) {
