@@ -408,6 +408,72 @@ const matchHeaderToField = (header: string): FieldMapping | null => {
   for (const { match, field } of HEADER_ALIASES) {
     if (match.test(cleaned)) return field
   }
+  // Fallback: busca parcial — se o header contem palavras-chave de preco
+  const norm = cleaned.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim()
+  if (/\bPRE[CÇ]?O\b.*\b(CX|CAIXA)\b/i.test(norm)) return 'pricePack'
+  if (/\bPRE[CÇ]?O\b.*\b(UN[D.]?|UNIDADE)\b/i.test(norm)) return 'priceUnit'
+  if (/\bPRE[CÇ]?O\b.*\bESPECIAL\b/i.test(norm)) return 'priceSpecial'
+  if (/\bPRE[CÇ]?O\b.*\bPROMO/i.test(norm)) return 'priceSpecial'
+  if (/\bEMBAL/i.test(norm)) return 'packageLabel'
+  if (/\bQU?A?NT/i.test(norm)) return 'packQuantity'
+  return null
+}
+
+// Verifica se uma linha parece ser sub-header (continuacao de cabecalho, sem valores numericos de preco)
+const looksLikeSubHeader = (cells: string[]): boolean => {
+  const nonEmpty = cells.filter(c => c.trim().length > 0)
+  if (nonEmpty.length === 0) return false
+  // Se a maioria das celulas tem texto curto e nenhuma parece preco, provavelmente e sub-header
+  const hasPrice = nonEmpty.some(c => {
+    const n = parseNumber(c)
+    return n !== null && n > 0.5
+  })
+  return !hasPrice
+}
+
+// Encontra a linha de cabecalho real (pode nao ser a primeira se tiver titulo ou linhas em branco)
+// Tambem faz merge de sub-headers (cabecalhos em 2 linhas, comum em planilhas atacarejo)
+const findHeaderRow = (lines: string[], sep: string): { headerIdx: number; dataStartIdx: number; headerCells: string[]; fieldMap: (FieldMapping | null)[] } | null => {
+  const maxProbe = Math.min(8, lines.length - 1)
+
+  for (let idx = 0; idx < maxProbe; idx++) {
+    const cells = splitRow(lines[idx]!, sep)
+    let fm = cells.map(matchHeaderToField)
+    if (!fm.includes('name')) continue
+
+    const mergedCells = [...cells]
+    let dataStart = idx + 1
+
+    // Tenta mergear com a proxima linha se parecer sub-header
+    if (dataStart < lines.length) {
+      const nextCells = splitRow(lines[dataStart]!, sep)
+      if (looksLikeSubHeader(nextCells)) {
+        for (let c = 0; c < mergedCells.length; c++) {
+          const sub = (nextCells[c] || '').trim()
+          if (sub) {
+            mergedCells[c] = (mergedCells[c]!.trim() + ' ' + sub).trim()
+          }
+        }
+        dataStart++
+        fm = mergedCells.map(matchHeaderToField)
+      }
+    }
+
+    const hasPriceField = fm.some(f => f === 'pricePack' || f === 'priceUnit' || f === 'priceSpecial' || f === 'priceSpecialUnit')
+    const mappedCount = fm.filter(f => f !== null).length
+    if (hasPriceField || mappedCount >= 2) {
+      return { headerIdx: idx, dataStartIdx: dataStart, headerCells: mergedCells, fieldMap: fm }
+    }
+  }
+
+  // Fallback: aceita qualquer linha com 'name' mesmo sem campo de preco
+  for (let idx = 0; idx < maxProbe; idx++) {
+    const cells = splitRow(lines[idx]!, sep)
+    const fm = cells.map(matchHeaderToField)
+    if (fm.includes('name')) {
+      return { headerIdx: idx, dataStartIdx: idx + 1, headerCells: cells, fieldMap: fm }
+    }
+  }
   return null
 }
 
@@ -421,15 +487,22 @@ export const parseProductsFromTable = (raw: string): ParsedProduct[] => {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
   if (lines.length < 2) return []
 
-  const headerCells = splitRow(lines[0]!, sep)
-  const fieldMap: (FieldMapping | null)[] = headerCells.map(matchHeaderToField)
-  const hasName = fieldMap.includes('name')
-  if (!hasName) return []
+  const headerResult = findHeaderRow(lines, sep)
+  if (!headerResult) return []
+
+  const { headerIdx, dataStartIdx, headerCells, fieldMap } = headerResult
+
+  if (process.dev) {
+    console.log('[parse-table] separator:', JSON.stringify(sep))
+    console.log('[parse-table] header row idx:', headerIdx, '| data start:', dataStartIdx)
+    console.log('[parse-table] headers:', headerCells)
+    console.log('[parse-table] field map:', fieldMap)
+  }
 
   const products: ParsedProduct[] = []
   const defaultRule = extractDefaultSpecialRuleFromSource(text)
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = dataStartIdx; i < lines.length; i++) {
     const cells = splitRow(lines[i]!, sep)
     if (cells.length === 1 && !cells[0]?.trim()) continue
 

@@ -113,7 +113,13 @@ export default defineEventHandler(async (event) => {
                         const wb = XLSX.read(buf, { type: 'buffer' })
                         const sheetName = wb.SheetNames?.[0]
                         const sheet = sheetName ? wb.Sheets?.[sheetName] : null
-                        text = clampText(sheet ? (XLSX.utils.sheet_to_csv(sheet) || '') : '')
+                        const csvRaw = sheet ? (XLSX.utils.sheet_to_csv(sheet, { FS: ';' }) || '') : ''
+                        // Log para debug: mostra as primeiras linhas do CSV gerado
+                        if (process.dev) {
+                            const previewLines = csvRaw.split('\n').slice(0, 5).map((l: string, i: number) => `  [${i}] ${l}`)
+                            console.log(`📋 [parse-products] CSV do XLSX (${csvRaw.length} chars, sheet: "${sheetName}"):\n${previewLines.join('\n')}`)
+                        }
+                        text = clampText(csvRaw)
                     } catch (xlsxErr: any) {
                         console.warn('⚠️ Falha ao ler Excel, tentando fallback texto:', xlsxErr?.message)
                         try { text = clampText(buf.toString('utf8')) } catch { text = '' }
