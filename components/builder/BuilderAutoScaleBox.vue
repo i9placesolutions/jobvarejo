@@ -30,8 +30,10 @@ const measure = () => {
     return
   }
 
-  const widthScale = outerWidth > 0 ? outerWidth / naturalWidth : props.maxScale
-  const heightScale = outerHeight > 0 ? outerHeight / naturalHeight : props.maxScale
+  // Margem de seguranca de 4% para evitar corte por sub-pixel rendering e font metrics
+  const safetyFactor = 1.04
+  const widthScale = outerWidth > 0 ? outerWidth / (naturalWidth * safetyFactor) : props.maxScale
+  const heightScale = outerHeight > 0 ? outerHeight / (naturalHeight * safetyFactor) : props.maxScale
   const nextScale = Math.min(props.maxScale, widthScale, heightScale)
 
   scale.value = Math.max(

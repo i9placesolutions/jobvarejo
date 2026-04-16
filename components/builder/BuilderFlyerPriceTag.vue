@@ -191,7 +191,7 @@ const sealStyle = computed(() => {
     color: textColor.value,
     padding: paddingStyle.value,
     position: 'relative',
-    overflow: 'hidden',
+    overflow: 'visible',
   }
 
   if (dm === 'filled' || dm === 'splash') {
