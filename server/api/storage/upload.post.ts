@@ -22,6 +22,12 @@ import {
  * Aceita até ~12 MB de payload (canvas JSON comprimido).
  */
 
+// Limite hard de payload para proteger memoria do Nitro.
+// Encartes com muitos frames (~10) e imagens de produto embed chegam a
+// ~40 MB comprimidos. 60 MB cobre esses casos sem abrir margem para abuso.
+// Acima disso o cliente precisaria usar multipart upload real (S3 MPU).
+const MAX_UPLOAD_BYTES = 60 * 1024 * 1024
+
 export default defineEventHandler(async (event) => {
   const routeStartMs = Date.now()
   console.log(`📥 [upload.post] Request START`)
@@ -62,6 +68,15 @@ export default defineEventHandler(async (event) => {
   const readStartedAt = Date.now()
   console.log(`📥 [upload.post] Reading body, contentType=${reqContentType.substring(0, 50)}`)
 
+  // Rejeita cedo se Content-Length anunciado exceder o limite, antes de bufferizar.
+  const declaredLength = Number(getHeader(event, 'content-length') || 0)
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_UPLOAD_BYTES) {
+    throw createError({
+      statusCode: 413,
+      statusMessage: `Payload too large (${declaredLength} bytes, max ${MAX_UPLOAD_BYTES})`
+    })
+  }
+
   if (!reqContentType.includes('multipart/form-data')) {
     try {
       const rawBodyStart = Date.now()
@@ -95,6 +110,15 @@ export default defineEventHandler(async (event) => {
 
   if (!bodyBuffer || bodyBuffer.length === 0) {
     throw createError({ statusCode: 400, statusMessage: 'Empty body' })
+  }
+
+  // Defesa em profundidade: mesmo sem Content-Length (chunked), rejeita payloads
+  // que excedam o limite depois de bufferizados.
+  if (bodyBuffer.length > MAX_UPLOAD_BYTES) {
+    throw createError({
+      statusCode: 413,
+      statusMessage: `Payload too large (${bodyBuffer.length} bytes, max ${MAX_UPLOAD_BYTES})`
+    })
   }
 
   const startMs = Date.now()

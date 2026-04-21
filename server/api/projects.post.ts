@@ -75,6 +75,12 @@ export default defineEventHandler(async (event) => {
 
   const updatedAt = new Date().toISOString()
   const actorClientId = String(getHeader(event, 'x-client-id') || '').trim() || null
+  // NOTA: optimistic concurrency control (expected_updated_at) foi removido porque
+  // a comparacao estrita de timestamps entre JS (ms) e Postgres (microssegundos)
+  // e updates laterais (realtime/history-snapshot) disparavam 409 em loop no
+  // caminho feliz. Se for necessario no futuro, precisa de margem de tolerancia
+  // e de uma UI de reconciliacao de conflito. O campo continua sendo aceito
+  // no payload para nao quebrar clientes ja deployados, mas e ignorado.
   let result: any = null
   let didPersistMutation = false
 

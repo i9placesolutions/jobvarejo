@@ -57,6 +57,10 @@ import {
     shouldSkipLifecycleSave
 } from '~/utils/editorSavePolicy'
 import {
+    createRenderScheduler,
+    type RenderScheduler
+} from '~/utils/editorRenderScheduler'
+import {
     getTextSelectionRange,
     isTextStyleObject,
     snapshotForPropertiesPanel,
@@ -168,6 +172,17 @@ let viewportStateSaveTimer: ReturnType<typeof setTimeout> | null = null
 // Flag to track if canvas is destroyed (prevents errors after unmount)
 const isCanvasDestroyed = ref(false)
 
+// Canvas refs sao declarados cedo porque o renderScheduler (abaixo) e
+// utilitarios logo a seguir precisam capturar esses refs no mesmo escopo.
+// Usos reais acontecem em handlers/funcoes chamadas depois do setup concluir.
+const canvas = shallowRef<any>(null)
+const canvasEl = ref<HTMLCanvasElement | null>(null)
+const wrapperEl = ref<HTMLDivElement | null>(null)
+
+// Coalesced render scheduler — acumula chamadas de render e executa
+// um unico requestAnimationFrame por frame, eliminando renders duplicados.
+const renderScheduler: RenderScheduler = createRenderScheduler(canvas, isCanvasDestroyed)
+
 /**
  * Lazy-frame store: filhos (JSON bruto) de frames invisíveis que foram
  * excluídos do loadFromJSON para melhorar performance.
@@ -197,7 +212,7 @@ const handleCropRectUpdate = (rect: { x: number; y: number; width: number; heigh
 
 const handleCropComplete = (rect: { x: number; y: number; width: number; height: number }) => {
     figmaCrop.applyCrop(rect)
-    canvas.value?.requestRenderAll()
+    safeRequestRenderAll()
     saveCurrentState?.()
 }
 
@@ -312,45 +327,21 @@ const resolveSelectedProductCardContext = (active: any): { card: any | null; ima
 };
 
 /**
- * Safe wrapper for requestRenderAll that checks if canvas is valid before rendering.
- * Prevents "Cannot read properties of undefined" errors when canvas is disposed.
+ * Safe wrapper for requestRenderAll that uses the coalesced render scheduler.
+ * Multiple calls within the same frame are batched into a single RAF.
+ * Use renderNow() for cases that need immediate synchronous render (export, load).
  */
-const safeRequestRenderAll = (canvasInstance?: any): void => {
-    const c = canvasInstance || canvas.value;
-    if (!c || isCanvasDestroyed.value) return;
-    if (typeof c.requestRenderAll !== 'function') return;
-
-    const ensureFabricContexts = (fc: any): boolean => {
-        try {
-            // In some edge cases (fast drag / mouseup outside / resize), Fabric can lose its cached contexts.
-            // If we just skip render, the lower canvas stays cleared (appears black). Rehydrate from DOM elements.
-            if (fc.upperCanvasEl && (!fc.contextTop || typeof fc.contextTop.clearRect !== 'function')) {
-                const ctxTop = fc.upperCanvasEl.getContext?.('2d');
-                if (ctxTop) fc.contextTop = ctxTop;
-            }
-            if (fc.lowerCanvasEl && (!fc.contextContainer || typeof fc.contextContainer.clearRect !== 'function')) {
-                const ctx = fc.lowerCanvasEl.getContext?.('2d');
-                if (ctx) fc.contextContainer = ctx;
-            }
-            // Some Fabric builds also keep a direct `context` alias.
-            if (!fc.context && fc.contextContainer) fc.context = fc.contextContainer;
-            return !!(fc.contextContainer && typeof fc.contextContainer.clearRect === 'function');
-        } catch {
-            return false;
-        }
-    };
-
-    try {
-        if (!ensureFabricContexts(c)) return;
-        c.requestRenderAll();
-    } catch {
-        // As a last resort, attempt a synchronous render.
-        try {
-            if (typeof c.renderAll === 'function') c.renderAll();
-        } catch {
-            // Ignore
-        }
+const safeRequestRenderAll = (_canvasInstance?: any): void => {
+    // Quando chamado sem instancia especifica, usa o scheduler (canvas padrao)
+    if (!_canvasInstance || _canvasInstance === canvas.value) {
+        renderScheduler.scheduleRender()
+        return
     }
+    // Instancia diferente (ex: StaticCanvas de thumbnail) — render direto
+    const c = _canvasInstance
+    if (!c || isCanvasDestroyed.value) return
+    if (typeof c.requestRenderAll !== 'function') return
+    try { c.requestRenderAll() } catch { /* ignore */ }
 };
 
 const releaseDanglingCanvasTransform = (evt?: MouseEvent | PointerEvent | null): boolean => {
@@ -1228,7 +1219,7 @@ const groupSelection = () => {
         canvas.value.remove(activeObject);
         canvas.value.add(group);
         canvas.value.setActiveObject(group);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         refreshCanvasObjects();
         saveCurrentState();
     }
@@ -1245,7 +1236,7 @@ const ungroupSelection = () => {
     group.ungroupOnCanvas();
     
     canvas.value.setActiveObject(objects[0]);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     refreshCanvasObjects();
     saveCurrentState();
 };
@@ -1397,7 +1388,7 @@ const addFrame = (opts: { width?: number; height?: number } = {}) => {
     vpt[5] = (canvasHeight - frameHeight * fitZoom) / 2;
     canvas.value.setViewportTransform(vpt);
     
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     
     // Force update canvasObjects immediately so LayersPanel shows the new frame
     refreshCanvasObjects();
@@ -1937,7 +1928,7 @@ const syncFrameClips = (
     }
 
     if (requestRender && hasChanges) {
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
     }
 };
 
@@ -2964,7 +2955,7 @@ const generateStickerOutlineCanvas = (
 	            if (outCanvas) {
 	                (obj as any).__stickerOutlineCache = outCanvas;
 	                obj.dirty = true;
-	                canvas.value?.renderAll?.();
+	                renderScheduler.renderNow();
                 return;
             }
         } catch (e) {
@@ -3019,7 +3010,7 @@ const setTool = (tool: 'select' | 'draw' | 'pen') => {
         isDrawing.value = true;
         canvas.value.isDrawingMode = true;
         canvas.value.discardActiveObject();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
 
         // Setup Brush
         if (!canvas.value.freeDrawingBrush) {
@@ -3067,7 +3058,7 @@ const setTool = (tool: 'select' | 'draw' | 'pen') => {
             o._prevEvented = o.evented;
             o.evented = false;
         });
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         
     } else {
         // Select Mode
@@ -3210,7 +3201,7 @@ const finishPenPath = () => {
             canvas.value.remove(currentPenPoint.value);
             currentPenPoint.value = null;
         }
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         return;
     }
     
@@ -3230,7 +3221,7 @@ const finishPenPath = () => {
         currentPenPoint.value = null;
     }
     currentMousePos.value = null;
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState();
 }
 
@@ -3256,7 +3247,7 @@ const addPenPoint = (point: {x: number, y: number}, withHandles = false) => {
             currentPenPath.value = null;
             currentMousePos.value = null;
             if (canvas.value) {
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
             }
             return;
         }
@@ -3470,7 +3461,7 @@ watch(isPenMode, (newVal) => {
         
         // Force update canvasObjects to refresh LayersPanel
         refreshCanvasObjects();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
     }
 });
 
@@ -3593,7 +3584,7 @@ const enterPathNodeEditing = (pathObj: any) => {
     
     pathObj.selectable = false;
     pathObj.evented = false;
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
 }
 
 // Select a path node
@@ -3625,7 +3616,7 @@ const selectPathNode = (index: number, pathObj: any) => {
         }
     });
     
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
 }
 
 // Clear path node selection
@@ -3643,7 +3634,7 @@ const clearPathNodeSelection = () => {
                 strokeWidth: 2
             });
         });
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
     }
 }
 
@@ -3738,7 +3729,7 @@ const closePath = () => {
         penPathPoints.value = [];
         currentPenPath.value = null;
         currentMousePos.value = null;
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         updateSelection();
         return;
@@ -3855,7 +3846,7 @@ const splitPath = () => {
     canvas.value.setActiveObject(secondPath);
     selectedObjectRef.value = secondPath;
     triggerRef(selectedObjectRef);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState();
     updateSelection();
 }
@@ -3895,7 +3886,7 @@ const enterNodeEditing = (obj: any) => {
     
     obj.selectable = false; // Lock parent while editing
     obj.evented = false;
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
 }
 
 
@@ -3957,7 +3948,7 @@ const exitNodeEditing = () => {
     
     // Force update canvasObjects to refresh LayersPanel
     refreshCanvasObjects();
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
 }
 
 // Update polygon when control point moves
@@ -4303,7 +4294,7 @@ const setupAltDragDuplicate = () => {
         if (state.didDuplicate) {
             if (state.manualFollowClone && state.clone) {
                 syncCloneToPointerDelta();
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
             }
             return;
         }
@@ -4517,7 +4508,7 @@ const setupAltDragDuplicate = () => {
                     }
                 }
                 state.cloning = false;
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 return;
             }
 
@@ -4691,7 +4682,7 @@ const setupAltDragDuplicate = () => {
             }
             state.cloning = false;
 
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
         };
 
         doClone();
@@ -4736,7 +4727,7 @@ const setupAltDragDuplicate = () => {
             canvas.value.setActiveObject(clone);
         }
 
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
 
         // Update objects list
         refreshCanvasObjects();
@@ -4831,10 +4822,10 @@ const applyArrangedOrder = (container: any, newOrder: any[]) => {
     }
 
     if (container === canvas.value) {
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
     } else {
         safeAddWithUpdate(container);
-        canvas.value?.requestRenderAll?.();
+        safeRequestRenderAll();
     }
 };
 
@@ -4960,7 +4951,7 @@ function arrangeActiveObjects(mode: ArrangeMode) {
         }
     } catch (_) {}
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     refreshCanvasObjects();
     saveCurrentState();
 }
@@ -5209,9 +5200,7 @@ const reorderPages = (orderedIds: string[]) => {
     project.pages = [...reordered, ...remaining]
 }
 
-const canvas = shallowRef<any>(null)
-const canvasEl = ref<HTMLCanvasElement | null>(null)
-const wrapperEl = ref<HTMLDivElement | null>(null)
+// canvas / canvasEl / wrapperEl declarados no topo do setup (ver acima).
 const isProcessing = ref(false)
 const isParsingProducts = ref(false)
 // Separate from isHistoryProcessing: we only want a UX loader during (initial) design/page load,
@@ -6592,7 +6581,7 @@ const handleFrameLabelClick = (label: typeof frameLabels.value[0], e: MouseEvent
     e.preventDefault();
     if (!canvas.value || !label.frameRef) return;
     canvas.value.setActiveObject(label.frameRef);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     updateSelection();
     refreshCanvasObjects();
 };
@@ -6605,7 +6594,7 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
 
     // Select frame first
     canvas.value.setActiveObject(frame);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     updateSelection();
 
     // Start drag tracking
@@ -6638,7 +6627,7 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
                 }
             });
             markFrameLabelsDirty();
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             throttledUpdateFrameLabels();
         });
     };
@@ -6657,7 +6646,7 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
             if (frame.clipContent) {
                 syncFrameClips(frame, { includeSpatialChildren: false, requestRender: false });
             }
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             refreshCanvasObjects();
             saveCurrentState();
         }
@@ -7538,7 +7527,7 @@ const handleZoom100 = () => {
     // canvas.value.viewportTransform[4] = (vpw - (activePage.value.width))/2; // simplified
     // canvas.value.viewportTransform[5] = (vph - (activePage.value.height))/2;
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     updateZoomState();
     scheduleViewportStateSave('zoom-100');
 }
@@ -7546,7 +7535,7 @@ const handleZoom100 = () => {
 const handleZoom50 = () => {
     if (!canvas.value) return;
     canvas.value.setZoom(0.5);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     updateZoomState();
     scheduleViewportStateSave('zoom-50');
 }
@@ -7554,7 +7543,7 @@ const handleZoom50 = () => {
 const handleZoom200 = () => {
     if (!canvas.value) return;
     canvas.value.setZoom(2);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     updateZoomState();
     scheduleViewportStateSave('zoom-200');
 }
@@ -7562,7 +7551,7 @@ const handleZoom200 = () => {
 const handleZoom400 = () => {
     if (!canvas.value) return;
     canvas.value.setZoom(4);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     updateZoomState();
     scheduleViewportStateSave('zoom-400');
 }
@@ -7581,7 +7570,7 @@ const handleZoomToSelection = () => {
     const zoom = Math.min(scaleX, scaleY, 2); // Cap at 200%
 
     canvas.value.setZoom(zoom);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     updateZoomState();
     scheduleViewportStateSave('zoom-selection');
 }
@@ -7858,12 +7847,12 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
     }
 };
 
-// FIX: Expose flushPersistenceNow to parent (pages/editor/[id].vue) via provide/inject.
-// This allows onBeforeRouteLeave to capture the current canvas state (text edits,
-// debounced property changes, etc.) BEFORE checking hasUnsavedChanges.
-// Without this, the route guard may skip saving because the canvas state
-// hasn't been serialized to page.canvasData yet.
+// CORRECAO: provide/inject so desce de pai para filho em Vue.
+// O editor pai (pages/editor/[id].vue) precisa acionar flushPersistenceNow
+// antes do route leave — exposto por defineExpose + template ref.
+// Mantemos o provide para qualquer descendente que tambem precise acionar.
 provide('editorFlushPersistence', flushPersistenceNow);
+defineExpose({ flushPersistenceNow });
 
 const emergencyBeaconSave = () => {
     try {
@@ -7908,6 +7897,7 @@ onUnmounted(() => {
     window.removeEventListener('pagehide', handleEditorPageHide);
     window.removeEventListener('editor:open-page-history', handleOpenPageHistoryEvent as EventListener);
     document.removeEventListener('visibilitychange', handleEditorVisibilityChange);
+    renderScheduler.dispose();
     if (propertySaveTimer) {
         clearTimeout(propertySaveTimer);
         propertySaveTimer = null;
@@ -8013,7 +8003,7 @@ const applyGridBackground = () => {
         } else {
             canvas.value.set?.('backgroundColor', '#1e1e1e')
         }
-        canvas.value.requestRenderAll?.()
+        safeRequestRenderAll()
     } catch (e) {
         console.warn('[grid] Falha ao aplicar background:', e)
     }
@@ -8353,7 +8343,7 @@ const startPresentation = async (pageIndex = -1) => {
     }
 
     canvas.value.discardActiveObject();
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
 
     // 1. Sanitize clipPaths before generating image
     sanitizeAllClipPaths();
@@ -8369,7 +8359,7 @@ const startPresentation = async (pageIndex = -1) => {
         // Nuclear option: clear all clipPaths
         removeAllClipPaths();
         try {
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             await new Promise(resolve => setTimeout(resolve, 10));
             presentationImage.value = canvas.value.toDataURL({
                 format: 'png',
@@ -8530,7 +8520,7 @@ const applyColorStyle = (styleId: string) => {
     if (active && style) {
         active.set('fill', style.value);
         active.set('styleId', styleId); // Save ref for future updates
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         // Update selection Ref
         selectedObjectRef.value = snapshotForPropertiesPanel(active);
@@ -8766,7 +8756,7 @@ const renderProductZone = (zone: any) => {
         zoneRect.setCoords();
     }
     
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
 }
 
 const renderProducts = (products: any[]) => {
@@ -8917,7 +8907,7 @@ const renderProducts = (products: any[]) => {
         }
     });
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
 }
 
 // --- Watch for Page Switching ---
@@ -8942,11 +8932,11 @@ watch(
 watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloadToken], async ([newPage, canvasInstance, loaded, _fabricReady, reloadToken], prev) => {
     const oldPage = (prev?.[0] as any) || null
     if (!newPage) {
-        console.log('[activePageWatch] ⚠️ newPage é null/undefined, retornando');
+        if (import.meta.dev) console.log('[activePageWatch] ⚠️ newPage é null/undefined, retornando');
         return;
     }
     if (!canvasInstance || !fabric || !isFabricReady.value) {
-        console.log('[activePageWatch] ⏳ Aguardando canvas/fabric inicializar...', {
+        if (import.meta.dev) console.log('[activePageWatch] ⏳ Aguardando canvas/fabric inicializar...', {
             hasCanvasInstance: !!canvasInstance,
             hasFabric: !!fabric,
             isFabricReady: isFabricReady.value
@@ -8954,7 +8944,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
         return;
     }
     if (!loaded && project.id && !project.id.startsWith('proj_')) {
-        console.log('[activePageWatch] ⏳ Projeto ainda não carregado:', { loaded, projectId: project.id });
+        if (import.meta.dev) console.log('[activePageWatch] ⏳ Projeto ainda não carregado:', { loaded, projectId: project.id });
         return;
     }
 
@@ -8964,7 +8954,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     const prevReloadToken = Number((prev as any)?.[4] ?? 0)
     const forceReload = Number(reloadToken ?? 0) !== prevReloadToken
 
-    console.log('[activePageWatch] 🔄 Iniciando carregamento:', {
+    if (import.meta.dev) console.log('[activePageWatch] 🔄 Iniciando carregamento:', {
         nextPageId,
         nextPageLoadKey,
         hasCanvasData: !!(newPage as any)?.canvasData,
@@ -8973,25 +8963,27 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
         lastLoadedPageKey,
         isSamePage: lastLoadedPageKey === nextPageLoadKey
     });
- 
+
     if (nextPageId && lastLoadedPageKey === nextPageLoadKey && !forceReload) {
         // If we already loaded this page and it has real objects, don't reload just because canvas/fabric became ready.
         try {
             const currentObjects = canvas.value?.getObjects?.() || [];
             const hasRealObjects = currentObjects.some((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg');
-            const allObjectsInfo = currentObjects.map((o: any) => ({
-                type: o?.type,
-                id: o?.id,
-                _customId: o?._customId,
-                isTransient: isTransientCanvasObject(o)
-            }));
-            console.log('[activePageWatch] 📋 Verificando objetos existentes:', {
-                totalObjects: currentObjects.length,
-                hasRealObjects,
-                objects: allObjectsInfo
-            });
+            if (import.meta.dev) {
+                const allObjectsInfo = currentObjects.map((o: any) => ({
+                    type: o?.type,
+                    id: o?.id,
+                    _customId: o?._customId,
+                    isTransient: isTransientCanvasObject(o)
+                }));
+                console.log('[activePageWatch] 📋 Verificando objetos existentes:', {
+                    totalObjects: currentObjects.length,
+                    hasRealObjects,
+                    objects: allObjectsInfo
+                });
+            }
             if (hasRealObjects) {
-                console.log('[activePageWatch] ⏭️ Página já carregada com objetos reais, pulando recarga');
+                if (import.meta.dev) console.log('[activePageWatch] ⏭️ Página já carregada com objetos reais, pulando recarga');
                 return
             }
         } catch (e) {
@@ -9003,18 +8995,20 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     const isStaleLoad = () => loadSessionId !== activePageLoadSessionId || isCanvasDestroyed.value;
     scheduleCanvasDataPrefetch(nextPageId, 0)
     if (!newPage.canvasData && nextPageId) {
-        console.log('[activePageWatch] ⏳ Carregando canvasData do servidor para página:', nextPageId);
+        if (import.meta.dev) console.log('[activePageWatch] ⏳ Carregando canvasData do servidor para página:', nextPageId);
         await ensurePageCanvasDataLoaded(nextPageId)
         if (isStaleLoad()) {
-            console.log('[activePageWatch] ⏭️ Sessão de load ficou stale após ensurePageCanvasDataLoaded');
+            if (import.meta.dev) console.log('[activePageWatch] ⏭️ Sessão de load ficou stale após ensurePageCanvasDataLoaded');
             return
         }
-        const loadedPage = project.pages?.find((p: any) => p.id === nextPageId);
-        console.log('[activePageWatch] 📥 Após ensurePageCanvasDataLoaded:', {
-            pageId: nextPageId,
-            hasCanvasData: !!loadedPage?.canvasData,
-            canvasDataObjectCount: loadedPage?.canvasData?.objects?.length || 0
-        });
+        if (import.meta.dev) {
+            const loadedPage = project.pages?.find((p: any) => p.id === nextPageId);
+            console.log('[activePageWatch] 📥 Após ensurePageCanvasDataLoaded:', {
+                pageId: nextPageId,
+                hasCanvasData: !!loadedPage?.canvasData,
+                canvasDataObjectCount: loadedPage?.canvasData?.objects?.length || 0
+            });
+        }
     }
     const pageToLoad = (project.pages?.[project.activePageIndex] as any) || newPage
 
@@ -9601,7 +9595,7 @@ const updateArtboard = () => {
     const legacyArtboard = canvas.value.getObjects().find((o: any) => o.id === 'artboard-bg');
     if (legacyArtboard) {
         canvas.value.remove(legacyArtboard);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
     }
 }
 
@@ -9816,7 +9810,7 @@ const flushZoneRelayoutOnDrop = () => {
         recalculateZoneLayout(zone, getZoneChildren(zone), { save: false, preserveStyles: true });
     });
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
 };
 
 const resolveCardParentZone = (card: any, opts: { allowNearest?: boolean } = {}) => {
@@ -11332,7 +11326,7 @@ const applyViewportTransform = (vpt: number[]) => {
     canvas.value.setViewportTransform([...vpt]);
     updateZoomState();
     updateScrollbars();
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
 };
 
 const clearCanvasForPageSwitch = (canvasInstance: any) => {
@@ -11551,7 +11545,7 @@ const CANVAS_CUSTOM_PROPS = [
 	    'lockScalingFlip',
 	    'lockSkewingX',
 	    'lockSkewingY'
-	] as const;
+	] as string[];
 
 // Helper function to extract key/path from Wasabi URL (presigned or permanent)
 const extractWasabiKey = (url: string): string | null => {
@@ -13301,12 +13295,15 @@ const _handleObjectModifiedInner = (e: any) => {
 	                            obj.setCoords?.();
 	                        }
                         // Card voltou ao mesmo slot — não precisa recalcular toda a zona.
-                        canvas.value.requestRenderAll();
+                        safeRequestRenderAll();
 	                        return;
 	                    }
 	                }
 
                 // Fast path: simple 2-card swap in standard grid (no featured layout) without full zone relayout.
+                // applyCardToSlot ja reposiciona e (se necessario) redimensiona os dois cards afetados,
+                // portanto chamar recalculateZoneLayout para a zona inteira desfazia a otimizacao —
+                // o comentario prometia evitar o relayout completo mas o codigo anterior o chamava.
 	                if (!didScale && !hasFeaturedLayout && fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
                     const fromCard = ordered[fromIndex];
                     const toCard = ordered[toIndex];
@@ -13320,7 +13317,7 @@ const _handleObjectModifiedInner = (e: any) => {
 	                        applyCardToSlot(toCard, fromSlot, fromIndex)
 	                    ) {
 	                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
-	                        recalculateZoneLayout(zone, ordered, { save: false, preserveStyles: true });
+	                        safeRequestRenderAll();
 	                        requestAnimationFrame(() => { saveCurrentState({ reason: 'card-swap' }); });
 	                        return;
 	                    }
@@ -13443,7 +13440,7 @@ const repairZoneCardsAfterHistoryRestore = () => {
     });
 
     if (repairedZones > 0) {
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         refreshCanvasObjects();
         console.log(`[history-repair] Repaired ${repairedZones} zone(s) after undo/redo`);
     }
@@ -13498,31 +13495,37 @@ const applyHistoryNavigation = async (
 
     hydrateLabelTemplatesFromProjectJson(state);
 
-    return applyHistoryStateToCanvas({
-        mode,
-        state,
-        canvas: canvas.value,
-        fabric,
-        getSavedViewportTransform,
-        loadFromJsonSafe,
-        sanitizeAllClipPaths,
-        rehydrateCanvasZones,
-        repairZoneCardsAfterHistoryRestore,
-        getFallbackPageState: () => {
-            const currentPage = project.pages[project.activePageIndex];
-            if (!currentPage?.canvasData?.objects?.length) return null;
-            return prepareCanvasDataForLoad(currentPage.canvasData, {
-                cacheKey: getPreparedCanvasDataCacheKey(currentPage)
-            });
-        },
-        updateZoomState,
-        updateScrollbars,
-        zoomToFit,
-        safeRequestRenderAll,
-        refreshCanvasObjects,
-        updateSelection,
-        removeAllClipPaths
-    })
+    try {
+        return await applyHistoryStateToCanvas({
+            mode,
+            state,
+            canvas: canvas.value,
+            fabric,
+            getSavedViewportTransform,
+            loadFromJsonSafe,
+            sanitizeAllClipPaths,
+            rehydrateCanvasZones,
+            repairZoneCardsAfterHistoryRestore,
+            getFallbackPageState: () => {
+                const currentPage = project.pages[project.activePageIndex];
+                if (!currentPage?.canvasData?.objects?.length) return null;
+                return prepareCanvasDataForLoad(currentPage.canvasData, {
+                    cacheKey: getPreparedCanvasDataCacheKey(currentPage)
+                });
+            },
+            updateZoomState,
+            updateScrollbars,
+            zoomToFit,
+            safeRequestRenderAll,
+            refreshCanvasObjects,
+            updateSelection,
+            removeAllClipPaths
+        })
+    } catch (err) {
+        console.error(`[history] Erro inesperado ao aplicar estado ${mode}:`, err)
+        notifyEditorError(`Falha ao ${mode === 'undo' ? 'desfazer' : 'refazer'}. Tente novamente.`)
+        return false
+    }
 };
 
 const undo = async () => {
@@ -13854,7 +13857,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     }
 
     canvas.value.setActiveObject(rootClone);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     refreshCanvasObjects();
     updateSelection();
     saveCurrentState({ reason: 'duplicate-frame' });
@@ -14623,7 +14626,7 @@ const finalizeDuplicatedObjects = (clones: any[]) => {
         canvas.value.setActiveObject(clones[0]);
     }
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     refreshCanvasObjects();
     updateSelection();
 };
@@ -14769,7 +14772,34 @@ const deleteActiveSelectionFromCanvas = (): boolean => {
         }
     }
 
-    canvas.value.requestRenderAll();
+    // CORRECAO: quando um frame e deletado, limpar os filhos diferidos dele (e dos
+    // descendentes). Sem isso, o serializador injeta de volta filhos de frames
+    // invisiveis que ja foram excluidos, "ressuscitando" conteudo deletado.
+    if (deferredFrameChildren.size > 0) {
+        for (const obj of activeWithCascade) {
+            if (!obj) continue;
+            if (!(obj as any).isFrame && !isFrameLikeObject(obj)) continue;
+            const frameId = String((obj as any)._customId || (obj as any).customId || '').trim();
+            if (frameId && deferredFrameChildren.has(frameId)) {
+                deferredFrameChildren.delete(frameId);
+            }
+        }
+        // Limpa tambem entradas cujo parente nao exista mais no canvas.
+        if (deferredFrameChildren.size > 0) {
+            const liveFrameIds = new Set<string>();
+            for (const o of canvas.value.getObjects() || []) {
+                if ((o as any)?.isFrame) {
+                    const id = String((o as any)._customId || (o as any).customId || '').trim();
+                    if (id) liveFrameIds.add(id);
+                }
+            }
+            for (const key of Array.from(deferredFrameChildren.keys())) {
+                if (!liveFrameIds.has(key)) deferredFrameChildren.delete(key);
+            }
+        }
+    }
+
+    safeRequestRenderAll();
     refreshCanvasObjects();
     updateSelection();
     saveCurrentState();
@@ -14924,7 +14954,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
             active.setCoords();
             getOrCreateFrameClipRect(active);
             invalidateScrollbarBounds();
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             keyboardNudgeDirty = true;
             return;
         }
@@ -14957,7 +14987,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                 getOrCreateFrameClipRect(active);
             }
             invalidateScrollbarBounds();
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             throttledUpdateScrollbars();
             keyboardNudgeDirty = true;
         } else {
@@ -14969,7 +14999,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
             if (e.key === 'ArrowDown') vpt[5] -= step;
             if (e.key === 'ArrowLeft') vpt[4] += step;
             if (e.key === 'ArrowRight') vpt[4] -= step;
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             throttledUpdateScrollbars();
             scheduleViewportStateSave('keyboard-pan');
             keyboardNudgeDirty = true;
@@ -15201,7 +15231,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                                 originalParentGroup.setCoords?.();
                             }
                             canvas.value.setActiveObject(cloned);
-                            canvas.value.requestRenderAll();
+                            safeRequestRenderAll();
                             refreshCanvasObjects();
                             saveCurrentState({ reason: 'paste' });
                             return;
@@ -15361,7 +15391,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                     }
 
                     canvas.value.setActiveObject(cloned);
-                    canvas.value.requestRenderAll();
+                    safeRequestRenderAll();
                     refreshCanvasObjects();
                     saveCurrentState({ reason: 'paste' });
                 } else {
@@ -16253,7 +16283,7 @@ const setupZoomPan = () => {
 	                 // Fabric often needs _calcDimensions or similar
 	                 parent._calcDimensions();
 	                 parent.setCoords();
-	                 canvas.value.requestRenderAll();
+	                 safeRequestRenderAll();
 	             }
 	        }
         
@@ -16274,7 +16304,7 @@ const setupZoomPan = () => {
 	        // horizontalGuide.set({ visible: false });
 	        
 	        flushZoneRelayoutOnDrop();
-	        canvas.value.requestRenderAll();
+	        safeRequestRenderAll();
         
         // Also ensure reactivity properties update on drop
         if (selectedObjectRef.value) {
@@ -16332,7 +16362,7 @@ const setupZoomPan = () => {
         pathObj.penPathData = updatedPathData;
         pathObj.isClosedPath = closed;
         pathObj.setCoords();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         
         // Only save state if not skipping (skip during real-time updates)
         if (!skipSave) {
@@ -16534,7 +16564,7 @@ const mirrorHandles = (pathObj: any, index: number) => {
     rebuildPathFromData(pathObj);
     if (isNodeEditing.value && currentEditingPath.value === pathObj) {
         updateHandleLines(pathObj);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
     }
 }
 
@@ -16638,7 +16668,7 @@ const rebuildPathFromData = (pathObj: any) => {
     if (!pathString) return;
     pathObj.set('path', fabric.util.parsePath(pathString));
     pathObj.setCoords();
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState();
 }
 
@@ -16807,7 +16837,7 @@ const loadFonts = () => {
                         // Re-run manual template fitting now that real font metrics are available.
                         // This is what keeps the product card label identical to the mini editor.
                         refitManualLabelTemplatesAfterFontMetrics(canvas.value);
-                        canvas.value.requestRenderAll();
+                        safeRequestRenderAll();
                     }
                 }
             });
@@ -18092,7 +18122,7 @@ const cleanupOrphanedObjects = () => {
                 // Ignore errors
             }
         });
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         refreshCanvasObjects();
     }
 }
@@ -18220,7 +18250,7 @@ const setupReactivity = () => {
         const styles = getStylesForCard(card);
         resizeSmartObject(card, nextW, nextH, styles);
         card.setCoords();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         if (shouldSave) saveCurrentState();
     };
 
@@ -18812,7 +18842,7 @@ const setupReactivity = () => {
                 const nextSelection = new fabric.ActiveSelection(normalized, { canvas: canvas.value });
                 canvas.value.setActiveObject(nextSelection);
             }
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
         } finally {
             isNormalizingShiftSelection = false;
         }
@@ -18849,7 +18879,7 @@ const setupReactivity = () => {
         sanitizeProductCardImageTransform(img, { clampWithinCard: true });
         safeAddWithUpdate(img);
         img.setCoords?.();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         if (shouldSave) saveCurrentState();
     };
 
@@ -18984,7 +19014,7 @@ const setupReactivity = () => {
         sanitizeProductCardImageTransform(img, { clampWithinCard: true });
         safeAddWithUpdate(img);
         img.setCoords?.();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         if (shouldSave) saveCurrentState();
     };
 
@@ -19387,7 +19417,7 @@ const setupReactivity = () => {
                 }
                 
                 updateSelection();
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 refreshShiftSelectionBaseline(canvas.value.getActiveObject?.());
                 return;
             }
@@ -19408,7 +19438,7 @@ const setupReactivity = () => {
             }
             // Renderizar canvas para mostrar o label do frame
             markFrameLabelsDirty();
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
         } else {
             if (!e.e?.shiftKey) frameChildrenCache = [];
             gridGroupSiblingCache = [];
@@ -19770,7 +19800,7 @@ const setupReactivity = () => {
                 syncCardProductDataNameFromTitleTarget(obj, { normalizeDisplayedText: true });
                 syncCardProductDataTitleWidthFromTarget(obj);
                 obj.setCoords();
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
             }
         }
         flushObjectMoveViewportCull();
@@ -19990,7 +20020,7 @@ const setupReactivity = () => {
 	                 });
 	             }
 	             target.setCoords?.();
-	             canvas.value.requestRenderAll();
+	             safeRequestRenderAll();
 	             return;
 	        }
 
@@ -20024,7 +20054,7 @@ const updatePageSettings = (prop: string, value: any) => {
                 }
             }
             canvas.value.backgroundColor = bgColor;
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             saveCurrentState();
         }
         // Also update activePage background
@@ -20097,7 +20127,7 @@ const alignSelectionHorizontally = (mode: 'left' | 'center' | 'right') => {
         alignOne(active, ref);
     }
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState();
     triggerRef(selectedObjectRef);
 };
@@ -20137,7 +20167,7 @@ const alignSelectionVertically = (mode: 'top' | 'middle' | 'bottom') => {
         alignOne(active, ref);
     }
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState();
     triggerRef(selectedObjectRef);
 };
@@ -20179,7 +20209,7 @@ const centerSelectionInContainer = (mode: 'h' | 'v' | 'both') => {
         applyTo(active, container);
     }
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState();
     triggerRef(selectedObjectRef);
 };
@@ -20562,7 +20592,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 getTextSelectionRange,
                 safeAddWithUpdate
             })) {
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 debouncedSaveCurrentState();
                 refreshSelectedRef();
                 return;
@@ -20615,7 +20645,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 applyLock(active);
             }
 
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             debouncedSaveCurrentState();
             refreshSelectedRef();
             return;
@@ -20637,7 +20667,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             if (active.isFrame) syncFrameClips(active);
             safeAddWithUpdate(active);
             active.setCoords?.();
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             debouncedSaveCurrentState();
             refreshSelectedRef({ __fillEnabled: !!value });
             return;
@@ -20649,7 +20679,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             if (active.isFrame) syncFrameClips(active);
             safeAddWithUpdate(active);
             active.setCoords?.();
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             debouncedSaveCurrentState();
             refreshSelectedRef({ __strokeEnabled: !!value });
             return;
@@ -20770,7 +20800,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             }
             safeAddWithUpdate(active);
             active.setCoords?.();
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             debouncedSaveCurrentState();
             refreshSelectedRef();
             return;
@@ -20794,7 +20824,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             }
             safeAddWithUpdate(active);
             active.setCoords?.();
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             debouncedSaveCurrentState();
             refreshSelectedRef();
             return;
@@ -20812,7 +20842,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 const dy = active.top - prevTop;
                 moveFrameDescendants(active, dx, dy);
                 getOrCreateFrameClipRect(active);
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 debouncedSaveCurrentState();
                 refreshSelectedRef();
                 return;
@@ -20824,7 +20854,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 active.setCoords();
                 getOrCreateFrameClipRect(active);
                 syncFrameClips(active);
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 debouncedSaveCurrentState();
                 refreshSelectedRef();
                 return;
@@ -20837,14 +20867,14 @@ const updateObjectProperty = (prop: string, value: any) => {
                 refreshSelectedRef({ clipContent: newVal });
 
                 syncFrameClips(active);
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
 
                 // FIX: Consolidate the two setTimeout calls into a single one that
                 // renders first and then saves, ensuring correct execution order.
                 // Previously, save (setTimeout 0ms) could execute before render (setTimeout 10ms),
                 // causing stale state to be serialized.
                 setTimeout(() => {
-                    if (canvas.value) canvas.value.requestRenderAll();
+                    if (canvas.value) safeRequestRenderAll();
                     try { saveCurrentState(); } catch (err) {
                         console.warn('[clipContent] saveCurrentState falhou:', err)
                     }
@@ -20867,7 +20897,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 maybeReparentToFrameOnDrop(active);
                 syncZoneCardFrameBindings(active);
                 
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 debouncedSaveCurrentState();
                 refreshSelectedRef();
                 return;
@@ -20899,7 +20929,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                     // Cache children before layout to avoid losing them
                     const cachedChildren = getZoneChildren(active);
                     recalculateZoneLayout(active, cachedChildren, { save: false, preserveStyles: true });
-                    canvas.value.requestRenderAll();
+                    safeRequestRenderAll();
                     debouncedSaveCurrentState();
                     refreshSelectedRef();
                     return;
@@ -20912,7 +20942,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 active.set(prop, value);
                 normalizeZoneScale(active);
                 recalculateZoneLayout(active, cachedChildren, { save: false, preserveStyles: true });
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 debouncedSaveCurrentState();
                 refreshSelectedRef();
                 return;
@@ -20945,7 +20975,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 markPriceGroupAsManuallyCustomized(active, { captureSnapshot: false });
                 if (active.group) safeAddWithUpdate(active.group);
                 active.setCoords?.();
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 debouncedSaveCurrentState();
                 snapshotExtra = undefined;
                 selectedObjectRef.value = snapshotForPropertiesPanel(active);
@@ -20966,7 +20996,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             markPriceGroupAsManuallyCustomized(active, { captureSnapshot: false });
             if (active.group) safeAddWithUpdate(active.group);
             active.setCoords?.();
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             debouncedSaveCurrentState();
             snapshotExtra = { [prop]: nextScale };
             selectedObjectRef.value = snapshotForPropertiesPanel(active, snapshotExtra);
@@ -20987,7 +21017,7 @@ const updateObjectProperty = (prop: string, value: any) => {
 
                 safeAddWithUpdate(active);
                 active.setCoords();
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 flushPropertySave();
                 refreshSelectedRef();
                 return;
@@ -21008,7 +21038,7 @@ const updateObjectProperty = (prop: string, value: any) => {
 
                 safeAddWithUpdate(active);
                 active.setCoords();
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 flushPropertySave();
                 refreshSelectedRef();
                 return;
@@ -21068,7 +21098,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 active.applyFilters();
             }
             active.dirty = true;
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             debouncedSaveCurrentState();
             refreshSelectedRef();
             return;
@@ -21139,7 +21169,7 @@ const updateObjectProperty = (prop: string, value: any) => {
                 active.filters = [];
                 active.applyFilters();
                 active.dirty = true;
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 debouncedSaveCurrentState();
                 refreshSelectedRef();
             }
@@ -21169,7 +21199,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             applyToActiveOrSelection((o) => {
                 o?.set?.(prop, value);
             });
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             debouncedSaveCurrentState();
             refreshSelectedRef();
             return;
@@ -21178,7 +21208,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             // Vector path specific properties
             if (active.isVectorPath) {
                 active.set(prop, value);
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 debouncedSaveCurrentState();
                 refreshSelectedRef();
             }
@@ -21189,7 +21219,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             applyToActiveOrSelection((o) => {
                 o?.set?.(prop, value);
             });
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             debouncedSaveCurrentState();
             refreshSelectedRef();
             return;
@@ -21260,7 +21290,7 @@ const updateObjectProperty = (prop: string, value: any) => {
         
         // REALTIME: Render immediately for instant visual feedback
         active.setCoords?.();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         
         // PERSIST: Debounced save to avoid lag during rapid input
         debouncedSaveCurrentState();
@@ -21328,7 +21358,7 @@ const updateSmartGroup = (keyOrUpdates: any, value?: any) => {
              safeAddWithUpdate(group); 
         });
         
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         return;
     }
@@ -21478,7 +21508,7 @@ const updateSmartGroup = (keyOrUpdates: any, value?: any) => {
         safeAddWithUpdate(group);
     });
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState();
 }
 
@@ -22174,7 +22204,7 @@ const handleAction = async (action: string) => {
                 }
 
                 canvas.value.setActiveObject(active.type === 'group' ? active : newImg);
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 saveCurrentState();
             } else {
                 throw new Error('API não retornou URL válida');
@@ -22220,7 +22250,7 @@ const handleAction = async (action: string) => {
         }
 
         active.toGroup();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
 
         // Update selection to the new group and preserve parentFrameId
@@ -22244,7 +22274,7 @@ const handleAction = async (action: string) => {
         const customIds = objects.map((o: any) => o._customId);
 
         active.toActiveSelection();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
 
         // Restore parentFrameId to all children after ungrouping
@@ -22269,12 +22299,12 @@ const handleAction = async (action: string) => {
             (active.group.isSmartObject || active.group.isProductCard || isLikelyProductCard(active.group))
         ) {
             active.set({ flipX: false, flipY: false, lockScalingFlip: true });
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             saveCurrentState();
             return;
         }
         active.set('flipX', !active.flipX);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         return;
     }
@@ -22286,12 +22316,12 @@ const handleAction = async (action: string) => {
             (active.group.isSmartObject || active.group.isProductCard || isLikelyProductCard(active.group))
         ) {
             active.set({ flipX: false, flipY: false, lockScalingFlip: true });
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             saveCurrentState();
             return;
         }
         active.set('flipY', !active.flipY);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         return;
     }
@@ -22311,7 +22341,7 @@ const handleAction = async (action: string) => {
             if (clearable.length > 0 && clearable.length === members.length) {
                 await checkpointMaskUndo();
                 clearable.forEach((obj: any) => clearObjectMaskFromObject(obj));
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
                 refreshCanvasObjects();
                 updateSelection();
                 if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
@@ -22326,7 +22356,7 @@ const handleAction = async (action: string) => {
                 return;
             }
 
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             refreshCanvasObjects();
             updateSelection();
             if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
@@ -22337,7 +22367,7 @@ const handleAction = async (action: string) => {
         if (hasObjectMaskApplied(active)) {
             await checkpointMaskUndo();
             clearObjectMaskFromObject(active);
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             refreshCanvasObjects();
             updateSelection();
             if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
@@ -22348,7 +22378,7 @@ const handleAction = async (action: string) => {
         await checkpointMaskUndo();
         const appliedSingle = await applyObjectMaskFromSingleTarget(active);
         if (appliedSingle) {
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             refreshCanvasObjects();
             updateSelection();
             if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
@@ -22370,14 +22400,14 @@ const handleAction = async (action: string) => {
     if (action === 'apply-crop') {
         if (!figmaCrop.cropTargetObject.value) return;
         figmaCrop.applyCrop(figmaCrop.cropFrameRect.value);
-        canvas.value?.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         return;
     }
 
     if (action === 'cancel-crop') {
         figmaCrop.cancelCrop();
-        canvas.value?.requestRenderAll();
+        safeRequestRenderAll();
         return;
     }
 
@@ -22455,7 +22485,7 @@ const handleAction = async (action: string) => {
             safeAddWithUpdate(active);
         }
 
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         return;
     }
@@ -22482,7 +22512,7 @@ const handleAction = async (action: string) => {
             height: (maxY - minY) + (padY * 2)
         });
         safeAddWithUpdate(active);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         return;
     }
@@ -22501,7 +22531,7 @@ const handleAction = async (action: string) => {
             obj.set('scaleX', scaleX);
         });
         safeAddWithUpdate(active);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         return;
     }
@@ -22531,7 +22561,7 @@ const handleAction = async (action: string) => {
             // Add label? Fabric doesn't support easy labels outside, 
             // but we could group with text or just use properties panel.
             
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             saveCurrentState();
             // Force Update UI
             selectedObjectRef.value = snapshotForPropertiesPanel(target);
@@ -22653,7 +22683,7 @@ const handleAction = async (action: string) => {
         }
         
         active.toGroup();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
         return;
     }
@@ -22678,7 +22708,7 @@ const handleAction = async (action: string) => {
         if (textTarget.group) safeAddWithUpdate(textTarget.group);
         textTarget.setCoords?.();
         selectedObjectRef.value = snapshotForPropertiesPanel(textTarget);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState({ reason: action });
         return;
     }
@@ -22687,7 +22717,7 @@ const handleAction = async (action: string) => {
     if (action === 'text-upper') {
         if (active && (active.type === 'i-text' || active.type === 'text' || active.type === 'textbox')) {
             active.set('text', active.text.toUpperCase());
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             saveCurrentState();
         }
         return;
@@ -22695,7 +22725,7 @@ const handleAction = async (action: string) => {
     if (action === 'text-lower') {
         if (active && (active.type === 'i-text' || active.type === 'text' || active.type === 'textbox')) {
             active.set('text', active.text.toLowerCase());
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             saveCurrentState();
         }
         return;
@@ -22761,7 +22791,7 @@ const handleAction = async (action: string) => {
 
         // Re-layout selection box
         safeAddWithUpdate(active);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState({ reason: action });
         return;
     }
@@ -22788,7 +22818,7 @@ const selectObject = (payload: LayerSelectPayload) => {
 
     if (!additive && !range) {
         canvas.value.setActiveObject(obj);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         updateSelection();
         return;
     }
@@ -22819,7 +22849,7 @@ const selectObject = (payload: LayerSelectPayload) => {
         canvas.value.setActiveObject(nextSelection[nextSelection.length - 1]);
     }
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     updateSelection();
 }
 
@@ -22895,7 +22925,7 @@ const reorderLayerByDrag = (payload: LayerReorderPayload) => {
         }
     }
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     refreshCanvasObjects();
     updateSelection();
     if (cancelPendingCoalescedSave) cancelPendingCoalescedSave();
@@ -22958,7 +22988,7 @@ const toggleVisible = async (id: string) => {
             }
             if (shouldClear) canvas.value.discardActiveObject();
         }
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         refreshCanvasObjects();
         updateSelection();
         saveCurrentState({ reason: 'layers-toggle-visible' });
@@ -22978,7 +23008,7 @@ const toggleLock = (id: string) => {
             lockScalingY: isLocked,
             lockRotation: isLocked
         });
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         refreshCanvasObjects();
         // Persist lock so reload keeps it
         saveCurrentState();
@@ -23011,7 +23041,7 @@ const deleteObject = (id: string) => {
         } else {
             canvas.value.remove(obj);
         }
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         refreshCanvasObjects();
         updateSelection();
         saveCurrentState({ reason: 'layers-delete' });
@@ -23053,7 +23083,7 @@ const moveLayer = (id: string, dir: 'up' | 'down') => {
             }
         }
 
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         // Update list order
         refreshCanvasObjects();
         saveCurrentState({ reason: dir === 'up' ? 'layers-move-up' : 'layers-move-down' });
@@ -23338,7 +23368,7 @@ const withProductZonesHiddenForOutput = async <T>(action: () => Promise<T> | T):
         zone?.set?.('visible', false);
         zone?.setCoords?.();
     });
-    canvas.value.requestRenderAll?.();
+    safeRequestRenderAll();
     await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
@@ -23348,7 +23378,7 @@ const withProductZonesHiddenForOutput = async <T>(action: () => Promise<T> | T):
             obj?.set?.('visible', visible);
             obj?.setCoords?.();
         });
-        canvas.value.requestRenderAll?.();
+        safeRequestRenderAll();
         await new Promise(resolve => setTimeout(resolve, 0));
     }
 };
@@ -23594,8 +23624,77 @@ const maybeWarnLargeBatchExport = (frames: any[], qualityPreset: ExportQualityPr
     }
 }
 
+// Preflight bloqueante de export: detecta problemas comerciais/visuais obvios
+// antes de gerar o arquivo final. Retorna lista de avisos (vazia = tudo OK).
+// Pode ser estendido com mais validacoes conforme novas regras aparecerem.
+const runExportPreflightChecks = (): string[] => {
+    const warnings: string[] = []
+    if (!canvas.value) return warnings
+    try {
+        const objects: any[] = canvas.value.getObjects?.() || []
+        let brokenImages = 0
+        let emptyProductCards = 0
+        const seenZones = new Set<string>()
+        let emptyZones = 0
+
+        const walk = (list: any[]): void => {
+            for (const obj of list || []) {
+                if (!obj) continue
+                const t = String(obj.type || '').toLowerCase()
+                if (t === 'image') {
+                    const hasSrc = !!(obj._element?.src || obj.src)
+                    const failed = obj._element?.naturalWidth === 0 || (obj as any).__loadFailed === true
+                    if (!hasSrc || failed) brokenImages++
+                }
+                if (isLikelyProductZone(obj)) {
+                    const zoneId = String((obj as any)._customId || '').trim()
+                    if (zoneId) seenZones.add(zoneId)
+                    const cards = objects.filter((o: any) => String((o as any).parentZoneId || '').trim() === zoneId)
+                    if (cards.length === 0) emptyZones++
+                }
+                if ((obj as any).isProductCard) {
+                    const name = String((obj as any).productName || '').trim()
+                    const price = String((obj as any).productPrice || '').trim()
+                    if (!name && !price) emptyProductCards++
+                }
+                if (typeof obj.getObjects === 'function') {
+                    walk(obj.getObjects() || [])
+                }
+            }
+        }
+        walk(objects)
+
+        if (brokenImages > 0) {
+            warnings.push(`${brokenImages} imagem(ns) nao carregaram — elas aparecerao em branco no export.`)
+        }
+        if (emptyZones > 0) {
+            warnings.push(`${emptyZones} zona(s) de produto sem cards — o layout pode ficar vazio.`)
+        }
+        if (emptyProductCards > 0) {
+            warnings.push(`${emptyProductCards} card(s) de produto sem nome/preco — informacoes comerciais podem estar incompletas.`)
+        }
+    } catch (err) {
+        console.warn('[export-preflight] Falha ao executar checagens:', err)
+    }
+    return warnings
+}
+
 const performExport = async () => {
     if (!canvas.value) return
+    if (isExportDownloadInProgress.value) return
+
+    // Preflight bloqueante: se houver avisos, confirmar com o usuario antes de exportar.
+    // Exportar um encarte com imagem ausente ou zona vazia e um risco comercial real.
+    const preflightWarnings = runExportPreflightChecks()
+    if (preflightWarnings.length > 0 && typeof window !== 'undefined') {
+        const message = `Encontramos ${preflightWarnings.length} problema(s) antes da exportacao:\n\n` +
+            preflightWarnings.map((w) => `• ${w}`).join('\n') +
+            '\n\nDeseja exportar mesmo assim?'
+        if (!window.confirm(message)) {
+            return
+        }
+    }
+
     const feedbackToken = startExportDownloadFeedback('Preparando exportação...')
     showExportModal.value = false
 
@@ -23604,7 +23703,7 @@ const performExport = async () => {
     try {
         const activeBeforeExport = canvas.value.getActiveObject?.()
         canvas.value.discardActiveObject()
-        canvas.value.requestRenderAll()
+        safeRequestRenderAll()
 
         const { format, exportScope, selectedFrameId } = exportSettings.value
         const qualityPreset = normalizeExportQualityPreset(String(exportSettings.value.qualityPreset || DEFAULT_EXPORT_QUALITY_PRESET))
@@ -23804,6 +23903,7 @@ const selectAllFrames = () => {
 
 const performShare = async () => {
     if (!canvas.value) return;
+    if (isExportDownloadInProgress.value) return;
     const feedbackToken = startExportDownloadFeedback('Baixando arquivo...')
     showShareModal.value = false;
 
@@ -23811,7 +23911,7 @@ const performShare = async () => {
         const activeBeforeShare = canvas.value.getActiveObject?.();
         // Deselect for clean export
         canvas.value.discardActiveObject();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
 
         const { format, shareScope } = shareSettings.value;
         const scale = HIGH_RES_EXPORT_SCALE;
@@ -23897,6 +23997,9 @@ const performShare = async () => {
         else {
             notifyEditorInfo('Selecione: objeto, frame ou todos os frames para exportar.');
         }
+    } catch (err) {
+        console.error('[Share] Falha ao compartilhar:', err)
+        notifyEditorError('Falha ao compartilhar. Tente novamente ou reduza a qualidade.')
     } finally {
         await stopExportDownloadFeedback(feedbackToken)
     }
@@ -23909,10 +24012,11 @@ const saveProject = async () => {
     if (hasActiveTextEditingForPersist()) {
         finalizeActiveTextEditingForPersist();
     }
+
     // FIX: Consolidate current canvas state before remote save.
     // If saveCurrentState fails, we log the error but still proceed with saveProjectDB
     // because the page may have data from a previous successful save that should be persisted.
-    // However, we now verify the page has canvasData before proceeding, to avoid
+    // However, we verify the page has canvasData before proceeding, to avoid
     // persisting stale/empty data to the server.
     try {
         await saveCurrentState({
@@ -23927,15 +24031,20 @@ const saveProject = async () => {
         const activePg = project.pages?.[project.activePageIndex]
         if (!activePg?.canvasData || !activePg.canvasData?.objects?.length) {
             console.error('[saveProject] Sem dados de canvas para salvar. Abortando save remoto.')
+            notifyEditorError('Falha ao preparar dados para salvar. Tente novamente.')
             return
         }
     }
 
     // Persist to DB + Wasabi
-    await saveProjectDB({ forceEmptyOverwrite: false });
-
-    showSaveModal.value = false;
-    console.log('Project saved to database');
+    try {
+        await saveProjectDB({ forceEmptyOverwrite: false });
+        showSaveModal.value = false;
+        console.log('Project saved to database');
+    } catch (dbErr) {
+        console.error('[saveProject] Falha ao salvar no banco/storage:', dbErr)
+        notifyEditorError('Falha ao salvar projeto no servidor. Seus dados locais estão preservados.')
+    }
 }
 
 const loadCanvasData = async (data: any) => {
@@ -24058,7 +24167,7 @@ const loadCanvasData = async (data: any) => {
     // NOTE: Legacy repair for product cards is handled inside `rehydrateCanvasZones()`.
     // Do not disable child interactivity here, otherwise deep-select (dblclick) stops working.
     
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     // Update CanvasObjects
     const objs = canvas.value.getObjects();
     refreshCanvasObjects({ source: objs, immediate: true }); 
@@ -24155,8 +24264,9 @@ const handleGenerateInstitutional = async (payload: {
         }
 
         // Apply to current page
+        // Nao chamar useProject() de novo aqui: ja esta no setup acima.
+        // Chamar duas vezes registra watch(storageSaveStatus) em duplicidade.
         const pageIndex = project.activePageIndex
-        const { updatePageData, saveProjectDB } = useProject()
 
         updatePageData(pageIndex, result.canvasData, {
             source: 'user',
@@ -24276,7 +24386,7 @@ const insertAssetToCanvas = async (asset: any, opts?: { pos?: { x: number; y: nu
         else if (typeof c.bringToFront === 'function') c.bringToFront(img);
 
         canvas.value.setActiveObject(img);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
     } catch (e) {
         console.warn('[assets] Failed to insert asset to canvas', e);
@@ -24323,7 +24433,7 @@ const insertElementToCanvas = (element: { type: string; data: any }) => {
             pathObj._customId = Math.random().toString(36).substr(2, 9);
             canvas.value.add(pathObj);
             canvas.value.setActiveObject(pathObj);
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             saveCurrentState();
         } catch (err) {
             console.warn('[elements] Failed to create path element', err);
@@ -24436,7 +24546,7 @@ const addImageToProductCardByUrl = async (
         if (shouldSetActive) {
             canvas.value.setActiveObject(newImg);
         }
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         refreshCanvasObjects();
         if (shouldSave) {
             saveCurrentState();
@@ -24530,7 +24640,7 @@ const replaceImageByCustomId = async (
             }
         }
 
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         if (shouldSave) {
             saveCurrentState();
         }
@@ -25168,7 +25278,7 @@ const handlePaste = async (e: ClipboardEvent) => {
                                  targetProductCard.dirty = true;
                                  
                                  canvas.value.setActiveObject(img);
-                                 canvas.value.requestRenderAll();
+                                 safeRequestRenderAll();
                                  refreshCanvasObjects();
                                  saveCurrentState();
                              } else {
@@ -25183,7 +25293,7 @@ const handlePaste = async (e: ClipboardEvent) => {
                                  
                                  canvas.value.add(img);
                                  canvas.value.setActiveObject(img);
-                                 canvas.value.requestRenderAll();
+                                 safeRequestRenderAll();
                                  saveCurrentState();
                              }
                          }
@@ -25247,7 +25357,7 @@ const addShape = (type: 'rect' | 'circle' | 'triangle' | 'star' | 'polygon' | 'l
         (shape as any)._customId = Math.random().toString(36).substr(2, 9);
         canvas.value.add(shape);
         canvas.value.setActiveObject(shape);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
     }
 }
@@ -25283,7 +25393,7 @@ const addHighlight = () => {
     (group as any)._customId = Math.random().toString(36).substr(2, 9);
     canvas.value.add(group);
     canvas.value.setActiveObject(group);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState();
 }
 
@@ -25301,7 +25411,7 @@ const setPenWidth = (width: number) => {
             })
             currentPenPath.value.setCoords?.()
         }
-        canvas.value.requestRenderAll()
+        safeRequestRenderAll()
     }
 }
 
@@ -25332,7 +25442,7 @@ const addText = (variant: 'default' | 'heading' | 'body' = 'default') => {
     (text as any)._customId = Math.random().toString(36).substr(2, 9);
     canvas.value.add(text);
     canvas.value.setActiveObject(text);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     refreshCanvasObjects();
     saveCurrentState();
 }
@@ -25500,11 +25610,23 @@ const getAvailablePrices = (product: any) => {
         addPrice(product.price, '', 'main');
     }
 
+    // CORRECAO: se houver preco 'main' (varejo), ele deve ser o mainPrice,
+    // nao o primeiro da lista (que pode ser 'special'/atacado).
+    // Template simples (sem exibicao de preco especial) estava mostrando
+    // atacado como preco comum. Fallback: pack -> special -> primeiro da lista.
+    const pickByType = (type: 'main' | 'special' | 'pack') =>
+        prices.find(p => p.type === type)?.value;
+    const mainPrice = pickByType('main')
+        || pickByType('pack')
+        || pickByType('special')
+        || prices[0]?.value
+        || '0,00';
+
     return {
         prices,
         condition,
         hasSpecial: prices.some(p => p.type === 'special'),
-        mainPrice: prices[0]?.value || '0,00'
+        mainPrice
     };
 };
 
@@ -25698,10 +25820,10 @@ const createSmartObject = async (
     // Unit label on the tag: ONLY "KG" or "UN" (gramatura stays in the product name).
     const unitText = inferUnitLabelFromProduct(product);
 
+    // Removido log de hot path (executa a cada render de card de produto).
+    // Mantemos apenas o warn para preco vazio, que e sinal de dado comercial faltante.
     if (!priceStr || priceStr === '0,00') {
         console.warn('[createSmartObject] PRECO VAZIO para produto:', product.name);
-    } else {
-        console.log('[createSmartObject] Produto:', product.name, '| priceStr:', priceStr, '| priceUnit:', product.priceUnit, '| price:', product.price);
     }
 
     // Default tag (fallback)
@@ -25746,7 +25868,7 @@ const createSmartObject = async (
                 o.name === 'smart_price'
             ))
             .map((o: any) => `${o.name}="${o.text}" visible=${o.visible !== false}`);
-        console.log('[buildPriceGroupFromTemplate] FINAL price state for', product?.name, ':', debugPriceTexts.join(' | '));
+        if (import.meta.dev) console.log('[buildPriceGroupFromTemplate] FINAL price state for', product?.name, ':', debugPriceTexts.join(' | '));
         return pg;
     };
 
@@ -26446,7 +26568,7 @@ const importProductsToMultipleFrames = async (products: any[], opts?: ProductImp
 
     if (applied > 0) {
         refreshCanvasObjects()
-        canvas.value.requestRenderAll()
+        safeRequestRenderAll()
         refreshSelectedRef()
         saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid-multi-frame' })
         flushPersistenceNow('simulate-smart-grid-multi-frame')
@@ -26655,7 +26777,7 @@ const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
         canvas.value.setActiveObject(cells[0]);
     }
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     refreshCanvasObjects();
     saveCurrentState();
 }
@@ -26675,7 +26797,7 @@ const addGridZone = () => {
         );
         if (zoneForFrame) {
             canvas.value.setActiveObject(zoneForFrame);
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             notifyEditorInfo('Este frame já possui uma zona de produtos.');
             return;
         }
@@ -26684,7 +26806,7 @@ const addGridZone = () => {
         const unboundZone = existingZones.find((z: any) => !String((z as any).parentFrameId || '').trim());
         if (unboundZone) {
             canvas.value.setActiveObject(unboundZone);
-            canvas.value.requestRenderAll();
+            safeRequestRenderAll();
             notifyEditorInfo('Já existe uma zona de produtos no canvas.');
             return;
         }
@@ -26759,7 +26881,7 @@ const addGridZone = () => {
     canvas.value.add(group);
     getResolvedZoneFrameId(group);
     canvas.value.setActiveObject(group);
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState({ allowEmptyOverwrite: true, reason: 'add-grid-zone' });
     flushPersistenceNow('add-grid-zone');
 }
@@ -27419,7 +27541,7 @@ const simulateSmartGrid = async (
         refreshCanvasObjects();
         invalidateScrollbarBounds();
         updateScrollbars();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         if (opts?.persist !== false) {
             saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid' });
             flushPersistenceNow('simulate-smart-grid');
@@ -28089,7 +28211,7 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
     }
 
     // Single render after all changes are applied
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     if (shouldRelayout || restoredViewportObjects > 0) {
         // FIX: Use requestAnimationFrame instead of queueMicrotask so that viewport
         // culling runs AFTER the first render completes. queueMicrotask runs before
@@ -28100,7 +28222,7 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
             // FIX: Second render pass after culling to ensure cards are properly displayed.
             // After a preset change (dramatic size change), Fabric v7 may cache stale group
             // renders from the first frame. This forces a clean second render.
-            if (canvas.value) canvas.value.requestRenderAll();
+            if (canvas.value) safeRequestRenderAll();
         });
     }
     if (opts.save !== false) {
@@ -28135,7 +28257,7 @@ const updateZoneOnCanvas = (prop: string, val: any) => {
 
     // Multiple target fallback (rare): apply without intermediate saves and commit once.
     targets.forEach((z: any) => applyZoneUpdates(z, { [prop]: val }, { save: false }));
-    canvas.value?.requestRenderAll();
+    safeRequestRenderAll();
     saveCurrentState();
     refreshSelectedRef();
 }
@@ -29297,7 +29419,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     // the new styles are visually applied.
     // Template updates already request render internally via applyLabelTemplateToZone.
     if (!isTemplateChange) {
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
     }
     if (!isTemplateChange && !isDebouncedGlobalStyleProp(prop)) {
         nextTick(() => {
@@ -29313,7 +29435,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
                         }
                     }
                 });
-                canvas.value.requestRenderAll();
+                safeRequestRenderAll();
             }
         });
     }
@@ -33953,7 +34075,7 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
     if (objectsJson.length === 0) throw new Error('Template group JSON has no objects');
     // DEBUG: Log template JSON names to verify they exist in the source data
     const jsonNames = objectsJson.map((o: any) => `${o?.name || '(sem nome)'}[${o?.type || '?'}]`);
-    console.log('[instantiatePriceGroupFromTemplate] JSON objectsJson names:', jsonNames.join(', '));
+    if (import.meta.dev) console.log('[instantiatePriceGroupFromTemplate] JSON objectsJson names:', jsonNames.join(', '));
     const groupOpts = { ...groupJson };
     delete (groupOpts as any).objects;
     // Fabric objects have a fixed `type` based on the class; restoring `type` from JSON is ignored and warns.
@@ -34277,7 +34399,7 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
 
     // DEBUG: Log all named objects in the price group for diagnosis
     const allNames = parts.map((o: any) => `${o?.name || '(sem nome)'}[${String(o?.type || '?').toLowerCase()}]`);
-    console.log('[setPriceOnPriceGroup] rawPrice:', rawPrice, '| total parts:', parts.length, '| names:', allNames.join(', '));
+    if (import.meta.dev) console.log('[setPriceOnPriceGroup] rawPrice:', rawPrice, '| total parts:', parts.length, '| names:', allNames.join(', '));
 
     const isVisibleNode = (obj: any): boolean => {
         if (!obj) return false;
@@ -34336,7 +34458,7 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
             }
         }
         if (intTxt || decTxt || legacy) {
-            console.log('[setPriceOnPriceGroup] Fallback por conteudo: intTxt:', !!intTxt, '| decTxt:', !!decTxt, '| legacy:', !!legacy, '| unitTxt:', !!unitTxt);
+            if (import.meta.dev) console.log('[setPriceOnPriceGroup] Fallback por conteudo: intTxt:', !!intTxt, '| decTxt:', !!decTxt, '| legacy:', !!legacy, '| unitTxt:', !!unitTxt);
         }
     }
 
@@ -36252,7 +36374,7 @@ async function applyLabelTemplateToZone(
                     : null;
                 restoreCardPriceGroup(card, currentPg, rollbackPriceGroup);
             }
-            if (applyOptions.requestRender) canvas.value.requestRenderAll();
+            if (applyOptions.requestRender) safeRequestRenderAll();
             console.warn(`[labelTemplates] Aborting zone template persistence because ${failedCards} card(s) failed`);
             return false;
         }
@@ -36279,7 +36401,7 @@ async function applyLabelTemplateToZone(
         }
     }
 
-    if (applyOptions.requestRender) canvas.value.requestRenderAll();
+    if (applyOptions.requestRender) safeRequestRenderAll();
     if (applyOptions.save) await saveCurrentState();
     return true;
 }
@@ -36393,7 +36515,7 @@ async function insertLabelTemplateToCanvas(templateId: string) {
         }
 
         canvas.value.setActiveObject(g);
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
         saveCurrentState();
     } catch (err) {
         console.warn('[labelTemplates] Failed to insert template', err);
@@ -36456,7 +36578,7 @@ function beginEditSelectedLabel() {
         pg.setCoords?.();
     }
 
-    canvas.value.requestRenderAll();
+    safeRequestRenderAll();
     triggerRef(selectedObjectRef);
 }
 
@@ -38784,7 +38906,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                             placeCard(card, x, y, cellW, normCardH, cards.indexOf(card));
                         });
 
-                        if (shouldRender) canvas.value.requestRenderAll();
+                        if (shouldRender) safeRequestRenderAll();
                         if (shouldSave) saveCurrentState();
                         return;
                     }
@@ -38881,7 +39003,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                         placeCard(card, x, y, cellW, normCardH, cards.indexOf(card));
                     });
 
-                    if (shouldRender) canvas.value.requestRenderAll();
+                    if (shouldRender) safeRequestRenderAll();
                     if (shouldSave) saveCurrentState();
                     return;
                 }
@@ -39041,7 +39163,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
       }
     });
 
-    if (shouldRender) canvas.value.requestRenderAll();
+    if (shouldRender) safeRequestRenderAll();
     if (shouldSave) saveCurrentState();
 }
 
@@ -39790,7 +39912,7 @@ const rehydrateCanvasZones = (
         scheduleMissingProductImageRecovery();
 
         refreshCanvasObjects();
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
     } finally {
         isHistoryProcessing.value = prevHistory;
     }
@@ -39804,7 +39926,7 @@ const handleRecalculateLayout = () => {
     // Re-select zone and refresh snapshot after layout recalculation
     if (canvas.value) {
         try { canvas.value.setActiveObject(zone); } catch { /* ignore */ }
-        canvas.value.requestRenderAll();
+        safeRequestRenderAll();
     }
     refreshSelectedRef();
 }

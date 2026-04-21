@@ -121,7 +121,10 @@ const THUMBNAIL_UPLOAD_TIMEOUT_MS = 15_000
 const THUMBNAIL_UPLOAD_RETRIES = 2
 const PRESIGNED_API_TIMEOUT_MS = 6_000
 const PRESIGNED_PUT_TIMEOUT_MS = 12_000
-const PROXY_UPLOAD_TIMEOUT_MS = 90_000
+// Em dev tunnels a banda pode cair para <100 KB/s; 180s comporta ate 18 MB
+// comprimido no pior caso antes de abrir fallback. Em producao o upload
+// normalmente conclui em segundos, entao o timeout extra nao prejudica.
+const PROXY_UPLOAD_TIMEOUT_MS = 180_000
 const LARGE_CANVAS_DIRECT_UPLOAD_BYTES = 6 * 1024 * 1024
 const lastHistorySnapshotAtByPage = new Map<string, number>()
 const historySnapshotInFlightByPage = new Map<string, Promise<void>>()
@@ -389,6 +392,17 @@ export const useStorage = () => {
   const auth = useAuth()
   const { tryGetApiAuthHeaders } = useApiAuth()
 
+  const isUnstableNetworkHost = (): boolean => {
+    if (typeof window === 'undefined') return false
+    const hostname = String(window.location.hostname || '').trim().toLowerCase()
+    return (
+      hostname.endsWith('.app.github.dev') ||
+      hostname.endsWith('.github.dev') ||
+      hostname.endsWith('.devtunnels.ms') ||
+      hostname.endsWith('.webcontainer.io')
+    )
+  }
+
   const triggerHistorySnapshot = async (opts: {
     userId: string
     projectId: string
@@ -396,6 +410,11 @@ export const useStorage = () => {
     key: string
   }): Promise<void> => {
     if (import.meta.server) return
+
+    // History snapshot e um backup de versao; em dev tunnels ele frequentemente
+    // da 504 por latencia. Pulamos para nao poluir o console — os snapshots
+    // voltam ao normal em producao / localhost onde a rede nao mata requests.
+    if (isUnstableNetworkHost()) return
 
     const pageScope = `${opts.userId}:${opts.projectId}:${opts.pageId}`
     const now = Date.now()
@@ -457,14 +476,14 @@ const saveCanvasData = async (
     externalSignal?: AbortSignal | null
   ): Promise<string | null> => {
     const entryTs = Date.now()
-    console.log(`🔵 [saveCanvasData] ENTRY projectId=${projectId} pageId=${pageId} hasPreSerialized=${!!preSerializedJson}`)
-    
+    if (import.meta.dev) console.log(`🔵 [saveCanvasData] ENTRY projectId=${projectId} pageId=${pageId} hasPreSerialized=${!!preSerializedJson}`)
+
     if (import.meta.server) {
       return null
     }
 
     const pageScope = `${projectId}:${pageId}`
-    console.log(`🔵 [saveCanvasData] pageScope=${pageScope} snapshotSavedAt=${getCanvasSnapshotSavedAt(canvasJson)}`)
+    if (import.meta.dev) console.log(`🔵 [saveCanvasData] pageScope=${pageScope} snapshotSavedAt=${getCanvasSnapshotSavedAt(canvasJson)}`)
     const snapshotSavedAt = getCanvasSnapshotSavedAt(canvasJson)
     const recentSuccess = getRecentCanvasUploadSuccess(pageScope, snapshotSavedAt)
     if (recentSuccess) {
@@ -496,8 +515,8 @@ const saveCanvasData = async (
     }
 
     const run = (async () => {
-      console.log(`🔵 [saveCanvasData/run] START run promise for ${pageScope}`)
-      
+      if (import.meta.dev) console.log(`🔵 [saveCanvasData/run] START run promise for ${pageScope}`)
+
       // Circuit breaker: pular Wasabi se muitas falhas consecutivas
       if (isWasabiCircuitOpen()) {
         console.warn(`⚡ Wasabi circuit breaker ABERTO — pulando upload remoto (retry em ${Math.ceil((_wasabiCircuitOpenUntil - Date.now()) / 60_000)}min)`)
@@ -505,7 +524,7 @@ const saveCanvasData = async (
       }
 
       const userId = auth.user.value?.id
-      console.log(`🔵 [saveCanvasData/run] userId=${userId}`)
+      if (import.meta.dev) console.log(`🔵 [saveCanvasData/run] userId=${userId}`)
       if (!userId) {
         saveStatus.value = 'error'
         saveError.value = 'Usuário não autenticado'
@@ -515,10 +534,10 @@ const saveCanvasData = async (
       saveStatus.value = 'saving'
       saveError.value = null
       const t0 = Date.now()
-      console.log(`🔵 [saveCanvasData/run] Getting auth headers...`)
+      if (import.meta.dev) console.log(`🔵 [saveCanvasData/run] Getting auth headers...`)
       const authHeaders = await tryGetApiAuthHeaders()
       const authElapsed = Date.now() - t0
-      console.log(`🔵 [saveCanvasData/run] Auth headers obtained in ${authElapsed}ms, hasHeaders=${!!authHeaders}`)
+      if (import.meta.dev) console.log(`🔵 [saveCanvasData/run] Auth headers obtained in ${authElapsed}ms, hasHeaders=${!!authHeaders}`)
       if (!authHeaders) {
         saveStatus.value = 'error'
         saveError.value = 'Sessão expirada. Faça login novamente.'
@@ -543,16 +562,16 @@ const saveCanvasData = async (
       let contentType: string
       const rawSizeKB = (jsonString.length / 1024).toFixed(0)
       const gzipStartedAt = Date.now()
-      console.log(`🔵 [saveCanvasData/run] Starting gzip compression, rawSize=${rawSizeKB}KB`)
+      if (import.meta.dev) console.log(`🔵 [saveCanvasData/run] Starting gzip compression, rawSize=${rawSizeKB}KB`)
       try {
         const compressedBuf = await compressGzip(jsonString)
         const gzipElapsed = Date.now() - gzipStartedAt
-        console.log(`🔵 [saveCanvasData/run] Gzip done in ${gzipElapsed}ms`)
+        if (import.meta.dev) console.log(`🔵 [saveCanvasData/run] Gzip done in ${gzipElapsed}ms`)
         blob = new Blob([compressedBuf], { type: 'application/octet-stream' })
         contentType = 'application/octet-stream'
         const compressedSizeKB = (compressedBuf.byteLength / 1024).toFixed(0)
         const ratio = ((1 - compressedBuf.byteLength / jsonString.length) * 100).toFixed(0)
-        console.log(`🗜️ Canvas comprimido: ${rawSizeKB}KB → ${compressedSizeKB}KB (${ratio}% redução)`)
+        if (import.meta.dev) console.log(`🗜️ Canvas comprimido: ${rawSizeKB}KB → ${compressedSizeKB}KB (${ratio}% redução)`)
       } catch (gzipErr) {
         // Fallback para JSON puro caso CompressionStream não esteja disponível
         blob = new Blob([jsonString], { type: 'application/json' })
@@ -561,7 +580,7 @@ const saveCanvasData = async (
       }
       const gzipMs = Date.now() - gzipStartedAt
 
-      console.log(
+      if (import.meta.dev) console.log(
         `📤 [saveCanvasData] Prep concluído em ${Date.now() - t0}ms ` +
         `(auth=${authMs}ms, serialize=${serializeMs}ms, gzip=${gzipMs}ms, ` +
         `preSerialized=${typeof preSerializedJson === 'string'}, raw=${rawSizeKB}KB, cors_blocked=${isPresignedCorsBlocked()}, snapshot=${snapshotSavedAt || 0})`
@@ -588,7 +607,7 @@ const saveCanvasData = async (
       for (let attempt = 1; attempt <= effectiveRetries; attempt++) {
         const uploadStart = Date.now()
         
-        console.log(`📡 [upload ${attempt}/${effectiveRetries}] Iniciando upload para ${key.substring(0, 50)}...`, {
+        if (import.meta.dev) console.log(`📡 [upload ${attempt}/${effectiveRetries}] Iniciando upload para ${key.substring(0, 50)}...`, {
           blobSize: blob.size,
           contentType,
           isHalfOpen,
@@ -606,13 +625,13 @@ const saveCanvasData = async (
           }
 
           // ── Upload via proxy servidor (raw body, sem multipart) ──
-          console.log(`📡 [upload ${attempt}/${effectiveRetries}] Tentando proxy servidor...`)
+          if (import.meta.dev) console.log(`📡 [upload ${attempt}/${effectiveRetries}] Tentando proxy servidor...`)
 
           const proxyController = new AbortController()
           const detachProxyAbort = forwardAbortSignal(uploadController.signal, proxyController)
 
           try {
-            console.log(`📤 [upload ${attempt}/${effectiveRetries}] Enviando raw body (${(blob.size / 1024).toFixed(0)}KB)...`);
+            if (import.meta.dev) console.log(`📤 [upload ${attempt}/${effectiveRetries}] Enviando raw body (${(blob.size / 1024).toFixed(0)}KB)...`);
             const fetchStart = Date.now()
 
             const result = await withAbortTimeout(
@@ -634,7 +653,7 @@ const saveCanvasData = async (
             failIfAborted()
 
             const fetchElapsed = Date.now() - fetchStart
-            console.log(`📤 [upload ${attempt}/${effectiveRetries}] $fetch completed in ${fetchElapsed}ms`)
+            if (import.meta.dev) console.log(`📤 [upload ${attempt}/${effectiveRetries}] $fetch completed in ${fetchElapsed}ms`)
 
             if (!result?.key) {
               throw new Error(String(result?.statusMessage || 'Upload proxy retornou resposta inválida'))
@@ -854,16 +873,19 @@ const saveCanvasData = async (
       const response = await fetch(dataUrl)
       const blob = await response.blob()
 
-      // Upload via servidor (evita CORS) usando FormData
+      // Upload via servidor (evita CORS) usando RAW BODY — FormData/multipart
+      // forca o servidor a rodar readMultipartFormData, o que em ambientes de
+      // alta latencia (dev tunnels) ultrapassava o timeout do gateway e gerava 504.
       for (let attempt = 1; attempt <= THUMBNAIL_UPLOAD_RETRIES; attempt++) {
         try {
-          const formData = new FormData()
-          formData.append('file', blob, 'thumb.png')
-
           const result = await $fetch<{ key: string }>('/api/storage/upload', {
             method: 'POST',
             query: { key, contentType: 'image/png' },
-            body: formData,
+            headers: {
+              ...authHeaders,
+              'Content-Type': 'image/png'
+            },
+            body: blob,
           })
 
           if (!result?.key) {

@@ -55,8 +55,14 @@ const SAVE_WATCHDOG_MS = 120_000
 // Worst case por tentativa: presigned (6s+12s) + proxy (35s) ~= 53s.
 // Com CORS bloqueado, usamos 1 tentativa de proxy; nos demais casos deixamos
 // margem para uma nova tentativa curta sem abortar prematuramente um upload saudável.
-const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 120_000
-const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 12_000
+// Elevado para acomodar dev tunnels lentos (devtunnels.ms / app.github.dev).
+// Em rede boa o upload termina em segundos; o soft-timeout so dispara em cenarios
+// degradados. Com 240s damos 2x PROXY_UPLOAD_TIMEOUT_MS para um fallback coerente.
+const CANVAS_UPLOAD_SOFT_TIMEOUT_MS = 240_000
+// Thumbnail pode ser regravado a qualquer save futuro e nao e critico.
+// Em dev tunnels o upload frequentemente exigia mais de 12s — elevamos para 30s
+// para cobrir latencia alta sem desistir do thumbnail no caminho feliz.
+const THUMBNAIL_UPLOAD_SOFT_TIMEOUT_MS = 30_000
 let lastSaveChangedDuringRunLogAt = 0
 // Exponential backoff counter for unsynced page retries.
 // Reset to 0 when all pages sync successfully.
@@ -1237,7 +1243,7 @@ export const useProject = () => {
 		    const saveProjectDB = async (opts: {
                 forceEmptyOverwrite?: boolean
             } = {}) => {
-                console.log(`🟡🟡🟡 [saveProjectDB] ENTRY v2 at ${new Date().toISOString()}`)
+                // entry log removido — disparava a cada save (30-90s) sem sinal util
 		        // Não executar no servidor (SSR) ou se o módulo HMR foi substituído
 		        if (import.meta.server || _moduleDisposed) {
 		            return
@@ -1336,19 +1342,72 @@ export const useProject = () => {
 	            }
 
             // 1. Salvar cada página no Storage
-            const storagePaths: string[] = []
-            const thumbnailUrls: string[] = []
+            // CORRECAO: usar Map por pageId em vez de array por indice.
+            // Se o usuario reordena/duplica/deleta paginas durante o upload,
+            // indices nao batem mais. Map<pageId, path> fica estavel.
+            const storagePathsById = new Map<string, string>()
+            const thumbnailUrlsById = new Map<string, string>()
             const failedCanvasSyncPageIds = new Set<string>()
             const failedThumbnailSyncPageIds = new Set<string>()
 
+            // CORRECAO CRITICA: Se o projeto ainda tem ID temporario (proj_*),
+            // precisamos criar o registro no banco ANTES do upload para obter o
+            // UUID real. Caso contrario, os arquivos vao para prefixo orfao
+            // (proj_*) no Wasabi, fora de projects/{userId}/{uuid}/...
+            const preflightCreateNeeded = !isUuid(String(project.id || '').trim())
+            if (preflightCreateNeeded) {
+                setSaveStage('persist-project:preflight-create')
+                try {
+                    const headers = await getApiAuthHeaders()
+                    const preflightHeaders = {
+                        ...headers,
+                        ...(realtimeClientId.value ? { 'x-client-id': realtimeClientId.value } : {})
+                    }
+                    // Envia metadados minimos das paginas (sem canvasDataPath ainda).
+                    // O POST /api/projects exige canvas_data nao vazio.
+                    const preflightPages = project.pages.map((p) => ({
+                        id: p.id,
+                        name: p.name,
+                        width: p.width,
+                        height: p.height,
+                        type: p.type
+                    }))
+                    const preflightResponse = await $fetch<any>('/api/projects', {
+                        method: 'POST',
+                        headers: preflightHeaders,
+                        body: {
+                            name: project.name,
+                            canvas_data: preflightPages.length > 0
+                                ? preflightPages
+                                : [{ id: project.pages[0]?.id || 'page_1', name: 'Página 1', width: 1080, height: 1920, type: 'RETAIL_OFFER' }]
+                        }
+                    })
+                    const createdPreflight = preflightResponse?.project || null
+                    if (!createdPreflight?.id || !isUuid(String(createdPreflight.id))) {
+                        throw new Error('Servidor nao retornou UUID valido para novo projeto')
+                    }
+                    project.id = createdPreflight.id
+                    if (createdPreflight?.updated_at) {
+                        projectServerUpdatedAt.value = createdPreflight.updated_at
+                    }
+                    console.log('✅ [saveProjectDB] Projeto criado com UUID real antes do upload:', project.id)
+                } catch (preflightErr) {
+                    console.error('[saveProjectDB] Falha ao criar projeto preflight:', preflightErr)
+                    saveStatus.value = 'error'
+                    saveLastError.value = 'Nao foi possivel inicializar o projeto no servidor. Verifique sua conexao.'
+                    return
+                }
+                if (abortIfStaleSaveContext()) return
+            }
+
             // Upload de todas as páginas em paralelo (canvas + thumbnail por página)
             setSaveStage('upload-pages')
-            console.log(`🟡 [saveProjectDB] upload-pages stage. pages=${project.pages.length}, pagesWithDirty=${project.pages.filter(p => p.dirty).length}, pagesWithCanvasData=${project.pages.filter(p => !!p.canvasData).length}`)
+            // log de stage removido — ruidoso no hot path do save
             // FIX: snapshot the pages array at this point so that a concurrent
             // loadProjectDB replacing project.pages does not cause us to iterate
             // the NEW project's pages while uploading the OLD project's data.
             const pagesSnapshot = [...project.pages]
-            const pageUploadPromises = pagesSnapshot.map(async (page, i) => {
+            const pageUploadPromises = pagesSnapshot.map(async (page) => {
                 // FIX: the abort check inside this lambda only returns from the lambda,
                 // NOT from saveProjectDB.  We still check so we can skip work early,
                 // but the real abort check is after Promise.all below.
@@ -1356,7 +1415,7 @@ export const useProject = () => {
 
                 // Salvar canvas JSON no Storage (com retry automático)
                 const shouldUploadCanvas = !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
-                console.log(`🟡 [saveProjectDB] page ${page?.id} shouldUploadCanvas=${shouldUploadCanvas} dirty=${!!page?.dirty} canvasDataPath=${!!page?.canvasDataPath} hasCanvasData=${!!page?.canvasData}`)
+                // log por pagina removido — disparava N vezes por save
                 if (shouldUploadCanvas && page?.canvasData) {
                     try {
                         const currentCount = getCanvasObjectCount(page.canvasData)
@@ -1364,7 +1423,7 @@ export const useProject = () => {
                         if (isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite) {
                             console.warn(`🛡️ Skip upload vazio para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
                         } else {
-                            console.log(`🟡 [saveProjectDB] CALLING saveCanvasData for page ${page.id}, objects=${currentCount}`)
+                            // log de call removido — ruidoso e ja coberto por ✅/❌ logs abaixo
                             const canvasUploadAbortController = new AbortController()
                             const path = await withSoftTimeout(
                                 saveCanvasData(
@@ -1391,7 +1450,7 @@ export const useProject = () => {
                                 () => canvasUploadAbortController.abort(`saveProjectDB-soft-timeout:${page.id}`)
                             )
                             if (path) {
-                                storagePaths[i] = path
+                                storagePathsById.set(page.id, path)
                                 page.canvasDataPath = path
                                 page.lastPersistedObjectCount = currentCount
                                 console.log('✅ Canvas salvo na Wasabi:', path)
@@ -1405,8 +1464,8 @@ export const useProject = () => {
                         console.error('❌ Erro crítico ao salvar canvas na Wasabi:', err)
                     }
                 }
-                if (!storagePaths[i] && page?.canvasDataPath) {
-                    storagePaths[i] = page.canvasDataPath
+                if (!storagePathsById.has(page.id) && page?.canvasDataPath) {
+                    storagePathsById.set(page.id, page.canvasDataPath)
                 }
 
                 // Salvar thumbnail no Storage (em paralelo com canvas)
@@ -1418,7 +1477,7 @@ export const useProject = () => {
                         `upload-thumbnail:${page.id}`
                     )
                     if (url) {
-                        thumbnailUrls[i] = url
+                        thumbnailUrlsById.set(page.id, url)
                         page.thumbnailUrl = url
                         page.thumbnailDirty = false
                     } else {
@@ -1426,8 +1485,8 @@ export const useProject = () => {
                         console.warn(`⚠️ Falha ao salvar thumbnail na Wasabi (página ${page.id})`)
                     }
                 }
-                if (!thumbnailUrls[i] && page?.thumbnailUrl) {
-                    thumbnailUrls[i] = page.thumbnailUrl
+                if (!thumbnailUrlsById.has(page.id) && page?.thumbnailUrl) {
+                    thumbnailUrlsById.set(page.id, page.thumbnailUrl)
                 }
             })
             await Promise.all(pageUploadPromises)
@@ -1455,17 +1514,16 @@ export const useProject = () => {
                 const pAny = project as any
                 pAny.__uploadFailed = true
                 
-                // IMPORTANTE: Limpar dirty das páginas que falharam para evitar loop infinito
-                // O retry será feito pelo timer abaixo, não pelo autoSave
+                // Marca paginas com falha para retry via timer explicito, limpando dirty
+                // para nao disparar rajada de autoSave enquanto o Wasabi esta degradado.
+                // O timer explicito (setTimeout abaixo) eventualmente restaura dirty e reenvia.
                 project.pages.forEach((page) => {
                     if (failedCanvasSyncPageIds.has(page.id)) {
-                        // Marcar como needingUploadRetry em vez de manter dirty
                         (page as any).__needsUploadRetry = true
-                        page.dirty = false  // Limpar dirty para evitar autoSave contínuo
+                        page.dirty = false
                     }
                 })
 
-                // Só manter hasUnsavedChanges=true se houver outras páginas dirty
                 const stillHasDirtyPages = project.pages.some(p => p.dirty)
                 hasUnsavedChanges.value = stillHasDirtyPages
 
@@ -1474,43 +1532,50 @@ export const useProject = () => {
                     const maxRetryBackoff = 5 * 60_000
                     const retryCooldownMs = Math.min(15_000 * Math.pow(2, _unsyncedRetryCount - 1), maxRetryBackoff)
                     console.log(`[saveProjectDB] Novo retry do upload Wasabi em ${Math.round(retryCooldownMs / 1000)}s (tentativa ${_unsyncedRetryCount})`)
-                    const retryTimer = setTimeout(() => {
-                        _pendingSaveTimers.delete(retryTimer)
-                        if (_moduleDisposed) return
-                        if (isSaving.value) return
-                        
-                        // Limpar flag de falha antes do retry
-                        (project as any).__uploadFailed = false;
-                        // Marcar que estamos em modo retry (não draft recuperado)
-                        (project as any).__isRetryMode = true;
-                        
-                        // Restaurar dirty para páginas que precisam de retry
-                        let hasPagesToRetry = false
-                        project.pages.forEach((page) => {
-                            if ((page as any).__needsUploadRetry) {
-                                page.dirty = true
-                                hasUnsavedChanges.value = true
-                                delete (page as any).__needsUploadRetry
-                                hasPagesToRetry = true
+                    const scheduleRetry = (delayMs: number) => {
+                        const timer = setTimeout(() => {
+                            _pendingSaveTimers.delete(timer)
+                            if (_moduleDisposed) return
+                            if (isSaving.value) {
+                                // Outro save em andamento — tenta novamente em 30s.
+                                scheduleRetry(30_000)
+                                return
                             }
-                        })
-                        
-                        if (!hasPagesToRetry) {
-                            console.log('[saveProjectDB] Nenhuma página precisa de retry.')
-                            return
-                        }
-                        
-                        if (Date.now() - _lastUserEditAt < 30_000) {
-                            console.log('[saveProjectDB] Retry do upload Wasabi postergado: usuario editando ativamente.')
-                            return
-                        }
-                        console.log(`🔄 Retentando upload Wasabi das paginas pendentes...`)
-                        void saveProjectDB().finally(() => {
-                            // Limpar modo retry após conclusão
-                            (project as any).__isRetryMode = false;
-                        });
-                    }, retryCooldownMs)
-                    _pendingSaveTimers.add(retryTimer)
+
+                            (project as any).__uploadFailed = false;
+                            (project as any).__isRetryMode = true;
+
+                            let hasPagesToRetry = false
+                            project.pages.forEach((page) => {
+                                if ((page as any).__needsUploadRetry) {
+                                    page.dirty = true
+                                    hasUnsavedChanges.value = true
+                                    delete (page as any).__needsUploadRetry
+                                    hasPagesToRetry = true
+                                }
+                            })
+
+                            if (!hasPagesToRetry) {
+                                console.log('[saveProjectDB] Nenhuma página precisa de retry.')
+                                return
+                            }
+
+                            // Se o usuario esta editando, reagenda em 30s em vez de abandonar.
+                            // Sem o reagendamento, o retry "morria" silenciosamente e as paginas
+                            // com __needsUploadRetry ficavam presas sem nenhum timer cuidando delas.
+                            if (Date.now() - _lastUserEditAt < 30_000) {
+                                console.log('[saveProjectDB] Retry do upload Wasabi postergado: usuario editando ativamente. Reagendado em 30s.')
+                                scheduleRetry(30_000)
+                                return
+                            }
+                            console.log(`🔄 Retentando upload Wasabi das paginas pendentes...`)
+                            void saveProjectDB().finally(() => {
+                                (project as any).__isRetryMode = false;
+                            });
+                        }, delayMs)
+                        _pendingSaveTimers.add(timer)
+                    }
+                    scheduleRetry(retryCooldownMs)
                 }
 
                 return
@@ -1521,15 +1586,15 @@ export const useProject = () => {
 
             // 2. Preparar payload mínimo para o banco (apenas metadados)
                 setSaveStage('prepare-db-payload')
-	            const pageMetadata = project.pages.map((page, index) => {
+	            const pageMetadata = project.pages.map((page) => {
                 const metadata: any = {
                     id: page.id,
                     name: page.name,
                     width: page.width,
                     height: page.height,
                     type: page.type,
-                    canvasDataPath: storagePaths[index] || page.canvasDataPath, // Caminho no Storage
-                    thumbnailUrl: thumbnailUrls[index] || page.thumbnailUrl, // URL do thumbnail
+                    canvasDataPath: storagePathsById.get(page.id) || page.canvasDataPath, // Caminho no Storage
+                    thumbnailUrl: thumbnailUrlsById.get(page.id) || page.thumbnailUrl, // URL do thumbnail
                     // Timestamp do canvas no momento do save — permite detectar no reload
                     // se o arquivo Wasabi é mais antigo que o esperado (Wasabi upload falhou
                     // em um save posterior mas o DB manteve o canvasDataPath antigo).
@@ -1539,11 +1604,12 @@ export const useProject = () => {
                 return metadata
             })
 
+	            const firstPageId = project.pages[0]?.id
 	            let payload = {
 	                name: project.name,
                 // Armazenar apenas metadados, não o canvas completo
                 canvas_data: pageMetadata,
-	                preview_url: thumbnailUrls[0] || project.pages[0]?.thumbnailUrl
+	                preview_url: (firstPageId && thumbnailUrlsById.get(firstPageId)) || project.pages[0]?.thumbnailUrl
 	            }
 	            if (!Array.isArray(payload.canvas_data) || payload.canvas_data.length === 0) {
                     saveStatus.value = 'idle'
@@ -1587,6 +1653,8 @@ export const useProject = () => {
                         return
                     }
 
+                    // optimistic concurrency removido: a comparacao estrita de timestamps
+                    // gerava 409 espurios no caminho feliz. Ver server/api/projects.post.ts.
                     const response = await $fetch<any>('/api/projects', {
                         method: 'POST',
                         headers: saveHeaders,
@@ -2153,10 +2221,10 @@ export const useProject = () => {
      */
     const deleteProjectDB = async (id: string) => {
         try {
-            // Primeiro deletar arquivos do Storage
-            await deleteProjectFiles(id)
-
-            // Depois deletar do banco
+            // IMPORTANTE: deletar o registro do banco PRIMEIRO.
+            // Se o DELETE /api/projects falhar, os arquivos ainda existem e o
+            // projeto continua coerente. A ordem inversa criava projeto
+            // "fantasma" apontando para arquivos deletados quando o DB falhava.
             const headers = await getApiAuthHeaders()
             const requestHeaders = {
                 ...headers,
@@ -2167,6 +2235,15 @@ export const useProject = () => {
                 headers: requestHeaders,
                 query: { id }
             })
+
+            // Somente apos o DB confirmar, removemos os arquivos do Storage.
+            // Se esta remocao falhar, sobram arquivos orfaos (cleanup periodico
+            // resolve), o que e preferivel a um projeto corrompido no banco.
+            try {
+                await deleteProjectFiles(id)
+            } catch (storageErr) {
+                console.warn('[deleteProjectDB] Projeto removido do banco, mas remocao de arquivos Wasabi falhou:', storageErr)
+            }
 
             return true
         } catch (e) {

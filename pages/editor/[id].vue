@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, defineAsyncComponent, watch, inject } from 'vue'
+import { onMounted, onUnmounted, ref, computed, defineAsyncComponent, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useProject } from '~/composables/useProject'
 import { useApiAuth } from '~/composables/useApiAuth'
@@ -8,9 +8,10 @@ import { useResponsive } from '~/composables/useResponsive'
 const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanvas.vue'))
 const { isMobile } = useResponsive()
 
-// FIX: Inject flushPersistenceNow from EditorCanvas to capture canvas state
-// (text edits, debounced property changes) before route navigation.
-const editorFlushPersistence = inject<((reason: string, opts?: { force?: boolean }) => void) | null>('editorFlushPersistence', null)
+// Ref para chamar flushPersistenceNow do filho via defineExpose.
+// provide/inject nao propaga do filho para o pai em Vue, entao usamos ref.
+type EditorCanvasInstance = { flushPersistenceNow?: (reason: string, opts?: { force?: boolean }) => void }
+const editorCanvasRef = ref<EditorCanvasInstance | null>(null)
 
 // Get project ID from route
 const route = useRoute()
@@ -55,11 +56,21 @@ let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let realtimePollTimer: ReturnType<typeof setTimeout> | null = null
 let visibilityHandler: (() => void) | null = null
 
-const isGithubPreviewHost = (): boolean => {
+// Hosts conhecidos por matar conexoes SSE longas com 504 (dev tunnels).
+// Nesses ambientes pulamos direto para polling — o SSE so gera ruido de erro.
+const isSseUnfriendlyHost = (): boolean => {
   if (typeof window === 'undefined') return false
   const hostname = String(window.location.hostname || '').trim().toLowerCase()
-  return hostname.endsWith('.app.github.dev') || hostname.endsWith('.github.dev')
+  return (
+    hostname.endsWith('.app.github.dev') ||
+    hostname.endsWith('.github.dev') ||
+    hostname.endsWith('.devtunnels.ms') ||
+    hostname.endsWith('.webcontainer.io')
+  )
 }
+
+// Mantido por compatibilidade com o resto do arquivo.
+const isGithubPreviewHost = isSseUnfriendlyHost
 
 const getConfiguredRealtimeTransport = (): 'auto' | 'sse' | 'poll' => {
   const rawValue = String(runtimeConfig.public?.projectRealtimeTransport || 'auto').trim().toLowerCase()
@@ -99,23 +110,39 @@ const activateRealtimePolling = (id: string, delayMs = 20_000) => {
   if (!projectId) return
   closeProjectRealtime()
   realtimeStatus.value = 'connected'
-  scheduleRealtimePoll(projectId, delayMs)
+  // Em dev tunnels, o gateway gera 504 quando a conexao do usuario esta saturada
+  // por uploads. Usamos um intervalo inicial maior para reduzir a frequencia
+  // dos erros visiveis no console do browser.
+  const effectiveDelay = isSseUnfriendlyHost() ? Math.max(delayMs, 45_000) : delayMs
+  scheduleRealtimePoll(projectId, effectiveDelay)
 }
+
+// Backoff para polling em ambientes instaveis (devtunnels):
+// cada falha dobra o intervalo do proximo poll; sucesso reseta.
+let realtimePollFailureStreak = 0
+const REALTIME_POLL_MAX_BACKOFF_MS = 5 * 60_000
 
 const fetchProjectRevision = async (id: string): Promise<string | null> => {
   const projectId = String(id || '').trim()
   if (!projectId) return null
 
+  const abortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+  const abortTimer = abortCtrl ? setTimeout(() => abortCtrl.abort(), 15_000) : null
   try {
     const headers = await getApiAuthHeaders()
     const response = await $fetch<{ updated_at?: string | null }>('/api/projects/revision', {
       headers,
-      query: { id: projectId }
+      query: { id: projectId },
+      signal: abortCtrl?.signal
     })
     const updatedAt = String(response?.updated_at || '').trim()
+    realtimePollFailureStreak = 0
     return updatedAt || null
   } catch {
+    realtimePollFailureStreak += 1
     return null
+  } finally {
+    if (abortTimer) clearTimeout(abortTimer)
   }
 }
 
@@ -159,7 +186,13 @@ const scheduleRealtimePoll = (id: string, delayMs = 20_000) => {
       }
     }
 
-    scheduleRealtimePoll(projectId, delayMs)
+    // Backoff exponencial quando /revision falha repetidamente (ex.: 504 em
+    // dev tunnels saturados). Sucesso reseta o streak em fetchProjectRevision.
+    const backoffMultiplier = realtimePollFailureStreak > 0
+      ? Math.min(Math.pow(2, realtimePollFailureStreak - 1), 16)
+      : 1
+    const nextDelayMs = Math.min(delayMs * backoffMultiplier, REALTIME_POLL_MAX_BACKOFF_MS)
+    scheduleRealtimePoll(projectId, nextDelayMs)
   }, delayMs)
 }
 
@@ -261,8 +294,9 @@ onBeforeRouteLeave(async () => {
   // hasUnsavedChanges. Sem isso, o guard pode retornar true imediatamente
   // porque as últimas edições ainda não foram serializadas para page.canvasData.
   try {
-    if (editorFlushPersistence) {
-      editorFlushPersistence('route-leave', { force: true })
+    const flush = editorCanvasRef.value?.flushPersistenceNow
+    if (typeof flush === 'function') {
+      flush('route-leave', { force: true })
     }
   } catch {
     // ignore — melhor continuar com o fluxo do que travar a navegação
@@ -531,7 +565,7 @@ const openPageHistory = () => {
     <div class="flex-1 min-h-0 overflow-hidden">
       <ClientOnly>
         <template v-if="isProjectLoaded">
-          <EditorCanvas @auto-save="triggerAutoSave" />
+          <EditorCanvas ref="editorCanvasRef" @auto-save="triggerAutoSave" />
         </template>
         <template v-else>
           <div class="flex flex-col items-center justify-center h-full gap-3">

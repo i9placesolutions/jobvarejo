@@ -108,9 +108,13 @@ const zoneRoleOptions = [
   { value: 'showcase' as const, label: 'Vitrine', hint: 'Composição mais editorial para seleções especiais.' }
 ] as const;
 
+// AVISO: a opcao 'paginate' ainda nao realiza paginacao real (nova pagina para excesso).
+// O comportamento atual compacta/expande linhas para caber os cards. O label foi
+// corrigido para refletir o comportamento real e evitar erro comercial de encarte
+// com cards minusculos quando ha muitos produtos.
 const overflowPolicyOptions = [
   { value: 'warn' as const, label: 'Avisar', hint: 'Mantém o layout e mostra risco de excesso.' },
-  { value: 'paginate' as const, label: 'Paginar', hint: 'Prepara a zona para distribuir o excesso depois.' }
+  { value: 'paginate' as const, label: 'Compactar', hint: 'Reduz a altura das linhas para caber os produtos extras.' }
 ] as const;
 
 const lastRowBehaviorOptions = [

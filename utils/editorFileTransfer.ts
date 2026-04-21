@@ -89,7 +89,9 @@ export const shareFileFromDataUrl = async (
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       const hasUserGesture = (navigator as any)?.userActivation?.isActive === true
       if (!hasUserGesture) {
-        console.warn('[Share] Ação bloqueada: é necessário clicar novamente para compartilhar (gesto do usuário).')
+        // Geracao do arquivo (export) e assincrona e consome o gesto do usuario.
+        // Quando isso acontece, retornamos false silenciosamente para que o caller
+        // caia no fallback de download direto — o usuario ainda recebe o arquivo.
         return false
       }
       try {

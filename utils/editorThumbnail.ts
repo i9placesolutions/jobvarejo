@@ -38,6 +38,12 @@ export const generateThumbnailFromCanvasJson = async (
   const scale = Math.min(THUMB_MAX_DIMENSION / fullWidth, THUMB_MAX_DIMENSION / fullHeight)
   const width = Math.max(1, Math.round(fullWidth * scale))
   const height = Math.max(1, Math.round(fullHeight * scale))
+
+  // Canvas reduzido + setZoom(scale) faz o Fabric renderizar os objetos escalados
+  // automaticamente sem tocar em left/top. Antes criavamos o canvas no tamanho
+  // reduzido sem zoom, e o JSON carregado em coordenadas originais resultava em
+  // um thumbnail que so mostrava o canto superior esquerdo.
+  // Tambem evita explodir memoria/CPU com renderAll em canvas full-size (1080x1920+).
   const el = document.createElement('canvas')
   el.width = width
   el.height = height
@@ -52,10 +58,11 @@ export const generateThumbnailFromCanvasJson = async (
   try {
     const thumbJson = JSON.parse(JSON.stringify(opts.sourceJson || {}))
     stripClipPathsRecursively(thumbJson)
-    // FIX: add a timeout to prevent thumbnail generation from hanging
-    // indefinitely if loadFromJSON tries to fetch external images that never
-    // respond.  10s is generous enough for local rendering.
-    const THUMBNAIL_TIMEOUT_MS = 10_000
+    // Timeout reduzido de 10s para 4s: loadFromJSON offscreen so refaz o canvas
+    // em memoria; o gargalo e o download de imagens do proxy. Se o proxy esta
+    // lento/504 (caso de dev tunnels), nao adianta esperar 10s — melhor falhar
+    // rapido e nao travar o fluxo de save.
+    const THUMBNAIL_TIMEOUT_MS = 4_000
     const loadPromise = sc.loadFromJSON(thumbJson)
     let timeoutId: ReturnType<typeof setTimeout> | null = null
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -65,6 +72,11 @@ export const generateThumbnailFromCanvasJson = async (
       await Promise.race([loadPromise, timeoutPromise])
     } finally {
       if (timeoutId !== null) clearTimeout(timeoutId)
+    }
+    if (typeof sc.setZoom === 'function') {
+      sc.setZoom(scale)
+    } else if (Array.isArray(sc.viewportTransform)) {
+      sc.viewportTransform = [scale, 0, 0, scale, 0, 0]
     }
     sc.renderAll()
     return sc.toDataURL({
