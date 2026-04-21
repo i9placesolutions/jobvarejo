@@ -224,7 +224,11 @@ export const extractLimitFromText = (raw: string): { limit: string | null; rest:
 //   "<NOME> <PRECO> [LIMITE ...]"
 // ============================================================================
 
-const PRICE_TOKEN_REGEX = /(?:r\$\s*)?(\d{1,4}(?:[.,]\d{3})*[,.]\d{2})\b/gi
+// Captura o preco (grupo 1) e opcionalmente consome uma unidade colada
+// ("3,29kg", "1,99/kg") para nao poluir o nome depois da remocao.
+// (?!\d|[.,]\d) impede casar digitos extras apos a unidade; sem isso,
+// "3,299" ou "3,29kg5" viraria "3,29".
+const PRICE_TOKEN_REGEX = /(?:r\$\s*)?(\d{1,4}(?:[.,]\d{3})*[,.]\d{2})(?!\d|[.,]\d)(?:\s*\/?\s*(?:kg|g|mg|ml|lt?|un[d.]?|unid(?:ade)?|pct|cx|fd))?/gi
 
 const isProbablyHeaderOrComment = (line: string): boolean => {
   const probe = line.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim()
