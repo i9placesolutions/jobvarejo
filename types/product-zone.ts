@@ -178,7 +178,8 @@ export interface ProductZone {
   borderWidth?: number;
   borderRadius?: number;
   showBorder?: boolean;
-  // Splash offset global
+  // @deprecated — use GlobalStyles.splashOffsetY. Mantido para compatibilidade
+  // com projetos antigos; leitura efetiva acontece em GlobalStyles.
   splashOffsetY?: number;
   splashOffsetByCol?: number[];
   splashOffsetByRow?: number[];
@@ -198,8 +199,12 @@ export interface GlobalStyles {
   // Nome do produto
   prodNameFont?: string;
   prodNameColor?: string;
+  /**
+   * @deprecated use prodNameScale. Mantido para compatibilidade com dados antigos.
+   * Leitura efetiva do tamanho usa prodNameScale * base responsivo calculado pelo editor.
+   */
   prodNameSize?: number;
-  // Multiplier over the responsive default size (Fabric-based editor).
+  // Multiplier sobre o tamanho responsivo default (fonte de verdade desde 2025).
   prodNameScale?: number;
   prodNameWeight?: number;
   prodNameAlign?: 'left' | 'center' | 'right';
@@ -1059,12 +1064,15 @@ export const DEFAULT_PRODUCT_ZONE: ProductZone = {
   lastRowBehavior: 'fill',
   verticalAlign: 'stretch',
   highlightCount: 0,
+  highlightPos: 'first',
+  highlightHeight: 1.5,
+  highlightStyle: 'larger',
   isLocked: false,
   showBorder: true,
   borderColor: '#404040',
   borderWidth: 2,
-  borderRadius: 16,
-  splashOffsetY: 0
+  borderRadius: 16
+  // splashOffsetY removido do default da zona — GlobalStyles.splashOffsetY e o ativo.
 };
 
 export const DEFAULT_GLOBAL_STYLES: GlobalStyles = {

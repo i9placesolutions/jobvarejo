@@ -524,8 +524,15 @@ export const useProductZone = () => {
     const state = JSON.parse(serialized);
     products.value = Array.isArray(state?.products) ? state.products.map((p: any) => migrateProduct(p)) : [];
     splashes.value = Array.isArray(state?.splashes) ? state.splashes : [];
-    productZone.value = normalizeIncomingZoneState(state?.zone);
-    globalStyles.value = normalizeIncomingGlobalStylesState(state?.globalStyles);
+    // Se o snapshot nao trouxer zona/globalStyles validos, preservamos os valores
+    // correntes em vez de resetar para DEFAULT — evita perder overrides apos um
+    // undo/redo cujo snapshot foi salvo em estado parcial.
+    if (state?.zone && typeof state.zone === 'object') {
+      productZone.value = normalizeIncomingZoneState(state.zone);
+    }
+    if (state?.globalStyles && typeof state.globalStyles === 'object') {
+      globalStyles.value = normalizeIncomingGlobalStylesState(state.globalStyles);
+    }
   };
 
   const serializeCurrentState = () => {

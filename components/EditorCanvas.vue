@@ -155,6 +155,10 @@ let globalMouseUpHandler: ((e: MouseEvent) => void) | null = null
 let globalPointerUpHandler: ((e: PointerEvent) => void) | null = null
 let globalWindowBlurHandler: (() => void) | null = null
 let globalEscKeyHandler: ((e: KeyboardEvent) => void) | null = null
+// Expondo o reset do deep-select de priceGroup para o handler global de Escape
+// (declarado em onMounted). A implementacao vive dentro de setupReactivity;
+// atribuimos esta ref quando a funcao for criada.
+let resetAllDeepSelectPriceGroupsRef: (() => void) | null = null
 let globalKeyUpHandler: ((e: KeyboardEvent) => void) | null = null
 let teardownSnapping: (() => void) | null = null
 let domCanvasDblClickHandler: ((e: MouseEvent) => void) | null = null
@@ -1107,6 +1111,23 @@ const ensureLabelTemplatesReady = async () => {
     }
 }
 
+// Invalida o _zoneTemplateSnapshot em todas as zonas que usam um dado templateId.
+// Chamado apos upsert bem-sucedido para que edicoes no Mini Editor propaguem
+// para zonas ja aplicadas, sem necessidade de reload manual.
+const invalidateZoneTemplateSnapshotsForTemplate = (templateId: string) => {
+    if (!templateId || !canvas.value) return;
+    try {
+        const objs = canvas.value.getObjects() || [];
+        for (const obj of objs) {
+            if (!obj || !isLikelyProductZone(obj)) continue;
+            const snapId = String((obj as any)?._zoneTemplateSnapshotId || '').trim();
+            if (snapId && snapId === templateId) {
+                (obj as any)._zoneTemplateSnapshot = null;
+            }
+        }
+    } catch { /* ignore */ }
+};
+
 const upsertLabelTemplateToDb = async (tpl: LabelTemplate): Promise<boolean> => {
     if (!tpl) return true;
     try {
@@ -1128,6 +1149,9 @@ const upsertLabelTemplateToDb = async (tpl: LabelTemplate): Promise<boolean> => 
             console.warn('[labelTemplates] API retornou falha ao salvar modelo no banco', resp);
             return false;
         }
+        // Apos salvar com sucesso, invalida snapshot stale em zonas que usam esse template.
+        // Sem isso, zonas ja aplicadas continuavam mostrando o template antigo ate reload.
+        if (tpl.id) invalidateZoneTemplateSnapshotsForTemplate(String(tpl.id));
         return true;
     } catch (err) {
         console.warn('[labelTemplates] Falha ao salvar modelo no banco', err);
@@ -10172,7 +10196,24 @@ onMounted(async () => {
 	        addCustomProps((fabric as any).FabricObject, CANVAS_CUSTOM_PROPS);
 	        addCustomProps((fabric as any).Object, CANVAS_CUSTOM_PROPS);
 	        addCustomProps((fabric as any).Group, CANVAS_CUSTOM_PROPS);
-	        addCustomProps((fabric as any).Rect, [...LABEL_TEMPLATE_EXTRA_PROPS]);
+	        // LABEL_TEMPLATE_EXTRA_PROPS precisa ser registrado em TODAS as classes de
+	        // node que aparecem dentro de um priceGroup — nao so Rect. Texto perde
+	        // __originalFontSize/__fontScale; Circle perde __originalRadius; Image
+	        // perde __originalScaleX/Y. O registro em FabricObject cobre heranca mas
+	        // reforcamos em classes concretas para Fabric 7 (onde algumas subclasses
+	        // tem customProperties proprio que substitui o da superclasse).
+	        const labelProps = [...LABEL_TEMPLATE_EXTRA_PROPS]
+	        addCustomProps((fabric as any).FabricObject, labelProps);
+	        addCustomProps((fabric as any).Object, labelProps);
+	        addCustomProps((fabric as any).Rect, labelProps);
+	        addCustomProps((fabric as any).Circle, labelProps);
+	        addCustomProps((fabric as any).Text, labelProps);
+	        addCustomProps((fabric as any).Textbox, labelProps);
+	        addCustomProps((fabric as any).IText, labelProps);
+	        addCustomProps((fabric as any).FabricText, labelProps);
+	        addCustomProps((fabric as any).Image, labelProps);
+	        addCustomProps((fabric as any).FabricImage, labelProps);
+	        addCustomProps((fabric as any).Group, labelProps);
 	    } catch (e) {
 	        console.warn('⚠️ Falha ao registrar customProperties do Fabric (StickerOutline):', e);
 	    }
@@ -10590,6 +10631,13 @@ onMounted(async () => {
                   if (isNodeEditing.value) {
                       exitNodeEditing();
                   }
+                  // Sair do deep-select de priceGroup (etiqueta de preco).
+                  // Sem esse reset, o usuario ficava preso editando o label.
+                  try {
+                      canvas.value?.discardActiveObject?.();
+                      resetAllDeepSelectPriceGroupsRef?.();
+                      safeRequestRenderAll();
+                  } catch { /* ignore */ }
               }
           };
           window.addEventListener('keydown', globalEscKeyHandler);
@@ -11475,11 +11523,19 @@ const CANVAS_CUSTOM_PROPS = [
     'highlightCount',
     'highlightPos',
     'highlightHeight',
+    'highlightStyle',
     'splashOffsetByCol',
     'splashOffsetByRow',
     'minCardSize',
     'maxColumns',
     'maxRows',
+    // Props da zona que estavam faltando e perdiam no loadFromJSON
+    'enabled',
+    'isLocked',
+    'borderColor',
+    'borderWidth',
+    'borderRadius',
+    'showBorder',
 
     // Price mode engine
     'priceMode',
@@ -14674,6 +14730,8 @@ const deleteActiveSelectionFromCanvas = (): boolean => {
     });
 
     // BUG #7: Ao remover uma zona de produtos, remover em cascata todos os cards filhos.
+    // CORRECAO: considerar AMBOS parentZoneId e _zoneSlot.zoneId — apos undo/drag, um
+    // pode estar stale. Pegar a uniao evita deixar cards "zumbis" no canvas.
     active.forEach((obj: any) => {
         if (!obj || !isLikelyProductZone(obj)) return;
         const zoneId = String((obj as any)._customId || '').trim();
@@ -14682,7 +14740,8 @@ const deleteActiveSelectionFromCanvas = (): boolean => {
         allObjects.forEach((child: any) => {
             if (!child) return;
             const childZoneId = String((child as any).parentZoneId || '').trim();
-            if (childZoneId === zoneId) {
+            const slotZoneId = String((child as any)?._zoneSlot?.zoneId || '').trim();
+            if (childZoneId === zoneId || slotZoneId === zoneId) {
                 deleteTargets.add(child);
             }
         });
@@ -19858,6 +19917,19 @@ const setupReactivity = () => {
         updateSelection();
     });
     canvas.value.on('selection:updated', () => {
+        // Se a nova selecao NAO e nenhum dos priceGroups com deep-select ativo
+        // (nem um filho deles), resetamos todos para evitar deep-select "preso".
+        try {
+            const active = canvas.value?.getActiveObjects?.() || []
+            const stillInside = active.some((o: any) => {
+                if (!o) return false
+                const pg = (o as any)?.group
+                return priceGroupsWithDeepSelect.has(o) || (pg && priceGroupsWithDeepSelect.has(pg))
+            })
+            if (!stillInside && priceGroupsWithDeepSelect.size > 0) {
+                resetAllDeepSelectPriceGroups()
+            }
+        } catch { /* ignore */ }
         if (normalizeActiveSelectionForProductCards()) {
             refreshShiftSelectionBaseline();
             updateSelection();
@@ -19875,10 +19947,47 @@ const setupReactivity = () => {
 
     // === DEEP SELECT (Figma-style) ===
     // Product cards always have subTargetCheck=true (single-click deep select).
-    // resetDeepSelection is now a no-op for product cards.
+    // priceGroups precisam ser reescolhidos no fim: quando usuario dblclicka
+    // em um priceGroup, habilitamos subTargetCheck/interactive para permitir
+    // editar elementos internos. Sem reset, o priceGroup permanecia selecionavel
+    // diretamente e sequestrava clicks que deveriam ir para a zona/card pai.
+    const priceGroupsWithDeepSelect = new Set<any>()
+
+    const resetPriceGroupDeepSelect = (pg: any) => {
+        if (!pg || pg.type !== 'group') return
+        try {
+            pg.set({ subTargetCheck: false, interactive: false })
+            if (typeof pg.getObjects === 'function') {
+                pg.getObjects().forEach((child: any) => {
+                    child.set({
+                        selectable: false,
+                        evented: false,
+                        hasControls: false,
+                        hasBorders: false
+                    })
+                    child.setCoords?.()
+                })
+            }
+            pg.setCoords?.()
+        } catch {
+            // ignore — se o priceGroup ja foi removido do canvas
+        }
+    }
+
+    const resetAllDeepSelectPriceGroups = () => {
+        if (priceGroupsWithDeepSelect.size === 0) return
+        priceGroupsWithDeepSelect.forEach((pg) => resetPriceGroupDeepSelect(pg))
+        priceGroupsWithDeepSelect.clear()
+        safeRequestRenderAll()
+    }
+    // Expor para o handler global de Escape (onMounted)
+    resetAllDeepSelectPriceGroupsRef = resetAllDeepSelectPriceGroups
+
     const resetDeepSelection = () => {
-        // No-op: product cards stay interactive at all times.
-        // Only non-product groups would be reset here if needed.
+        // Desfaz deep-select em priceGroups. Sem isso, o usuario entra no label,
+        // edita, clica fora e o label continuava com subTargetCheck=true, o que
+        // quebrava o drag da zona/card-pai.
+        resetAllDeepSelectPriceGroups()
     }
 
     // 2. Enable deep select on Double Click
@@ -20020,6 +20129,8 @@ const setupReactivity = () => {
 	                 });
 	             }
 	             target.setCoords?.();
+	             // Rastreia para reset futuro em selection-cleared / Escape
+	             priceGroupsWithDeepSelect.add(target);
 	             safeRequestRenderAll();
 	             return;
 	        }
@@ -28030,8 +28141,15 @@ const handleUpdateZone = (propOrPayload: string | Record<string, any>, val?: any
     // 1. Update Reactive State
     productZoneState.updateZone(Object.fromEntries(entries));
 
-    // 2. Apply to Canvas Object
-    entries.forEach(([prop, value]) => updateZoneOnCanvas(prop, value));
+    // 2. Apply to Canvas Object. Se algum prop falhar, logamos e seguimos — o estado
+    // reativo ja reflete a intencao e o proximo save/render tentara sincronizar.
+    entries.forEach(([prop, value]) => {
+        try {
+            updateZoneOnCanvas(prop, value);
+        } catch (err) {
+            console.warn(`⚠️ [handleUpdateZone] Falha ao aplicar prop "${prop}" no canvas:`, err);
+        }
+    });
 }
 
 const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: { save?: boolean; saveReason?: string } = {}) => {
@@ -28076,7 +28194,11 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
     try {
     Object.entries(updates).forEach(([prop, val]) => {
         if (prop === 'padding') {
-            zone._zonePadding = Number(val);
+            // Sanitiza padding: negativo nao faz sentido; acima de 200 quebra layout
+            // (deixa cards muito pequenos). Clamp defensivo no handler evita JSON
+            // injetado externamente corromper a zona.
+            const n = Math.max(0, Math.min(200, Number(val) || 0));
+            zone._zonePadding = n;
             zone.set('padding', 0);
             shouldRelayout = true;
             return;
@@ -28087,39 +28209,75 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
             return;
         }
 
+        if (prop === 'highlightCount') {
+            // Clamp para nao ultrapassar o numero de cards reais. Sem isso o UI
+            // aceitava valores arbitrarios e o runtime silenciosamente reduzia,
+            // divergindo do que o composable armazenava.
+            const cardCount = getZoneChildren(zone)?.length || 0;
+            const n = Math.max(0, Math.min(cardCount, Number(val) || 0));
+            zone.set('highlightCount', n);
+            shouldRelayout = true;
+            return;
+        }
+
         if (prop === 'isLocked') {
             const locked = !!val;
             zone.set({
+                isLocked: locked,
                 lockMovementX: locked,
                 lockMovementY: locked,
                 lockScalingX: locked,
                 lockScalingY: locked
             });
+            // Cards filhos herdam o lock visual para nao ficarem editaveis com zona trancada.
+            try {
+                const children = getZoneChildren(zone) || [];
+                children.forEach((card: any) => {
+                    card.set({
+                        lockMovementX: locked,
+                        lockMovementY: locked,
+                        lockScalingX: locked,
+                        lockScalingY: locked,
+                        selectable: !locked
+                    });
+                    card.setCoords?.();
+                });
+            } catch { /* ignore */ }
+            zoneRect?.set?.('dirty', true);
             return;
         }
 
-        // Visual props live on the inner rect.
+        // Visual props live on the inner rect. Persistem tambem na zone para sobreviver ao reload.
         if (prop === 'backgroundColor' && zoneRect) {
-            // Persist the intent on the zone (so we can distinguish "no background" vs Fabric default black).
             zone.set('backgroundColor', val);
             zoneRect.set('fill', val || 'transparent');
+            zoneRect.set('dirty', true);
             return;
         }
         if (prop === 'borderColor' && zoneRect) {
+            zone.set('borderColor', val);
             zoneRect.set('stroke', val);
+            zoneRect.set('dirty', true);
             return;
         }
         if (prop === 'borderWidth' && zoneRect) {
-            zoneRect.set('strokeWidth', Number(val));
+            const w = Number(val);
+            zone.set('borderWidth', w);
+            zoneRect.set('strokeWidth', w);
+            zoneRect.set('dirty', true);
             return;
         }
         if (prop === 'borderRadius' && zoneRect) {
             const r = Number(val);
+            zone.set('borderRadius', r);
             zoneRect.set({ rx: r, ry: r });
+            zoneRect.set('dirty', true);
             return;
         }
         if (prop === 'showBorder' && zoneRect) {
+            zone.set('showBorder', !!val);
             zoneRect.set('strokeWidth', val ? Math.max(zoneRect.strokeWidth || 0, 2) : 0);
+            zoneRect.set('dirty', true);
             return;
         }
 
@@ -28581,13 +28739,29 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
                 const n = String(o?.name || '');
                 return (n === 'price_currency_text' || n === 'retail_currency_text' || n === 'wholesale_currency_text') && isTextLikeObject(o);
             });
-            const nextCurrency = styles.priceCurrencyColor ?? styles.priceTextColor ?? styles.splashTextColor;
-            if (nextCurrency && allCurrencyTexts.length > 0) {
-                allCurrencyTexts.forEach((ct: any) => {
-                    ct.set('fill', nextCurrency);
-                    if (typeof ct.initDimensions === 'function') ct.initDimensions();
-                });
-                changed = true;
+            // CORRECAO: DEFAULT_GLOBAL_STYLES.priceCurrencyColor = undefined significa
+            // "preservar cor original do template" (ex: preto no circulo amarelo do
+            // red-burst). Se o user limpar a cor (undefined), restauramos __originalFill.
+            // Antes o codigo caia em fallback para priceTextColor/splashTextColor
+            // silenciosamente, sobrescrevendo o design.
+            if (allCurrencyTexts.length > 0) {
+                if (styles.priceCurrencyColor) {
+                    allCurrencyTexts.forEach((ct: any) => {
+                        ct.set('fill', styles.priceCurrencyColor);
+                        if (typeof ct.initDimensions === 'function') ct.initDimensions();
+                    });
+                    changed = true;
+                } else if (Object.prototype.hasOwnProperty.call(styles, 'priceCurrencyColor')) {
+                    // User setou explicitamente como undefined/vazio — restaurar original
+                    allCurrencyTexts.forEach((ct: any) => {
+                        const orig = (ct as any).__originalFill;
+                        if (orig) {
+                            ct.set('fill', orig);
+                            if (typeof ct.initDimensions === 'function') ct.initDimensions();
+                        }
+                    });
+                    changed = true;
+                }
             }
         }
         if (p === 'priceTextColor' || p === 'splashTextColor') {
@@ -28757,23 +28931,26 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
 
     // ── Fast-apply: splashRoundness ──
     // Atualiza apenas o arredondamento do price_bg SEM tocar em outros elementos.
+    // IMPORTANTE: respeita templates manuais que ja tem __originalRx/__originalRy.
     if (p === 'splashRoundness' && priceGroup && typeof styles.splashRoundness === 'number') {
-        const parts = collectObjectsDeep(priceGroup);
-        const priceBg = parts.find((o: any) => {
-            const n = String(o?.name || '');
-            return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
-        });
-        if (priceBg && String(priceBg?.type || '').toLowerCase() === 'rect') {
-            const clampVal = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
-            const roundness = clampVal(styles.splashRoundness, 0, 1);
-            (priceBg as any).__roundness = roundness;
-            const hRaw = Number(priceBg.height || 0);
-            if (Number.isFinite(hRaw) && hRaw > 0) {
-                const radius = (hRaw / 2) * roundness;
-                priceBg.set({ rx: radius, ry: radius });
+        if (!shouldPreserveManualTemplateVisual(priceGroup)) {
+            const parts = collectObjectsDeep(priceGroup);
+            const priceBg = parts.find((o: any) => {
+                const n = String(o?.name || '');
+                return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
+            });
+            if (priceBg && String(priceBg?.type || '').toLowerCase() === 'rect') {
+                const clampVal = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+                const roundness = clampVal(styles.splashRoundness, 0, 1);
+                (priceBg as any).__roundness = roundness;
+                const hRaw = Number(priceBg.height || 0);
+                if (Number.isFinite(hRaw) && hRaw > 0) {
+                    const radius = (hRaw / 2) * roundness;
+                    priceBg.set({ rx: radius, ry: radius });
+                }
+                priceBg.dirty = true;
+                changed = true;
             }
-            priceBg.dirty = true;
-            changed = true;
         }
     }
 
@@ -28823,20 +29000,23 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
 
     // ── Fast-apply: splashStrokeWidth ──
     // Altera a largura da borda/stroke do fundo da etiqueta de preço (price_bg).
+    // IMPORTANTE: respeita templates manuais (__originalStrokeWidth).
     if (p === 'splashStrokeWidth' && priceGroup && typeof styles.splashStrokeWidth === 'number') {
-        const parts = collectObjectsDeep(priceGroup);
-        const allPriceBgs = parts.filter((o: any) => {
-            const n = String(o?.name || '');
-            return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
-        });
-        if (allPriceBgs.length > 0) {
-            const strokeVal = Math.max(0, styles.splashStrokeWidth);
-            allPriceBgs.forEach((bg: any) => {
-                bg.set('strokeWidth', strokeVal);
-                (bg as any).__strokeWidth = strokeVal;
-                bg.dirty = true;
+        if (!shouldPreserveManualTemplateVisual(priceGroup)) {
+            const parts = collectObjectsDeep(priceGroup);
+            const allPriceBgs = parts.filter((o: any) => {
+                const n = String(o?.name || '');
+                return n === 'price_bg' || n === 'atac_retail_bg' || n === 'atac_wholesale_bg';
             });
-            changed = true;
+            if (allPriceBgs.length > 0) {
+                const strokeVal = Math.max(0, styles.splashStrokeWidth);
+                allPriceBgs.forEach((bg: any) => {
+                    bg.set('strokeWidth', strokeVal);
+                    (bg as any).__strokeWidth = strokeVal;
+                    bg.dirty = true;
+                });
+                changed = true;
+            }
         }
     }
 
@@ -29056,9 +29236,17 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
                 }
 
                 if (zones.length <= 1) {
-                    // Single-zone: seguro aplicar em todos os cards pois pertencem à mesma zona.
+                    // Single-zone: ainda assim filtra cards que explicitamente pertencam a OUTRA
+                    // zona (parentZoneId diferente do zid atual). Evita vazamento quando
+                    // alguma zona "fantasma" nao foi detectada por isLikelyProductZone.
                     console.warn('⚠️ [applyGlobalStylesToCards] No cards resolved for single zone; fallback to all cards');
-                    list = allCards;
+                    const currentZid = String((zone as any)?._customId || '').trim();
+                    list = currentZid
+                        ? allCards.filter((c: any) => {
+                            const cardZid = String((c as any)?.parentZoneId || '').trim();
+                            return !cardZid || cardZid === currentZid;
+                        })
+                        : allCards;
                 } else {
                     const warnedMap = ((applyGlobalStylesToCards as any).__warnedZones ||= new Set<string>());
                     if (!warnedMap.has(zoneWarnKey)) {
@@ -29219,7 +29407,12 @@ const handleApplyZonePreset = async (presetId: string) => {
             verticalAlign: z.verticalAlign ?? 'stretch',
             highlightCount: z.highlightCount ?? 0,
             highlightPos: z.highlightPos ?? 'first',
-            highlightHeight: z.highlightHeight ?? 1.5
+            highlightHeight: z.highlightHeight ?? 1.5,
+            // CORRECAO: highlightStyle e overflowPolicy faziam parte do preset mas
+            // nao eram propagados. Ao trocar preset, a zona ficava com estilo de
+            // destaque stale do preset anterior.
+            highlightStyle: z.highlightStyle ?? 'larger',
+            overflowPolicy: z.overflowPolicy ?? 'warn'
         }, { saveReason: 'preset-change' });
     } finally {
         // FIX: Restore global style updates after preset application is complete.
@@ -38316,6 +38509,13 @@ const getZoneChildren = (zone: any) => {
         // Keep deterministic binding when slot metadata exists (important after undo/reload).
         const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
         if (zoneId && slotZoneId && slotZoneId === zoneId) {
+            // CORRECAO A5: se boundId existe e aponta para OUTRA zona, o parentZoneId
+            // e autoritativo — nao sequestrar o card aqui. Isso evita que um card
+            // pertencente a Z1 apareca tambem em Z2 so porque _zoneSlot ficou stale
+            // depois de um drag/undo.
+            if (boundId && boundId !== zoneId) {
+                return;
+            }
             normalizeLegacyCard(o, explicitCard);
             o.parentZoneId = zoneId;
             applyCardFrameBinding(o, zoneFrameId);
@@ -38779,7 +38979,12 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                 const dimChanged = Math.abs(prevW - slotW) > 1 || Math.abs(prevH - slotH) > 1;
                 if (dimChanged) {
                     try {
-                        resizeSmartObject(card, slotW, slotH, undefined);
+                        // CORRECAO A8: passar stylesToApply ao resize mesmo com preserveStyles=true.
+                        // Antes passavamos undefined, o que zerava title/splash/image scales para
+                        // defaults — contradizendo a intencao de "preservar" o template visual.
+                        // O resizeSmartObject reaplica estilos internos mas sem tocar em zone
+                        // globals que ja estao no proprio card.
+                        resizeSmartObject(card, slotW, slotH, stylesToApply);
                     } catch (resizeErr) {
                         console.warn('[placeCard] resizeSmartObject (preserveStyles) failed:', resizeErr);
                     }
@@ -39803,18 +40008,27 @@ const rehydrateCanvasZones = (
                 // In that case, bind every card-like group to the single zone so the layout can be reconstructed.
                 if (zones.length === 1) {
                     card.parentZoneId = bestZone._customId;
-                    return;
-                }
+                } else {
+                    const zm = getZoneMetrics(bestZone) ?? bestZone.getBoundingRect(true);
+                    const maxDim = Math.max(zm.width || 0, zm.height || 0);
 
-                const zm = getZoneMetrics(bestZone) ?? bestZone.getBoundingRect(true);
-                const maxDim = Math.max(zm.width || 0, zm.height || 0);
-
-                // More aggressive repair if the project has no valid bindings at all (classic "solto" legacy state).
-                const base = hadAnyValidBinding ? 2.5 : 6.0;
-                const maxD = Math.max(200, maxDim * base);
-                if (Number.isFinite(bestD2) && bestD2 <= (maxD * maxD)) {
-                    card.parentZoneId = bestZone._customId;
+                    // More aggressive repair if the project has no valid bindings at all (classic "solto" legacy state).
+                    const base = hadAnyValidBinding ? 2.5 : 6.0;
+                    const maxD = Math.max(200, maxDim * base);
+                    if (Number.isFinite(bestD2) && bestD2 <= (maxD * maxD)) {
+                        card.parentZoneId = bestZone._customId;
+                    }
                 }
+            }
+
+            // Se o _zoneSlot aponta para uma zona diferente da resolvida acima,
+            // invalidamos o slot para forcar recalculateZoneLayout a reatribuir um slot
+            // valido. Sem isso o card ficaria posicionado no slot de uma zona que
+            // ja nao e sua pai — UI diverge do JSON apos undo/redo ou reload.
+            const repairedZid = String((card as any)?.parentZoneId || '').trim();
+            const slotZid = String((card as any)?._zoneSlot?.zoneId || '').trim();
+            if (repairedZid && slotZid && slotZid !== repairedZid) {
+                (card as any)._zoneSlot = null;
             }
         });
 
