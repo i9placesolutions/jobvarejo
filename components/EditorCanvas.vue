@@ -34680,9 +34680,16 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
         if (typeof decTxt.initDimensions === 'function') decTxt.initDimensions();
 
         if (unitTxt) {
-            const raw = (typeof unitText === 'string' && unitText.trim().length) ? unitText : String(unitTxt.text || '').trim();
-            const u = raw ? normalizeUnitForLabel(raw) : '';
-            unitTxt.set?.('text', u);
+            // Templates como o Preto/Amarelo deixam o campo de unidade escondido (visible=false).
+            // Nesses casos, NAO repovoar a gramatura ao reabrir o projeto — texto fica vazio
+            // para impedir que apareca caso algum fluxo de edicao religue a visibilidade.
+            if (unitTxt.visible === false) {
+                unitTxt.set?.('text', '');
+            } else {
+                const raw = (typeof unitText === 'string' && unitText.trim().length) ? unitText : String(unitTxt.text || '').trim();
+                const u = raw ? normalizeUnitForLabel(raw) : '';
+                unitTxt.set?.('text', u);
+            }
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
         }
         // Keep Mini Editor templates visually identical and only fit dynamic values.
@@ -34707,9 +34714,14 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
         if (typeof intTxt.initDimensions === 'function') intTxt.initDimensions();
         if (typeof decTxt.initDimensions === 'function') decTxt.initDimensions();
         if (unitTxt) {
-            const raw = (typeof unitText === 'string' && unitText.trim().length) ? unitText : String(unitTxt.text || '').trim();
-            const u = raw ? normalizeUnitForLabel(raw) : '';
-            unitTxt.set?.('text', u);
+            // Mesma regra do caminho split principal: respeita visible=false do template.
+            if (unitTxt.visible === false) {
+                unitTxt.set?.('text', '');
+            } else {
+                const raw = (typeof unitText === 'string' && unitText.trim().length) ? unitText : String(unitTxt.text || '').trim();
+                const u = raw ? normalizeUnitForLabel(raw) : '';
+                unitTxt.set?.('text', u);
+            }
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
         }
     } else {
