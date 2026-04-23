@@ -145,9 +145,16 @@ type CanvasUploadSuccessEntry = {
 const canvasUploadInFlightByScope = new Map<string, CanvasUploadInFlightEntry>()
 const canvasUploadSuccessByScope = new Map<string, CanvasUploadSuccessEntry>()
 
-// Cache de presigned URLs de leitura (GET) — válidas por ~55min no servidor, cache por 30min
+// Cache de presigned URLs de leitura (GET) — válidas por ~55min no servidor, cache por 30min.
+// Canvas JSON é sobrescrito na mesma key, então o cache precisa ser invalidado após upload.
 const _presignedGetCache = new Map<string, { url: string; expiresAt: number }>()
 const PRESIGNED_CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutos
+
+const invalidatePresignedGetCache = (key: string) => {
+  const normalizedKey = String(key || '').trim()
+  if (!normalizedKey) return
+  _presignedGetCache.delete(normalizedKey)
+}
 
 const getCanvasSnapshotSavedAt = (canvasJson: any): number => {
   if (!canvasJson || typeof canvasJson !== 'object') return 0
@@ -215,11 +222,12 @@ async function getPresignedUrl(
   contentType?: string,
   operation: 'put' | 'get' = 'put',
   retries = 2,
-  headers?: Record<string, string> | null
+  headers?: Record<string, string> | null,
+  forceRefresh = false
 ): Promise<string | null> {
   // Cache hit para GET (leitura): evita roundtrip extra ao servidor
   if (operation === 'get') {
-    const cached = _presignedGetCache.get(key)
+    const cached = forceRefresh ? null : _presignedGetCache.get(key)
     if (cached && cached.expiresAt > Date.now()) {
       return cached.url
     }
@@ -302,6 +310,7 @@ const fetchJsonWithRetry = async (
 
       const response = await fetch(url, {
         signal: controller.signal,
+        cache: 'no-store',
         ...(headers ? { headers } : {})
       })
       clearTimeout(timeoutId)
@@ -662,6 +671,7 @@ const saveCanvasData = async (
             lastSavedAt.value = new Date()
             saveStatus.value = 'saved'
             recordWasabiSuccess()
+            invalidatePresignedGetCache(key)
             rememberCanvasUploadSuccess(pageScope, snapshotSavedAt, result.key)
             console.log(`✅ Canvas salvo via proxy (tentativa ${attempt}/${effectiveRetries}, ${Date.now() - uploadStart}ms):`, result.key)
             return result.key
@@ -736,7 +746,8 @@ const saveCanvasData = async (
    * Carrega dados JSON da Wasabi Storage usando o caminho completo
    */
   const loadCanvasDataFromPath = async (
-    canvasDataPath: string
+    canvasDataPath: string,
+    opts: { forceRefresh?: boolean } = {}
   ): Promise<any | null> => {
     // Não executar no servidor (SSR)
     if (import.meta.server) {
@@ -748,7 +759,7 @@ const saveCanvasData = async (
       const headers = await tryGetApiAuthHeaders()
       if (!headers) return null
 
-      const presignedUrl = await getPresignedUrl(canvasDataPath, undefined, 'get', 2, headers)
+      const presignedUrl = await getPresignedUrl(canvasDataPath, undefined, 'get', 2, headers, !!opts.forceRefresh)
       if (presignedUrl) {
         const canvasJson = await fetchJsonWithRetry(presignedUrl, 2)
         if (canvasJson) {
@@ -865,7 +876,7 @@ const saveCanvasData = async (
     }
 
     try {
-      const key = `projects/${userId}/${projectId}/thumb_${pageId}.png`
+      const key = `projects/${userId}/${projectId}/thumb_${pageId}_${Date.now()}.png`
       const authHeaders = await tryGetApiAuthHeaders()
       if (!authHeaders) return null
 

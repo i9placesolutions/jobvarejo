@@ -8,7 +8,9 @@ const {
   theme,
   paginatedProducts,
   productsPerPage,
+  currentPage,
   highlightPositions,
+  cardTemplates,
   addProduct,
   updateProduct,
   reorderProducts,
@@ -21,17 +23,27 @@ const fontConfig = computed(() => (flyer.value?.font_config || {}) as Record<str
 const priceOptionsModalIndex = ref<number | null>(null)
 const priceTagSelectorIndex = ref<number | null>(null)
 const bubbleModalIndex = ref<number | null>(null)
+const priceOptionsProduct = computed(() => {
+  const idx = priceOptionsModalIndex.value
+  return idx == null ? null : (paginatedProducts.value[idx] || null)
+})
+const priceTagProduct = computed(() => {
+  const idx = priceTagSelectorIndex.value
+  return idx == null ? null : (paginatedProducts.value[idx] || null)
+})
 
 const openPriceOptions = (idx: number) => { priceOptionsModalIndex.value = idx }
 const openPriceTagSelector = (idx: number) => { priceTagSelectorIndex.value = idx }
 const openBubbleModal = (idx: number) => { bubbleModalIndex.value = idx }
+const pageStartIndex = computed(() => Math.max(0, (currentPage.value - 1) * productsPerPage.value))
+const toGlobalProductIndex = (pageIndex: number) => pageStartIndex.value + pageIndex
 
 const onSelectPriceMode = (mode: string, applyAll: boolean) => {
   if (priceOptionsModalIndex.value != null) {
     if (applyAll) {
-      paginatedProducts.value.forEach((_: any, i: number) => updateProduct(i, { price_mode: mode } as any))
+      paginatedProducts.value.forEach((_: any, i: number) => updateProduct(toGlobalProductIndex(i), { price_mode: mode } as any))
     } else {
-      updateProduct(priceOptionsModalIndex.value, { price_mode: mode } as any)
+      updateProduct(toGlobalProductIndex(priceOptionsModalIndex.value), { price_mode: mode } as any)
     }
   }
   priceOptionsModalIndex.value = null
@@ -40,25 +52,31 @@ const onSelectPriceMode = (mode: string, applyAll: boolean) => {
 const onSelectPriceTag = (styleId: string, applyAll: boolean) => {
   if (priceTagSelectorIndex.value != null) {
     if (applyAll) {
-      paginatedProducts.value.forEach((_: any, i: number) => updateProduct(i, { price_tag_style_id: styleId } as any))
+      paginatedProducts.value.forEach((_: any, i: number) => updateProduct(toGlobalProductIndex(i), { price_tag_style_id: styleId } as any))
     } else {
-      updateProduct(priceTagSelectorIndex.value, { price_tag_style_id: styleId } as any)
+      updateProduct(toGlobalProductIndex(priceTagSelectorIndex.value), { price_tag_style_id: styleId } as any)
     }
   }
   priceTagSelectorIndex.value = null
 }
 
-// Template de card ativo — SEMPRE QRO local, NUNCA admin
+// Template de card ativo: biblioteca salva no flyer ou QRO local salvo no font_config.
 const DEFAULT_QRO_TEMPLATE = 'qro-vertical-classic'
 
 const activeCardTemplate = computed(() => {
-  // 1. Se o usuario escolheu um layout QRO no font_config
+  const dbTemplateId = String((flyer.value as any)?.card_template_id || '').trim()
+  if (dbTemplateId) {
+    const tpl = (cardTemplates.value || []).find((item: any) => String(item?.id || '') === dbTemplateId)
+    if (tpl) return tpl
+  }
+
+  // Se o usuario escolheu um layout QRO no font_config
   const localLayoutId = String(fontConfig.value.card_layout || '').trim()
   if (localLayoutId) {
     const tpl = getQroCardTemplateById(localLayoutId)
     if (tpl) return tpl
   }
-  // 2. Fallback: template padrao QRO
+
   return getQroCardTemplateById(DEFAULT_QRO_TEMPLATE) || QRO_CARD_TEMPLATES[0] || null
 })
 
@@ -66,7 +84,7 @@ const activeCardTemplate = computed(() => {
 const toggleHighlight = (idx: number) => {
   const prod = paginatedProducts.value[idx]
   if (!prod) return
-  updateProduct(idx, { is_highlight: !prod.is_highlight })
+  updateProduct(toGlobalProductIndex(idx), { is_highlight: !prod.is_highlight })
 }
 
 // ── Drag & Drop para reordenar produtos ─────────────────────────────────────
@@ -95,7 +113,7 @@ const onDrop = (e: DragEvent, toIdx: number) => {
   e.preventDefault()
   const fromIdx = dragFromIndex.value
   if (fromIdx !== null && fromIdx !== toIdx) {
-    reorderProducts(fromIdx, toIdx)
+    reorderProducts(toGlobalProductIndex(fromIdx), toGlobalProductIndex(toIdx))
   }
   dragFromIndex.value = null
   dragOverIndex.value = null
@@ -318,16 +336,16 @@ const handleOpenEditor = () => {
 
     <!-- Modal Opcoes de Preco -->
     <BuilderPriceOptionsModal
-      v-if="priceOptionsModalIndex != null && paginatedProducts[priceOptionsModalIndex]"
-      :current-mode="paginatedProducts[priceOptionsModalIndex].price_mode || 'simple'"
+      v-if="priceOptionsProduct"
+      :current-mode="priceOptionsProduct.price_mode || 'simple'"
       @select="onSelectPriceMode"
       @close="priceOptionsModalIndex = null"
     />
 
     <!-- Modal Seletor de Etiqueta -->
     <BuilderPriceTagSelectorModal
-      v-if="priceTagSelectorIndex != null && paginatedProducts[priceTagSelectorIndex]"
-      :current-style-id="paginatedProducts[priceTagSelectorIndex].price_tag_style_id"
+      v-if="priceTagProduct"
+      :current-style-id="priceTagProduct.price_tag_style_id"
       @select="onSelectPriceTag"
       @close="priceTagSelectorIndex = null"
     />

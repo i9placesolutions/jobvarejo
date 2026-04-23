@@ -53,6 +53,7 @@ export default defineEventHandler(async (event) => {
             is_highlight, is_adult,
             is_pinned, is_price_pinned, bg_opacity, custom_lines,
             price_tag_style_id, badge_style_id,
+            image_zoom, image_x, image_y,
             extra_images, extra_images_layout)
          VALUES
            ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6,
@@ -64,7 +65,8 @@ export default defineEventHandler(async (event) => {
             $23::boolean, $24::boolean,
             $25::boolean, $26::boolean, $27, $28::jsonb,
             $29::uuid, $30::uuid,
-            $31::jsonb, $32)
+            $31::int, $32::int, $33::int,
+            $34::jsonb, $35)
          RETURNING *`,
         [
           id, flyerId, p.product_id || null, p.position ?? 0,
@@ -79,6 +81,9 @@ export default defineEventHandler(async (event) => {
           p.is_pinned ?? false, p.is_price_pinned ?? false,
           p.bg_opacity ?? null, p.custom_lines ? JSON.stringify(p.custom_lines) : null,
           p.price_tag_style_id || null, p.badge_style_id || null,
+          Number.isFinite(Number(p.image_zoom)) ? Number(p.image_zoom) : 100,
+          Number.isFinite(Number(p.image_x)) ? Number(p.image_x) : 0,
+          Number.isFinite(Number(p.image_y)) ? Number(p.image_y) : 0,
           JSON.stringify(p.extra_images || []),
           (typeof p.extra_images_layout === 'string' && ['auto', 'horizontal', 'vertical'].includes(p.extra_images_layout))
             ? p.extra_images_layout

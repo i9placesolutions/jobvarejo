@@ -90,9 +90,10 @@ const batchSearchImages = async () => {
       const filled = new Set<number>()
       termsMap.forEach(({ index, term }) => {
         const match = res.results[term]
-        if (match) {
-          localProducts.value[index].image = match.image
-          localProducts.value[index].image_wasabi_key = match.image_wasabi_key || null
+        const product = localProducts.value[index]
+        if (match && product) {
+          product.image = match.image
+          product.image_wasabi_key = match.image_wasabi_key || null
           filled.add(index)
         }
       })
@@ -115,8 +116,11 @@ const openImageEditor = (index: number) => {
 // Callback quando imagem é selecionada no editor
 const onImageSelected = (data: { image: string; image_wasabi_key: string | null }) => {
   if (editingProductIndex.value !== null) {
-    localProducts.value[editingProductIndex.value].image = data.image
-    localProducts.value[editingProductIndex.value].image_wasabi_key = data.image_wasabi_key
+    const product = localProducts.value[editingProductIndex.value]
+    if (product) {
+      product.image = data.image
+      product.image_wasabi_key = data.image_wasabi_key
+    }
   }
   imageEditorOpen.value = false
   editingProductIndex.value = null

@@ -10,6 +10,7 @@ export interface Page {
     type: 'RETAIL_OFFER' | 'FREE_DESIGN';
     canvasData: any; // JSON do FabricJS (em memória apenas)
     canvasDataPath?: string; // Caminho no Storage (salvo no banco)
+    canvasSavedAt?: number; // Timestamp do JSON confirmado no Storage
     thumbnail?: string; // DataURL da miniatura (em memória)
     thumbnailUrl?: string; // URL pública no Storage
     thumbnailDirty?: boolean;
@@ -615,6 +616,9 @@ const serializeProjectDraftPages = (pages: Page[]): ProjectDraftPagePayload[] =>
         canvasDataPath: typeof page?.canvasDataPath === 'string'
             ? (page.canvasDataPath.trim() || undefined)
             : undefined,
+        canvasSavedAt: Number.isFinite(Number(page?.canvasSavedAt))
+            ? Number(page.canvasSavedAt)
+            : undefined,
         // NOTE: thumbnail (base64 data URL) is intentionally excluded from
         // localStorage drafts to avoid blowing the ~5 MB quota.  The
         // thumbnailUrl (S3 URL) is preserved for restoration.
@@ -662,6 +666,9 @@ const hydratePagesFromProjectDraft = (projectId: string, pages: ProjectDraftPage
             canvasData: normalizedCanvasData,
             canvasDataPath: typeof page?.canvasDataPath === 'string'
                 ? (page.canvasDataPath.trim() || undefined)
+                : undefined,
+            canvasSavedAt: Number.isFinite(Number(page?.canvasSavedAt))
+                ? Number(page.canvasSavedAt)
                 : undefined,
             thumbnail: typeof page?.thumbnail === 'string' ? page.thumbnail : undefined,
             thumbnailUrl: typeof page?.thumbnailUrl === 'string'
@@ -724,6 +731,7 @@ let deferredCanvasPrefetchRunId = 0
 type ResolvedPageCanvasState = {
     canvasData: any
     canvasDataPath?: string
+    canvasSavedAt?: number
     finalObjectCount: number
     finalFingerprint: string
     needsRemoteSync: boolean
@@ -821,9 +829,19 @@ export const useProject = () => {
                         `Diferença: ${Math.round((expectedCanvasSavedAt - wasabiTs) / 1000)}s. ` +
                         `Preferindo backup legado do DB ou draft local.`
                     )
-                    // Marcar como stale - pickBestRemoteCanvasData vai preferir um
-                    // backup legado do DB se ele ainda existir, senão o draft local.
-                    if (dbCanvasData && getCanvasObjectCount(dbCanvasData) > 0) {
+                    const refreshedCanvasData = await loadCanvasDataFromPath(preferredPath, { forceRefresh: true })
+                    const refreshedTs = getCanvasSavedAt(refreshedCanvasData)
+                    if (
+                        refreshedCanvasData &&
+                        getCanvasObjectCount(refreshedCanvasData) > 0 &&
+                        (refreshedTs === 0 || expectedCanvasSavedAt - refreshedTs <= 5_000)
+                    ) {
+                        serverCanvasData = refreshedCanvasData
+                        console.log('✅ CanvasData stale atualizado com leitura sem cache:', {
+                            pageId: opts.pageId,
+                            refreshedTs
+                        })
+                    } else if (dbCanvasData && getCanvasObjectCount(dbCanvasData) > 0) {
                         // Backup legado do DB existe e tem conteúdo - ignorar Wasabi stale.
                         serverCanvasData = null
                     }
@@ -894,6 +912,7 @@ export const useProject = () => {
         return {
             canvasData,
             canvasDataPath: resolvedCanvasPath,
+            canvasSavedAt: getCanvasSavedAt(canvasData) || Number(opts.pageMeta?.canvasSavedAt || 0) || undefined,
             finalObjectCount,
             finalFingerprint,
             needsRemoteSync: draftDecision.needsRemoteSync,
@@ -904,6 +923,7 @@ export const useProject = () => {
     const applyResolvedPageCanvasState = (page: Page, resolved: ResolvedPageCanvasState) => {
         page.canvasData = resolved.canvasData
         page.canvasDataPath = resolved.canvasDataPath || page.canvasDataPath
+        page.canvasSavedAt = resolved.canvasSavedAt || page.canvasSavedAt
         page.lastLoadedFingerprint = resolved.finalFingerprint
         page.lastSavedFingerprint = resolved.finalFingerprint
         page.lastPersistedObjectCount = resolved.finalObjectCount
@@ -1347,6 +1367,7 @@ export const useProject = () => {
             // indices nao batem mais. Map<pageId, path> fica estavel.
             const storagePathsById = new Map<string, string>()
             const thumbnailUrlsById = new Map<string, string>()
+            const confirmedCanvasUploadPageIds = new Set<string>()
             const failedCanvasSyncPageIds = new Set<string>()
             const failedThumbnailSyncPageIds = new Set<string>()
 
@@ -1450,8 +1471,11 @@ export const useProject = () => {
                                 () => canvasUploadAbortController.abort(`saveProjectDB-soft-timeout:${page.id}`)
                             )
                             if (path) {
+                                const confirmedCanvasSavedAt = getCanvasSavedAt(page.canvasData) || Date.now()
                                 storagePathsById.set(page.id, path)
+                                confirmedCanvasUploadPageIds.add(page.id)
                                 page.canvasDataPath = path
+                                page.canvasSavedAt = confirmedCanvasSavedAt
                                 page.lastPersistedObjectCount = currentCount
                                 console.log('✅ Canvas salvo na Wasabi:', path)
                             } else {
@@ -1584,25 +1608,30 @@ export const useProject = () => {
             // Upload bem-sucedido: limpar flag de falha
             (project as any).__uploadFailed = false;
 
-            // 2. Preparar payload mínimo para o banco (apenas metadados)
-                setSaveStage('prepare-db-payload')
-	            const pageMetadata = project.pages.map((page) => {
-                const metadata: any = {
-                    id: page.id,
-                    name: page.name,
-                    width: page.width,
-                    height: page.height,
-                    type: page.type,
-                    canvasDataPath: storagePathsById.get(page.id) || page.canvasDataPath, // Caminho no Storage
-                    thumbnailUrl: thumbnailUrlsById.get(page.id) || page.thumbnailUrl, // URL do thumbnail
-                    // Timestamp do canvas no momento do save — permite detectar no reload
-                    // se o arquivo Wasabi é mais antigo que o esperado (Wasabi upload falhou
-                    // em um save posterior mas o DB manteve o canvasDataPath antigo).
-                    canvasSavedAt: getCanvasSavedAt(page.canvasData) || Date.now()
-                }
+	            // 2. Preparar payload mínimo para o banco (apenas metadados)
+	                setSaveStage('prepare-db-payload')
+		            const pageMetadata = project.pages.map((page) => {
+                const canvasDataPath = storagePathsById.get(page.id) || page.canvasDataPath
+                const didUploadCanvas = confirmedCanvasUploadPageIds.has(page.id)
+                const liveCanvasSavedAt = getCanvasSavedAt(page.canvasData)
+                const confirmedCanvasSavedAt = didUploadCanvas
+                    ? (liveCanvasSavedAt || Number(page.canvasSavedAt || 0) || Date.now())
+                    : (Number(page.canvasSavedAt || 0) || liveCanvasSavedAt || undefined)
+		                const metadata: any = {
+	                    id: page.id,
+	                    name: page.name,
+	                    width: page.width,
+	                    height: page.height,
+	                    type: page.type,
+		                    canvasDataPath, // Caminho no Storage
+	                    thumbnailUrl: thumbnailUrlsById.get(page.id) || page.thumbnailUrl, // URL do thumbnail
+		                    // Timestamp do canvas confirmado no Storage. Não renovar para
+		                    // páginas que apenas preservaram o canvasDataPath anterior.
+	                }
+                if (confirmedCanvasSavedAt) metadata.canvasSavedAt = confirmedCanvasSavedAt
 
-                return metadata
-            })
+	                return metadata
+	            })
 
 	            const firstPageId = project.pages[0]?.id
 	            let payload = {
@@ -2040,10 +2069,13 @@ export const useProject = () => {
                     name: pageMeta.name,
                     width: pageMeta.width || 1080,
                     height: pageMeta.height || 1920,
-                    type: pageMeta.type || 'RETAIL_OFFER',
-                    canvasData: null,
-                    canvasDataPath: pageMeta.canvasDataPath,
-                    thumbnailUrl: typeof pageMeta.thumbnailUrl === 'string'
+	                    type: pageMeta.type || 'RETAIL_OFFER',
+	                    canvasData: null,
+	                    canvasDataPath: pageMeta.canvasDataPath,
+	                    canvasSavedAt: Number.isFinite(Number(pageMeta.canvasSavedAt))
+                            ? Number(pageMeta.canvasSavedAt)
+                            : undefined,
+	                    thumbnailUrl: typeof pageMeta.thumbnailUrl === 'string'
                         ? (pageMeta.thumbnailUrl.trim() || undefined)
                         : undefined,
                     lastLoadedFingerprint: 'deferred',

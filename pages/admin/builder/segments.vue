@@ -12,9 +12,8 @@ definePageMeta({
   ssr: false,
 })
 
-const { getApiAuthHeaders } = useApiAuthHeaders()
+const { getApiAuthHeaders } = useApiAuth()
 const route = useRoute()
-const headers = computed(() => getApiAuthHeaders())
 
 // State
 const segments = ref<any[]>([])
@@ -44,7 +43,7 @@ const ICON_OPTIONS = [
 const fetchSegments = async () => {
   isLoading.value = true
   try {
-    const data = await $fetch<any>('/api/admin/builder/segments', { headers: headers.value })
+    const data = await $fetch<any>('/api/admin/builder/segments', { headers: await getApiAuthHeaders() })
     segments.value = Array.isArray(data) ? data : data?.data ?? []
   } catch (err) {
     console.error('Erro ao carregar segmentos:', err)
@@ -93,13 +92,13 @@ const handleSave = async () => {
     if (editingId.value) {
       await $fetch(`/api/admin/builder/segments/${editingId.value}`, {
         method: 'PUT',
-        headers: headers.value,
+        headers: await getApiAuthHeaders(),
         body: form.value,
       })
     } else {
       await $fetch('/api/admin/builder/segments', {
         method: 'POST',
-        headers: headers.value,
+        headers: await getApiAuthHeaders(),
         body: form.value,
       })
     }
@@ -115,7 +114,7 @@ const handleDelete = async (id: string) => {
   try {
     await $fetch(`/api/admin/builder/segments/${id}`, {
       method: 'DELETE',
-      headers: headers.value,
+      headers: await getApiAuthHeaders(),
     })
     await fetchSegments()
   } catch (err) {
@@ -127,7 +126,7 @@ const toggleActive = async (seg: any) => {
   try {
     await $fetch(`/api/admin/builder/segments/${seg.id}`, {
       method: 'PUT',
-      headers: headers.value,
+      headers: await getApiAuthHeaders(),
       body: { is_active: !seg.is_active },
     })
     await fetchSegments()

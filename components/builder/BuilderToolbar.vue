@@ -99,7 +99,7 @@ const activeLocalCardLayout = computed(() => {
   return isQroCardTemplateId(raw) ? raw : ''
 })
 const activeCardTemplateValue = computed(() => activeLocalCardLayout.value || ((flyer.value as any)?.card_template_id || ''))
-const hasVisualCardTemplates = computed(() => QRO_CARD_TEMPLATES.length > 0 || cardTemplates.length > 0)
+const hasVisualCardTemplates = computed(() => QRO_CARD_TEMPLATES.length > 0 || cardTemplates.value.length > 0)
 const setFc = (changes: Record<string, any>) => {
   updateFlyer({ font_config: { ...fontConfig.value, ...changes } })
 }

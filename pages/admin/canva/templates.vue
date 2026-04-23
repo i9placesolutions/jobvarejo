@@ -165,9 +165,10 @@ const saveEdit = async () => {
     })
     // Atualizar na lista local
     const idx = templates.value.findIndex(t => t.id === editingTemplate.value!.id)
-    if (idx !== -1) {
+    const current = templates.value[idx]
+    if (idx !== -1 && current) {
       templates.value[idx] = {
-        ...templates.value[idx],
+        ...current,
         ...body,
       }
     }

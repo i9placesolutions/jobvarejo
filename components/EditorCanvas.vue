@@ -992,9 +992,10 @@ const syncLabelTemplatesIntoProjectPages = (source: 'user' | 'system' = 'user') 
 
     for (let i = 0; i < pages.length; i++) {
         const page = pages[i];
-        const baseCanvasData = (page?.canvasData && typeof page.canvasData === 'object')
-            ? page.canvasData
-            : { version: '6.0.0', objects: [] };
+        if (!page?.canvasData || typeof page.canvasData !== 'object') {
+            continue;
+        }
+        const baseCanvasData = page.canvasData;
         const nextCanvasData = {
             ...baseCanvasData,
             [LABEL_TEMPLATES_JSON_KEY]: templatesSnapshot
@@ -28124,7 +28125,7 @@ const resolveZoneUpdatesPayload = (propOrPayload: any, val: any): Record<string,
     return {};
 };
 
-const handleUpdateZone = (propOrPayload: string | Record<string, any>, val?: any) => {
+const handleUpdateZone = async (propOrPayload: string | Record<string, any>, val?: any) => {
     const updates = resolveZoneUpdatesPayload(propOrPayload, val);
     const entries = Object.entries(updates).filter(([key]) => key && key !== 'prop' && key !== 'value');
     if (!entries.length) {
@@ -28143,13 +28144,11 @@ const handleUpdateZone = (propOrPayload: string | Record<string, any>, val?: any
 
     // 2. Apply to Canvas Object. Se algum prop falhar, logamos e seguimos — o estado
     // reativo ja reflete a intencao e o proximo save/render tentara sincronizar.
-    entries.forEach(([prop, value]) => {
-        try {
-            updateZoneOnCanvas(prop, value);
-        } catch (err) {
-            console.warn(`⚠️ [handleUpdateZone] Falha ao aplicar prop "${prop}" no canvas:`, err);
-        }
-    });
+    try {
+        await updateZoneOnCanvas(Object.fromEntries(entries));
+    } catch (err) {
+        console.warn('⚠️ [handleUpdateZone] Falha ao aplicar updates no canvas:', err);
+    }
 }
 
 const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: { save?: boolean; saveReason?: string } = {}) => {
@@ -28402,21 +28401,30 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
     refreshSelectedRef();
 };
 
-const updateZoneOnCanvas = (prop: string, val: any) => {
+const updateZoneOnCanvas = async (propOrPayload: string | Record<string, any>, val?: any) => {
+    const updates = resolveZoneUpdatesPayload(propOrPayload, val);
+    const entries = Object.entries(updates).filter(([key]) => key && key !== 'prop' && key !== 'value');
+    if (!entries.length) {
+        console.warn('⚠️ [updateZoneOnCanvas] Invalid payload received:', propOrPayload);
+        return;
+    }
+    const normalizedUpdates = Object.fromEntries(entries);
     const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false });
     if (!targets.length) {
         console.warn('⚠️ [updateZoneOnCanvas] No zone found! Cannot update canvas.');
         return;
     }
     if (targets.length === 1) {
-        applyZoneUpdates(targets[0], { [prop]: val });
+        await applyZoneUpdates(targets[0], normalizedUpdates);
         return;
     }
 
     // Multiple target fallback (rare): apply without intermediate saves and commit once.
-    targets.forEach((z: any) => applyZoneUpdates(z, { [prop]: val }, { save: false }));
+    for (const z of targets) {
+        await applyZoneUpdates(z, normalizedUpdates, { save: false });
+    }
     safeRequestRenderAll();
-    saveCurrentState();
+    await saveCurrentState();
     refreshSelectedRef();
 }
 
@@ -29426,7 +29434,7 @@ const handleApplyZonePreset = async (presetId: string) => {
     }
 };
 
-const handleSyncZoneGaps = (padding: number) => {
+const handleSyncZoneGaps = async (padding: number) => {
     const active = resolveZoneTargetsForUpdates({ allowAllFallback: false })[0] || getCurrentZoneObject();
     if (!active) {
         console.warn('⚠️ [handleSyncZoneGaps] No zone resolved; skipping sync to avoid UI/canvas divergence');
@@ -29435,7 +29443,7 @@ const handleSyncZoneGaps = (padding: number) => {
     productZoneState.syncGapsWithPadding(padding);
     if (!canvas.value) return;
     const z = productZoneState.productZone.value;
-    applyZoneUpdates(active, {
+    await applyZoneUpdates(active, {
         padding: z.padding,
         gapHorizontal: z.gapHorizontal ?? z.padding,
         gapVertical: z.gapVertical ?? z.padding
@@ -34960,6 +34968,7 @@ async function createLabelTemplateFromSelection(name: string) {
     };
     tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     labelTemplates.value = [...labelTemplates.value, tpl];
+    syncLabelTemplatesIntoProjectPages('user');
     saveCurrentState();
     const saved = await upsertLabelTemplateToDb(tpl);
     if (!saved) {
@@ -34988,6 +34997,7 @@ async function createDefaultLabelTemplate(name: string) {
         };
         tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
         labelTemplates.value = [...labelTemplates.value, tpl];
+        syncLabelTemplatesIntoProjectPages('user');
         saveCurrentState();
         const saved = await upsertLabelTemplateToDb(tpl);
         if (!saved) {

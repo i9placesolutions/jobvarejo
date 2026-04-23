@@ -183,6 +183,22 @@ CREATE TABLE IF NOT EXISTS builder_flyers (
     footer_style TEXT DEFAULT 'rounded_large',
     ink_economy INT DEFAULT 0,
     show_cover BOOLEAN DEFAULT FALSE,
+    custom_products_per_page INT,
+
+    -- General branding and footer overrides
+    show_logo BOOLEAN DEFAULT TRUE,
+    custom_logo TEXT,
+    logo_size INT DEFAULT 80,
+    logo_x INT DEFAULT 50,
+    logo_y INT DEFAULT 50,
+    payment_methods JSONB DEFAULT '[]',
+    segments JSONB DEFAULT '[]',
+    footer_bg TEXT,
+    footer_text_color TEXT,
+    footer_primary TEXT,
+    footer_secondary TEXT,
+    footer_show_logo BOOLEAN DEFAULT TRUE,
+    footer_logo_size INT DEFAULT 52,
 
     -- JSON configs
     font_config JSONB DEFAULT '{}',

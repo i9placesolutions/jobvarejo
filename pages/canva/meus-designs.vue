@@ -139,6 +139,7 @@ const navigateToFolder = async (folder: CanvaFolder) => {
 const navigateToBreadcrumb = async (index: number) => {
   closeMenus()
   const item = breadcrumbs.value[index]
+  if (!item) return
   currentFolderId.value = item.id
   breadcrumbs.value = breadcrumbs.value.slice(0, index + 1)
   await loadCurrentFolder()

@@ -1,10 +1,8 @@
 import type { H3Event } from 'h3'
 
 const isSecureRequest = (event: H3Event): boolean => {
-  const forwardedProto = String(getHeader(event, 'x-forwarded-proto') || '')
-    .split(',')[0]
-    .trim()
-    .toLowerCase()
+  const [rawForwardedProto = ''] = String(getHeader(event, 'x-forwarded-proto') || '').split(',')
+  const forwardedProto = rawForwardedProto.trim().toLowerCase()
 
   if (forwardedProto === 'https') return true
   if (forwardedProto === 'http') return false

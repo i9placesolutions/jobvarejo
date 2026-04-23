@@ -98,8 +98,9 @@ const setCache = (designId: string, result: DesignIntelligentAnalysis): void => 
   // Limitar cache a 100 entradas para nao estourar memoria
   if (analysisCache.size > 100) {
     const oldest = [...analysisCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp)
-    for (let i = 0; i < 20; i++) {
-      analysisCache.delete(oldest[i][0])
+    for (let i = 0; i < Math.min(20, oldest.length); i++) {
+      const entry = oldest[i]
+      if (entry) analysisCache.delete(entry[0])
     }
   }
   analysisCache.set(designId, { result, timestamp: Date.now() })
@@ -317,6 +318,7 @@ const callOpenAI = async (
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i]
+    if (!chunk) continue
     const result = await singleOpenAICall(chunk.texts, chunk.images, apiKey)
 
     if (!result) return null // falha na API, usar fallback

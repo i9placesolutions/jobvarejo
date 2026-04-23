@@ -85,7 +85,7 @@ const UNIT_PATTERN = /\b(KG|UN|G|100G|500G|L|ML|PCT|CX|DZ|BD|FD|SC|PEA|BANDEJA|C
 // Extrair unidade do texto
 const extractUnit = (text: string): string | null => {
   const match = text.match(UNIT_PATTERN)
-  return match ? match[1].toUpperCase() : null
+  return match?.[1] ? match[1].toUpperCase() : null
 }
 
 // Verificar se texto e um elemento fixo
@@ -184,7 +184,7 @@ export const analyzeCanvaDesign = (
       const area = dim.width * dim.height
       if (area <= 1500 || area >= 200000) return false
       // Excluir asset_ids que aparecem em muitos elements (decorativos/patterns)
-      if (f.asset_id && assetIdCount[f.asset_id] > 10) return false
+      if (f.asset_id && (assetIdCount[f.asset_id] || 0) > 10) return false
       return true
     })
     .map((f: any) => ({

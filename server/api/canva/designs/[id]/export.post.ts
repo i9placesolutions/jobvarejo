@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const pages = body.pages as number[] | undefined // ex: [1, 3] = so paginas 1 e 3
 
   // Montar opcoes de export incluindo paginas especificas
-  const exportOptions: Record<string, any> = { type: format }
+  const exportOptions: { type: string; pages?: number[]; [key: string]: any } = { type: String(format) }
   if (pages && Array.isArray(pages) && pages.length > 0) {
     exportOptions.pages = pages
   }

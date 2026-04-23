@@ -133,7 +133,8 @@ export default defineEventHandler(async (event) => {
     } else {
       command = new GetObjectCommand({
         Bucket: bucket,
-        Key: key
+        Key: key,
+        ...(key.endsWith('.json') ? { ResponseCacheControl: 'no-store' } : {})
       })
     }
 

@@ -185,7 +185,7 @@ export function getAutoHighlightLayout(productCount: number): HighlightLayoutCon
   const matches = HIGHLIGHT_LAYOUTS.filter(l => l.productsPerPage === productCount)
   if (matches.length === 0) return null
   // Prefer first match (typically left highlight or top highlight)
-  return matches[0]
+  return matches[0] ?? null
 }
 
 /**

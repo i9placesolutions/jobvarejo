@@ -292,13 +292,14 @@ export function resolveContentType(ct: string): string {
 
 // Retorna layout options agrupados por categoria (para o select do sidebar)
 export function getLayoutOptions(): { label: string; options: { value: string; label: string }[] }[] {
-  const groups: Record<string, { value: string; label: string }[]> = {
+  const groups = {
     '2x2': [],
     '1x3': [],
     '3x1': [],
-  }
+  } as Record<'2x2' | '1x3' | '3x1', { value: string; label: string }[]>
   for (const [key, layout] of Object.entries(GRID_LAYOUTS)) {
-    groups[layout.category].push({ value: key, label: layout.label })
+    const group = groups[layout.category as keyof typeof groups]
+    if (group) group.push({ value: key, label: layout.label })
   }
   return [
     { label: 'Grade 2x2 (elemento com span)', options: groups['2x2'] },

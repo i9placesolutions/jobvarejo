@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
     'show_facebook', 'show_website'
   ]
   const numericKeys = ['logo_size', 'logo_x', 'logo_y']
-  const stringKeys = ['footer_layout', 'footer_bg', 'footer_text_color', 'footer_primary', 'footer_secondary']
+  const stringKeys = ['footer_bg', 'footer_text_color', 'footer_primary', 'footer_secondary']
   const jsonKeys = ['payment_methods']
 
   for (const key of booleanKeys) {
@@ -74,6 +74,11 @@ export default defineEventHandler(async (event) => {
   // Flyers antigos (sem esse campo) continuam no layout legacy.
   const seededFontConfig = {
     ...(defaults.font_config || {}),
+    ...(
+      defaults.footer_layout && !(defaults.font_config || {}).footer_mode
+        ? { footer_mode: defaults.footer_layout }
+        : {}
+    ),
     card_layout_version: 'v2',
   }
   defaultColumns.push('font_config')

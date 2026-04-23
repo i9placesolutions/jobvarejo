@@ -151,6 +151,7 @@ export interface BuilderPriceTagStyle {
         borderWidth?: number
         borderColor?: string
         borderStyle?: 'none' | 'solid' | 'dashed' | 'dotted' | 'double'
+        borderRadius?: string
         // Border radius custom per corner (overrides shape)
         borderRadiusTL?: number
         borderRadiusTR?: number
@@ -301,7 +302,7 @@ export interface CardTemplateStyle {
     suggestedPerPage?: number      // produtos por pagina recomendado
     suggestedColumns?: number      // colunas recomendadas
     // ── Sistema QROfertas ──
-    contentType?: 'CONTENT_LINE' | 'CONTENT_ROW_BOTTOM'  // geometria do grid interno
+    contentType?: 'CONTENT_LINE' | 'CONTENT_ROW_BOTTOM' | 'V3_TIE' | 'G2_IT_IE'  // geometria do grid interno
     ordem?: string                 // ex: 'TITULO-IMAGEM-ETIQUETA', 'IMAGEM-TITULO-ETIQUETA'
     xWeight?: string               // ex: 'X_50-50', 'X_60-40', 'X_40-60', 'X_70-30', 'X_80-20'
     yWeight?: string               // ex: 'Y_50-50', 'Y_60-40', 'Y_80-20', 'Y_20-80'
@@ -404,6 +405,13 @@ export interface BuilderFlyer {
     show_instagram: boolean
     show_facebook: boolean
     show_website: boolean
+    show_logo: boolean
+    custom_logo: string | null
+    logo_size: number | null
+    logo_x: number | null
+    logo_y: number | null
+    payment_methods: string[] | null
+    segments: string[] | null
 
     // Visual config
     text_size_mode: BuilderTextSizeMode
@@ -413,6 +421,13 @@ export interface BuilderFlyer {
     ink_economy: number
     show_cover: boolean
     custom_products_per_page: number | null
+    current_page?: number | null
+    footer_bg: string | null
+    footer_text_color: string | null
+    footer_primary: string | null
+    footer_secondary: string | null
+    footer_show_logo: boolean | null
+    footer_logo_size: number | null
 
     // JSON configs
     font_config: Record<string, any>

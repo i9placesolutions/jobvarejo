@@ -176,7 +176,7 @@ const confirmCopy = async () => {
 
     closeModal()
     // Redireciona para o design copiado usando o id do canva_designs
-    await navigateTo(`/canva/${result.design?.id || result.id}`)
+    await navigateTo(`/canva/${result.design.id}`)
   } catch (err: unknown) {
     const fetchError = err as { data?: { statusMessage?: string; canvaError?: string } }
     copyError.value = fetchError?.data?.statusMessage || 'Nao foi possivel copiar o template agora.'

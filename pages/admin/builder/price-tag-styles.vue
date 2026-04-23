@@ -433,6 +433,7 @@ const seedStyles = async () => {
     let created = 0
     for (let i = 0; i < PREDEFINED_STYLES.length; i++) {
       const preset = PREDEFINED_STYLES[i]
+      if (!preset) continue
       if (existingNames.has(preset.name.toLowerCase())) continue
 
       await $fetch('/api/admin/builder/price-tag-styles', {
@@ -536,7 +537,7 @@ const previewShadow = computed(() => {
 
 const previewPadding = computed(() => {
   const map: Record<string, string> = { compact: '4px 8px', normal: '6px 12px', spacious: '10px 20px' }
-  return map[form.value.padding] || map.normal
+  return map[form.value.padding] || '6px 12px'
 })
 
 const previewTextShadow = computed(() => {

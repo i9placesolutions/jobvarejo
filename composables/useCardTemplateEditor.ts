@@ -310,7 +310,9 @@ export function useCardTemplateEditor() {
   function updateElement(id: string, changes: Partial<CardTemplateElement>) {
     const idx = elements.value.findIndex(el => el.id === id)
     if (idx === -1) return
-    elements.value[idx] = { ...elements.value[idx], ...changes }
+    const current = elements.value[idx]
+    if (!current) return
+    elements.value[idx] = { ...current, ...changes }
   }
 
   // ── Atualizar elemento selecionado ──

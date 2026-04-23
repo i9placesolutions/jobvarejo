@@ -133,6 +133,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const UPLOAD_TIMEOUT_MS = 90_000 // 90s — Wasabi é mais lenta que AWS S3
+  const isProjectJson = isProjectsKey(key) && key.endsWith('.json')
+  const isProjectThumbnail = isProjectsKey(key) && /\/thumb_[^/]+\.png$/i.test(key)
+  const cacheControl = isProjectJson
+    ? 'no-store'
+    : (isProjectThumbnail ? 'public, max-age=31536000, immutable' : undefined)
 
   const sendPutObject = async (attempt: number) => {
     const s3Client = getS3Client()
@@ -150,7 +155,8 @@ export default defineEventHandler(async (event) => {
         Bucket: bucket,
         Key: key,
         Body: bodyBuffer,
-        ContentType: contentType
+        ContentType: contentType,
+        ...(cacheControl ? { CacheControl: cacheControl } : {})
       }), {
         abortSignal: abortController.signal
       })

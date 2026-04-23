@@ -72,6 +72,31 @@ const MOCK_HEADER: Record<string, string> = {
   promo_phrase: 'OFERTAS IMPERDIVEIS',
 }
 
+const elementPreviewStyle = (el: CardTemplateElement): Record<string, string | number> => ({
+  width: '100%',
+  height: '100%',
+  overflow: el.overflow || 'hidden',
+  borderRadius: el.borderRadius || '0',
+  background: el.type === 'shape' ? (el.bg || 'rgba(0,0,0,0.1)')
+    : el.type === 'image' ? '#e5e7eb'
+    : el.type === 'price' ? 'rgba(220,38,38,0.1)'
+    : el.type === 'badge' ? 'rgba(245,158,11,0.15)'
+    : (el.bg || 'transparent'),
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: el.textAlign === 'right' ? 'flex-end' : el.textAlign === 'left' ? 'flex-start' : 'center',
+  fontSize: el.fontSize === 'auto' ? '11px' : (el.fontSize || '10px'),
+  fontWeight: el.fontWeight || 400,
+  textAlign: el.textAlign || 'center',
+  textTransform: el.textTransform || 'none',
+  color: el.color === 'inherit' ? '#333' : (el.color || '#333'),
+  padding: '2px 4px',
+  userSelect: 'none',
+  lineHeight: '1.2',
+  wordBreak: 'break-word',
+  boxShadow: el.boxShadow || 'none'
+})
+
 // ── Drag state ──
 const isDragging = ref(false)
 const isResizing = ref(false)
@@ -451,28 +476,7 @@ onMounted(fetchData)
                 @click.stop="selectedElementId = el.id"
               >
                 <!-- Conteudo visual do elemento -->
-                <div
-                  :style="{
-                    width: '100%', height: '100%', overflow: el.overflow || 'hidden',
-                    borderRadius: el.borderRadius || '0',
-                    background: el.type === 'shape' ? (el.bg || 'rgba(0,0,0,0.1)')
-                      : el.type === 'image' ? '#e5e7eb'
-                      : el.type === 'price' ? 'rgba(220,38,38,0.1)'
-                      : el.type === 'badge' ? 'rgba(245,158,11,0.15)'
-                      : (el.bg || 'transparent'),
-                    display: 'flex', alignItems: 'center', justifyContent: el.textAlign === 'right' ? 'flex-end' : el.textAlign === 'left' ? 'flex-start' : 'center',
-                    fontSize: el.fontSize === 'auto' ? '11px' : (el.fontSize || '10px'),
-                    fontWeight: el.fontWeight || 400,
-                    textAlign: el.textAlign || 'center',
-                    textTransform: el.textTransform || 'none',
-                    color: el.color === 'inherit' ? '#333' : (el.color || '#333'),
-                    padding: '2px 4px',
-                    userSelect: 'none',
-                    lineHeight: '1.2',
-                    wordBreak: 'break-word',
-                    boxShadow: el.boxShadow || 'none',
-                  }"
-                >
+                <div :style="elementPreviewStyle(el)">
                   <!-- Preview de conteudo mock -->
                   <div v-if="el.type === 'image'" :style="{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: el.slot === 'background_image' ? 'linear-gradient(135deg, #667eea, #764ba2)' : 'rgba(255,255,255,0.15)', borderRadius: el.borderRadius || '4px', fontSize: '20px' }">{{ el.slot === 'logo' ? '🏪' : '🖼️' }}</div>
                   <span v-else-if="el.type === 'shape'" />

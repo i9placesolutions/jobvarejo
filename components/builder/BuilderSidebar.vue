@@ -190,7 +190,9 @@ const resolveOverlayUrl = (url: string) => {
 
 const updateOverlay = (idx: number, changes: Partial<OverlayImage>) => {
   const list = [...overlayImages.value]
-  list[idx] = { ...list[idx], ...changes }
+  const current = list[idx]
+  if (!current) return
+  list[idx] = { ...current, ...changes } as OverlayImage
   updateFlyer({ font_config: { ...fontConfig.value, overlay_images: list } })
 }
 
@@ -765,14 +767,14 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
             <div class="grid grid-cols-2 gap-2">
               <label class="block">
                 <span class="text-[9px] text-gray-400 block mb-1">Fundo do Card</span>
-                <input type="color" :value="(flyer as any)?.card_bg_color || '#ffffff'" @input="updateFlyer({ card_bg_color: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
+                <input type="color" :value="fontConfig.card_bg_color || '#ffffff'" @input="setFc({ card_bg_color: ($event.target as HTMLInputElement).value })" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
               </label>
               <label class="block">
                 <span class="text-[9px] text-gray-400 block mb-1">Texto do Card</span>
-                <input type="color" :value="(flyer as any)?.card_text_color || '#000000'" @input="updateFlyer({ card_text_color: ($event.target as HTMLInputElement).value } as any)" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
+                <input type="color" :value="fontConfig.card_text_color || '#000000'" @input="setFc({ card_text_color: ($event.target as HTMLInputElement).value })" class="w-full h-7 rounded border border-gray-200 cursor-pointer bg-transparent" />
               </label>
             </div>
-            <button @click="updateFlyer({ card_bg_color: null, card_text_color: null } as any)" class="text-[9px] text-gray-400 hover:text-gray-600 mt-1.5 transition-colors">
+            <button @click="setFc({ card_bg_color: null, card_text_color: null })" class="text-[9px] text-gray-400 hover:text-gray-600 mt-1.5 transition-colors">
               Resetar cores do card
             </button>
           </div>

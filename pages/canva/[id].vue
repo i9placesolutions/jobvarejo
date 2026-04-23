@@ -10,6 +10,21 @@ import {
 } from 'lucide-vue-next'
 import type { CanvaMappedProduct } from '~/types/canva'
 
+interface ReviewProduct {
+  name: string
+  offer_price: number | null
+  unit: string
+  image: string | null
+  image_wasabi_key: string | null
+}
+
+interface CompanionProduct {
+  name: string
+  offer_price: number | null
+  unit: string
+  image: string | null
+}
+
 definePageMeta({
   layout: false,
   middleware: 'builder-auth',
@@ -137,6 +152,44 @@ const validityElements = computed(() => {
 // Produtos organizados por pagina: { 1: [...], 2: [...], 3: [...] }
 const productsByPage = ref<Record<number, CanvaMappedProduct[]>>({})
 
+const getProductsForPage = (pageIndex: number): CanvaMappedProduct[] => {
+  return productsByPage.value[pageIndex] || []
+}
+
+const ensureProductsForPage = (pageIndex: number): CanvaMappedProduct[] => {
+  const current = productsByPage.value[pageIndex]
+  if (current) return current
+  const next: CanvaMappedProduct[] = []
+  productsByPage.value[pageIndex] = next
+  return next
+}
+
+const normalizeReviewProduct = (product: CanvaMappedProduct): ReviewProduct => ({
+  name: product.name || '',
+  offer_price: product.offer_price ?? null,
+  unit: product.unit || 'UN',
+  image: product.image ?? null,
+  image_wasabi_key: product.image_wasabi_key ?? null,
+})
+
+const normalizeCompanionProduct = (product: CanvaMappedProduct): CompanionProduct => ({
+  name: product.name || '',
+  offer_price: product.offer_price ?? null,
+  unit: product.unit || 'UN',
+  image: product.image ?? null,
+})
+
+const reviewProductsForModal = computed<ReviewProduct[]>(() =>
+  reviewProducts.value.map(normalizeReviewProduct)
+)
+
+const companionPickerProducts = computed<CompanionProduct[]>(() =>
+  Object.values(productsByPage.value)
+    .flat()
+    .filter((product): product is CanvaMappedProduct => !!product?.name)
+    .map(normalizeCompanionProduct)
+)
+
 // Thumbnails por pagina: { 1: 'url', 2: 'url', ... }
 const pageThumbnails = ref<Record<number, string | null>>({})
 
@@ -177,10 +230,20 @@ const currentPageSlots = computed(() => {
 })
 
 // Quantidade de produtos por pagina (da analise)
-const productsCountPerPage = computed(() => {
-  if (!analysis.value?.products_per_page) return {}
-  return analysis.value.products_per_page
+const productsCountPerPage = computed<Record<number, number>>(() => {
+  const rawCounts = analysis.value?.products_per_page
+  if (!rawCounts || typeof rawCounts !== 'object') return {}
+
+  const counts: Record<number, number> = {}
+  for (const [pageIndex, count] of Object.entries(rawCounts as Record<string, unknown>)) {
+    counts[Number(pageIndex)] = Number(count) || 0
+  }
+  return counts
 })
+
+const totalProductSlots = computed(() =>
+  Object.values(productsCountPerPage.value).reduce((sum, count) => sum + count, 0)
+)
 
 // Thumbnail da pagina ativa
 const currentThumbnail = computed(() => {
@@ -191,7 +254,7 @@ const currentThumbnail = computed(() => {
 const totalFilledProducts = computed(() => {
   let count = 0
   for (const pageIdx of Object.keys(productsByPage.value)) {
-    const list = productsByPage.value[Number(pageIdx)]
+    const list = getProductsForPage(Number(pageIdx))
     count += list.filter(p => !!p.name).length
   }
   return count
@@ -313,10 +376,7 @@ const analyzeDesignAction = async () => {
 
 // Adicionar produto na pagina ativa
 const addProduct = () => {
-  if (!productsByPage.value[activePage.value]) {
-    productsByPage.value[activePage.value] = []
-  }
-  productsByPage.value[activePage.value].push({
+  ensureProductsForPage(activePage.value).push({
     name: '',
     offer_price: null,
     unit: 'UN',
@@ -326,25 +386,23 @@ const addProduct = () => {
 
 // Remover produto da pagina ativa
 const removeProduct = (index: number) => {
-  if (productsByPage.value[activePage.value]) {
-    productsByPage.value[activePage.value].splice(index, 1)
-  }
+  getProductsForPage(activePage.value).splice(index, 1)
 }
 
 // Receber produtos do catalogo (preenche na pagina ativa)
 const onCatalogSelect = (products: Array<{ name: string; image: string | null; brand: string | null }>) => {
-  if (!productsByPage.value[activePage.value]) {
-    productsByPage.value[activePage.value] = []
-  }
-  const list = productsByPage.value[activePage.value]
+  const list = ensureProductsForPage(activePage.value)
 
   for (let i = 0; i < products.length; i++) {
     const p = products[i]
+    if (!p) continue
     const emptyIdx = list.findIndex((slot, idx) => idx >= 0 && !slot.name)
     if (emptyIdx !== -1) {
-      list[emptyIdx].name = p.name
-      list[emptyIdx].image = p.image
-      list[emptyIdx].image_wasabi_key = p.image
+      const slot = list[emptyIdx]
+      if (!slot) continue
+      slot.name = p.name
+      slot.image = p.image
+      slot.image_wasabi_key = p.image
     } else {
       list.push({
         name: p.name,
@@ -359,16 +417,16 @@ const onCatalogSelect = (products: Array<{ name: string; image: string | null; b
 
 // Receber produtos da lista colada (preenche na pagina ativa)
 const onPasteProducts = (items: Array<{ name: string; price: number | null }>) => {
-  if (!productsByPage.value[activePage.value]) {
-    productsByPage.value[activePage.value] = []
-  }
-  const list = productsByPage.value[activePage.value]
+  const list = ensureProductsForPage(activePage.value)
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
+    if (!item) continue
     if (i < list.length) {
-      list[i].name = item.name
-      list[i].offer_price = item.price
+      const product = list[i]
+      if (!product) continue
+      product.name = item.name
+      product.offer_price = item.price
     } else {
       list.push({
         name: item.name,
@@ -553,7 +611,7 @@ const buildTextMappings = (): any[] => {
 
 // Aplicar produtos de UMA pagina especifica
 const applyPageProducts = async (pageIndex: number) => {
-  const pageProducts = productsByPage.value[pageIndex]
+  const pageProducts = getProductsForPage(pageIndex)
   if (!analysis.value) return false
 
   step.value = 'applying'
@@ -575,13 +633,15 @@ const applyPageProducts = async (pageIndex: number) => {
     mappingsToApply.push(...buildTextMappings())
 
     // 4. Produtos (se oferta/misto e tem produtos na pagina)
-    if (hasProducts.value && pageProducts && pageProducts.length > 0) {
-      const pageSlots = analysis.value.products.filter((p: any) => p.page_index === pageIndex)
+    if (hasProducts.value && pageProducts.length > 0) {
+      const pageSlots = Array.isArray(analysis.value.products)
+        ? analysis.value.products.filter((p: any) => p.page_index === pageIndex)
+        : []
 
       for (let i = 0; i < pageProducts.length; i++) {
         const product = pageProducts[i]
         const slot = pageSlots[i]
-        if (!slot || !product.name) continue
+        if (!slot || !product?.name) continue
 
         if (slot.name) {
           let nameText = product.name
@@ -609,10 +669,11 @@ const applyPageProducts = async (pageIndex: number) => {
           })
         }
 
-        if (slot.images && slot.images.length > 0 && product.image_wasabi_key) {
+        const firstImage = slot.images?.[0]
+        if (firstImage && product.image_wasabi_key) {
           mappingsToApply.push({
             slot_index: slot.index,
-            element_id: slot.images[0].element_id,
+            element_id: firstImage.element_id,
             image_element_ids: slot.images.map((img: any) => img.element_id),
             type: 'image',
             page_index: slot.page_index,
@@ -799,7 +860,7 @@ const onAcceptCompanion = () => {
   showCompanionSuggestion.value = false
   const allProducts: any[] = []
   for (const pageIdx of Object.keys(productsByPage.value)) {
-    const list = productsByPage.value[Number(pageIdx)]
+    const list = getProductsForPage(Number(pageIdx))
     for (const p of list) {
       if (p.name) allProducts.push({ ...p })
     }
@@ -873,14 +934,17 @@ onMounted(async () => {
     const stored = sessionStorage.getItem('companion_products')
     if (stored) {
       try {
-        const companionProducts = JSON.parse(stored)
-        if (productsByPage.value[1]) {
+        const companionProducts = JSON.parse(stored) as CanvaMappedProduct[]
+        if (productsByPage.value[1] && Array.isArray(companionProducts)) {
           const list = productsByPage.value[1]
           for (let i = 0; i < Math.min(companionProducts.length, list.length); i++) {
-            list[i].name = companionProducts[i].name
-            list[i].offer_price = companionProducts[i].offer_price
-            list[i].unit = companionProducts[i].unit || 'UN'
-            list[i].image = companionProducts[i].image || null
+            const target = list[i]
+            const source = companionProducts[i]
+            if (!target || !source) continue
+            target.name = source.name
+            target.offer_price = source.offer_price
+            target.unit = source.unit || 'UN'
+            target.image = source.image || null
           }
         }
       } catch {
@@ -1304,7 +1368,7 @@ onMounted(async () => {
                 <div class="text-left">
                   <h2 class="text-sm font-semibold text-white">Produtos</h2>
                   <p class="text-[11px] text-zinc-500">
-                    {{ totalFilledProducts }} preenchidos de {{ Object.values(productsCountPerPage).reduce((a: number, b: number) => a + b, 0) }} slots
+                    {{ totalFilledProducts }} preenchidos de {{ totalProductSlots }} slots
                   </p>
                 </div>
               </div>
@@ -1519,7 +1583,7 @@ onMounted(async () => {
     <!-- Conferencia de produtos antes de enviar -->
     <CanvaProductReview
       :open="showReview"
-      :products="reviewProducts"
+      :products="reviewProductsForModal"
       :page-index="reviewPageIndex"
       :total-slots="productsCountPerPage[reviewPageIndex] || 0"
       :tenant-id="tenantId"
@@ -1532,7 +1596,7 @@ onMounted(async () => {
     <CanvaCompanionPicker
       v-if="companion"
       :open="showCompanionPicker"
-      :products="Object.values(productsByPage).flat().filter(p => !!p.name)"
+      :products="companionPickerProducts"
       :max-slots="companionTotalSlots"
       :min-slots="companionTotalSlots"
       :companion-title="`${companion.label} - ${companion.title}`"

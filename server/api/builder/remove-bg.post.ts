@@ -39,7 +39,7 @@ export default defineEventHandler(async (event) => {
   if (!s3Key && body?.imageUrl) {
     const url = String(body.imageUrl)
     const match = url.match(/[?&]key=([^&]+)/)
-    if (match) s3Key = decodeURIComponent(match[1])
+    if (match?.[1]) s3Key = decodeURIComponent(match[1])
   }
 
   if (!s3Key) {
