@@ -28,7 +28,7 @@ const DEFAULT_ELEMENT_PROPS: Record<string, Partial<CardTemplateElement>> = {
 
 // ── Gerar ID unico simples ──
 function uid(): string {
-  return `el_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  return `el_${makeId()}`
 }
 
 // ── Estilo padrao do card ──

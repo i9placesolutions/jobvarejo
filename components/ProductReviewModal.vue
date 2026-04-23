@@ -584,7 +584,7 @@ const handleDropFile = async (event: DragEvent) => {
 }
 
 const createEmptyProduct = (): SmartProduct => ({
-    id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `manual_${Date.now()}_${makeId()}`,
     name: '',
     brand: '',
     productCode: '',

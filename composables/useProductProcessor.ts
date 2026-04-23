@@ -326,7 +326,7 @@ export const useProductProcessor = () => {
     const mapParsedProducts = (data: any) => {
         if (!data || !Array.isArray(data.products)) return [];
         return data.products.map((p: any) => ({
-            id: Math.random().toString(36).substr(2, 9),
+            id: makeId(),
             name: p.name || 'Produto sem nome',
             brand: p.brand || '',
             productCode: p.productCode || null,

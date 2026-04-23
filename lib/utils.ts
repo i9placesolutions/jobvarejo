@@ -38,7 +38,7 @@ export function parseProductList(text: string) {
     name = name.replace(/[-–]/g, '').trim();
 
     return {
-        id: Math.random().toString(36).substr(2, 9),
+        id: makeId(),
         name: name,
         price: price,
         image: '', // Placeholder, would need search

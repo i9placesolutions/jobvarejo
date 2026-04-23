@@ -903,7 +903,7 @@ const createProject = async () => {
     if (!userId) throw new Error('Usuário não autenticado.')
 
     const initialPage = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: makeId(),
       name: 'Página 1',
       width: 1080,
       height: 1920,

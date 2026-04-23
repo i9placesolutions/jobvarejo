@@ -60,11 +60,19 @@ export const useAuth = () => {
       state.value.user = user
       state.value.isAuthenticated = true
       return { user }
-    } catch {
-      state.value.user = null
-      state.value.isAuthenticated = false
-      clearAuthFlag()
-      return null
+    } catch (error: any) {
+      const statusCode = Number(error?.statusCode || error?.response?.status || 0)
+      // Apenas 401/403 indicam sessao realmente invalida.
+      // Erros 5xx, timeout ou rede nao devem derrubar o usuario — preservamos
+      // o estado atual para nao forcar um logout indevido em falhas transitorias.
+      if (statusCode === 401 || statusCode === 403) {
+        state.value.user = null
+        state.value.isAuthenticated = false
+        clearAuthFlag()
+        return null
+      }
+      console.warn('[auth.getSession] falha transitoria ao consultar sessao:', statusCode || error?.message || error)
+      return state.value.isAuthenticated ? { user: state.value.user! } : null
     } finally {
       state.value.isLoading = false
     }

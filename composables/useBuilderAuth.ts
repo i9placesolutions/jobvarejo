@@ -77,11 +77,19 @@ export const useBuilderAuth = () => {
       state.value.tenant = tenant
       state.value.isAuthenticated = true
       return { tenant }
-    } catch {
-      state.value.tenant = null
-      state.value.isAuthenticated = false
-      clearAuthFlag()
-      return null
+    } catch (error: any) {
+      const statusCode = Number(error?.statusCode || error?.response?.status || 0)
+      // Apenas 401/403 indicam sessao realmente invalida.
+      // Erros 5xx, timeout ou rede nao devem derrubar o tenant — preservamos
+      // o estado atual para evitar logout indevido em falhas transitorias.
+      if (statusCode === 401 || statusCode === 403) {
+        state.value.tenant = null
+        state.value.isAuthenticated = false
+        clearAuthFlag()
+        return null
+      }
+      console.warn('[builderAuth.getSession] falha transitoria ao consultar sessao:', statusCode || error?.message || error)
+      return state.value.isAuthenticated && state.value.tenant ? { tenant: state.value.tenant } : null
     } finally {
       state.value.isLoading = false
     }

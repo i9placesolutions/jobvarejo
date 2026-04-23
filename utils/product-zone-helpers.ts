@@ -452,7 +452,7 @@ export const calculateProductPosition = (
  * Migra produto de formato antigo para novo
  */
 export const migrateProduct = (oldProduct: any): Product => {
-  const id = oldProduct.id ?? `prod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const id = oldProduct.id ?? `prod_${Date.now()}_${makeId()}`;
   const hasValue = (value: unknown): boolean => {
     if (value === undefined || value === null) return false;
     if (typeof value === 'string') return value.trim() !== '';
@@ -607,7 +607,7 @@ export const createDefaultProductZone = (overrides?: Partial<ProductZone>): Prod
  * Cria um Product padrão
  */
 export const createDefaultProduct = (overrides?: Partial<Product>): Product => {
-  const id = `prod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const id = `prod_${Date.now()}_${makeId()}`;
   return {
     id,
     name: 'Novo Produto',

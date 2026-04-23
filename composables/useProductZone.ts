@@ -548,14 +548,24 @@ export const useProductZone = () => {
     if (historyIndex.value < 0) return;
 
     isHistoryAction.value = true;
-    try {
-      const historyEntry = historyStack.value[historyIndex.value];
-      if (!historyEntry) return;
+    const currentSnapshot = serializeCurrentState();
+    const targetIndex = historyIndex.value;
+    const historyEntry = historyStack.value[targetIndex];
+    if (!historyEntry) {
+      isHistoryAction.value = false;
+      return;
+    }
 
-      // Swap current state with previous snapshot to support redo without a second stack.
-      historyStack.value[historyIndex.value] = serializeCurrentState();
-      historyIndex.value--;
+    // Swap current state with previous snapshot to support redo without a second stack.
+    historyStack.value[targetIndex] = currentSnapshot;
+    historyIndex.value--;
+    try {
       applySerializedState(historyEntry);
+    } catch (err) {
+      // Restore history and index on failure so the stack stays consistent
+      historyIndex.value++;
+      historyStack.value[targetIndex] = historyEntry;
+      console.warn('[useProductZone] undo failed, history restored:', err);
     } finally {
       isHistoryAction.value = false;
     }
@@ -565,14 +575,23 @@ export const useProductZone = () => {
     if (historyIndex.value >= historyStack.value.length - 1) return;
 
     isHistoryAction.value = true;
-    try {
-      const nextIndex = historyIndex.value + 1;
-      const historyEntry = historyStack.value[nextIndex];
-      if (!historyEntry) return;
+    const currentSnapshot = serializeCurrentState();
+    const nextIndex = historyIndex.value + 1;
+    const historyEntry = historyStack.value[nextIndex];
+    if (!historyEntry) {
+      isHistoryAction.value = false;
+      return;
+    }
 
-      historyStack.value[nextIndex] = serializeCurrentState();
-      historyIndex.value = nextIndex;
+    historyStack.value[nextIndex] = currentSnapshot;
+    historyIndex.value = nextIndex;
+    try {
       applySerializedState(historyEntry);
+    } catch (err) {
+      // Restore history and index on failure so the stack stays consistent
+      historyIndex.value--;
+      historyStack.value[nextIndex] = historyEntry;
+      console.warn('[useProductZone] redo failed, history restored:', err);
     } finally {
       isHistoryAction.value = false;
     }
@@ -601,8 +620,10 @@ export const useProductZone = () => {
    * Importa estado de JSON
    */
   const importState = (state: Partial<ProductZoneState>) => {
-    saveToHistory();
-    
+    // Clear history to prevent undo from restoring pre-import state
+    historyStack.value = [];
+    historyIndex.value = -1;
+
     if (state.products) {
       products.value = state.products.map(p => migrateProduct(p));
     }

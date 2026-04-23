@@ -123,9 +123,24 @@ const ICON = {
   thumbsUp: `<path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>`,
 }
 
+// Sanitiza valor de cor antes de concatenar em HTML (v-html). Aceita apenas
+// #rgb/#rgba/#rrggbb/#rrggbbaa, nomes simples (letras) e rgb()/rgba() basicos.
+// Qualquer valor fora do padrao vira cor default para evitar injecao de
+// atributo/HTML no SVG renderizado via v-html.
+function sanitizeSvgColor(value: string | undefined, fallback: string): string {
+  if (!value) return fallback
+  const v = String(value).trim()
+  if (/^#[0-9a-fA-F]{3,8}$/.test(v)) return v
+  if (/^[a-zA-Z]+$/.test(v)) return v
+  if (/^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(\s*,\s*(0|1|0?\.\d+))?\s*\)$/.test(v)) return v
+  return fallback
+}
+
 function svgIcon(name: keyof typeof ICON, size: number, fill?: string): string {
-  const f = fill ? ` fill="${fill}"` : ''
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24"${f}>${ICON[name]}</svg>`
+  const safeFill = fill ? sanitizeSvgColor(fill, 'currentColor') : ''
+  const f = safeFill ? ` fill="${safeFill}"` : ''
+  const safeSize = Number.isFinite(Number(size)) ? Number(size) : 16
+  return `<svg width="${safeSize}" height="${safeSize}" viewBox="0 0 24 24"${f}>${ICON[name]}</svg>`
 }
 
 // ── Chips para V2/V3 ──

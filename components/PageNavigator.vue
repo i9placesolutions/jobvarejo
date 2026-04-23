@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useProject } from '~/composables/useProject'
+import { useProject, type Page } from '~/composables/useProject'
 import Button from './ui/Button.vue'
 import { Plus, Copy, Trash2, Smartphone, Monitor, FileText, Instagram, ChevronUp, ChevronDown } from 'lucide-vue-next'
 
@@ -33,15 +33,15 @@ const isUsableThumbnailUrl = (url: unknown): boolean => {
     return true
 }
 
-const getRawPageThumbSrc = (page: any): string => {
+const getRawPageThumbSrc = (page: Page): string => {
     const inlineThumb = typeof page?.thumbnail === 'string' ? page.thumbnail.trim() : ''
     const storedThumb = typeof page?.thumbnailUrl === 'string' ? page.thumbnailUrl.trim() : ''
     return inlineThumb || storedThumb
 }
 
-const getPageId = (page: any): string => String(page?.id || '').trim()
+const getPageId = (page: Page): string => String(page?.id || '').trim()
 
-const canPageUseThumb = (page: any): boolean => {
+const canPageUseThumb = (page: Page): boolean => {
     const id = String(page?.id || '')
     if (pageThumbErrors.value[id]) return false
     return isUsableThumbnailUrl(getRawPageThumbSrc(page))
@@ -75,7 +75,7 @@ const clearThumbHydrationSchedule = () => {
 }
 
 const primeImmediatePageThumbs = () => {
-    (project.pages || []).forEach((page: any, index: number) => {
+    (project.pages || []).forEach((page: Page, index: number) => {
         if (!isPageThumbImmediate(index)) return
         if (!canPageUseThumb(page)) return
         markPageThumbHydrated(getPageId(page))
@@ -139,30 +139,30 @@ const enqueuePageThumbHydration = (pageId: string, opts: { priority?: boolean } 
     scheduleThumbHydrationPump(opts.priority ? 40 : 180)
 }
 
-const shouldShowPageThumb = (page: any, index: number): boolean => {
+const shouldShowPageThumb = (page: Page, index: number): boolean => {
     const id = getPageId(page)
     if (!id) return false
     if (!canPageUseThumb(page)) return false
     return isPageThumbImmediate(index) || !!hydratedThumbIds.value[id]
 }
 
-const getPageThumbSrc = (page: any, index: number): string => {
+const getPageThumbSrc = (page: Page, index: number): string => {
     return shouldShowPageThumb(page, index) ? getRawPageThumbSrc(page) : ''
 }
 
-const hasUsablePageThumbnail = (page: any, index: number): boolean => {
+const hasUsablePageThumbnail = (page: Page, index: number): boolean => {
     const id = getPageId(page)
     if (pageThumbErrors.value[id]) return false
     return isUsableThumbnailUrl(getPageThumbSrc(page, index))
 }
 
-const markPageThumbError = (page: any) => {
+const markPageThumbError = (page: Page) => {
     const id = String(page?.id || '')
     if (!id) return
     pageThumbErrors.value[id] = true
 }
 
-const getPageInitials = (page: any): string => {
+const getPageInitials = (page: Page): string => {
     const rawName = String(page?.name || '').trim()
     if (!rawName) return 'PG'
     const words = rawName.split(/\s+/).filter(Boolean).slice(0, 2)
@@ -188,7 +188,7 @@ const setPageThumbHost = (pageId: string, el: Element | null) => {
     pageThumbHosts.delete(id)
 }
 
-const promotePageThumb = (page: any, index: number) => {
+const promotePageThumb = (page: Page, index: number) => {
     const id = getPageId(page)
     if (!id || !canPageUseThumb(page)) return
     if (isPageThumbImmediate(index)) {
@@ -229,7 +229,7 @@ const refreshPageThumbObserver = async () => {
 }
 
 const prunePageThumbState = () => {
-    const validIds = new Set((project.pages || []).map((page: any) => getPageId(page)).filter(Boolean))
+    const validIds = new Set((project.pages || []).map((page: Page) => getPageId(page)).filter(Boolean))
     for (const id of Object.keys(hydratedThumbIds.value)) {
         if (!validIds.has(id)) delete hydratedThumbIds.value[id]
     }
@@ -259,7 +259,7 @@ watch(
 )
 
 watch(
-    () => project.pages.map((page: any) => {
+    () => project.pages.map((page: Page) => {
         const inlineLen = typeof page?.thumbnail === 'string' ? page.thumbnail.length : 0
         const storedLen = typeof page?.thumbnailUrl === 'string' ? page.thumbnailUrl.length : 0
         return `${getPageId(page)}:${inlineLen}:${storedLen}`

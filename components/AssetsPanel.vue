@@ -867,7 +867,7 @@ const handleFileUpload = async (event: Event) => {
                 if (!result?.success) return
 
                 const newItem = {
-                    id: result.key || `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                    id: result.key || `upload-${Date.now()}-${makeId()}`,
                     url: result.url,
                     name: file.name.replace(/\.[^/.]+$/, ''),
                     folderId: activeCategory.value === 'folders' ? currentFolderId.value : null,

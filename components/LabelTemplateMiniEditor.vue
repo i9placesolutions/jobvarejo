@@ -1560,7 +1560,10 @@ const enlivenObjectsAsync = (objectsJson: any[]) => {
   try {
     const maybe = fn(objectsJson)
     if (maybe && typeof maybe.then === 'function') return maybe
-  } catch (_) {}
+  } catch (_) {
+    // Fabric legacy: enlivenObjects nao aceita chamada sem callback.
+    // Cai para o caminho com callback abaixo; nao e erro.
+  }
   return new Promise<any[]>((resolve, reject) => {
     try {
       fn(objectsJson, (enlivened: any[]) => resolve(enlivened))
@@ -3231,7 +3234,7 @@ const addText = () => {
     textAlign: String(baseText?.textAlign || 'center'),
     lineHeight: Math.max(0.8, Number(baseText?.lineHeight || 1)),
     charSpacing: Number(baseText?.charSpacing || 0),
-    name: `custom_text_${Math.random().toString(36).slice(2, 7)}`
+    name: `custom_text_${makeId()}`
   })
   safeAddWithUpdate(group, txt)
   canvas.setActiveObject?.(txt)
@@ -3255,7 +3258,7 @@ const addRect = () => {
     top: 0,
     originX: 'center',
     originY: 'center',
-    name: `custom_rect_${Math.random().toString(36).slice(2, 7)}`
+    name: `custom_rect_${makeId()}`
   })
   safeAddWithUpdate(group, rect)
   canvas.setActiveObject(rect)
@@ -3275,7 +3278,7 @@ const addCircle = () => {
     top: 0,
     originX: 'center',
     originY: 'center',
-    name: `custom_circle_${Math.random().toString(36).slice(2, 7)}`
+    name: `custom_circle_${makeId()}`
   })
   safeAddWithUpdate(group, c)
   canvas.setActiveObject(c)
@@ -3311,7 +3314,7 @@ const onAddImage = async (e: Event) => {
       top: 0,
       originX: 'center',
       originY: 'center',
-      name: existingBgImage ? `custom_image_${Math.random().toString(36).slice(2, 7)}` : 'splash_image'
+      name: existingBgImage ? `custom_image_${makeId()}` : 'splash_image'
     })
     
     const iw = img.width || 1

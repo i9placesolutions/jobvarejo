@@ -85,7 +85,7 @@ const createRealtimeClientId = (): string => {
     } catch {
         // ignore
     }
-    return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    return `client-${Date.now().toString(36)}-${makeId()}`
 }
 const realtimeClientId = ref<string>(createRealtimeClientId())
 
@@ -120,7 +120,7 @@ let pendingLocalDraftFlushIdleId: number | null = null
 const LOCAL_DRAFT_FLUSH_DELAY_MS = 600
 const LOCAL_DRAFT_FLUSH_IDLE_TIMEOUT_MS = 2000
 
-const makePageId = (): string => Math.random().toString(36).substr(2, 9)
+const makePageId = (): string => makeId()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const isUuid = (value: unknown): boolean => UUID_RE.test(String(value || '').trim())
 
@@ -1804,7 +1804,7 @@ export const useProject = () => {
 		                    const statusCode = (e as any)?.statusCode ?? (e as any)?.response?.status ?? 0
 		                    const statusMessage = (e as any)?.statusMessage ?? (e as any)?.data?.statusMessage ?? null
 		                    const rawMessage = (e as any)?.message ?? null
-		                    console.error('Save Failed:', { stage: currentSaveStage, statusCode, statusMessage, message: rawMessage, data: (e as any)?.data ?? null })
+		                    console.error('Save Failed:', { stage: currentSaveStage, statusCode, statusMessage, message: rawMessage })
 		                    // Monta mensagem amigável para exibir no toast
 		                    if (Number(statusCode) === 401) {
 		                        saveLastError.value = 'Sessão expirada. Faça login novamente.'
@@ -2311,9 +2311,15 @@ export const useProject = () => {
                     if (json.length <= EMERGENCY_DRAFT_MAX_BYTES) {
                         localStorage.setItem(draftKey, json)
                     }
-                } catch { /* ignore quota errors */ }
+                } catch (err) {
+                    // Quota excedida ou storage indisponivel: avisar uma vez por
+                    // chave para permitir diagnostico sem inundar o console.
+                    console.warn('[emergencySnapshot] falha ao gravar draft local:', draftKey, err)
+                }
             }
-        } catch { /* ignore */ }
+        } catch (err) {
+            console.warn('[emergencySnapshot] abortado:', err)
+        }
     }
 
     return {

@@ -1393,7 +1393,7 @@ const addFrame = (opts: { width?: number; height?: number } = {}) => {
         borderScaleFactor: 1
     });
 
-    (frame as any)._customId = Math.random().toString(36).substr(2, 9);
+    (frame as any)._customId = makeId();
     (frame as any).__strokeEnabled = false;
     
     // CRITICAL: Set layerName to ensure it persists and shows as "FRAMER" in LayersPanel
@@ -1466,7 +1466,7 @@ const isFrameLikeObject = (obj: any) => {
 
 const normalizeFrameRuntimeProps = (obj: any) => {
     if (!obj || !isFrameLikeObject(obj)) return null;
-    if (!obj._customId) obj._customId = Math.random().toString(36).substr(2, 9);
+    if (!obj._customId) obj._customId = makeId();
     if (!obj.isFrame) obj.isFrame = true;
     if (typeof obj.clipContent !== 'boolean') obj.clipContent = true;
     if (!obj.layerName) obj.layerName = 'FRAMER';
@@ -3190,7 +3190,7 @@ const createVectorPathFromPenData = (
         selectable: true,
         evented: true,
         opacity: Number.isFinite(Number(source.opacity)) ? Number(source.opacity) : 1,
-        _customId: Math.random().toString(36).substr(2, 9),
+        _customId: makeId(),
         name: source.name || 'Vector Path',
         isVectorPath: true,
         isClosedPath: closed,
@@ -4101,11 +4101,11 @@ const setupAltDragDuplicate = () => {
     const assignNewIdsDeep = (obj: any) => {
         if (!obj || typeof obj !== 'object') return;
         if (typeof obj.set !== 'function') return;
-        obj._customId = Math.random().toString(36).substr(2, 9);
+        obj._customId = makeId();
         if (typeof obj.getObjects === 'function') {
             (obj.getObjects() || []).forEach((c: any) => {
                 if (c && typeof c.set === 'function') {
-                    c._customId = Math.random().toString(36).substr(2, 9);
+                    c._customId = makeId();
                 }
             });
         }
@@ -5191,7 +5191,7 @@ const switchToPage = (pageId: string) => {
 }
 const addNewPage = () => {
     const newPage: any = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: makeId(),
         name: `Página ${(project.pages?.length || 0) + 1}`,
         width: 1080,
         height: 1080,
@@ -5210,7 +5210,7 @@ const duplicatePage = (pageId: string) => {
     if (!src) return
     const dup = {
         ...JSON.parse(JSON.stringify(src)),
-        id: Math.random().toString(36).substr(2, 9),
+        id: makeId(),
         name: `${src.name || 'Página'} (cópia)`,
         dirty: true
     }
@@ -5698,7 +5698,9 @@ const restoreFromHistoryItem = async (item: PageHistoryItem) => {
                     project.pages[idx].canvasDataPath = result.targetKey
                 }
                 // Clear local draft so it doesn't override the restored version.
-                try { localStorage.removeItem(`jobvarejo:draft:page:${project.id}:${pageId}`) } catch { /* ignore */ }
+                try { localStorage.removeItem(`jobvarejo:draft:page:${project.id}:${pageId}`) } catch (err) {
+                    console.warn('[history-restore] falha ao remover draft local:', err)
+                }
             }
             showHistoryModal.value = false
             retryStorageReload()
@@ -8532,7 +8534,7 @@ const colorStyles = ref<{id: string, name: string, value: string}[]>([
 
 const addColorStyle = (color: string) => {
     colorStyles.value.push({
-        id: Math.random().toString(36).substr(2, 9),
+        id: makeId(),
         name: 'New Color',
         value: color
     });
@@ -8557,9 +8559,9 @@ const historyStack = ref<string[]>([]);
 const historyIndex = ref(-1);
 const isHistoryProcessing = ref(false); // Flag to prevent loop
 let isZoneCascadeDelete = false;
-let isApplyingZoneUpdate = false; // Flag to prevent double state save when updating product zones
+let applyingZoneUpdateCount = 0; // Counter to prevent double state save when updating product zones (supports concurrent zone updates)
 
-const makeCanvasObjectId = () => Math.random().toString(36).substr(2, 9);
+const makeCanvasObjectId = () => makeId();
 const TRANSIENT_CONTROL_NAMES = new Set(['path_node', 'bezier_handle', 'control_point', 'handle_line']);
 
 const isControlLikeObject = (obj: any) => {
@@ -8653,287 +8655,6 @@ const isFabricReady = ref(false)
 const MOCK_PRODUCTS: any[] = [];
 
 
-
-// --- Smart Grid Implementation ---
-// Legacy renderer (productZoneState.products -> Fabric objects) conflicts with the
-// current Product Zone engine (group + recalculateZoneLayout). Keep disabled.
-const LEGACY_PRODUCT_ZONE_RENDERER_ENABLED = false;
-
-const initProductZone = () => {
-    if (!canvas.value) return;
-    if (!LEGACY_PRODUCT_ZONE_RENDERER_ENABLED) return;
-
-    // watch for zone changes
-    watch(() => productZoneState.productZone.value, (newZone) => {
-        renderProductZone(newZone);
-    }, { deep: true });
-
-    // watch for products changes
-    watch(() => productZoneState.products.value, (newProducts) => {
-        renderProducts(newProducts);
-    }, { deep: true });
-}
-
-// Map to track rendered product objects to avoid full re-renders
-const productObjectMap = new Map<string | number, any>();
-const zoneObjectRef = shallowRef<any>(null);
-
-const renderProductZone = (zone: any) => {
-    if (!canvas.value) return;
-
-    let zoneRect = zoneObjectRef.value;
-
-    // Only create zone if user explicitly enabled it
-    if (!zone.enabled) {
-        // Remove existing zone if disabled
-        if (zoneRect) {
-            canvas.value.remove(zoneRect);
-            zoneObjectRef.value = null;
-        }
-        return;
-    }
-
-    if (!zoneRect) {
-        // Create Zone Container (only when enabled)
-        zoneRect = new fabric.Rect({
-            left: zone.x,
-            top: zone.y,
-            width: zone.width,
-            height: zone.height,
-            fill: 'rgba(13, 153, 255, 0.05)',
-            stroke: '#0d99ff',
-            strokeWidth: 1,
-            strokeDashArray: [5, 5],
-            selectable: true,
-            hasControls: true,
-            lockRotation: true,
-            id: 'product_zone_container',
-            isZone: true, // Custom flag
-            isProductZone: true // Flag to identify as product zone
-        });
-
-        // Add Event Listeners for "Smart" behavior
-        zoneRect.on('moving', (e: any) => {
-            const dx = e.transform.target.left - zone.x;
-            const dy = e.transform.target.top - zone.y;
-            
-            // Move internal logic (update state)
-            productZoneState.updateZone({ x: e.transform.target.left, y: e.transform.target.top });
-            
-            // Move all products visually to stay in sync during drag
-            // (Re-render will fix exact positions, but this mimics realtime)
-            productZoneState.products.value.forEach(p => {
-                const pObj = productObjectMap.get(p.id);
-                if (pObj) {
-                    pObj.set({
-                        left: pObj.left + dx,
-                        top: pObj.top + dy
-                    });
-                    pObj.setCoords();
-                }
-            });
-            // Also update product state coordinates
-            productZoneState.products.value.forEach(p => {
-                 productZoneState.updateProduct(p.id, {
-                     x: p.x + dx, 
-                     y: p.y + dy
-                 });
-            });
-        });
-
-        zoneRect.on('scaling', (e: any) => {
-             // "Smart Container" resizing
-             const newWidth = zoneRect.getScaledWidth();
-             const newHeight = zoneRect.getScaledHeight();
-
-             // Reset Scale to 1 to avoid distortion
-             zoneRect.set({
-                 width: newWidth,
-                 height: newHeight,
-                 scaleX: 1,
-                 scaleY: 1
-             });
-
-             // Update State -> Triggers Recalculate
-             productZoneState.updateZone({ width: newWidth, height: newHeight });
-             productZoneState.recalculateLayout();
-        });
-
-        canvas.value.add(zoneRect);
-        // Move to back by manipulating _objects array (Fabric.js v7 compatible)
-        const objects = canvas.value._objects;
-        if (Array.isArray(objects)) {
-            const index = objects.indexOf(zoneRect);
-            if (index > -1) {
-                objects.splice(index, 1);
-                objects.unshift(zoneRect);
-            }
-        }
-        zoneObjectRef.value = zoneRect;
-    } else {
-        // Update existing zone visual
-        zoneRect.set({
-            left: zone.x,
-            top: zone.y,
-            width: zone.width,
-            height: zone.height
-        });
-        zoneRect.setCoords();
-    }
-    
-    safeRequestRenderAll();
-}
-
-const renderProducts = (products: any[]) => {
-    if (!canvas.value) return;
-
-    // 1. Identify removed products
-    const currentIds = new Set(products.map(p => p.id));
-    for (const [id, obj] of productObjectMap.entries()) {
-        if (!currentIds.has(id)) {
-            canvas.value.remove(obj);
-            productObjectMap.delete(id);
-        }
-    }
-
-    // 2. Add/Update products
-    products.forEach(product => {
-        let pObj = productObjectMap.get(product.id);
-
-        if (!pObj) {
-            // CREATE NEW PRODUCT GROUP
-            // Calculate optimal image size
-            const optimalSize = productZoneState.getOptimalImageSize(product);
-
-            const bg = new fabric.Rect({
-                width: product.width,
-                height: product.height,
-                fill: product.backgroundColor || '#ffffff',
-                rx: product.borderRadius || 8,
-                ry: product.borderRadius || 8,
-                originX: 'center',
-                originY: 'center',
-                shadow: { color: 'rgba(0,0,0,0.1)', blur: 4, offsetX: 0, offsetY: 2 }
-            });
-
-            const text = new fabric.Textbox(product.name || 'Nome', {
-                fontSize: Math.min(18, product.width * 0.1),
-                fontFamily: 'Inter',
-                fontWeight: 600,
-                fill: '#333333',
-                originX: 'center',
-                originY: 'top',
-                top: -product.height/2 + 10,
-                width: product.width - 20,
-                textAlign: 'center',
-                splitByGrapheme: true
-            });
-
-            // Image Area (Placeholder)
-            const imgPlaceholder = new fabric.Rect({
-                width: optimalSize.maxWidth,
-                height: optimalSize.maxHeight,
-                fill: '#f5f5f5',
-                stroke: '#e5e5e5',
-                strokeWidth: 1,
-                originX: 'center',
-                originY: 'center',
-                top: -10 
-            });
-
-            // Usar getAvailablePrices para determinar o preço principal
-            const availablePrices = getAvailablePrices(product);
-            const priceVal = availablePrices.mainPrice !== undefined ? availablePrices.mainPrice : 0;
-            const priceStr = typeof priceVal === 'number'
-                ? priceVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
-                : priceVal.toString();
-
-            const price = new fabric.Text(`R$ ${priceStr}`, {
-                fontSize: Math.min(28, product.width * 0.15),
-                fontWeight: '800',
-                fill: '#dc2626',
-                originX: 'center',
-                originY: 'bottom',
-                top: product.height/2 - 15
-            });
-
-	            pObj = new fabric.Group([bg, text, imgPlaceholder, price], {
-	                left: product.x,
-	                top: product.y,
-	                width: product.width,
-	                height: product.height,
-	                selectable: true,
-	                id: product.id,
-	                isProduct: true,
-	                // Keep parity with product-card behavior: allow inner target selection.
-	                subTargetCheck: true,
-	                interactive: true
-	            });
-
-            pObj.on('moving', (e: any) => {
-                 // Update product position in state
-                 // Note: If restricted to grid, we arguably shouldn't allow moving individual items freely unless 'freeMode'
-                 // For now, let's sync state
-                 productZoneState.updateProduct(product.id, {
-                     x: pObj.left,
-                     y: pObj.top
-                 });
-            });
-
-            canvas.value.add(pObj);
-            productObjectMap.set(product.id, pObj);
-        } else {
-            // UPDATE EXISTING
-            // We animate the move for smoothness if desired, or set directly
-            pObj.set({
-                left: product.x,
-                top: product.y,
-                width: product.width,
-                height: product.height
-            });
-            
-            // Deep update of internals
-            const items = pObj.getObjects();
-            const optimalSize = productZoneState.getOptimalImageSize(product);
-            
-            if(items[0]) { // BG
-                items[0].set({ width: product.width, height: product.height, fill: product.backgroundColor || '#ffffff' });
-            }
-            if(items[1]) { // Textbox
-                items[1].set({ 
-                    text: product.name, 
-                    top: -product.height/2 + 10,
-                    width: product.width - 20,
-                    fontSize: Math.min(18, product.width * 0.1)
-                });
-            }
-            if(items[2]) { // Image Placeholder
-                items[2].set({
-                    width: optimalSize.maxWidth,
-                    height: optimalSize.maxHeight,
-                    top: -10
-                });
-            }
-            if(items[3]) { // Price
-                // Usar getAvailablePrices para determinar o preço principal
-                const availablePrices = getAvailablePrices(product);
-                const priceVal = availablePrices.mainPrice !== undefined ? availablePrices.mainPrice : 0;
-                const priceStr = typeof priceVal === 'number'
-                   ? priceVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
-                   : priceVal.toString();
-                items[3].set({
-                    text: `R$ ${priceStr}`,
-                    fontSize: Math.min(28, product.width * 0.15),
-                    top: product.height/2 - 15
-                });
-            }
-
-            pObj.setCoords();
-        }
-    });
-
-    safeRequestRenderAll();
-}
 
 // --- Watch for Page Switching ---
 // IMPORTANT: When the user changes pages (or creates a new one), there is a tiny window where
@@ -10549,9 +10270,6 @@ onMounted(async () => {
           // ignore
       }
 
-      // Initialize Smart Grid
-      initProductZone();
-
       // FIX #8: guard against null refs in case canvas init threw and was caught.
       // Previously this code ran unconditionally after the try/catch, which would
       // crash with "Cannot read properties of null" if new fabric.Canvas() failed.
@@ -11091,7 +10809,9 @@ onMounted(async () => {
                           }
                           if (orphanedToRemove.length > 0) {
                               orphanedToRemove.forEach((obj: any) => {
-                                  try { canvas.value.remove(obj); } catch (e) {}
+                                  try { canvas.value.remove(obj); } catch (e) {
+                                      console.warn('[post-load] falha ao remover objeto transitorio:', e)
+                                  }
                               });
                           }
 
@@ -11214,6 +10934,7 @@ onUnmounted(() => {
   invalidateFrameRuntimeCache();
   resetFrameLabelLayoutState();
   frameLabelUpdatePending = false;
+  pendingZoneRelayoutOnDrop.clear();
   if (imageProgressRafId !== null && typeof window !== 'undefined') {
     cancelAnimationFrame(imageProgressRafId)
     imageProgressRafId = null
@@ -13076,7 +12797,7 @@ const removeImageObjectsDeep = (node: any): any => {
         updateScrollbars,
         isBulkProductMutation: () => !!isBulkProductMutation,
         isHistoryProcessing: () => !!isHistoryProcessing.value,
-        isApplyingZoneUpdate: () => !!isApplyingZoneUpdate,
+        isApplyingZoneUpdate: () => applyingZoneUpdateCount > 0,
         getIsZoneCascadeDelete: () => !!isZoneCascadeDelete,
         setIsZoneCascadeDelete: (value: boolean) => {
             isZoneCascadeDelete = !!value
@@ -13802,7 +13523,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         if (!cloned) continue;
 
         const oldId = String(original._customId || '');
-        const newId = Math.random().toString(36).substr(2, 9);
+        const newId = makeId();
         oldToNewId.set(oldId, newId);
 
         cloned._customId = newId;
@@ -13967,7 +13688,7 @@ const isProductCardContainer = (group: any) => {
 
 const assignNewCustomIdsDeep = (obj: any) => {
     if (!obj || typeof obj !== 'object') return;
-    obj._customId = Math.random().toString(36).substr(2, 9);
+    obj._customId = makeId();
     if (typeof obj.getObjects === 'function') {
         (obj.getObjects() || []).forEach((child: any) => assignNewCustomIdsDeep(child));
     }
@@ -17005,7 +16726,7 @@ const applyUserGuidesVisibility = () => {
 }
 
 const makeUserGuideId = (axis: 'x' | 'y') => {
-    const rand = Math.random().toString(36).slice(2, 10)
+    const rand = makeId()
     return axis === 'x' ? `guide-user-v-${rand}` : `guide-user-h-${rand}`
 }
 
@@ -18198,6 +17919,9 @@ const setupReactivity = () => {
     canvas.value.on('object:added', invalidateFrameRuntimeCache);
     canvas.value.on('object:removed', invalidateFrameRuntimeCache);
     canvas.value.on('object:modified', invalidateFrameRuntimeCache);
+    canvas.value.on('object:added', invalidateContainmentZoneCache);
+    canvas.value.on('object:removed', invalidateContainmentZoneCache);
+    canvas.value.on('object:modified', invalidateContainmentZoneCache);
     canvas.value.on('object:added', (e: any) => {
         if (e?.target?.isFrame) markFrameLabelsDirty();
     });
@@ -22104,7 +21828,7 @@ const handleAction = async (action: string) => {
             notifyEditorError('Não foi possível obter a URL da imagem. Tente usar uma imagem do storage.');
             return;
         }
-        if (!(img as any)._customId) (img as any)._customId = Math.random().toString(36).substr(2, 9);
+        if (!(img as any)._customId) (img as any)._customId = makeId();
 
         aiStudio.openStudio({
             initial: {
@@ -22368,7 +22092,7 @@ const handleAction = async (action: string) => {
         // Update selection to the new group and preserve parentFrameId
 	        const newGroup = canvas.value.getActiveObject();
 	        if (newGroup) {
-	            if (!newGroup._customId) newGroup._customId = Math.random().toString(36).substr(2, 9);
+	            if (!newGroup._customId) newGroup._customId = makeId();
 	            // Preserve parentFrameId from the objects (they all have the same one at this point)
 	            if (parentFrames.size === 1) {
 	                newGroup.parentFrameId = [...parentFrames][0];
@@ -23081,7 +22805,9 @@ const toggleVisible = async (id: string) => {
         if (isFrameTarget) {
             if (!obj.isFrame) obj.isFrame = true;
             // Ensure frame membership is up to date before toggling visibility.
-            try { syncFrameClips(obj); } catch (_) {}
+            try { syncFrameClips(obj); } catch (err) {
+                console.warn('[frame-visibility] syncFrameClips falhou:', err)
+            }
             targets = collectFrameVisibilityTargets(obj);
         }
 
@@ -24489,7 +24215,7 @@ const insertAssetToCanvas = async (asset: any, opts?: { pos?: { x: number; y: nu
             selectable: true,
             evented: true
         });
-        (img as any)._customId = Math.random().toString(36).substr(2, 9);
+        (img as any)._customId = makeId();
 
         canvas.value.add(img);
         // Keep the new asset visible above the page/frame.
@@ -24542,7 +24268,7 @@ const insertElementToCanvas = (element: { type: string; data: any }) => {
                 originX: 'center',
                 originY: 'center',
             });
-            pathObj._customId = Math.random().toString(36).substr(2, 9);
+            pathObj._customId = makeId();
             canvas.value.add(pathObj);
             canvas.value.setActiveObject(pathObj);
             safeRequestRenderAll();
@@ -25314,7 +25040,7 @@ const handlePaste = async (e: ClipboardEvent) => {
                                  img.scaleToWidth(500);
                              }
                              
-                             (img as any)._customId = Math.random().toString(36).substr(2, 9);
+                             (img as any)._customId = makeId();
                              
                              // Check if there's a product card group selected to paste INTO
                              const activeObj = canvas.value.getActiveObject();
@@ -25466,7 +25192,7 @@ const addShape = (type: 'rect' | 'circle' | 'triangle' | 'star' | 'polygon' | 'l
     }
     
     if (shape) {
-        (shape as any)._customId = Math.random().toString(36).substr(2, 9);
+        (shape as any)._customId = makeId();
         canvas.value.add(shape);
         canvas.value.setActiveObject(shape);
         safeRequestRenderAll();
@@ -25502,7 +25228,7 @@ const addHighlight = () => {
         name: 'Selo de Oferta'
     });
 
-    (group as any)._customId = Math.random().toString(36).substr(2, 9);
+    (group as any)._customId = makeId();
     canvas.value.add(group);
     canvas.value.setActiveObject(group);
     safeRequestRenderAll();
@@ -25551,7 +25277,7 @@ const addText = (variant: 'default' | 'heading' | 'body' = 'default') => {
         editable: true
     });
     
-    (text as any)._customId = Math.random().toString(36).substr(2, 9);
+    (text as any)._customId = makeId();
     canvas.value.add(text);
     canvas.value.setActiveObject(text);
     safeRequestRenderAll();
@@ -26819,7 +26545,7 @@ const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
     if (!canvas.value || !fabric) return;
 
     const center = getCenterOfView();
-    const gridGroupId = 'grid_' + Math.random().toString(36).substr(2, 9);
+    const gridGroupId = 'grid_' + makeId();
 
     // Total grid dimensions — fit nicely in view
     const totalW = 600;
@@ -26866,7 +26592,7 @@ const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
                 borderScaleFactor: 1
             });
 
-            (cell as any)._customId = Math.random().toString(36).substr(2, 9);
+            (cell as any)._customId = makeId();
             (cell as any).__strokeEnabled = false;
             (cell as any).layerName = 'FRAMER';
             (cell as any).gridGroupId = gridGroupId;
@@ -27161,7 +26887,7 @@ const simulateSmartGrid = async (
     }
     
     // Batch Generation ID
-    const batchGridId = `grid_${Math.random().toString(36).substr(2, 9)}`;
+    const batchGridId = `grid_${makeId()}`;
     if (!targetZone) {
         layoutRows = Math.ceil(count / cols);
     }
@@ -28387,14 +28113,14 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
         // Previously the flag was reset synchronously after an async saveCurrentState call, meaning
         // object:modified events during the actual save were NOT suppressed as intended.
         // Now we use try/finally with await to ensure the flag stays true until the save completes.
-        isApplyingZoneUpdate = true;
+        applyingZoneUpdateCount++;
         try {
             await saveCurrentState({
                 allowEmptyOverwrite: true,
                 reason: opts.saveReason || 'object:modified(zone)'
             });
         } finally {
-            isApplyingZoneUpdate = false;
+            applyingZoneUpdateCount = Math.max(0, applyingZoneUpdateCount - 1);
         }
     }
     // Refresh snapshot so PropertiesPanel picks up the new values
@@ -29380,6 +29106,7 @@ const handleApplyZonePreset = async (presetId: string) => {
             presetCards.forEach((card: any) => {
                 card.__forceCardRelayout = true;
                 card.__lastCardRelayoutSignature = null;
+                card.__lastCardRelayoutAt = 0;
                 // FIX: Also reset the card's LayoutManager to prevent Fabric v7
                 // from auto-recalculating group bounds during resizeSmartObject
                 const cardLm = (card as any).layoutManager;
@@ -34959,7 +34686,7 @@ async function createLabelTemplateFromSelection(name: string) {
 
     const now = new Date().toISOString();
     const tpl: LabelTemplate = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: makeId(),
         name: (name || 'Etiqueta').trim() || 'Etiqueta',
         kind: 'priceGroup-v1',
         group: serializePriceGroupForTemplate(pg),
@@ -34988,7 +34715,7 @@ async function createDefaultLabelTemplate(name: string) {
         }
 
         const tpl: LabelTemplate = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: makeId(),
             name: (name || 'Etiqueta Padrao').trim() || 'Etiqueta Padrao',
             kind: 'priceGroup-v1',
             group: serializePriceGroupForTemplate(pg),
@@ -35264,7 +34991,7 @@ async function duplicateLabelTemplateById(templateId: string) {
     const now = new Date().toISOString();
     const copy: LabelTemplate = {
         ...src,
-        id: Math.random().toString(36).substr(2, 9),
+        id: makeId(),
         name: `${src.name} (Copia)`,
         createdAt: now,
         updatedAt: now
@@ -36704,7 +36431,7 @@ async function insertLabelTemplateToCanvas(templateId: string) {
         if (typeof g.getObjects === 'function') {
             g.getObjects().forEach((child: any) => child.set({ selectable: true, evented: true, hasControls: true, hasBorders: true }));
         }
-        (g as any)._customId = Math.random().toString(36).substr(2, 9);
+        (g as any)._customId = makeId();
         canvas.value.add(g);
 
         // Center using the actual rendered bounds. Some custom templates can have
@@ -37007,7 +36734,10 @@ const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: P
         packUnit: txt((group as any)?.packUnit ?? productData.packUnit),
         packageLabel: txt((group as any)?.packageLabel ?? productData.packageLabel),
         specialCondition: txt((group as any)?.specialCondition ?? productData.specialCondition),
-        imageUrl: txt((group as any)?.imageUrl ?? productData.imageUrl ?? productData.image)
+        imageUrl: txt((group as any)?.imageUrl ?? productData.imageUrl ?? productData.image),
+        // Product name and limit affect internal layout (title height, badge visibility)
+        name: txt(productData.name),
+        limitText: txt(productData.limitText)
     };
 
     return JSON.stringify({
@@ -37053,7 +36783,12 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     // (signature matches), we must NOT touch width/height to avoid this corruption.
     const relayoutSignature = buildCardRelayoutSignature(group, w, h, styles);
     const forceRelayout = (group as any).__forceCardRelayout === true;
-    if (!forceRelayout && (group as any).__lastCardRelayoutSignature === relayoutSignature) {
+    const CARD_RELAYOUT_SIG_TTL_MS = 60000; // 1 minuto — evita layout stale após mudanças externas
+    const sigAge = Date.now() - Number((group as any).__lastCardRelayoutAt || 0);
+    const sigValid = !forceRelayout &&
+        (group as any).__lastCardRelayoutSignature === relayoutSignature &&
+        Number.isFinite(sigAge) && sigAge >= 0 && sigAge < CARD_RELAYOUT_SIG_TTL_MS;
+    if (sigValid) {
         // Dimensions and styles match — skip relayout entirely.
         // Only update stored card dimensions (for serialization) without touching the group.
         (group as any)._cardWidth = w;
@@ -37063,6 +36798,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
         return;
     }
     (group as any).__lastCardRelayoutSignature = relayoutSignature;
+    (group as any).__lastCardRelayoutAt = Date.now();
     (group as any).__forceCardRelayout = false;
 
     // Preservar _productData antes de operações que podem perdê-la
@@ -37854,7 +37590,13 @@ const isLikelyProductZone = (obj: any) => {
     // This catches legacy arts where flags were not originally in CANVAS_CUSTOM_PROPS.
     if (typeof obj._zonePadding === 'number' && typeof obj._zoneWidth === 'number' && typeof obj._zoneHeight === 'number') return true;
     const rect = getZoneRect(obj);
-    return !!(rect && Array.isArray(rect.strokeDashArray));
+    // A dashed rect alone is NOT enough — many generic groups (arrows, annotations)
+    // can contain dashed rects. Require additional zone-specific signals to avoid
+    // false positives that corrupt canvas behavior.
+    if (rect && Array.isArray(rect.strokeDashArray)) {
+        return !!(obj._zoneGlobalStyles || obj.zoneName || obj._zoneTemplateSnapshotId || obj.role);
+    }
+    return false;
 }
 
 const isStandalonePriceGroup = (obj: any) => {
@@ -38030,7 +37772,7 @@ const repairLegacyProductCardImageTransforms = (
 
 const ensureZoneSanity = (zone: any) => {
     if (!zone) return;
-    if (!zone._customId) zone._customId = Math.random().toString(36).substr(2, 9);
+    if (!zone._customId) zone._customId = makeId();
     let needsBoundsUpdate = false;
 
     // CRITICAL: Product zones should NOT have clipPath as it causes rendering errors
@@ -38080,10 +37822,12 @@ const ensureZoneSanity = (zone: any) => {
     }
 
     // Ensure stable interaction flags
+    // NOTE: we intentionally do NOT set objectCaching/statefullCache here.
+    // Those props are in CANVAS_CUSTOM_PROPS; forcing them to false on zones
+    // persists the value and degrades rendering performance for all subsequent
+    // loads. If a zone needs a cache refresh, call zone.set('dirty', true).
     zone.set({
         lockScalingFlip: true,
-        objectCaching: false,
-        statefullCache: false,
         selectable: true,
         evented: true,
         hasControls: true,
@@ -38815,8 +38559,11 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
     const cachedList = Array.isArray(cachedChildren) ? cachedChildren.filter(Boolean) : [];
     
     // 1. Find cards in zone (Use cache if available for performance)
+    const canvasObjects = canvas.value ? new Set(canvas.value.getObjects()) : null;
     const cardMap = new Map<any, any>();
     cachedList.forEach((card: any) => {
+        // Ignore cached cards that were removed from canvas (stale cache)
+        if (canvasObjects && !canvasObjects.has(card)) return;
         const key = card._customId ?? card.id ?? card;
         cardMap.set(key, card);
     });
@@ -38912,14 +38659,16 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
             gapY = clamp(gapY, 0, Math.max(0, maxGapByUsableHeight));
         }
 
+        const MIN_GAP = 2;
+        const MIN_PAD = 2;
         return {
-            padding,
-            gapX,
-            gapY,
+            padding: Math.max(MIN_PAD, padding),
+            gapX: Math.max(MIN_GAP, gapX),
+            gapY: Math.max(MIN_GAP, gapY),
             usableW,
             usableH,
-            startX: zoneRect.left + padding,
-            startY: zoneRect.top + padding
+            startX: zoneRect.left + Math.max(MIN_PAD, padding),
+            startY: zoneRect.top + Math.max(MIN_PAD, padding)
         };
     };
 
@@ -38984,7 +38733,13 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                 // normalizeZoneScale / ensureZoneSanity.
                 const savedW = Number((card as any)._cardWidth) || Number(card.width) || 0;
                 const savedH = Number((card as any)._cardHeight) || Number(card.height) || 0;
-                if (savedW > 0 && savedH > 0) {
+                // Guard against corrupted saved dimensions (e.g. 3000px from old bugs)
+                const dimsLookValid = savedW > 0 && savedH > 0 &&
+                    savedW <= Math.max(slotW * 3, 3000) &&
+                    savedH <= Math.max(slotH * 3, 3000) &&
+                    savedW >= slotW * 0.1 &&
+                    savedH >= slotH * 0.1;
+                if (dimsLookValid) {
                     card.set({ width: savedW, height: savedH });
                     (card as any)._cardWidth = savedW;
                     (card as any)._cardHeight = savedH;
@@ -39413,7 +39168,7 @@ const rehydrateCanvasZones = (
 
         // Ensure IDs exist (used for parentZoneId mapping and selection)
         objs.forEach((o: any) => {
-            if (!o._customId) o._customId = Math.random().toString(36).substr(2, 9);
+            if (!o._customId) o._customId = makeId();
         });
 
         // CRITICAL: Clear clipPath from all product zones to prevent rendering errors
@@ -39442,10 +39197,22 @@ const rehydrateCanvasZones = (
             // - Default: select/move the whole card (subTargetCheck OFF)
             // - Double click: enable deep select for inner elements (handled elsewhere)
             // Also supports legacy projects where flags were not serialized yet (heuristic-based detection).
+            // Only normalize objects that are explicitly tagged as product cards OR have
+            // strong internal signals (offerBackground, priceGroup, _cardWidth).
+            // This prevents generic groups from being mutated by rehydration heuristics.
+            const hasStrongCardSignals = (obj: any) => {
+                if (obj.isProductCard || obj.isSmartObject) return true;
+                const children = typeof obj.getObjects === 'function' ? obj.getObjects() : [];
+                const hasOfferBg = children.some((c: any) => String(c?.name || '') === 'offerBackground');
+                const hasPriceGroup = children.some((c: any) => String(c?.type || '').toLowerCase() === 'group' && String(c?.name || '') === 'priceGroup');
+                const hasCardDims = Number.isFinite(Number((obj as any)?._cardWidth)) && Number((obj as any)?._cardWidth) > 0;
+                return hasOfferBg || hasPriceGroup || hasCardDims;
+            };
             const isCardLike =
                 (o.isProductCard || o.isSmartObject || isLikelyProductCard(o)) &&
                 o.type === 'group' &&
-                !isLikelyPriceGroupObject(o);
+                !isLikelyPriceGroupObject(o) &&
+                hasStrongCardSignals(o);
             if (isCardLike) {
                 if (!o.isProductCard && !o.isSmartObject && isLikelyProductCard(o)) {
                     o.isProductCard = true;
@@ -39637,23 +39404,20 @@ const rehydrateCanvasZones = (
 
         // Remove legacy zone rectangles from the deprecated renderer.
         // Keeping them causes duplicate/overlapping zone behaviors after spacing edits.
-        if (!LEGACY_PRODUCT_ZONE_RENDERER_ENABLED) {
-            const legacyZoneRects = objs.filter((o: any) =>
-                o?.type === 'rect' &&
-                (
-                    o?.id === 'product_zone_container' ||
-                    o?.name === 'product_zone_container' ||
-                    (o?.isZone === true && o?.isProductZone === true)
-                )
-            );
-            if (legacyZoneRects.length > 0) {
-                legacyZoneRects.forEach((o: any) => {
-                    if (zoneObjectRef.value === o) zoneObjectRef.value = null;
-                    canvas.value.remove(o);
-                });
-                console.log(`[rehydrateCanvasZones] Removed ${legacyZoneRects.length} legacy zone rect(s)`);
-                objs = canvas.value.getObjects();
-            }
+        const legacyZoneRects = objs.filter((o: any) =>
+            o?.type === 'rect' &&
+            (
+                o?.id === 'product_zone_container' ||
+                o?.name === 'product_zone_container' ||
+                (o?.isZone === true && o?.isProductZone === true)
+            )
+        );
+        if (legacyZoneRects.length > 0) {
+            legacyZoneRects.forEach((o: any) => {
+                canvas.value.remove(o);
+            });
+            console.log(`[rehydrateCanvasZones] Removed ${legacyZoneRects.length} legacy zone rect(s)`);
+            objs = canvas.value.getObjects();
         }
 
         let zones = objs.filter((o: any) => o?.type === 'group' && isLikelyProductZone(o));
@@ -39687,7 +39451,7 @@ const rehydrateCanvasZones = (
                 if (seenIds.has(zid)) {
                     // Mesmo _customId — regenerar em vez de remover
                     const oldId = z._customId;
-                    z._customId = Math.random().toString(36).substr(2, 9);
+                    z._customId = makeId();
                     seenIds.add(z._customId);
                     console.warn(`[rehydrateCanvasZones] Zona com _customId duplicado. Regenerado: ${oldId} -> ${z._customId}`);
                 } else {
@@ -39697,23 +39461,7 @@ const rehydrateCanvasZones = (
         }
 
         restoreMissingManualTemplateFlagsInCanvas(canvas.value, 'rehydrate');
-        
-        if (LEGACY_PRODUCT_ZONE_RENDERER_ENABLED) {
-            // Legacy only: reconnect zone rect reference used by renderProductZone().
-            const existingProductZoneRect = objs.find((o: any) =>
-                o?.type === 'rect' &&
-                (
-                    o?.isProductZone === true ||
-                    o?.id === 'product_zone_container' ||
-                    o?.name === 'product_zone_container'
-                )
-            );
-            if (existingProductZoneRect && !zoneObjectRef.value) {
-                console.log('[rehydrateCanvasZones] Reconnecting zoneObjectRef to existing product zone from JSON');
-                zoneObjectRef.value = existingProductZoneRect;
-            }
-        }
-        
+
         zones.forEach((z: any) => {
             if (z.name === 'gridZone') z.isGridZone = true;
             if (z.name === 'productZoneContainer') z.isProductZone = true;
@@ -39977,7 +39725,7 @@ const rehydrateCanvasZones = (
         // Repair missing parentZoneId by intersection (helps after old history/undo states)
         const cardsWithSavedParentZone = new Set<any>();
         cards.forEach((card: any) => {
-            if (!card._customId) card._customId = Math.random().toString(36).substr(2, 9);
+            if (!card._customId) card._customId = makeId();
             if (card._cardWidth == null) card._cardWidth = card.width;
             if (card._cardHeight == null) card._cardHeight = card.height;
 

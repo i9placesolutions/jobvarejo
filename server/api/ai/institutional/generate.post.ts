@@ -219,7 +219,7 @@ export default defineEventHandler(async (event) => {
   // ========================================
   // 6. Canvas: Frame + Imagem (cover) — sem elementos soltos
   // ========================================
-  const id = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+  const id = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12)
   const frameId = id()
   const coverScale = Math.max(width / imgW, height / imgH)
 

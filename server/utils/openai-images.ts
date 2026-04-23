@@ -194,7 +194,7 @@ export const resolveReferenceImages = async (opts: {
     const ext = guessExtFromMime(detectedMime)
     out.push({
       data: buf,
-      filename: `ref-${Math.random().toString(36).slice(2)}.${ext}`,
+      filename: `ref-${crypto.randomUUID().replace(/-/g, '')}.${ext}`,
       mime: detectedMime
     })
   }

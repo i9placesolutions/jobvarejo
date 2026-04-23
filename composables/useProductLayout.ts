@@ -71,11 +71,11 @@ export const useProductLayout = () => {
       cardHeight
     );
     
-    const zoneId = `zone_${Date.now()}`;
-    
     // -------------------------------------------------------------------------
     // 1. Background
     // -------------------------------------------------------------------------
+    // NOTE: We intentionally do NOT set a fake smartGridId here.
+    // The real zone binding is done later via parentZoneId / _zoneSlot.
     const bgFill = styles.isProdBgTransparent ? 'transparent' : (prod.backgroundColor ?? styles.cardColor ?? '#ffffff');
     
     const bg = new fabric.Rect({
@@ -396,21 +396,19 @@ export const useProductLayout = () => {
       interactive: false, // Disable internal interactions
       isSmartObject: true,
       isProductCard: true,
-      smartGridId: zoneId,
       // objectCaching: true (default), but ensure it's not false
       data: { 
         id: prod.id,
         productId: prod.id,
         productData: prod,
-        isProductCard: true,
-        smartZoneId: zoneId
+        isProductCard: true
       }
     });
     
     // Store dimensions for containment
     (group as any)._cardWidth = cardWidth;
     (group as any)._cardHeight = cardHeight;
-    (group as any)._customId = `card_${Math.random().toString(36).substr(2, 9)}`;
+    (group as any)._customId = `card_${makeId()}`;
 
     // Internal elements should NOT be selectable independently
     // The entire card group should move together as one unit
@@ -583,7 +581,7 @@ export const useProductLayout = () => {
       padding: 5
     });
     
-    (group as any)._customId = `zone_${Math.random().toString(36).substr(2, 9)}`;
+    (group as any)._customId = `zone_${makeId()}`;
     (group as any)._zoneWidth = width;
     (group as any)._zoneHeight = height;
 
