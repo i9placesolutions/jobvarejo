@@ -25837,7 +25837,11 @@ const createSmartObject = async (
     // Image reference (para re-importação e review)
     (group as any).imageUrl = (product as any).image_wasabi_key || (product as any).imageUrl || (product as any).image || null;
     // Store original product data for reference
-    (group as any)._productData = { ...product };
+    // Normaliza limitText a partir de limit (fluxo de importação inteligente) ou limitText (formato Product)
+    (group as any)._productData = {
+        ...product,
+        limitText: product.limitText || product.limit || limitTextValue || ''
+    };
 
     // Internal elements should be selectable for manual adjustments
     group.getObjects().forEach((obj: any) => {
@@ -36737,7 +36741,7 @@ const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: P
         imageUrl: txt((group as any)?.imageUrl ?? productData.imageUrl ?? productData.image),
         // Product name and limit affect internal layout (title height, badge visibility)
         name: txt(productData.name),
-        limitText: txt(productData.limitText)
+        limitText: txt(productData.limitText || productData.limit)
     };
 
     return JSON.stringify({
