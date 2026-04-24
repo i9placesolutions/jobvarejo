@@ -10048,9 +10048,11 @@ onMounted(async () => {
 	          clipTo: undefined,
 	        });
 
-            // Global baseline for huge scenes: skip drawing offscreen objects.
-            // This is safe for editing and dramatically reduces overdraw on large projects.
-            (canvas.value as any).skipOffscreen = true;
+            // Keep Fabric's built-in offscreen skipper disabled. The editor already
+            // has its own viewport culling, and Fabric's object-level skipper can
+            // incorrectly skip frame children/clipPath content while still drawing
+            // selection controls.
+            (canvas.value as any).skipOffscreen = false;
 
             // Tablet/Touch UX + performance: bigger handles and cheaper hit-tests.
             // This makes selection/resizing usable on iPad/Android tablets.
@@ -10061,9 +10063,9 @@ onMounted(async () => {
                     window.matchMedia('(pointer: coarse)').matches;
 
                 if (isCoarsePointer && canvas.value) {
-                    // Big canvases render faster if we skip objects outside viewport.
-                    // Safe for interactive editing; exports should use their own render path.
-                    (canvas.value as any).skipOffscreen = true;
+                    // Use the editor's own viewport culling instead of Fabric's
+                    // built-in skipper; the latter is unsafe with frame clipping.
+                    (canvas.value as any).skipOffscreen = false;
                     // Per-pixel hit-testing is expensive and unnecessary for touch.
                     (canvas.value as any).perPixelTargetFind = false;
                     // Increase tolerance so taps select objects more reliably.
@@ -40197,15 +40199,28 @@ const handleRecalculateLayout = () => {
               <!-- Mobile Zoom Display (top right) -->
               <div
                 v-if="isMobile"
-                class="absolute top-2 right-2 z-200 flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#18181b]/90 backdrop-blur-md border border-white/10 shadow-lg"
+                class="absolute top-2 right-2 z-200 flex items-center gap-1"
               >
-                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Zoom -" @click="handleZoomOut()">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
+                <!-- Botao Exportar destacado (atalho rapido para ExportDialog) -->
+                <button
+                  class="touch-target flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-500 hover:bg-violet-600 active:bg-violet-700 text-white shadow-lg border border-violet-400/40"
+                  title="Exportar (PNG / JPG / PDF)"
+                  @click="exportDesign()"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                  <span class="text-[11px] font-semibold">Exportar</span>
                 </button>
-                <span class="text-[11px] text-white/50 min-w-9 text-center tabular-nums">{{ Math.round(currentZoom) }}%</span>
-                <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Zoom +" @click="handleZoomIn()">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
-                </button>
+
+                <!-- Grupo de zoom -->
+                <div class="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#18181b]/90 backdrop-blur-md border border-white/10 shadow-lg">
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Zoom -" @click="handleZoomOut()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
+                  </button>
+                  <span class="text-[11px] text-white/50 min-w-9 text-center tabular-nums">{{ Math.round(currentZoom) }}%</span>
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 w-9 h-9" title="Zoom +" @click="handleZoomIn()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
+                  </button>
+                </div>
               </div>
 
               <!-- Mobile Quick Actions Bar (appears when object is selected) -->
@@ -40548,17 +40563,14 @@ const handleRecalculateLayout = () => {
           <div>
             <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Ações</div>
             <div class="grid grid-cols-4 gap-2">
+              <!-- Exportar: abre o ExportDialog completo (PNG/JPEG/PDF, pagina/frame/todos) -->
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 active:text-white col-span-2" @click="exportDesign(); mobilePanel = null; mobileNavRef?.clearActive()">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                <span class="text-[11px] font-semibold">Exportar (PNG / JPG / PDF)</span>
+              </button>
               <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="startPresentation(); mobilePanel = null; mobileNavRef?.clearActive()">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 <span class="text-[11px]">Apresentar</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleAction('export-png'); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                <span class="text-[11px]">Export PNG</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleAction('export-jpg'); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                <span class="text-[11px]">Export JPG</span>
               </button>
               <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="shareDesign(); mobilePanel = null; mobileNavRef?.clearActive()">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
