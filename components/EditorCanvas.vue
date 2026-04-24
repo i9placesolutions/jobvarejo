@@ -27340,12 +27340,33 @@ const simulateSmartGrid = async (
             try {
                 const cache = (mode === 'append') ? [...existingCards, ...smartObjects] : smartObjects;
                 syncZoneCardFrameBindings(targetZone, cache);
+                // FIX: preserveStyles evita relayout completo de cards recém-criados,
+                // o que bagunçava as etiquetas (splashes/price groups) do template.
                 recalculateZoneLayout(targetZone, cache, {
                     save: false,
                     requestRender: false,
-                    trustCachedChildren: true
+                    trustCachedChildren: true,
+                    preserveStyles: true
                 });
                 syncZoneDerivedMetadata(targetZone);
+                // FIX: Restaurar cards que possam ter sido escondidos pelo viewport culling
+                // durante a criação. Sem isso, cards ficavam invisíveis até o usuário mexer
+                // no espaçamento da zona (que dispara o mesmo restore).
+                const zoneId = String((targetZone as any)?._customId || '').trim();
+                const allObjs = canvas.value.getObjects?.() || [];
+                const zoneRelatedObjs = allObjs.filter((o: any) => {
+                    if (!o) return false;
+                    const boundId = String((o as any)?.parentZoneId || '').trim();
+                    const slotId = String((o as any)?._zoneSlot?.zoneId || '').trim();
+                    return (zoneId && boundId === zoneId) || (zoneId && slotId === zoneId);
+                });
+                restoreViewportCulledObjects(zoneRelatedObjs);
+                for (const obj of zoneRelatedObjs) {
+                    if (obj && obj !== targetZone && obj.visible === false && !(obj as any).__viewportCulled) {
+                        obj.visible = true;
+                        obj.dirty = true;
+                    }
+                }
             } catch (calcErr) {
                 console.warn('Grid layout recalc error:', calcErr);
             }
@@ -38770,9 +38791,11 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                         console.warn('[placeCard] resizeSmartObject (preserveStyles) failed:', resizeErr);
                     }
                 } else {
-                    card.set({ width: slotW, height: slotH });
-                    (card as any)._cardWidth = slotW;
-                    (card as any)._cardHeight = slotH;
+                    // Do not call card.set({ width, height }) here. In Fabric v7, even a
+                    // near-identical width/height assignment can shift a group's internal
+                    // coordinate system and move children such as priceGroup labels.
+                    (card as any)._cardWidth = prevW || slotW;
+                    (card as any)._cardHeight = prevH || slotH;
                 }
             } else {
                 try {
