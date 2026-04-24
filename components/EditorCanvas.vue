@@ -7800,7 +7800,7 @@ const clearPendingPersistenceTimers = () => {
     }
 };
 
-const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => {
+const flushPersistenceNow = async (reason: string, opts: { force?: boolean } = {}) => {
     const now = Date.now();
     const force = !!opts.force;
     if (!force && now - lastLifecycleFlushAt < 250) return;
@@ -7842,13 +7842,13 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
             } else {
                 // Save to in-memory project + local draft immediately (sync path inside saveState/updatePageData).
                 try {
-                    saveCurrentState({
+                    await Promise.resolve(saveCurrentState({
                         reason: `lifecycle:${reason}`,
                         source: 'system',
                         markUnsaved: true,
                         skipIfUnchanged: true,
                         skipCoalesce: true
-                    });
+                    }));
                 } catch (err) {
                     console.warn('[persist] Falha ao salvar estado em flush de lifecycle:', err);
                 }
@@ -7865,7 +7865,7 @@ const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}) => 
         const hasPendingProjectSyncNow = hadPendingProjectSync || hasUnsavedChanges.value || project.pages.some((page: any) => !!page?.dirty);
         if (hasPendingProjectSyncNow) {
             if (hasUnsavedChanges.value) triggerAutoSave();
-            void flushAutoSave().catch((err: any) => {
+            await flushAutoSave().catch((err: any) => {
                 console.warn('[persist] Falha no flushAutoSave:', err);
             });
         }
@@ -40042,7 +40042,7 @@ const handleRecalculateLayout = () => {
           </SidebarLeft>
 
           <!-- Canvas Stage -->
-          <main class="flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing" :style="isMobile ? 'padding-bottom: 56px' : ''">
+          <main class="flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing" :style="isMobile ? ((project.pages?.length || 0) > 1 ? 'padding-bottom: 140px' : 'padding-bottom: 56px') : ''">
               <!-- Infinite Canvas Effect (Wrapper) -->
                   <div ref="wrapperEl" class="w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
@@ -40211,7 +40211,8 @@ const handleRecalculateLayout = () => {
               <!-- Mobile Quick Actions Bar (appears when object is selected) -->
               <div
                 v-if="isMobile && selectedObjectRef"
-                class="absolute bottom-16 left-0 right-0 z-200 flex items-center justify-center px-2"
+                class="absolute left-0 right-0 z-200 flex items-center justify-center px-2"
+                :style="(project.pages?.length || 0) > 1 ? 'bottom: 148px' : 'bottom: 64px'"
               >
                 <div class="flex items-center gap-0.5 px-2 py-1.5 rounded-xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-xl overflow-x-auto max-w-full scrollbar-hide">
                   <!-- Copy -->
@@ -40337,6 +40338,17 @@ const handleRecalculateLayout = () => {
             @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
           />
       </div>
+
+      <!-- Mobile Pages Carousel (estilo Canva: swipe horizontal entre páginas) -->
+      <EditorMobilePagesCarousel
+        v-if="isMobile && (project.pages?.length || 0) > 1"
+        :pages="project.pages"
+        :active-page-id="currentPageId"
+        @select-page="switchToPage"
+        @add-page="addNewPage"
+        @duplicate-page="duplicatePage"
+        @delete-page="(id) => { const idx = project.pages?.findIndex((p: any) => p.id === id); if (idx != null && idx >= 0) deletePage(idx) }"
+      />
 
       <!-- Mobile Bottom Nav -->
       <EditorMobileNav
