@@ -1964,9 +1964,10 @@ const maybeReparentToFrameOnDrop = (obj: any) => {
 
     const currentParentFrameId = String((obj as any).parentFrameId || '').trim();
     const currentFrame = currentParentFrameId ? getFrameById(currentParentFrameId) : null;
-    // Keep the current frame binding while there is any visual overlap.
-    // Only detach when the object is fully outside.
-    if (currentFrame && isObjectIntersectingFrame(obj, currentFrame)) {
+    // Keep frame binding only while the object is still mostly inside the frame.
+    // The old "any overlap" rule left large/dragged rectangles clipped by a stale
+    // parentFrameId, making complete objects look visually cut.
+    if (currentFrame && isObjectMostlyInsideFrame(obj, currentFrame)) {
         return;
     }
 
@@ -2058,6 +2059,27 @@ const isObjectIntersectingFrame = (obj: any, frame: any) => {
     const overlapArea = overlapW * overlapH;
 
     return overlapArea > 0;
+};
+
+const isObjectMostlyInsideFrame = (obj: any, frame: any, minOverlapRatio = 0.6) => {
+    if (!obj || !frame || typeof obj.getBoundingRect !== 'function' || typeof frame.getBoundingRect !== 'function') {
+        return false;
+    }
+
+    const objBounds = obj.getBoundingRect(true);
+    const frameBounds = frame.getBoundingRect(true);
+    if (!objBounds || !frameBounds) return false;
+
+    const left = Math.max(objBounds.left, frameBounds.left);
+    const top = Math.max(objBounds.top, frameBounds.top);
+    const right = Math.min(objBounds.left + objBounds.width, frameBounds.left + frameBounds.width);
+    const bottom = Math.min(objBounds.top + objBounds.height, frameBounds.top + frameBounds.height);
+    const overlapW = Math.max(0, right - left);
+    const overlapH = Math.max(0, bottom - top);
+    const overlapArea = overlapW * overlapH;
+    const objArea = Math.max(1, objBounds.width * objBounds.height);
+
+    return (overlapArea / objArea) >= minOverlapRatio;
 };
 
 const collectFrameVisibilityTargets = (rootFrame: any) => {
@@ -39410,10 +39432,11 @@ const rehydrateCanvasZones = (
                 return;
             }
             
-            // Keep frame binding while object still overlaps the frame bounds.
-            // Only remove binding when the object is fully outside.
-            if (!isObjectIntersectingFrame(o, frame)) {
-                console.log(`🔓 Removendo parentFrameId de objeto totalmente fora do frame:`, {
+            // Keep frame binding only while the object is mostly inside the frame.
+            // This also repairs old saves where a large rectangle kept a stale
+            // frame clip after being dragged/resized outside the frame.
+            if (!isObjectMostlyInsideFrame(o, frame)) {
+                console.log(`🔓 Removendo parentFrameId de objeto fora da maior parte do frame:`, {
                     object: o.name || o._customId,
                     frame: frame.name || frame._customId
                 });
