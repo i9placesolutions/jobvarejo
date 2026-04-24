@@ -10,7 +10,7 @@ const { isMobile } = useResponsive()
 
 // Ref para chamar flushPersistenceNow do filho via defineExpose.
 // provide/inject nao propaga do filho para o pai em Vue, entao usamos ref.
-type EditorCanvasInstance = { flushPersistenceNow?: (reason: string, opts?: { force?: boolean }) => void }
+type EditorCanvasInstance = { flushPersistenceNow?: (reason: string, opts?: { force?: boolean }) => void | Promise<void> }
 const editorCanvasRef = ref<EditorCanvasInstance | null>(null)
 
 // Get project ID from route
@@ -296,7 +296,7 @@ onBeforeRouteLeave(async () => {
   try {
     const flush = editorCanvasRef.value?.flushPersistenceNow
     if (typeof flush === 'function') {
-      flush('route-leave', { force: true })
+      await flush('route-leave', { force: true })
     }
   } catch {
     // ignore — melhor continuar com o fluxo do que travar a navegação
