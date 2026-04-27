@@ -545,6 +545,37 @@ const normalizePersistedImageUrls = (json: any, convertPresignedToPermanentUrl: 
 const stripNestedInlinePayloads = (json: any) => {
   if (!json?.objects || !Array.isArray(json.objects)) return
 
+  const stripFromArbitraryMetadata = (root: any) => {
+    const seen = new WeakSet<object>()
+    const walk = (value: any) => {
+      if (!value || typeof value !== 'object') return
+      if (seen.has(value)) return
+      seen.add(value)
+
+      if (!Array.isArray(value)) {
+        for (const key of ['_raw', '_imported', '_parsedVariants', '_originalRow']) {
+          if (key in value) delete value[key]
+        }
+      }
+
+      Object.entries(value).forEach(([key, entry]: [string, any]) => {
+        if (typeof entry === 'string' && isLargeInlineUrl(entry)) {
+          if (key === 'src') {
+            value[key] = TINY_IMAGE_PLACEHOLDER
+          } else if (key === '__originalSrc') {
+            value[key] = ''
+          } else if (/image|url/i.test(key)) {
+            value[key] = ''
+          }
+          return
+        }
+        walk(entry)
+      })
+    }
+
+    walk(root)
+  }
+
   const stripFromTree = (root: any) => {
     if (!root || typeof root !== 'object') return
     walkSerializedCanvasObjects(root, (node: any, ancestors = []) => {
@@ -571,6 +602,13 @@ const stripNestedInlinePayloads = (json: any) => {
     // _zoneTemplateSnapshot
     if (obj?._zoneTemplateSnapshot && typeof obj._zoneTemplateSnapshot === 'object') {
       stripFromTree(obj._zoneTemplateSnapshot)
+    }
+    // _zoneStateSnapshot stores canonical zone/card state. Keep it, but strip
+    // inline/blob image payloads and raw import metadata so autosave does not
+    // balloon when product images or AI imports include embedded data.
+    if (obj?._zoneStateSnapshot && typeof obj._zoneStateSnapshot === 'object') {
+      stripFromTree(obj._zoneStateSnapshot)
+      stripFromArbitraryMetadata(obj._zoneStateSnapshot)
     }
     // _templateGroup (used by some template systems)
     if (obj?._templateGroup && typeof obj._templateGroup === 'object') {

@@ -1493,7 +1493,7 @@ export const useProject = () => {
                 }
 
                 // Salvar thumbnail no Storage (em paralelo com canvas)
-                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.dirty || !!page?.thumbnailDirty || !page?.thumbnailUrl)
+                const shouldUploadThumbnail = !!page?.thumbnail && (!!page?.thumbnailDirty || !page?.thumbnailUrl)
                 if (shouldUploadThumbnail && page?.thumbnail) {
                     const url = await withSoftTimeout(
                         saveThumbnail(project.id, page.id, page.thumbnail),

@@ -5492,7 +5492,9 @@ const patchFabricLoadImageProgress = () => {
     }
 }
 
-const ENABLE_LEGACY_WATCH_EFFECT_LOADER = false
+// Loader antigo mantido apenas como referência histórica dentro de um bloco morto.
+// Não reativar: o pipeline oficial é o watch(activePage) com session guard.
+const ENABLE_LEGACY_WATCH_EFFECT_LOADER = false as const
 
 const designLoadMessage = computed(() => {
     if (!isProjectLoaded.value) return 'Carregando projeto...'
@@ -8281,13 +8283,25 @@ const openProductReviewForZone = (zone: any, opts: { mode?: 'replace' | 'append'
     })
 }
 
-const tryOpenProductReviewFromDblClickTarget = (target: any): boolean => {
-    if (!target || showProductReviewModal.value) return false;
+const focusProductZoneFromDblClickTarget = (target: any): boolean => {
+    if (!target) return false;
     if (isPriceGroupOrPriceChild(target)) return false;
+    if (isProductCardContainer(target) || isLikelyProductCard(target)) return false;
+    if (isProductCardContainer((target as any)?.group) || isLikelyProductCard((target as any)?.group)) return false;
 
     const zone = resolveZoneForProductImport(target);
     if (!zone) return false;
-    return openProductReviewForZone(zone, { mode: 'replace' });
+    try {
+        canvas.value?.setActiveObject?.(zone);
+        refreshSelectedRef();
+    } catch {
+        // ignore selection focus failures
+    }
+    if (isMobile.value) {
+        mobilePanel.value = 'properties';
+    }
+    focusProductZoneSettings();
+    return true;
 }
 
 const importZoneLabelTemplateId = computed(() => {
@@ -8744,7 +8758,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                     _customId: o?._customId,
                     isTransient: isTransientCanvasObject(o)
                 }));
-                console.log('[activePageWatch] 📋 Verificando objetos existentes:', {
+                if (import.meta.dev) console.log('[activePageWatch] 📋 Verificando objetos existentes:', {
                     totalObjects: currentObjects.length,
                     hasRealObjects,
                     objects: allObjectsInfo
@@ -8771,7 +8785,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
         }
         if (import.meta.dev) {
             const loadedPage = project.pages?.find((p: any) => p.id === nextPageId);
-            console.log('[activePageWatch] 📥 Após ensurePageCanvasDataLoaded:', {
+            if (import.meta.dev) console.log('[activePageWatch] 📥 Após ensurePageCanvasDataLoaded:', {
                 pageId: nextPageId,
                 hasCanvasData: !!loadedPage?.canvasData,
                 canvasDataObjectCount: loadedPage?.canvasData?.objects?.length || 0
@@ -8861,7 +8875,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	            let didLoadNewPage = false;
 	            let degradedNewPage = false;
 	            
-	            console.log('[activePageWatch] 📦 Preparando loadFromJSON:', {
+	            if (import.meta.dev) console.log('[activePageWatch] 📦 Preparando loadFromJSON:', {
 	                pageId: nextPageId,
 	                expectedObjects: canvasDataToLoad?.objects?.length || 0,
 	                firstFewObjectTypes: canvasDataToLoad?.objects?.slice(0, 3).map((o: any) => ({ 
@@ -8874,7 +8888,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	            
 	            try {
 	                try {
-	                    console.log('[activePageWatch] 🚀 Iniciando loadFromJSON...');
+	                    if (import.meta.dev) console.log('[activePageWatch] 🚀 Iniciando loadFromJSON...');
 	                    await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
 	                    didLoadNewPage = true;
 	                    
@@ -8887,7 +8901,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	                        isTransient: isTransientCanvasObject(o)
 	                    }));
 	                    
-	                    console.log('[activePageWatch] ✅ loadFromJSON concluído:', {
+	                    if (import.meta.dev) console.log('[activePageWatch] ✅ loadFromJSON concluído:', {
 	                        totalLoaded: loadedObjects.length,
 	                        transientCount: loadedObjects.filter((o: any) => isTransientCanvasObject(o)).length,
 	                        realObjectsCount: loadedObjects.filter((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg').length,
@@ -9266,7 +9280,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     // Log final do estado do carregamento
     const finalObjects = canvas.value?.getObjects?.() || [];
     const finalRealObjects = finalObjects.filter((o: any) => !isTransientCanvasObject(o) && o?.id !== 'artboard-bg');
-    console.log('[activePageWatch] ✅ Carregamento finalizado:', {
+    if (import.meta.dev) console.log('[activePageWatch] ✅ Carregamento finalizado:', {
         pageId: nextPageId,
         loadedOk,
         totalObjects: finalObjects.length,
@@ -11254,6 +11268,7 @@ const CANVAS_CUSTOM_PROPS = [
     '_zoneGlobalStyles',
     '_zoneTemplateSnapshotId',
     '_zoneTemplateSnapshot',
+    '_zoneStateSnapshot',
     'backgroundColor', // Zone background color
     'padding',
     'gapHorizontal',
@@ -12427,6 +12442,7 @@ const removeImageObjectsDeep = (node: any): any => {
         if (culledCount > 0 && import.meta.dev) {
             console.log(`[saveState] Restored ${culledCount} viewport-culled object(s) before serialization`)
         }
+        syncAllZoneStateSnapshots(canvasInstance, `saveState:${saveReason}`)
 
         const { canvasFrames, restoreZoneClipPaths } = prepareCanvasForSerialization({
             canvasInstance,
@@ -13435,7 +13451,6 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     const isObjectInsideOrOverlappingFrame = (candidate: any, container: any) => {
         if (!candidate || !container) return false;
         try {
-            if (isObjectCenterInsideFrame(candidate, container)) return true;
             if (typeof candidate.getBoundingRect !== 'function' || typeof container.getBoundingRect !== 'function') return false;
             const objBounds = candidate.getBoundingRect(true);
             const frameBounds = container.getBoundingRect(true);
@@ -13444,7 +13459,15 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             const ix = Math.max(0, Math.min(objBounds.left + objBounds.width, frameBounds.left + frameBounds.width) - Math.max(objBounds.left, frameBounds.left));
             const iy = Math.max(0, Math.min(objBounds.top + objBounds.height, frameBounds.top + frameBounds.height) - Math.max(objBounds.top, frameBounds.top));
             const overlapRatio = (ix * iy) / objArea;
-            return overlapRatio >= 0.6;
+            const center = typeof candidate.getCenterPoint === 'function'
+                ? candidate.getCenterPoint()
+                : { x: objBounds.left + objBounds.width / 2, y: objBounds.top + objBounds.height / 2 };
+            const centerInside =
+                center.x >= frameBounds.left &&
+                center.x <= frameBounds.left + frameBounds.width &&
+                center.y >= frameBounds.top &&
+                center.y <= frameBounds.top + frameBounds.height;
+            return overlapRatio >= 0.85 || (centerInside && overlapRatio >= 0.65);
         } catch {
             return false;
         }
@@ -13488,6 +13511,8 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             if (!candidate || candidate.excludeFromExport || !candidate._customId) return;
             const candidateId = String(candidate._customId);
             if (toDuplicateIds.has(candidateId)) return;
+            const existingParent = String((candidate as any).parentFrameId || '').trim();
+            if (existingParent && !toDuplicateIds.has(existingParent)) return;
 
             let container: any = null;
             for (const f of duplicatedFrames) {
@@ -13501,7 +13526,6 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             toDuplicateIds.add(candidateId);
             changed = true;
 
-            const existingParent = String((candidate as any).parentFrameId || '').trim();
             const resolvedParent = existingParent && toDuplicateIds.has(existingParent)
                 ? existingParent
                 : String(container._customId);
@@ -13509,21 +13533,56 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         });
     }
 
-    const shouldSkipWhenDuplicatingFrameContent = (obj: any) => {
-        if (!obj) return false;
-        // Keep product zones (container/style), but do not duplicate any product instances/cards.
-        if (isLikelyProductZone(obj)) return false;
-        if (isLikelyProductCard(obj) || obj.isProductCard || obj.isSmartObject) return true;
-        const parentZoneId = String((obj as any).parentZoneId || '').trim();
-        if (parentZoneId) return true;
-        return false;
-    };
+    // Product cards are top-level Fabric groups bound to the zone via parentZoneId/_zoneSlot,
+    // not children of the zone group. Include every object bound to any duplicated zone even
+    // if a legacy save lost parentFrameId or the spatial fallback misses it.
+    let zoneBindingSafety = 0;
+    let zoneBindingChanged = true;
+    while (zoneBindingChanged && zoneBindingSafety++ < 10) {
+        zoneBindingChanged = false;
+        const duplicatedZoneIds = new Set(
+            all
+                .filter((o: any) => o?._customId && toDuplicateIds.has(String(o._customId)) && isLikelyProductZone(o))
+                .map((o: any) => String(o._customId || '').trim())
+                .filter(Boolean)
+        );
+        if (duplicatedZoneIds.size === 0) break;
+
+        all.forEach((candidate: any) => {
+            if (!candidate || candidate.excludeFromExport || !candidate._customId) return;
+            const candidateId = String(candidate._customId);
+            if (toDuplicateIds.has(candidateId)) return;
+
+            const parentZoneId = String((candidate as any).parentZoneId || '').trim();
+            const slotZoneId = String((candidate as any)?._zoneSlot?.zoneId || '').trim();
+            const boundZoneId = parentZoneId && duplicatedZoneIds.has(parentZoneId)
+                ? parentZoneId
+                : (slotZoneId && duplicatedZoneIds.has(slotZoneId) ? slotZoneId : '');
+            if (!boundZoneId) return;
+
+            toDuplicateIds.add(candidateId);
+            zoneBindingChanged = true;
+
+            const existingParent = String((candidate as any).parentFrameId || '').trim();
+            if (existingParent && toDuplicateIds.has(existingParent)) {
+                resolvedParentByOriginalId.set(candidateId, existingParent);
+                return;
+            }
+
+            const zone = all.find((o: any) => String(o?._customId || '').trim() === boundZoneId);
+            const zoneFrameId = String((zone as any)?.parentFrameId || '').trim();
+            resolvedParentByOriginalId.set(
+                candidateId,
+                zoneFrameId && toDuplicateIds.has(zoneFrameId) ? zoneFrameId : undefined
+            );
+        });
+    }
 
     const originals = all
         .filter((o: any) => o?._customId && toDuplicateIds.has(String(o._customId)))
-        .filter((o: any) => !shouldSkipWhenDuplicatingFrameContent(o));
+        .filter((o: any) => !!o && !o.excludeFromExport);
     originals.sort((a: any, b: any) => (indexById.get(String(a._customId)) ?? 0) - (indexById.get(String(b._customId)) ?? 0));
-    console.log(`[duplicateFrameWithContents] root=${rootId} totalDuplicated=${originals.length} framesInSet=${originals.filter((o: any) => isFrameContainerCandidate(o)).length}`);
+    if (import.meta.dev) console.log(`[duplicateFrameWithContents] root=${rootId} totalDuplicated=${originals.length} framesInSet=${originals.filter((o: any) => isFrameContainerCandidate(o)).length}`);
 
     if (!originals.length) return null;
 
@@ -13533,6 +13592,29 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     const oldToNewId = new Map<string, string>();
     const clones: any[] = [];
     let rootClone: any = null;
+    const cloneJsonSafe = <T>(value: T): T => {
+        if (value === null || value === undefined) return value;
+        try {
+            return JSON.parse(JSON.stringify(value));
+        } catch {
+            if (Array.isArray(value)) return ([...value] as unknown) as T;
+            if (typeof value === 'object') return ({ ...(value as any) } as unknown) as T;
+            return value;
+        }
+    };
+
+    const assignNewDescendantIds = (root: any) => {
+        if (!root || typeof root !== 'object' || typeof root.getObjects !== 'function') return;
+        try {
+            (root.getObjects() || []).forEach((child: any) => {
+                if (!child || typeof child !== 'object') return;
+                child._customId = makeId();
+                assignNewDescendantIds(child);
+            });
+        } catch {
+            // ignore malformed group children
+        }
+    };
 
     // Clone everything first (preserve z-order), then fix parentFrameId references.
     for (let i = 0; i < originals.length; i++) {
@@ -13551,6 +13633,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         oldToNewId.set(oldId, newId);
 
         cloned._customId = newId;
+        assignNewDescendantIds(cloned);
         cloned.set?.({
             left: (Number(original.left) || 0) + offsetX,
             top: (Number(original.top) || 0) + offsetY,
@@ -13565,6 +13648,22 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             try { delete (cloned as any)._frameClipOwner; } catch {}
         }
         try { delete (cloned as any).__clipRect; } catch {}
+
+        // Keep mutable metadata independent from the source frame/card/zone.
+        for (const key of [
+            '_productData',
+            '_zoneSlot',
+            '_zoneGlobalStyles',
+            '_zoneTemplateSnapshot',
+            '_zoneStateSnapshot',
+            '__priceLayoutSnapshot',
+            '__atacValueVariants',
+            '__atacVariantGroups'
+        ]) {
+            if (typeof (original as any)[key] !== 'undefined') {
+                (cloned as any)[key] = cloneJsonSafe((original as any)[key]);
+            }
+        }
 
         // Keep the frame flag even if Fabric drops it in clone.
         if (isFrameContainerCandidate(original)) {
@@ -13622,10 +13721,24 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         const oldParent = String(resolvedParent || (original as any).parentFrameId || '');
         if (!oldParent) {
             clone.parentFrameId = undefined;
-            return;
+        } else {
+            const mappedParent = oldToNewId.get(oldParent);
+            clone.parentFrameId = mappedParent || undefined;
         }
-        const mappedParent = oldToNewId.get(oldParent);
-        clone.parentFrameId = mappedParent || undefined;
+
+        const oldZoneId = String((original as any).parentZoneId || '').trim();
+        if (oldZoneId) {
+            const mappedZoneId = oldToNewId.get(oldZoneId);
+            if (mappedZoneId) clone.parentZoneId = mappedZoneId;
+            else delete clone.parentZoneId;
+        }
+
+        const oldSlotZoneId = String((original as any)?._zoneSlot?.zoneId || '').trim();
+        if (oldSlotZoneId && clone._zoneSlot && typeof clone._zoneSlot === 'object') {
+            const mappedSlotZoneId = oldToNewId.get(oldSlotZoneId);
+            if (mappedSlotZoneId) clone._zoneSlot = { ...clone._zoneSlot, zoneId: mappedSlotZoneId };
+            else clone._zoneSlot = null;
+        }
 
         const oldMaskSource = String((original as any).objectMaskSourceId || '').trim();
         if (!oldMaskSource) {
@@ -13654,6 +13767,18 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         clones.forEach((o: any) => {
             if (o) reapplyRuntimeVisualPatchesTree(o);
         });
+        const zones = clones.filter((o: any) => isLikelyProductZone(o));
+        const cards = clones.filter((o: any) => isLikelyProductCard(o) || o?.isProductCard || o?.isSmartObject);
+        zones.forEach((zone: any) => {
+            ensureZoneSanity(zone);
+            const zoneId = String((zone as any)._customId || '').trim();
+            const zoneCards = cards.filter((card: any) => String((card as any)?.parentZoneId || '').trim() === zoneId);
+            zoneCards.forEach((card: any) => applyCardFrameBinding(card, getResolvedZoneFrameId(zone)));
+            if (zoneCards.length > 0) {
+                recalculateZoneLayout(zone, zoneCards, { save: false, preserveStyles: true });
+            }
+        });
+        stabilizePriceGroupsForPersistence(canvas.value, 'duplicate-frame');
     } catch (err) {
         console.warn('[duplicateFrameWithContents] failed to reapply runtime visual patches', err);
     }
@@ -15948,10 +16073,9 @@ const setupZoomPan = () => {
 
     canvas.value.on('mouse:dblclick', (opt: any) => {
         if (opt.target) {
-            // Product zone import/edit on double-click:
-            // works on zone itself and also on cards/children inside the zone.
-            // Keep price label nested-edit (priceGroup) untouched.
-            if (tryOpenProductReviewFromDblClickTarget(opt.target)) {
+            // Product zone double-click is for editing zone settings only.
+            // Import is intentionally kept behind explicit buttons to avoid accidental modals.
+            if (focusProductZoneFromDblClickTarget(opt.target)) {
                 return;
             } else if (opt.target.type === 'polygon' || opt.target.type === 'polyline') {
                 enterNodeEditing(opt.target);
@@ -19853,7 +19977,7 @@ const setupReactivity = () => {
             });
         }
 
-        if (tryOpenProductReviewFromDblClickTarget(target)) {
+        if (focusProductZoneFromDblClickTarget(target)) {
             return;
         }
         
@@ -19885,7 +20009,7 @@ const setupReactivity = () => {
 	        }
 
             // Product cards already have subTargetCheck=true for single-click deep select.
-            // Double-click on card/zone now prioritizes opening Product Review import/edit modal.
+            // Product import stays on explicit zone actions to avoid accidental modals.
     });
 
     // 3. Product cards always stay interactive (single-click deep select).
@@ -27658,8 +27782,8 @@ const getCurrentZoneObject = () => {
     return null;
 }
 
-const getZoneCardDiagnosticsPayload = (zone: any) => {
-    const zoneCards = getZoneChildren(zone);
+const getZoneCardDiagnosticsPayload = (zone: any, zoneCardsOverride?: any[]) => {
+    const zoneCards = Array.isArray(zoneCardsOverride) ? zoneCardsOverride : getZoneChildren(zone);
     return zoneCards.map((card: any) => {
         const productData = (card as any)?._productData && typeof (card as any)._productData === 'object'
             ? (card as any)._productData
@@ -27681,7 +27805,358 @@ const getZoneCardDiagnosticsPayload = (zone: any) => {
     });
 }
 
-const syncZoneDerivedMetadata = (zone: any, diagnostics?: ProductZoneDiagnostic[]) => {
+const clonePlainForZoneSnapshot = (value: any): any => {
+    if (value == null) return value;
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch {
+        if (Array.isArray(value)) return value.map((item) => clonePlainForZoneSnapshot(item));
+        if (typeof value === 'object') {
+            const out: Record<string, any> = {};
+            Object.entries(value).forEach(([key, entry]: [string, any]) => {
+                if (typeof entry === 'function') return;
+                out[key] = clonePlainForZoneSnapshot(entry);
+            });
+            return out;
+        }
+        return value;
+    }
+}
+
+const finiteZoneSnapshotNumber = (value: any, fallback = 0) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+const firstDefinedZoneSnapshotValue = (...values: any[]) => {
+    for (const value of values) {
+        if (typeof value !== 'undefined' && value !== null && value !== '') return value;
+    }
+    return null;
+}
+
+const buildZoneCardStateSnapshot = (card: any, index: number) => {
+    const productData = card?._productData && typeof card._productData === 'object' ? card._productData : {};
+    const titleText = getCardTitleText(card);
+    let priceGroupSnapshot: any = null;
+    try {
+        priceGroupSnapshot = serializePriceGroupForTemplate(getPriceGroupFromAny(card));
+    } catch (err) {
+        if (import.meta.dev) {
+            console.warn('[zoneStateSnapshot] Falha ao serializar etiqueta do card:', err);
+        }
+    }
+
+    return {
+        id: String(card?._customId || '').trim(),
+        order: finiteZoneSnapshotNumber(card?._zoneOrder, index),
+        parentZoneId: String(card?.parentZoneId || '').trim(),
+        parentFrameId: String(card?.parentFrameId || '').trim() || null,
+        slot: clonePlainForZoneSnapshot(card?._zoneSlot || null),
+        geometry: {
+            left: finiteZoneSnapshotNumber(card?.left),
+            top: finiteZoneSnapshotNumber(card?.top),
+            width: finiteZoneSnapshotNumber(card?._cardWidth ?? card?.width),
+            height: finiteZoneSnapshotNumber(card?._cardHeight ?? card?.height),
+            scaleX: finiteZoneSnapshotNumber(card?.scaleX, 1),
+            scaleY: finiteZoneSnapshotNumber(card?.scaleY, 1),
+            angle: finiteZoneSnapshotNumber(card?.angle)
+        },
+        productData: clonePlainForZoneSnapshot(productData),
+        product: {
+            name: String(firstDefinedZoneSnapshotValue(productData?.name, productData?.title, card?.productName, titleText?.text) || '').trim(),
+            description: String(firstDefinedZoneSnapshotValue(productData?.description, productData?.subtitle, '') || '').trim(),
+            imageUrl: firstDefinedZoneSnapshotValue(card?.imageUrl, productData?.imageUrl, productData?.image),
+            priceMode: firstDefinedZoneSnapshotValue(productData?.priceMode, productData?.price_mode),
+            price: firstDefinedZoneSnapshotValue(productData?.price, card?.price),
+            pricePack: firstDefinedZoneSnapshotValue(productData?.pricePack, card?.pricePack),
+            priceUnit: firstDefinedZoneSnapshotValue(productData?.priceUnit, card?.priceUnit),
+            priceSpecial: firstDefinedZoneSnapshotValue(productData?.priceSpecial, card?.priceSpecial),
+            priceSpecialUnit: firstDefinedZoneSnapshotValue(productData?.priceSpecialUnit, card?.priceSpecialUnit),
+            priceWholesale: firstDefinedZoneSnapshotValue(productData?.priceWholesale, card?.priceWholesale),
+            wholesaleTrigger: firstDefinedZoneSnapshotValue(productData?.wholesaleTrigger, card?.wholesaleTrigger),
+            wholesaleTriggerUnit: firstDefinedZoneSnapshotValue(productData?.wholesaleTriggerUnit, card?.wholesaleTriggerUnit),
+            packQuantity: firstDefinedZoneSnapshotValue(productData?.packQuantity, card?.packQuantity),
+            packUnit: firstDefinedZoneSnapshotValue(productData?.packUnit, card?.packUnit),
+            packageLabel: firstDefinedZoneSnapshotValue(productData?.packageLabel, card?.packageLabel),
+            specialCondition: firstDefinedZoneSnapshotValue(productData?.specialCondition, card?.specialCondition),
+            unit: firstDefinedZoneSnapshotValue(productData?.unit, card?.unit),
+            unitLabel: firstDefinedZoneSnapshotValue(productData?.unitLabel, card?.unitLabel),
+            limit: firstDefinedZoneSnapshotValue(productData?.limit, card?.limit),
+            titleText: titleText?.text ?? null
+        },
+        priceGroup: clonePlainForZoneSnapshot(priceGroupSnapshot)
+    };
+}
+
+const buildZoneStateSnapshot = (zone: any, zoneCards: any[]) => {
+    const orderedCards = [...(zoneCards || [])].sort((a: any, b: any) => {
+        const orderA = finiteZoneSnapshotNumber(a?._zoneOrder, Number.MAX_SAFE_INTEGER);
+        const orderB = finiteZoneSnapshotNumber(b?._zoneOrder, Number.MAX_SAFE_INTEGER);
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a?._customId || '').localeCompare(String(b?._customId || ''));
+    });
+    const globalStyles = getZoneGlobalStyles(zone);
+    const snapshotTemplateId = String(zone?._zoneTemplateSnapshotId || globalStyles?.splashTemplateId || '').trim();
+
+    return {
+        version: 1,
+        zone: {
+            id: String(zone?._customId || '').trim(),
+            name: String(zone?.zoneName || '').trim() || 'Zona de Produtos',
+            role: zone?.role || 'grid',
+            contentSource: zone?.contentSource || 'manual',
+            contentStatus: zone?.contentStatus || 'empty',
+            overflowPolicy: zone?.overflowPolicy || 'warn',
+            parentFrameId: String(zone?.parentFrameId || '').trim() || null,
+            geometry: {
+                x: finiteZoneSnapshotNumber(zone?.left),
+                y: finiteZoneSnapshotNumber(zone?.top),
+                width: finiteZoneSnapshotNumber(zone?._zoneWidth ?? zone?.width, 900),
+                height: finiteZoneSnapshotNumber(zone?._zoneHeight ?? zone?.height, 600),
+                scaleX: finiteZoneSnapshotNumber(zone?.scaleX, 1),
+                scaleY: finiteZoneSnapshotNumber(zone?.scaleY, 1),
+                angle: finiteZoneSnapshotNumber(zone?.angle)
+            },
+            layout: {
+                padding: finiteZoneSnapshotNumber(zone?._zonePadding ?? zone?.padding, 15),
+                gapHorizontal: finiteZoneSnapshotNumber(zone?.gapHorizontal ?? zone?._zonePadding ?? zone?.padding, 15),
+                gapVertical: finiteZoneSnapshotNumber(zone?.gapVertical ?? zone?._zonePadding ?? zone?.padding, 15),
+                columns: finiteZoneSnapshotNumber(zone?.columns),
+                rows: finiteZoneSnapshotNumber(zone?.rows),
+                columnRatio: clonePlainForZoneSnapshot(zone?.columnRatio ?? null),
+                rowRatio: clonePlainForZoneSnapshot(zone?.rowRatio ?? null),
+                cardAspectRatio: zone?.cardAspectRatio ?? 'fill',
+                lastRowBehavior: zone?.lastRowBehavior ?? 'fill',
+                layoutDirection: zone?.layoutDirection ?? 'horizontal',
+                verticalAlign: zone?.verticalAlign ?? 'stretch',
+                highlightCount: finiteZoneSnapshotNumber(zone?.highlightCount),
+                highlightPos: zone?.highlightPos ?? 'first',
+                highlightHeight: finiteZoneSnapshotNumber(zone?.highlightHeight, 1.5),
+                highlightStyle: zone?.highlightStyle ?? null,
+                splashOffsetByCol: clonePlainForZoneSnapshot(zone?.splashOffsetByCol ?? null)
+            },
+            appearance: {
+                backgroundColor: zone?.backgroundColor ?? zone?.fill ?? null,
+                borderColor: zone?.stroke ?? null,
+                borderWidth: finiteZoneSnapshotNumber(zone?.strokeWidth),
+                borderRadius: finiteZoneSnapshotNumber(zone?.rx ?? zone?.borderRadius),
+                showBorder: zone?.stroke !== 'transparent' && zone?.strokeWidth !== 0
+            }
+        },
+        globalStyles: clonePlainForZoneSnapshot(globalStyles),
+        labelTemplate: {
+            id: snapshotTemplateId || null,
+            snapshot: clonePlainForZoneSnapshot(zone?._zoneTemplateSnapshot || null)
+        },
+        cards: orderedCards.map((card: any, index: number) => buildZoneCardStateSnapshot(card, index))
+    };
+}
+
+const getZoneSnapshotCards = (zone: any): any[] => {
+    const snapshot = zone?._zoneStateSnapshot;
+    if (!snapshot || typeof snapshot !== 'object' || Number(snapshot.version || 0) !== 1) return [];
+    return Array.isArray(snapshot.cards) ? snapshot.cards.filter((card: any) => card && typeof card === 'object') : [];
+}
+
+const buildProductFromZoneSnapshotCard = (cardSnapshot: any) => {
+    const productData = cardSnapshot?.productData && typeof cardSnapshot.productData === 'object'
+        ? clonePlainForZoneSnapshot(cardSnapshot.productData)
+        : {};
+    const product = cardSnapshot?.product && typeof cardSnapshot.product === 'object'
+        ? cardSnapshot.product
+        : {};
+    const imageUrl = firstDefinedZoneSnapshotValue(product?.imageUrl, productData?.imageUrl, productData?.image, productData?.image_wasabi_key);
+
+    return {
+        ...productData,
+        name: String(firstDefinedZoneSnapshotValue(productData?.name, product?.name, product?.titleText) || '').trim(),
+        description: firstDefinedZoneSnapshotValue(productData?.description, product?.description),
+        imageUrl,
+        image: firstDefinedZoneSnapshotValue(productData?.image, imageUrl),
+        image_wasabi_key: firstDefinedZoneSnapshotValue(productData?.image_wasabi_key, imageUrl),
+        priceMode: firstDefinedZoneSnapshotValue(productData?.priceMode, product?.priceMode),
+        price: firstDefinedZoneSnapshotValue(productData?.price, product?.price),
+        pricePack: firstDefinedZoneSnapshotValue(productData?.pricePack, product?.pricePack),
+        priceUnit: firstDefinedZoneSnapshotValue(productData?.priceUnit, product?.priceUnit),
+        priceSpecial: firstDefinedZoneSnapshotValue(productData?.priceSpecial, product?.priceSpecial),
+        priceSpecialUnit: firstDefinedZoneSnapshotValue(productData?.priceSpecialUnit, product?.priceSpecialUnit),
+        priceWholesale: firstDefinedZoneSnapshotValue(productData?.priceWholesale, product?.priceWholesale),
+        wholesaleTrigger: firstDefinedZoneSnapshotValue(productData?.wholesaleTrigger, product?.wholesaleTrigger),
+        wholesaleTriggerUnit: firstDefinedZoneSnapshotValue(productData?.wholesaleTriggerUnit, product?.wholesaleTriggerUnit),
+        packQuantity: firstDefinedZoneSnapshotValue(productData?.packQuantity, product?.packQuantity),
+        packUnit: firstDefinedZoneSnapshotValue(productData?.packUnit, product?.packUnit),
+        packageLabel: firstDefinedZoneSnapshotValue(productData?.packageLabel, product?.packageLabel),
+        specialCondition: firstDefinedZoneSnapshotValue(productData?.specialCondition, product?.specialCondition),
+        unit: firstDefinedZoneSnapshotValue(productData?.unit, product?.unit),
+        unitLabel: firstDefinedZoneSnapshotValue(productData?.unitLabel, product?.unitLabel),
+        limit: firstDefinedZoneSnapshotValue(productData?.limit, product?.limit)
+    };
+}
+
+const buildLabelTemplateFromZoneSnapshot = (zone: any, cardSnapshot?: any): any | undefined => {
+    const cardPriceGroup = cardSnapshot?.priceGroup && typeof cardSnapshot.priceGroup === 'object'
+        ? cardSnapshot.priceGroup
+        : null;
+    if (cardPriceGroup) {
+        return {
+            id: `zone-card-snapshot-${String(cardSnapshot?.id || makeId()).trim() || makeId()}`,
+            name: 'Etiqueta recuperada',
+            group: clonePlainForZoneSnapshot(cardPriceGroup)
+        };
+    }
+
+    const stateSnapshot = zone?._zoneStateSnapshot;
+    const zoneTemplate = stateSnapshot?.labelTemplate?.snapshot && typeof stateSnapshot.labelTemplate.snapshot === 'object'
+        ? stateSnapshot.labelTemplate.snapshot
+        : zone?._zoneTemplateSnapshot;
+    if (!zoneTemplate || typeof zoneTemplate !== 'object') return undefined;
+    return {
+        id: String(stateSnapshot?.labelTemplate?.id || zone?._zoneTemplateSnapshotId || 'zone-snapshot-template'),
+        name: 'Etiqueta da zona',
+        group: clonePlainForZoneSnapshot(zoneTemplate)
+    };
+}
+
+const restoreZoneCardsFromStateSnapshot = async (zone: any, reason = 'rehydrate') => {
+    if (!canvas.value || !zone || !isLikelyProductZone(zone)) return 0;
+    if ((zone as any).__zoneSnapshotRecoveryAttempted) return 0;
+
+    const snapshotCards = getZoneSnapshotCards(zone);
+    if (snapshotCards.length === 0) return 0;
+
+    const liveCards = getZoneChildren(zone);
+    if (liveCards.length > 0) return 0;
+
+    (zone as any).__zoneSnapshotRecoveryAttempted = true;
+    const zoneId = String((zone as any)._customId || '').trim();
+    if (!zoneId) return 0;
+
+    const existingIds = new Set(
+        (canvas.value.getObjects?.() || [])
+            .map((obj: any) => String(obj?._customId || '').trim())
+            .filter(Boolean)
+    );
+    const zoneFrameId = getResolvedZoneFrameId(zone);
+    const zoneStyles = getZoneGlobalStyles(zone);
+    const restoredCards: any[] = [];
+
+    for (let index = 0; index < snapshotCards.length; index++) {
+        const cardSnapshot = snapshotCards[index];
+        const geometry = cardSnapshot?.geometry || {};
+        const width = Math.max(40, finiteZoneSnapshotNumber(geometry.width, 220));
+        const height = Math.max(40, finiteZoneSnapshotNumber(geometry.height, width * 1.4));
+        const x = finiteZoneSnapshotNumber(geometry.left, finiteZoneSnapshotNumber(zone.left));
+        const y = finiteZoneSnapshotNumber(geometry.top, finiteZoneSnapshotNumber(zone.top));
+        const product = buildProductFromZoneSnapshotCard(cardSnapshot);
+        if (!String(product?.name || '').trim() && !String(product?.imageUrl || product?.image || '').trim()) continue;
+
+        try {
+            const labelTemplate = buildLabelTemplateFromZoneSnapshot(zone, cardSnapshot);
+            const card = await createSmartObject(
+                product,
+                x,
+                y,
+                width,
+                height,
+                `zone-snapshot-${zoneId}`,
+                labelTemplate,
+                zoneStyles
+            );
+            if (!card) continue;
+
+            const snapshotId = String(cardSnapshot?.id || '').trim();
+            if (snapshotId && !existingIds.has(snapshotId)) {
+                (card as any)._customId = snapshotId;
+                existingIds.add(snapshotId);
+            }
+            (card as any).isProductCard = true;
+            (card as any).isSmartObject = true;
+            (card as any).parentZoneId = zoneId;
+            (card as any).parentFrameId = zoneFrameId;
+            (card as any)._zoneOrder = finiteZoneSnapshotNumber(cardSnapshot?._zoneOrder ?? cardSnapshot?.order, index);
+            (card as any)._zoneSlot = clonePlainForZoneSnapshot(cardSnapshot?.slot || null);
+            (card as any)._productData = {
+                ...buildProductFromZoneSnapshotCard(cardSnapshot),
+                ...(cardSnapshot?.productData && typeof cardSnapshot.productData === 'object' ? clonePlainForZoneSnapshot(cardSnapshot.productData) : {})
+            };
+            (card as any).imageUrl = firstDefinedZoneSnapshotValue(product?.image_wasabi_key, product?.imageUrl, product?.image);
+            card.set?.({
+                left: x,
+                top: y,
+                width,
+                height,
+                scaleX: finiteZoneSnapshotNumber(geometry.scaleX, 1),
+                scaleY: finiteZoneSnapshotNumber(geometry.scaleY, 1),
+                angle: finiteZoneSnapshotNumber(geometry.angle),
+                visible: true,
+                excludeFromExport: false,
+                objectCaching: false,
+                statefullCache: false,
+                dirty: true
+            });
+            card.clipPath = null;
+            delete (card as any)._frameClipOwner;
+            applyCardFrameBinding(card, zoneFrameId);
+            card.setCoords?.();
+            canvas.value.add(card);
+            restoredCards.push(card);
+        } catch (err) {
+            console.warn(`[zoneStateSnapshot] Falha ao restaurar card da zona (${reason}):`, err);
+        }
+    }
+
+    if (restoredCards.length > 0) {
+        ensureFramesBelowContents();
+        syncZoneCardFrameBindings(zone, restoredCards);
+        syncZoneDerivedMetadata(zone, undefined, { updateStateSnapshot: true });
+        refreshCanvasObjects();
+        safeRequestRenderAll();
+        scheduleIdleStatePersistence({ reason: `zone-snapshot-recovery:${reason}`, source: 'system', skipIfUnchanged: true }, 1200);
+    }
+
+    return restoredCards.length;
+}
+
+const scheduleZoneSnapshotRecovery = (zones: any[], reason = 'rehydrate') => {
+    if (!Array.isArray(zones) || zones.length === 0) return;
+    const candidates = zones.filter((zone: any) => {
+        if (!zone || (zone as any).__zoneSnapshotRecoveryAttempted) return false;
+        const snapshotCards = getZoneSnapshotCards(zone);
+        if (snapshotCards.length === 0) return false;
+        try {
+            return getZoneChildren(zone).length === 0;
+        } catch {
+            return true;
+        }
+    });
+    if (candidates.length === 0) return;
+
+    scheduleIdleWork(async () => {
+        for (const zone of candidates) {
+            await restoreZoneCardsFromStateSnapshot(zone, reason);
+        }
+    }, 900);
+}
+
+function syncAllZoneStateSnapshots(canvasInstance: any, reason = 'unknown') {
+    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return;
+    const objects = canvasInstance.getObjects?.() || [];
+    objects.forEach((obj: any) => {
+        if (!isLikelyProductZone(obj)) return;
+        try {
+            syncZoneDerivedMetadata(obj, undefined, { updateStateSnapshot: true });
+        } catch (err) {
+            console.warn(`[zoneStateSnapshot] Falha ao sincronizar snapshot da zona (${reason}):`, err);
+        }
+    });
+}
+
+const syncZoneDerivedMetadata = (
+    zone: any,
+    diagnostics?: ProductZoneDiagnostic[],
+    opts: { updateStateSnapshot?: boolean } = {}
+) => {
     if (!zone || !isLikelyProductZone(zone)) return null;
     // Snapshot dos children — usado para diagnostics e contentStatus
     const zoneCards = getZoneChildren(zone).slice();
@@ -27709,7 +28184,7 @@ const syncZoneDerivedMetadata = (zone: any, diagnostics?: ProductZoneDiagnostic[
             highlightPos: (zone as any)?.highlightPos ?? 'first',
             highlightHeight: Number((zone as any)?.highlightHeight ?? 1.5)
         },
-        zoneCards: getZoneCardDiagnosticsPayload(zone),
+        zoneCards: getZoneCardDiagnosticsPayload(zone, zoneCards),
         globalStyles: getZoneGlobalStyles(zone)
     });
 
@@ -27726,6 +28201,9 @@ const syncZoneDerivedMetadata = (zone: any, diagnostics?: ProductZoneDiagnostic[
         (zone as any).overflowPolicy = 'warn';
     }
     (zone as any).contentStatus = getZoneContentStatusFromDiagnostics(zoneCards.length, nextDiagnostics);
+    if (opts.updateStateSnapshot) {
+        (zone as any)._zoneStateSnapshot = buildZoneStateSnapshot(zone, zoneCards);
+    }
     return {
         diagnostics: nextDiagnostics,
         zoneCards
@@ -39903,6 +40381,8 @@ const rehydrateCanvasZones = (
                 }
             });
         }
+
+        scheduleZoneSnapshotRecovery(zones, 'rehydrate');
 
         // Ensure zones never sit above their cards (legacy saved designs sometimes have wrong stacking order).
         // If the zone is above the cards, it intercepts clicks and prevents selecting products individually.
