@@ -9,6 +9,23 @@ import { pgOneOrNull, pgQuery } from '../utils/postgres'
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
+const getFirstPageThumbnailRef = (canvasData: any): string | null => {
+  const pages = Array.isArray(canvasData)
+    ? canvasData
+    : (canvasData && typeof canvasData === 'object' && Array.isArray(canvasData.pages) ? canvasData.pages : [])
+  for (const page of pages) {
+    const thumb = String(page?.thumbnailUrl || page?.thumbnail_url || '').trim()
+    if (thumb) return thumb
+  }
+  return null
+}
+
+const resolveProjectPreviewUrl = async (project: any, userId: string): Promise<string | null> => {
+  const explicitPreview = await resolveStorageReadUrl(project?.preview_url, userId)
+  if (explicitPreview) return explicitPreview
+  return await resolveStorageReadUrl(getFirstPageThumbnailRef(project?.canvas_data), userId)
+}
+
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   await enforceRateLimit(event, `projects-get:${user.id}`, 180, 60_000)
@@ -39,7 +56,7 @@ export default defineEventHandler(async (event) => {
       if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
       return {
         ...row,
-        preview_url: await resolveStorageReadUrl(row?.preview_url, user.id),
+        preview_url: await resolveProjectPreviewUrl(row, user.id),
         canvas_data: await resolveProjectCanvasDataReadUrls(row?.canvas_data, user.id)
       }
     } catch (error: any) {
@@ -50,7 +67,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const baseSql = `
-      select id, name, created_at, updated_at, preview_url, folder_id, last_viewed, is_shared, shared_with, is_starred
+      select id, name, created_at, updated_at, preview_url, canvas_data, folder_id, last_viewed, is_shared, shared_with, is_starred
       from public.projects
       where user_id = $1
       order by updated_at desc
@@ -62,10 +79,13 @@ export default defineEventHandler(async (event) => {
     const { rows } = await pgQuery<any>(sql, params)
 
     return await Promise.all(
-      (rows || []).map(async (p: any) => ({
-        ...p,
-        preview_url: await resolveStorageReadUrl(p?.preview_url, user.id)
-      }))
+      (rows || []).map(async (p: any) => {
+        const { canvas_data: _canvasData, ...rest } = p || {}
+        return {
+          ...rest,
+          preview_url: await resolveProjectPreviewUrl(p, user.id)
+        }
+      })
     )
   } catch (error: any) {
     throw createError({ statusCode: 500, statusMessage: error?.message || 'Failed to list projects' })

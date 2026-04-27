@@ -1,15 +1,20 @@
 import { requireBuilderTenant } from '../../utils/builder-auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { getS3Client } from '../../utils/s3'
-import { getCachedS3Objects } from '../../utils/s3-object-cache'
-import { normalizeSearchTerm } from '../../utils/product-image-matching'
+import { getUserAssetNamesMap, findExactAssetNameKey } from '../../utils/product-image-asset-names'
+import {
+  buildExpandedNormalizedCandidates,
+  findTopS3Matches,
+  normalizeSearchTerm,
+  type RankedS3MatchCandidate
+} from '../../utils/product-image-matching'
 
 /**
  * Busca em batch: recebe array de nomes de produtos,
  * retorna a melhor imagem do Wasabi para cada um.
  *
  * Body: { terms: string[] }
- * Response: { results: Record<string, { key: string; url: string; name: string } | null> }
+ * Response: { results: Record<string, { image: string; image_wasabi_key: string; key: string; url: string; name: string } | null> }
  */
 export default defineEventHandler(async (event) => {
   const tenant = await requireBuilderTenant(event)
@@ -32,29 +37,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const s3 = getS3Client()
-
-  // Get cached S3 objects
-  const objects = await getCachedS3Objects({
-    s3,
-    bucket,
-    prefixes: ['imagens/', 'uploads/'],
-    ttlMs: 90_000,
-    maxKeysPerPrefix: 5000,
-    excludeKeyPrefixes: ['imagens/bg-removed-', 'uploads/bg-removed-'],
-  })
-
-  // Pre-filter to only image files
-  const imageObjects = objects.filter(obj => /\.(png|jpe?g|webp|gif|avif)$/i.test(obj.key))
-
-  // Normalize helper: remove accents, lowercase, clean separators
-  const normalize = (s: string) =>
-    s.toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[-_]+/g, ' ')
-      .replace(/[^a-z0-9\s.]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+  const assetNamesByKey = await getUserAssetNamesMap(String(tenant.id || ''))
+  const isImageKey = (key: string) => /\.(png|jpe?g|webp|gif|avif)$/i.test(String(key || '').split('?')[0] || '')
 
   // Extract display name from S3 key
   const extractName = (key: string): string => {
@@ -71,17 +55,32 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Pre-compute normalized names and search terms for all S3 objects
-  const indexedObjects = imageObjects.map(obj => {
-    const displayName = extractName(obj.key)
-    const normalizedName = normalize(displayName)
-    const searchTerm = normalizeSearchTerm(displayName)
-    const tokens = normalizedName.split(/\s+/).filter(t => t.length > 1)
-    return { key: obj.key, displayName, normalizedName, searchTerm, tokens }
-  })
+  const buildResult = (key: string, score?: number, reason?: string, kind?: string) => {
+    const url = `/api/storage/p?key=${encodeURIComponent(key)}`
+    return {
+      image: url,
+      image_wasabi_key: key,
+      key,
+      url,
+      name: assetNamesByKey.get(key) || extractName(key),
+      score,
+      reason,
+      kind
+    }
+  }
+
+  const isAutoFillSafe = (candidate: RankedS3MatchCandidate, runnerUp?: RankedS3MatchCandidate): boolean => {
+    if (candidate.kind !== 'exact' && candidate.kind !== 'strict') return false
+    if (candidate.kind === 'exact') return candidate.score >= 390
+    if (candidate.score < 328) return false
+
+    const nextScore = Number(runnerUp?.score || 0)
+    if (nextScore > 0 && candidate.score - nextScore < 18) return false
+    return true
+  }
 
   // Process each term
-  const results: Record<string, { key: string; url: string; name: string } | null> = {}
+  const results: Record<string, ReturnType<typeof buildResult> | null> = {}
 
   for (const rawTerm of terms) {
     const term = String(rawTerm || '').trim()
@@ -90,82 +89,46 @@ export default defineEventHandler(async (event) => {
       continue
     }
 
-    const normalizedTerm = normalize(term)
-    const searchTermNormalized = normalizeSearchTerm(term)
-    const searchTokens = normalizedTerm.split(/\s+/).filter(t => t.length > 1)
-    const advancedTokens = searchTermNormalized.split(/\s+/).filter(t => t.length > 0)
-
-    if (searchTokens.length === 0) {
+    const normalizedTerm = normalizeSearchTerm(term)
+    if (!normalizedTerm) {
       results[term] = null
       continue
     }
 
-    let bestMatch: { key: string; displayName: string; score: number } | null = null
+    const normalizedCandidates = buildExpandedNormalizedCandidates({
+      rawInputs: [term],
+      enforceWeight: false,
+      maxCandidates: 10
+    })
 
-    for (const obj of indexedObjects) {
-      let score = 0
-      let matchedTokens = 0
-
-      // --- Stage 1: Basic token matching ---
-      for (const token of searchTokens) {
-        if (obj.normalizedName.includes(token)) {
-          score += 2
-          matchedTokens++
-        }
-      }
-
-      // No basic match at all — skip
-      if (matchedTokens === 0) continue
-
-      // Percentage of search tokens matched
-      score += (matchedTokens / searchTokens.length) * 3
-
-      // --- Stage 2: Advanced normalized matching (uses normalizeSearchTerm) ---
-      let advancedMatched = 0
-      for (const token of advancedTokens) {
-        if (obj.searchTerm.includes(token)) {
-          advancedMatched++
-        }
-      }
-      if (advancedTokens.length > 0) {
-        score += (advancedMatched / advancedTokens.length) * 4
-      }
-
-      // --- Stage 3: Full phrase match bonuses ---
-      if (obj.normalizedName.includes(normalizedTerm)) score += 6
-      if (obj.normalizedName.startsWith(normalizedTerm)) score += 4
-
-      // --- Stage 4: Exact name match (highest bonus) ---
-      if (obj.normalizedName === normalizedTerm) score += 10
-
-      // --- Stage 5: Token count similarity bonus ---
-      // Prefer images whose name length is similar to the search term
-      // (avoids matching "leite" to "leite condensado moca 395g")
-      const nameTkLen = obj.tokens.length
-      const searchTkLen = searchTokens.length
-      if (nameTkLen > 0 && searchTkLen > 0) {
-        const ratio = Math.min(nameTkLen, searchTkLen) / Math.max(nameTkLen, searchTkLen)
-        score += ratio * 2
-      }
-
-      // --- Stage 6: All search tokens matched bonus ---
-      if (matchedTokens === searchTokens.length) {
-        score += 3
-      }
-
-      if (!bestMatch || score > bestMatch.score) {
-        bestMatch = { key: obj.key, displayName: obj.displayName, score }
-      }
+    const exactAssetNameKey = findExactAssetNameKey(normalizedCandidates, assetNamesByKey)
+    if (exactAssetNameKey && isImageKey(exactAssetNameKey)) {
+      results[term] = buildResult(exactAssetNameKey, 999, 'Match exato por nome renomeado', 'exact')
+      continue
     }
 
-    // Minimum score threshold to avoid garbage matches
-    if (bestMatch && bestMatch.score >= 4) {
-      results[term] = {
-        key: bestMatch.key,
-        url: `/api/storage/p?key=${encodeURIComponent(bestMatch.key)}`,
-        name: bestMatch.displayName,
+    try {
+      const ranked = await findTopS3Matches({
+        s3,
+        bucketName: String(bucket),
+        prefixes: ['uploads/', 'imagens/'],
+        normalizedCandidates,
+        strictOnly: false,
+        keyAliases: assetNamesByKey,
+        cacheNamespace: String(tenant.id || ''),
+        maxKeysPerPrefix: 12_000,
+        limit: 3
+      })
+
+      const imageRanked = ranked.filter((item) => isImageKey(item.key))
+      const best = imageRanked[0]
+      if (best && isAutoFillSafe(best, imageRanked[1])) {
+        results[term] = buildResult(best.key, best.score, best.reason, best.kind)
+      } else {
+        results[term] = null
       }
-    } else {
+    } catch (err) {
+      console.warn('Builder batch image search failed:', err)
       results[term] = null
     }
   }
