@@ -8149,6 +8149,7 @@ const reviewProducts = ref<any[]>([])
 const productImportExistingCount = ref(0)
 const productReviewInitialImportMode = ref<'replace' | 'append'>('replace')
 const targetGridZone = ref<any>(null) // Reference to the Grid Zone that was double-clicked
+const targetGridZones = ref<any[]>([])
 const isConfirmingProductImport = ref(false)
 
 type ImportTargetMode = 'zone' | 'multi-frame'
@@ -8262,6 +8263,83 @@ const resolveImportTargetZone = (): any | null => resolveImportTargetZoneHelper(
     resolveZoneForProductImport
 })
 
+const sortProductZonesByVisualOrder = (zones: any[]): any[] => {
+    return zones
+        .filter((zone: any) => !!zone && isLikelyProductZone(zone))
+        .slice()
+        .sort((a: any, b: any) => {
+            const ao = Number((a as any)?._zoneOrder)
+            const bo = Number((b as any)?._zoneOrder)
+            if (Number.isFinite(ao) && Number.isFinite(bo) && ao !== bo) return ao - bo
+            if (Number.isFinite(ao) && !Number.isFinite(bo)) return -1
+            if (!Number.isFinite(ao) && Number.isFinite(bo)) return 1
+
+            const ar = getZoneMetrics(a) ?? a?.getBoundingRect?.(true) ?? { top: 0, left: 0 }
+            const br = getZoneMetrics(b) ?? b?.getBoundingRect?.(true) ?? { top: 0, left: 0 }
+            const topDelta = Number(ar?.top || 0) - Number(br?.top || 0)
+            if (Math.abs(topDelta) > 2) return topDelta
+            return Number(ar?.left || 0) - Number(br?.left || 0)
+        })
+}
+
+const resolveRelatedImportZones = (primaryZone: any): any[] => {
+    if (!canvas.value || !primaryZone || !isLikelyProductZone(primaryZone)) return []
+
+    const allZones = (canvas.value.getObjects?.() || []).filter((obj: any) => isLikelyProductZone(obj))
+    if (!allZones.length) return []
+
+    const primaryId = String((primaryZone as any)?._customId || '').trim()
+    const refreshedPrimary = primaryId
+        ? allZones.find((zone: any) => String((zone as any)?._customId || '').trim() === primaryId) || primaryZone
+        : primaryZone
+    const frameId = String((refreshedPrimary as any)?.parentFrameId || getResolvedZoneFrameId(refreshedPrimary) || '').trim()
+
+    const related = allZones.filter((zone: any) => {
+        if (!zone || !isLikelyProductZone(zone)) return false
+        const zoneFrameId = String((zone as any)?.parentFrameId || getResolvedZoneFrameId(zone) || '').trim()
+        if (frameId) return zoneFrameId === frameId
+        return !zoneFrameId
+    })
+
+    const unique: any[] = []
+    const push = (zone: any) => {
+        if (!zone || !isLikelyProductZone(zone)) return
+        if (!unique.includes(zone)) unique.push(zone)
+    }
+    related.forEach(push)
+    push(refreshedPrimary)
+    return sortProductZonesByVisualOrder(unique)
+}
+
+const getImportTargetZones = (): any[] => {
+    const stored = Array.isArray(targetGridZones.value) ? targetGridZones.value : []
+    const zones = stored
+        .map((zone: any) => {
+            if (!zone || !isLikelyProductZone(zone) || !canvas.value) return null
+            const id = String((zone as any)?._customId || '').trim()
+            if (!id) return zone
+            return (canvas.value.getObjects?.() || []).find((obj: any) =>
+                isLikelyProductZone(obj) && String((obj as any)?._customId || '').trim() === id
+            ) || zone
+        })
+        .filter((zone: any) => !!zone && isLikelyProductZone(zone))
+
+    if (zones.length > 0) return sortProductZonesByVisualOrder(zones)
+
+    const single = resolveImportTargetZone()
+    return single ? [single] : []
+}
+
+const getImportZonesExistingCount = (zones: any[]): number => {
+    return zones.reduce((total, zone) => {
+        try {
+            return total + getZoneChildren(zone).length
+        } catch {
+            return total
+        }
+    }, 0)
+}
+
 const openProductReviewForZone = (zone: any, opts: { mode?: 'replace' | 'append' } = {}): boolean => {
     productReviewInitialImportMode.value = opts.mode === 'append' ? 'append' : 'replace'
     return openProductReviewForZoneHelper({
@@ -8270,9 +8348,11 @@ const openProductReviewForZone = (zone: any, opts: { mode?: 'replace' | 'append'
         getZoneChildren,
         setTargetZone: (nextZone) => {
             targetGridZone.value = nextZone
+            targetGridZones.value = resolveRelatedImportZones(nextZone)
         },
         setExistingCount: (count) => {
-            productImportExistingCount.value = count
+            const zones = targetGridZones.value.length ? targetGridZones.value : [targetGridZone.value].filter(Boolean)
+            productImportExistingCount.value = zones.length > 1 ? getImportZonesExistingCount(zones) : count
         },
         setReviewProducts: (products) => {
             reviewProducts.value = products
@@ -26129,8 +26209,8 @@ const isTransientPasteError = (err: any): boolean => {
 const openReviewModalWithProducts = (productsWithImages: any[]) => {
     reviewProducts.value = productsWithImages;
     try {
-        const zone = targetGridZone.value;
-        productImportExistingCount.value = (zone && isLikelyProductZone(zone)) ? getZoneChildren(zone).length : 0;
+        const zones = getImportTargetZones();
+        productImportExistingCount.value = zones.length > 0 ? getImportZonesExistingCount(zones) : 0;
     } catch {
         productImportExistingCount.value = 0;
     }
@@ -26565,6 +26645,128 @@ const importProductsToMultipleFrames = async (products: any[], opts?: ProductImp
     }
 }
 
+const buildProductSlicesForZones = (products: any[], zones: any[], mode: 'replace' | 'append'): any[][] => {
+    const slices = zones.map(() => [] as any[])
+    if (!Array.isArray(products) || products.length === 0 || zones.length === 0) return slices
+    if (zones.length === 1) {
+        slices[0] = products.slice()
+        return slices
+    }
+
+    const existingCounts = zones.map((zone: any) => {
+        try {
+            return getZoneChildren(zone).length
+        } catch {
+            return 0
+        }
+    })
+    const totalExisting = existingCounts.reduce((sum, count) => sum + Math.max(0, count), 0)
+
+    let allocations: number[]
+    if (mode === 'replace' && totalExisting > 0) {
+        allocations = existingCounts.map((count) => Math.max(0, count))
+        let allocated = allocations.reduce((sum, count) => sum + count, 0)
+        while (allocated > products.length) {
+            for (let i = allocations.length - 1; i >= 0 && allocated > products.length; i -= 1) {
+                if (allocations[i] <= 0) continue
+                allocations[i] -= 1
+                allocated -= 1
+            }
+        }
+        let cursor = 0
+        while (allocated < products.length) {
+            allocations[cursor % allocations.length] += 1
+            allocated += 1
+            cursor += 1
+        }
+    } else {
+        const base = Math.floor(products.length / zones.length)
+        const remainder = products.length % zones.length
+        allocations = zones.map((_, index) => base + (index < remainder ? 1 : 0))
+    }
+
+    let cursor = 0
+    allocations.forEach((count, index) => {
+        const nextCount = Math.max(0, count)
+        slices[index] = products.slice(cursor, cursor + nextCount)
+        cursor += nextCount
+    })
+    return slices
+}
+
+const clearProductZoneCards = (zone: any) => {
+    if (!canvas.value || !zone || !isLikelyProductZone(zone)) return
+    let cards: any[] = []
+    try {
+        cards = getZoneChildren(zone)
+    } catch {
+        cards = []
+    }
+    cards.forEach((card: any) => {
+        try {
+            canvas.value?.remove(card)
+        } catch {
+            // ignore individual stale card removal
+        }
+    })
+    syncZoneDerivedMetadata(zone)
+}
+
+const importProductsToMultipleZones = async (products: any[], zones: any[], opts?: ProductImportOptions) => {
+    if (!canvas.value || !Array.isArray(products) || products.length === 0) return
+
+    const validZones = sortProductZonesByVisualOrder(
+        zones.filter((zone: any) => zone && isLikelyProductZone(zone))
+    )
+    if (validZones.length === 0) return
+    if (validZones.length === 1) {
+        const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined
+        const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : productReviewInitialImportMode.value
+        await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, validZones[0], { mode, labelTemplateId })
+        return
+    }
+
+    const mode: 'replace' | 'append' = (opts?.mode === 'append' || opts?.mode === 'replace')
+        ? opts.mode
+        : productReviewInitialImportMode.value
+    const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined
+    const nextSource = opts?.sourceMode === 'paste-list' || opts?.sourceMode === 'file-import'
+        ? opts.sourceMode
+        : 'manual'
+    const slices = buildProductSlicesForZones(products, validZones, mode)
+    let applied = 0
+
+    for (let index = 0; index < validZones.length; index += 1) {
+        const zone = validZones[index]
+        const slice = slices[index] || []
+        if (slice.length === 0) {
+            if (mode === 'replace') {
+                clearProductZoneCards(zone)
+                ;(zone as any).contentSource = nextSource
+                applied += 1
+            }
+            continue
+        }
+
+        await simulateSmartGrid(slice, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, {
+            mode,
+            labelTemplateId,
+            persist: false
+        })
+        ;(zone as any).contentSource = nextSource
+        syncZoneDerivedMetadata(zone)
+        applied += 1
+    }
+
+    if (applied > 0) {
+        refreshCanvasObjects()
+        safeRequestRenderAll()
+        refreshSelectedRef()
+        saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid-multi-zone' })
+        flushPersistenceNow('simulate-smart-grid-multi-zone')
+    }
+}
+
 // Confirm import from review modal
 const confirmProductImport = async (products: any[], opts?: ProductImportOptions) => {
     if (isConfirmingProductImport.value) {
@@ -26586,7 +26788,8 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
             await importProductsToMultipleFrames(products, opts)
         } else {
             // Recover the real zone object from canvas state (prevents "solto" cards on stale refs).
-            const zone = resolveImportTargetZone()
+            const zones = getImportTargetZones()
+            const zone = zones[0] || resolveImportTargetZone()
             if (!zone) {
                 console.warn('[confirmProductImport] Could not resolve target product zone. Import aborted to avoid detached cards.')
                 notifyEditorError('Nao foi possivel localizar a zona de produtos para substituir os cards.')
@@ -26594,20 +26797,25 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
             }
             targetGridZone.value = zone
 
-            // Add to canvas using the products received from the modal (with edits applied)
-            const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace'
-            const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined
-            await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, { mode, labelTemplateId })
-            const nextSource = opts?.sourceMode === 'paste-list' || opts?.sourceMode === 'file-import'
-                ? opts.sourceMode
-                : 'manual'
-            ;(zone as any).contentSource = nextSource
-            syncZoneDerivedMetadata(zone)
+            if (zones.length > 1) {
+                await importProductsToMultipleZones(products, zones, opts)
+            } else {
+                // Add to canvas using the products received from the modal (with edits applied)
+                const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace'
+                const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined
+                await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, { mode, labelTemplateId })
+                const nextSource = opts?.sourceMode === 'paste-list' || opts?.sourceMode === 'file-import'
+                    ? opts.sourceMode
+                    : 'manual'
+                ;(zone as any).contentSource = nextSource
+                syncZoneDerivedMetadata(zone)
+            }
         }
     } finally {
         // Clear review state and zone reference
         reviewProducts.value = []
         targetGridZone.value = null
+        targetGridZones.value = []
         productImportExistingCount.value = 0
         productReviewInitialImportMode.value = 'replace'
 
@@ -26625,6 +26833,7 @@ const handleProductReviewModalVisibility = (value: boolean) => {
 
     reviewProducts.value = []
     targetGridZone.value = null
+    targetGridZones.value = []
     productImportExistingCount.value = 0
     productReviewInitialImportMode.value = 'replace'
 }
