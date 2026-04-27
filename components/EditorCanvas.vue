@@ -26668,14 +26668,16 @@ const buildProductSlicesForZones = (products: any[], zones: any[], mode: 'replac
         let allocated = allocations.reduce((sum, count) => sum + count, 0)
         while (allocated > products.length) {
             for (let i = allocations.length - 1; i >= 0 && allocated > products.length; i -= 1) {
-                if (allocations[i] <= 0) continue
-                allocations[i] -= 1
+                const current = allocations[i] ?? 0
+                if (current <= 0) continue
+                allocations[i] = current - 1
                 allocated -= 1
             }
         }
         let cursor = 0
         while (allocated < products.length) {
-            allocations[cursor % allocations.length] += 1
+            const index = cursor % allocations.length
+            allocations[index] = (allocations[index] ?? 0) + 1
             allocated += 1
             cursor += 1
         }
