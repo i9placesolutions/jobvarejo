@@ -14130,6 +14130,98 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             }
             return best;
         };
+        const createFallbackZoneForClonedCards = (frameId: string, frameCards: any[]) => {
+            if (!fabric || !frameCards.length) return null;
+            let minLeft = Number.POSITIVE_INFINITY;
+            let minTop = Number.POSITIVE_INFINITY;
+            let maxRight = Number.NEGATIVE_INFINITY;
+            let maxBottom = Number.NEGATIVE_INFINITY;
+
+            frameCards.forEach((card: any) => {
+                try { card?.setCoords?.(); } catch {}
+                const bounds = typeof card?.getBoundingRect === 'function' ? card.getBoundingRect(true) : null;
+                if (!bounds) return;
+                minLeft = Math.min(minLeft, Number(bounds.left || 0));
+                minTop = Math.min(minTop, Number(bounds.top || 0));
+                maxRight = Math.max(maxRight, Number(bounds.left || 0) + Number(bounds.width || 0));
+                maxBottom = Math.max(maxBottom, Number(bounds.top || 0) + Number(bounds.height || 0));
+            });
+
+            if (!Number.isFinite(minLeft) || !Number.isFinite(minTop) || !Number.isFinite(maxRight) || !Number.isFinite(maxBottom)) {
+                return null;
+            }
+
+            const pad = 18;
+            const width = Math.max(80, maxRight - minLeft + pad * 2);
+            const height = Math.max(80, maxBottom - minTop + pad * 2);
+            const centerX = minLeft + (maxRight - minLeft) / 2;
+            const centerY = minTop + (maxBottom - minTop) / 2;
+            const zoneRect = new fabric.Rect({
+                width,
+                height,
+                fill: 'rgba(0,0,0,0)',
+                stroke: '#404040',
+                strokeWidth: 2,
+                strokeDashArray: [10, 10],
+                strokeUniform: true,
+                rx: 16,
+                ry: 16,
+                originX: 'center',
+                originY: 'center',
+                name: 'zoneRect',
+                selectable: false,
+                evented: false
+            });
+            const zone = new fabric.Group([zoneRect], {
+                left: centerX,
+                top: centerY,
+                originX: 'center',
+                originY: 'center',
+                isGridZone: true,
+                isProductZone: true,
+                name: 'productZoneContainer',
+                columns: 0,
+                rows: 0,
+                gapHorizontal: 20,
+                gapVertical: 20,
+                cardAspectRatio: 'fill',
+                lastRowBehavior: 'fill',
+                layoutDirection: 'horizontal',
+                verticalAlign: 'stretch',
+                subTargetCheck: false,
+                selectable: true,
+                evented: true,
+                hasControls: true,
+                hasBorders: true,
+                lockScalingFlip: true
+            } as any);
+            (zone as any)._customId = makeId();
+            (zone as any).parentFrameId = frameId || undefined;
+            (zone as any)._zoneWidth = width;
+            (zone as any)._zoneHeight = height;
+            (zone as any)._zonePadding = 20;
+            try { zone.setCoords?.(); } catch {}
+            return zone;
+        };
+
+        const clonedFrameIds = new Set(
+            clones
+                .filter((o: any) => isFrameContainerCandidate(o))
+                .map((o: any) => String((o as any)?._customId || '').trim())
+                .filter(Boolean)
+        );
+        clonedFrameIds.forEach((frameId: string) => {
+            const zonesInFrame = clonedZones.filter((zone: any) => getCloneZoneFrameId(zone) === frameId);
+            if (zonesInFrame.length > 0) return;
+            const cardsInFrame = clonedCards.filter((card: any) => String((card as any)?.parentFrameId || '').trim() === frameId);
+            if (!cardsInFrame.length) return;
+            const fallbackZone = createFallbackZoneForClonedCards(frameId, cardsInFrame);
+            if (!fallbackZone) return;
+            clonedZones.push(fallbackZone);
+            const zoneId = String((fallbackZone as any)._customId || '').trim();
+            if (zoneId) clonedZoneById.set(zoneId, fallbackZone);
+            clones.push(fallbackZone);
+        });
 
         clonedCards.forEach((card: any) => {
             const cardFrameId = String((card as any)?.parentFrameId || '').trim();
@@ -14170,6 +14262,34 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         }
     });
     invalidateContainmentZoneCache();
+
+    try {
+        const c: any = canvas.value as any;
+        if (typeof c.moveTo === 'function') {
+            const clonedZones = clones.filter((o: any) => isLikelyProductZone(o));
+            clonedZones.forEach((zone: any) => {
+                const list = canvas.value!.getObjects();
+                const zoneIndex = list.indexOf(zone);
+                if (zoneIndex < 0) return;
+                const zoneId = String((zone as any)?._customId || '').trim();
+                const zoneFrameId = String((zone as any)?.parentFrameId || '').trim();
+                const frameIndex = zoneFrameId
+                    ? list.findIndex((o: any) => String((o as any)?._customId || '').trim() === zoneFrameId)
+                    : -1;
+                const zoneCardIndices: number[] = [];
+                for (let i = 0; i < list.length; i++) {
+                    const obj = list[i] as any;
+                    if (!obj || obj === zone) continue;
+                    if (String(obj?.parentZoneId || '').trim() === zoneId) zoneCardIndices.push(i);
+                }
+                const minCardIndex = zoneCardIndices.length ? Math.min(...zoneCardIndices) : Number.POSITIVE_INFINITY;
+                const targetIndex = Math.max(frameIndex >= 0 ? frameIndex + 1 : 0, Number.isFinite(minCardIndex) ? minCardIndex - 1 : zoneIndex);
+                if (zoneIndex !== targetIndex) c.moveTo(zone, targetIndex);
+            });
+        }
+    } catch {
+        // Stacking is a visual guard only; duplication data is already repaired.
+    }
 
     // Rebuild clipping for the new frame tree.
     try {
