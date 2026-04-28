@@ -8154,6 +8154,7 @@ const isConfirmingProductImport = ref(false)
 
 type ImportTargetMode = 'zone' | 'multi-frame'
 type FrameAssignment = { productId: string; frameId: string | null }
+type ZoneAssignment = { productId: string; zoneId: string | null }
 type ImageMatchMode = 'precise' | 'fast'
 type ProductImportOptions = {
     mode?: 'replace' | 'append'
@@ -8162,6 +8163,7 @@ type ProductImportOptions = {
     sourceMode?: 'manual' | 'paste-list' | 'file-import'
     selectedFrameIds?: string[]
     frameAssignments?: FrameAssignment[]
+    zoneAssignments?: ZoneAssignment[]
     countRule?: 'min'
     cardsPerFrame?: 1
     imageMatchMode?: ImageMatchMode
@@ -8632,6 +8634,31 @@ const availableFramesForImport = computed(() => {
             name,
             left: bounds?.left,
             top: bounds?.top
+        }
+    })
+})
+
+const availableZonesForImport = computed(() => {
+    const zones = getImportTargetZones()
+    return zones.map((zone: any, index: number) => {
+        const id = String((zone as any)?._customId || (zone as any)?.id || '').trim() || `zone-${index + 1}`
+        const metrics = getZoneMetrics(zone) ?? zone?.getBoundingRect?.(true)
+        const frameId = String((zone as any)?.parentFrameId || '').trim()
+        const frame = frameId ? getFrameById(frameId) : null
+        const frameName = String((frame as any)?.layerName || (frame as any)?.name || '').trim()
+        let existingCount = 0
+        try {
+            existingCount = getZoneChildren(zone).length
+        } catch {
+            existingCount = 0
+        }
+        return {
+            id,
+            name: String((zone as any)?.zoneName || '').trim() || `Zona ${index + 1}`,
+            left: metrics?.left,
+            top: metrics?.top,
+            existingCount,
+            frameName: frameName || undefined
         }
     })
 })
@@ -26735,7 +26762,31 @@ const importProductsToMultipleZones = async (products: any[], zones: any[], opts
     const nextSource = opts?.sourceMode === 'paste-list' || opts?.sourceMode === 'file-import'
         ? opts.sourceMode
         : 'manual'
-    const slices = buildProductSlicesForZones(products, validZones, mode)
+    const zoneById = new Map<string, any>()
+    validZones.forEach((zone: any) => {
+        const id = String((zone as any)?._customId || (zone as any)?.id || '').trim()
+        if (id) zoneById.set(id, zone)
+    })
+    const productById = new Map<string, any>()
+    products.forEach((product: any, index: number) => {
+        const id = String(product?.id || `tmp-product-${index + 1}`).trim()
+        if (id && !productById.has(id)) productById.set(id, product)
+    })
+    const rawZoneAssignments = Array.isArray(opts?.zoneAssignments) ? opts.zoneAssignments : []
+    const hasManualZoneAssignments = rawZoneAssignments.some((assignment: any) => {
+        const productId = String(assignment?.productId || '').trim()
+        const zoneId = String(assignment?.zoneId || '').trim()
+        return productId && zoneId && productById.has(productId) && zoneById.has(zoneId)
+    })
+    const slices = hasManualZoneAssignments
+        ? validZones.map((zone: any) => {
+            const zoneId = String((zone as any)?._customId || (zone as any)?.id || '').trim()
+            return rawZoneAssignments
+                .filter((assignment: any) => String(assignment?.zoneId || '').trim() === zoneId)
+                .map((assignment: any) => productById.get(String(assignment?.productId || '').trim()))
+                .filter(Boolean)
+        })
+        : buildProductSlicesForZones(products, validZones, mode)
     let applied = 0
 
     for (let index = 0; index < validZones.length; index += 1) {
@@ -41358,6 +41409,7 @@ const handleRecalculateLayout = () => {
         :available-frames-for-export="availableFramesForExport"
         :has-exportable-selected-object="hasExportableSelectedObject"
         :available-frames-for-import="availableFramesForImport"
+        :available-zones-for-import="availableZonesForImport"
         :show-share-modal="showShareModal"
         :share-settings="shareSettings"
         :show-presentation-modal="showPresentationModal"

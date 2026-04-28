@@ -5,6 +5,7 @@ import type { LabelTemplate } from '~/types/label-template'
 type ImportTargetMode = 'zone' | 'multi-frame'
 type ImageMatchMode = 'precise' | 'fast'
 type FrameAssignment = { productId: string; frameId: string | null }
+type ZoneAssignment = { productId: string; zoneId: string | null }
 type ProductImportOptions = {
   mode?: 'replace' | 'append'
   labelTemplateId?: string
@@ -12,6 +13,7 @@ type ProductImportOptions = {
   sourceMode?: 'manual' | 'paste-list' | 'file-import'
   selectedFrameIds?: string[]
   frameAssignments?: FrameAssignment[]
+  zoneAssignments?: ZoneAssignment[]
   countRule?: 'min'
   cardsPerFrame?: 1
   imageMatchMode?: ImageMatchMode
@@ -70,6 +72,7 @@ defineProps<{
   availableFramesForExport: any[]
   hasExportableSelectedObject: boolean
   availableFramesForImport: any[]
+  availableZonesForImport: any[]
   showShareModal: boolean
   shareSettings: any
   showPresentationModal: boolean
@@ -210,6 +213,7 @@ const emit = defineEmits<{
     :label-templates="labelTemplates"
     :initial-label-template-id="importZoneLabelTemplateId"
     :available-frames-for-import="availableFramesForImport"
+    :available-zones-for-import="availableZonesForImport"
     @update:model-value="emit('update:showProductReviewModal', $event)"
     @import="(products, opts) => emit('import-products', products, opts)"
   />

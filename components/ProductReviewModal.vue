@@ -14,7 +14,9 @@ type ImageBgPolicy = 'auto' | 'never' | 'always'
 type ImageMatchMode = 'precise' | 'fast'
 type ImageQuickAction = 'search' | 'upload' | 'storage' | 'reprocess'
 type FrameCandidate = { id: string; name: string; left?: number; top?: number }
+type ZoneCandidate = { id: string; name: string; left?: number; top?: number; existingCount?: number; frameName?: string }
 type FrameAssignment = { productId: string; frameId: string | null }
+type ZoneAssignment = { productId: string; zoneId: string | null }
 type ProductImportOptions = {
     mode?: 'replace' | 'append'
     labelTemplateId?: string
@@ -22,6 +24,7 @@ type ProductImportOptions = {
     sourceMode?: ImportSourceMode
     selectedFrameIds?: string[]
     frameAssignments?: FrameAssignment[]
+    zoneAssignments?: ZoneAssignment[]
     countRule?: 'min'
     cardsPerFrame?: 1
     imageMatchMode?: ImageMatchMode
@@ -53,6 +56,7 @@ const props = defineProps<{
     labelTemplates?: LabelTemplate[]
     initialLabelTemplateId?: string
     availableFramesForImport?: FrameCandidate[]
+    availableZonesForImport?: ZoneCandidate[]
 }>()
 
 const emit = defineEmits<{
@@ -72,6 +76,7 @@ const targetMode = ref<ImportTargetMode>('zone')
 const importSource = ref<ImportSourceMode>('manual')
 const selectedFrameIds = ref<string[]>([])
 const frameAssignmentsMap = ref<Record<string, string | null>>({})
+const zoneAssignmentsMap = ref<Record<string, string | null>>({})
 // Importacao inteligente: por padrao, queremos remover o fundo das imagens encontradas.
 const imageBgPolicy = ref<ImageBgPolicy>('always')
 const isSubmittingImport = ref(false)
@@ -499,6 +504,10 @@ watch(() => props.modelValue, (newVal) => {
         }
         reconcileFrameAssignments({ autofill: true })
     }
+    if (targetMode.value === 'zone' && canUseMultiZone.value) {
+        zoneAssignmentsMap.value = {}
+        reconcileZoneAssignments({ autofill: true })
+    }
     reviewPage.value = 1
 
     if (step.value === 'review') {
@@ -651,6 +660,12 @@ const handleImport = () => {
         }))
         opts.countRule = 'min'
         opts.cardsPerFrame = 1
+    }
+    if (targetMode.value === 'zone' && canUseMultiZone.value) {
+        opts.zoneAssignments = productRows.value.map((row) => ({
+            productId: row.productId,
+            zoneId: getAssignedZoneId(row.productId)
+        }))
     }
 
     const importedProducts = (JSON.parse(JSON.stringify(products.value)) as SmartProduct[])
@@ -1194,12 +1209,18 @@ const activeDecisionLabel = computed(() => {
 })
 
 const selectedImportModeLabel = computed(() => importMode.value === 'append' ? 'Adicionar' : 'Substituir')
-const selectedTargetModeLabel = computed(() => targetMode.value === 'multi-frame' ? 'Multi-frame' : 'Zona atual')
+const selectedTargetModeLabel = computed(() => {
+    if (targetMode.value === 'multi-frame') return 'Multi-frame'
+    return canUseMultiZone.value ? 'Zonas' : 'Zona atual'
+})
 const selectedLabelTemplateSummary = computed(() => selectedLabelTemplate.value?.name || 'Padrão da zona')
 const importImpactSummary = computed(() => {
     const totalProducts = products.value.length
     if (targetMode.value === 'multi-frame') {
         return `${multiFrameImportCount.value} ofertas serão distribuídas nos frames selecionados.`
+    }
+    if (canUseMultiZone.value) {
+        return `${multiZoneImportCount.value} produtos serão distribuídos nas zonas selecionadas.`
     }
     const existing = Math.max(0, Number(props.existingCount || 0))
     if (importMode.value === 'replace') {
@@ -1664,13 +1685,53 @@ const availableFrames = computed<FrameCandidate[]>(() => {
     return sorted
 })
 
+const availableZones = computed<ZoneCandidate[]>(() => {
+    const source = Array.isArray(props.availableZonesForImport) ? props.availableZonesForImport : []
+    const byId = new Map<string, ZoneCandidate>()
+
+    source.forEach((item: any, index: number) => {
+        const id = String(item?.id || '').trim() || `zone-${index + 1}`
+        if (byId.has(id)) return
+        const name = String(item?.name || '').trim() || `Zona ${index + 1}`
+        const left = Number(item?.left)
+        const top = Number(item?.top)
+        const existingCount = Number(item?.existingCount)
+        const frameName = String(item?.frameName || '').trim()
+        byId.set(id, {
+            id,
+            name,
+            left: Number.isFinite(left) ? left : undefined,
+            top: Number.isFinite(top) ? top : undefined,
+            existingCount: Number.isFinite(existingCount) ? Math.max(0, existingCount) : 0,
+            frameName: frameName || undefined
+        })
+    })
+
+    const sorted = Array.from(byId.values())
+    sorted.sort((a, b) => {
+        const aTop = Number.isFinite(Number(a.top)) ? Number(a.top) : Number.POSITIVE_INFINITY
+        const bTop = Number.isFinite(Number(b.top)) ? Number(b.top) : Number.POSITIVE_INFINITY
+        if (aTop !== bTop) return aTop - bTop
+
+        const aLeft = Number.isFinite(Number(a.left)) ? Number(a.left) : Number.POSITIVE_INFINITY
+        const bLeft = Number.isFinite(Number(b.left)) ? Number(b.left) : Number.POSITIVE_INFINITY
+        if (aLeft !== bLeft) return aLeft - bLeft
+
+        return a.name.localeCompare(b.name)
+    })
+    return sorted
+})
+
 const orderedFrameIds = computed(() => availableFrames.value.map(frame => frame.id))
+const orderedZoneIds = computed(() => availableZones.value.map(zone => zone.id))
 const selectedFrameSet = computed(() => new Set(selectedFrameIds.value))
 const selectedFrames = computed(() => availableFrames.value.filter(frame => selectedFrameSet.value.has(frame.id)))
 const multiFrameImportCount = computed(() => Math.min(productRows.value.length, selectedFrameIds.value.length))
+const multiZoneImportCount = computed(() => productRows.value.filter(row => !!getAssignedZoneId(row.productId)).length)
 const isProcessingProducts = computed(() => products.value.some((p: any) => p.status === 'processing'))
 const isImageQueueLocked = computed(() => isImageQueueRunning.value)
 const canUseMultiFrame = computed(() => availableFrames.value.length > 0)
+const canUseMultiZone = computed(() => availableZones.value.length > 1)
 
 const setSelectedFrameIdsOrdered = (ids: string[]) => {
     const wanted = new Set(
@@ -1782,6 +1843,80 @@ const setAssignmentForProduct = (productId: string, frameIdRaw: string) => {
     reconcileFrameAssignments({ autofill: false })
 }
 
+const getAssignedZoneId = (productId: string): string | null => {
+    const value = String(zoneAssignmentsMap.value[String(productId) || ''] || '').trim()
+    return value || null
+}
+
+const reconcileZoneAssignments = (opts: { autofill?: boolean } = {}) => {
+    const productIds = productRows.value.map(row => row.productId)
+    const validZoneIds = new Set(orderedZoneIds.value)
+    const next: Record<string, string | null> = {}
+
+    productIds.forEach((productId) => {
+        const assigned = getAssignedZoneId(productId)
+        next[productId] = assigned && validZoneIds.has(assigned) ? assigned : null
+    })
+
+    if (opts.autofill !== false && orderedZoneIds.value.length > 0) {
+        const existingCounts = availableZones.value.map(zone => Math.max(0, Number(zone.existingCount || 0)))
+        const totalExisting = existingCounts.reduce((sum, count) => sum + count, 0)
+        let allocations: number[]
+        if (importMode.value === 'replace' && totalExisting > 0) {
+            allocations = [...existingCounts]
+            let allocated = allocations.reduce((sum, count) => sum + count, 0)
+            while (allocated > productIds.length) {
+                for (let i = allocations.length - 1; i >= 0 && allocated > productIds.length; i -= 1) {
+                    const current = allocations[i] ?? 0
+                    if (current <= 0) continue
+                    allocations[i] = current - 1
+                    allocated -= 1
+                }
+            }
+            let cursor = 0
+            while (allocated < productIds.length) {
+                const index = cursor % allocations.length
+                allocations[index] = (allocations[index] ?? 0) + 1
+                allocated += 1
+                cursor += 1
+            }
+        } else {
+            const base = Math.floor(productIds.length / orderedZoneIds.value.length)
+            const remainder = productIds.length % orderedZoneIds.value.length
+            allocations = orderedZoneIds.value.map((_, index) => base + (index < remainder ? 1 : 0))
+        }
+
+        let productCursor = 0
+        allocations.forEach((count, zoneIndex) => {
+            const zoneId = orderedZoneIds.value[zoneIndex]
+            if (!zoneId) return
+            for (let i = 0; i < count && productCursor < productIds.length; i += 1) {
+                const productId = productIds[productCursor]
+                if (productId && !next[productId]) next[productId] = zoneId
+                productCursor += 1
+            }
+        })
+    }
+
+    zoneAssignmentsMap.value = next
+}
+
+const setZoneAssignmentForProduct = (productId: string, zoneIdRaw: string) => {
+    const pid = String(productId || '').trim()
+    if (!pid) return
+    const zoneId = String(zoneIdRaw || '').trim() || null
+    const validZoneIds = new Set(orderedZoneIds.value)
+    zoneAssignmentsMap.value = {
+        ...zoneAssignmentsMap.value,
+        [pid]: zoneId && validZoneIds.has(zoneId) ? zoneId : null
+    }
+}
+
+const autoDistributeZoneAssignments = () => {
+    zoneAssignmentsMap.value = {}
+    reconcileZoneAssignments({ autofill: true })
+}
+
 const hasInvalidMultiFrameAssignments = computed(() => {
     if (targetMode.value !== 'multi-frame') return false
     if (multiFrameImportCount.value <= 0) return true
@@ -1803,6 +1938,9 @@ const importButtonDisabled = computed(() => {
     if (isImageQueueLocked.value) return true
     if (missingCommercialPriceCount.value > 0) return true
     if (imageStatusCounters.value.attention > 0) return true
+    if (targetMode.value === 'zone' && canUseMultiZone.value) {
+        return multiZoneImportCount.value <= 0
+    }
     if (targetMode.value !== 'multi-frame') return false
     if (!canUseMultiFrame.value) return true
     if (selectedFrameIds.value.length === 0) return true
@@ -1828,6 +1966,21 @@ watch(() => orderedFrameIds.value.join('|'), () => {
 watch(() => productRows.value.map(row => row.productId).join('|'), () => {
     if (targetMode.value === 'multi-frame') {
         reconcileFrameAssignments({ autofill: true })
+    }
+    if (targetMode.value === 'zone' && canUseMultiZone.value) {
+        reconcileZoneAssignments({ autofill: true })
+    }
+})
+
+watch(() => orderedZoneIds.value.join('|'), () => {
+    if (targetMode.value === 'zone' && canUseMultiZone.value) {
+        reconcileZoneAssignments({ autofill: true })
+    }
+})
+
+watch(importMode, () => {
+    if (targetMode.value === 'zone' && canUseMultiZone.value) {
+        autoDistributeZoneAssignments()
     }
 })
 
@@ -2686,6 +2839,78 @@ const getAssetDisplayName = (asset: any): string => {
                                 <Check v-else class="w-3.5 h-3.5 mr-2" />
                                 Importar {{ multiFrameImportCount }} Produtos
                             </Button>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="targetMode === 'zone' && canUseMultiZone"
+                        class="mt-3 p-3 rounded-lg border border-white/10 bg-black/20 flex flex-col gap-3"
+                    >
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Divisão por zona</div>
+                                <div class="text-[10px] text-zinc-500">
+                                    Escolha manualmente em qual zona cada produto será importado.
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                class="text-[10px] text-zinc-300 border border-zinc-700 rounded px-2 py-1 hover:bg-white/5 transition-colors"
+                                @click="autoDistributeZoneAssignments"
+                            >
+                                Auto distribuir
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div
+                                v-for="zone in availableZones"
+                                :key="zone.id"
+                                class="rounded border border-zinc-800 px-2 py-1.5"
+                            >
+                                <div class="text-xs text-zinc-200 truncate">{{ zone.name }}</div>
+                                <div class="text-[10px] text-zinc-500">
+                                    {{ zone.existingCount || 0 }} itens<span v-if="zone.frameName"> • {{ zone.frameName }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border border-zinc-800 rounded-md overflow-hidden">
+                            <div class="grid grid-cols-12 bg-zinc-900/70 text-[10px] uppercase tracking-widest text-zinc-500 px-2 py-1">
+                                <div class="col-span-6">Oferta</div>
+                                <div class="col-span-6">Zona destino</div>
+                            </div>
+                            <div class="max-h-40 overflow-y-auto custom-scrollbar divide-y divide-zinc-800">
+                                <div
+                                    v-for="row in productRows"
+                                    :key="`zone-${row.productId}`"
+                                    class="grid grid-cols-12 px-2 py-1.5 items-center gap-2"
+                                >
+                                    <div class="col-span-6 min-w-0">
+                                        <div class="text-xs text-zinc-200 truncate">{{ row.product?.name || `Produto ${row.index + 1}` }}</div>
+                                    </div>
+                                    <div class="col-span-6">
+                                        <select
+                                            class="w-full h-7 bg-transparent border border-zinc-700 rounded px-2 text-[11px] text-zinc-200 focus:outline-none"
+                                            :value="getAssignedZoneId(row.productId) || ''"
+                                            @change="setZoneAssignmentForProduct(row.productId, String(($event.target as HTMLSelectElement).value || ''))"
+                                        >
+                                            <option value="">(sem zona)</option>
+                                            <option
+                                                v-for="zone in availableZones"
+                                                :key="zone.id"
+                                                :value="zone.id"
+                                            >
+                                                {{ zone.name }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-[11px] text-zinc-400">
+                            Serão importadas <span class="text-zinc-200 font-semibold">{{ multiZoneImportCount }}</span> ofertas nas zonas selecionadas.
                         </div>
                     </div>
 
