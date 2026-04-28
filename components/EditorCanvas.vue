@@ -104,7 +104,6 @@ const PenContextualToolbar = defineAsyncComponent(() => import('./PenContextualT
 const FrameLabelsOverlay = defineAsyncComponent(() => import('./FrameLabelsOverlay.vue'))
 const EditorModalsHost = defineAsyncComponent(() => import('./EditorModalsHost.vue'))
 const EditorRightSidebar = defineAsyncComponent(() => import('./EditorRightSidebar.vue'))
-const CanvaImportDialog = defineAsyncComponent(() => import('./CanvaImportDialog.vue'))
 const ZoneQuickActions = defineAsyncComponent(() => import('./ZoneQuickActions.vue'))
 import {
   Undo,
@@ -8513,77 +8512,6 @@ const openAiGenerationModal = () => {
     showAIModal.value = true
 }
 
-const showCanvaImportDialog = ref(false)
-const openCanvaImportDialog = () => { showCanvaImportDialog.value = true }
-
-interface CanvaImportedPage {
-    index: number
-    key: string
-    url: string
-    width: number
-    height: number
-}
-
-const handleCanvaPagesImported = (payload: { design: { id: string; title?: string }; pages: CanvaImportedPage[] }) => {
-    const importedPages = Array.isArray(payload?.pages) ? payload.pages : []
-    if (importedPages.length === 0) return
-
-    const designTitle = String(payload?.design?.title || '').trim() || 'Canva'
-    const firstNewIndex = project.pages.length
-
-    importedPages.forEach((page) => {
-        const fallbackW = 1080
-        const fallbackH = 1080
-        const pageW = Math.max(64, Math.round(Number(page.width) || fallbackW))
-        const pageH = Math.max(64, Math.round(Number(page.height) || fallbackH))
-        const pageName = `${designTitle} — Pag. ${page.index}`
-        addPage('FREE_DESIGN', pageW, pageH, pageName)
-        const newPageIdx = project.pages.length - 1
-        if (newPageIdx < 0) return
-
-        // Constroi um canvasData minimo: uma unica imagem (do PNG exportado pelo Canva)
-        // ocupando a pagina inteira, com selecao livre para o usuario reaproveitar/excluir.
-        const imageObject: Record<string, any> = {
-            type: 'image',
-            version: '7.0.0',
-            originX: 'left',
-            originY: 'top',
-            left: 0,
-            top: 0,
-            width: pageW,
-            height: pageH,
-            scaleX: 1,
-            scaleY: 1,
-            opacity: 1,
-            visible: true,
-            crossOrigin: 'anonymous',
-            src: page.url,
-            image_wasabi_key: page.key,
-            name: 'canva-import-background',
-            _customId: makeId(),
-            selectable: true,
-            evented: true
-        }
-
-        const canvasJson: Record<string, any> = {
-            version: '7.0.0',
-            background: '#ffffff',
-            objects: [imageObject]
-        }
-
-        updatePageData(newPageIdx, canvasJson, {
-            source: 'system',
-            markUnsaved: true,
-            reason: 'canva-import'
-        })
-    })
-
-    if (firstNewIndex < project.pages.length) {
-        switchPage(firstNewIndex)
-    }
-    triggerAutoSave?.()
-    notifyEditorInfo(`${importedPages.length} pagina(s) importada(s) do Canva`)
-}
 onUnmounted(() => {
     if (aiToastTimer) clearTimeout(aiToastTimer)
 })
@@ -40883,12 +40811,6 @@ const handleRecalculateLayout = () => {
         @created="handleAiStudioCreated"
       />
 
-      <CanvaImportDialog
-        v-if="showCanvaImportDialog"
-        v-model="showCanvaImportDialog"
-        @pages-imported="handleCanvaPagesImported"
-      />
-
       <div
         v-if="showProductImageUploadPicker"
         class="fixed inset-0 z-140 bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4"
@@ -41246,7 +41168,6 @@ const handleRecalculateLayout = () => {
             @update:show-zoom-menu="showZoomMenu = $event"
             @present="startPresentation()"
             @open-ai-generate="openAiGenerationModal"
-            @open-canva-import="openCanvaImportDialog"
             @open-share="shareDesign"
             @zoom-50="handleZoom50"
             @zoom-100="handleZoom100"
