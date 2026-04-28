@@ -1917,6 +1917,28 @@ const autoDistributeZoneAssignments = () => {
     reconcileZoneAssignments({ autofill: true })
 }
 
+const getFrameNameById = (frameId: string | null): string => {
+    const id = String(frameId || '').trim()
+    if (!id) return ''
+    return availableFrames.value.find(frame => frame.id === id)?.name || ''
+}
+
+const getZoneNameById = (zoneId: string | null): string => {
+    const id = String(zoneId || '').trim()
+    if (!id) return ''
+    return availableZones.value.find(zone => zone.id === id)?.name || ''
+}
+
+const getProductDestinationLabel = (productId: string): string => {
+    if (targetMode.value === 'multi-frame') {
+        return getFrameNameById(getAssignedFrameId(productId)) || 'Sem frame'
+    }
+    if (canUseMultiZone.value) {
+        return getZoneNameById(getAssignedZoneId(productId)) || 'Sem zona'
+    }
+    return selectedTargetModeLabel.value
+}
+
 const hasInvalidMultiFrameAssignments = computed(() => {
     if (targetMode.value !== 'multi-frame') return false
     if (multiFrameImportCount.value <= 0) return true
@@ -2509,7 +2531,7 @@ const getAssetDisplayName = (asset: any): string => {
         :model-value="modelValue"
         @update:model-value="$emit('update:modelValue', $event)"
         title="Importação Inteligente"
-        width="1120px"
+        width="1280px"
     >
         <div class="flex flex-col gap-3 min-h-145 max-h-[84vh]">
 
@@ -2917,42 +2939,63 @@ const getAssetDisplayName = (asset: any): string => {
 
                 <div
                     v-if="activeReviewRowMeta"
-                    class="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)] flex-1 min-h-0"
+                    class="grid gap-4 xl:grid-cols-[390px_minmax(0,1fr)] flex-1 min-h-0"
                 >
-                    <!-- Sidebar compacta -->
-                    <aside class="rounded-xl border border-zinc-800 bg-zinc-900/40 flex flex-col min-h-0 max-h-[72vh]">
-                        <!-- Header da sidebar -->
-                        <div class="px-3 py-2 border-b border-zinc-800 flex items-center justify-between shrink-0">
-                            <span class="text-[10px] font-medium text-zinc-400">
-                                {{ activeReviewRowVisibleIndex + 1 }}/{{ filteredProductRows.length }} produtos
-                            </span>
-                            <div class="flex items-center gap-1">
-                                <button type="button" class="w-6 h-6 rounded flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-30" @click="gotoReviewPage(reviewPage - 1)" :disabled="reviewPage <= 1">
-                                    <ChevronDown class="h-3.5 w-3.5 rotate-90" />
-                                </button>
-                                <span class="text-[9px] text-zinc-500 tabular-nums">{{ reviewPage }}/{{ reviewPageCount }}</span>
-                                <button type="button" class="w-6 h-6 rounded flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-30" @click="gotoReviewPage(reviewPage + 1)" :disabled="reviewPage >= reviewPageCount">
-                                    <ChevronDown class="h-3.5 w-3.5 -rotate-90" />
-                                </button>
+                    <aside class="rounded-2xl border border-zinc-800 bg-zinc-950/55 shadow-2xl shadow-black/20 flex flex-col min-h-0 max-h-[68vh] overflow-hidden">
+                        <div class="px-4 py-3 border-b border-zinc-800 bg-zinc-900/70 shrink-0">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">Produtos adicionados</div>
+                                    <div class="mt-1 flex items-baseline gap-2">
+                                        <span class="text-2xl font-semibold leading-none text-white">{{ filteredProductRows.length }}</span>
+                                        <span class="text-[11px] text-zinc-500">de {{ products.length }} no lote</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <button type="button" class="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors disabled:opacity-30" @click="gotoReviewPage(reviewPage - 1)" :disabled="reviewPage <= 1">
+                                        <ChevronDown class="h-4 w-4 rotate-90" />
+                                    </button>
+                                    <span class="min-w-10 text-center text-[10px] text-zinc-500 tabular-nums">{{ reviewPage }}/{{ reviewPageCount }}</span>
+                                    <button type="button" class="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors disabled:opacity-30" @click="gotoReviewPage(reviewPage + 1)" :disabled="reviewPage >= reviewPageCount">
+                                        <ChevronDown class="h-4 w-4 -rotate-90" />
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mt-3 grid grid-cols-4 gap-1.5">
+                                <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1">
+                                    <div class="text-[9px] uppercase text-emerald-300/70">Prontos</div>
+                                    <div class="text-sm font-semibold text-emerald-200">{{ imageStatusCounters.approved }}</div>
+                                </div>
+                                <div class="rounded-lg border border-sky-500/20 bg-sky-500/10 px-2 py-1">
+                                    <div class="text-[9px] uppercase text-sky-300/70">Fila</div>
+                                    <div class="text-sm font-semibold text-sky-200">{{ imageStatusCounters.pending }}</div>
+                                </div>
+                                <div class="rounded-lg border border-amber-500/20 bg-amber-500/10 px-2 py-1">
+                                    <div class="text-[9px] uppercase text-amber-300/70">Revisar</div>
+                                    <div class="text-sm font-semibold text-amber-200">{{ imageStatusCounters.ambiguous }}</div>
+                                </div>
+                                <div class="rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 py-1">
+                                    <div class="text-[9px] uppercase text-rose-300/70">Bloq.</div>
+                                    <div class="text-sm font-semibold text-rose-200">{{ imageStatusCounters.blocked }}</div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Lista de produtos -->
-                        <div class="flex-1 overflow-y-auto custom-scrollbar p-1.5 space-y-1">
+                        <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1.5">
                             <button
                                 v-for="row in reviewRowsWithMeta"
                                 :key="row.productId"
                                 type="button"
-                                class="w-full rounded-xl border px-2 py-2 text-left transition-all"
+                                class="w-full rounded-xl border p-2.5 text-left transition-all duration-200"
                                 :class="activeReviewRowIndex === row.index
-                                    ? 'border-sky-500/30 bg-sky-500/8 shadow-sm'
-                                    : 'border-transparent hover:border-zinc-700 hover:bg-zinc-800/40'"
+                                    ? 'border-sky-400/40 bg-sky-500/10 shadow-lg shadow-sky-950/20'
+                                    : 'border-zinc-800/60 bg-zinc-900/35 hover:border-zinc-700 hover:bg-zinc-800/45'"
                                 @click="activeReviewRowIndex = row.index"
                             >
-                                <div class="flex items-center gap-2.5">
+                                <div class="grid grid-cols-[56px_minmax(0,1fr)] gap-3">
                                     <div
                                         :class="[
-                                            'h-11 w-11 shrink-0 overflow-hidden rounded-lg border bg-zinc-950/80',
+                                            'h-14 w-14 shrink-0 overflow-hidden rounded-xl border bg-zinc-950/80',
                                             thumbnailUiStateClass(row.product)
                                         ]"
                                     >
@@ -2966,9 +3009,9 @@ const getAssetDisplayName = (asset: any): string => {
                                             {{ row.product?.status === 'processing' ? '...' : '?' }}
                                         </div>
                                     </div>
-                                    <div class="min-w-0 flex-1">
+                                    <div class="min-w-0">
                                         <div class="flex items-center justify-between gap-1">
-                                            <div class="line-clamp-1 text-[11px] font-medium leading-tight text-white">
+                                            <div class="line-clamp-2 text-[12px] font-semibold leading-tight text-white">
                                                 {{ row.product.name || `Produto ${row.index + 1}` }}
                                             </div>
                                             <span
@@ -2981,15 +3024,18 @@ const getAssetDisplayName = (asset: any): string => {
                                                 }"
                                             ></span>
                                         </div>
-                                        <div class="text-[10px] text-zinc-500 line-clamp-1">
-                                            {{ row.product.brand || '' }}<span v-if="row.product.weight"> {{ row.product.weight }}</span>
+                                        <div class="mt-1 text-[10px] text-zinc-500 line-clamp-1">
+                                            <span class="text-zinc-400">#{{ row.index + 1 }}</span>
+                                            <span v-if="row.product.brand"> • {{ row.product.brand }}</span>
+                                            <span v-if="row.product.weight"> • {{ row.product.weight }}</span>
                                         </div>
-                                        <div class="mt-0.5 flex items-center gap-1.5 text-[9px]">
-                                            <span v-if="hasCommercialPrice(row.product)" class="font-semibold text-zinc-300">
+                                        <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[9px]">
+                                            <span v-if="hasCommercialPrice(row.product)" class="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 font-semibold text-emerald-200">
                                                 R$ {{ getFirstCommercialPrice(row.product) }}
                                             </span>
-                                            <span v-else class="font-semibold text-rose-300">Sem preco</span>
-                                            <span class="text-zinc-600">{{ row.imageStatusMeta.state }}</span>
+                                            <span v-else class="rounded-md border border-rose-500/20 bg-rose-500/10 px-1.5 py-0.5 font-semibold text-rose-200">Sem preco</span>
+                                            <span class="rounded-md border border-zinc-700/70 bg-zinc-800/50 px-1.5 py-0.5 text-zinc-400 truncate max-w-32">{{ getProductDestinationLabel(row.productId) }}</span>
+                                            <span class="rounded-md bg-zinc-800/60 px-1.5 py-0.5 text-zinc-500">{{ row.imageStatusMeta.state }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -3003,14 +3049,13 @@ const getAssetDisplayName = (asset: any): string => {
                             </div>
                         </div>
 
-                        <!-- Footer sidebar -->
                         <div class="px-2 py-2 border-t border-zinc-800 shrink-0">
                             <button
                                 @click="startAppendFromReview"
-                                class="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 text-[10px] font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
+                                class="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-sky-500/20 bg-sky-500/10 text-[10px] font-bold uppercase tracking-widest text-sky-100 transition-colors hover:bg-sky-500/20"
                             >
                                 <Plus class="h-3 w-3" />
-                                Adicionar mais
+                                Adicionar mais produtos
                             </button>
                         </div>
                     </aside>
