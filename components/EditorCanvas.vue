@@ -13716,6 +13716,31 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         });
     }
 
+    // Inclusao garantida das zonas: qualquer zona cujo parentFrameId aponte para
+    // um frame ja marcado para duplicar entra no conjunto, independentemente de
+    // o fallback espacial alcanca-la (zonas redimensionadas pelo usuario podem
+    // extrapolar o frame; a regra de "85% de overlap" perde esses casos).
+    {
+        const duplicatedFrameIdsForZones = new Set(
+            all
+                .filter((o: any) => o?._customId && toDuplicateIds.has(String(o._customId)) && isFrameContainerCandidate(o))
+                .map((o: any) => String(o._customId || '').trim())
+                .filter(Boolean)
+        );
+        if (duplicatedFrameIdsForZones.size > 0) {
+            all.forEach((candidate: any) => {
+                if (!candidate || candidate.excludeFromExport || !candidate._customId) return;
+                const candidateId = String(candidate._customId);
+                if (toDuplicateIds.has(candidateId)) return;
+                if (!isLikelyProductZone(candidate)) return;
+                const candidateFrameId = String((candidate as any).parentFrameId || '').trim();
+                if (!candidateFrameId || !duplicatedFrameIdsForZones.has(candidateFrameId)) return;
+                toDuplicateIds.add(candidateId);
+                resolvedParentByOriginalId.set(candidateId, candidateFrameId);
+            });
+        }
+    }
+
     // Product cards are top-level Fabric groups bound to the zone via parentZoneId/_zoneSlot,
     // not children of the zone group. Include every object bound to any duplicated zone even
     // if a legacy save lost parentFrameId or the spatial fallback misses it.
@@ -27145,24 +27170,43 @@ const addGridZone = () => {
         }
     }
 
-    const center = getCenterOfView();
-    // Create a nicer placeholder zone
-    // Background with Glass/Dark aesthetic
+    // Quando existe um frame ativo, posiciona e dimensiona a nova zona dentro
+    // dele e amarra parentFrameId explicitamente. Evita o caso em que, com
+    // varios frames visiveis, getResolvedZoneFrameId atribui a zona ao frame
+    // errado (e os produtos vao para a zona vizinha).
+    const activeFrameBounds = activeFrameId ? getFrameBounds(activeFrame) : null;
+    let zoneCenterX: number;
+    let zoneCenterY: number;
+    let zoneInnerWidth: number;
+    let zoneInnerHeight: number;
+    if (activeFrameBounds) {
+        const innerPadding = Math.max(12, Math.min(64, Math.round(Math.min(activeFrameBounds.width, activeFrameBounds.height) * 0.04)));
+        zoneInnerWidth = Math.max(120, activeFrameBounds.width - innerPadding * 2);
+        zoneInnerHeight = Math.max(120, activeFrameBounds.height - innerPadding * 2);
+        zoneCenterX = activeFrameBounds.left + activeFrameBounds.width / 2;
+        zoneCenterY = activeFrameBounds.top + activeFrameBounds.height / 2;
+    } else {
+        const center = getCenterOfView();
+        zoneCenterX = center.x;
+        zoneCenterY = center.y;
+        zoneInnerWidth = 400;
+        zoneInnerHeight = 600;
+    }
     const zone = new fabric.Rect({
-        width: 400, 
-        height: 600, 
-        fill: 'rgba(0,0,0,0)', 
-        stroke: '#404040', 
-        strokeWidth: 2, 
-        strokeDashArray: [10, 10], 
+        width: zoneInnerWidth,
+        height: zoneInnerHeight,
+        fill: 'rgba(0,0,0,0)',
+        stroke: '#404040',
+        strokeWidth: 2,
+        strokeDashArray: [10, 10],
         strokeUniform: true,
         rx: 16, ry: 16,
         originX: 'center', originY: 'center'
     });
 
     const group = new fabric.Group([zone], {
-        left: center.x,
-        top: center.y,
+        left: zoneCenterX,
+        top: zoneCenterY,
         originX: 'center',
         originY: 'center',
         isGridZone: true, // Marker flag
@@ -27206,10 +27250,16 @@ const addGridZone = () => {
     (group as any).overflowPolicy = 'warn';
     (group as any)._zonePadding = 20;
     // CRITICAL: Initialize zone dimensions for persistence
-    (group as any)._zoneWidth = 400;
-    (group as any)._zoneHeight = 600;
+    (group as any)._zoneWidth = zoneInnerWidth;
+    (group as any)._zoneHeight = zoneInnerHeight;
     // New zones should start from defaults (not from the previous page's last-selected styles).
     (group as any)._zoneGlobalStyles = normalizeGlobalStyles(DEFAULT_GLOBAL_STYLES);
+    // Vincula a zona ao frame ativo antes de qualquer deteccao espacial, para
+    // garantir que produtos importados aqui caiam exatamente nesta zona, mesmo
+    // que outro frame com zona esteja proximo.
+    if (activeFrameId) {
+        (group as any).parentFrameId = activeFrameId;
+    }
 
     canvas.value.add(group);
     getResolvedZoneFrameId(group);
