@@ -9781,21 +9781,39 @@ const flushZoneRelayoutOnDrop = () => {
 const resolveCardParentZone = (card: any, opts: { allowNearest?: boolean } = {}) => {
     if (!canvas.value || !card) return null;
     const allowNearest = opts.allowNearest !== false;
+    const cardFrameId = String((card as any)?.parentFrameId || '').trim();
+
+    const getZoneFrameIdForCardBinding = (zone: any) => {
+        if (!zone) return '';
+        const direct = String((zone as any)?.parentFrameId || '').trim();
+        if (direct) return direct;
+        try {
+            return String(getResolvedZoneFrameId(zone) || '').trim();
+        } catch {
+            return '';
+        }
+    };
+
+    const isZoneCompatibleWithCardFrame = (zone: any) => {
+        if (!zone || !cardFrameId) return true;
+        const zoneFrameId = getZoneFrameIdForCardBinding(zone);
+        return !zoneFrameId || zoneFrameId === cardFrameId;
+    };
 
     const currentZoneId = String((card as any)?.parentZoneId || '').trim();
     if (currentZoneId) {
         const currentZone = findContainmentZoneById(currentZoneId);
-        if (currentZone) return currentZone;
+        if (currentZone && isZoneCompatibleWithCardFrame(currentZone)) return currentZone;
     }
 
     // Slot metadata is a stronger signal than nearest-zone guessing.
     const slotZoneId = String((card as any)?._zoneSlot?.zoneId || '').trim();
     if (slotZoneId) {
         const slotZone = findContainmentZoneById(slotZoneId);
-        if (slotZone) return slotZone;
+        if (slotZone && isZoneCompatibleWithCardFrame(slotZone)) return slotZone;
     }
 
-    const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+    const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o) && isZoneCompatibleWithCardFrame(o));
     if (!zones.length) return null;
     if (zones.length === 1) return zones[0];
 
@@ -13716,14 +13734,100 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         });
     }
 
-    // Inclusao garantida das zonas: qualquer zona cujo parentFrameId aponte para
-    // um frame ja marcado para duplicar, OU cujo centro esteja geometricamente
-    // dentro de um frame duplicado, entra no conjunto. A checagem geometrica
-    // cobre o caso (visto em campo) onde o parentFrameId da zona ficou vazio
-    // ou stale — o BFS e o fallback de overlap (>=85%) falhavam, a zona ficava
-    // de fora dos originals e os cards duplicados eram redirecionados para a
-    // zona original.
+    // Inclusao garantida das zonas: product zones precisam usar o retangulo
+    // interno da zona, nao o bounding box do grupo. O grupo pode ser inflado por
+    // labels/runtime state, fazendo a regra generica de overlap perder a zona.
     {
+        const getZoneDuplicationBounds = (zone: any) => {
+            try {
+                const metrics = getZoneMetrics(zone);
+                if (
+                    metrics &&
+                    Number.isFinite(metrics.left) &&
+                    Number.isFinite(metrics.top) &&
+                    Number.isFinite(metrics.width) &&
+                    Number.isFinite(metrics.height) &&
+                    metrics.width > 0 &&
+                    metrics.height > 0
+                ) {
+                    return metrics;
+                }
+            } catch {
+                // fallback below
+            }
+            try {
+                const bounds = typeof zone?.getBoundingRect === 'function' ? zone.getBoundingRect(true) : null;
+                if (
+                    bounds &&
+                    Number.isFinite(bounds.left) &&
+                    Number.isFinite(bounds.top) &&
+                    Number.isFinite(bounds.width) &&
+                    Number.isFinite(bounds.height) &&
+                    bounds.width > 0 &&
+                    bounds.height > 0
+                ) {
+                    return {
+                        left: bounds.left,
+                        top: bounds.top,
+                        width: bounds.width,
+                        height: bounds.height,
+                        centerX: bounds.left + bounds.width / 2,
+                        centerY: bounds.top + bounds.height / 2
+                    };
+                }
+            } catch {
+                // malformed zone, ignore
+            }
+            return null;
+        };
+
+        const getZoneDuplicationFrameHit = (zone: any, frames: any[]) => {
+            const zoneBounds = getZoneDuplicationBounds(zone);
+            if (!zoneBounds) return null;
+            const zoneArea = Math.max(1, Number(zoneBounds.width || 0) * Number(zoneBounds.height || 0));
+            const centerX = Number(zoneBounds.centerX ?? (zoneBounds.left + zoneBounds.width / 2));
+            const centerY = Number(zoneBounds.centerY ?? (zoneBounds.top + zoneBounds.height / 2));
+
+            let best: { frame: any; overlapRatio: number } | null = null;
+            for (const frame of frames) {
+                const fb = getFrameBounds(frame) || (typeof frame?.getBoundingRect === 'function' ? frame.getBoundingRect(true) : null);
+                if (!fb) continue;
+
+                const centerInside =
+                    centerX >= fb.left &&
+                    centerX <= fb.left + fb.width &&
+                    centerY >= fb.top &&
+                    centerY <= fb.top + fb.height;
+                if (centerInside) return frame;
+
+                const ix = Math.max(0, Math.min(zoneBounds.left + zoneBounds.width, fb.left + fb.width) - Math.max(zoneBounds.left, fb.left));
+                const iy = Math.max(0, Math.min(zoneBounds.top + zoneBounds.height, fb.top + fb.height) - Math.max(zoneBounds.top, fb.top));
+                const overlapRatio = (ix * iy) / zoneArea;
+                if (overlapRatio >= 0.2 && (!best || overlapRatio > best.overlapRatio)) {
+                    best = { frame, overlapRatio };
+                }
+            }
+            return best?.frame || null;
+        };
+
+        const isProductZoneDuplicationCandidate = (candidate: any) => {
+            if (isLikelyProductZone(candidate)) return true;
+            if (!candidate || String(candidate.type || '').toLowerCase() !== 'group') return false;
+            if (typeof candidate.getObjects !== 'function') return false;
+            const candidateId = String(candidate?._customId || '').trim();
+            if (!candidateId) return false;
+            const rect = getZoneRect(candidate);
+            if (!rect || !Array.isArray((rect as any).strokeDashArray)) return false;
+            return all.some((o: any) => (
+                o &&
+                o !== candidate &&
+                (
+                    String((o as any)?.parentZoneId || '').trim() === candidateId ||
+                    String((o as any)?._zoneSlot?.zoneId || '').trim() === candidateId
+                )
+            ));
+        };
+
         const duplicatedFrames = all.filter((o: any) =>
             o?._customId && toDuplicateIds.has(String(o._customId)) && isFrameContainerCandidate(o)
         );
@@ -13737,34 +13841,19 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
                 if (!candidate || candidate.excludeFromExport || !candidate._customId) return;
                 const candidateId = String(candidate._customId);
                 if (toDuplicateIds.has(candidateId)) return;
-                if (!isLikelyProductZone(candidate)) return;
+                if (!isProductZoneDuplicationCandidate(candidate)) return;
 
                 const candidateFrameId = String((candidate as any).parentFrameId || '').trim();
                 let chosenFrameId: string | undefined;
                 if (candidateFrameId && duplicatedFrameIdsForZones.has(candidateFrameId)) {
                     chosenFrameId = candidateFrameId;
                 } else {
-                    // Fallback geometrico: centro da zona dentro de algum frame duplicado.
-                    const center = typeof candidate.getCenterPoint === 'function'
-                        ? candidate.getCenterPoint()
-                        : { x: Number(candidate.left || 0), y: Number(candidate.top || 0) };
-                    if (Number.isFinite(center?.x) && Number.isFinite(center?.y)) {
-                        for (const frame of duplicatedFrames) {
-                            const fb = typeof frame.getBoundingRect === 'function' ? frame.getBoundingRect(true) : null;
-                            if (!fb) continue;
-                            const inside =
-                                center.x >= fb.left &&
-                                center.x <= fb.left + fb.width &&
-                                center.y >= fb.top &&
-                                center.y <= fb.top + fb.height;
-                            if (inside) {
-                                chosenFrameId = String(frame._customId || '').trim() || undefined;
-                                break;
-                            }
-                        }
-                    }
+                    const hitFrame = getZoneDuplicationFrameHit(candidate, duplicatedFrames);
+                    chosenFrameId = hitFrame ? String(hitFrame._customId || '').trim() || undefined : undefined;
                 }
                 if (!chosenFrameId) return;
+                candidate.isProductZone = true;
+                candidate.isGridZone = true;
                 toDuplicateIds.add(candidateId);
                 resolvedParentByOriginalId.set(candidateId, chosenFrameId);
                 if (import.meta.dev) {
@@ -13987,6 +14076,85 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         }
     });
 
+    // Final guard: cloned product cards must bind to cloned zones from the same
+    // frame. A stale parentZoneId pointing to the source frame makes any product
+    // drag relayout the original zone and pull the duplicated products back.
+    {
+        const clonedZones = clones.filter((o: any) => isLikelyProductZone(o));
+        const clonedCards = clones.filter((o: any) => isLikelyProductCard(o) || o?.isProductCard || o?.isSmartObject);
+        const clonedZoneById = new Map<string, any>();
+        clonedZones.forEach((zone: any) => {
+            const id = String((zone as any)?._customId || '').trim();
+            if (id) clonedZoneById.set(id, zone);
+        });
+
+        const getCloneZoneFrameId = (zone: any) => String((zone as any)?.parentFrameId || '').trim();
+        const getCloneZoneBounds = (zone: any) => {
+            try {
+                return getZoneMetrics(zone) ?? zone.getBoundingRect?.(true) ?? null;
+            } catch {
+                try { return zone.getBoundingRect?.(true) ?? null; } catch { return null; }
+            }
+        };
+        const findReplacementZoneForCard = (card: any) => {
+            const cardFrameId = String((card as any)?.parentFrameId || '').trim();
+            const pool = cardFrameId
+                ? clonedZones.filter((zone: any) => getCloneZoneFrameId(zone) === cardFrameId)
+                : clonedZones;
+            if (pool.length === 0) return null;
+            if (pool.length === 1) return pool[0];
+
+            const center = typeof card.getCenterPoint === 'function'
+                ? card.getCenterPoint()
+                : { x: Number(card.left || 0), y: Number(card.top || 0) };
+            let best: any = null;
+            let bestDistanceSq = Number.POSITIVE_INFINITY;
+            for (const zone of pool) {
+                const bounds = getCloneZoneBounds(zone);
+                if (!bounds) continue;
+                const inside =
+                    center.x >= bounds.left &&
+                    center.x <= bounds.left + bounds.width &&
+                    center.y >= bounds.top &&
+                    center.y <= bounds.top + bounds.height;
+                if (inside) return zone;
+                const zx = Number((bounds.centerX ?? (bounds.left + bounds.width / 2)) || 0);
+                const zy = Number((bounds.centerY ?? (bounds.top + bounds.height / 2)) || 0);
+                const dx = center.x - zx;
+                const dy = center.y - zy;
+                const d2 = dx * dx + dy * dy;
+                if (d2 < bestDistanceSq) {
+                    best = zone;
+                    bestDistanceSq = d2;
+                }
+            }
+            return best;
+        };
+
+        clonedCards.forEach((card: any) => {
+            const cardFrameId = String((card as any)?.parentFrameId || '').trim();
+            const currentZoneId = String((card as any)?.parentZoneId || '').trim();
+            const currentZone = currentZoneId ? clonedZoneById.get(currentZoneId) : null;
+            const currentZoneFrameId = currentZone ? getCloneZoneFrameId(currentZone) : '';
+            if (currentZone && (!cardFrameId || !currentZoneFrameId || currentZoneFrameId === cardFrameId)) return;
+
+            const replacement = findReplacementZoneForCard(card);
+            const replacementId = String((replacement as any)?._customId || '').trim();
+            if (!replacementId) {
+                delete (card as any).parentZoneId;
+                (card as any)._zoneSlot = null;
+                return;
+            }
+
+            (card as any).parentZoneId = replacementId;
+            const slot = (card as any)?._zoneSlot;
+            if (slot && typeof slot === 'object') {
+                (card as any)._zoneSlot = { ...slot, zoneId: replacementId };
+            }
+            applyCardFrameBinding(card, getCloneZoneFrameId(replacement) || undefined);
+        });
+    }
+
     // Insert only after all frame/zone bindings are remapped. If card clones
     // briefly enter the canvas with the original parentZoneId, Fabric events
     // and zone relayout can capture them back into the source zone.
@@ -14001,6 +14169,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             canvas.value.add(cloned);
         }
     });
+    invalidateContainmentZoneCache();
 
     // Rebuild clipping for the new frame tree.
     try {
