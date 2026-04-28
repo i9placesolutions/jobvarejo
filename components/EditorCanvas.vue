@@ -13950,6 +13950,64 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         }
     };
 
+    const preserveClonedPriceUnitState = (source: any, target: any) => {
+        if (!source || !target) return;
+
+        const collectPriceGroups = (root: any): any[] => {
+            const groups: any[] = [];
+            const visit = (node: any) => {
+                if (!node || typeof node !== 'object') return;
+                if (
+                    String((node as any).type || '').toLowerCase() === 'group' &&
+                    String((node as any).name || '') === 'priceGroup' &&
+                    typeof (node as any).getObjects === 'function'
+                ) {
+                    groups.push(node);
+                }
+                if (typeof (node as any).getObjects === 'function') {
+                    try {
+                        ((node as any).getObjects() || []).forEach((child: any) => visit(child));
+                    } catch {
+                        // ignore malformed clone children
+                    }
+                }
+            };
+            visit(root);
+            return groups;
+        };
+
+        const unitNames = new Set([
+            'price_unit_text',
+            'priceUnit',
+            'price_unit',
+            'price_header_unit_text',
+            'retail_unit_text',
+            'wholesale_unit_text'
+        ]);
+        const sourceGroups = collectPriceGroups(source);
+        const targetGroups = collectPriceGroups(target);
+        sourceGroups.forEach((sourceGroup: any, groupIndex: number) => {
+            const targetGroup = targetGroups[groupIndex];
+            if (!targetGroup) return;
+            const sourceUnits = collectObjectsDeep(sourceGroup).filter((o: any) => unitNames.has(String(o?.name || '')));
+            const targetUnits = collectObjectsDeep(targetGroup).filter((o: any) => unitNames.has(String(o?.name || '')));
+            sourceUnits.forEach((sourceUnit: any, unitIndex: number) => {
+                const targetUnit = targetUnits[unitIndex];
+                if (!targetUnit || !isTextLikeObject(targetUnit)) return;
+                const sourceText = typeof sourceUnit?.text === 'string' ? sourceUnit.text : '';
+                targetUnit.set?.({
+                    text: sourceText,
+                    visible: sourceUnit?.visible !== false
+                });
+                targetUnit.visible = sourceUnit?.visible !== false;
+                targetUnit.initDimensions?.();
+                targetUnit.setCoords?.();
+            });
+            targetGroup.dirty = true;
+            targetGroup.setCoords?.();
+        });
+    };
+
     // Clone everything first (preserve z-order), then fix parentFrameId references.
     for (let i = 0; i < originals.length; i++) {
         const original = originals[i];
@@ -13968,6 +14026,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
 
         cloned._customId = newId;
         assignNewDescendantIds(cloned);
+        preserveClonedPriceUnitState(original, cloned);
         cloned.set?.({
             left: (Number(original.left) || 0) + offsetX,
             top: (Number(original.top) || 0) + offsetY,
@@ -31346,8 +31405,13 @@ const repairCollapsedSinglePriceTemplateGeometry = (priceGroup: any, reason: str
         const scaleY = Math.abs(Number(obj?.scaleY ?? 1)) || 1;
         return height * scaleY;
     };
-    const reviveNode = (obj: any, opts: { defaultScale?: number; defaultFontSize?: number; defaultText?: string } = {}) => {
+    const reviveNode = (obj: any, opts: { defaultScale?: number; defaultFontSize?: number; defaultText?: string; preserveHidden?: boolean } = {}) => {
         if (!obj || typeof obj.set !== 'function') return;
+        if (opts.preserveHidden && obj.visible === false) {
+            obj.set({ visible: false });
+            obj.setCoords?.();
+            return;
+        }
         const defaultScale = Number.isFinite(Number(opts.defaultScale)) ? Number(opts.defaultScale) : 1;
         const fallbackScaleX = Number((obj as any).__visibleScaleX ?? (obj as any).__originalScaleX);
         const fallbackScaleY = Number((obj as any).__visibleScaleY ?? (obj as any).__originalScaleY);
@@ -31385,7 +31449,14 @@ const repairCollapsedSinglePriceTemplateGeometry = (priceGroup: any, reason: str
     reviveNode(currency, { defaultScale: 1, defaultFontSize: 18, defaultText: 'R$' });
     reviveNode(integer, { defaultScale: 1, defaultFontSize: 42, defaultText: '22' });
     reviveNode(decimal, { defaultScale: 1, defaultFontSize: 24, defaultText: ',99' });
-    reviveNode(unit, { defaultScale: 1, defaultFontSize: 15, defaultText: 'UN' });
+    // Some single-price templates (ex: black/yellow pill) intentionally keep the
+    // unit field hidden/empty. Duplication runs this recovery path, so do not
+    // revive that field with a default "UN" and make it leak into the label.
+    reviveNode(unit, { defaultScale: 1, defaultFontSize: 15, preserveHidden: true });
+    if (unit?.visible === false && !String(unit?.text || '').trim()) {
+        unit.set?.('text', '');
+        unit.initDimensions?.();
+    }
     reviveNode(legacyPrice, { defaultScale: 1, defaultFontSize: 36, defaultText: '22,99' });
 
     if (background && String(background?.type || '').toLowerCase() === 'image') {
