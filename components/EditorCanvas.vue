@@ -15324,7 +15324,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         if (active && isLikelyProductZone(active)) {
             e.preventDefault();
             openProductReviewForZone(active, {
-                mode: getZoneChildren(active).length > 0 ? 'append' : 'replace'
+                mode: 'replace'
             });
             return;
         }
@@ -26584,7 +26584,7 @@ const handleImportProductList = () => {
     const active = canvas.value.getActiveObject();
     if (active && isLikelyProductZone(active)) {
         openProductReviewForZone(active, {
-            mode: getZoneChildren(active).length > 0 ? 'append' : 'replace'
+            mode: 'replace'
         });
         return;
     }
@@ -29034,7 +29034,7 @@ const focusProductZoneSettings = () => {
 const handleZoneQuickActionFill = () => {
     const summary = selectedZoneQuickActions.value;
     if (!summary) return;
-    openProductReviewForZone(summary.zone, { mode: summary.isEmpty ? 'replace' : 'append' });
+    openProductReviewForZone(summary.zone, { mode: 'replace' });
 }
 
 const handleZoneQuickActionAppend = () => {
