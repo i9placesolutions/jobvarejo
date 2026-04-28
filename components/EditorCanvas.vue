@@ -13717,26 +13717,63 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     }
 
     // Inclusao garantida das zonas: qualquer zona cujo parentFrameId aponte para
-    // um frame ja marcado para duplicar entra no conjunto, independentemente de
-    // o fallback espacial alcanca-la (zonas redimensionadas pelo usuario podem
-    // extrapolar o frame; a regra de "85% de overlap" perde esses casos).
+    // um frame ja marcado para duplicar, OU cujo centro esteja geometricamente
+    // dentro de um frame duplicado, entra no conjunto. A checagem geometrica
+    // cobre o caso (visto em campo) onde o parentFrameId da zona ficou vazio
+    // ou stale — o BFS e o fallback de overlap (>=85%) falhavam, a zona ficava
+    // de fora dos originals e os cards duplicados eram redirecionados para a
+    // zona original.
     {
+        const duplicatedFrames = all.filter((o: any) =>
+            o?._customId && toDuplicateIds.has(String(o._customId)) && isFrameContainerCandidate(o)
+        );
         const duplicatedFrameIdsForZones = new Set(
-            all
-                .filter((o: any) => o?._customId && toDuplicateIds.has(String(o._customId)) && isFrameContainerCandidate(o))
+            duplicatedFrames
                 .map((o: any) => String(o._customId || '').trim())
                 .filter(Boolean)
         );
-        if (duplicatedFrameIdsForZones.size > 0) {
+        if (duplicatedFrames.length > 0) {
             all.forEach((candidate: any) => {
                 if (!candidate || candidate.excludeFromExport || !candidate._customId) return;
                 const candidateId = String(candidate._customId);
                 if (toDuplicateIds.has(candidateId)) return;
                 if (!isLikelyProductZone(candidate)) return;
+
                 const candidateFrameId = String((candidate as any).parentFrameId || '').trim();
-                if (!candidateFrameId || !duplicatedFrameIdsForZones.has(candidateFrameId)) return;
+                let chosenFrameId: string | undefined;
+                if (candidateFrameId && duplicatedFrameIdsForZones.has(candidateFrameId)) {
+                    chosenFrameId = candidateFrameId;
+                } else {
+                    // Fallback geometrico: centro da zona dentro de algum frame duplicado.
+                    const center = typeof candidate.getCenterPoint === 'function'
+                        ? candidate.getCenterPoint()
+                        : { x: Number(candidate.left || 0), y: Number(candidate.top || 0) };
+                    if (Number.isFinite(center?.x) && Number.isFinite(center?.y)) {
+                        for (const frame of duplicatedFrames) {
+                            const fb = typeof frame.getBoundingRect === 'function' ? frame.getBoundingRect(true) : null;
+                            if (!fb) continue;
+                            const inside =
+                                center.x >= fb.left &&
+                                center.x <= fb.left + fb.width &&
+                                center.y >= fb.top &&
+                                center.y <= fb.top + fb.height;
+                            if (inside) {
+                                chosenFrameId = String(frame._customId || '').trim() || undefined;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!chosenFrameId) return;
                 toDuplicateIds.add(candidateId);
-                resolvedParentByOriginalId.set(candidateId, candidateFrameId);
+                resolvedParentByOriginalId.set(candidateId, chosenFrameId);
+                if (import.meta.dev) {
+                    console.log('[duplicateFrameWithContents] zona incluida via fallback', {
+                        zoneId: candidateId,
+                        viaParentFrameId: !!candidateFrameId,
+                        chosenFrameId
+                    });
+                }
             });
         }
     }
@@ -13896,17 +13933,6 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             cloned.name = copiedName;
         }
 
-        // Insert right above the duplicated block to keep stacking predictable.
-        try {
-            if (typeof (canvas.value as any).insertAt === 'function') {
-                (canvas.value as any).insertAt(insertBaseIndex + clones.length, cloned);
-            } else {
-                canvas.value.add(cloned);
-            }
-        } catch {
-            canvas.value.add(cloned);
-        }
-
         clones.push(cloned);
     }
 
@@ -13958,6 +13984,21 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             delete clone.objectMaskSourceId;
         } else {
             clone.objectMaskSourceId = oldToNewId.get(oldMaskSource) || oldMaskSource;
+        }
+    });
+
+    // Insert only after all frame/zone bindings are remapped. If card clones
+    // briefly enter the canvas with the original parentZoneId, Fabric events
+    // and zone relayout can capture them back into the source zone.
+    clones.forEach((cloned: any, index: number) => {
+        try {
+            if (typeof (canvas.value as any).insertAt === 'function') {
+                (canvas.value as any).insertAt(insertBaseIndex + index, cloned);
+            } else {
+                canvas.value.add(cloned);
+            }
+        } catch {
+            canvas.value.add(cloned);
         }
     });
 
