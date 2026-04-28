@@ -104,6 +104,7 @@ const PenContextualToolbar = defineAsyncComponent(() => import('./PenContextualT
 const FrameLabelsOverlay = defineAsyncComponent(() => import('./FrameLabelsOverlay.vue'))
 const EditorModalsHost = defineAsyncComponent(() => import('./EditorModalsHost.vue'))
 const EditorRightSidebar = defineAsyncComponent(() => import('./EditorRightSidebar.vue'))
+const CanvaImportDialog = defineAsyncComponent(() => import('./CanvaImportDialog.vue'))
 const ZoneQuickActions = defineAsyncComponent(() => import('./ZoneQuickActions.vue'))
 import {
   Undo,
@@ -5044,6 +5045,8 @@ const {
   project,
   activePage,
   initProject,
+  addPage,
+  switchPage,
   updatePageData,
   updatePageThumbnail,
   deletePage,
@@ -8342,6 +8345,78 @@ const getImportZonesExistingCount = (zones: any[]): number => {
     }, 0)
 }
 
+const BASE_PRODUCT_ZONE_NAME = 'Zona de Produtos'
+const isDefaultProductZoneName = (value: any): boolean => {
+    const name = String(value || '').trim()
+    return !name || /^Zona de Produtos(?:\s+\d+)?$/i.test(name)
+}
+
+const getNextProductZoneName = (excludeZone?: any): string => {
+    const used = new Set<number>()
+    const zones = (canvas.value?.getObjects?.() || []).filter((obj: any) => isLikelyProductZone(obj) && obj !== excludeZone)
+    zones.forEach((zone: any) => {
+        const name = String((zone as any)?.zoneName || '').trim()
+        if (!name) return
+        if (name.toLowerCase() === BASE_PRODUCT_ZONE_NAME.toLowerCase()) {
+            used.add(1)
+            return
+        }
+        const match = /^Zona de Produtos\s+(\d+)$/i.exec(name)
+        if (match) {
+            const n = Number(match[1])
+            if (Number.isInteger(n) && n > 0) used.add(n)
+        }
+    })
+    let index = 1
+    while (used.has(index)) index += 1
+    return `${BASE_PRODUCT_ZONE_NAME} ${index}`
+}
+
+const ensureProductZoneNamesDistinct = (zonesInput?: any[]) => {
+    const zones = (Array.isArray(zonesInput) ? zonesInput : (canvas.value?.getObjects?.() || []))
+        .filter((obj: any) => isLikelyProductZone(obj))
+    if (!zones.length) return
+
+    const reservedNames = new Set<string>()
+    const usedNumbers = new Set<number>()
+    const ordered = sortProductZonesByVisualOrder(zones)
+    ordered.forEach((zone: any) => {
+        const current = String((zone as any)?.zoneName || '').trim()
+        if (!current || isDefaultProductZoneName(current)) return
+        const key = current.toLowerCase()
+        if (reservedNames.has(key)) return
+        reservedNames.add(key)
+        const match = /^Zona de Produtos\s+(\d+)$/i.exec(current)
+        if (match) {
+            const n = Number(match[1])
+            if (Number.isInteger(n) && n > 0) usedNumbers.add(n)
+        }
+    })
+
+    let nextIndex = 1
+    const nextDefaultName = () => {
+        while (usedNumbers.has(nextIndex) || reservedNames.has(`${BASE_PRODUCT_ZONE_NAME} ${nextIndex}`.toLowerCase())) {
+            nextIndex += 1
+        }
+        const name = `${BASE_PRODUCT_ZONE_NAME} ${nextIndex}`
+        usedNumbers.add(nextIndex)
+        reservedNames.add(name.toLowerCase())
+        nextIndex += 1
+        return name
+    }
+
+    const seenCustomNames = new Set<string>()
+    ordered.forEach((zone: any) => {
+        const current = String((zone as any)?.zoneName || '').trim()
+        const key = current.toLowerCase()
+        if (!current || isDefaultProductZoneName(current) || seenCustomNames.has(key)) {
+            ;(zone as any).zoneName = nextDefaultName()
+            return
+        }
+        seenCustomNames.add(key)
+    })
+}
+
 const openProductReviewForZone = (zone: any, opts: { mode?: 'replace' | 'append' } = {}): boolean => {
     productReviewInitialImportMode.value = opts.mode === 'append' ? 'append' : 'replace'
     return openProductReviewForZoneHelper({
@@ -8436,6 +8511,78 @@ const openAiGenerationModal = () => {
     aiPageHeight.value = Math.max(64, Math.round(Number(activePage.value?.height || 1920)))
     aiReferenceImageDataUrl.value = null
     showAIModal.value = true
+}
+
+const showCanvaImportDialog = ref(false)
+const openCanvaImportDialog = () => { showCanvaImportDialog.value = true }
+
+interface CanvaImportedPage {
+    index: number
+    key: string
+    url: string
+    width: number
+    height: number
+}
+
+const handleCanvaPagesImported = (payload: { design: { id: string; title?: string }; pages: CanvaImportedPage[] }) => {
+    const importedPages = Array.isArray(payload?.pages) ? payload.pages : []
+    if (importedPages.length === 0) return
+
+    const designTitle = String(payload?.design?.title || '').trim() || 'Canva'
+    const firstNewIndex = project.pages.length
+
+    importedPages.forEach((page) => {
+        const fallbackW = 1080
+        const fallbackH = 1080
+        const pageW = Math.max(64, Math.round(Number(page.width) || fallbackW))
+        const pageH = Math.max(64, Math.round(Number(page.height) || fallbackH))
+        const pageName = `${designTitle} — Pag. ${page.index}`
+        addPage('FREE_DESIGN', pageW, pageH, pageName)
+        const newPageIdx = project.pages.length - 1
+        if (newPageIdx < 0) return
+
+        // Constroi um canvasData minimo: uma unica imagem (do PNG exportado pelo Canva)
+        // ocupando a pagina inteira, com selecao livre para o usuario reaproveitar/excluir.
+        const imageObject: Record<string, any> = {
+            type: 'image',
+            version: '7.0.0',
+            originX: 'left',
+            originY: 'top',
+            left: 0,
+            top: 0,
+            width: pageW,
+            height: pageH,
+            scaleX: 1,
+            scaleY: 1,
+            opacity: 1,
+            visible: true,
+            crossOrigin: 'anonymous',
+            src: page.url,
+            image_wasabi_key: page.key,
+            name: 'canva-import-background',
+            _customId: makeId(),
+            selectable: true,
+            evented: true
+        }
+
+        const canvasJson: Record<string, any> = {
+            version: '7.0.0',
+            background: '#ffffff',
+            objects: [imageObject]
+        }
+
+        updatePageData(newPageIdx, canvasJson, {
+            source: 'system',
+            markUnsaved: true,
+            reason: 'canva-import'
+        })
+    })
+
+    if (firstNewIndex < project.pages.length) {
+        switchPage(firstNewIndex)
+    }
+    triggerAutoSave?.()
+    notifyEditorInfo(`${importedPages.length} pagina(s) importada(s) do Canva`)
 }
 onUnmounted(() => {
     if (aiToastTimer) clearTimeout(aiToastTimer)
@@ -8640,6 +8787,7 @@ const availableFramesForImport = computed(() => {
 
 const availableZonesForImport = computed(() => {
     const zones = getImportTargetZones()
+    ensureProductZoneNamesDistinct(zones)
     return zones.map((zone: any, index: number) => {
         const id = String((zone as any)?._customId || (zone as any)?.id || '').trim() || `zone-${index + 1}`
         const metrics = getZoneMetrics(zone) ?? zone?.getBoundingRect?.(true)
@@ -26539,7 +26687,7 @@ const resolveOrCreateZoneForFrame = (frame: any): any | null => {
     })
 
     ;(zone as any)._customId = makeCanvasObjectId()
-    ;(zone as any).zoneName = 'Zona de Produtos'
+    ;(zone as any).zoneName = getNextProductZoneName(zone)
     ;(zone as any).role = 'grid'
     ;(zone as any).contentSource = 'multi-frame'
     ;(zone as any).contentStatus = 'empty'
@@ -27118,7 +27266,7 @@ const addGridZone = () => {
     
     // Add Custom ID
     (group as any)._customId = makeCanvasObjectId();
-    (group as any).zoneName = 'Zona de Produtos';
+    (group as any).zoneName = getNextProductZoneName(group);
     (group as any).role = 'grid';
     (group as any).contentSource = 'manual';
     (group as any).contentStatus = 'empty';
@@ -28451,7 +28599,7 @@ const syncZoneDerivedMetadata = (
     });
 
     if (!(zone as any).zoneName) {
-        (zone as any).zoneName = 'Zona de Produtos';
+        (zone as any).zoneName = getNextProductZoneName(zone);
     }
     if (!(zone as any).role) {
         (zone as any).role = 'grid';
@@ -28719,7 +28867,8 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
         }
 
         if (prop === 'name') {
-            zone.set('zoneName', String(val || '').trim() || 'Zona de Produtos');
+            zone.set('zoneName', String(val || '').trim() || getNextProductZoneName(zone));
+            ensureProductZoneNamesDistinct();
             return;
         }
 
@@ -40258,7 +40407,7 @@ const rehydrateCanvasZones = (
             if (z.name === 'gridZone') z.isGridZone = true;
             if (z.name === 'productZoneContainer') z.isProductZone = true;
             if (!z.isGridZone && !z.isProductZone) z.isGridZone = true;
-            if (!(z as any).zoneName) (z as any).zoneName = 'Zona de Produtos';
+            if (!(z as any).zoneName) (z as any).zoneName = getNextProductZoneName(z);
             if (!(z as any).role) (z as any).role = 'grid';
             if (!(z as any).contentSource) (z as any).contentSource = 'manual';
             if (!(z as any).overflowPolicy) (z as any).overflowPolicy = 'warn';
@@ -40331,6 +40480,8 @@ const rehydrateCanvasZones = (
             }
             syncZoneDerivedMetadata(z);
         });
+
+        ensureProductZoneNamesDistinct(zones);
 
         // ═══════════════════════════════════════════════════════════════════
         // CRITICAL FIX: Sync composable state from persisted zone data.
@@ -40730,6 +40881,12 @@ const handleRecalculateLayout = () => {
         @created="handleAiStudioCreated"
       />
 
+      <CanvaImportDialog
+        v-if="showCanvaImportDialog"
+        v-model="showCanvaImportDialog"
+        @pages-imported="handleCanvaPagesImported"
+      />
+
       <div
         v-if="showProductImageUploadPicker"
         class="fixed inset-0 z-140 bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4"
@@ -41087,6 +41244,7 @@ const handleRecalculateLayout = () => {
             @update:show-zoom-menu="showZoomMenu = $event"
             @present="startPresentation()"
             @open-ai-generate="openAiGenerationModal"
+            @open-canva-import="openCanvaImportDialog"
             @open-share="shareDesign"
             @zoom-50="handleZoom50"
             @zoom-100="handleZoom100"

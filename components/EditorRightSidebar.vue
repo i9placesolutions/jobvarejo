@@ -49,6 +49,7 @@ const emit = defineEmits<{
   (e: 'update:showZoomMenu', value: boolean): void
   (e: 'present'): void
   (e: 'open-ai-generate'): void
+  (e: 'open-canva-import'): void
   (e: 'open-share'): void
   (e: 'zoom-50'): void
   (e: 'zoom-100'): void
@@ -107,6 +108,7 @@ const emit = defineEmits<{
         @update:show-zoom-menu="emit('update:showZoomMenu', $event)"
         @present="emit('present')"
         @open-ai-generate="emit('open-ai-generate')"
+        @open-canva-import="emit('open-canva-import')"
         @open-share="emit('open-share')"
         @zoom-50="emit('zoom-50')"
         @zoom-100="emit('zoom-100')"

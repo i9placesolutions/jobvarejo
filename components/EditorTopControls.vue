@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Play, Share2, ChevronDown, View, Check, LayoutGrid, Sparkles } from 'lucide-vue-next'
+import { Play, Share2, ChevronDown, View, Check, LayoutGrid, Sparkles, Download } from 'lucide-vue-next'
 
 const props = defineProps<{
   collaborators: any[]
@@ -22,6 +22,7 @@ const emit = defineEmits<{
   (e: 'update:showZoomMenu', value: boolean): void
   (e: 'present'): void
   (e: 'open-ai-generate'): void
+  (e: 'open-canva-import'): void
   (e: 'open-share'): void
   (e: 'zoom-50'): void
   (e: 'zoom-100'): void
@@ -90,6 +91,15 @@ const closeViewMenu = () => { showViewMenu.value = false }
     >
       <Sparkles class="w-4 h-4 shrink-0 text-violet-300" />
       <span>Gerar IA</span>
+    </button>
+
+    <button
+      @click="emit('open-canva-import')"
+      class="h-8 px-3.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/30 hover:border-cyan-400/50 text-cyan-100 rounded-full text-[12px] font-semibold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap"
+      title="Importar paginas do Canva"
+    >
+      <Download class="w-4 h-4 shrink-0 text-cyan-300" />
+      <span>Canva</span>
     </button>
 
     <button
