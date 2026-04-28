@@ -13848,6 +13848,11 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             evented: true,
             selectable: true,
         });
+        // Forca recalculo dos cached bounds. Sem isso, getBoundingRect/oCoords
+        // ficam apontando para a posicao antiga, e recalculateZoneLayout
+        // posiciona os cards usando a bounding box errada (resultado: cards
+        // da zona duplicada sao espalhados no frame original).
+        try { cloned.setCoords?.(); } catch {}
 
         // Avoid stale frame clip refs; keep object masks.
         const isObjectMaskClone = !!(cloned as any)?.objectMaskEnabled;
@@ -13975,8 +13980,19 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         clones.forEach((o: any) => {
             if (o) reapplyRuntimeVisualPatchesTree(o);
         });
+        // Garante que todos os clones tenham bounds atualizados antes do
+        // recalculateZoneLayout consultar getBoundingRect/getZoneMetrics.
+        clones.forEach((o: any) => {
+            try { o?.setCoords?.(); } catch {}
+        });
         const zones = clones.filter((o: any) => isLikelyProductZone(o));
         const cards = clones.filter((o: any) => isLikelyProductCard(o) || o?.isProductCard || o?.isSmartObject);
+        if (import.meta.dev) {
+            console.log('[duplicateFrameWithContents] pos-clone', {
+                zones: zones.map((z: any) => ({ id: z._customId, parentFrameId: z.parentFrameId, left: Math.round(z.left), top: Math.round(z.top) })),
+                cards: cards.map((c: any) => ({ id: c._customId, parentZoneId: c.parentZoneId, parentFrameId: c.parentFrameId, left: Math.round(c.left), top: Math.round(c.top) }))
+            });
+        }
         zones.forEach((zone: any) => {
             ensureZoneSanity(zone);
             const zoneId = String((zone as any)._customId || '').trim();
