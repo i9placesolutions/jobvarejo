@@ -30044,6 +30044,7 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
             return (n === 'price_decimal_text' || n === 'retail_decimal_text' || n === 'wholesale_decimal_text') && isTextLikeObject(o);
         });
         const baseFontSize = styles.priceFontSize;
+        (priceGroup as any).__priceFontSizeOverride = baseFontSize;
         integerTexts.forEach((txt: any) => {
             txt.set('fontSize', baseFontSize);
             if (typeof txt.initDimensions === 'function') txt.initDimensions();
@@ -30596,10 +30597,12 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     const effectiveTargets = targets.length > 0
         ? targets
         : (zone ? [zone] : []);
+    const previousZoneStylesByTarget = new Map<any, GlobalStyles>();
     
     if (effectiveTargets.length > 0) {
         effectiveTargets.forEach((z: any) => {
             const prev = getZoneGlobalStyles(z);
+            previousZoneStylesByTarget.set(z, prev);
             (z as any)._zoneGlobalStyles = normalizeGlobalStyles({ ...prev, [prop]: value });
         });
     }
@@ -30618,6 +30621,10 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
             }
             if (templateApplyFailed) {
                 productZoneState.globalStyles.value = normalizeGlobalStyles(baseStylesForState);
+                effectiveTargets.forEach((z: any) => {
+                    const prev = previousZoneStylesByTarget.get(z);
+                    if (prev) (z as any)._zoneGlobalStyles = normalizeGlobalStyles(prev);
+                });
                 refreshSelectedRef();
                 return;
             }
@@ -34772,6 +34779,17 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
     const setTextSizing = (txt: any, defaultScale: number) => {
         if (!txt || !txt.type || !String(txt.type).includes('text')) return;
+        const priceFontSizeOverride = Number((priceGroup as any).__priceFontSizeOverride);
+        if (Number.isFinite(priceFontSizeOverride) && priceFontSizeOverride > 0) {
+            const ratio = defaultScale / 0.72;
+            txt.set({
+                fontSize: priceFontSizeOverride * ratio * textScaleMult,
+                scaleX: 1,
+                scaleY: 1
+            });
+            if (typeof txt.initDimensions === 'function') txt.initDimensions();
+            return;
+        }
         const scale = typeof txt.__fontScale === 'number' ? txt.__fontScale : defaultScale;
         txt.set({ fontSize: pillH * scale * textScaleMult, scaleX: 1, scaleY: 1 });
         if (typeof txt.initDimensions === 'function') txt.initDimensions();
@@ -38036,11 +38054,14 @@ const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: P
         splashFill: txt((s as any).splashFill),
         splashColor: txt((s as any).splashColor ?? (s as any).accentColor),
         splashTextColor: txt((s as any).splashTextColor),
+        splashStrokeWidth: num((s as any).splashStrokeWidth),
         priceTextColor: txt((s as any).priceTextColor),
         priceCurrencyColor: txt((s as any).priceCurrencyColor),
         priceFont: txt((s as any).priceFont),
+        priceFontSize: num((s as any).priceFontSize),
         priceFontWeight: txt((s as any).priceFontWeight),
         priceFontStyle: txt((s as any).priceFontStyle),
+        currencySymbol: txt((s as any).currencySymbol),
         prodNameScale: num((s as any).prodNameScale),
         prodNameTransform: txt((s as any).prodNameTransform),
         prodNameLineHeight: num((s as any).prodNameLineHeight),
@@ -38499,11 +38520,29 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
             // Apply label styling overrides (local to the selected zone/design; never mutates templates).
             if (styles && typeof splash.getObjects === 'function') {
                 const parts = collectObjectsDeep(splash);
-                priceBg = parts.find((o: any) => o?.name === 'price_bg');
-                const currencyText = parts.find((o: any) => o?.name === 'price_currency_text');
-                const priceInteger = parts.find((o: any) => o?.name === 'price_integer_text');
-                const priceDecimal = parts.find((o: any) => o?.name === 'price_decimal_text');
-                const priceUnit = parts.find((o: any) => o?.name === 'price_unit_text');
+                const getName = (o: any) => String(o?.name || '');
+                const priceBgNames = new Set(['price_bg', 'atac_retail_bg', 'atac_wholesale_bg']);
+                const currencyTextNames = new Set(['price_currency_text', 'retail_currency_text', 'wholesale_currency_text']);
+                const integerTextNames = new Set(['price_integer_text', 'retail_integer_text', 'wholesale_integer_text']);
+                const decimalTextNames = new Set(['price_decimal_text', 'retail_decimal_text', 'wholesale_decimal_text']);
+                const priceTextNames = new Set([
+                    'price_integer_text',
+                    'price_decimal_text',
+                    'price_unit_text',
+                    'price_value_text',
+                    'retail_integer_text',
+                    'retail_decimal_text',
+                    'retail_unit_text',
+                    'wholesale_integer_text',
+                    'wholesale_decimal_text',
+                    'wholesale_unit_text'
+                ]);
+                const allPriceBgs = parts.filter((o: any) => priceBgNames.has(getName(o)));
+                const currencyTexts = parts.filter((o: any) => currencyTextNames.has(getName(o)) && isTextLikeObject(o));
+                const integerTexts = parts.filter((o: any) => integerTextNames.has(getName(o)) && isTextLikeObject(o));
+                const decimalTexts = parts.filter((o: any) => decimalTextNames.has(getName(o)) && isTextLikeObject(o));
+                const priceTexts = parts.filter((o: any) => priceTextNames.has(getName(o)) && isTextLikeObject(o));
+                priceBg = allPriceBgs[0] || null;
                 const normalizeColorToken = (value: any) => {
                     const raw = String(value ?? '').trim().toLowerCase();
                     if (!raw) return '';
@@ -38545,31 +38584,35 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                 );
                 const hasExplicitCurrencyColor = typeof styles.priceCurrencyColor === 'string' && styles.priceCurrencyColor.trim().length > 0;
 
-                if (priceBg) {
+                allPriceBgs.forEach((bg: any) => {
                     // Apply styles to price background
                     // Priority: explicit splashFill > template fill > default
                     if (hasExplicitFill) {
-                        priceBg.set('fill', styles.splashFill);
+                        bg.set('fill', styles.splashFill);
                     }
                     if (hasExplicitRoundness && typeof styles.splashRoundness === 'number') {
                         const roundness = clamp(styles.splashRoundness, 0, 1);
-                        (priceBg as any).__roundness = roundness;
-                        if (String(priceBg?.type || '').toLowerCase() === 'rect') {
-                            const hRaw = Number(priceBg.height || 0);
+                        (bg as any).__roundness = roundness;
+                        if (String(bg?.type || '').toLowerCase() === 'rect') {
+                            const hRaw = Number(bg.height || 0);
                             if (Number.isFinite(hRaw) && hRaw > 0) {
                                 const radius = (hRaw / 2) * roundness;
-                                priceBg.set({ rx: radius, ry: radius });
+                                bg.set({ rx: radius, ry: radius });
                             }
                         }
                     }
-                    if (hasExplicitStrokeWidth) (priceBg as any).__strokeWidth = styles.splashStrokeWidth;
+                    if (hasExplicitStrokeWidth) {
+                        const strokeVal = Math.max(0, Number(styles.splashStrokeWidth) || 0);
+                        (bg as any).__strokeWidth = strokeVal;
+                        if (!preserveTemplateVisual) bg.set('strokeWidth', strokeVal);
+                    }
 
                     // Apply accent/splash color - always apply if set, regardless of template
                     // This allows users to override template colors with zone styles
                     if (hasExplicitAccent && accent) {
-                        priceBg.set('stroke', accent);
+                        bg.set('stroke', accent);
                     }
-                }
+                });
 
                 const applyTextShared = (t: any) => {
                     if (!t || !String(t.type || '').includes('text')) return;
@@ -38624,8 +38667,26 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     if (hasExplicitCurrencyColor) t.set('fill', styles.priceCurrencyColor);
                 };
 
-                applyCurrencyText(currencyText);
-                [priceInteger, priceDecimal, priceUnit].forEach(applyPriceText);
+                currencyTexts.forEach(applyCurrencyText);
+                priceTexts.forEach(applyPriceText);
+                if (styles.currencySymbol !== undefined) {
+                    currencyTexts.forEach((ct: any) => {
+                        ct.set('text', String(styles.currencySymbol));
+                        if (typeof ct.initDimensions === 'function') ct.initDimensions();
+                    });
+                }
+                if (typeof styles.priceFontSize === 'number' && Number.isFinite(styles.priceFontSize) && styles.priceFontSize > 0) {
+                    const baseFontSize = styles.priceFontSize;
+                    (splash as any).__priceFontSizeOverride = baseFontSize;
+                    integerTexts.forEach((txt: any) => {
+                        txt.set('fontSize', baseFontSize);
+                        if (typeof txt.initDimensions === 'function') txt.initDimensions();
+                    });
+                    decimalTexts.forEach((txt: any) => {
+                        txt.set('fontSize', Math.round(baseFontSize * 0.6));
+                        if (typeof txt.initDimensions === 'function') txt.initDimensions();
+                    });
+                }
                 if (preserveTemplateVisual) {
                     // Keep authored geometry, but expand the manual template when typography grows.
                     refreshManualTemplateAfterTypographyChange(splash);

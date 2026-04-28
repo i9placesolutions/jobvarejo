@@ -510,6 +510,20 @@ const isActiveTemplateAtacarejo = computed(() => {
   return hasAtacNode(tpl.group);
 });
 
+const isActiveTemplateShapeLocked = computed(() => {
+  const templateId = String(props.globalStyles?.splashTemplateId || '').trim();
+  if (!templateId) return false;
+  const tpl = props.labelTemplates?.find((t) => String(t.id) === templateId);
+  if (!tpl?.group) return false;
+  const hasPreservedGeometry = (obj: any): boolean => {
+    if (!obj || typeof obj !== 'object') return false;
+    if (obj.__preserveManualLayout === true || obj.__isCustomTemplate === true) return true;
+    if (Array.isArray(obj.objects)) return obj.objects.some(hasPreservedGeometry);
+    return false;
+  };
+  return hasPreservedGeometry(tpl.group);
+});
+
 const zoneRoleLabel = computed(() => getZoneRoleLabel(props.zone.role ?? 'grid'));
 const zoneStatusLabel = computed(() => getZoneStatusLabel(props.zone.contentStatus ?? 'empty'));
 const zoneSourceLabel = computed(() => {
@@ -2048,7 +2062,9 @@ onBeforeUnmount(() => {
             <div class="control-card__head">
               <div>
                 <label class="field-label">Borda da etiqueta</label>
-                <p class="field-hint">Intensidade do contorno da etiqueta.</p>
+                <p class="field-hint">
+                  {{ isActiveTemplateShapeLocked ? 'Controlada pelo modelo selecionado.' : 'Intensidade do contorno da etiqueta.' }}
+                </p>
               </div>
               <div class="value-editor">
                 <input
@@ -2060,6 +2076,7 @@ onBeforeUnmount(() => {
                   class="value-input"
                   :value="Math.round(globalStyles?.splashStrokeWidth ?? 0)"
                   aria-label="Borda da etiqueta"
+                  :disabled="isActiveTemplateShapeLocked"
                   @input="_dUpdateGlobalInt('splashStrokeWidth', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.splashStrokeWidth ?? 0, 0, 24)"
                 />
                 <span class="value-suffix">px</span>
@@ -2071,6 +2088,7 @@ onBeforeUnmount(() => {
               max="24"
               :value="globalStyles?.splashStrokeWidth ?? 0"
               class="slider text-fuchsia-400"
+              :disabled="isActiveTemplateShapeLocked"
               @input="updateGlobal('splashStrokeWidth', Number(($event.target as HTMLInputElement).value))"
             />
           </div>
@@ -2079,7 +2097,9 @@ onBeforeUnmount(() => {
             <div class="control-card__head">
               <div>
                 <label class="field-label">Cantos</label>
-                <p class="field-hint">Quanto a etiqueta fica reta ou arredondada.</p>
+                <p class="field-hint">
+                  {{ isActiveTemplateShapeLocked ? 'Controlados pelo modelo selecionado.' : 'Quanto a etiqueta fica reta ou arredondada.' }}
+                </p>
               </div>
               <div class="value-editor">
                 <input
@@ -2091,6 +2111,7 @@ onBeforeUnmount(() => {
                   class="value-input"
                   :value="Math.round((globalStyles?.splashRoundness ?? 1) * 100)"
                   aria-label="Cantos da etiqueta"
+                  :disabled="isActiveTemplateShapeLocked"
                   @input="_dUpdateGlobalFloat('splashRoundness', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashRoundness ?? 1, 0, 1, 2)"
                 />
                 <span class="value-suffix">%</span>
@@ -2102,6 +2123,7 @@ onBeforeUnmount(() => {
               max="100"
               :value="Math.round((globalStyles?.splashRoundness ?? 1) * 100)"
               class="slider text-fuchsia-400"
+              :disabled="isActiveTemplateShapeLocked"
               @input="updateGlobal('splashRoundness', Number(($event.target as HTMLInputElement).value) / 100)"
             />
           </div>
