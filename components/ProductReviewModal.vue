@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import Dialog from './ui/Dialog.vue'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
-import { Sparkles, X, Check, AlertCircle, Loader2, Upload, Plus, Play, RefreshCw, ChevronDown, SlidersHorizontal, Settings2, Wand2, ImageOff, Search as SearchIcon } from 'lucide-vue-next'
+import { Sparkles, X, Check, AlertCircle, Loader2, Upload, Plus, Play, RefreshCw, ChevronDown, SlidersHorizontal, Settings2, Wand2 } from 'lucide-vue-next'
 import { useProductProcessor, type SmartProduct, type SmartProductImageCandidate } from '../composables/useProductProcessor'
 import { toWasabiDirectUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
@@ -1018,9 +1018,16 @@ const matchesReviewFilter = (product: SmartProduct): boolean => {
 
 const filteredProductRows = computed(() => {
     const filteredSet = reviewSearch.value.trim() ? new Set<any>(filteredProducts.value) : null
+    const zoneFilter = zoneFilterId.value
     return productRows.value.filter((row) => {
         if (filteredSet && !filteredSet.has(row.product)) return false
-        return matchesReviewFilter(row.product)
+        if (!matchesReviewFilter(row.product)) return false
+        if (zoneFilter) {
+            const assigned = getAssignedZoneId(row.productId)
+            if (zoneFilter === '__none__') return !assigned
+            return assigned === zoneFilter
+        }
+        return true
     })
 })
 
@@ -1732,14 +1739,6 @@ const multiZoneImportCount = computed(() => productRows.value.filter(row => !!ge
 const multiZoneUnassignedCount = computed(() => Math.max(0, productRows.value.length - multiZoneImportCount.value))
 const countProductsAssignedToZone = (zoneId: string): number =>
     productRows.value.filter(row => getAssignedZoneId(row.productId) === zoneId).length
-const zoneAssignmentRowsVisible = computed(() => {
-    const rows = filteredProductRows.value
-    if (!zoneFilterId.value) return rows
-    if (zoneFilterId.value === '__none__') {
-        return rows.filter(row => !getAssignedZoneId(row.productId))
-    }
-    return rows.filter(row => getAssignedZoneId(row.productId) === zoneFilterId.value)
-})
 const isProcessingProducts = computed(() => products.value.some((p: any) => p.status === 'processing'))
 const isImageQueueLocked = computed(() => isImageQueueRunning.value)
 const canUseMultiFrame = computed(() => availableFrames.value.length > 0)
@@ -2878,150 +2877,67 @@ const getAssetDisplayName = (asset: any): string => {
 
                     <div
                         v-if="targetMode === 'zone' && canUseMultiZone"
-                        class="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3.5 space-y-3 shrink-0"
+                        class="shrink-0 rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2 flex flex-wrap items-center gap-1.5"
                     >
-                        <!-- Header -->
-                        <div class="flex items-center justify-between gap-3">
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">Divisão por zona</span>
-                                    <span v-if="multiZoneUnassignedCount > 0" class="rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-200 text-[9px] font-semibold px-1.5 py-0.5">{{ multiZoneUnassignedCount }} sem zona</span>
-                                </div>
-                                <div class="mt-0.5 text-[11px] text-zinc-500">
-                                    Cada produto vai para a zona escolhida no card. Use os chips para filtrar.
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                class="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-[11px] font-medium text-sky-200 transition-colors"
-                                @click="autoDistributeZoneAssignments"
-                            >
-                                <Wand2 class="w-3 h-3" />
-                                Auto distribuir
-                            </button>
-                        </div>
-
-                        <!-- Chips das zonas com contagem alocada -->
-                        <div class="flex flex-wrap items-center gap-1.5">
-                            <button
-                                v-for="zone in availableZones"
-                                :key="zone.id"
-                                type="button"
-                                class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-[11px] transition-colors"
-                                :class="zoneFilterId === zone.id
-                                    ? 'border-sky-400/60 bg-sky-500/15 text-sky-100'
-                                    : 'border-zinc-700 bg-zinc-900/70 hover:border-zinc-500 text-zinc-200'"
-                                @click="zoneFilterId = zoneFilterId === zone.id ? null : zone.id"
-                            >
-                                <span class="font-medium truncate max-w-32">{{ zone.name }}</span>
-                                <span
-                                    class="rounded-md px-1.5 py-0.5 text-[10px] tabular-nums font-semibold"
-                                    :class="countProductsAssignedToZone(zone.id) > 0 ? 'bg-emerald-500/20 text-emerald-200' : 'bg-zinc-800 text-zinc-400'"
-                                >
-                                    {{ countProductsAssignedToZone(zone.id) }}
-                                </span>
-                                <span v-if="zone.frameName" class="text-[9px] text-zinc-500 truncate max-w-24">· {{ zone.frameName }}</span>
-                            </button>
-                            <button
-                                v-if="multiZoneUnassignedCount > 0"
-                                type="button"
-                                class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-[11px] transition-colors"
-                                :class="zoneFilterId === '__none__'
-                                    ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
-                                    : 'border-zinc-700 bg-zinc-900/70 hover:border-zinc-500 text-zinc-300'"
-                                @click="zoneFilterId = zoneFilterId === '__none__' ? null : '__none__'"
-                            >
-                                <span class="font-medium">Sem zona</span>
-                                <span class="rounded-md bg-amber-500/20 text-amber-200 px-1.5 py-0.5 text-[10px] tabular-nums font-semibold">{{ multiZoneUnassignedCount }}</span>
-                            </button>
-                            <button
-                                v-if="zoneFilterId"
-                                type="button"
-                                class="ml-1 text-[10px] text-zinc-500 hover:text-zinc-300 underline underline-offset-2"
-                                @click="zoneFilterId = null"
-                            >
-                                limpar filtro
-                            </button>
-                        </div>
-
-                        <!-- Grid de cards visuais -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 max-h-[42vh] overflow-y-auto custom-scrollbar pr-1">
-                            <article
-                                v-for="row in zoneAssignmentRowsVisible"
-                                :key="`zone-card-${row.productId}`"
-                                class="rounded-xl border bg-zinc-950/60 hover:bg-zinc-950/80 transition-all p-2.5 flex gap-2.5"
-                                :class="getAssignedZoneId(row.productId) ? 'border-zinc-800/80' : 'border-amber-500/30'"
-                            >
-                                <div class="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/80 flex items-center justify-center">
-                                    <img
-                                        v-if="row.product?.imageUrl"
-                                        :src="resolveProductImageUrl(row.product.imageUrl)"
-                                        class="h-full w-full object-contain"
-                                        alt=""
-                                    />
-                                    <ImageOff v-else class="h-4 w-4 text-zinc-600" />
-                                </div>
-                                <div class="min-w-0 flex-1 flex flex-col">
-                                    <div class="text-[11px] font-semibold leading-tight text-white line-clamp-1">
-                                        {{ row.product?.name || `Produto ${row.index + 1}` }}
-                                    </div>
-                                    <div class="text-[9px] text-zinc-500 line-clamp-1 mt-0.5">
-                                        <span class="text-zinc-400">#{{ row.index + 1 }}</span>
-                                        <span v-if="row.product?.brand"> • {{ row.product.brand }}</span>
-                                        <span v-if="row.product?.weight"> • {{ row.product.weight }}</span>
-                                    </div>
-                                    <div class="mt-1 flex items-center gap-1">
-                                        <span
-                                            v-if="hasCommercialPrice(row.product)"
-                                            class="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-200"
-                                        >
-                                            R$ {{ getFirstCommercialPrice(row.product) }}
-                                        </span>
-                                        <span
-                                            v-else
-                                            class="rounded-md border border-rose-500/20 bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-rose-200"
-                                        >
-                                            Sem preço
-                                        </span>
-                                    </div>
-                                    <select
-                                        :value="getAssignedZoneId(row.productId) || ''"
-                                        @change="setZoneAssignmentForProduct(row.productId, String(($event.target as HTMLSelectElement).value || ''))"
-                                        class="mt-1.5 h-6 w-full bg-zinc-900 border rounded text-[10px] text-zinc-200 px-1.5 focus:outline-none focus:border-sky-400/60"
-                                        :class="getAssignedZoneId(row.productId) ? 'border-zinc-700' : 'border-amber-500/40'"
-                                    >
-                                        <option value="">(sem zona)</option>
-                                        <option v-for="zone in availableZones" :key="zone.id" :value="zone.id">
-                                            {{ zone.name }}
-                                        </option>
-                                    </select>
-                                </div>
-                            </article>
-
-                            <div
-                                v-if="!zoneAssignmentRowsVisible.length"
-                                class="col-span-full rounded-xl border border-dashed border-zinc-800 px-4 py-8 flex flex-col items-center gap-2 text-center"
-                            >
-                                <SearchIcon class="w-5 h-5 text-zinc-600" />
-                                <p class="text-[11px] text-zinc-500">
-                                    {{ zoneFilterId === '__none__'
-                                        ? 'Todos os produtos já estão atribuídos a uma zona.'
-                                        : (zoneFilterId
-                                            ? 'Nenhum produto atribuído a esta zona ainda.'
-                                            : 'Nenhum produto encontrado com esses filtros.') }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Rodapé -->
-                        <div class="flex items-center justify-between text-[11px]">
-                            <span class="text-zinc-400">
-                                Serão importadas <span class="text-white font-semibold">{{ multiZoneImportCount }}</span> de {{ productRows.length }} ofertas nas zonas selecionadas.
-                            </span>
-                            <span v-if="multiZoneUnassignedCount > 0" class="text-amber-300/90">
-                                {{ multiZoneUnassignedCount }} produto{{ multiZoneUnassignedCount === 1 ? '' : 's' }} sem zona
+                        <div class="flex items-center gap-2 mr-1.5">
+                            <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">Zonas</span>
+                            <span class="text-[10px] text-zinc-500">
+                                {{ multiZoneImportCount }}/{{ productRows.length }}
                             </span>
                         </div>
+
+                        <button
+                            v-for="zone in availableZones"
+                            :key="zone.id"
+                            type="button"
+                            class="inline-flex items-center gap-1.5 h-6 px-2 rounded-full border text-[10px] transition-colors"
+                            :class="zoneFilterId === zone.id
+                                ? 'border-sky-400/60 bg-sky-500/15 text-sky-100'
+                                : 'border-zinc-700 bg-zinc-900/70 hover:border-zinc-500 text-zinc-200'"
+                            :title="zone.frameName ? `${zone.name} · ${zone.frameName}` : zone.name"
+                            @click="zoneFilterId = zoneFilterId === zone.id ? null : zone.id"
+                        >
+                            <span class="font-medium truncate max-w-28">{{ zone.name }}</span>
+                            <span
+                                class="rounded-md px-1.5 py-0.5 text-[9px] tabular-nums font-semibold"
+                                :class="countProductsAssignedToZone(zone.id) > 0 ? 'bg-emerald-500/20 text-emerald-200' : 'bg-zinc-800 text-zinc-400'"
+                            >
+                                {{ countProductsAssignedToZone(zone.id) }}
+                            </span>
+                        </button>
+
+                        <button
+                            v-if="multiZoneUnassignedCount > 0"
+                            type="button"
+                            class="inline-flex items-center gap-1.5 h-6 px-2 rounded-full border text-[10px] transition-colors"
+                            :class="zoneFilterId === '__none__'
+                                ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
+                                : 'border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-amber-200'"
+                            @click="zoneFilterId = zoneFilterId === '__none__' ? null : '__none__'"
+                        >
+                            <span class="font-medium">Sem zona</span>
+                            <span class="rounded-md bg-amber-500/20 text-amber-200 px-1.5 py-0.5 text-[9px] tabular-nums font-semibold">{{ multiZoneUnassignedCount }}</span>
+                        </button>
+
+                        <button
+                            v-if="zoneFilterId"
+                            type="button"
+                            class="text-[10px] text-zinc-500 hover:text-zinc-300 underline underline-offset-2 px-1"
+                            @click="zoneFilterId = null"
+                        >
+                            limpar
+                        </button>
+
+                        <div class="w-px h-4 bg-zinc-800 mx-1"></div>
+
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-[10px] font-medium text-sky-200 transition-colors"
+                            @click="autoDistributeZoneAssignments"
+                        >
+                            <Wand2 class="w-3 h-3" />
+                            Auto distribuir
+                        </button>
                     </div>
 
 
@@ -3122,7 +3038,22 @@ const getAssetDisplayName = (asset: any): string => {
                                                 R$ {{ getFirstCommercialPrice(row.product) }}
                                             </span>
                                             <span v-else class="rounded-md border border-rose-500/20 bg-rose-500/10 px-1.5 py-0.5 font-semibold text-rose-200">Sem preco</span>
-                                            <span class="rounded-md border border-zinc-700/70 bg-zinc-800/50 px-1.5 py-0.5 text-zinc-400 truncate max-w-32">{{ getProductDestinationLabel(row.productId) }}</span>
+                                            <select
+                                                v-if="targetMode === 'zone' && canUseMultiZone"
+                                                :value="getAssignedZoneId(row.productId) || ''"
+                                                @change="setZoneAssignmentForProduct(row.productId, String(($event.target as HTMLSelectElement).value || ''))"
+                                                @click.stop
+                                                class="h-5 rounded-md border bg-zinc-900 px-1.5 text-[9px] text-zinc-200 focus:outline-none focus:border-sky-400/60 max-w-32"
+                                                :class="getAssignedZoneId(row.productId) ? 'border-zinc-700/70' : 'border-amber-500/40 text-amber-200'"
+                                                :title="getProductDestinationLabel(row.productId)"
+                                            >
+                                                <option value="">(sem zona)</option>
+                                                <option v-for="zone in availableZones" :key="zone.id" :value="zone.id">{{ zone.name }}</option>
+                                            </select>
+                                            <span
+                                                v-else
+                                                class="rounded-md border border-zinc-700/70 bg-zinc-800/50 px-1.5 py-0.5 text-zinc-400 truncate max-w-32"
+                                            >{{ getProductDestinationLabel(row.productId) }}</span>
                                             <span class="rounded-md bg-zinc-800/60 px-1.5 py-0.5 text-zinc-500">{{ row.imageStatusMeta.state }}</span>
                                         </div>
                                     </div>
