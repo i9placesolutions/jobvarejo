@@ -867,7 +867,7 @@ const BUILTIN_LABEL_TEMPLATE_IDS = new Set([
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const BUILTIN_RED_BURST_SEED_VERSION = 2
 const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
-const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', 'visible', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors', '__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR', '__originalCornerTL', '__originalCornerTR', '__originalCornerBL', '__originalCornerBR']
+const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', 'visible', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__manualScaleX', '__manualScaleY', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors', '__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR', '__originalCornerTL', '__originalCornerTR', '__originalCornerBL', '__originalCornerBR']
 const MANUAL_TEMPLATE_STABLE_PROPS = ['__manualTemplateBaseW', '__manualTemplateBaseH'] as const;
 const MANUAL_TEMPLATE_DERIVED_PROPS = ['__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors'] as const;
 const autoHealedLabelTemplateIds = new Set<string>()
@@ -25884,9 +25884,14 @@ const createSmartObject = async (
     labelPlacementSnapshot?: {
         left?: number;
         top?: number;
+        leftRatio?: number;
+        topRatio?: number;
+        bottomGapRatio?: number | null;
         originX?: string;
         originY?: string;
         angle?: number;
+        cardW?: number;
+        cardH?: number;
     } | null
 ) => {
     // Layout Constants
@@ -27556,7 +27561,7 @@ const simulateSmartGrid = async (
         const zoneStylesForNewCards = targetZone
             ? getZoneGlobalStyles(targetZone)
             : normalizeGlobalStyles(productZoneState.globalStyles.value);
-        const donorPriceGroupPlacements = targetZone && mode === 'replace' && !requestedTplId
+        const donorPriceGroupPlacements = targetZone && !requestedTplId
             ? existingZoneCardsAtStart.map((card: any) => getPriceGroupPlacementSnapshotFromCard(card))
             : [];
         const fallbackDonorPriceGroupPlacement =
@@ -27789,7 +27794,7 @@ const simulateSmartGrid = async (
 
 	                 } else {
                       const labelPlacementSnapshot =
-                          (mode === 'replace' && !requestedTplId)
+                          (targetZone && !requestedTplId)
                               ? (donorPriceGroupPlacements[index] || fallbackDonorPriceGroupPlacement)
                               : null;
 	                  return await createSmartObject(
@@ -39812,13 +39817,15 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                             let rowStartX = startX;
 
                             if (isLastRow && itemsInRow < normalCols) {
-                                if ((lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow >= 1) {
+                                if ((lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow > 1) {
                                     cellW = (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow);
                                     rowGapX = gapX;
                                     rowStartX = startX;
                                 } else {
                                     const rowW = (itemsInRow * cellW) + ((itemsInRow - 1) * rowGapX);
-                                    if (lastRowBehavior === 'center') rowStartX = startX + (usableW - rowW) / 2;
+                                    if (lastRowBehavior === 'center' || (itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch'))) {
+                                        rowStartX = startX + (usableW - rowW) / 2;
+                                    }
                                     else if (lastRowBehavior === 'left') rowStartX = startX;
                                 }
                             }
@@ -39895,13 +39902,6 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
                         let rowGapX = gapX;
                         let rowStartX = normSectionX;
                         if (isLastRow && itemsInRow < normalCols) {
-                            // For a single item, "fill" should actually fill the entire row width.
-                            // Expanding gaps is impossible with 1 item, so we span the full section.
-                            if (itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch')) {
-                                cellW = normSectionW;
-                                rowGapX = 0;
-                                rowStartX = normSectionX;
-                            }
                             if ((lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow > 1) {
                                 // "fill" in sparse last rows: prefer stretching cards instead of exploding gaps.
                                 cellW = (normSectionW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow);
@@ -40061,14 +40061,16 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         let rowStartX = gridStartX;
 
         if (isLastRow && itemsInRow < cols) {
-            if ((lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow >= 1) {
+            if ((lastRowBehavior === 'fill' || lastRowBehavior === 'stretch') && itemsInRow > 1) {
                 // Prefer stretching cards (consistent gap) instead of creating huge gaps between items.
                 rowItemW = (usableW - ((itemsInRow - 1) * gapX)) / Math.max(1, itemsInRow);
                 rowGapX = gapX;
                 rowStartX = startX;
             } else {
                 const rowW = (itemsInRow * rowItemW) + ((itemsInRow - 1) * rowGapX);
-                const shouldCenter = lastRowBehavior === 'center';
+                const shouldCenter =
+                    lastRowBehavior === 'center' ||
+                    (itemsInRow === 1 && (lastRowBehavior === 'fill' || lastRowBehavior === 'stretch'));
                 if (shouldCenter) rowStartX = startX + (usableW - rowW) / 2;
                 else if (lastRowBehavior === 'left') rowStartX = gridStartX;
             }
