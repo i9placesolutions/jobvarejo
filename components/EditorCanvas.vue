@@ -8657,7 +8657,6 @@ const getFrameDisplayNameForExport = (frame: any, index: number) => {
 };
 
 const availableFramesForExport = computed(() => {
-    if (!showExportModal.value && !showProductReviewModal.value) return [];
     const _activePage = Number(project.activePageIndex || 0);
     const _objectsSnapshot = canvasObjects.value;
     void _activePage;
@@ -8699,7 +8698,6 @@ const availableFramesForExport = computed(() => {
 })
 
 const availableFramesForImport = computed(() => {
-    if (!showProductReviewModal.value) return []
     const frames = availableFramesForExport.value || []
     return frames.map((frame: any, index: number) => {
         const id = String(frame?.id || '').trim() || `frame-${index + 1}`
@@ -8716,7 +8714,6 @@ const availableFramesForImport = computed(() => {
 })
 
 const availableZonesForImport = computed(() => {
-    if (!showProductReviewModal.value) return []
     const zones = getImportTargetZones()
     ensureProductZoneNamesDistinct(zones)
     return zones.map((zone: any, index: number) => {
