@@ -8310,11 +8310,19 @@ const resolveRelatedImportZones = (primaryZone: any): any[] => {
         : primaryZone
     const frameId = String((refreshedPrimary as any)?.parentFrameId || getResolvedZoneFrameId(refreshedPrimary) || '').trim()
 
+    // Sem um frameId valido nao da para confiar no agrupamento por frame:
+    // depois de varias duplicacoes, zonas com parentFrameId vazio seriam
+    // todas agrupadas como "irmas" e os produtos cairiam em zonas de frames
+    // diferentes. Se a zona primaria nao tem frame resolvido, restringimos a
+    // importacao APENAS a zona em que o usuario clicou.
+    if (!frameId) {
+        return [refreshedPrimary]
+    }
+
     const related = allZones.filter((zone: any) => {
         if (!zone || !isLikelyProductZone(zone)) return false
         const zoneFrameId = String((zone as any)?.parentFrameId || getResolvedZoneFrameId(zone) || '').trim()
-        if (frameId) return zoneFrameId === frameId
-        return !zoneFrameId
+        return zoneFrameId === frameId
     })
 
     const unique: any[] = []
