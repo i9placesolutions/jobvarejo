@@ -29136,12 +29136,43 @@ const showZoneQuickActions = computed(() => {
     if (!zone || !isLikelyProductZone(zone)) return false;
     const active = canvas.value?.getActiveObject?.();
     if (!active) return false;
-    if (!selectedObjectPos.value.visible) return false;
+    if (!selectedZoneQuickActionsPos.value.visible) return false;
     if (figmaCrop.isCropActive.value) return false;
     if (isPenMode.value || isNodeEditing.value || isDrawing.value) return false;
     if (showProductReviewModal.value || showSaveModal.value || showLabelTemplatesModal.value) return false;
     if (showAIModal.value || showExportModal.value || showShareModal.value || showPresentationModal.value) return false;
     return true;
+})
+
+const getCanvasOffsetInsideWrapper = () => {
+    const wrapper = wrapperEl.value;
+    const canvasElement =
+        (canvas.value as any)?.upperCanvasEl ||
+        canvasEl.value ||
+        canvas.value?.getElement?.();
+    if (!wrapper || !canvasElement || typeof wrapper.getBoundingClientRect !== 'function') {
+        return { x: 0, y: 0 };
+    }
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const canvasRect = canvasElement.getBoundingClientRect();
+    return {
+        x: canvasRect.left - wrapperRect.left,
+        y: canvasRect.top - wrapperRect.top
+    };
+}
+
+const selectedZoneQuickActionsPos = computed(() => {
+    const zone = selectedZoneQuickActions.value?.zone;
+    const base = selectedObjectPos.value.visible
+        ? selectedObjectPos.value
+        : (zone ? getSelectedObjectFloatingPos(zone, isLikelyProductZone) : selectedObjectPos.value);
+    if (!base.visible) return base;
+    const offset = getCanvasOffsetInsideWrapper();
+    return {
+        ...base,
+        left: base.left + offset.x,
+        top: base.top + offset.y
+    };
 })
 
 const focusProductZoneSettings = () => {
@@ -41701,10 +41732,10 @@ const handleRecalculateLayout = () => {
                   <ZoneQuickActions
                     v-if="selectedZoneQuickActions"
                     :visible="showZoneQuickActions"
-                    :top="selectedObjectPos.top"
-                    :left="selectedObjectPos.left"
-                    :width="selectedObjectPos.width"
-                    :height="selectedObjectPos.height"
+                    :top="selectedZoneQuickActionsPos.top"
+                    :left="selectedZoneQuickActionsPos.left"
+                    :width="selectedZoneQuickActionsPos.width"
+                    :height="selectedZoneQuickActionsPos.height"
                     :name="selectedZoneQuickActions.name"
                     :role-label="selectedZoneQuickActions.roleLabel"
                     :status-label="selectedZoneQuickActions.statusLabel"

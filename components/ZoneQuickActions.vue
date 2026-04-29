@@ -43,7 +43,7 @@ const actionsStyle = computed(() => ({
 </script>
 
 <template>
-  <div v-if="visible" class="pointer-events-none absolute inset-0 z-115">
+  <div v-if="visible" class="pointer-events-none absolute inset-0 z-[115]">
 
     <!-- Compact corner badge (always shown, top-right of zone) -->
     <div class="pointer-events-auto absolute" :style="badgeStyle">
