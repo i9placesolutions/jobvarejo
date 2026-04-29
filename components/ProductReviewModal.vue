@@ -1739,6 +1739,13 @@ const multiZoneImportCount = computed(() => productRows.value.filter(row => !!ge
 const multiZoneUnassignedCount = computed(() => Math.max(0, productRows.value.length - multiZoneImportCount.value))
 const countProductsAssignedToZone = (zoneId: string): number =>
     productRows.value.filter(row => getAssignedZoneId(row.productId) === zoneId).length
+const bulkZoneAssignmentValue = computed(() => {
+    const rows = productRows.value
+    if (!rows.length) return ''
+    const first = getAssignedZoneId(rows[0]!.productId)
+    if (!first) return ''
+    return rows.every(row => getAssignedZoneId(row.productId) === first) ? first : ''
+})
 const isProcessingProducts = computed(() => products.value.some((p: any) => p.status === 'processing'))
 const isImageQueueLocked = computed(() => isImageQueueRunning.value)
 const canUseMultiFrame = computed(() => availableFrames.value.length > 0)
@@ -1926,6 +1933,22 @@ const setZoneAssignmentForProduct = (productId: string, zoneIdRaw: string) => {
 const autoDistributeZoneAssignments = () => {
     zoneAssignmentsMap.value = {}
     reconcileZoneAssignments({ autofill: true })
+}
+
+const setBulkZoneAssignment = (zoneIdRaw: string) => {
+    const zoneId = String(zoneIdRaw || '').trim()
+    if (!zoneId) {
+        autoDistributeZoneAssignments()
+        return
+    }
+    const validZoneIds = new Set(orderedZoneIds.value)
+    if (!validZoneIds.has(zoneId)) return
+    const next: Record<string, string | null> = {}
+    productRows.value.forEach((row) => {
+        next[row.productId] = zoneId
+    })
+    zoneAssignmentsMap.value = next
+    zoneFilterId.value = null
 }
 
 const getFrameNameById = (frameId: string | null): string => {
@@ -2877,7 +2900,7 @@ const getAssetDisplayName = (asset: any): string => {
 
                     <div
                         v-if="targetMode === 'zone' && canUseMultiZone"
-                        class="shrink-0 rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2 flex flex-wrap items-center gap-1.5"
+                        class="shrink-0 rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2 flex flex-wrap items-center gap-2"
                     >
                         <div class="flex items-center gap-2 mr-1.5">
                             <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">Zonas</span>
@@ -2885,6 +2908,22 @@ const getAssetDisplayName = (asset: any): string => {
                                 {{ multiZoneImportCount }}/{{ productRows.length }}
                             </span>
                         </div>
+
+                        <label class="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                            <span class="font-semibold uppercase tracking-widest text-zinc-500">Geral</span>
+                            <select
+                                class="h-6 max-w-44 rounded-lg border border-sky-500/30 bg-zinc-950 px-2 text-[10px] text-sky-100 focus:outline-none focus:border-sky-400/70"
+                                :value="bulkZoneAssignmentValue"
+                                @change="setBulkZoneAssignment(String(($event.target as HTMLSelectElement).value || ''))"
+                            >
+                                <option value="">Auto distribuir</option>
+                                <option v-for="zone in availableZones" :key="zone.id" :value="zone.id">
+                                    {{ zone.name }}
+                                </option>
+                            </select>
+                        </label>
+
+                        <div class="w-px h-4 bg-zinc-800 mx-0.5"></div>
 
                         <button
                             v-for="zone in availableZones"

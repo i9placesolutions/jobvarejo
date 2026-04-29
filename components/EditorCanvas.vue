@@ -27304,7 +27304,7 @@ const importProductsToMultipleZones = async (products: any[], zones: any[], opts
         const zone = validZones[index]
         const slice = slices[index] || []
         if (slice.length === 0) {
-            if (mode === 'replace') {
+            if (mode === 'replace' && !hasManualZoneAssignments) {
                 clearProductZoneCards(zone)
                 ;(zone as any).contentSource = nextSource
                 applied += 1
