@@ -13,6 +13,7 @@ import {
   CreditCard,
   Type,
   Tag,
+  PackagePlus
 } from 'lucide-vue-next';
 import { LAYOUT_PRESETS, SPLASH_STYLES, type LayoutPreset } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
@@ -907,6 +908,22 @@ onBeforeUnmount(() => {
               >
                 <strong>{{ option.label }}</strong>
                 <span>{{ option.hint }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="template-card">
+            <div class="template-card__head">
+              <div>
+                <label class="field-label">Produtos da zona</label>
+                <p class="field-hint">Importe uma lista nova ou revise os produtos atuais.</p>
+              </div>
+              <span class="template-card__status">{{ activeTemplateName }}</span>
+            </div>
+            <div class="action-row">
+              <button type="button" class="primary-button" @click="emit('open-review')">
+                <PackagePlus class="h-4 w-4" />
+                Importar produtos
               </button>
             </div>
           </div>
