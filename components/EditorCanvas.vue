@@ -26355,22 +26355,29 @@ const createSmartObject = async (
     });
 
     // 2. Title (Top) - positioned at top of card
+    // Mantemos a mesma margem usada em resizeSmartObject (5% da altura) para que o
+    // primeiro layout case com o relayout subsequente — evita o "salto" do titulo
+    // e do limit logo apos a criacao do card.
+    const titleMarginTop = cardHeight * 0.05;
     const titleOffsetY = typeof effectiveStyles.prodNameOffsetY === 'number' ? effectiveStyles.prodNameOffsetY : 0;
-    const titleY = -halfH + (cardHeight * 0.08) + titleOffsetY; // Near top
+    const titleY = -halfH + titleMarginTop + titleOffsetY;
+    const titleScale = typeof effectiveStyles.prodNameScale === 'number' ? effectiveStyles.prodNameScale : 1;
+    const titleFontSize = Math.max(10, Math.min(baseSize * 0.22, baseSize * 0.09 * titleScale));
     const title = new fabric.Textbox(String(cleanedName || ''), {
-        fontSize: baseSize * 0.09,
-        fontFamily: 'Inter',
-        fontWeight: '900',
-        fill: '#1a1a1a',
-        textAlign: 'center',
+        fontSize: titleFontSize,
+        fontFamily: effectiveStyles.prodNameFont || 'Inter',
+        fontWeight: (effectiveStyles.prodNameWeight as any) ?? '900',
+        fill: effectiveStyles.prodNameColor || '#1a1a1a',
+        textAlign: effectiveStyles.prodNameAlign || 'center',
+        lineHeight: typeof effectiveStyles.prodNameLineHeight === 'number' ? effectiveStyles.prodNameLineHeight : 1.16,
         originX: 'center',
         originY: 'top',
-        left: 0, // Centered horizontally
+        left: 0,
         top: titleY,
         width: initialTitleWidth,
         name: 'smart_title',
         // UX: Prevent font stretching/blurring, enforce reflow
-        lockScalingY: true, 
+        lockScalingY: true,
         splitByGrapheme: false
     });
     if (
@@ -26389,22 +26396,29 @@ const createSmartObject = async (
     }
     if (typeof (title as any).initDimensions === 'function') (title as any).initDimensions();
 
-    // 2.1 Limit (Below title)
+    // 2.1 Limit (Below title) — mesma matematica do resizeSmartObject:
+    // top = titleY + titleH + gap; gap = max(4, h * 0.008).
+    // Cor/fonte/tamanho saem dos styles da zona (limitColor, limitFont, limitSize),
+    // garantindo coerencia entre criacao e relayout.
     let limitObj: any = null;
     if (limitTextValue) {
         const titleH = (title.getScaledHeight?.() ?? title.height ?? 0);
-        const gap = Math.max(4, baseSize * 0.02);
+        const gap = Math.max(4, cardHeight * 0.015);
+        const limitMult = (typeof effectiveStyles.limitSize === 'number' && effectiveStyles.limitSize > 0)
+            ? effectiveStyles.limitSize / 14
+            : 1;
+        const limitFontSize = Math.max(8, Math.min(baseSize * 0.12, baseSize * 0.045 * limitMult));
         limitObj = new fabric.Textbox(limitTextValue, {
-            fontSize: baseSize * 0.045,
-            fontFamily: 'Inter',
+            fontSize: limitFontSize,
+            fontFamily: effectiveStyles.limitFont || effectiveStyles.prodNameFont || 'Inter',
             fontWeight: '900',
-            fill: '#d32f2f',
+            fill: effectiveStyles.limitColor || '#ef4444',
             textAlign: 'center',
             originX: 'center',
             originY: 'top',
             left: 0,
             top: titleY + titleH + gap,
-            width: width - 20,
+            width: width * 0.9,
             name: 'smart_limit',
             data: { smartType: 'product-limit' },
             lockScalingY: true,
@@ -26710,6 +26724,23 @@ const handleImportProductList = () => {
         return;
     }
 
+    // Se o ativo é um card/elemento dentro de uma zona (ex.: usuario clicou
+    // num card da zona duplicada e mandou "Importar lista"), resolvemos a
+    // zona dona desse card via parentZoneId e abrimos o review nela. Sem
+    // esse passo, targetGridZone ficava stale e a importação caía na zona
+    // do último import bem-sucedido (geralmente o frame original).
+    const zoneFromActive = active ? resolveZoneForProductImport(active) : null;
+    if (zoneFromActive && isLikelyProductZone(zoneFromActive)) {
+        openProductReviewForZone(zoneFromActive, {
+            mode: 'replace'
+        });
+        return;
+    }
+
+    // Sem zona resolvível: limpa o targetGridZone para que o resolver decida
+    // a partir do canvas atual (evita herdar referência stale do import anterior).
+    targetGridZone.value = null;
+    targetGridZones.value = [];
     productReviewInitialImportMode.value = 'replace';
     showProductReviewModal.value = true;
 }
@@ -26808,6 +26839,31 @@ const isTransientPasteError = (err: any): boolean => {
 
 const openReviewModalWithProducts = (productsWithImages: any[]) => {
     reviewProducts.value = productsWithImages;
+
+    // Antes de abrir o modal precisamos resolver qual zona vai receber os
+    // produtos. O fluxo de paste-list/arquivo NÃO passa pelo
+    // openProductReviewForZone, então sem este passo `targetGridZone` ficava
+    // herdado do import anterior — depois de duplicar um frame, isso fazia os
+    // produtos caírem na zona do frame original em vez da zona selecionada.
+    if (canvas.value) {
+        const active = canvas.value.getActiveObject?.() ?? null;
+        let resolvedZone: any = active && isLikelyProductZone(active) ? active : null;
+        if (!resolvedZone && active) {
+            resolvedZone = resolveZoneForProductImport(active);
+        }
+        if (!resolvedZone) {
+            resolvedZone = resolveImportTargetZone();
+        }
+
+        if (resolvedZone && isLikelyProductZone(resolvedZone)) {
+            targetGridZone.value = resolvedZone;
+            targetGridZones.value = resolveRelatedImportZones(resolvedZone);
+        } else {
+            targetGridZone.value = null;
+            targetGridZones.value = [];
+        }
+    }
+
     try {
         const zones = getImportTargetZones();
         productImportExistingCount.value = zones.length > 0 ? getImportZonesExistingCount(zones) : 0;
@@ -28199,15 +28255,21 @@ const simulateSmartGrid = async (
                  }
 
                  // If template doesn't include a limit object but product has a limit, create one.
+                 // Posicionamento provisorio (top ~12% da altura) eh substituido pelo
+                 // resizeSmartObject logo abaixo, que ancora o limit no titulo do card.
                  if (!limitFound && limitTextValue) {
                      const cardW = cloned._cardWidth ?? cloned.width ?? itemWidth;
                      const cardH = cloned._cardHeight ?? cloned.height ?? itemHeight;
                      const baseSize = Math.min(cardW || itemWidth, cardH || itemHeight);
+                     const limitMult = (typeof zoneStylesForNewCards?.limitSize === 'number' && zoneStylesForNewCards.limitSize > 0)
+                         ? zoneStylesForNewCards.limitSize / 14
+                         : 1;
+                     const limitFontSize = Math.max(8, Math.min(baseSize * 0.12, baseSize * 0.045 * limitMult));
                      const limitObj = new fabric.Textbox(limitTextValue, {
-                         fontSize: baseSize * 0.045,
-                         fontFamily: 'Inter',
+                         fontSize: limitFontSize,
+                         fontFamily: zoneStylesForNewCards?.limitFont || zoneStylesForNewCards?.prodNameFont || 'Inter',
                          fontWeight: '900',
-                         fill: '#d32f2f',
+                         fill: zoneStylesForNewCards?.limitColor || '#ef4444',
                          textAlign: 'center',
                          originX: 'center',
                          originY: 'top',
@@ -38662,7 +38724,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     let limitH = 0;
         if (limit && String(limit.type || '').includes('text')) {
             const marginTop = h * 0.05;
-            const gap = Math.max(4, h * 0.008);
+            const gap = Math.max(4, h * 0.015);
             const _rawLimitNameOffY = typeof styles?.prodNameOffsetY === 'number' ? styles.prodNameOffsetY : 0;
             const titleOffsetY = _rawLimitNameOffY * (h / _refH);
 

@@ -82,18 +82,45 @@ export const resolveImportTargetZone = (opts: ResolveImportTargetZoneOptions): a
     return byId.get(id) || null;
   };
 
+  // Resolve a zona da seleção ativa primeiro: depois de duplicar um frame, a
+  // referência explícita em `targetGridZone` pode estar apontando para a zona
+  // original (último import bem-sucedido). Se o usuário agora tem a zona/card
+  // do frame duplicado selecionado, ela é a fonte de verdade — caso contrário,
+  // a importação cai na zona errada.
+  const active = opts.canvas.getActiveObject?.();
+  const fromActive = opts.resolveZoneForProductImport(active);
+
   const explicit = opts.targetGridZone;
   if (explicit && opts.isLikelyProductZone(explicit)) {
     const refreshed = resolveById((explicit as any)?._customId);
-    return refreshed || explicit;
+    const explicitZone = refreshed || explicit;
+
+    // Quando o ativo aponta para uma zona DIFERENTE da explícita, a explícita
+    // está stale (ex.: confirmProductImport/openProductReviewForZone abriu o
+    // modal antes da nova seleção). Prefere a zona ativa.
+    if (fromActive && fromActive !== explicitZone) {
+      const explicitId = String((explicitZone as any)?._customId || '').trim();
+      const activeId = String((fromActive as any)?._customId || '').trim();
+      if (explicitId && activeId && explicitId !== activeId) {
+        return fromActive;
+      }
+    }
+    return explicitZone;
   }
   if (explicit) {
     const byExplicitId = resolveById((explicit as any)?._customId) || resolveById((explicit as any)?.id);
-    if (byExplicitId) return byExplicitId;
+    if (byExplicitId) {
+      if (fromActive && fromActive !== byExplicitId) {
+        const explicitId = String((byExplicitId as any)?._customId || '').trim();
+        const activeId = String((fromActive as any)?._customId || '').trim();
+        if (explicitId && activeId && explicitId !== activeId) {
+          return fromActive;
+        }
+      }
+      return byExplicitId;
+    }
   }
 
-  const active = opts.canvas.getActiveObject?.();
-  const fromActive = opts.resolveZoneForProductImport(active);
   if (fromActive) return fromActive;
 
   const snap: any = opts.selectedObjectSnapshot;
