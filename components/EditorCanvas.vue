@@ -105,6 +105,7 @@ const FrameLabelsOverlay = defineAsyncComponent(() => import('./FrameLabelsOverl
 const EditorModalsHost = defineAsyncComponent(() => import('./EditorModalsHost.vue'))
 const EditorRightSidebar = defineAsyncComponent(() => import('./EditorRightSidebar.vue'))
 const ZoneQuickActions = defineAsyncComponent(() => import('./ZoneQuickActions.vue'))
+const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
 import {
   Undo,
   Redo,
@@ -41983,7 +41984,7 @@ const handleRecalculateLayout = () => {
       <!-- Mobile Bottom Sheet -->
       <EditorMobileBottomSheet
         v-if="isMobile && mobilePanel"
-        :title="mobilePanel === 'tools' ? 'Ferramentas' : mobilePanel === 'layers' ? 'Camadas' : mobilePanel === 'properties' ? 'Propriedades' : mobilePanel === 'pages' ? 'Páginas' : 'Mais'"
+        :title="mobilePanel === 'tools' ? 'Ferramentas' : mobilePanel === 'layers' ? 'Camadas' : mobilePanel === 'properties' ? 'Propriedades' : mobilePanel === 'pages' ? 'Páginas' : mobilePanel === 'uploads' ? 'Imagens' : 'Mais'"
         @close="mobilePanel = null; mobileNavRef?.clearActive()"
       >
         <!-- Tools panel -->
@@ -42060,9 +42061,9 @@ const handleRecalculateLayout = () => {
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
                 <span class="text-[11px]">Etiquetas</span>
               </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="fileInput?.click(); mobilePanel = null; mobileNavRef?.clearActive()">
+              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="mobilePanel = 'uploads'">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                <span class="text-[11px]">Imagem</span>
+                <span class="text-[11px]">Imagens</span>
               </button>
               <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="openAiGenerationModal(); mobilePanel = null; mobileNavRef?.clearActive()">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
@@ -42071,6 +42072,14 @@ const handleRecalculateLayout = () => {
             </div>
           </div>
         </div>
+
+        <!-- Uploads / Imagens panel -->
+        <template v-if="mobilePanel === 'uploads'">
+          <AssetsPanel
+            class="-mx-4 -mb-4 flex-1 min-h-0"
+            @insert-asset="(asset) => { insertAssetToCanvas(asset); mobilePanel = null; mobileNavRef?.clearActive(); }"
+          />
+        </template>
 
         <!-- Layers panel -->
         <template v-if="mobilePanel === 'layers'">
