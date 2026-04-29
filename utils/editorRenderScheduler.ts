@@ -48,11 +48,14 @@ export const createRenderScheduler = (
   const executeRender = () => {
     const c = canvasRef.value
     if (!c || isCanvasDestroyed.value) return
-    if (typeof c.requestRenderAll !== 'function') return
+    const requestRender = typeof c.__origRequestRenderAll === 'function'
+      ? c.__origRequestRenderAll.bind(c)
+      : (typeof c.requestRenderAll === 'function' ? c.requestRenderAll.bind(c) : null)
+    if (!requestRender) return
 
     try {
       if (!ensureFabricContexts(c)) return
-      c.requestRenderAll()
+      requestRender()
     } catch {
       // Fallback: render sincrono
       try {

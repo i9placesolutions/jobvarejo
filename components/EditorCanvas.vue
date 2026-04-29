@@ -8657,6 +8657,7 @@ const getFrameDisplayNameForExport = (frame: any, index: number) => {
 };
 
 const availableFramesForExport = computed(() => {
+    if (!showExportModal.value && !showProductReviewModal.value) return [];
     const _activePage = Number(project.activePageIndex || 0);
     const _objectsSnapshot = canvasObjects.value;
     void _activePage;
@@ -8698,6 +8699,7 @@ const availableFramesForExport = computed(() => {
 })
 
 const availableFramesForImport = computed(() => {
+    if (!showProductReviewModal.value) return []
     const frames = availableFramesForExport.value || []
     return frames.map((frame: any, index: number) => {
         const id = String(frame?.id || '').trim() || `frame-${index + 1}`
@@ -8714,6 +8716,7 @@ const availableFramesForImport = computed(() => {
 })
 
 const availableZonesForImport = computed(() => {
+    if (!showProductReviewModal.value) return []
     const zones = getImportTargetZones()
     ensureProductZoneNamesDistinct(zones)
     return zones.map((zone: any, index: number) => {
@@ -13595,8 +13598,8 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     const isRootFrameLike = !!(frame as any)?.isFrame ||
         frameLayerName === 'FRAMER' ||
         frameLayerName === 'FRAME' ||
-        /^FRAME(?:\s+\d+)?$/i.test(frameName) ||
-        /^FRAMER(?:\s+\d+)?$/i.test(frameName);
+        /^FRAME(?:\s+\d+)?(?:\s*\(.+\))?$/i.test(frameName) ||
+        /^FRAMER(?:\s+\d+)?(?:\s*\(.+\))?$/i.test(frameName);
     if (!isRootFrameLike) return null;
     if (!(frame as any)._customId) (frame as any)._customId = makeCanvasObjectId();
     const rootId = String((frame as any)._customId || '');
@@ -14140,7 +14143,13 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     // drag relayout the original zone and pull the duplicated products back.
     {
         const clonedZones = clones.filter((o: any) => isLikelyProductZone(o));
-        const clonedCards = clones.filter((o: any) => isLikelyProductCard(o) || o?.isProductCard || o?.isSmartObject);
+        const clonedCards = clones.filter((o: any) => (
+            isLikelyProductCard(o) ||
+            o?.isProductCard ||
+            o?.isSmartObject ||
+            String((o as any)?.parentZoneId || '').trim().length > 0 ||
+            String((o as any)?._zoneSlot?.zoneId || '').trim().length > 0
+        ));
         const clonedZoneById = new Map<string, any>();
         clonedZones.forEach((zone: any) => {
             const id = String((zone as any)?._customId || '').trim();
@@ -14269,6 +14278,40 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
                 .map((o: any) => String((o as any)?._customId || '').trim())
                 .filter(Boolean)
         );
+        const clonedFrames = clones.filter((o: any) => isFrameContainerCandidate(o));
+        const findContainingClonedFrameId = (obj: any) => {
+            try { obj?.setCoords?.(); } catch {}
+            const bounds = typeof obj?.getBoundingRect === 'function' ? obj.getBoundingRect(true) : null;
+            if (!bounds) return '';
+            const cx = Number(bounds.left || 0) + Number(bounds.width || 0) / 2;
+            const cy = Number(bounds.top || 0) + Number(bounds.height || 0) / 2;
+            let bestFrameId = '';
+            let bestArea = Number.POSITIVE_INFINITY;
+            clonedFrames.forEach((frame: any) => {
+                const frameId = String((frame as any)?._customId || '').trim();
+                if (!frameId) return;
+                const fb = getFrameBounds(frame) || (typeof frame?.getBoundingRect === 'function' ? frame.getBoundingRect(true) : null);
+                if (!fb) return;
+                const inside = cx >= fb.left && cx <= fb.left + fb.width && cy >= fb.top && cy <= fb.top + fb.height;
+                if (!inside) return;
+                const area = Math.max(1, Number(fb.width || 0) * Number(fb.height || 0));
+                if (area < bestArea) {
+                    bestArea = area;
+                    bestFrameId = frameId;
+                }
+            });
+            return bestFrameId;
+        };
+        clonedZones.forEach((zone: any) => {
+            const zoneFrameId = String((zone as any)?.parentFrameId || '').trim();
+            if (zoneFrameId && clonedFrameIds.has(zoneFrameId)) return;
+            const containingFrameId = findContainingClonedFrameId(zone);
+            if (containingFrameId) {
+                (zone as any).parentFrameId = containingFrameId;
+            } else if (zoneFrameId && !clonedFrameIds.has(zoneFrameId)) {
+                delete (zone as any).parentFrameId;
+            }
+        });
         clonedFrameIds.forEach((frameId: string) => {
             const zonesInFrame = clonedZones.filter((zone: any) => getCloneZoneFrameId(zone) === frameId);
             if (zonesInFrame.length > 0) return;
@@ -14283,7 +14326,17 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         });
 
         clonedCards.forEach((card: any) => {
-            const cardFrameId = String((card as any)?.parentFrameId || '').trim();
+            let cardFrameId = String((card as any)?.parentFrameId || '').trim();
+            if (!cardFrameId || !clonedFrameIds.has(cardFrameId)) {
+                const containingFrameId = findContainingClonedFrameId(card);
+                if (containingFrameId) {
+                    cardFrameId = containingFrameId;
+                    (card as any).parentFrameId = containingFrameId;
+                } else if (cardFrameId && !clonedFrameIds.has(cardFrameId)) {
+                    delete (card as any).parentFrameId;
+                    cardFrameId = '';
+                }
+            }
             const currentZoneId = String((card as any)?.parentZoneId || '').trim();
             const currentZone = currentZoneId ? clonedZoneById.get(currentZoneId) : null;
             const currentZoneFrameId = currentZone ? getCloneZoneFrameId(currentZone) : '';
@@ -16004,8 +16057,8 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         const looksLikeFrame = !!(active as any)?.isFrame ||
             activeLayerName === 'FRAMER' ||
             activeLayerName === 'FRAME' ||
-            /^FRAME(?:\s+\d+)?$/i.test(activeName) ||
-            /^FRAMER(?:\s+\d+)?$/i.test(activeName);
+            /^FRAME(?:\s+\d+)?(?:\s*\(.+\))?$/i.test(activeName) ||
+            /^FRAMER(?:\s+\d+)?(?:\s*\(.+\))?$/i.test(activeName);
         if (looksLikeFrame) {
             const duplicatedFrame = await duplicateFrameWithContents(active);
             if (duplicatedFrame) return;
@@ -22559,8 +22612,8 @@ const handleAction = async (action: string) => {
         const looksLikeFrame = !!(active as any)?.isFrame ||
             activeLayerName === 'FRAMER' ||
             activeLayerName === 'FRAME' ||
-            /^FRAME(?:\s+\d+)?$/i.test(activeName) ||
-            /^FRAMER(?:\s+\d+)?$/i.test(activeName);
+            /^FRAME(?:\s+\d+)?(?:\s*\(.+\))?$/i.test(activeName) ||
+            /^FRAMER(?:\s+\d+)?(?:\s*\(.+\))?$/i.test(activeName);
         if (looksLikeFrame) {
             const duplicatedFrame = await duplicateFrameWithContents(active);
             if (duplicatedFrame) return;
@@ -28385,7 +28438,9 @@ function normalizeGlobalStyles(styles?: Partial<GlobalStyles> | null): GlobalSty
         splashScale: DEFAULT_GLOBAL_STYLES.splashScale ?? 1,
         splashTextScale: DEFAULT_GLOBAL_STYLES.splashTextScale ?? 1,
         splashRoundness: DEFAULT_GLOBAL_STYLES.splashRoundness ?? 1,
-        splashOffsetY: DEFAULT_GLOBAL_STYLES.splashOffsetY ?? 0
+        splashOffsetY: DEFAULT_GLOBAL_STYLES.splashOffsetY ?? 0,
+        priceFontSize: DEFAULT_GLOBAL_STYLES.priceFontSize ?? 60,
+        splashStrokeWidth: DEFAULT_GLOBAL_STYLES.splashStrokeWidth ?? 0
     };
 
     const normalizeHexColor = (
@@ -28437,10 +28492,14 @@ function normalizeGlobalStyles(styles?: Partial<GlobalStyles> | null): GlobalSty
         prodNameScale: toFinite(merged.prodNameScale, defaultNumber.prodNameScale, 0.5, 2.5),
         prodNameLineHeight: toFinite(merged.prodNameLineHeight, defaultNumber.prodNameLineHeight, 0.7, 2.2),
         prodNameOffsetY: toFinite(merged.prodNameOffsetY, defaultNumber.prodNameOffsetY, -300, 300),
-        splashScale: toFinite(merged.splashScale, defaultNumber.splashScale, 0.35, 20),
+        splashScale: toFinite(merged.splashScale, defaultNumber.splashScale, 0.35, 3),
         splashTextScale: toFinite(merged.splashTextScale, defaultNumber.splashTextScale, 0.4, 2.8),
         splashRoundness: toFinite(merged.splashRoundness, defaultNumber.splashRoundness, 0, 1),
         splashOffsetY: toFinite(merged.splashOffsetY, defaultNumber.splashOffsetY, -300, 300),
+        priceFontSize: toFinite(merged.priceFontSize, defaultNumber.priceFontSize, 24, 160),
+        splashStrokeWidth: merged.splashStrokeWidth === undefined || merged.splashStrokeWidth === null
+            ? undefined
+            : toFinite(merged.splashStrokeWidth, defaultNumber.splashStrokeWidth, 0, 24),
         priceTextColor: normalizeHexColor(merged.priceTextColor, defaultColor.splashTextColor, { allowUndefined: true }),
         priceCurrencyColor: normalizeHexColor(merged.priceCurrencyColor, defaultColor.splashTextColor, { allowUndefined: true }),
         priceFontWeight: merged.priceFontWeight === '' || merged.priceFontWeight === null ? undefined : merged.priceFontWeight,
@@ -32032,8 +32091,96 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
         }
     }
 
+    constrainSinglePriceTextInsideBackground(priceGroup);
+
     const parts = priceGroup.getObjects?.() || [];
     parts.forEach((o: any) => o?.setCoords?.());
+    priceGroup.dirty = true;
+    priceGroup.setCoords?.();
+};
+
+const constrainSinglePriceTextInsideBackground = (priceGroup: any) => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return;
+    const all = collectObjectsDeep(priceGroup);
+    if (findByName(all, 'atac_retail_bg')) return;
+
+    const background = getSinglePriceBackgroundCandidate(all);
+    const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer');
+    const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
+    const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
+    const currency = getSinglePriceCurrencyTextCandidate(all);
+    const currencyCircle = ensureSinglePriceCurrencyCircleAnchor(priceGroup, all);
+    if (!background || !integer || !decimal) return;
+
+    [currency, integer, decimal, unit].forEach((obj: any) => {
+        if (obj && isTextLikeObject(obj)) obj.initDimensions?.();
+    });
+
+    const bgBounds = getObjectHorizontalBoundsLocal(background);
+    const bgWidth = bgBounds ? Math.max(0, bgBounds.right - bgBounds.left) : 0;
+    if (!bgBounds || bgWidth <= 0) return;
+
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+    const unitVisible = isObjectShownForBounds(unit) && String(unit?.text || '').trim().length > 0;
+    const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[];
+    const hasCurrencyCircle = !!(currencyCircle && isObjectShownForBounds(currencyCircle));
+    const fitTargets = hasCurrencyCircle
+        ? chain
+        : [currency, ...chain].filter((obj: any) => isObjectShownForBounds(obj));
+    if (!fitTargets.length) return;
+
+    const pad = clamp(bgWidth * 0.1, 7, 34);
+    const currencyGap = clamp(bgWidth * 0.018, 2, 10);
+    const circleBounds = hasCurrencyCircle ? getObjectHorizontalBoundsLocal(currencyCircle) : null;
+    const leftLimit = hasCurrencyCircle && circleBounds
+        ? Math.min(bgBounds.right - pad, circleBounds.right + currencyGap)
+        : bgBounds.left + pad;
+    const rightLimit = bgBounds.right - pad;
+    const availableW = Math.max(8, rightLimit - leftLimit);
+
+    const scaleTargets = (targets: any[], scale: number) => {
+        targets.forEach((obj: any) => {
+            if (!obj || typeof obj.set !== 'function') return;
+            obj.set({
+                scaleX: Number(obj.scaleX || 1) * scale,
+                scaleY: Number(obj.scaleY || 1) * scale
+            });
+            obj.initDimensions?.();
+            obj.setCoords?.();
+        });
+    };
+    const moveTargets = (targets: any[], dx: number) => {
+        targets.forEach((obj: any) => {
+            if (!obj || typeof obj.set !== 'function') return;
+            obj.set({ left: Number(obj.left || 0) + dx });
+            obj.setCoords?.();
+        });
+    };
+
+    let bounds = measureHorizontalBoundsLocal(fitTargets);
+    if (!bounds) return;
+    if (bounds.width > availableW) {
+        scaleTargets(fitTargets, clamp(availableW / bounds.width, 0.28, 1));
+        bounds = measureHorizontalBoundsLocal(fitTargets);
+        if (!bounds) return;
+    }
+
+    let dx = 0;
+    if (bounds.left < leftLimit) dx += leftLimit - bounds.left;
+    if ((bounds.right + dx) > rightLimit) dx += rightLimit - (bounds.right + dx);
+    if (Math.abs(dx) > 0.001) moveTargets(fitTargets, dx);
+
+    if (currency && hasCurrencyCircle) {
+        const circle = getObjectHorizontalBoundsLocal(currencyCircle);
+        const currencyBounds = getObjectHorizontalBoundsLocal(currency);
+        if (circle && currencyBounds) {
+            const circleCenter = (circle.left + circle.right) / 2;
+            const currencyCenter = (currencyBounds.left + currencyBounds.right) / 2;
+            currency.set?.({ left: Number(currency.left || 0) + (circleCenter - currencyCenter) });
+            currency.setCoords?.();
+        }
+    }
+
     priceGroup.dirty = true;
     priceGroup.setCoords?.();
 };
@@ -34230,6 +34377,8 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
             }
         }
     });
+
+    constrainSinglePriceTextInsideBackground(priceGroup);
 
     // CRITICAL: Freeze priceGroup to intended pill dimensions (no auto-expand).
     priceGroup.set({ width: newW, height: newH });
@@ -36505,8 +36654,8 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
         originX: oldPg.originX ?? 'center',
         originY: oldPg.originY ?? 'center',
         angle: oldPg.angle ?? 0,
-        scaleX: 1,
-        scaleY: 1,
+        scaleX: preserveManualTemplateLayout ? (Math.abs(Number(newPg.scaleX)) || 1) : 1,
+        scaleY: preserveManualTemplateLayout ? (Math.abs(Number(newPg.scaleY)) || 1) : 1,
         name: 'priceGroup',
         subTargetCheck: true,
         interactive: true
@@ -37687,7 +37836,27 @@ async function applyLabelTemplateToZone(
         }
 
         // Also re-apply colors/text style if the zone has global styles.
-        applyGlobalStylesToCards(nextZoneStyles, zone, { cards });
+        const labelStyleProps = [
+            'splashColor',
+            'accentColor',
+            'splashFill',
+            'splashTextColor',
+            'priceTextColor',
+            'priceCurrencyColor',
+            'priceFont',
+            'priceFontWeight',
+            'priceFontStyle',
+            'currencySymbol',
+            'priceFontSize',
+            'splashTextScale',
+            'splashStrokeWidth',
+            'splashRoundness',
+            'splashScale',
+            'splashOffsetY'
+        ];
+        labelStyleProps.forEach((prop) => {
+            applyGlobalStylesToCards(nextZoneStyles, zone, { cards, prop });
+        });
     } else {
         (zone as any)._zoneGlobalStyles = nextZoneStyles;
         if (id) {
@@ -39959,6 +40128,14 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
     
     // 1. Find cards in zone (Use cache if available for performance)
     const canvasObjects = canvas.value ? new Set(canvas.value.getObjects()) : null;
+    const zoneIdForCachedChildren = String((zone as any)?._customId || '').trim();
+    const canTrustCachedChildren = cachedList.length > 0 && cachedList.every((card: any) => {
+        if (!card) return false;
+        if (canvasObjects && !canvasObjects.has(card)) return false;
+        const parentZoneId = String((card as any)?.parentZoneId || '').trim();
+        const slotZoneId = String((card as any)?._zoneSlot?.zoneId || '').trim();
+        return !!zoneIdForCachedChildren && (parentZoneId === zoneIdForCachedChildren || slotZoneId === zoneIdForCachedChildren);
+    });
     const cardMap = new Map<any, any>();
     cachedList.forEach((card: any) => {
         // Ignore cached cards that were removed from canvas (stale cache)
@@ -39967,7 +40144,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
         cardMap.set(key, card);
     });
 
-    if (!opts.trustCachedChildren || cachedList.length === 0) {
+    if ((!opts.trustCachedChildren && !canTrustCachedChildren) || cachedList.length === 0) {
         getZoneChildren(zone).forEach((card: any) => {
             const key = card._customId ?? card.id ?? card;
             cardMap.set(key, card);
@@ -41521,7 +41698,25 @@ const handleRecalculateLayout = () => {
                     @label-mousedown="handleFrameLabelMouseDown"
                   />
 
-                  <!-- ZoneQuickActions removido — ações de zona são acessadas pelo painel lateral -->
+                  <ZoneQuickActions
+                    v-if="selectedZoneQuickActions"
+                    :visible="showZoneQuickActions"
+                    :top="selectedObjectPos.top"
+                    :left="selectedObjectPos.left"
+                    :width="selectedObjectPos.width"
+                    :height="selectedObjectPos.height"
+                    :name="selectedZoneQuickActions.name"
+                    :role-label="selectedZoneQuickActions.roleLabel"
+                    :status-label="selectedZoneQuickActions.statusLabel"
+                    :frame-label="selectedZoneQuickActions.frameLabel"
+                    :product-count="selectedZoneQuickActions.productCount"
+                    :is-empty="selectedZoneQuickActions.isEmpty"
+                    @fill="handleZoneQuickActionFill"
+                    @append="handleZoneQuickActionAppend"
+                    @replace="handleZoneQuickActionReplace"
+                    @preset="handleZoneQuickActionPreset"
+                    @duplicate="handleZoneQuickActionDuplicate"
+                  />
 
                   <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" accept="image/*" multiple />
               </div>

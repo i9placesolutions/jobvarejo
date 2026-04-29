@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { LayoutGrid, Plus, RefreshCcw, Copy, Wand2, Ellipsis, Pencil } from 'lucide-vue-next';
+import { LayoutGrid, Plus, RefreshCcw, Copy, Wand2, Ellipsis } from 'lucide-vue-next';
 
 const props = defineProps<{
   visible: boolean;
@@ -20,7 +20,6 @@ const emit = defineEmits<{
   (e: 'fill'): void;
   (e: 'append'): void;
   (e: 'replace'): void;
-  (e: 'edit'): void;
   (e: 'preset'): void;
   (e: 'duplicate'): void;
 }>();
@@ -57,9 +56,9 @@ const actionsStyle = computed(() => ({
         <button
           type="button"
           class="rounded-md bg-[linear-gradient(135deg,rgba(16,185,129,0.24),rgba(5,150,105,0.18))] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.04em] text-emerald-100 transition-colors hover:bg-[linear-gradient(135deg,rgba(16,185,129,0.36),rgba(5,150,105,0.28))] border border-emerald-400/25 hover:border-emerald-300/40"
-          @click.stop="isEmpty ? emit('fill') : emit('edit')"
+          @click.stop="isEmpty ? emit('fill') : emit('append')"
         >
-          {{ isEmpty ? 'Preencher' : 'Editar' }}
+          Importar
         </button>
         <!-- Expand toggle -->
         <button
@@ -84,14 +83,6 @@ const actionsStyle = computed(() => ({
           </div>
           <!-- Secondary actions row -->
           <div class="flex items-center gap-1 pt-0.5">
-            <button
-              v-if="!isEmpty"
-              type="button"
-              class="zone-pill"
-              @click.stop="emit('edit')"
-            >
-              <Pencil class="h-3 w-3" /> Editar
-            </button>
             <button
               v-if="!isEmpty"
               type="button"

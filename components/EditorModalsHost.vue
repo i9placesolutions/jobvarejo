@@ -205,6 +205,7 @@ const emit = defineEmits<{
   />
 
   <ProductReviewModal
+    v-if="showProductReviewModal"
     :model-value="showProductReviewModal"
     :initial-products="reviewProducts"
     :show-import-mode="showImportMode"

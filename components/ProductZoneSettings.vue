@@ -13,7 +13,6 @@ import {
   CreditCard,
   Type,
   Tag,
-  PackagePlus
 } from 'lucide-vue-next';
 import { LAYOUT_PRESETS, SPLASH_STYLES, type LayoutPreset } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
@@ -154,6 +153,15 @@ const highlightPositionOptions = [
   { value: 'top', label: 'Topo' },
   { value: 'bottom', label: 'Base' },
   { value: 'random', label: 'Aleatório' }
+] as const;
+
+const PRICE_TAG_SCALE_MIN = 0.6;
+const PRICE_TAG_SCALE_MAX = 3;
+
+const priceTagFitPresets = [
+  { id: 'compact', label: 'Compacta', splashScale: 0.88, splashTextScale: 0.92, priceFontSize: 52, splashOffsetY: 0 },
+  { id: 'normal', label: 'Padrão', splashScale: 1, splashTextScale: 1, priceFontSize: 60, splashOffsetY: 0 },
+  { id: 'large', label: 'Grande', splashScale: 1.16, splashTextScale: 1.08, priceFontSize: 68, splashOffsetY: 0 }
 ] as const;
 
 const isSpacingSynced = () => {
@@ -594,6 +602,22 @@ const updateGlobal = (prop: string, value: any) => {
   emit('update:global-styles', prop, value);
 };
 
+const applyPriceTagFitPreset = (presetId: typeof priceTagFitPresets[number]['id']) => {
+  const preset = priceTagFitPresets.find((item) => item.id === presetId) ?? priceTagFitPresets[1];
+  updateGlobal('splashScale', preset.splashScale);
+  if (!isActiveTemplateAtacarejo.value) updateGlobal('splashTextScale', preset.splashTextScale);
+  updateGlobal('priceFontSize', preset.priceFontSize);
+  updateGlobal('splashOffsetY', preset.splashOffsetY);
+};
+
+const resetPriceTagGeometry = () => {
+  applyPriceTagFitPreset('normal');
+  if (!isActiveTemplateShapeLocked.value) {
+    updateGlobal('splashStrokeWidth', 0);
+    updateGlobal('splashRoundness', 1);
+  }
+};
+
 const updateGlobalInt = (prop: string, value: unknown, fallback: number, min: number, max: number) => {
   updateGlobal(prop, clamp(Math.round(toSafeNumber(value, fallback)), min, max));
 };
@@ -887,21 +911,6 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="template-card">
-            <div class="template-card__head">
-              <div>
-                <label class="field-label">Produtos da zona</label>
-                <p class="field-hint">Importe uma lista nova ou revise os produtos atuais.</p>
-              </div>
-              <span class="template-card__status">{{ activeTemplateName }}</span>
-            </div>
-            <div class="action-row">
-              <button type="button" class="primary-button" @click="emit('open-review')">
-                <PackagePlus class="h-4 w-4" />
-                Importar produtos
-              </button>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -1840,9 +1849,42 @@ onBeforeUnmount(() => {
             <div class="template-card__footer">
               <span class="template-card__status">{{ activeTemplateName }}</span>
               <button type="button" class="secondary-button" @click="emit('apply-template-to-zone')">
-                Aplicar em todos os cards
+                Sincronizar cards
               </button>
             </div>
+          </div>
+
+          <div class="template-notice">
+            <div>
+              <strong>{{ globalStyles?.splashTemplateId ? 'Modelo ativo' : 'Ajuste padrão' }}</strong>
+              <span>
+                {{ globalStyles?.splashTemplateId
+                  ? 'Os controles abaixo ajustam a zona sem alterar o modelo salvo.'
+                  : 'Use os atalhos para voltar a uma etiqueta proporcional.' }}
+              </span>
+            </div>
+            <span v-if="isActiveTemplateShapeLocked" class="lock-chip">Forma do modelo</span>
+          </div>
+
+          <div class="field-stack">
+            <div class="field-stack__head">
+              <label class="field-label">Ajuste rápido</label>
+              <p class="field-hint">Corrige proporção da etiqueta mantendo o modelo selecionado.</p>
+            </div>
+            <div class="segmented-grid segmented-grid--3">
+              <button
+                v-for="preset in priceTagFitPresets"
+                :key="preset.id"
+                type="button"
+                class="segmented-option segmented-option--compact"
+                @click="applyPriceTagFitPreset(preset.id)"
+              >
+                <strong>{{ preset.label }}</strong>
+              </button>
+            </div>
+            <button type="button" class="ghost-button ghost-button--full" @click="resetPriceTagGeometry">
+              Restaurar etiqueta da zona
+            </button>
           </div>
 
           <template v-if="!globalStyles?.splashTemplateId">
@@ -2026,7 +2068,7 @@ onBeforeUnmount(() => {
             <div class="control-card__head">
               <div>
                 <label class="field-label">Escala geral</label>
-                <p class="field-hint">Escala de R$, valor e centavos.</p>
+                <p class="field-hint">Escala dos textos internos da etiqueta.</p>
               </div>
               <div class="value-editor">
                 <input
@@ -2051,6 +2093,13 @@ onBeforeUnmount(() => {
               class="slider text-fuchsia-400"
               @input="updateGlobal('splashTextScale', Number(($event.target as HTMLInputElement).value) / 100)"
             />
+          </div>
+
+          <div v-else class="template-notice template-notice--muted">
+            <div>
+              <strong>Escala dos textos travada</strong>
+              <span>Este modelo atacarejo mantém proporção própria entre varejo e atacado.</span>
+            </div>
           </div>
 
           <!-- Sub-área 4: Formato da Etiqueta -->
@@ -2134,18 +2183,19 @@ onBeforeUnmount(() => {
               <div class="control-card__head">
                 <div>
                   <label class="field-label">Escala da etiqueta</label>
+                  <p class="field-hint">Tamanho da etiqueta inteira.</p>
                 </div>
                 <div class="value-editor">
                   <input
                     type="number"
                     min="60"
-                    max="2000"
+                    max="300"
                     step="1"
                     inputmode="numeric"
                     class="value-input"
-                    :value="Math.round((globalStyles?.splashScale ?? 1) * 100)"
+                    :value="Math.round(clamp(globalStyles?.splashScale ?? 1, PRICE_TAG_SCALE_MIN, PRICE_TAG_SCALE_MAX) * 100)"
                     aria-label="Escala da etiqueta"
-                    @input="_dUpdateGlobalFloat('splashScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashScale ?? 1, 0.6, 20, 2)"
+                    @input="_dUpdateGlobalFloat('splashScale', (($event.target as HTMLInputElement).valueAsNumber || 0) / 100, globalStyles?.splashScale ?? 1, PRICE_TAG_SCALE_MIN, PRICE_TAG_SCALE_MAX, 2)"
                   />
                   <span class="value-suffix">%</span>
                 </div>
@@ -2153,8 +2203,8 @@ onBeforeUnmount(() => {
               <input
                 type="range"
                 min="60"
-                max="2000"
-                :value="Math.round((globalStyles?.splashScale ?? 1) * 100)"
+                max="300"
+                :value="Math.round(clamp(globalStyles?.splashScale ?? 1, PRICE_TAG_SCALE_MIN, PRICE_TAG_SCALE_MAX) * 100)"
                 class="slider text-fuchsia-400"
                 @input="updateGlobal('splashScale', Number(($event.target as HTMLInputElement).value) / 100)"
               />
@@ -2865,6 +2915,51 @@ onBeforeUnmount(() => {
   color: #d4d4d8;
 }
 
+.template-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(45, 212, 191, 0.16);
+  background: rgba(45, 212, 191, 0.06);
+  padding: 10px 12px;
+}
+
+.template-notice--muted {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.template-notice div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.template-notice strong {
+  font-size: 11px;
+  color: #f4f4f5;
+}
+
+.template-notice span {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #a1a1aa;
+}
+
+.lock-chip {
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid rgba(250, 204, 21, 0.24);
+  background: rgba(250, 204, 21, 0.1);
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fde68a;
+}
+
 .action-row {
   display: flex;
   flex-wrap: wrap;
@@ -3191,6 +3286,10 @@ onBeforeUnmount(() => {
 .ghost-button {
   background: rgba(255, 255, 255, 0.04);
   color: #f4f4f5;
+}
+
+.ghost-button--full {
+  width: 100%;
 }
 
 .secondary-button {
