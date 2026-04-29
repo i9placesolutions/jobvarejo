@@ -2070,6 +2070,17 @@ const isObjectMostlyInsideFrame = (obj: any, frame: any, minOverlapRatio = 0.6) 
     const frameBounds = frame.getBoundingRect(true);
     if (!objBounds || !frameBounds) return false;
 
+    // Decoracoes (boneco, splash, titulo) costumam estourar a borda do frame mas tem
+    // o centro ancorado dentro dele. Manter o binding nesse caso preserva o clip.
+    const cx = objBounds.left + objBounds.width / 2;
+    const cy = objBounds.top + objBounds.height / 2;
+    const centerInside =
+        cx >= frameBounds.left &&
+        cx <= frameBounds.left + frameBounds.width &&
+        cy >= frameBounds.top &&
+        cy <= frameBounds.top + frameBounds.height;
+    if (centerInside) return true;
+
     const left = Math.max(objBounds.left, frameBounds.left);
     const top = Math.max(objBounds.top, frameBounds.top);
     const right = Math.min(objBounds.left + objBounds.width, frameBounds.left + frameBounds.width);
