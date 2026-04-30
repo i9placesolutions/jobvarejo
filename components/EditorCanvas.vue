@@ -41173,14 +41173,25 @@ const rehydrateCanvasZones = (
             f.isFrame = true;
             if (typeof f.clipContent !== 'boolean') f.clipContent = true;
 
-            // CRITICAL: Ensure frames always have originX='center' and originY='center'
-            // This prevents size jumps after reload when clipPath is recalculated
-            if (f.originX !== 'center') {
-                f.originX = 'center';
-                f.setCoords?.();
-            }
-            if (f.originY !== 'center') {
-                f.originY = 'center';
+            // CRITICAL: Ensure frames always have originX='center' and originY='center'.
+            // Preserve the visual center while normalizing. Changing originX/originY
+            // directly shifts legacy frames on reload, which then breaks clipping and
+            // parentFrameId geometry.
+            if (f.originX !== 'center' || f.originY !== 'center') {
+                try {
+                    const center = typeof f.getCenterPoint === 'function'
+                        ? f.getCenterPoint()
+                        : { x: Number(f.left || 0), y: Number(f.top || 0) };
+                    f.set?.({
+                        originX: 'center',
+                        originY: 'center',
+                        left: Number(center?.x ?? f.left ?? 0),
+                        top: Number(center?.y ?? f.top ?? 0)
+                    });
+                } catch {
+                    f.originX = 'center';
+                    f.originY = 'center';
+                }
                 f.setCoords?.();
             }
             
