@@ -8323,31 +8323,15 @@ const resolveRelatedImportZones = (primaryZone: any): any[] => {
     const refreshedPrimary = primaryId
         ? allZones.find((zone: any) => String((zone as any)?._customId || '').trim() === primaryId) || primaryZone
         : primaryZone
-    const frameId = String((refreshedPrimary as any)?.parentFrameId || getResolvedZoneFrameId(refreshedPrimary) || '').trim()
 
-    // Sem um frameId valido nao da para confiar no agrupamento por frame:
-    // depois de varias duplicacoes, zonas com parentFrameId vazio seriam
-    // todas agrupadas como "irmas" e os produtos cairiam em zonas de frames
-    // diferentes. Se a zona primaria nao tem frame resolvido, restringimos a
-    // importacao APENAS a zona em que o usuario clicou.
-    if (!frameId) {
-        return [refreshedPrimary]
-    }
-
-    const related = allZones.filter((zone: any) => {
-        if (!zone || !isLikelyProductZone(zone)) return false
-        const zoneFrameId = String((zone as any)?.parentFrameId || getResolvedZoneFrameId(zone) || '').trim()
-        return zoneFrameId === frameId
-    })
-
-    const unique: any[] = []
-    const push = (zone: any) => {
-        if (!zone || !isLikelyProductZone(zone)) return
-        if (!unique.includes(zone)) unique.push(zone)
-    }
-    related.forEach(push)
-    push(refreshedPrimary)
-    return sortProductZonesByVisualOrder(unique)
+    // Comportamento corrigido: a importacao inteligente sempre alvo APENAS a
+    // zona explicitamente selecionada pelo usuario. Antes, agrupavamos todas
+    // as zonas com o mesmo parentFrameId como "irmas" e distribuiamos os
+    // produtos entre elas — o que fazia com que ao duplicar uma zona e
+    // importar produtos NA COPIA, os itens caissem na zona original (que vinha
+    // primeiro na ordem visual). Tratar cada zona como independente respeita
+    // a escolha do usuario e evita esse vazamento entre duplicatas.
+    return [refreshedPrimary]
 }
 
 const getImportTargetZones = (): any[] => {
@@ -22562,7 +22546,9 @@ const updateSmartGroup = (keyOrUpdates: any, value?: any) => {
                  priceFrom: group.priceFrom,
                  priceClub: group.priceClub,
                  priceColor: intTxt ? intTxt.fill : 'red',
-                 unit: unitObj ? unitObj.text : (storedData.unit || 'UN'),
+                 // Sem fallback fantasma para 'UN': se o produto/etiqueta nao tem
+                 // unidade definida, deixa vazio e a renderizacao decide pelo template.
+                 unit: unitObj ? unitObj.text : (storedData.unit || ''),
                  // Atacarejo
                  priceWholesale: group.priceWholesale,
                  wholesaleTrigger: group.wholesaleTrigger,
@@ -24484,17 +24470,14 @@ const withProductZonesHiddenForOutput = async <T>(action: () => Promise<T> | T):
     if (!canvas.value) return await action();
 
     const allObjects = canvas.value.getObjects() || [];
+    // Oculta apenas as molduras tracejadas das zonas (guias visuais).
+    // Os cards de produtos (parentZoneId) são conteúdo real e DEVEM
+    // aparecer na imagem exportada.
     const zones = allObjects.filter((o: any) => isLikelyProductZone(o));
-    // FIX: Also hide product cards (standalone top-level objects bound to zones)
-    const zoneIds = new Set(zones.map((z: any) => String(z._customId || '').trim()));
-    const cards = allObjects.filter((o: any) => {
-        const pid = String(o?.parentZoneId || '').trim();
-        return pid && zoneIds.has(pid);
-    });
 
-    if (!zones.length && !cards.length) return await action();
+    if (!zones.length) return await action();
 
-    const targetsToHide = [...zones, ...cards];
+    const targetsToHide = zones;
     const prevVisibility = targetsToHide.map((obj: any) => ({
         obj,
         visible: obj?.visible !== false
@@ -31530,8 +31513,10 @@ const normalizeUnitForLabel = (raw: any): PriceUnitLabel => {
     if (tok === 'KG' || tok === 'K' || tok === 'KILO' || tok === 'KILOS' || tok.includes('KG')) return 'KG';
     if (tok === 'UN' || tok === 'UND' || tok === 'UNID' || tok === 'UNIDADE' || tok.includes('UN')) return 'UN';
 
-    // Everything else (ML/L/G/etc) becomes "UN" (gramatura stays in the product name).
-    return 'UN';
+    // Gramaturas (ML/L/G/etc) NAO devem virar 'UN' automatico — gramatura segue
+    // no nome do produto. Retornar string vazia evita 'UN' fantasma quando o
+    // template nao permite unidade.
+    return '';
 };
 
 const PRICE_INTEGER_DECIMAL_GAP_PX = 1;
@@ -31589,19 +31574,32 @@ const layoutPrice = (opts: {
     let intW = getW(integer);
     const decWInitial = getW(decimal);
 
-    // If the value is too wide, shrink the integer only (preserves design hierarchy).
+    // Quando o preco nao cabe na largura disponivel, aplicamos shrink em
+    // INTEIRO + DECIMAL para preservar a hierarquia visual. Antes so o inteiro
+    // encolhia e o decimal mantinha escala 1 — em precos com 2+ digitos como
+    // 47,99/129,99 isso deixava o decimal visualmente desproporcional ao
+    // inteiro reduzido. A unidade nao precisa ser tocada aqui: o auto-fit
+    // logo abaixo (apos centsX) ja a ajusta a largura do decimal.
     if (maxWidth > 0 && intW > 0) {
         const allowedIntW = Math.max(8, maxWidth - decWInitial - gap);
         if (intW > allowedIntW) {
-            const baseScaleX = Number(integer.scaleX || 1);
-            const baseScaleY = Number(integer.scaleY || 1);
+            const baseIntSx = Number(integer.scaleX || 1);
+            const baseIntSy = Number(integer.scaleY || 1);
             const shrink = Math.min(1, Math.max(0.35, allowedIntW / intW));
             integer.set?.({
-                scaleX: baseScaleX * shrink,
-                scaleY: baseScaleY * shrink
+                scaleX: baseIntSx * shrink,
+                scaleY: baseIntSy * shrink
             });
             integer.initDimensions?.();
             intW = getW(integer);
+
+            const baseDecSx = Number(decimal.scaleX || 1);
+            const baseDecSy = Number(decimal.scaleY || 1);
+            decimal.set?.({
+                scaleX: baseDecSx * shrink,
+                scaleY: baseDecSy * shrink
+            });
+            decimal.initDimensions?.();
         }
     }
 
@@ -33051,7 +33049,11 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
         return {
             chainWidthRatio: clamp(asFinite(fromTemplate.chainWidthRatio, base.chainWidthRatio), 0.35, 0.95),
             minScale: clamp(asFinite(fromTemplate.minScale, base.minScale), 0.30, 1),
-            intDecimalGap: PRICE_INTEGER_DECIMAL_GAP_PX,
+            // Respeita o gap especifico armazenado em __atacValueVariants[key].intDecimalGap
+            // (configurado via Mini Editor por variante: tiny/normal/large). Antes este
+            // valor era ignorado e forcado para 1px, deixando os centavos visualmente
+            // descolados do inteiro em precos com 2+ digitos como 47,99 / 129,99.
+            intDecimalGap: clamp(asFinite(fromTemplate.intDecimalGap, base.intDecimalGap), -8, 60),
             currencyGapRatio: clamp(asFinite(fromTemplate.currencyGapRatio, base.currencyGapRatio), 0.005, 0.08),
             packWidthRatio: clamp(asFinite(fromTemplate.packWidthRatio, base.packWidthRatio), 0.55, 0.99),
         };
@@ -36390,11 +36392,19 @@ function serializePriceGroupForTemplate(pg: any) {
     safeAddWithUpdate(pg);
     const j: any = pg.toObject(LABEL_TEMPLATE_EXTRA_PROPS);
     const useVariantSnapshots = shouldUseAtacVariantSnapshotsForTemplate(pg);
-    if (typeof (pg as any).__atacValueVariants === 'object') {
-        j.__atacValueVariants = (pg as any).__atacValueVariants;
+    // Deep clone para impedir que templates serializados compartilhem por
+    // referencia as estruturas aninhadas com a etiqueta original. Sem isso,
+    // editar variantes em uma zona duplicada/template salvo alterava o objeto
+    // vivo da etiqueta no canvas (e vice-versa).
+    const safeDeepClone = (value: any): any => {
+        if (value === null || typeof value !== 'object') return value;
+        try { return JSON.parse(JSON.stringify(value)); } catch { return value; }
+    };
+    if (typeof (pg as any).__atacValueVariants === 'object' && (pg as any).__atacValueVariants !== null) {
+        j.__atacValueVariants = safeDeepClone((pg as any).__atacValueVariants);
     }
-    if (useVariantSnapshots && typeof (pg as any).__atacVariantGroups === 'object') {
-        j.__atacVariantGroups = (pg as any).__atacVariantGroups;
+    if (useVariantSnapshots && typeof (pg as any).__atacVariantGroups === 'object' && (pg as any).__atacVariantGroups !== null) {
+        j.__atacVariantGroups = safeDeepClone((pg as any).__atacVariantGroups);
     } else {
         delete j.__atacVariantGroups;
     }
