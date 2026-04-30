@@ -30,6 +30,13 @@ import {
     collectObjectsDeep,
     findByName
 } from '~/utils/fabricObjectClassifiers'
+import {
+    isObjectShownForBounds,
+    getObjectHorizontalBoundsLocal,
+    measureHorizontalBoundsLocal,
+    getObjectVerticalBoundsLocal,
+    measureContentBoundsLocal
+} from '~/utils/fabricMeasure'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
 import { registerHistorySaveListeners } from '~/utils/editorHistoryListeners'
@@ -31456,73 +31463,10 @@ type PriceUnitLabel = import('~/utils/priceTagText').PriceUnitLabel;
 // modularizacao) com 16 testes unitarios cobrindo regressoes do shrink
 // proporcional, normalizacao de unidade e centralizacao do bloco.
 
-const isObjectShownForBounds = (obj: any) => {
-    if (!obj) return false;
-    if (obj.visible === false) return false;
-    const sx = Number(obj.scaleX ?? 1);
-    const sy = Number(obj.scaleY ?? 1);
-    return sx !== 0 && sy !== 0;
-};
-
-const getObjectHorizontalBoundsLocal = (obj: any): { left: number; right: number } | null => {
-    if (!isObjectShownForBounds(obj)) return null;
-    const widthRaw = Number(obj?.width ?? 0);
-    const scaleX = Math.abs(Number(obj?.scaleX ?? 1)) || 1;
-    const width = widthRaw * scaleX;
-    if (!Number.isFinite(width) || width <= 0) return null;
-    const x = Number(obj?.left ?? 0);
-    const ox = String(obj?.originX || 'left');
-    if (ox === 'center') return { left: x - (width / 2), right: x + (width / 2) };
-    if (ox === 'right') return { left: x - width, right: x };
-    return { left: x, right: x + width };
-};
-
-const measureHorizontalBoundsLocal = (objects: any[]): { left: number; right: number; width: number } | null => {
-    const bounds = (objects || [])
-        .map((o) => getObjectHorizontalBoundsLocal(o))
-        .filter(Boolean) as Array<{ left: number; right: number }>;
-    if (!bounds.length) return null;
-    const left = Math.min(...bounds.map((b) => b.left));
-    const right = Math.max(...bounds.map((b) => b.right));
-    return { left, right, width: Math.max(0, right - left) };
-};
-
-const getObjectVerticalBoundsLocal = (obj: any): { top: number; bottom: number } | null => {
-    if (!isObjectShownForBounds(obj)) return null;
-    const heightRaw = Number(obj?.height ?? 0);
-    const scaleY = Math.abs(Number(obj?.scaleY ?? 1)) || 1;
-    const height = heightRaw * scaleY;
-    if (!Number.isFinite(height) || height <= 0) return null;
-    const y = Number(obj?.top ?? 0);
-    const oy = String(obj?.originY || 'top');
-    if (oy === 'center') return { top: y - (height / 2), bottom: y + (height / 2) };
-    if (oy === 'bottom') return { top: y - height, bottom: y };
-    return { top: y, bottom: y + height };
-};
-
-const measureContentBoundsLocal = (
-    objects: any[]
-): { left: number; right: number; top: number; bottom: number; width: number; height: number } | null => {
-    const h = (objects || [])
-        .map((o) => getObjectHorizontalBoundsLocal(o))
-        .filter(Boolean) as Array<{ left: number; right: number }>;
-    const v = (objects || [])
-        .map((o) => getObjectVerticalBoundsLocal(o))
-        .filter(Boolean) as Array<{ top: number; bottom: number }>;
-    if (!h.length || !v.length) return null;
-    const left = Math.min(...h.map((b) => b.left));
-    const right = Math.max(...h.map((b) => b.right));
-    const top = Math.min(...v.map((b) => b.top));
-    const bottom = Math.max(...v.map((b) => b.bottom));
-    return {
-        left,
-        right,
-        top,
-        bottom,
-        width: Math.max(0, right - left),
-        height: Math.max(0, bottom - top)
-    };
-};
+// isObjectShownForBounds / getObjectHorizontalBoundsLocal /
+// measureHorizontalBoundsLocal / getObjectVerticalBoundsLocal /
+// measureContentBoundsLocal foram extraidos para utils/fabricMeasure.ts
+// (Fase 2 da modularizacao).
 
 const resolvePriceGroupVisibleBoundsLocal = (priceGroup: any) => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
