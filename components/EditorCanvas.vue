@@ -19,6 +19,15 @@ import {
     resolveAtacVariantKeyFromPrice,
     PRICE_INTEGER_DECIMAL_GAP_PX
 } from '~/utils/priceTagText'
+import {
+    getZoneRect,
+    isLikelyProductZone,
+    isStandalonePriceGroup,
+    isLikelyProductCard,
+    isTextLikeObject,
+    collectObjectsDeep,
+    findByName
+} from '~/utils/fabricObjectClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
 import { registerHistorySaveListeners } from '~/utils/editorHistoryListeners'
@@ -31426,31 +31435,8 @@ const handleApplyTemplateToZone = async () => {
     refreshSelectedRef();
 };
 
-const collectObjectsDeep = (root: any): any[] => {
-    const out: any[] = [];
-    const isGroupLike = (obj: any): boolean => {
-        const t = String(obj?.type || '').toLowerCase();
-        return t === 'group' && typeof obj.getObjects === 'function';
-    };
-    const walk = (obj: any) => {
-        if (!obj) return;
-        out.push(obj);
-        if (isGroupLike(obj)) {
-            const children = obj.getObjects() || [];
-            children.forEach(walk);
-        }
-    };
-    if (root && typeof root.getObjects === 'function') {
-        root.getObjects().forEach(walk);
-    }
-    return out;
-};
-
-const findByName = (objects: any[], name: string) => objects.find((o: any) => o?.name === name);
-const isTextLikeObject = (obj: any) => {
-    const t = String(obj?.type || '').toLowerCase();
-    return t === 'text' || t === 'i-text' || t === 'textbox';
-};
+// collectObjectsDeep / findByName / isTextLikeObject foram extraidos para
+// utils/fabricObjectClassifiers.ts (Fase 2 da modularizacao).
 
 // parsePriceToCents / formatCentsToPrice / splitPriceParts /
 // resolveAtacVariantKeyFromPrice + tipo AtacVariantKey foram extraidos
@@ -39608,109 +39594,8 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     // No wrapper needed — dimensions are explicitly set by resizeSmartObject.
 }
 
-const getZoneRect = (zone: any) => {
-    if (!zone) return null;
-    if (zone.type === 'rect') return zone;
-    if (typeof zone.getObjects !== 'function') return null;
-    const objs = zone.getObjects() || [];
-    return (
-        objs.find((o: any) => o.type === 'rect' && (o.name === 'zoneRect' || o.name === 'zone-border' || Array.isArray(o.strokeDashArray))) ||
-        objs.find((o: any) => o.type === 'rect') ||
-        null
-    );
-}
-
-const isLikelyProductZone = (obj: any) => {
-    if (!obj) return false;
-    if (obj.type !== 'group') return false;
-    if (obj.isGridZone || obj.isProductZone) return true;
-    if (obj.name === 'gridZone' || obj.name === 'productZoneContainer') return true;
-    // CRITICAL: Detect zones via zone-specific custom properties that survive serialization.
-    // This catches legacy arts where flags were not originally in CANVAS_CUSTOM_PROPS.
-    if (typeof obj._zonePadding === 'number' && typeof obj._zoneWidth === 'number' && typeof obj._zoneHeight === 'number') return true;
-    const rect = getZoneRect(obj);
-    // A dashed rect alone is NOT enough — many generic groups (arrows, annotations)
-    // can contain dashed rects. Require additional zone-specific signals to avoid
-    // false positives that corrupt canvas behavior.
-    if (rect && Array.isArray(rect.strokeDashArray)) {
-        return !!(obj._zoneGlobalStyles || obj.zoneName || obj._zoneTemplateSnapshotId || obj.role);
-    }
-    return false;
-}
-
-const isStandalonePriceGroup = (obj: any) => {
-    if (!obj) return false;
-    if (obj.type !== 'group' || typeof obj.getObjects !== 'function') return false;
-    if (String(obj.name || '') !== 'priceGroup') return false;
-
-    // If it's already tagged as card/smart object, it's not a standalone label.
-    if (obj.isSmartObject || obj.isProductCard) return false;
-    if (String((obj as any).parentZoneId || '').trim()) return false;
-    if (String((obj as any).smartGridId || '').trim()) return false;
-
-    const children = obj.getObjects() || [];
-    const hasOfferBg = children.some((c: any) => String(c?.name || '') === 'offerBackground');
-    const hasSmartImage = children.some((c: any) => {
-        const t = String(c?.type || '').toLowerCase();
-        const n = String(c?.name || '');
-        return t === 'image' || ['smart_image', 'product_image', 'productImage'].includes(n);
-    });
-
-    // A real standalone price label usually has only price texts/backgrounds, not card background/image.
-    return !hasOfferBg && !hasSmartImage;
-}
-
-const isLikelyProductCard = (obj: any) => {
-    if (!obj) return false;
-    if (obj.excludeFromExport) return false;
-    if (obj.isFrame) return false;
-    if (isLikelyProductZone(obj)) return false;
-    if (obj.type !== 'group' || typeof obj.getObjects !== 'function') return false;
-    // Ignore only true standalone price labels. Some legacy cards were incorrectly named "priceGroup".
-    if (isStandalonePriceGroup(obj)) return false;
-
-    // If it already has a zone binding, treat as a product card (legacy-safe).
-    const pz = String((obj as any).parentZoneId || '').trim();
-    if (pz) return true;
-
-    // Strong signals from our engine (even in older saves).
-    const cw = Number((obj as any)._cardWidth);
-    const ch = Number((obj as any)._cardHeight);
-    if (Number.isFinite(cw) && cw > 0 && Number.isFinite(ch) && ch > 0) return true;
-    if (String((obj as any).smartGridId || '').trim()) return true;
-    if (String((obj as any).priceMode || '').trim()) return true;
-
-    const children = obj.getObjects() || [];
-    if (!children.length) return false;
-
-    const isText = (o: any) => String(o?.type || '').toLowerCase().includes('text');
-    const hasOfferBg = children.some((c: any) => String(c?.name || '') === 'offerBackground');
-    const hasBg = hasOfferBg || children.some((c: any) => String(c?.type || '').toLowerCase() === 'rect' && /(offerBackground|background|bg)/i.test(String(c?.name || '')));
-    const hasPriceGroup = children.some((c: any) => String(c?.type || '').toLowerCase() === 'group' && String(c?.name || '') === 'priceGroup');
-    const hasAnyPriceText = children.some((c: any) => /price_(integer|decimal|value|currency|unit)_text/i.test(String(c?.name || '')));
-    const hasImage = children.some((c: any) => {
-        const t = String(c?.type || '').toLowerCase();
-        const n = String(c?.name || '');
-        return t === 'image' || ['smart_image', 'product_image', 'productImage'].includes(n);
-    });
-    const hasTitle = children.some((c: any) => isText(c) && /(^smart_title$|^title$|title)/i.test(String(c?.name || '')));
-    const textCount = children.filter((c: any) => isText(c)).length;
-    const nonTextCount = children.length - textCount;
-
-    // Super-forte: o retângulo de fundo padrão do card.
-    if (hasOfferBg) return true;
-    // Forte: templates normalmente sempre têm o priceGroup.
-    if (hasPriceGroup && (hasImage || hasTitle || textCount >= 1)) return true;
-
-    // Heurística mais permissiva para cards montados manualmente:
-    // se for um grupo (não-zone) com texto + algum elemento visual, tratamos como card.
-    if (textCount >= 1 && nonTextCount >= 1 && (hasImage || hasBg || hasAnyPriceText)) return true;
-
-    // Most cards have an embedded priceGroup. Require at least 2 signals to avoid false positives.
-    const signals = [hasPriceGroup, hasImage, hasTitle, hasBg, hasAnyPriceText].filter(Boolean).length;
-    if (hasAnyPriceText && hasImage && textCount >= 1) return true;
-    return signals >= 3 || (hasAnyPriceText && textCount >= 2);
-}
+// getZoneRect / isLikelyProductZone / isStandalonePriceGroup / isLikelyProductCard
+// foram extraidos para utils/fabricObjectClassifiers.ts (Fase 2).
 
 const repairLegacyProductCardImageTransforms = (
     cards: any[],
