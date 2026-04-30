@@ -93,7 +93,7 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
       v-if="['classic', 'bubble', 'explosion', 'star', 'ribbon'].includes(splashStyle)"
       :width="splashStyle === 'ribbon' ? 180 : 160" 
       :height="splashStyle === 'ribbon' ? 80 : 130"
-      viewBox="0 0 160 130"
+      :viewBox="splashStyle === 'ribbon' ? '0 0 160 80' : '0 0 160 130'"
       class="overflow-visible"
     >
       <!-- Background Shape -->
@@ -278,6 +278,5 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
 <style scoped>
 .splash-renderer {
   z-index: 100;
-  will-change: transform;
 }
 </style>

@@ -73,6 +73,7 @@ import {
 } from '~/utils/editorSelectionTextOps'
 import {
     buildSelectionSyncPayload,
+    buildZoneSelectionConfig,
     getSelectedObjectFloatingPos,
     refreshSelectedRefWithRecovery,
     syncSelectionDomainState
@@ -14476,6 +14477,9 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     if (nextTargetZone && isLikelyProductZone(nextTargetZone)) {
         targetGridZone.value = nextTargetZone;
         targetGridZones.value = resolveRelatedImportZones(nextTargetZone);
+        // Sync composable singleton with cloned zone data so edits target the clone, not the original
+        productZoneState.updateZone(buildZoneSelectionConfig(nextTargetZone));
+        productZoneState.updateGlobalStyles(getZoneGlobalStyles(nextTargetZone));
     } else {
         targetGridZone.value = null;
         targetGridZones.value = [];
