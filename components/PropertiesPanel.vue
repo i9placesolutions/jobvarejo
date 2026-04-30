@@ -28,6 +28,10 @@ import ColorPicker from './ui/ColorPicker.vue'
 import ProductZoneSettings from './ProductZoneSettings.vue'
 import type { ProductZone, GlobalStyles } from '~/types/product-zone'
 import type { LabelTemplate } from '~/types/label-template'
+
+type ZoneUpdateTargetMeta = {
+  targetId?: string | null
+}
 import { AVAILABLE_FONT_FAMILIES } from '~/utils/font-catalog'
 
 const props = defineProps<{
@@ -50,10 +54,10 @@ const emit = defineEmits<{
   (e: 'add-color-style', color: string): void
   (e: 'apply-color-style', styleId: string): void
   // Product Zone Events
-  (e: 'update-zone', prop: string, value: any): void
-  (e: 'update-global-styles', prop: string, value: any): void
+  (e: 'update-zone', prop: string, value: any, meta?: ZoneUpdateTargetMeta): void
+  (e: 'update-global-styles', prop: string, value: any, meta?: ZoneUpdateTargetMeta): void
   (e: 'apply-preset', presetId: string): void
-  (e: 'sync-gaps', padding: number): void
+  (e: 'sync-gaps', padding: number, meta?: ZoneUpdateTargetMeta): void
   (e: 'recalculate-layout'): void
   (e: 'manage-label-templates'): void
   (e: 'open-zone-review'): void
@@ -301,6 +305,7 @@ onBeforeUnmount(() => {
 
 // Extract zone data directly from selected object when it's a product zone
 type ZoneInspectorData = Partial<ProductZone> & {
+  _customId?: string
   name?: string
   role?: ProductZone['role']
   contentSource?: ProductZone['contentSource']
@@ -316,9 +321,11 @@ const currentZoneData = computed<ZoneInspectorData>(() => {
   if (!obj) return props.productZone ?? {}
 
   const pad = typeof obj._zonePadding === 'number' ? obj._zonePadding : (obj.padding || 20)
-  const inspectorMeta = props.productZoneInspector || {}
+    const inspectorMeta = props.productZoneInspector || {}
 
   return {
+    id: String((obj as any)?._customId || (obj as any)?.id || inspectorMeta?.id || '').trim() || undefined,
+    _customId: String((obj as any)?._customId || inspectorMeta?._customId || inspectorMeta?.id || '').trim() || undefined,
     name: String((obj as any).zoneName || (obj as any).name || inspectorMeta?.name || '').trim() || 'Zona de Produtos',
     role: (obj as any).role ?? inspectorMeta?.role ?? 'grid',
     contentSource: (obj as any).contentSource ?? inspectorMeta?.contentSource ?? 'manual',
@@ -2101,10 +2108,10 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             :global-styles="currentGlobalStyles"
             :label-templates="labelTemplates"
             @open-review="$emit('open-zone-review')"
-            @update:zone="(prop, val) => $emit('update-zone', prop, val)"
-            @update:global-styles="(prop, val) => $emit('update-global-styles', prop, val)"
+            @update:zone="(prop, val, meta) => $emit('update-zone', prop, val, meta)"
+            @update:global-styles="(prop, val, meta) => $emit('update-global-styles', prop, val, meta)"
             @apply-preset="presetId => $emit('apply-preset', presetId)"
-            @sync-gaps="padding => $emit('sync-gaps', padding)"
+            @sync-gaps="(padding, meta) => $emit('sync-gaps', padding, meta)"
             @recalculate-layout="$emit('recalculate-layout')"
             @manage-label-templates="$emit('manage-label-templates')"
             @apply-template-to-zone="$emit('apply-template-to-zone')"

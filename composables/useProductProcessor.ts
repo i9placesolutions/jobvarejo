@@ -17,6 +17,9 @@ export interface SmartProductImageCandidate {
 
 export interface SmartProduct {
     id: string;
+    productId?: string | null;
+    productInstanceId?: string | null;
+    zoneInstanceId?: string | null;
     name: string;
     productCode?: string | null;
     brand: string | null;

@@ -70,11 +70,11 @@ const emit = defineEmits<{
   (e: 'action', action: string): void
   (e: 'add-color-style', color: string): void
   (e: 'apply-color-style', styleId: string): void
-  (e: 'update-zone', prop: string, value: any): void
-  (e: 'update-global-styles', prop: string, value: any): void
+  (e: 'update-zone', prop: string, value: any, meta?: any): void
+  (e: 'update-global-styles', prop: string, value: any, meta?: any): void
   (e: 'apply-template-to-zone'): void
   (e: 'apply-preset', presetId: string): void
-  (e: 'sync-gaps', padding: number): void
+  (e: 'sync-gaps', padding: number, meta?: any): void
   (e: 'recalculate-layout'): void
   (e: 'manage-label-templates'): void
   (e: 'open-zone-review'): void
@@ -144,11 +144,11 @@ const emit = defineEmits<{
         @add-color-style="(color) => emit('add-color-style', color)"
         @apply-color-style="(styleId) => emit('apply-color-style', styleId)"
         @add-interaction="() => {}"
-        @update-zone="(prop, value) => emit('update-zone', prop, value)"
-        @update-global-styles="(prop, value) => emit('update-global-styles', prop, value)"
+        @update-zone="(prop, value, meta) => emit('update-zone', prop, value, meta)"
+        @update-global-styles="(prop, value, meta) => emit('update-global-styles', prop, value, meta)"
         @apply-template-to-zone="emit('apply-template-to-zone')"
         @apply-preset="(payload) => emit('apply-preset', payload)"
-        @sync-gaps="(padding) => emit('sync-gaps', padding)"
+        @sync-gaps="(padding, meta) => emit('sync-gaps', padding, meta)"
         @recalculate-layout="emit('recalculate-layout')"
         @manage-label-templates="emit('manage-label-templates')"
         @open-zone-review="emit('open-zone-review')"

@@ -136,6 +136,229 @@ const ensureUniquePageId = (wanted: unknown, used: Set<string>): string => {
     return next
 }
 
+const makeDuplicatedProductInstanceId = (): string => `item_${makeId()}`
+
+const clonePlainJson = <T>(value: T): T => JSON.parse(JSON.stringify(value))
+
+const getOrCreateMappedId = (map: Map<string, string>, raw: unknown, factory: () => string = makeId): string => {
+    const id = String(raw || '').trim()
+    if (!id) return ''
+    const existing = map.get(id)
+    if (existing) return existing
+    let next = factory()
+    while (!next || next === id || Array.from(map.values()).includes(next)) {
+        next = factory()
+    }
+    map.set(id, next)
+    return next
+}
+
+const PAGE_DUPLICATE_REF_KEYS = new Set([
+    'parentFrameId',
+    'parentZoneId',
+    '_frameClipOwner',
+    'objectMaskSourceId',
+    'zoneId',
+    'zoneInstanceId',
+    'parentId',
+    'groupId',
+    'linkedProductId',
+    'sourceObjectId',
+    'sourceZoneId',
+    'targetObjectId',
+    'targetZoneId'
+])
+
+const PAGE_DUPLICATE_INSTANCE_ID_KEYS = new Set([
+    '_customId',
+    'objectId',
+    'canvasObjectId'
+])
+
+const PAGE_DUPLICATE_GROUP_ID_KEYS = new Set([
+    'gridGroupId',
+    'smartGridId',
+    'groupId'
+])
+
+const shouldRegenerateSerializedId = (node: any): boolean => {
+    if (!node || typeof node !== 'object') return false
+    const id = String(node.id || '').trim()
+    if (!id || id === 'artboard-bg' || id.startsWith('guide-')) return false
+    return !!(
+        node._customId ||
+        node.type ||
+        node.isFrame ||
+        node.isGridZone ||
+        node.isProductZone ||
+        node.isSmartObject ||
+        node.isProductCard ||
+        node.parentZoneId ||
+        node.parentFrameId
+    )
+}
+
+const collectDuplicatedPageInstanceIds = (root: any): Set<string> => {
+    const ids = new Set<string>()
+    const visit = (value: any) => {
+        if (!value || typeof value !== 'object') return
+        if (Array.isArray(value)) {
+            value.forEach(visit)
+            return
+        }
+        ;[
+            '_customId',
+            'objectId',
+            'canvasObjectId',
+            'productInstanceId'
+        ].forEach((key) => {
+            const id = String(value?.[key] || '').trim()
+            if (id) ids.add(id)
+        })
+        if (value._productData && typeof value._productData === 'object') {
+            const productInstanceId = String(value._productData.productInstanceId || '').trim()
+            if (productInstanceId) ids.add(productInstanceId)
+        }
+        Object.values(value).forEach(visit)
+    }
+    visit(root)
+    return ids
+}
+
+const clonePageCanvasDataWithFreshIds = (sourceCanvasData: any): any => {
+    const clonedJson = clonePlainJson(sourceCanvasData)
+    const objectIdMap = new Map<string, string>()
+    const groupIdMap = new Map<string, string>()
+
+    const remapObjectRef = (value: unknown): string => {
+        const id = String(value || '').trim()
+        if (!id) return ''
+        return objectIdMap.get(id) || groupIdMap.get(id) || getOrCreateMappedId(objectIdMap, id)
+    }
+
+    const normalizeProductIdentity = (node: any) => {
+        if (!node || typeof node !== 'object') return
+        const hasProductMetadata = !!(
+            node._productData ||
+            node.productData ||
+            node.isProductCard ||
+            node.isSmartObject ||
+            node.parentZoneId
+        )
+        if (!hasProductMetadata) return
+
+        const pdSource = node._productData && typeof node._productData === 'object'
+            ? node._productData
+            : (node.productData && typeof node.productData === 'object' ? node.productData : {})
+        const productId = String(
+            pdSource.productId ||
+            pdSource.product_id ||
+            pdSource.catalogProductId ||
+            pdSource.id ||
+            node.productId ||
+            ''
+        ).trim()
+        const productInstanceId = makeDuplicatedProductInstanceId()
+        const zoneInstanceId = String(node.parentZoneId || pdSource.zoneInstanceId || node.zoneInstanceId || '').trim()
+
+        if (node._productData && typeof node._productData === 'object') {
+            node._productData = {
+                ...node._productData,
+                ...(productId ? { productId } : {}),
+                id: productInstanceId,
+                productInstanceId,
+                ...(zoneInstanceId ? { zoneInstanceId } : {})
+            }
+        }
+        if (node.productData && typeof node.productData === 'object') {
+            node.productData = {
+                ...node.productData,
+                ...(productId ? { productId } : {}),
+                id: productInstanceId,
+                productInstanceId,
+                ...(zoneInstanceId ? { zoneInstanceId } : {})
+            }
+        }
+        if (node.product && typeof node.product === 'object') {
+            node.product = {
+                ...node.product,
+                ...(productId ? { productId } : {}),
+                id: productInstanceId,
+                productInstanceId,
+                ...(zoneInstanceId ? { zoneInstanceId } : {})
+            }
+        }
+        node.productInstanceId = productInstanceId
+        if (productId) node.productId = productId
+        else delete node.productId
+        if (zoneInstanceId) node.zoneInstanceId = zoneInstanceId
+        else delete node.zoneInstanceId
+    }
+
+    const visit = (value: any) => {
+        if (!value || typeof value !== 'object') return
+        if (Array.isArray(value)) {
+            value.forEach(visit)
+            return
+        }
+
+        PAGE_DUPLICATE_INSTANCE_ID_KEYS.forEach((key) => {
+            const current = String(value[key] || '').trim()
+            if (current) value[key] = getOrCreateMappedId(objectIdMap, current)
+        })
+
+        if (shouldRegenerateSerializedId(value)) {
+            value.id = getOrCreateMappedId(objectIdMap, value.id)
+        }
+
+        PAGE_DUPLICATE_GROUP_ID_KEYS.forEach((key) => {
+            const current = String(value[key] || '').trim()
+            if (current) value[key] = getOrCreateMappedId(groupIdMap, current, () => `${key.replace(/Id$/, '').toLowerCase()}_${makeId()}`)
+        })
+
+        PAGE_DUPLICATE_REF_KEYS.forEach((key) => {
+            const current = String(value[key] || '').trim()
+            if (current) value[key] = remapObjectRef(current)
+        })
+
+        if (value._zoneSlot && typeof value._zoneSlot === 'object') {
+            const slotZoneId = String(value._zoneSlot.zoneId || '').trim()
+            if (slotZoneId) value._zoneSlot = { ...value._zoneSlot, zoneId: remapObjectRef(slotZoneId) }
+        }
+
+        if (value.zone && typeof value.zone === 'object') {
+            const zoneId = String(value.zone.id || '').trim()
+            if (zoneId) value.zone.id = remapObjectRef(zoneId)
+            const zoneFrameId = String(value.zone.parentFrameId || '').trim()
+            if (zoneFrameId) value.zone.parentFrameId = remapObjectRef(zoneFrameId)
+        }
+
+        normalizeProductIdentity(value)
+        Object.entries(value).forEach(([key, entry]) => {
+            if (key === '_productData' || key === 'productData' || key === 'product') return
+            visit(entry)
+        })
+    }
+
+    visit(clonedJson)
+
+    if (import.meta.dev) {
+        const sourceIds = collectDuplicatedPageInstanceIds(sourceCanvasData)
+        const cloneIds = collectDuplicatedPageInstanceIds(clonedJson)
+        const sharedIds = Array.from(cloneIds).filter((id) => sourceIds.has(id))
+        console.debug('[duplicate-page:identity]', {
+            sourceIds: sourceIds.size,
+            clonedIds: cloneIds.size,
+            remappedObjectIds: objectIdMap.size,
+            remappedGroupIds: groupIdMap.size,
+            sharedIds: sharedIds.slice(0, 20),
+            sharedCount: sharedIds.length
+        })
+    }
+
+    return clonedJson
+}
+
 const normalizeProjectPageIds = (pages: any[], context: string): void => {
     if (!Array.isArray(pages)) return
     const used = new Set<string>()
@@ -1176,8 +1399,9 @@ export const useProject = () => {
         }
         if (!sourcePage.canvasData) return
 
-        // 1. Deep Clone do JSON
-        const clonedJson = JSON.parse(JSON.stringify(sourcePage.canvasData))
+        // 1. Deep clone com identidades novas. A copia precisa ser visualmente
+        // igual, mas nenhum objeto/zona/produto pode apontar para instancias da pagina original.
+        const clonedJson = clonePageCanvasDataWithFreshIds(sourcePage.canvasData)
 
         // 2. Lógica de "Sanitização" baseada no Tipo
         if (sourcePage.type === 'RETAIL_OFFER') {

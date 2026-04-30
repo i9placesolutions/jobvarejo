@@ -8191,6 +8191,10 @@ type SmartGridRunOptions = {
     persist?: boolean
 }
 
+const getProductImportIdentityKey = (product: any, index: number): string => {
+    return String(product?.productInstanceId || product?.id || `tmp-product-${index + 1}`).trim();
+};
+
 const isPriceGroupOrPriceChild = (obj: any): boolean => {
     if (!obj) return false;
     if (String(obj?.name || '') === 'priceGroup') return true;
@@ -8234,8 +8238,15 @@ const extractProductsFromZoneForReview = (zone: any): any[] => {
         const imageUrlRaw = base.imageUrl ?? base.image ?? (card as any)?.imageUrl ?? null;
         const imageUrl = imageUrlRaw == null ? null : String(imageUrlRaw).trim() || null;
 
+        const productId = String(base.productId || base.product_id || base.id || (card as any)?.productId || '').trim();
+        const productInstanceId = String(base.productInstanceId || (card as any)?.productInstanceId || (card as any)?._customId || '').trim();
+        const zoneInstanceId = String((card as any)?.parentZoneId || base.zoneInstanceId || (zone as any)?._customId || '').trim();
+
         return {
-            id: String(base.id || (card as any)?._customId || `zone-product-${index + 1}`),
+            id: productInstanceId || `zone-product-${index + 1}`,
+            productId: productId || undefined,
+            productInstanceId: productInstanceId || undefined,
+            zoneInstanceId: zoneInstanceId || undefined,
             name,
             brand: base.brand ?? '',
             weight: base.weight ?? '',
@@ -8802,7 +8813,83 @@ let isZoneCascadeDelete = false;
 let applyingZoneUpdateCount = 0; // Counter to prevent double state save when updating product zones (supports concurrent zone updates)
 
 const makeCanvasObjectId = () => makeId();
+const makeProductInstanceId = () => `item_${makeId()}`;
 const TRANSIENT_CONTROL_NAMES = new Set(['path_node', 'bezier_handle', 'control_point', 'handle_line']);
+
+const clonePlainMetadata = (value: any): any => {
+    if (value == null) return value;
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch {
+        if (Array.isArray(value)) return value.map((item) => clonePlainMetadata(item));
+        if (typeof value === 'object') {
+            const out: Record<string, any> = {};
+            Object.entries(value).forEach(([key, entry]: [string, any]) => {
+                if (typeof entry === 'function') return;
+                out[key] = clonePlainMetadata(entry);
+            });
+            return out;
+        }
+        return value;
+    }
+};
+
+const normalizeProductCardIdentity = (
+    card: any,
+    opts: { zoneInstanceId?: string | null; forceNewInstance?: boolean; reason?: string } = {}
+) => {
+    if (!card || typeof card !== 'object') return null;
+
+    const previousData = (card as any)._productData && typeof (card as any)._productData === 'object'
+        ? clonePlainMetadata((card as any)._productData)
+        : {};
+    const previousInstanceId = String(previousData.productInstanceId || (card as any).productInstanceId || '').trim();
+    const productId = String(
+        previousData.productId ||
+        previousData.product_id ||
+        previousData.id ||
+        (card as any).productId ||
+        (card as any).id ||
+        ''
+    ).trim();
+    const nextInstanceId = opts.forceNewInstance || !previousInstanceId
+        ? makeProductInstanceId()
+        : previousInstanceId;
+    const zoneInstanceId = String(opts.zoneInstanceId || (card as any).parentZoneId || previousData.zoneInstanceId || '').trim();
+
+    const nextProductData = {
+        ...previousData,
+        ...(productId ? { productId } : {}),
+        productInstanceId: nextInstanceId,
+        ...(zoneInstanceId ? { zoneInstanceId } : {})
+    };
+
+    (card as any)._productData = nextProductData;
+    (card as any).productInstanceId = nextInstanceId;
+    if (productId) (card as any).productId = productId;
+    else delete (card as any).productId;
+    if (zoneInstanceId) (card as any).zoneInstanceId = zoneInstanceId;
+    else delete (card as any).zoneInstanceId;
+    if (opts.forceNewInstance) (card as any).__productIdentityFresh = true;
+
+    if (import.meta.dev && opts.reason) {
+        console.debug('[product-zone:identity]', {
+            reason: opts.reason,
+            cardObjectId: String((card as any)._customId || '').trim(),
+            productId,
+            previousProductInstanceId: previousInstanceId || null,
+            productInstanceId: nextInstanceId,
+            zoneInstanceId: zoneInstanceId || null
+        });
+    }
+
+    return {
+        productId,
+        previousProductInstanceId: previousInstanceId || null,
+        productInstanceId: nextInstanceId,
+        zoneInstanceId: zoneInstanceId || null
+    };
+};
 
 const isControlLikeObject = (obj: any) => {
     if (!obj || typeof obj !== 'object') return false;
@@ -11414,6 +11501,9 @@ const CANVAS_CUSTOM_PROPS = [
     'isProductCard',
     'smartGridId',
     'parentZoneId',
+    'productId',
+    'productInstanceId',
+    'zoneInstanceId',
     '_zoneOrder',
     '_cardWidth',
     '_cardHeight',
@@ -14174,6 +14264,14 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         } else {
             clone.objectMaskSourceId = oldToNewId.get(oldMaskSource) || oldMaskSource;
         }
+
+        if (clone?.isProductCard || clone?.isSmartObject || isLikelyProductCard(clone)) {
+            normalizeProductCardIdentity(clone, {
+                zoneInstanceId: String((clone as any).parentZoneId || '').trim() || null,
+                forceNewInstance: true,
+                reason: 'duplicate-frame'
+            });
+        }
     });
 
     // Final guard: cloned product cards must bind to cloned zones from the same
@@ -14394,6 +14492,10 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
                 (card as any)._zoneSlot = { ...slot, zoneId: replacementId };
             }
             applyCardFrameBinding(card, getCloneZoneFrameId(replacement) || undefined);
+            normalizeProductCardIdentity(card, {
+                zoneInstanceId: replacementId,
+                reason: 'duplicate-frame-rebind'
+            });
         });
     }
 
@@ -14481,6 +14583,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
             if (zoneCards.length > 0) {
                 recalculateZoneLayout(zone, zoneCards, { save: false, preserveStyles: true });
             }
+            syncZoneDerivedMetadata(zone, undefined, { updateStateSnapshot: true });
         });
         stabilizePriceGroupsForPersistence(canvas.value, 'duplicate-frame');
     } catch (err) {
@@ -14928,6 +15031,42 @@ const duplicateObjectWithContext = async (
         selectable: true,
         evented: true,
     });
+    if (isProductCardContainer(cloned) || isLikelyProductCard(cloned)) {
+        const slot = (cloned as any)?._zoneSlot;
+        if (slot && typeof slot === 'object') {
+            (cloned as any)._zoneSlot = {
+                ...slot,
+                left: Number(slot.left || 0) + offsetX,
+                top: Number(slot.top || 0) + offsetY
+            };
+        }
+        const zoneId = String((cloned as any).parentZoneId || '').trim();
+        if (zoneId) {
+            const zone = getContainmentZoneById(zoneId);
+            const siblings = zone ? getZoneChildren(zone) : [];
+            const maxOrder = siblings.reduce((max: number, card: any) => {
+                const order = Number((card as any)?._zoneOrder);
+                return Number.isFinite(order) ? Math.max(max, order) : max;
+            }, -1);
+            (cloned as any)._zoneOrder = maxOrder + 1;
+        }
+        normalizeProductCardIdentity(cloned, {
+            zoneInstanceId: String((cloned as any).parentZoneId || '').trim() || null,
+            forceNewInstance: true,
+            reason: 'duplicate-card'
+        });
+        if (import.meta.dev) {
+            console.debug('[product-card:duplicate]', {
+                sourceObjectId: String((original as any)?._customId || '').trim(),
+                clonedObjectId: String((cloned as any)?._customId || '').trim(),
+                zoneInstanceId: String((cloned as any)?.parentZoneId || '').trim() || null,
+                productId: String((cloned as any)?._productData?.productId || '').trim() || null,
+                sourceProductInstanceId: String((original as any)?._productData?.productInstanceId || (original as any)?.productInstanceId || '').trim() || null,
+                clonedProductInstanceId: String((cloned as any)?._productData?.productInstanceId || (cloned as any)?.productInstanceId || '').trim() || null,
+                selectedObjectId: String(canvas.value.getActiveObject?.()?._customId || '').trim() || null
+            });
+        }
+    }
     canvas.value.add(cloned);
 
     return cloned;
@@ -14990,6 +15129,11 @@ const duplicateProductZoneWithCards = async (
         clonedCard.isSmartObject = true;
         clonedCard.parentZoneId = newZoneId;
         clonedCard.parentFrameId = zoneFrameId;
+        normalizeProductCardIdentity(clonedCard, {
+            zoneInstanceId: newZoneId,
+            forceNewInstance: true,
+            reason: 'duplicate-zone-card'
+        });
         clonedCard.clipPath = null;
         delete (clonedCard as any)._frameClipOwner;
         const slot = (card as any)?._zoneSlot;
@@ -15005,6 +15149,21 @@ const duplicateProductZoneWithCards = async (
         cardClones.push(clonedCard);
     }
 
+    if (import.meta.dev) {
+        console.debug('[product-zone:duplicate]', {
+            sourceZoneInstanceId: String((zone as any)._customId || '').trim(),
+            clonedZoneInstanceId: newZoneId,
+            selectedObjectId: String(canvas.value.getActiveObject?.()?._customId || '').trim() || null,
+            products: sourceCards.map((card: any, index: number) => ({
+                sourceObjectId: String((card as any)?._customId || '').trim(),
+                clonedObjectId: String((cardClones[index] as any)?._customId || '').trim(),
+                productId: String((cardClones[index] as any)?._productData?.productId || (card as any)?._productData?.productId || (card as any)?._productData?.id || '').trim(),
+                sourceProductInstanceId: String((card as any)?._productData?.productInstanceId || (card as any)?.productInstanceId || '').trim(),
+                clonedProductInstanceId: String((cardClones[index] as any)?._productData?.productInstanceId || (cardClones[index] as any)?.productInstanceId || '').trim()
+            }))
+        });
+    }
+
     const clones = [clonedZone, ...cardClones];
     clones.forEach((clone: any) => canvas.value?.add(clone));
     finalizeDuplicatedObjects(clones);
@@ -15017,6 +15176,7 @@ const duplicateProductZoneWithCards = async (
             preserveStyles: true
         });
     }
+    syncZoneDerivedMetadata(clonedZone, undefined, { updateStateSnapshot: true });
     targetGridZone.value = clonedZone;
     targetGridZones.value = resolveRelatedImportZones(clonedZone);
     canvas.value.setActiveObject(clonedZone);
@@ -15335,6 +15495,14 @@ const finalizeDuplicatedObjects = (clones: any[]) => {
         if (!obj) return;
         resetDuplicatedObjectRuntime(obj);
         reapplyRuntimeVisualPatchesTree(obj);
+        if (isProductCardContainer(obj) || isLikelyProductCard(obj)) {
+            normalizeProductCardIdentity(obj, {
+                zoneInstanceId: String((obj as any)?.parentZoneId || '').trim() || null,
+                forceNewInstance: !(obj as any).__productIdentityFresh,
+                reason: 'finalize-duplicate'
+            });
+            (obj as any).__productIdentityFresh = true;
+        }
         if (obj?.isFrame) {
             getOrCreateFrameClipRect(obj);
             syncFrameClips(obj);
@@ -26890,6 +27058,10 @@ const createSmartObject = async (
     
     // Add custom ID
     (group as any)._customId = makeCanvasObjectId();
+    normalizeProductCardIdentity(group, {
+        zoneInstanceId: String((product as any)?.zoneInstanceId || '').trim() || null,
+        reason: 'create-smart-object'
+    });
 
     // ESSENTIAL: Force group to calculate proper coordinates and cache
     group.setCoords();
@@ -27405,7 +27577,7 @@ const importProductsToMultipleFrames = async (products: any[], opts?: ProductImp
     const productById = new Map<string, any>()
     const orderedProductIds: string[] = []
     products.forEach((product: any, index: number) => {
-        const id = String(product?.id || `tmp-product-${index + 1}`).trim()
+        const id = getProductImportIdentityKey(product, index)
         if (!productById.has(id)) {
             productById.set(id, product)
             orderedProductIds.push(id)
@@ -27590,7 +27762,7 @@ const importProductsToMultipleZones = async (products: any[], zones: any[], opts
     })
     const productById = new Map<string, any>()
     products.forEach((product: any, index: number) => {
-        const id = String(product?.id || `tmp-product-${index + 1}`).trim()
+        const id = getProductImportIdentityKey(product, index)
         if (id && !productById.has(id)) productById.set(id, product)
     })
     const rawZoneAssignments = Array.isArray(opts?.zoneAssignments) ? opts.zoneAssignments : []
@@ -28586,6 +28758,10 @@ const simulateSmartGrid = async (
                 obj.isProductCard = true;
                 obj.parentZoneId = targetZone._customId;
                 obj.parentFrameId = zoneFrameId;
+                normalizeProductCardIdentity(obj, {
+                    zoneInstanceId: String(targetZone._customId || '').trim() || null,
+                    reason: 'smart-grid-bind-zone'
+                });
                 obj.excludeFromExport = false;
                 obj.clipPath = null;
                 delete obj._frameClipOwner;
@@ -29227,6 +29403,10 @@ const restoreZoneCardsFromStateSnapshot = async (zone: any, reason = 'rehydrate'
                 ...buildProductFromZoneSnapshotCard(cardSnapshot),
                 ...(cardSnapshot?.productData && typeof cardSnapshot.productData === 'object' ? clonePlainForZoneSnapshot(cardSnapshot.productData) : {})
             };
+            normalizeProductCardIdentity(card, {
+                zoneInstanceId: zoneId,
+                reason: 'restore-zone-snapshot'
+            });
             (card as any).imageUrl = firstDefinedZoneSnapshotValue(product?.image_wasabi_key, product?.imageUrl, product?.image);
             card.set?.({
                 left: x,
@@ -29393,6 +29573,8 @@ const selectedZoneInspectorData = computed(() => {
         : Number((zone as any)?.padding ?? 20);
 
     return {
+        id: String((zone as any)?._customId || '').trim() || undefined,
+        _customId: String((zone as any)?._customId || '').trim() || undefined,
         name: summary.name,
         role: (zone as any)?.role || 'grid',
         contentSource: (zone as any)?.contentSource || 'manual',
@@ -29503,7 +29685,11 @@ const handleZoneQuickActionDuplicate = async () => {
     await handleAction('duplicate');
 }
 
-const resolveZoneTargetsForUpdates = (opts: { allowAllFallback?: boolean } = {}) => {
+type ZoneUpdateTargetMeta = {
+    targetId?: string | null
+}
+
+const resolveZoneTargetsForUpdates = (opts: { allowAllFallback?: boolean; targetId?: string | null } = {}) => {
     if (!canvas.value) return [] as any[];
 
     const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
@@ -29518,6 +29704,24 @@ const resolveZoneTargetsForUpdates = (opts: { allowAllFallback?: boolean } = {})
         if (!z || !isLikelyProductZone(z)) return;
         if (!resolved.includes(z)) resolved.push(z);
     };
+
+    const targetId = String(opts.targetId || '').trim();
+    if (targetId) {
+        const target = byId.get(targetId);
+        if (target) {
+            if (import.meta.dev) {
+                console.debug('[product-zone:targeted-update]', {
+                    targetId,
+                    selectedId: String(canvas.value.getActiveObject?.()?._customId || selectedObjectRef.value?._customId || '').trim() || null
+                });
+            }
+            return [target];
+        }
+        if (import.meta.dev) {
+            console.debug('[product-zone:targeted-update:skip]', { targetId, reason: 'target-not-found' });
+        }
+        return [];
+    }
 
     // 1) Primary source: currently resolved zone (active/snapshot/card parent).
     pushZone(getCurrentZoneObject());
@@ -29556,7 +29760,7 @@ const resolveZoneUpdatesPayload = (propOrPayload: any, val: any): Record<string,
     return {};
 };
 
-const handleUpdateZone = async (propOrPayload: string | Record<string, any>, val?: any) => {
+const handleUpdateZone = async (propOrPayload: string | Record<string, any>, val?: any, meta?: ZoneUpdateTargetMeta) => {
     const updates = resolveZoneUpdatesPayload(propOrPayload, val);
     const entries = Object.entries(updates).filter(([key]) => key && key !== 'prop' && key !== 'value');
     if (!entries.length) {
@@ -29564,7 +29768,7 @@ const handleUpdateZone = async (propOrPayload: string | Record<string, any>, val
         return;
     }
 
-    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false });
+    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false, targetId: meta?.targetId });
     if (!targets.length) {
         console.warn('⚠️ [handleUpdateZone] No zone resolved; skipping update to avoid UI/canvas divergence');
         return;
@@ -29576,7 +29780,7 @@ const handleUpdateZone = async (propOrPayload: string | Record<string, any>, val
     // 2. Apply to Canvas Object. Se algum prop falhar, logamos e seguimos — o estado
     // reativo ja reflete a intencao e o proximo save/render tentara sincronizar.
     try {
-        await updateZoneOnCanvas(Object.fromEntries(entries));
+        await updateZoneOnCanvas(Object.fromEntries(entries), undefined, meta);
     } catch (err) {
         console.warn('⚠️ [handleUpdateZone] Falha ao aplicar updates no canvas:', err);
     }
@@ -29833,7 +30037,7 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
     refreshSelectedRef();
 };
 
-const updateZoneOnCanvas = async (propOrPayload: string | Record<string, any>, val?: any) => {
+const updateZoneOnCanvas = async (propOrPayload: string | Record<string, any>, val?: any, meta?: ZoneUpdateTargetMeta) => {
     const updates = resolveZoneUpdatesPayload(propOrPayload, val);
     const entries = Object.entries(updates).filter(([key]) => key && key !== 'prop' && key !== 'value');
     if (!entries.length) {
@@ -29841,7 +30045,7 @@ const updateZoneOnCanvas = async (propOrPayload: string | Record<string, any>, v
         return;
     }
     const normalizedUpdates = Object.fromEntries(entries);
-    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false });
+    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false, targetId: meta?.targetId });
     if (!targets.length) {
         console.warn('⚠️ [updateZoneOnCanvas] No zone found! Cannot update canvas.');
         return;
@@ -30868,8 +31072,8 @@ const handleApplyZonePreset = async (presetId: string) => {
     }
 };
 
-const handleSyncZoneGaps = async (padding: number) => {
-    const active = resolveZoneTargetsForUpdates({ allowAllFallback: false })[0] || getCurrentZoneObject();
+const handleSyncZoneGaps = async (padding: number, meta?: ZoneUpdateTargetMeta) => {
+    const active = resolveZoneTargetsForUpdates({ allowAllFallback: false, targetId: meta?.targetId })[0] || (!meta?.targetId ? getCurrentZoneObject() : null);
     if (!active) {
         console.warn('⚠️ [handleSyncZoneGaps] No zone resolved; skipping sync to avoid UI/canvas divergence');
         return;
@@ -30908,7 +31112,7 @@ const resolveGlobalStyleUpdatePayload = (propOrPayload: any, val: any): { prop: 
     return null;
 };
 
-const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, any>, val?: any) => {
+const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, any>, val?: any, meta?: ZoneUpdateTargetMeta) => {
     if (!canvas.value) return;
     // CRITICAL FIX: Suppress style updates during page load / composable sync.
     // When rehydrateCanvasZones syncs composable state, ProductZoneSettings emits
@@ -30935,12 +31139,12 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     // Gather ALL zones in canvas first (for fallback).
     const allZones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
 
-    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false });
+    const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false, targetId: meta?.targetId });
     const primaryZone = targets[0];
 
     // If no zone found but a card is selected, try to find its parent zone
     let zone = primaryZone;
-    if (!zone && selectedObjectRef.value && isLikelyProductCard(selectedObjectRef.value)) {
+    if (!zone && !meta?.targetId && selectedObjectRef.value && isLikelyProductCard(selectedObjectRef.value)) {
         const parentZoneId = selectedObjectRef.value.parentZoneId;
         if (parentZoneId) {
             zone = canvas.value.getObjects().find((o: any) =>
@@ -30951,7 +31155,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
 
     // Reload safety: if a zone snapshot is selected but Fabric lost activeObject,
     // resolve the real zone directly by _customId.
-    if (!zone && selectedObjectRef.value?._customId) {
+    if (!zone && !meta?.targetId && selectedObjectRef.value?._customId) {
         const selectedId = String(selectedObjectRef.value._customId).trim();
         if (selectedId) {
             zone = canvas.value.getObjects().find((o: any) =>
@@ -30961,7 +31165,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     }
 
     // Last deterministic fallback: pick the single zone if there's only one.
-    if (!zone && allZones.length === 1) {
+    if (!zone && !meta?.targetId && allZones.length === 1) {
         zone = allZones[0];
     }
 
@@ -41786,6 +41990,10 @@ const rehydrateCanvasZones = (
             if (repairedZid && slotZid && slotZid !== repairedZid) {
                 (card as any)._zoneSlot = null;
             }
+            normalizeProductCardIdentity(card, {
+                zoneInstanceId: repairedZid || null,
+                reason: 'rehydrate-card'
+            });
         });
 
         // Keep card → frame binding aligned with its zone frame.

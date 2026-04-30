@@ -415,6 +415,12 @@ const hasCommercialPrice = (product: Partial<SmartProduct> | null | undefined): 
 
 const normalizeProductForImport = (product: SmartProduct): SmartProduct => {
     const next = { ...product }
+    if (!next.productId && next.id && next.productInstanceId && next.id !== next.productInstanceId) {
+        next.productId = next.id
+    }
+    if (next.productInstanceId) {
+        next.id = next.productInstanceId
+    }
     const primaryPrice = getFirstCommercialPrice(next)
     if (!normalizeCommercialPriceValue(next.price) && primaryPrice) {
         next.price = primaryPrice
@@ -955,6 +961,9 @@ const productTempIdMap = new WeakMap<object, string>()
 let productTempIdSeq = 0
 
 const getStableProductId = (product: any, index: number): string => {
+    const instanceId = String(product?.productInstanceId ?? '').trim()
+    if (instanceId) return instanceId
+
     const persisted = String(product?.id ?? '').trim()
     if (persisted) return persisted
 

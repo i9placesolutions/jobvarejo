@@ -28,8 +28,14 @@ import {
 import type { ProductZoneDiagnostic } from '~/utils/product-zone-diagnostics';
 import { getZoneRoleLabel, getZoneStatusLabel } from '~/utils/product-zone-metadata';
 
+type ZoneUpdateTargetMeta = {
+  targetId: string | null;
+};
+
 const props = defineProps<{
   zone: {
+    id?: string;
+    _customId?: string;
     name?: string;
     role?: ProductZone['role'];
     contentSource?: ProductZone['contentSource'];
@@ -60,10 +66,10 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:zone', prop: string, value: any): void;
-  (e: 'update:global-styles', prop: string, value: any): void;
+  (e: 'update:zone', prop: string, value: any, meta?: ZoneUpdateTargetMeta): void;
+  (e: 'update:global-styles', prop: string, value: any, meta?: ZoneUpdateTargetMeta): void;
   (e: 'apply-preset', presetId: string): void;
-  (e: 'sync-gaps', padding: number): void;
+  (e: 'sync-gaps', padding: number, meta?: ZoneUpdateTargetMeta): void;
   (e: 'recalculate-layout'): void;
   (e: 'manage-label-templates'): void;
   (e: 'apply-template-to-zone'): void;
@@ -595,12 +601,16 @@ const overviewMetrics = computed(() => ([
 const gridPresets = computed(() => LAYOUT_PRESETS.filter(preset => preset.category === 'grid'));
 const specialPresets = computed(() => LAYOUT_PRESETS.filter(preset => preset.category === 'special'));
 
-const updateZone = (prop: string, value: any) => {
-  emit('update:zone', prop, value);
+const getZoneUpdateTargetMeta = (): ZoneUpdateTargetMeta => ({
+  targetId: String((props.zone as any)?._customId || (props.zone as any)?.id || '').trim() || null
+});
+
+const updateZone = (prop: string, value: any, meta: ZoneUpdateTargetMeta = getZoneUpdateTargetMeta()) => {
+  emit('update:zone', prop, value, meta);
 };
 
-const updateGlobal = (prop: string, value: any) => {
-  emit('update:global-styles', prop, value);
+const updateGlobal = (prop: string, value: any, meta: ZoneUpdateTargetMeta = getZoneUpdateTargetMeta()) => {
+  emit('update:global-styles', prop, value, meta);
 };
 
 const applyPriceTagFitPreset = (presetId: typeof priceTagFitPresets[number]['id']) => {
@@ -619,8 +629,8 @@ const resetPriceTagGeometry = () => {
   }
 };
 
-const updateGlobalInt = (prop: string, value: unknown, fallback: number, min: number, max: number) => {
-  updateGlobal(prop, clamp(Math.round(toSafeNumber(value, fallback)), min, max));
+const updateGlobalInt = (prop: string, value: unknown, fallback: number, min: number, max: number, meta?: ZoneUpdateTargetMeta) => {
+  updateGlobal(prop, clamp(Math.round(toSafeNumber(value, fallback)), min, max), meta);
 };
 
 const updateGlobalFloat = (
@@ -629,15 +639,18 @@ const updateGlobalFloat = (
   fallback: number,
   min: number,
   max: number,
-  precision = 1
+  precision: number | ZoneUpdateTargetMeta = 1,
+  meta?: ZoneUpdateTargetMeta
 ) => {
-  const factor = 10 ** precision;
+  const targetMeta = typeof precision === 'object' ? precision : meta;
+  const resolvedPrecision = typeof precision === 'number' ? precision : 1;
+  const factor = 10 ** resolvedPrecision;
   const next = clamp(Math.round(toSafeNumber(value, fallback) * factor) / factor, min, max);
-  updateGlobal(prop, next);
+  updateGlobal(prop, next, targetMeta);
 };
 
-const updateZoneInt = (prop: string, value: unknown, fallback: number, min: number, max: number) => {
-  updateZone(prop, clamp(Math.round(toSafeNumber(value, fallback)), min, max));
+const updateZoneInt = (prop: string, value: unknown, fallback: number, min: number, max: number, meta?: ZoneUpdateTargetMeta) => {
+  updateZone(prop, clamp(Math.round(toSafeNumber(value, fallback)), min, max), meta);
 };
 
 const updateZoneFloat = (
@@ -646,11 +659,14 @@ const updateZoneFloat = (
   fallback: number,
   min: number,
   max: number,
-  precision = 1
+  precision: number | ZoneUpdateTargetMeta = 1,
+  meta?: ZoneUpdateTargetMeta
 ) => {
-  const factor = 10 ** precision;
+  const targetMeta = typeof precision === 'object' ? precision : meta;
+  const resolvedPrecision = typeof precision === 'number' ? precision : 1;
+  const factor = 10 ** resolvedPrecision;
   const next = clamp(Math.round(toSafeNumber(value, fallback) * factor) / factor, min, max);
-  updateZone(prop, next);
+  updateZone(prop, next, targetMeta);
 };
 
 const FONT_DATALIST_ID = 'product-zone-fonts';
@@ -698,19 +714,19 @@ const handlePriceFontChange = (event: Event) => {
   }
 };
 
-const handlePaddingChange = (value: unknown) => {
+const handlePaddingChange = (value: unknown, meta: ZoneUpdateTargetMeta = getZoneUpdateTargetMeta()) => {
   const next = clamp(Math.round(toSafeNumber(value, props.zone.padding ?? 15)), 0, 60);
   if (syncGaps.value) {
-    emit('sync-gaps', next);
+    emit('sync-gaps', next, meta);
   } else {
-    updateZone('padding', next);
+    updateZone('padding', next, meta);
   }
 };
 
 const handleSyncToggle = (checked: boolean) => {
   syncGaps.value = checked;
   if (checked) {
-    emit('sync-gaps', clamp(Math.round(toSafeNumber(props.zone.padding, 15)), 0, 60));
+    emit('sync-gaps', clamp(Math.round(toSafeNumber(props.zone.padding, 15)), 0, 60), getZoneUpdateTargetMeta());
   }
 };
 
@@ -722,16 +738,26 @@ const applyPreset = (presetId: string) => {
 // Used for numeric text inputs so rapid keystrokes don't flood the reactive
 // update pipeline. Range sliders keep using the direct (non-debounced) versions
 // because they need immediate visual feedback while dragging.
-function _debounce<A extends unknown[]>(fn: (...args: A) => void, ms: number): (...args: A) => void {
+function _debounceWithZoneTarget<A extends unknown[]>(
+  fn: (...args: [...A, ZoneUpdateTargetMeta]) => void,
+  ms: number
+): (...args: A) => void {
   let t: ReturnType<typeof setTimeout> | null = null;
-  return (...args: A) => { if (t) clearTimeout(t); t = setTimeout(() => { t = null; fn(...args); }, ms); };
+  return (...args: A) => {
+    const meta = getZoneUpdateTargetMeta();
+    if (t) clearTimeout(t);
+    t = setTimeout(() => {
+      t = null;
+      fn(...args, meta);
+    }, ms);
+  };
 }
-const _dUpdateZoneInt = _debounce(updateZoneInt, 180);
-const _dUpdateZoneFloat = _debounce(updateZoneFloat, 180);
-const _dUpdateGlobalInt = _debounce(updateGlobalInt, 180);
-const _dUpdateGlobalFloat = _debounce(updateGlobalFloat, 180);
-const _dHandlePadding = _debounce(handlePaddingChange, 180);
-const _dUpdateZoneName = _debounce((v: string) => updateZone('name', v), 300);
+const _dUpdateZoneInt = _debounceWithZoneTarget(updateZoneInt, 180);
+const _dUpdateZoneFloat = _debounceWithZoneTarget(updateZoneFloat, 180);
+const _dUpdateGlobalInt = _debounceWithZoneTarget(updateGlobalInt, 180);
+const _dUpdateGlobalFloat = _debounceWithZoneTarget(updateGlobalFloat, 180);
+const _dHandlePadding = _debounceWithZoneTarget(handlePaddingChange, 180);
+const _dUpdateZoneName = _debounceWithZoneTarget((v: string, meta: ZoneUpdateTargetMeta) => updateZone('name', v, meta), 300);
 
 const toggleSection = (section: keyof typeof expandedSections.value) => {
   expandedSections.value[section] = !expandedSections.value[section];
