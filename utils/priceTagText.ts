@@ -81,3 +81,86 @@ export const normalizeUnitForLabel = (raw: any): PriceUnitLabel => {
  * Pode ser sobrescrito por variante via __atacValueVariants[key].intDecimalGap.
  */
 export const PRICE_INTEGER_DECIMAL_GAP_PX = 1;
+
+/**
+ * Converte um preco arbitrario (string ou number, em qualquer formato) para
+ * centavos como inteiro. Retorna null se a entrada nao for parseavel.
+ *
+ * Regra de separadores:
+ *  - "1.234,56" (BR com milhar) -> 123456
+ *  - "1234.56"  (US sem milhar) -> 123456
+ *  - "1,234.56" (US com milhar) -> 123456 (virgula = milhar)
+ *  - "47,99"                    -> 4799
+ *  - "100"                      -> 10000
+ */
+export const parsePriceToCents = (v: any): number | null => {
+    if (v === null || v === undefined) return null;
+    const s0 = String(v).trim();
+    if (!s0) return null;
+    const s = s0.replace(/[^\d.,-]/g, '');
+    if (!s) return null;
+    const hasComma = s.includes(',');
+    const hasDot = s.includes('.');
+    let normalized = s;
+    if (hasComma && hasDot) normalized = s.replace(/\./g, '').replace(',', '.'); // 1.234,56 -> 1234.56
+    else if (hasComma) normalized = s.replace(/\./g, '').replace(',', '.'); // 123,45 -> 123.45
+    else normalized = s.replace(/,/g, ''); // 1,234.56 -> 1234.56
+    const n = Number(normalized);
+    if (!Number.isFinite(n)) return null;
+    return Math.round(n * 100);
+};
+
+/**
+ * Inverso de parsePriceToCents: formata uma quantidade em centavos para
+ * string BR "INTEIRO,CENTAVOS" sem prefixo R$.
+ *
+ * Exemplos:
+ *  4799  -> "47,99"
+ *  100   -> "1,00"
+ *  -50   -> "-0,50"
+ *  null  -> null
+ */
+export const formatCentsToPrice = (cents: number | null): string | null => {
+    if (cents === null || cents === undefined || !Number.isFinite(cents)) return null;
+    const n = Math.round(cents);
+    const abs = Math.abs(n);
+    const int = Math.floor(abs / 100);
+    const dec = String(abs % 100).padStart(2, '0');
+    const sign = n < 0 ? '-' : '';
+    return `${sign}${int},${dec}`;
+};
+
+/**
+ * Wrapper sobre parsePriceBR garantindo que { integer, dec } nunca contenham
+ * undefined/vazio. Usado em pontos de renderizacao da etiqueta onde precisamos
+ * sempre de valores defaults seguros (evita "0,undefined").
+ */
+export const splitPriceParts = (raw: any): { integer: string; dec: string } => {
+    const parsed = parsePriceBR(String(raw ?? ''));
+    return {
+        integer: parsed.inteiro || '0',
+        dec: parsed.centavos || '00'
+    };
+};
+
+/**
+ * Variantes de etiqueta atacarejo conforme o numero de digitos do preco.
+ *  - tiny: 1 digito (ex: 1,99)
+ *  - normal: 2 digitos (ex: 47,99)
+ *  - large: 3+ digitos (ex: 129,99 / 1.299,99)
+ *
+ * Cada variante carrega defaults proprios de proporcao/gap em
+ * DEFAULT_ATAC_VALUE_VARIANTS dentro do EditorCanvas, e pode ser sobrescrita
+ * por variante salva em __atacValueVariants[key] do template.
+ */
+export type AtacVariantKey = 'tiny' | 'normal' | 'large';
+
+export const resolveAtacVariantKeyFromPrice = (raw: any): AtacVariantKey => {
+    const parsed = parsePriceBR(String(raw ?? ''));
+    const integerDigits = String(parsed.inteiro || '0').replace(/^0+(?=\d)/, '');
+    const digitsCount = Math.max(1, integerDigits.length || 1);
+    if (digitsCount <= 1) return 'tiny';
+    // 3+ digits (e.g. 129,99) require the "large" behavior to avoid overlap.
+    if (digitsCount >= 3) return 'large';
+    return 'normal';
+};

@@ -13,6 +13,10 @@ import { prepareCanvasForSerialization } from '~/utils/editorCanvasPreSerialize'
 import {
     parsePriceBR,
     normalizeUnitForLabel,
+    parsePriceToCents,
+    formatCentsToPrice,
+    splitPriceParts,
+    resolveAtacVariantKeyFromPrice,
     PRICE_INTEGER_DECIMAL_GAP_PX
 } from '~/utils/priceTagText'
 import { layoutPrice } from '~/utils/priceTagLayout'
@@ -31448,49 +31452,11 @@ const isTextLikeObject = (obj: any) => {
     return t === 'text' || t === 'i-text' || t === 'textbox';
 };
 
-const parsePriceToCents = (v: any): number | null => {
-    if (v === null || v === undefined) return null;
-    const s0 = String(v).trim();
-    if (!s0) return null;
-    const s = s0.replace(/[^\d.,-]/g, '');
-    if (!s) return null;
-    const hasComma = s.includes(',');
-    const hasDot = s.includes('.');
-    let normalized = s;
-    if (hasComma && hasDot) normalized = s.replace(/\./g, '').replace(',', '.'); // 1.234,56 -> 1234.56
-    else if (hasComma) normalized = s.replace(/\./g, '').replace(',', '.'); // 123,45 -> 123.45
-    else normalized = s.replace(/,/g, ''); // 1,234.56 -> 1234.56
-    const n = Number(normalized);
-    if (!Number.isFinite(n)) return null;
-    return Math.round(n * 100);
-};
-
-const formatCentsToPrice = (cents: number | null): string | null => {
-    if (cents === null || cents === undefined || !Number.isFinite(cents)) return null;
-    const n = Math.round(cents);
-    const abs = Math.abs(n);
-    const int = Math.floor(abs / 100);
-    const dec = String(abs % 100).padStart(2, '0');
-    const sign = n < 0 ? '-' : '';
-    return `${sign}${int},${dec}`;
-};
-
-const splitPriceParts = (raw: any): { integer: string; dec: string } => {
-    const parsed = parsePriceBR(String(raw ?? ''));
-    // Garantir que centavos nunca seja undefined/vazio (ex: preço "0" retornava "0,undefined")
-    return { integer: parsed.inteiro || '0', dec: parsed.centavos || '00' };
-};
-
-type AtacVariantKey = 'tiny' | 'normal' | 'large';
-const resolveAtacVariantKeyFromPrice = (raw: any): AtacVariantKey => {
-    const parsed = parsePriceBR(String(raw ?? ''));
-    const integerDigits = String(parsed.inteiro || '0').replace(/^0+(?=\d)/, '');
-    const digitsCount = Math.max(1, integerDigits.length || 1);
-    if (digitsCount <= 1) return 'tiny';
-    // 3+ digits (e.g. 129,99) require the "large" behavior to avoid overlap.
-    if (digitsCount >= 3) return 'large';
-    return 'normal';
-};
+// parsePriceToCents / formatCentsToPrice / splitPriceParts /
+// resolveAtacVariantKeyFromPrice + tipo AtacVariantKey foram extraidos
+// para utils/priceTagText.ts (Fase 2 da modularizacao). Reexport local
+// do tipo mantem compat com o codigo abaixo.
+type AtacVariantKey = import('~/utils/priceTagText').AtacVariantKey;
 
 // parsePriceBR / normalizeUnitForLabel / PRICE_INTEGER_DECIMAL_GAP_PX
 // foram extraidos para utils/priceTagText.ts (Fase 2 da modularizacao).
