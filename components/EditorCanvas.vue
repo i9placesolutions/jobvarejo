@@ -5212,7 +5212,10 @@ watch(() => currentUser.value, () => {
 }, { immediate: true })
 
 const { isMobile, isTablet } = useResponsive()
-const mobilePanel = ref<string | null>(null)
+// Painel ativo no layout mobile. Tipo restrito para evitar string literals
+// divergentes espalhadas pelo template (antes era `string | null`).
+type MobilePanel = 'tools' | 'layers' | 'properties' | 'pages' | 'uploads' | 'more'
+const mobilePanel = ref<MobilePanel | null>(null)
 const mobileNavRef = ref<InstanceType<typeof import('./EditorMobileNav.vue').default> | null>(null)
 
 // ── Mobile template helpers (avoids Volar TS errors in large file) ──
@@ -7745,18 +7748,32 @@ const resolveZoneQuickActionsAnchor = () => {
 
 // Debounced save for properties panel (prevents lag during rapid input changes)
 let propertySaveTimer: ReturnType<typeof setTimeout> | null = null;
-// Guarda contra saves sobrepostos — evita race condition em mudanças rápidas
+// Padrao "single-flight com pending bit": garante que mudancas chegadas
+// durante um save em andamento nao sao descartadas. Quando o save em voo
+// termina, se houve novas edicoes (propertySavePending=true), reroda.
 let propertySaveInFlight = false;
+let propertySavePending = false;
+const runPropertySave = async (reason: string) => {
+    if (propertySaveInFlight) {
+        // Marca que ha edicoes novas; o save em andamento vai re-executar ao terminar.
+        propertySavePending = true;
+        return;
+    }
+    propertySaveInFlight = true;
+    try {
+        do {
+            propertySavePending = false;
+            await saveCurrentState({ reason });
+        } while (propertySavePending);
+    } finally {
+        propertySaveInFlight = false;
+    }
+};
 const debouncedSaveCurrentState = () => {
     if (propertySaveTimer) clearTimeout(propertySaveTimer);
-    propertySaveTimer = setTimeout(async () => {
-        if (propertySaveInFlight) return; // save anterior ainda em andamento, ignorar
-        propertySaveInFlight = true;
-        try {
-            await saveCurrentState({ reason: 'properties-panel' });
-        } finally {
-            propertySaveInFlight = false;
-        }
+    propertySaveTimer = setTimeout(() => {
+        propertySaveTimer = null;
+        void runPropertySave('properties-panel');
     }, 150); // 150ms debounce for snappy feel but coalesces rapid changes
 };
 const flushPropertySave = async () => {
@@ -7764,13 +7781,7 @@ const flushPropertySave = async () => {
         clearTimeout(propertySaveTimer);
         propertySaveTimer = null;
     }
-    if (propertySaveInFlight) return; // save anterior ainda em andamento
-    propertySaveInFlight = true;
-    try {
-        await saveCurrentState({ reason: 'properties-panel-flush' });
-    } finally {
-        propertySaveInFlight = false;
-    }
+    await runPropertySave('properties-panel-flush');
 };
 
 // Debounced save for text editing (typing in i-text/textbox does not always emit object:modified).
@@ -43027,7 +43038,7 @@ const handleRecalculateLayout = () => {
 
       <div
         v-if="aiToast"
-        class="fixed top-4 right-4 z-10001 px-3 py-2 rounded-lg border text-sm shadow-xl"
+        class="fixed top-4 right-4 z-(--z-toast) px-3 py-2 rounded-lg border text-sm shadow-xl"
         :class="aiToast.type === 'error'
           ? 'bg-red-950/90 border-red-300/35 text-red-100'
           : (aiToast.type === 'success'
@@ -43039,7 +43050,7 @@ const handleRecalculateLayout = () => {
 
       <div
         v-if="isExportDownloadInProgress"
-        class="fixed inset-0 z-10002 pointer-events-none flex items-center justify-center"
+        class="fixed inset-0 z-(--z-toast) pointer-events-none flex items-center justify-center"
       >
         <div class="flex items-center gap-3 rounded-xl border border-violet-400/35 bg-zinc-950/90 px-4 py-3 shadow-2xl">
           <span class="inline-block h-4 w-4 rounded-full border-2 border-violet-300/30 border-t-violet-300 animate-spin" />
@@ -43060,7 +43071,7 @@ const handleRecalculateLayout = () => {
           leave-from-class="opacity-100"
           leave-to-class="opacity-0"
         >
-          <div v-if="showHistoryModal" class="fixed inset-0 z-9999 flex items-center justify-center">
+          <div v-if="showHistoryModal" class="fixed inset-0 z-(--z-modal) flex items-center justify-center">
             <!-- Backdrop -->
             <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="showHistoryModal = false" />
 

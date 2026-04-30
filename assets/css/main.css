@@ -32,6 +32,16 @@
   --radius-md: calc(0.75rem - 2px);
   --radius-sm: calc(0.75rem - 4px);
 
+  /* Tokens semanticos de z-index — substitui valores hardcoded espalhados.
+   * Escala unica para o editor, evitando conflitos como z-9999/10001/10002. */
+  --z-canvas-overlay: 40;       /* overlays internos do canvas (guides, snap) */
+  --z-toolbar: 50;              /* toolbars e painéis flutuantes */
+  --z-dropdown: 60;             /* dropdowns e popovers */
+  --z-sticky: 70;               /* topo/aba mobile fixos */
+  --z-modal-backdrop: 80;       /* fundo de modais */
+  --z-modal: 90;                /* corpo do modal */
+  --z-toast: 100;               /* notificacoes / toasts */
+
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
 
