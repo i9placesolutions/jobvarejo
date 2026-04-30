@@ -28589,11 +28589,13 @@ const simulateSmartGrid = async (
                      if (String(obj?.type || '').toLowerCase() === 'group' && typeof obj.getObjects === 'function') {
                          const unitTxt = findPriceUnitInChildren(obj);
                          if (unitTxt) {
-                             if (unitTxt.visible === false) {
-                                 unitTxt.set('text', '');
+                             const templateAllowsUnit = unitTxt.visible !== false && String(unitTxt.text || '').trim().length > 0;
+                             if (templateAllowsUnit && unitLabel) {
+                                 unitTxt.set({ text: unitLabel, visible: true });
                              } else {
-                                 unitTxt.set('text', unitLabel || '');
+                                 unitTxt.set({ text: '', visible: false });
                              }
+                             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
                          }
                      }
                  }
@@ -31395,9 +31397,11 @@ const parsePriceBR = (preco: string): { inteiro: string; centavos: string } => {
     return { inteiro, centavos };
 };
 
-const normalizeUnitForLabel = (raw: any): 'KG' | 'UN' => {
+type PriceUnitLabel = '' | 'KG' | 'UN';
+
+const normalizeUnitForLabel = (raw: any): PriceUnitLabel => {
     const s0 = String(raw ?? '').trim();
-    if (!s0) return 'UN';
+    if (!s0) return '';
     const s = s0.toUpperCase().replace(/\s+/g, '');
 
     // Remove a leading numeric quantity (e.g. "500ML", "1KG", "2,5KG") so we don't show gramatura.
@@ -33085,12 +33089,12 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
     fitText(bannerText, bannerInnerW, 0.50);
 };
 
-const inferUnitLabelFromProduct = (product: any): 'KG' | 'UN' => {
+const inferUnitLabelFromProduct = (product: any): PriceUnitLabel => {
     // Priority:
     // 1) explicit product.unit
     // 2) Detect based on name: if has NUMBER before weight unit → UN, else → KG
     // 3) packUnit if present
-    // 4) default UN
+    // 4) no unit when the product has no real unit signal
 
     const unitRaw = String(product?.unit ?? '').trim();
     if (unitRaw) return normalizeUnitForLabel(unitRaw);
@@ -33115,7 +33119,7 @@ const inferUnitLabelFromProduct = (product: any): 'KG' | 'UN' => {
     if (packUnitNorm === 'KG') return 'KG';
     if (packUnitNorm === 'UN') return 'UN';
 
-    return 'UN';
+    return '';
 };
 
 const computePackLine = (opts: { packageLabel?: any; packQuantity?: any; packUnit?: any; packPrice?: any; itemUnit?: any }): string | null => {
@@ -36359,6 +36363,7 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     if (!pg || typeof pg.getObjects !== 'function') return;
     const parts = collectObjectsDeep(pg);
     const preserveTemplateVisual = shouldPreserveManualTemplateVisual(pg);
+    const requestedUnit = normalizeUnitForLabel(unitText);
 
     // DEBUG: Log all named objects in the price group for diagnosis
     const allNames = parts.map((o: any) => `${o?.name || '(sem nome)'}[${String(o?.type || '?').toLowerCase()}]`);
@@ -36439,11 +36444,6 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     );
 
 	    if (hasSplitPair && splitLooksLikeMainPrice) {
-	        // Capture authored Mini Editor anchors BEFORE changing text,
-	        // so dynamic values keep the exact original spacing.
-	        if (preserveTemplateVisual) {
-	            readSingleManualPriceAnchors(pg, { force: true });
-	        }
         intTxt.set?.('text', integer);
         decTxt.set?.('text', decimalText);
         if (typeof intTxt.initDimensions === 'function') intTxt.initDimensions();
@@ -36453,14 +36453,18 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
             // Templates como o Preto/Amarelo deixam o campo de unidade escondido (visible=false).
             // Nesses casos, NAO repovoar a gramatura ao reabrir o projeto — texto fica vazio
             // para impedir que apareca caso algum fluxo de edicao religue a visibilidade.
-            if (unitTxt.visible === false) {
-                unitTxt.set?.('text', '');
+            const templateAllowsUnit = unitTxt.visible !== false && String(unitTxt.text || '').trim().length > 0;
+            if (templateAllowsUnit && requestedUnit) {
+                unitTxt.set?.({ text: requestedUnit, visible: true });
             } else {
-                const raw = (typeof unitText === 'string' && unitText.trim().length) ? unitText : String(unitTxt.text || '').trim();
-                const u = raw ? normalizeUnitForLabel(raw) : '';
-                unitTxt.set?.('text', u);
+                unitTxt.set?.({ text: '', visible: false });
             }
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
+        }
+        // Capture anchors after unit visibility is settled, so hidden gramatura
+        // does not participate in the dynamic centering/fitting pass.
+        if (preserveTemplateVisual) {
+            readSingleManualPriceAnchors(pg, { force: true });
         }
         // Keep Mini Editor templates visually identical and only fit dynamic values.
         if (preserveTemplateVisual) {
@@ -36475,24 +36479,23 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
         legacy.set?.('text', `${integer}${decimalText}`);
         if (typeof legacy.initDimensions === 'function') legacy.initDimensions();
 	    } else if (hasSplitPair) {
-	        // Fallback: if no legacy field exists, still update split fields.
-	        if (preserveTemplateVisual) {
-	            readSingleManualPriceAnchors(pg, { force: true });
-	        }
+        // Fallback: if no legacy field exists, still update split fields.
         intTxt.set?.('text', integer);
         decTxt.set?.('text', decimalText);
         if (typeof intTxt.initDimensions === 'function') intTxt.initDimensions();
         if (typeof decTxt.initDimensions === 'function') decTxt.initDimensions();
         if (unitTxt) {
             // Mesma regra do caminho split principal: respeita visible=false do template.
-            if (unitTxt.visible === false) {
-                unitTxt.set?.('text', '');
+            const templateAllowsUnit = unitTxt.visible !== false && String(unitTxt.text || '').trim().length > 0;
+            if (templateAllowsUnit && requestedUnit) {
+                unitTxt.set?.({ text: requestedUnit, visible: true });
             } else {
-                const raw = (typeof unitText === 'string' && unitText.trim().length) ? unitText : String(unitTxt.text || '').trim();
-                const u = raw ? normalizeUnitForLabel(raw) : '';
-                unitTxt.set?.('text', u);
+                unitTxt.set?.({ text: '', visible: false });
             }
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
+        }
+        if (preserveTemplateVisual) {
+            readSingleManualPriceAnchors(pg, { force: true });
         }
     } else {
         console.warn('[setPriceOnPriceGroup] Nenhum campo de preco encontrado no template! rawPrice:', rawPrice, 'parts:', parts.length, 'names:', parts.map((o: any) => o?.name).filter(Boolean));
@@ -36577,7 +36580,7 @@ function inferHeaderPartsFromProduct(
 }
 
 function inferUnitFromCard(card: any): string | undefined {
-    if (!card) return 'UN';
+    if (!card) return '';
     // Prefer explicit metadata (new cards store it on the group).
     const meta = (card as any).unitLabel ?? (card as any).unit ?? (card as any).packUnit ?? '';
     if (String(meta || '').trim().length) return normalizeUnitForLabel(meta);
@@ -36588,7 +36591,7 @@ function inferUnitFromCard(card: any): string | undefined {
         const text = String(title?.text || '');
         if (/\bkg\b/i.test(text)) return 'KG';
     }
-    return 'UN';
+    return '';
 }
 
 function inferHeaderPartsForPriceTemplate(
