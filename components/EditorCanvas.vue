@@ -38,6 +38,13 @@ import {
     measureContentBoundsLocal
 } from '~/utils/fabricMeasure'
 import { setText, setVisible } from '~/utils/fabricObjectOps'
+import {
+    walkCanvasObjects,
+    getJsonGroupChildren,
+    isStandalonePriceGroupJson,
+    isLikelyProductCardJson,
+    getCardBaseSizeForContainmentJson
+} from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
 import { registerHistorySaveListeners } from '~/utils/editorHistoryListeners'
@@ -12119,113 +12126,9 @@ const getCanvasLoadCacheToken = (canvasData: any): string => {
     return `${savedAt}:${objectCount}:${version}`;
 };
 
-const walkCanvasObjects = (root: any, visitor: (obj: any) => void): void => {
-    if (!root || typeof root !== 'object') return;
-    const stack: any[] = Array.isArray(root.objects) ? [...root.objects] : [];
-    while (stack.length > 0) {
-        const node = stack.pop();
-        if (!node || typeof node !== 'object') continue;
-        visitor(node);
-        if (Array.isArray(node.objects) && node.objects.length) {
-            for (let i = node.objects.length - 1; i >= 0; i--) {
-                stack.push(node.objects[i]);
-            }
-        }
-    }
-};
-
-const getJsonGroupChildren = (obj: any): any[] => (
-    Array.isArray(obj?.objects) ? obj.objects.filter((child: any) => !!child && typeof child === 'object') : []
-);
-
-const isStandalonePriceGroupJson = (obj: any) => {
-    if (!obj) return false;
-    if (obj.type !== 'group') return false;
-    if (String(obj.name || '') !== 'priceGroup') return false;
-    if (obj.isSmartObject || obj.isProductCard) return false;
-    if (String((obj as any).parentZoneId || '').trim()) return false;
-    if (String((obj as any).smartGridId || '').trim()) return false;
-
-    const children = getJsonGroupChildren(obj);
-    const hasOfferBg = children.some((child: any) => String(child?.name || '') === 'offerBackground');
-    const hasSmartImage = children.some((child: any) => {
-        const childType = String(child?.type || '').toLowerCase();
-        const childName = String(child?.name || '');
-        return childType === 'image' || ['smart_image', 'product_image', 'productImage'].includes(childName);
-    });
-
-    return !hasOfferBg && !hasSmartImage;
-};
-
-const isLikelyProductCardJson = (obj: any) => {
-    if (!obj) return false;
-    if (obj.excludeFromExport || obj.isFrame) return false;
-    if (obj.type !== 'group') return false;
-    if (isStandalonePriceGroupJson(obj)) return false;
-
-    const parentZoneId = String((obj as any).parentZoneId || '').trim();
-    if (parentZoneId) return true;
-
-    const cardWidth = Number((obj as any)._cardWidth);
-    const cardHeight = Number((obj as any)._cardHeight);
-    if (Number.isFinite(cardWidth) && cardWidth > 0 && Number.isFinite(cardHeight) && cardHeight > 0) return true;
-    if (String((obj as any).smartGridId || '').trim()) return true;
-    if (String((obj as any).priceMode || '').trim()) return true;
-    if (obj.isSmartObject || obj.isProductCard) return true;
-
-    const children = getJsonGroupChildren(obj);
-    if (!children.length) return false;
-
-    const isTextLike = (child: any) => String(child?.type || '').toLowerCase().includes('text');
-    const hasOfferBg = children.some((child: any) => String(child?.name || '') === 'offerBackground');
-    const hasBg = hasOfferBg || children.some((child: any) => (
-        String(child?.type || '').toLowerCase() === 'rect' && /(offerBackground|background|bg)/i.test(String(child?.name || ''))
-    ));
-    const hasPriceGroup = children.some((child: any) => (
-        String(child?.type || '').toLowerCase() === 'group' && String(child?.name || '') === 'priceGroup'
-    ));
-    const hasAnyPriceText = children.some((child: any) => /price_(integer|decimal|value|currency|unit)_text/i.test(String(child?.name || '')));
-    const hasImage = children.some((child: any) => {
-        const childType = String(child?.type || '').toLowerCase();
-        const childName = String(child?.name || '');
-        return childType === 'image' || ['smart_image', 'product_image', 'productImage'].includes(childName);
-    });
-    const hasTitle = children.some((child: any) => isTextLike(child) && /(^smart_title$|^title$|title)/i.test(String(child?.name || '')));
-    const textCount = children.filter((child: any) => isTextLike(child)).length;
-    const nonTextCount = children.length - textCount;
-
-    if (hasOfferBg) return true;
-    if (hasPriceGroup && (hasImage || hasTitle || textCount >= 1)) return true;
-    if (textCount >= 1 && nonTextCount >= 1 && (hasImage || hasBg || hasAnyPriceText)) return true;
-
-    const signals = [hasPriceGroup, hasImage, hasTitle, hasBg, hasAnyPriceText].filter(Boolean).length;
-    if (hasAnyPriceText && hasImage && textCount >= 1) return true;
-    return signals >= 3 || (hasAnyPriceText && textCount >= 2);
-};
-
-const getCardBaseSizeForContainmentJson = (card: any): { w: number; h: number } | null => {
-    if (!card) return null;
-    const storedW = Number((card as any)._cardWidth);
-    const storedH = Number((card as any)._cardHeight);
-    if (Number.isFinite(storedW) && storedW > 0 && Number.isFinite(storedH) && storedH > 0) {
-        return { w: storedW, h: storedH };
-    }
-
-    const bg = getJsonGroupChildren(card).find((child: any) => child?.name === 'offerBackground' && String(child?.type || '').toLowerCase() === 'rect');
-    const bgW = Number(bg?.width);
-    const bgH = Number(bg?.height);
-    if (Number.isFinite(bgW) && bgW > 0 && Number.isFinite(bgH) && bgH > 0) {
-        return { w: bgW, h: bgH };
-    }
-
-    const cardW = Number(card?.width);
-    const cardH = Number(card?.height);
-    if (Number.isFinite(cardW) && cardW > 0 && Number.isFinite(cardH) && cardH > 0) {
-        return { w: cardW, h: cardH };
-    }
-
-    return null;
-};
+// walkCanvasObjects / getJsonGroupChildren / isStandalonePriceGroupJson /
+// isLikelyProductCardJson / getCardBaseSizeForContainmentJson foram
+// extraidos para utils/canvasJsonClassifiers.ts (Fase 2 da modularizacao).
 
 const getJsonObjectSize = (
     obj: any,
