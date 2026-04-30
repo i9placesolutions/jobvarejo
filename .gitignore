@@ -65,3 +65,7 @@ tmp/
 
 # Claude Code local settings (contém tokens e aprovações locais)
 .claude/
+
+# Vitest
+coverage/
+.vitest/

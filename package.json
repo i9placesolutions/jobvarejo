@@ -21,6 +21,9 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
     "preview": "nuxt preview",
     "postinstall": "patch-package && nuxt prepare"
   },
@@ -62,6 +65,8 @@
     "@types/nodemailer": "^7.0.10",
     "@types/pg": "^8.16.0",
     "@types/webfontloader": "^1.6.38",
-    "patch-package": "^8.0.0"
+    "@vitest/ui": "^4.1.5",
+    "patch-package": "^8.0.0",
+    "vitest": "^4.1.5"
   }
 }
