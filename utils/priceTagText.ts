@@ -164,3 +164,88 @@ export const resolveAtacVariantKeyFromPrice = (raw: any): AtacVariantKey => {
     if (digitsCount >= 3) return 'large';
     return 'normal';
 };
+
+/**
+ * Forma minima do produto que `inferUnitLabelFromProduct` consome.
+ * Aceita dados parciais (qualquer fonte importadora pode preencher subsets).
+ */
+export type ProductUnitInferenceInput = {
+    unit?: any
+    name?: any
+    weight?: any
+    packageLabel?: any
+    packUnit?: any
+}
+
+/**
+ * Infere a unidade visivel ('KG' | 'UN' | '') a partir dos campos do produto,
+ * priorizando sinais explicitos antes de heuristica baseada no nome.
+ *
+ * Ordem de prioridade:
+ *  1. product.unit explicito
+ *  2. Heuristica do nome/weight/packageLabel:
+ *     - "5KG", "500G", "2L" (numero antes da unidade) → UN (vendido por unidade)
+ *     - "KG" / "G" / "L" sozinho (sem numero antes) → KG (vendido por peso)
+ *  3. packUnit como fallback
+ *  4. '' quando nenhum sinal disponivel
+ */
+export const inferUnitLabelFromProduct = (product: ProductUnitInferenceInput): PriceUnitLabel => {
+    const unitRaw = String(product?.unit ?? '').trim();
+    if (unitRaw) return normalizeUnitForLabel(unitRaw);
+
+    const name = String(product?.name ?? '');
+    const weight = String(product?.weight ?? '');
+    const packageLabel = String(product?.packageLabel ?? '');
+    const probe = `${name} ${weight} ${packageLabel}`.toUpperCase();
+
+    // CRITICAL: Check if there's a NUMBER before the weight unit (KG, G, ML, L)
+    // Pattern like "5KG", "500G", "2L" = sold by unit → use "UN"
+    // Pattern like "KG", "G" without number = sold by kilo → use "KG"
+    const hasNumberBeforeWeightUnit = /\d+\s*(?:KG|G|ML|L)\b/.test(probe);
+    const hasWeightUnitWithoutNumber = /\b(?:KG|G|ML|L)\b/.test(probe) && !hasNumberBeforeWeightUnit;
+
+    if (hasWeightUnitWithoutNumber) return 'KG'; // Vendido por quilo (ex: "ARROZ KG")
+    if (hasNumberBeforeWeightUnit) return 'UN'; // Vendido por unidade (ex: "ARROZ 5KG")
+
+    const packUnitRaw = String(product?.packUnit ?? '').trim();
+    const packUnitNorm = packUnitRaw ? normalizeUnitForLabel(packUnitRaw) : '';
+    if (packUnitNorm === 'KG') return 'KG';
+    if (packUnitNorm === 'UN') return 'UN';
+
+    return '';
+};
+
+/**
+ * Gera o texto de "linha de pack" exibido em etiquetas atacarejo.
+ *
+ * Exemplos:
+ *  - { packageLabel: 'FD', packQuantity: 12, packUnit: 'UN', packPrice: '14,90' }
+ *      → "FD C/12UN: R$ 14,90"
+ *  - { packageLabel: 'CX', packQuantity: 1, packUnit: 'UN', packPrice: '5,99', itemUnit: 'KG' }
+ *      → "1 UN: R$ 5,99"  (q=1 usa formato compacto)
+ *  - sem dados suficientes → null (caller esconde o texto)
+ *
+ * Quando packUnit e' um token de embalagem (FD/CX/PCT), cai para itemUnit
+ * — ex: pack "FD" sem unidade explicita do item conta com itemUnit do produto.
+ */
+export const computePackLine = (opts: {
+    packageLabel?: any
+    packQuantity?: any
+    packUnit?: any
+    packPrice?: any
+    itemUnit?: any
+}): string | null => {
+    const label = String(opts.packageLabel ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    const q = Number.parseInt(String(opts.packQuantity ?? '').replace(/[^\d]/g, ''), 10);
+    const packUnitToken = String(opts.packUnit ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    const itemUnit = normalizeUnitForLabel(opts.itemUnit ?? '');
+    const packagingTokens = new Set(['FD', 'FARDO', 'FARDOS', 'CX', 'CAIXA', 'CAIXAS', 'PCT', 'PACOTE', 'PACOTES', 'PC']);
+    const unit =
+        (!packUnitToken || packUnitToken === label || packagingTokens.has(packUnitToken))
+            ? itemUnit
+            : normalizeUnitForLabel(packUnitToken);
+    const price = String(opts.packPrice ?? '').trim();
+    if (!label || !Number.isFinite(q) || q <= 0 || !unit || !price) return null;
+    if (q === 1) return `1 ${unit}: R$ ${price}`;
+    return `${label} C/${q}${unit}: R$ ${price}`;
+};

@@ -6,6 +6,8 @@ import {
   formatCentsToPrice,
   splitPriceParts,
   resolveAtacVariantKeyFromPrice,
+  inferUnitLabelFromProduct,
+  computePackLine,
   PRICE_INTEGER_DECIMAL_GAP_PX
 } from '~/utils/priceTagText'
 
@@ -238,5 +240,122 @@ describe('resolveAtacVariantKeyFromPrice — chave de variante por digitos', () 
     // "047,99" tem 3 digitos brutos mas 2 digitos significativos → normal
     expect(resolveAtacVariantKeyFromPrice('047,99')).toBe('normal')
     expect(resolveAtacVariantKeyFromPrice('001,99')).toBe('tiny')
+  })
+})
+
+describe('inferUnitLabelFromProduct — descobrir UN/KG/vazio do produto', () => {
+  it('product.unit explicito tem prioridade absoluta', () => {
+    expect(inferUnitLabelFromProduct({ unit: 'KG' })).toBe('KG')
+    expect(inferUnitLabelFromProduct({ unit: 'UN' })).toBe('UN')
+    // unit=ML (gramatura) NAO vira UN — vira ''
+    expect(inferUnitLabelFromProduct({ unit: 'ML' })).toBe('')
+  })
+
+  it('produto sem unit, name com numero antes da unidade → UN (vendido por unidade)', () => {
+    expect(inferUnitLabelFromProduct({ name: 'ARROZ 5KG' })).toBe('UN')
+    expect(inferUnitLabelFromProduct({ name: 'BISCOITO 200G' })).toBe('UN')
+    expect(inferUnitLabelFromProduct({ name: 'COCA-COLA 2L' })).toBe('UN')
+    expect(inferUnitLabelFromProduct({ name: 'OLEO 900ML' })).toBe('UN')
+  })
+
+  it('produto sem unit, name com unidade SEM numero → KG (vendido por peso)', () => {
+    expect(inferUnitLabelFromProduct({ name: 'BANANA KG' })).toBe('KG')
+    expect(inferUnitLabelFromProduct({ name: 'TOMATE G' })).toBe('KG')
+  })
+
+  it('weight/packageLabel tambem alimentam a heuristica', () => {
+    expect(inferUnitLabelFromProduct({ name: 'ARROZ', weight: '5KG' })).toBe('UN')
+    expect(inferUnitLabelFromProduct({ name: 'CARNE', packageLabel: '500G' })).toBe('UN')
+  })
+
+  it('packUnit serve de fallback quando nada mais bate', () => {
+    expect(inferUnitLabelFromProduct({ name: 'XYZ', packUnit: 'KG' })).toBe('KG')
+    expect(inferUnitLabelFromProduct({ name: 'XYZ', packUnit: 'UN' })).toBe('UN')
+  })
+
+  it('produto sem nenhum sinal retorna string vazia', () => {
+    expect(inferUnitLabelFromProduct({})).toBe('')
+    expect(inferUnitLabelFromProduct({ name: 'PRODUTO GENERICO' })).toBe('')
+    expect(inferUnitLabelFromProduct({ name: 'CHOCOLATE NEGRO' })).toBe('')
+  })
+
+  it('REGRESSAO: nome com gramatura "500ML" mostra UN (vendido por unidade), nao KG', () => {
+    // O bug historico era: ML virava UN automatico em normalizeUnitForLabel.
+    // Aqui a logica e' diferente: "500ML" no NOME → UN (correto), porque
+    // identifica que e' embalagem.
+    expect(inferUnitLabelFromProduct({ name: 'AGUA 500ML' })).toBe('UN')
+  })
+})
+
+describe('computePackLine — texto da linha de pack atacarejo', () => {
+  it('formato classico FD C/12UN: R$ 1,99', () => {
+    const r = computePackLine({
+      packageLabel: 'FD',
+      packQuantity: 12,
+      packUnit: 'UN',
+      packPrice: '1,99'
+    })
+    expect(r).toBe('FD C/12UN: R$ 1,99')
+  })
+
+  it('q=1 usa formato compacto "1 UN: R$ X"', () => {
+    const r = computePackLine({
+      packageLabel: 'CX',
+      packQuantity: 1,
+      packUnit: 'UN',
+      packPrice: '5,99'
+    })
+    expect(r).toBe('1 UN: R$ 5,99')
+  })
+
+  it('packUnit=token de embalagem (FD/CX/PCT) cai para itemUnit', () => {
+    expect(computePackLine({
+      packageLabel: 'FD',
+      packQuantity: 6,
+      packUnit: 'FD', // mesmo token do label
+      itemUnit: 'KG',
+      packPrice: '49,90'
+    })).toBe('FD C/6KG: R$ 49,90')
+
+    expect(computePackLine({
+      packageLabel: 'FD',
+      packQuantity: 6,
+      packUnit: 'CX', // outro token de embalagem
+      itemUnit: 'UN',
+      packPrice: '99,00'
+    })).toBe('FD C/6UN: R$ 99,00')
+  })
+
+  it('retorna null quando faltam dados essenciais', () => {
+    expect(computePackLine({})).toBeNull()
+    expect(computePackLine({ packageLabel: 'FD' })).toBeNull()
+    expect(computePackLine({ packageLabel: 'FD', packQuantity: 0 })).toBeNull()
+    expect(computePackLine({ packageLabel: 'FD', packQuantity: 'abc' })).toBeNull()
+    expect(computePackLine({
+      packageLabel: 'FD',
+      packQuantity: 12,
+      packPrice: '' // sem preco
+    })).toBeNull()
+  })
+
+  it('packUnit ML/L (gramatura) cai para itemUnit pois normalizeUnitForLabel retorna ""', () => {
+    // ML/L em packUnit nao geram label valido (vide normalizeUnitForLabel),
+    // entao a funcao tenta itemUnit antes de desistir.
+    expect(computePackLine({
+      packageLabel: 'CX',
+      packQuantity: 6,
+      packUnit: 'ML',
+      itemUnit: 'UN',
+      packPrice: '12,99'
+    })).toBeNull()
+  })
+
+  it('aceita packQuantity como string com unidade', () => {
+    expect(computePackLine({
+      packageLabel: 'FD',
+      packQuantity: '12 UN',
+      packUnit: 'UN',
+      packPrice: '23,99'
+    })).toBe('FD C/12UN: R$ 23,99')
   })
 })
