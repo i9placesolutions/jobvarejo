@@ -13621,6 +13621,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     if (!(frame as any)._customId) (frame as any)._customId = makeCanvasObjectId();
     const rootId = String((frame as any)._customId || '');
     if (!rootId) return null;
+    const sourceTargetZoneId = String((targetGridZone.value as any)?._customId || '').trim();
 
     const rootBounds = getFrameBounds(frame);
     const fallbackRootWidth = (Number((frame as any).width) || 0) * (Number((frame as any).scaleX) || 1);
@@ -14466,6 +14467,20 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         console.warn('[duplicateFrameWithContents] failed to reapply runtime visual patches', err);
     }
 
+    const duplicatedTargetZoneId = sourceTargetZoneId ? oldToNewId.get(sourceTargetZoneId) : '';
+    const rootCloneId = String((rootClone as any)?._customId || '').trim();
+    const clonedZones = clones.filter((o: any) => isLikelyProductZone(o));
+    const nextTargetZone = duplicatedTargetZoneId
+        ? clonedZones.find((zone: any) => String((zone as any)?._customId || '').trim() === duplicatedTargetZoneId)
+        : clonedZones.find((zone: any) => String((zone as any)?.parentFrameId || '').trim() === rootCloneId) || clonedZones[0];
+    if (nextTargetZone && isLikelyProductZone(nextTargetZone)) {
+        targetGridZone.value = nextTargetZone;
+        targetGridZones.value = resolveRelatedImportZones(nextTargetZone);
+    } else {
+        targetGridZone.value = null;
+        targetGridZones.value = [];
+    }
+
     canvas.value.setActiveObject(rootClone);
     safeRequestRenderAll();
     refreshCanvasObjects();
@@ -15135,6 +15150,11 @@ const remapOrClearBindingsRecursive = (root: any, idMap: Map<string, string>, ex
         if (next) obj.parentZoneId = next;
         else delete obj.parentZoneId;
     }
+    if (obj._zoneSlot && typeof obj._zoneSlot === 'object') {
+        const next = remapId(obj._zoneSlot.zoneId);
+        if (next) obj._zoneSlot = { ...obj._zoneSlot, zoneId: next };
+        else obj._zoneSlot = null;
+    }
     if (obj.objectMaskSourceId) {
         const next = remapId(obj.objectMaskSourceId);
         if (next) obj.objectMaskSourceId = next;
@@ -15224,6 +15244,12 @@ const finalizeDuplicatedObjects = (clones: any[]) => {
         ensureZoneSanity(zone);
         recalculateZoneLayout(zone, getZoneChildren(zone), { save: false, preserveStyles: true });
     });
+
+    const duplicatedZone = clones.find((obj: any) => obj && !obj?.group && isLikelyProductZone(obj));
+    if (duplicatedZone && isLikelyProductZone(duplicatedZone)) {
+        targetGridZone.value = duplicatedZone;
+        targetGridZones.value = resolveRelatedImportZones(duplicatedZone);
+    }
 
     const topLevelClones = clones.filter((obj: any) => !obj?.group);
     canvas.value.discardActiveObject();
