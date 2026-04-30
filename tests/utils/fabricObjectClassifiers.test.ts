@@ -6,7 +6,8 @@ import {
   isLikelyProductCard,
   isTextLikeObject,
   collectObjectsDeep,
-  findByName
+  findByName,
+  isPriceGroupOrPriceChild
 } from '~/utils/fabricObjectClassifiers'
 
 // Helpers de mock — todos seguem duck typing de Fabric.
@@ -268,5 +269,30 @@ describe('findByName', () => {
 
   it('lista vazia retorna undefined', () => {
     expect(findByName([], 'a')).toBeUndefined()
+  })
+})
+
+describe('isPriceGroupOrPriceChild', () => {
+  it('retorna true para o priceGroup proprio', () => {
+    expect(isPriceGroupOrPriceChild({ name: 'priceGroup' })).toBe(true)
+  })
+
+  it('retorna true para filho direto de priceGroup', () => {
+    const pg = { name: 'priceGroup' }
+    const child = { name: 'price_integer_text', group: pg }
+    expect(isPriceGroupOrPriceChild(child)).toBe(true)
+  })
+
+  it('retorna false para neto (group.group=priceGroup, mas group nao e' + ' direto)', () => {
+    const pg = { name: 'priceGroup' }
+    const inner = { name: 'inner-group', group: pg }
+    const grandChild = { name: 'leaf', group: inner }
+    expect(isPriceGroupOrPriceChild(grandChild)).toBe(false)
+  })
+
+  it('rejeita null e objetos sem name', () => {
+    expect(isPriceGroupOrPriceChild(null)).toBe(false)
+    expect(isPriceGroupOrPriceChild({})).toBe(false)
+    expect(isPriceGroupOrPriceChild({ name: 'card', group: { name: 'whatever' } })).toBe(false)
   })
 })

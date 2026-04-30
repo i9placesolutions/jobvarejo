@@ -56,6 +56,18 @@ export const isLikelyProductZone = (obj: any): boolean => {
 }
 
 /**
+ * Detecta se o objeto E' o priceGroup ou esta DENTRO dele (filho direto).
+ * Usado em pipelines de export/seleção que precisam tratar o conjunto da
+ * etiqueta como uma unidade (ex: ocultar parts, transformar grupo todo).
+ */
+export const isPriceGroupOrPriceChild = (obj: any): boolean => {
+    if (!obj) return false
+    if (String(obj?.name || '') === 'priceGroup') return true
+    if (String((obj as any)?.group?.name || '') === 'priceGroup') return true
+    return false
+}
+
+/**
  * Detecta uma "etiqueta de preco solta" (priceGroup standalone) — um group
  * nomeado priceGroup que NAO esta dentro de um card de produto e nao tem
  * imagem/background de card. Usado para evitar tratar essas etiquetas

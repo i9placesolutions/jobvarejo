@@ -28,7 +28,8 @@ import {
     isLikelyProductCard,
     isTextLikeObject,
     collectObjectsDeep,
-    findByName
+    findByName,
+    isPriceGroupOrPriceChild
 } from '~/utils/fabricObjectClassifiers'
 import {
     isObjectShownForBounds,
@@ -8250,12 +8251,7 @@ const getProductImportIdentityKey = (product: any, index: number): string => {
     return String(product?.productInstanceId || product?.id || `tmp-product-${index + 1}`).trim();
 };
 
-const isPriceGroupOrPriceChild = (obj: any): boolean => {
-    if (!obj) return false;
-    if (String(obj?.name || '') === 'priceGroup') return true;
-    if (String((obj as any)?.group?.name || '') === 'priceGroup') return true;
-    return false;
-}
+// isPriceGroupOrPriceChild extraido para utils/fabricObjectClassifiers.ts
 
 const extractProductsFromZoneForReview = (zone: any): any[] => {
     if (!zone || !isLikelyProductZone(zone)) return [];
