@@ -5,7 +5,11 @@ import {
   isStandalonePriceGroupJson,
   isLikelyProductCardJson,
   getCardBaseSizeForContainmentJson,
-  cloneTemplateGroupJson
+  cloneTemplateGroupJson,
+  getJsonObjectSize,
+  getJsonObjectCenterInParentPlane,
+  setJsonObjectCenterInParentPlane,
+  collectJsonDescendantsWithParent
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -320,5 +324,123 @@ describe('cloneTemplateGroupJson — clone profundo de template', () => {
     expect(Array.isArray(cloned.objects)).toBe(true)
     expect(cloned.objects.length).toBe(2)
     expect(cloned.objects[1].objects[0].id).toBe('leaf')
+  })
+})
+
+describe('getJsonObjectSize', () => {
+  it('basico: width*scaleX, height*scaleY', () => {
+    expect(getJsonObjectSize({ width: 100, height: 50 })).toEqual({ width: 100, height: 50 })
+    expect(getJsonObjectSize({ width: 100, height: 50, scaleX: 2, scaleY: 0.5 })).toEqual({ width: 200, height: 25 })
+  })
+
+  it('opts sobrescreve scale do objeto', () => {
+    const obj = { width: 100, height: 50, scaleX: 5, scaleY: 5 }
+    expect(getJsonObjectSize(obj, { scaleX: 1, scaleY: 1 })).toEqual({ width: 100, height: 50 })
+  })
+
+  it('aplica abs em scale negativo (flip)', () => {
+    expect(getJsonObjectSize({ width: 100, height: 50, scaleX: -2, scaleY: -1 })).toEqual({ width: 200, height: 50 })
+  })
+
+  it('width/height invalidos retornam null', () => {
+    expect(getJsonObjectSize({ width: 0, height: 100 })).toBeNull()
+    expect(getJsonObjectSize({ width: 100, height: 0 })).toBeNull()
+    expect(getJsonObjectSize({})).toBeNull()
+  })
+
+  it('width negativo e tomado em abs (defensivo)', () => {
+    expect(getJsonObjectSize({ width: -10, height: 100 })).toEqual({ width: 10, height: 100 })
+  })
+
+  it('scale=0 cai para fallback 1', () => {
+    // Math.abs(0) || 1 = 1, entao tamanho fica width*1
+    expect(getJsonObjectSize({ width: 100, height: 50, scaleX: 0 })).toEqual({ width: 100, height: 50 })
+  })
+})
+
+describe('getJsonObjectCenterInParentPlane', () => {
+  it('originX=left/originY=top: centro = topo-esquerdo + half', () => {
+    expect(getJsonObjectCenterInParentPlane({
+      left: 10, top: 20, width: 100, height: 50
+    })).toEqual({ x: 60, y: 45 })
+  })
+
+  it('originX=center/originY=center: centro = (left, top) literal', () => {
+    expect(getJsonObjectCenterInParentPlane({
+      left: 100, top: 100, width: 50, height: 50, originX: 'center', originY: 'center'
+    })).toEqual({ x: 100, y: 100 })
+  })
+
+  it('originX=right: centro = left - half', () => {
+    expect(getJsonObjectCenterInParentPlane({
+      left: 100, top: 0, width: 50, height: 20, originX: 'right'
+    })).toEqual({ x: 75, y: 10 })
+  })
+
+  it('size invalido retorna null', () => {
+    expect(getJsonObjectCenterInParentPlane({})).toBeNull()
+  })
+
+  it('left/top NaN retorna null', () => {
+    expect(getJsonObjectCenterInParentPlane({
+      left: 'abc', top: 0, width: 100, height: 50
+    })).toBeNull()
+  })
+})
+
+describe('setJsonObjectCenterInParentPlane', () => {
+  it('originX=left/top default: define left/top de modo que center bata', () => {
+    const obj: any = { width: 100, height: 50 }
+    expect(setJsonObjectCenterInParentPlane(obj, 100, 100)).toBe(true)
+    expect(obj.left).toBe(50)
+    expect(obj.top).toBe(75)
+  })
+
+  it('originX=center/originY=center: left/top = centro literal', () => {
+    const obj: any = { width: 100, height: 50, originX: 'center', originY: 'center' }
+    setJsonObjectCenterInParentPlane(obj, 200, 200)
+    expect(obj.left).toBe(200)
+    expect(obj.top).toBe(200)
+  })
+
+  it('roundtrip: set + get retorna o centro original', () => {
+    const obj: any = { width: 80, height: 40 }
+    setJsonObjectCenterInParentPlane(obj, 250, 100)
+    const center = getJsonObjectCenterInParentPlane(obj)
+    expect(center).toEqual({ x: 250, y: 100 })
+  })
+
+  it('size invalido nao muta o objeto e retorna false', () => {
+    const obj: any = { left: 5, top: 5 }
+    expect(setJsonObjectCenterInParentPlane(obj, 100, 100)).toBe(false)
+    expect(obj.left).toBe(5) // intacto
+  })
+})
+
+describe('collectJsonDescendantsWithParent', () => {
+  it('coleta descendentes diretos com parent', () => {
+    const root = { type: 'group', objects: [
+      { id: 'a' },
+      { id: 'b' }
+    ]}
+    const r = collectJsonDescendantsWithParent(root)
+    expect(r.length).toBe(2)
+    expect(r.every((e) => e.parent === root)).toBe(true)
+  })
+
+  it('descobre niveis aninhados, parent muda corretamente', () => {
+    const leaf = { id: 'leaf' }
+    const inner = { id: 'inner', type: 'group', objects: [leaf] }
+    const root = { type: 'group', objects: [inner] }
+    const r = collectJsonDescendantsWithParent(root)
+    const innerEntry = r.find((e) => e.node.id === 'inner')
+    const leafEntry = r.find((e) => e.node.id === 'leaf')
+    expect(innerEntry?.parent).toBe(root)
+    expect(leafEntry?.parent).toBe(inner) // parent imediato, nao root
+  })
+
+  it('group sem children retorna []', () => {
+    expect(collectJsonDescendantsWithParent({ type: 'group' })).toEqual([])
+    expect(collectJsonDescendantsWithParent({})).toEqual([])
   })
 })

@@ -132,6 +132,117 @@ export const isLikelyProductCardJson = (obj: any): boolean => {
  * Usado em containment / collision detection durante post-load.
  */
 /**
+ * Obtem largura/altura efetivas de um nodo JSON. `opts.scaleX/Y` permite
+ * sobrescrever a escala do proprio objeto (uteis quando se quer medir
+ * com uma escala-alvo hipotetica). Retorna null para dimensoes invalidas
+ * (zero, negativas, NaN/Infinity).
+ */
+export const getJsonObjectSize = (
+    obj: any,
+    opts: { scaleX?: number; scaleY?: number } = {}
+): { width: number; height: number } | null => {
+    const rawWidth = Number(obj?.width ?? 0)
+    const rawHeight = Number(obj?.height ?? 0)
+    const scaleX = Math.abs(Number(opts.scaleX ?? obj?.scaleX ?? 1)) || 1
+    const scaleY = Math.abs(Number(opts.scaleY ?? obj?.scaleY ?? 1)) || 1
+    const width = Math.abs(rawWidth * scaleX)
+    const height = Math.abs(rawHeight * scaleY)
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+        return null
+    }
+    return { width, height }
+}
+
+/**
+ * Calcula o centro de um nodo JSON no plano do parent, respeitando origem
+ * (left/center/right e top/center/bottom). Retorna null para dimensoes
+ * invalidas ou left/top nao-finitos.
+ */
+export const getJsonObjectCenterInParentPlane = (
+    obj: any,
+    opts: { scaleX?: number; scaleY?: number } = {}
+): { x: number; y: number } | null => {
+    const size = getJsonObjectSize(obj, opts)
+    if (!size) return null
+
+    const left = Number(obj?.left ?? 0)
+    const top = Number(obj?.top ?? 0)
+    const originX = String(obj?.originX || 'left')
+    const originY = String(obj?.originY || 'top')
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return null
+
+    const centerX = originX === 'center'
+        ? left
+        : originX === 'right'
+            ? left - (size.width / 2)
+            : left + (size.width / 2)
+    const centerY = originY === 'center'
+        ? top
+        : originY === 'bottom'
+            ? top - (size.height / 2)
+            : top + (size.height / 2)
+
+    if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return null
+    return { x: centerX, y: centerY }
+}
+
+/**
+ * Define a posicao de um nodo JSON de forma que seu centro fique em
+ * (centerX, centerY) no plano do parent. Mantem origem; muta `obj.left`
+ * e `obj.top`. Retorna `true` se aplicou, `false` se a operacao nao foi
+ * possivel (size invalido, left/top nao-finitos).
+ */
+export const setJsonObjectCenterInParentPlane = (
+    obj: any,
+    centerX: number,
+    centerY: number,
+    opts: { scaleX?: number; scaleY?: number } = {}
+): boolean => {
+    const size = getJsonObjectSize(obj, opts)
+    if (!size) return false
+
+    const originX = String(obj?.originX || 'left')
+    const originY = String(obj?.originY || 'top')
+    const nextLeft = originX === 'center'
+        ? centerX
+        : originX === 'right'
+            ? centerX + (size.width / 2)
+            : centerX - (size.width / 2)
+    const nextTop = originY === 'center'
+        ? centerY
+        : originY === 'bottom'
+            ? centerY + (size.height / 2)
+            : centerY - (size.height / 2)
+
+    if (!Number.isFinite(nextLeft) || !Number.isFinite(nextTop)) return false
+    obj.left = nextLeft
+    obj.top = nextTop
+    return true
+}
+
+/**
+ * DFS no JSON retornando uma lista plana { node, parent } de todos os
+ * descendentes do group. Util para reparos/normalizacoes que precisam
+ * conhecer o pai imediato de cada nodo (ex: re-vincular cards a zones).
+ */
+export const collectJsonDescendantsWithParent = (group: any): Array<{ node: any; parent: any }> => {
+    const out: Array<{ node: any; parent: any }> = []
+    const stack: Array<{ node: any; parent: any }> = getJsonGroupChildren(group).map(
+        (child: any) => ({ node: child, parent: group })
+    )
+    while (stack.length > 0) {
+        const current = stack.pop()
+        if (!current?.node || typeof current.node !== 'object') continue
+        out.push(current)
+        const children = getJsonGroupChildren(current.node)
+        for (let i = children.length - 1; i >= 0; i--) {
+            stack.push({ node: children[i], parent: current.node })
+        }
+    }
+    return out
+}
+
+/**
  * Clone profundo de um group JSON (template de etiqueta, normalmente).
  *
  * Estrategia em camadas:

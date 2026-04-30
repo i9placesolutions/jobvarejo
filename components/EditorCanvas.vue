@@ -44,7 +44,11 @@ import {
     isStandalonePriceGroupJson,
     isLikelyProductCardJson,
     getCardBaseSizeForContainmentJson,
-    cloneTemplateGroupJson
+    cloneTemplateGroupJson,
+    getJsonObjectSize,
+    getJsonObjectCenterInParentPlane,
+    setJsonObjectCenterInParentPlane,
+    collectJsonDescendantsWithParent
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -12131,92 +12135,9 @@ const getCanvasLoadCacheToken = (canvasData: any): string => {
 // isLikelyProductCardJson / getCardBaseSizeForContainmentJson foram
 // extraidos para utils/canvasJsonClassifiers.ts (Fase 2 da modularizacao).
 
-const getJsonObjectSize = (
-    obj: any,
-    opts: { scaleX?: number; scaleY?: number } = {}
-): { width: number; height: number } | null => {
-    const rawWidth = Number(obj?.width ?? 0);
-    const rawHeight = Number(obj?.height ?? 0);
-    const scaleX = Math.abs(Number(opts.scaleX ?? obj?.scaleX ?? 1)) || 1;
-    const scaleY = Math.abs(Number(opts.scaleY ?? obj?.scaleY ?? 1)) || 1;
-    const width = Math.abs(rawWidth * scaleX);
-    const height = Math.abs(rawHeight * scaleY);
-    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
-        return null;
-    }
-    return { width, height };
-};
-
-const getJsonObjectCenterInParentPlane = (
-    obj: any,
-    opts: { scaleX?: number; scaleY?: number } = {}
-): { x: number; y: number } | null => {
-    const size = getJsonObjectSize(obj, opts);
-    if (!size) return null;
-
-    const left = Number(obj?.left ?? 0);
-    const top = Number(obj?.top ?? 0);
-    const originX = String(obj?.originX || 'left');
-    const originY = String(obj?.originY || 'top');
-    if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
-
-    const centerX = originX === 'center'
-        ? left
-        : originX === 'right'
-            ? left - (size.width / 2)
-            : left + (size.width / 2);
-    const centerY = originY === 'center'
-        ? top
-        : originY === 'bottom'
-            ? top - (size.height / 2)
-            : top + (size.height / 2);
-
-    if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return null;
-    return { x: centerX, y: centerY };
-};
-
-const setJsonObjectCenterInParentPlane = (
-    obj: any,
-    centerX: number,
-    centerY: number,
-    opts: { scaleX?: number; scaleY?: number } = {}
-) => {
-    const size = getJsonObjectSize(obj, opts);
-    if (!size) return false;
-
-    const originX = String(obj?.originX || 'left');
-    const originY = String(obj?.originY || 'top');
-    const nextLeft = originX === 'center'
-        ? centerX
-        : originX === 'right'
-            ? centerX + (size.width / 2)
-            : centerX - (size.width / 2);
-    const nextTop = originY === 'center'
-        ? centerY
-        : originY === 'bottom'
-            ? centerY + (size.height / 2)
-            : centerY - (size.height / 2);
-
-    if (!Number.isFinite(nextLeft) || !Number.isFinite(nextTop)) return false;
-    obj.left = nextLeft;
-    obj.top = nextTop;
-    return true;
-};
-
-const collectJsonDescendantsWithParent = (group: any): Array<{ node: any; parent: any }> => {
-    const out: Array<{ node: any; parent: any }> = [];
-    const stack = getJsonGroupChildren(group).map((child: any) => ({ node: child, parent: group }));
-    while (stack.length > 0) {
-        const current = stack.pop();
-        if (!current?.node || typeof current.node !== 'object') continue;
-        out.push(current);
-        const children = getJsonGroupChildren(current.node);
-        for (let i = children.length - 1; i >= 0; i--) {
-            stack.push({ node: children[i], parent: current.node });
-        }
-    }
-    return out;
-};
+// getJsonObjectSize / getJsonObjectCenterInParentPlane /
+// setJsonObjectCenterInParentPlane / collectJsonDescendantsWithParent
+// foram extraidos para utils/canvasJsonClassifiers.ts.
 
 const DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD = 24;
 const DEFERRED_PRODUCT_IMAGE_LOAD_MAX = 72;
