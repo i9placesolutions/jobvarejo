@@ -10,6 +10,11 @@ import { useAiImageStudio } from '~/composables/useAiImageStudio'
 import { toWasabiDirectUrl, toWasabiProxyUrl } from '~/utils/storageProxy'
 import { finalizeSerializedCanvasJson } from '~/utils/editorCanvasSerialize'
 import { prepareCanvasForSerialization } from '~/utils/editorCanvasPreSerialize'
+import {
+    parsePriceBR,
+    normalizeUnitForLabel,
+    PRICE_INTEGER_DECIMAL_GAP_PX
+} from '~/utils/priceTagText'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
 import { registerHistorySaveListeners } from '~/utils/editorHistoryListeners'
 import { applyHistoryStateToCanvas } from '~/utils/editorHistoryApply'
@@ -31486,51 +31491,11 @@ const resolveAtacVariantKeyFromPrice = (raw: any): AtacVariantKey => {
     return 'normal';
 };
 
-// Parse de preço brasileiro (ex: "129,99" => { inteiro: "129", centavos: "99" })
-const parsePriceBR = (preco: string): { inteiro: string; centavos: string } => {
-    const s0 = String(preco ?? '')
-        .replace(/R\$\s*/gi, '')
-        .replace(/\s+/g, '')
-        .trim();
-    if (!s0) return { inteiro: '0', centavos: '00' };
-
-    const lastComma = s0.lastIndexOf(',');
-    const lastDot = s0.lastIndexOf('.');
-    const sepIdx = Math.max(lastComma, lastDot);
-
-    if (sepIdx === -1) {
-        const inteiro = s0.replace(/[^\d]/g, '') || '0';
-        return { inteiro, centavos: '00' };
-    }
-
-    const rawInt = s0.slice(0, sepIdx);
-    const rawDec = s0.slice(sepIdx + 1);
-    const inteiro = rawInt.replace(/[^\d]/g, '') || '0';
-    const centavos = rawDec.replace(/[^\d]/g, '').padEnd(2, '0').slice(0, 2) || '00';
-    return { inteiro, centavos };
-};
-
-type PriceUnitLabel = '' | 'KG' | 'UN';
-
-const normalizeUnitForLabel = (raw: any): PriceUnitLabel => {
-    const s0 = String(raw ?? '').trim();
-    if (!s0) return '';
-    const s = s0.toUpperCase().replace(/\s+/g, '');
-
-    // Remove a leading numeric quantity (e.g. "500ML", "1KG", "2,5KG") so we don't show gramatura.
-    const tok = s.replace(/^\d+(?:[.,]\d+)?/, '');
-
-    // Only allow these units on the label.
-    if (tok === 'KG' || tok === 'K' || tok === 'KILO' || tok === 'KILOS' || tok.includes('KG')) return 'KG';
-    if (tok === 'UN' || tok === 'UND' || tok === 'UNID' || tok === 'UNIDADE' || tok.includes('UN')) return 'UN';
-
-    // Gramaturas (ML/L/G/etc) NAO devem virar 'UN' automatico — gramatura segue
-    // no nome do produto. Retornar string vazia evita 'UN' fantasma quando o
-    // template nao permite unidade.
-    return '';
-};
-
-const PRICE_INTEGER_DECIMAL_GAP_PX = 1;
+// parsePriceBR / normalizeUnitForLabel / PRICE_INTEGER_DECIMAL_GAP_PX
+// foram extraidos para utils/priceTagText.ts (Fase 2 da modularizacao).
+// Mantemos PriceUnitLabel reexportado localmente para compatibilidade com
+// os tipos ja referenciados ao longo deste arquivo.
+type PriceUnitLabel = import('~/utils/priceTagText').PriceUnitLabel;
 
 const layoutPrice = (opts: {
     priceInteger: any;
