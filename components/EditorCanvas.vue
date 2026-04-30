@@ -15,6 +15,7 @@ import {
     normalizeUnitForLabel,
     PRICE_INTEGER_DECIMAL_GAP_PX
 } from '~/utils/priceTagText'
+import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
 import { registerHistorySaveListeners } from '~/utils/editorHistoryListeners'
 import { applyHistoryStateToCanvas } from '~/utils/editorHistoryApply'
@@ -31497,162 +31498,9 @@ const resolveAtacVariantKeyFromPrice = (raw: any): AtacVariantKey => {
 // os tipos ja referenciados ao longo deste arquivo.
 type PriceUnitLabel = import('~/utils/priceTagText').PriceUnitLabel;
 
-const layoutPrice = (opts: {
-    priceInteger: any;
-    priceDecimal: any;
-    priceUnit?: any;
-    intX: number;
-    intY: number;
-    decY: number;
-    unitY: number;
-    maxWidth?: number;
-    gapPx?: number;
-    minGapPx?: number;
-    maxGapPx?: number;
-    targetCenterX?: number;
-}) => {
-    const integer = opts.priceInteger;
-    const decimal = opts.priceDecimal;
-    if (!integer || !decimal) return null;
-
-    const getW = (t: any) => (t && typeof t.getScaledWidth === 'function' ? t.getScaledWidth() : 0);
-    const minGap = Number.isFinite(Number(opts.minGapPx)) ? Number(opts.minGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX;
-    const maxGap = Number.isFinite(Number(opts.maxGapPx)) ? Number(opts.maxGapPx) : PRICE_INTEGER_DECIMAL_GAP_PX;
-    const autoGap = PRICE_INTEGER_DECIMAL_GAP_PX;
-    let gap = Number.isFinite(Number(opts.gapPx)) ? Number(opts.gapPx) : autoGap;
-    gap = Math.min(maxGap, Math.max(minGap, gap));
-
-    integer.set?.({ originX: 'left', originY: 'center' });
-    decimal.set?.({ originX: 'left', originY: 'center' });
-
-    // Keep UN/KG only.
-    const unitObj = opts.priceUnit;
-    const rawUnit = String(unitObj?.text || '').trim();
-    const hasUnit = !!(unitObj && rawUnit.length > 0);
-    if (unitObj) {
-        // Respect explicit hidden state (used by collapsed atacarejo tiers).
-        // Avoid auto-reactivating hidden unit texts.
-        if (unitObj.visible === false) {
-            unitObj.set?.({ visible: false });
-        } else if (hasUnit) {
-            const unitNorm = normalizeUnitForLabel(rawUnit);
-            if (unitNorm !== rawUnit.toUpperCase().replace(/\s+/g, '')) {
-                unitObj.set?.('text', unitNorm);
-                unitObj.initDimensions?.();
-            }
-            unitObj.set?.({ visible: true });
-        } else {
-            unitObj.set?.({ visible: false });
-        }
-    }
-
-    const maxWidth = Number.isFinite(Number(opts.maxWidth)) ? Number(opts.maxWidth) : 0;
-    let intW = getW(integer);
-    const decWInitial = getW(decimal);
-
-    // Quando o preco nao cabe na largura disponivel, aplicamos shrink em
-    // INTEIRO + DECIMAL para preservar a hierarquia visual. Antes so o inteiro
-    // encolhia e o decimal mantinha escala 1 — em precos com 2+ digitos como
-    // 47,99/129,99 isso deixava o decimal visualmente desproporcional ao
-    // inteiro reduzido. A unidade nao precisa ser tocada aqui: o auto-fit
-    // logo abaixo (apos centsX) ja a ajusta a largura do decimal.
-    if (maxWidth > 0 && intW > 0) {
-        const allowedIntW = Math.max(8, maxWidth - decWInitial - gap);
-        if (intW > allowedIntW) {
-            const baseIntSx = Number(integer.scaleX || 1);
-            const baseIntSy = Number(integer.scaleY || 1);
-            const shrink = Math.min(1, Math.max(0.35, allowedIntW / intW));
-            integer.set?.({
-                scaleX: baseIntSx * shrink,
-                scaleY: baseIntSy * shrink
-            });
-            integer.initDimensions?.();
-            intW = getW(integer);
-
-            const baseDecSx = Number(decimal.scaleX || 1);
-            const baseDecSy = Number(decimal.scaleY || 1);
-            decimal.set?.({
-                scaleX: baseDecSx * shrink,
-                scaleY: baseDecSy * shrink
-            });
-            decimal.initDimensions?.();
-        }
-    }
-
-    integer.set?.({
-        left: opts.intX,
-        top: opts.intY
-    });
-
-    const centsX = opts.intX + intW + gap; // regra pedida: depende da largura renderizada do inteiro
-    decimal.set?.({
-        left: centsX,
-        top: opts.decY
-    });
-
-    const decW = getW(decimal);
-    if (unitObj && unitObj.visible !== false) {
-        const decCenterX = centsX + (decW / 2);
-        unitObj.set?.({
-            originX: 'center',
-            originY: 'center',
-            left: decCenterX,
-            top: opts.unitY
-        });
-
-        const unitW = getW(unitObj);
-        if (decW > 0 && unitW > decW) {
-            const s = decW / unitW;
-            unitObj.set?.({ scaleX: s, scaleY: s });
-            unitObj.set?.({ left: decCenterX });
-        } else {
-            unitObj.set?.({ scaleX: 1, scaleY: 1 });
-            unitObj.set?.({ left: decCenterX });
-        }
-    }
-
-    // Keep the "inteiro + centavos (+ unidade)" block visually centered when requested.
-    const toFinite = (v: any) => {
-        const n = Number(v);
-        return Number.isFinite(n) ? n : null;
-    };
-    const edgeLR = (obj: any): { left: number; right: number } | null => {
-        if (!obj) return null;
-        const w = getW(obj);
-        if (!Number.isFinite(w) || w <= 0) return null;
-        const x = Number(obj.left || 0);
-        const ox = String(obj.originX || 'left');
-        if (ox === 'center') return { left: x - (w / 2), right: x + (w / 2) };
-        if (ox === 'right') return { left: x - w, right: x };
-        return { left: x, right: x + w };
-    };
-    const targetCenterX = toFinite(opts.targetCenterX);
-    if (targetCenterX !== null) {
-        const edges = [edgeLR(integer), edgeLR(decimal), (unitObj?.visible !== false ? edgeLR(unitObj) : null)]
-            .filter(Boolean) as Array<{ left: number; right: number }>;
-        if (edges.length > 0) {
-            const minX = Math.min(...edges.map((e) => e.left));
-            const maxX = Math.max(...edges.map((e) => e.right));
-            const currentCenter = (minX + maxX) / 2;
-            const dx = targetCenterX - currentCenter;
-            if (Math.abs(dx) > 0.001) {
-                integer.set?.({ left: Number(integer.left || 0) + dx });
-                decimal.set?.({ left: Number(decimal.left || 0) + dx });
-                if (unitObj && unitObj.visible !== false) {
-                    unitObj.set?.({ left: Number(unitObj.left || 0) + dx });
-                }
-            }
-        }
-    }
-
-    return {
-        intX: opts.intX,
-        centsX,
-        intW,
-        decW,
-        gap
-    };
-};
+// layoutPrice foi extraido para utils/priceTagLayout.ts (Fase 2 da
+// modularizacao) com 16 testes unitarios cobrindo regressoes do shrink
+// proporcional, normalizacao de unidade e centralizacao do bloco.
 
 const isObjectShownForBounds = (obj: any) => {
     if (!obj) return false;
