@@ -5,6 +5,7 @@ import type { BuilderFlyerStatus } from '~/types/builder'
 definePageMeta({
   layout: 'builder',
   middleware: 'builder-auth',
+  ssr: false,
 })
 
 const auth = useBuilderAuth()

@@ -17,16 +17,14 @@ export default defineNuxtRouteMiddleware(async (to) => {
     if (!builderAuth.isAuthenticated.value) {
       await builderAuth.getSession()
     }
-    if (builderAuth.isAuthenticated.value) {
-      // Verify it's actually an admin by checking the tenant has _isAdmin flag
-      // (set during login from profiles table)
+    if (builderAuth.isAuthenticated.value && builderAuth.tenant.value?._isAdmin) {
       return
     }
   }
 
   if (!auth.isAuthenticated.value) {
-    return navigateTo('/auth/login')
+    return navigateTo('/auth/login', { replace: true })
   }
 
-  return navigateTo('/')
+  return navigateTo('/', { replace: true })
 })

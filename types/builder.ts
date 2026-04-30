@@ -55,7 +55,7 @@ export interface BuilderTenant {
     updated_at: string
 }
 
-export type BuilderTenantPublic = Omit<BuilderTenant, 'last_login_at' | 'is_active'>
+export type BuilderTenantPublic = Omit<BuilderTenant, 'last_login_at' | 'is_active'> & { _isAdmin?: boolean }
 
 export interface BuilderTheme {
     id: string

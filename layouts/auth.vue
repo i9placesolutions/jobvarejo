@@ -21,16 +21,18 @@ const handleMouseLeave = () => {
   mousePosition.value = null
 }
 
-onMounted(() => {
-  window.addEventListener('mousemove', handleMouseMove)
-  window.addEventListener('mouseleave', handleMouseLeave)
-})
+if (import.meta.client) {
+  onMounted(() => {
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseleave', handleMouseLeave)
+  })
 
-onBeforeUnmount(() => {
-  window.removeEventListener('mousemove', handleMouseMove)
-  window.removeEventListener('mouseleave', handleMouseLeave)
-  if (rafId) cancelAnimationFrame(rafId)
-})
+  onBeforeUnmount(() => {
+    window.removeEventListener('mousemove', handleMouseMove)
+    window.removeEventListener('mouseleave', handleMouseLeave)
+    if (rafId) cancelAnimationFrame(rafId)
+  })
+}
 </script>
 
 <template>

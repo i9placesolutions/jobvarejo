@@ -39,7 +39,7 @@ export default defineEventHandler(async (event) => {
     maxAge: expiresIn,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    httpOnly: false
+    httpOnly: true
   })
   // Keep legacy cookie for backward compatibility during cutover.
   setCookie(event, 'sb-access-token', sessionToken, {
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
     maxAge: expiresIn,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    httpOnly: false
+    httpOnly: true
   })
   setCookie(event, 'authenticated', 'true', {
     path: '/',

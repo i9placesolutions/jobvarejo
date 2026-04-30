@@ -1,7 +1,17 @@
 import { ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getS3Client } from '../utils/s3'
+import { requireAdminUser } from '../utils/auth'
+import { enforceRateLimit } from '../utils/rate-limit'
 
 export default defineEventHandler(async (event) => {
+  // Gate behind dev/non-production — this endpoint exposes infrastructure details
+  if (process.env.NODE_ENV === 'production') {
+    throw createError({ statusCode: 404, statusMessage: 'Not found' })
+  }
+
+  const { user } = await requireAdminUser(event)
+  await enforceRateLimit(event, `storage-diagnose:${user.id}`, 5, 60_000)
+
   const start = Date.now()
   const results: any = {
     timestamp: new Date().toISOString(),

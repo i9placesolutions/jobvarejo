@@ -868,7 +868,7 @@ const BUILTIN_LABEL_TEMPLATE_IDS = new Set([
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const BUILTIN_RED_BURST_SEED_VERSION = 2
 const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
-const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', 'visible', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__manualScaleX', '__manualScaleY', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors', '__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR', '__originalCornerTL', '__originalCornerTR', '__originalCornerBL', '__originalCornerBR']
+const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', 'visible', 'charSpacing', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__manualScaleX', '__manualScaleY', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors', '__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR', '__originalCornerTL', '__originalCornerTR', '__originalCornerBL', '__originalCornerBR']
 const MANUAL_TEMPLATE_STABLE_PROPS = ['__manualTemplateBaseW', '__manualTemplateBaseH'] as const;
 const MANUAL_TEMPLATE_DERIVED_PROPS = ['__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors'] as const;
 const autoHealedLabelTemplateIds = new Set<string>()
@@ -11319,18 +11319,18 @@ onUnmounted(() => {
     teardownSnapping = null;
   }
   if (canvas.value) {
-    // FIX #5: explicitly remove Fabric event listeners before dispose() to
-    // prevent memory leaks from handlers that retain Vue reactive refs.
+    // FIX #5: explicitly remove ALL Fabric event listeners before dispose() to
+    // break closures that retain Vue reactive refs and prevent GC.
     try {
       const c = canvas.value as any
-      c.off('after:render', handleAfterRenderPerf)
-      if (c.__afterRenderFrameLabels) c.off('after:render', c.__afterRenderFrameLabels)
-      c.off('after:render', throttledUpdateScrollbars)
+      c.off()
     } catch { /* ignore */ }
     const canvasToDispose = canvas.value;
     canvas.value = null;
     canvasToDispose.dispose();
   }
+  // Clean up deferred children map to release Fabric object references
+  deferredFrameChildren.clear()
 })
 
 // --- History & Keyboard ---
@@ -11583,7 +11583,20 @@ const CANVAS_CUSTOM_PROPS = [
 	    'lockRotation',
 	    'lockScalingFlip',
 	    'lockSkewingX',
-	    'lockSkewingY'
+	    'lockSkewingY',
+
+	    // Template text props (must survive serialization for label templates)
+	    'charSpacing',
+	    'fontFamily',
+
+	    // Manual template corner radii
+	    '__originalCornerTL',
+	    '__originalCornerTR',
+	    '__originalCornerBL',
+	    '__originalCornerBR',
+
+	    // Manual template anchors
+	    '__manualSingleAnchors'
 	] as string[];
 
 // Helper function to extract key/path from Wasabi URL (presigned or permanent)
@@ -11601,20 +11614,22 @@ const extractWasabiKey = (url: string): string | null => {
         // Decode pathname as well to handle any encoded characters
         const decodedPathname = decodeURIComponent(urlObj.pathname);
         const pathParts = decodedPathname.split('/').filter(p => p);
-        console.log(`🔍 extractWasabiKey - URL: ${url.substring(0, 100)}...`);
-        console.log(`   decodedUrl: ${decodedUrl.substring(0, 100)}...`);
-        console.log(`   pathname: ${decodedPathname}`);
-        console.log(`   pathParts: [${pathParts.join(', ')}]`);
+        if (import.meta.dev) {
+            console.log(`🔍 extractWasabiKey - URL: ${url.substring(0, 100)}...`);
+            console.log(`   decodedUrl: ${decodedUrl.substring(0, 100)}...`);
+            console.log(`   pathname: ${decodedPathname}`);
+            console.log(`   pathParts: [${pathParts.join(', ')}]`);
+        }
 
         if (pathParts.length === 0) {
-            console.warn(`⚠️ Não foi possível extrair chave da URL (path vazio): ${url.substring(0, 100)}`);
+            if (import.meta.dev) console.warn(`⚠️ Não foi possível extrair chave da URL (path vazio): ${url.substring(0, 100)}`);
             return null;
         }
 
         const cfg = useRuntimeConfig()?.public?.wasabi || {};
         const configuredBucket = (cfg.bucket || 'jobvarejo').toString();
 
-        console.log(`   configuredBucket: ${configuredBucket}`);
+        if (import.meta.dev) console.log(`   configuredBucket: ${configuredBucket}`);
 
         const hostname = (urlObj.hostname || '').toLowerCase();
         const first = pathParts[0] ?? '';
@@ -11622,25 +11637,29 @@ const extractWasabiKey = (url: string): string | null => {
         const firstLooksLikeBucket = first === configuredBucket || first.includes(':');
         const hostLooksLikeVirtualHost = hostname.includes(`${configuredBucket.toLowerCase()}.`);
 
-        console.log(`   first: ${first}`);
-        console.log(`   firstLooksLikeBucket: ${firstLooksLikeBucket}`);
-        console.log(`   hostLooksLikeVirtualHost: ${hostLooksLikeVirtualHost}`);
+        if (import.meta.dev) {
+            console.log(`   first: ${first}`);
+            console.log(`   firstLooksLikeBucket: ${firstLooksLikeBucket}`);
+            console.log(`   hostLooksLikeVirtualHost: ${hostLooksLikeVirtualHost}`);
+        }
 
         // Path-style: primeira parte do path é bucket → remover
         // Virtual-host: host já contém bucket → NÃO remover nada do path
         const keyParts = (firstLooksLikeBucket && !hostLooksLikeVirtualHost) ? pathParts.slice(1) : pathParts;
         const key = keyParts.join('/');
 
-        console.log(`   keyParts: [${keyParts.join(', ')}]`);
-        console.log(`   key extraída: ${key}`);
+        if (import.meta.dev) {
+            console.log(`   keyParts: [${keyParts.join(', ')}]`);
+            console.log(`   key extraída: ${key}`);
+        }
 
         if (!key || key.length === 0) {
-            console.warn(`⚠️ Chave extraída está vazia da URL: ${url.substring(0, 100)}`);
+            if (import.meta.dev) console.warn(`⚠️ Chave extraída está vazia da URL: ${url.substring(0, 100)}`);
             return null;
         }
         return key;
     } catch (err) {
-        console.error(`❌ Erro ao extrair chave da URL: ${url.substring(0, 100)}`, err);
+        if (import.meta.dev) console.error(`❌ Erro ao extrair chave da URL: ${url.substring(0, 100)}`, err);
         return null;
     }
 };
@@ -11656,7 +11675,7 @@ const convertPresignedToPermanentUrl = (url: string): string => {
     try {
         const urlObj = new URL(url);
         if (!urlObj.search) {
-            console.log(`🔗 URL já é permanente (sem query params): ${url.substring(0, 80)}...`);
+            if (import.meta.dev) console.log(`🔗 URL já é permanente (sem query params): ${url.substring(0, 80)}...`);
             return url;
         }
 
@@ -16943,12 +16962,12 @@ const setupZoomPan = () => {
                     const vpt = canvas.value.viewportTransform;
                     const zoom = canvas.value.getZoom();
                     
-                    const nodes = canvas.value.getObjects().filter((o: any) => 
-                        o.name === 'path_node' && o.data.parentPath === parentPath && o.data.index === nodeIndex
+                    // FIX: Single getObjects() call with combined filter instead of two separate calls
+                    const allPathObjects = canvas.value.getObjects().filter((o: any) =>
+                        (o.name === 'path_node' || o.name === 'bezier_handle') && o.data.parentPath === parentPath && o.data.index === nodeIndex
                     );
-                    const handles = canvas.value.getObjects().filter((o: any) => 
-                        o.name === 'bezier_handle' && o.data.parentPath === parentPath && o.data.index === nodeIndex
-                    );
+                    const nodes = allPathObjects.filter((o: any) => o.name === 'path_node');
+                    const handles = allPathObjects.filter((o: any) => o.name === 'bezier_handle');
                     
                     if (nodes.length > 0 && handles.length >= 2) {
                         const node = nodes[0];
@@ -22945,6 +22964,8 @@ const handleAction = async (action: string) => {
                     if (imgIndex >= 0) {
                         const oldImg = objects[imgIndex];
                         active.remove(oldImg);
+                        // FIX: Dispose old image to free memory (canvas element + bitmap)
+                        try { oldImg.dispose?.(); } catch {}
                         (newImg as any).src = cacheBustedBgUrl;
                         newImg.set({
                             left: oldImg.left,
@@ -23827,6 +23848,7 @@ const deleteObject = (id: string) => {
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
         const isFrameTarget = !!obj.isFrame || !!isFrameLikeObject(obj);
+        const isZoneTarget = isLikelyProductZone(obj);
         if (isFrameTarget && typeof window !== 'undefined') {
             const ok = window.confirm(
                 'Excluir Frame no painel de camadas? Isso remove tambem todo o conteudo dentro dele.'
@@ -23836,6 +23858,20 @@ const deleteObject = (id: string) => {
 
         const active = canvas.value.getActiveObject?.();
         if (active && active === obj) canvas.value.discardActiveObject();
+
+        // FIX: Clean up orphan cards when deleting a product zone
+        if (isZoneTarget) {
+            const zoneId = String((obj as any)._customId || '').trim();
+            if (zoneId) {
+                const orphanCards = canvas.value.getObjects().filter((o: any) =>
+                    String(o?.parentZoneId || '').trim() === zoneId
+                );
+                orphanCards.forEach((card: any) => {
+                    try { canvas.value!.remove(card); } catch {}
+                });
+            }
+        }
+
         if (isFrameTarget) {
             const targets = collectFrameVisibilityTargets(obj);
             targets.forEach((entry: any) => {
@@ -24160,19 +24196,26 @@ const runWithNeutralViewport = async <T>(action: () => Promise<T> | T): Promise<
 const withProductZonesHiddenForOutput = async <T>(action: () => Promise<T> | T): Promise<T> => {
     if (!canvas.value) return await action();
 
-    const zones = (canvas.value.getObjects() || []).filter((o: any) => isLikelyProductZone(o));
-    if (!zones.length) return await action();
+    const allObjects = canvas.value.getObjects() || [];
+    const zones = allObjects.filter((o: any) => isLikelyProductZone(o));
+    // FIX: Also hide product cards (standalone top-level objects bound to zones)
+    const zoneIds = new Set(zones.map((z: any) => String(z._customId || '').trim()));
+    const cards = allObjects.filter((o: any) => {
+        const pid = String(o?.parentZoneId || '').trim();
+        return pid && zoneIds.has(pid);
+    });
 
-    const prevVisibility = zones.map((zone: any) => ({
-        obj: zone,
-        visible: zone?.visible !== false
+    if (!zones.length && !cards.length) return await action();
+
+    const targetsToHide = [...zones, ...cards];
+    const prevVisibility = targetsToHide.map((obj: any) => ({
+        obj,
+        visible: obj?.visible !== false
     }));
 
-    // IMPORTANT: call Fabric methods through the instance (`obj.set(...)`), never detached.
-    // Detached method refs lose `this` and crash on internal `_set`.
-    zones.forEach((zone: any) => {
-        zone?.set?.('visible', false);
-        zone?.setCoords?.();
+    targetsToHide.forEach((obj: any) => {
+        obj?.set?.('visible', false);
+        obj?.setCoords?.();
     });
     safeRequestRenderAll();
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -25414,6 +25457,8 @@ const replaceImageByCustomId = async (
             const list = typeof parent.getObjects === 'function' ? parent.getObjects() : [];
             const idx = list.indexOf(target);
             parent.remove(target);
+            // FIX: Dispose old image to free memory
+            try { target.dispose?.(); } catch {}
             if (typeof (parent as any).insertAt === 'function' && idx >= 0) (parent as any).insertAt(idx, newImg);
             else parent.add(newImg);
             safeAddWithUpdate(parent);
@@ -25436,6 +25481,8 @@ const replaceImageByCustomId = async (
         } else {
             const oldIndex = canvas.value.getObjects().indexOf(target);
             canvas.value.remove(target);
+            // FIX: Dispose old image to free memory
+            try { target.dispose?.(); } catch {}
             if (oldIndex >= 0 && typeof (canvas.value as any).insertAt === 'function') {
                 (canvas.value as any).insertAt(oldIndex, newImg);
             } else {
@@ -28345,12 +28392,39 @@ const simulateSmartGrid = async (
                     }
                  });
 
-	                 // Fallback
-	                 if (!titleFound || !priceFound) {
-	                     const texts = objects.filter((o: any) => isTextNode(o));
-	                     if (texts.length >= 1 && !titleFound) texts[0].set('text', cleanedName);
-	                     if (texts.length >= 2 && !priceFound) texts[1].set('text', displayPrice);
-	                 }
+                 // Fallback
+                 if (!titleFound || !priceFound) {
+                     const texts = objects.filter((o: any) => isTextNode(o));
+                     if (texts.length >= 1 && !titleFound) texts[0].set('text', cleanedName);
+                     if (texts.length >= 2 && !priceFound) texts[1].set('text', displayPrice);
+                 }
+
+                 // FIX: Inject unit text into nested priceGroup (price_unit_text).
+                 // The clone path only injects top-level texts (smart_title, smart_price, smart_limit)
+                 // but misses the unit text inside priceGroup sub-groups.
+                 const unitLabel = inferUnitLabelFromProduct(product);
+                 const findPriceUnitInChildren = (node: any): any => {
+                     if (!node) return null;
+                     if (typeof node.getObjects !== 'function') return null;
+                     for (const child of node.getObjects()) {
+                         if (child.name === 'price_unit_text') return child;
+                         const nested = findPriceUnitInChildren(child);
+                         if (nested) return nested;
+                     }
+                     return null;
+                 };
+                 for (const obj of objects) {
+                     if (String(obj?.type || '').toLowerCase() === 'group' && typeof obj.getObjects === 'function') {
+                         const unitTxt = findPriceUnitInChildren(obj);
+                         if (unitTxt) {
+                             if (unitTxt.visible === false) {
+                                 unitTxt.set('text', '');
+                             } else {
+                                 unitTxt.set('text', unitLabel || '');
+                             }
+                         }
+                     }
+                 }
 
                  // Injetar imagem do produto no clone do template
                  const productImgRef = product?.image_wasabi_key || product?.imageUrl || product?.image || product?.url;
@@ -35784,6 +35858,11 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
             if (json.name && !obj.name) {
                 obj.name = json.name;
             }
+            // FIX: Restore `visible` from JSON — Fabric v7 may reset it to true during enlivenObjects.
+            // This is critical for templates with hidden unit text (e.g. black/yellow template).
+            if (json.visible === false && obj.visible !== false) {
+                obj.visible = false;
+            }
             // Restore custom _ e __ props (template metadata, zone bindings, product data)
             for (const key of Object.keys(json)) {
                 if (key.startsWith('_') && obj[key] === undefined) {
@@ -36942,11 +37021,12 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
     }
 
     const titleObj = getCardTitleText(card);
+    const hasHeader = isRedBurst || (typeof newPg.getObjects === 'function' && newPg.getObjects().some((o: any) => o.name === 'price_header_text' || o.name === 'offer_header_bg'));
     if (titleObj && typeof titleObj.set === 'function') {
         titleObj.set({
-            visible: !isRedBurst,
-            selectable: !isRedBurst,
-            evented: !isRedBurst
+            visible: !hasHeader,
+            selectable: !hasHeader,
+            evented: !hasHeader
         });
         if (typeof titleObj.initDimensions === 'function') titleObj.initDimensions();
     }
@@ -37223,7 +37303,7 @@ function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _
         top: headerY + 1,
         selectable: true,
         evented: true,
-        name: 'offer_header_text',
+        name: 'price_header_text',
         charSpacing: 120
     });
 
@@ -37254,7 +37334,9 @@ function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _
         originY: 'center',
         left: -70,
         top: priceAreaCenterY + 8,
-        name: 'price_integer_text'
+        name: 'price_integer_text',
+        __fontScale: 0.66,
+        __yOffsetRatio: 0.06
     });
 
     const priceDecimal = new fabric.IText(`,${dec}`, {
@@ -37266,7 +37348,9 @@ function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _
         originY: 'center',
         left: 40,
         top: priceAreaCenterY - 10,
-        name: 'price_decimal_text'
+        name: 'price_decimal_text',
+        __fontScale: 0.35,
+        __yOffsetRatio: -0.08
     });
 
     const u = normalizeUnitForLabel(unitText);
@@ -37280,7 +37364,9 @@ function buildOfertaAmarelaPriceGroupForCard(priceStr: string, _cardW: number, _
         left: 40,
         top: priceAreaCenterY + 34,
         name: 'price_unit_text',
-        visible: false
+        visible: false,
+        __fontScale: 0.15,
+        __yOffsetRatio: 0.26
     });
 
     const pg = new fabric.Group([
@@ -37369,7 +37455,9 @@ function buildBarlowBlackPriceGroupForCard(priceStr: string, _cardW: number, _ca
         originY: 'center',
         left: -60,
         top: 4,
-        name: 'price_integer_text'
+        name: 'price_integer_text',
+        __fontScale: 0.77,
+        __yOffsetRatio: 0.03
     });
 
     const priceDecimal = new fabric.IText(`,${dec}`, {
@@ -37381,7 +37469,9 @@ function buildBarlowBlackPriceGroupForCard(priceStr: string, _cardW: number, _ca
         originY: 'center',
         left: 68,
         top: -12,
-        name: 'price_decimal_text'
+        name: 'price_decimal_text',
+        __fontScale: 0.46,
+        __yOffsetRatio: -0.09
     });
 
     const u = normalizeUnitForLabel(unitText);
@@ -37395,7 +37485,9 @@ function buildBarlowBlackPriceGroupForCard(priceStr: string, _cardW: number, _ca
         left: 68,
         top: 34,
         name: 'price_unit_text',
-        visible: false
+        visible: false,
+        __fontScale: 0.17,
+        __yOffsetRatio: 0.26
     });
 
     const pg = new fabric.Group([
@@ -37638,7 +37730,9 @@ function buildRedBurstPriceGroupForCard(priceStr: string, cardW: number, cardH: 
         originY: 'center',
         left: integerX,
         top: priceBaselineY + (labelH * 0.01),
-        name: 'price_integer_text'
+        name: 'price_integer_text',
+        __fontScale: 0.82,
+        __yOffsetRatio: 0.01
     });
 
     const priceDecimal = new fabric.IText(`,${dec}`, {
@@ -37650,7 +37744,9 @@ function buildRedBurstPriceGroupForCard(priceStr: string, cardW: number, cardH: 
         originY: 'center',
         left: integerX + (labelW * 0.145),
         top: priceBaselineY - (labelH * 0.145),
-        name: 'price_decimal_text'
+        name: 'price_decimal_text',
+        __fontScale: 0.46,
+        __yOffsetRatio: -0.145
     });
 
     // Unit is displayed on the top strip for this style.
@@ -37664,7 +37760,9 @@ function buildRedBurstPriceGroupForCard(priceStr: string, cardW: number, cardH: 
         left: integerX + (labelW * 0.15),
         top: priceBaselineY + (labelH * 0.18),
         name: 'price_unit_text',
-        visible: false
+        visible: false,
+        __fontScale: 0.16,
+        __yOffsetRatio: 0.18
     });
 
     const pg = new fabric.Group([

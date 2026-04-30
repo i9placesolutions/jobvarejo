@@ -37,6 +37,6 @@ export default defineNuxtRouteMiddleware(async (to) => {
         return // builder admin session is valid, let admin middleware check role
       }
     }
-    return navigateTo('/auth/login')
+    return navigateTo('/auth/login', { replace: true })
   }
 })

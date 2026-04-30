@@ -7,6 +7,7 @@ import {
 definePageMeta({
   layout: false,
   middleware: 'builder-auth',
+  ssr: false,
 })
 
 const route = useRoute()

@@ -73,13 +73,16 @@ export default defineEventHandler(async (event) => {
       }
     } else {
       debugResetUrl = resetUrl
-      console.warn(`[auth] Reset link gerado para ${email}: ${debugResetUrl}`)
     }
+  }
+
+  // Never expose reset URL in production response — only log server-side
+  if (debugResetUrl && !isProduction) {
+    console.warn(`[auth] Reset link gerado para ${email}: ${debugResetUrl}`)
   }
 
   return {
     success: true,
-    message: 'Se o e-mail existir, enviaremos instrucoes para redefinir a senha.',
-    debugResetUrl
+    message: 'Se o e-mail existir, enviaremos instrucoes para redefinir a senha.'
   }
 })

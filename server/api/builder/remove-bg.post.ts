@@ -26,7 +26,7 @@ const streamToBuffer = async (body: any): Promise<Buffer> => {
  */
 export default defineEventHandler(async (event) => {
   const tenant = await requireBuilderTenant(event)
-  enforceRateLimit(event, `builder-remove-bg:${tenant.id}`, 15, 60_000)
+  await enforceRateLimit(event, `builder-remove-bg:${tenant.id}`, 15, 60_000)
 
   const config = useRuntimeConfig()
   const bucket = config.wasabiBucket
@@ -44,6 +44,11 @@ export default defineEventHandler(async (event) => {
 
   if (!s3Key) {
     throw createError({ statusCode: 400, statusMessage: 'S3 key is required' })
+  }
+
+  // Verify the key belongs to this tenant (prevent cross-tenant access)
+  if (!s3Key.startsWith(`builder/${tenant.id}/`) && !s3Key.startsWith(`imagens/`) && !s3Key.startsWith(`uploads/`)) {
+    throw createError({ statusCode: 403, statusMessage: 'Access denied to this storage key' })
   }
 
   const s3 = getS3Client()
