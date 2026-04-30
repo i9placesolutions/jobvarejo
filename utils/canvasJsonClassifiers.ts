@@ -131,6 +131,51 @@ export const isLikelyProductCardJson = (obj: any): boolean => {
  *
  * Usado em containment / collision detection durante post-load.
  */
+/**
+ * Clone profundo de um group JSON (template de etiqueta, normalmente).
+ *
+ * Estrategia em camadas:
+ *  1. structuredClone (preferido — preserva tipos, lida com Map/Set/etc).
+ *  2. JSON.parse(JSON.stringify(...)) — fallback comum.
+ *  3. Clone raso recursivo de 2 niveis — ultima saida quando os 2 acima
+ *     falham (referencias circulares, valores nao-serializaveis tipo
+ *     funcao). Preserva apenas a estrutura minima `{...group, objects: [...]}`.
+ *
+ * Retorna null para entradas nao-objeto.
+ *
+ * Critico para evitar shared-state entre templates duplicados — o bug
+ * historico era que editar variantes em uma copia mutava o template
+ * original porque o clone era atribuicao por referencia.
+ */
+export const cloneTemplateGroupJson = (group: any): any | null => {
+    if (!group || typeof group !== 'object') return null
+    try {
+        return typeof structuredClone === 'function'
+            ? structuredClone(group)
+            : JSON.parse(JSON.stringify(group))
+    } catch {
+        try {
+            return JSON.parse(JSON.stringify(group))
+        } catch {
+            // Ultima saida: clone raso de 2 niveis
+            const shallow: any = { ...group }
+            if (Array.isArray(group.objects)) {
+                shallow.objects = group.objects.map((o: any) => {
+                    if (!o || typeof o !== 'object') return o
+                    const clone: any = { ...o }
+                    if (Array.isArray(o.objects)) {
+                        clone.objects = o.objects.map((c: any) =>
+                            c && typeof c === 'object' ? { ...c } : c
+                        )
+                    }
+                    return clone
+                })
+            }
+            return shallow
+        }
+    }
+}
+
 export const getCardBaseSizeForContainmentJson = (card: any): { w: number; h: number } | null => {
     if (!card) return null
     const storedW = Number((card as any)._cardWidth)

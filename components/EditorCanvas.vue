@@ -43,7 +43,8 @@ import {
     getJsonGroupChildren,
     isStandalonePriceGroupJson,
     isLikelyProductCardJson,
-    getCardBaseSizeForContainmentJson
+    getCardBaseSizeForContainmentJson,
+    cloneTemplateGroupJson
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -37920,35 +37921,7 @@ async function resetCardPriceGroupToDefault(card: any) {
     card.setCoords();
 }
 
-const cloneTemplateGroupJson = (group: any) => {
-    if (!group || typeof group !== 'object') return null;
-    // Tenta clone profundo; se falhar (referências circulares), faz clone raso como último recurso
-    try {
-        return (typeof structuredClone === 'function')
-            ? structuredClone(group)
-            : JSON.parse(JSON.stringify(group));
-    } catch {
-        try {
-            return JSON.parse(JSON.stringify(group));
-        } catch {
-            // Último recurso: clone raso preservando a estrutura mínima necessária
-            console.warn('[cloneTemplateGroupJson] Clone profundo falhou (possível referência circular). Usando clone raso.');
-            const shallow: any = { ...group };
-            if (Array.isArray(group.objects)) {
-                shallow.objects = group.objects.map((o: any) => {
-                    if (!o || typeof o !== 'object') return o;
-                    const clone: any = { ...o };
-                    // Preservar sub-objetos aninhados (ex: nested groups com objects[])
-                    if (Array.isArray(o.objects)) {
-                        clone.objects = o.objects.map((c: any) => (c && typeof c === 'object' ? { ...c } : c));
-                    }
-                    return clone;
-                });
-            }
-            return shallow;
-        }
-    }
-};
+// cloneTemplateGroupJson extraido para utils/canvasJsonClassifiers.ts.
 
 
 const clonePriceGroupForRollback = async (priceGroup: any) => {

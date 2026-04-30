@@ -4,7 +4,8 @@ import {
   getJsonGroupChildren,
   isStandalonePriceGroupJson,
   isLikelyProductCardJson,
-  getCardBaseSizeForContainmentJson
+  getCardBaseSizeForContainmentJson,
+  cloneTemplateGroupJson
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -231,5 +232,93 @@ describe('getCardBaseSizeForContainmentJson', () => {
       width: Infinity,
       height: 200
     })).toBeNull()
+  })
+})
+
+describe('cloneTemplateGroupJson — clone profundo de template', () => {
+  it('null/undefined/nao-objeto retornam null', () => {
+    expect(cloneTemplateGroupJson(null)).toBeNull()
+    expect(cloneTemplateGroupJson(undefined)).toBeNull()
+    expect(cloneTemplateGroupJson('str')).toBeNull()
+    expect(cloneTemplateGroupJson(42)).toBeNull()
+  })
+
+  it('clone basico preserva todos os campos', () => {
+    const tpl = { id: 't1', type: 'group', name: 'priceGroup', __preserveManualLayout: true }
+    const cloned = cloneTemplateGroupJson(tpl)
+    expect(cloned).toEqual(tpl)
+    expect(cloned).not.toBe(tpl) // referencia diferente
+  })
+
+  it('clone profundo desconecta nested objects', () => {
+    const original = {
+      type: 'group',
+      objects: [
+        { id: 'a', type: 'i-text', text: 'old' },
+        { id: 'b', type: 'group', objects: [{ id: 'leaf' }] }
+      ]
+    }
+    const cloned = cloneTemplateGroupJson(original)
+    cloned.objects[0].text = 'modified-clone'
+    cloned.objects[1].objects[0].id = 'modified-leaf'
+    expect(original.objects[0].text).toBe('old') // original intacto
+    expect(original.objects[1].objects[0].id).toBe('leaf')
+  })
+
+  it('REGRESSAO: arrays e objetos aninhados nao sao compartilhados por ref', () => {
+    // Bug historico: __atacValueVariants era atribuido por referencia,
+    // editar variantes na copia mutava o template original.
+    const original = {
+      type: 'group',
+      __atacValueVariants: {
+        tiny: { intDecimalGap: 1 },
+        normal: { intDecimalGap: 2 }
+      }
+    }
+    const cloned = cloneTemplateGroupJson(original)
+    cloned.__atacValueVariants.tiny.intDecimalGap = 99
+    expect(original.__atacValueVariants.tiny.intDecimalGap).toBe(1)
+  })
+
+  it('preserva valores complexos via structuredClone (Date, RegExp etc.)', () => {
+    const date = new Date(2026, 0, 1)
+    const original = { type: 'group', _createdAt: date }
+    const cloned = cloneTemplateGroupJson(original)
+    expect(cloned._createdAt).toBeInstanceOf(Date)
+    expect(cloned._createdAt.getTime()).toBe(date.getTime())
+    expect(cloned._createdAt).not.toBe(date) // clone, nao mesma ref
+  })
+
+  it('fallback funciona quando structuredClone falha (valor nao-clonavel)', () => {
+    // Funcoes nao sao clonaveis por structuredClone E nao por JSON.stringify
+    // (sao silenciosamente removidas na 2a passada). Mas o objeto base
+    // ainda e' clonado.
+    const original: any = {
+      type: 'group',
+      onClick: () => 'fn', // nao clonavel
+      keep: 'this-stays'
+    }
+    const cloned = cloneTemplateGroupJson(original)
+    expect(cloned).toBeTruthy()
+    expect(cloned.keep).toBe('this-stays')
+  })
+
+  it('clone vazio retorna objeto vazio', () => {
+    const cloned = cloneTemplateGroupJson({})
+    expect(cloned).toEqual({})
+  })
+
+  it('clone preserva estrutura objects[] mesmo apos clone raso', () => {
+    const original = {
+      type: 'group',
+      objects: [
+        { id: 'a' },
+        { id: 'b', objects: [{ id: 'leaf' }] }
+      ]
+    }
+    const cloned = cloneTemplateGroupJson(original)
+    expect(Array.isArray(cloned.objects)).toBe(true)
+    expect(cloned.objects.length).toBe(2)
+    expect(cloned.objects[1].objects[0].id).toBe('leaf')
   })
 })
