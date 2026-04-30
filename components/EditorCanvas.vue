@@ -37,6 +37,7 @@ import {
     getObjectVerticalBoundsLocal,
     measureContentBoundsLocal
 } from '~/utils/fabricMeasure'
+import { setText, setVisible } from '~/utils/fabricObjectOps'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
 import { registerHistorySaveListeners } from '~/utils/editorHistoryListeners'
@@ -32935,52 +32936,8 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
 // inferUnitLabelFromProduct e computePackLine extraidos para
 // utils/priceTagText.ts (Fase 2 da modularizacao).
 
-const setText = (obj: any, text: string) => {
-    if (!obj || typeof obj.set !== 'function') return;
-    obj.set('text', text);
-    if (typeof obj.initDimensions === 'function') obj.initDimensions();
-};
-
-const setVisible = (obj: any, visible: boolean) => {
-    if (!obj || typeof obj.set !== 'function') return;
-    const clampScale = (raw: any, fallback: any, min = 0.08, max = 3.2) => {
-        const fb = Number(fallback);
-        const safeFallback = Number.isFinite(fb) && Math.abs(fb) > 0 ? fb : 1;
-        const n = Number(raw);
-        if (!Number.isFinite(n) || n === 0) return safeFallback;
-        const sign = n < 0 ? -1 : 1;
-        const mag = Math.min(max, Math.max(min, Math.abs(n)));
-        return sign * mag;
-    };
-    const toFinite = (v: any) => {
-        const n = Number(v);
-        return Number.isFinite(n) ? n : undefined;
-    };
-
-    if (visible) {
-        const fallbackX = (toFinite(obj.scaleX) && Math.abs(Number(obj.scaleX)) > 0) ? Number(obj.scaleX) : 1;
-        const fallbackY = (toFinite(obj.scaleY) && Math.abs(Number(obj.scaleY)) > 0) ? Number(obj.scaleY) : 1;
-        const restoreScaleX = clampScale(
-            toFinite((obj as any).__visibleScaleX) ?? toFinite((obj as any).__originalScaleX),
-            fallbackX
-        );
-        const restoreScaleY = clampScale(
-            toFinite((obj as any).__visibleScaleY) ?? toFinite((obj as any).__originalScaleY),
-            fallbackY
-        );
-        obj.set({ visible: true, scaleX: restoreScaleX, scaleY: restoreScaleY });
-        return;
-    }
-
-    // Preserve the current visual scale so showing again does not reset manual edits.
-    const sx = toFinite(obj.scaleX);
-    const sy = toFinite(obj.scaleY);
-    if (sx != null && Math.abs(sx) > 0) (obj as any).__visibleScaleX = sx;
-    if (sy != null && Math.abs(sy) > 0) (obj as any).__visibleScaleY = sy;
-
-    // `visible=false` can still affect group bounds in Fabric; scale-to-zero avoids giant selections.
-    obj.set({ visible: false, scaleX: 0, scaleY: 0 });
-};
+// setText / setVisible foram extraidos para utils/fabricObjectOps.ts
+// (Fase 2 da modularizacao).
 
 /**
  * FIX: Fabric v7 may drop `name` from deeply nested group children during
