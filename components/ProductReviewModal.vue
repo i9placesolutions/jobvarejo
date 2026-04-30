@@ -14,7 +14,7 @@ type ImageBgPolicy = 'auto' | 'never' | 'always'
 type ImageMatchMode = 'precise' | 'fast'
 type ImageQuickAction = 'search' | 'upload' | 'storage' | 'reprocess'
 type FrameCandidate = { id: string; name: string; left?: number; top?: number }
-type ZoneCandidate = { id: string; name: string; left?: number; top?: number; existingCount?: number; frameName?: string }
+type ZoneCandidate = { id: string; name: string; left?: number; top?: number; existingCount?: number; frameName?: string; isPrimary?: boolean }
 type FrameAssignment = { productId: string; frameId: string | null }
 type ZoneAssignment = { productId: string; zoneId: string | null }
 type ProductImportOptions = {
@@ -1714,13 +1714,15 @@ const availableZones = computed<ZoneCandidate[]>(() => {
         const top = Number(item?.top)
         const existingCount = Number(item?.existingCount)
         const frameName = String(item?.frameName || '').trim()
+        const isPrimary = item?.isPrimary === true
         byId.set(id, {
             id,
             name,
             left: Number.isFinite(left) ? left : undefined,
             top: Number.isFinite(top) ? top : undefined,
             existingCount: Number.isFinite(existingCount) ? Math.max(0, existingCount) : 0,
-            frameName: frameName || undefined
+            frameName: frameName || undefined,
+            isPrimary
         })
     })
 
@@ -1741,6 +1743,7 @@ const availableZones = computed<ZoneCandidate[]>(() => {
 
 const orderedFrameIds = computed(() => availableFrames.value.map(frame => frame.id))
 const orderedZoneIds = computed(() => availableZones.value.map(zone => zone.id))
+const primaryZoneId = computed(() => availableZones.value.find(zone => zone.isPrimary)?.id || '')
 const selectedFrameSet = computed(() => new Set(selectedFrameIds.value))
 const selectedFrames = computed(() => availableFrames.value.filter(frame => selectedFrameSet.value.has(frame.id)))
 const multiFrameImportCount = computed(() => Math.min(productRows.value.length, selectedFrameIds.value.length))
@@ -1875,7 +1878,7 @@ const getAssignedZoneId = (productId: string): string | null => {
     return value || null
 }
 
-const reconcileZoneAssignments = (opts: { autofill?: boolean } = {}) => {
+const reconcileZoneAssignments = (opts: { autofill?: boolean; preferPrimary?: boolean } = {}) => {
     const productIds = productRows.value.map(row => row.productId)
     const validZoneIds = new Set(orderedZoneIds.value)
     const next: Record<string, string | null> = {}
@@ -1885,7 +1888,12 @@ const reconcileZoneAssignments = (opts: { autofill?: boolean } = {}) => {
         next[productId] = assigned && validZoneIds.has(assigned) ? assigned : null
     })
 
-    if (opts.autofill !== false && orderedZoneIds.value.length > 0) {
+    const preferredZoneId = opts.preferPrimary !== false ? primaryZoneId.value : ''
+    if (opts.autofill !== false && preferredZoneId && validZoneIds.has(preferredZoneId)) {
+        productIds.forEach((productId) => {
+            if (productId && !next[productId]) next[productId] = preferredZoneId
+        })
+    } else if (opts.autofill !== false && orderedZoneIds.value.length > 0) {
         const existingCounts = availableZones.value.map(zone => Math.max(0, Number(zone.existingCount || 0)))
         const totalExisting = existingCounts.reduce((sum, count) => sum + count, 0)
         let allocations: number[]
@@ -1941,7 +1949,7 @@ const setZoneAssignmentForProduct = (productId: string, zoneIdRaw: string) => {
 
 const autoDistributeZoneAssignments = () => {
     zoneAssignmentsMap.value = {}
-    reconcileZoneAssignments({ autofill: true })
+    reconcileZoneAssignments({ autofill: true, preferPrimary: false })
 }
 
 const setBulkZoneAssignment = (zoneIdRaw: string) => {

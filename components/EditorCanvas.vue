@@ -4136,10 +4136,12 @@ const setupAltDragDuplicate = () => {
     const assignNewIdsDeep = (obj: any) => {
         if (!obj || typeof obj !== 'object') return;
         if (typeof obj.set !== 'function') return;
+        (obj as any).__duplicateSourceCustomId = String((obj as any)._customId || '').trim();
         obj._customId = makeId();
         if (typeof obj.getObjects === 'function') {
             (obj.getObjects() || []).forEach((c: any) => {
                 if (c && typeof c.set === 'function') {
+                    (c as any).__duplicateSourceCustomId = String((c as any)._customId || '').trim();
                     c._customId = makeId();
                 }
             });
@@ -4526,6 +4528,7 @@ const setupAltDragDuplicate = () => {
                     canvas.value.add(c);
                     clones.push(c);
                 }
+                remapDuplicatedSelectionBindings(clones, { reason: 'alt-drag-selection', relayout: false });
 
                 if (clones.length === 0 || !canvas.value) {
                     state.activeCloneRequestId = 0;
@@ -8748,6 +8751,7 @@ const availableFramesForImport = computed(() => {
 const availableZonesForImport = computed(() => {
     const zones = getImportTargetZones()
     ensureProductZoneNamesDistinct(zones)
+    const primaryZoneId = String((targetGridZone.value as any)?._customId || '').trim()
     return zones.map((zone: any, index: number) => {
         const id = String((zone as any)?._customId || (zone as any)?.id || '').trim() || `zone-${index + 1}`
         const metrics = getZoneMetrics(zone) ?? zone?.getBoundingRect?.(true)
@@ -8766,7 +8770,8 @@ const availableZonesForImport = computed(() => {
             left: metrics?.left,
             top: metrics?.top,
             existingCount,
-            frameName: frameName || undefined
+            frameName: frameName || undefined,
+            isPrimary: !!primaryZoneId && id === primaryZoneId
         }
     })
 })
@@ -14661,9 +14666,122 @@ const isProductCardContainer = (group: any) => {
 
 const assignNewCustomIdsDeep = (obj: any) => {
     if (!obj || typeof obj !== 'object') return;
+    (obj as any).__duplicateSourceCustomId = String((obj as any)._customId || '').trim();
     obj._customId = makeId();
     if (typeof obj.getObjects === 'function') {
         (obj.getObjects() || []).forEach((child: any) => assignNewCustomIdsDeep(child));
+    }
+};
+
+const remapDuplicatedSelectionBindings = (
+    clones: any[],
+    opts: { reason?: string; relayout?: boolean } = {}
+) => {
+    if (!canvas.value || !Array.isArray(clones) || clones.length === 0) return;
+
+    const allNodes: any[] = [];
+    const visit = (node: any) => {
+        if (!node || typeof node !== 'object') return;
+        allNodes.push(node);
+        if (typeof node.getObjects === 'function') {
+            try {
+                (node.getObjects() || []).forEach((child: any) => visit(child));
+            } catch {
+                // ignore malformed clone children
+            }
+        }
+        if (node.clipPath && typeof node.clipPath === 'object') visit(node.clipPath);
+    };
+    clones.forEach((clone: any) => visit(clone));
+
+    const idMap = new Map<string, string>();
+    allNodes.forEach((node: any) => {
+        const oldId = String((node as any).__duplicateSourceCustomId || '').trim();
+        const newId = String((node as any)._customId || '').trim();
+        if (oldId && newId && oldId !== newId) idMap.set(oldId, newId);
+    });
+    if (idMap.size === 0) {
+        allNodes.forEach((node: any) => {
+            try { delete (node as any).__duplicateSourceCustomId; } catch { /* ignore */ }
+        });
+        return;
+    }
+
+    const remapRef = (raw: any): string => {
+        const id = String(raw || '').trim();
+        return id ? (idMap.get(id) || id) : '';
+    };
+    const remapPlainMetadata = (value: any, seen = new Set<any>()) => {
+        if (!value || typeof value !== 'object' || seen.has(value)) return;
+        seen.add(value);
+        ['parentFrameId', 'parentZoneId', 'zoneId', 'zoneInstanceId', 'targetZoneId', 'canvasObjectId', 'objectId', 'groupId', 'parentId'].forEach((key) => {
+            if (typeof value[key] === 'string') {
+                const next = remapRef(value[key]);
+                if (next && next !== value[key]) value[key] = next;
+            }
+        });
+        if (value._zoneSlot && typeof value._zoneSlot === 'object') {
+            const nextZoneId = remapRef(value._zoneSlot.zoneId);
+            if (nextZoneId && nextZoneId !== value._zoneSlot.zoneId) {
+                value._zoneSlot = { ...value._zoneSlot, zoneId: nextZoneId };
+            }
+        }
+        Object.keys(value).forEach((key) => {
+            const child = value[key];
+            if (child && typeof child === 'object') remapPlainMetadata(child, seen);
+        });
+    };
+
+    invalidateContainmentZoneCache();
+
+    const affectedZones = new Map<string, any>();
+    allNodes.forEach((node: any) => {
+        const obj = node as any;
+        if (typeof obj.parentFrameId === 'string') obj.parentFrameId = remapRef(obj.parentFrameId);
+        if (typeof obj.parentZoneId === 'string') obj.parentZoneId = remapRef(obj.parentZoneId);
+        if (typeof obj.zoneInstanceId === 'string') obj.zoneInstanceId = remapRef(obj.zoneInstanceId);
+        if (typeof obj.zoneId === 'string') obj.zoneId = remapRef(obj.zoneId);
+        if (obj._zoneSlot && typeof obj._zoneSlot === 'object') {
+            const nextZoneId = remapRef(obj._zoneSlot.zoneId);
+            if (nextZoneId) obj._zoneSlot = { ...obj._zoneSlot, zoneId: nextZoneId };
+        }
+        remapPlainMetadata(obj._productData);
+        remapPlainMetadata(obj._zoneStateSnapshot);
+
+        const zoneId = String(obj.parentZoneId || obj._zoneSlot?.zoneId || '').trim();
+        if ((isProductCardContainer(obj) || isLikelyProductCard(obj)) && zoneId) {
+            normalizeProductCardIdentity(obj, {
+                zoneInstanceId: zoneId,
+                forceNewInstance: true,
+                reason: opts.reason || 'duplicate-selection'
+            });
+            const zone = findContainmentZoneById(zoneId);
+            if (zone) affectedZones.set(zoneId, zone);
+        }
+        delete obj.__duplicateSourceCustomId;
+    });
+
+    affectedZones.forEach((zone: any) => {
+        syncZoneCardFrameBindings(zone, getZoneChildren(zone));
+        if (opts.relayout !== false) {
+            recalculateZoneLayout(zone, getZoneChildren(zone), { save: false, preserveStyles: true });
+        }
+        syncZoneDerivedMetadata(zone, undefined, { updateStateSnapshot: true });
+    });
+
+    const duplicatedZone = clones.find((obj: any) => obj && !obj?.group && isLikelyProductZone(obj));
+    if (duplicatedZone && isLikelyProductZone(duplicatedZone)) {
+        targetGridZone.value = duplicatedZone;
+        targetGridZones.value = resolveRelatedImportZones(duplicatedZone);
+    }
+
+    if (import.meta.dev) {
+        console.debug('[product-zone:duplicate-selection-remap]', {
+            reason: opts.reason || 'duplicate-selection',
+            remappedIds: idMap.size,
+            affectedZones: Array.from(affectedZones.keys()),
+            targetZoneId: String((duplicatedZone as any)?._customId || '').trim() || null
+        });
     }
 };
 
@@ -15200,6 +15318,7 @@ const duplicateActiveObjectWithContext = async (
             const cloned = await duplicateObjectWithContext(member, opts);
             if (cloned) clones.push(cloned);
         }
+        remapDuplicatedSelectionBindings(clones, { reason: 'duplicate-active-selection' });
         return clones;
     }
 
