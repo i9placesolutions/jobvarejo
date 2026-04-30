@@ -14910,6 +14910,99 @@ const duplicateObjectWithContext = async (
     return cloned;
 };
 
+const duplicateProductZoneWithCards = async (
+    zone: any,
+    opts: { offsetX?: number; offsetY?: number } = {}
+) => {
+    if (!canvas.value || !zone || !isLikelyProductZone(zone)) return [] as any[];
+    const offsetX = Number(opts.offsetX ?? DUPLICATE_OFFSET) || 0;
+    const offsetY = Number(opts.offsetY ?? DUPLICATE_OFFSET) || 0;
+
+    if (!(zone as any)._customId) (zone as any)._customId = makeCanvasObjectId();
+    const clonedZone = await cloneFabricObjectSafely(zone, DUPLICATE_CLONE_PROPS, 'duplicate-zone');
+    if (!clonedZone) return [];
+
+    assignNewCustomIdsDeep(clonedZone);
+    resetDuplicatedObjectRuntime(clonedZone);
+    clonedZone.set?.({
+        left: (Number((zone as any).left) || 0) + offsetX,
+        top: (Number((zone as any).top) || 0) + offsetY,
+        originX: (zone as any).originX || 'center',
+        originY: (zone as any).originY || 'center',
+        angle: (zone as any).angle || 0,
+        scaleX: (zone as any).scaleX || 1,
+        scaleY: (zone as any).scaleY || 1,
+        selectable: true,
+        evented: true
+    });
+    clonedZone.isGridZone = true;
+    clonedZone.isProductZone = true;
+    clonedZone.parentFrameId = (zone as any).parentFrameId;
+    clonedZone.clipPath = null;
+    delete (clonedZone as any)._frameClipOwner;
+    clonedZone.setCoords?.();
+
+    const newZoneId = String((clonedZone as any)._customId || '').trim();
+    const zoneFrameId = getResolvedZoneFrameId(clonedZone);
+    const sourceCards = getZoneChildren(zone);
+    const cardClones: any[] = [];
+
+    for (const card of sourceCards) {
+        const clonedCard = await cloneFabricObjectSafely(card, DUPLICATE_CLONE_PROPS, 'duplicate-zone-card');
+        if (!clonedCard) continue;
+        assignNewCustomIdsDeep(clonedCard);
+        resetDuplicatedObjectRuntime(clonedCard);
+        clonedCard.set?.({
+            left: (Number((card as any).left) || 0) + offsetX,
+            top: (Number((card as any).top) || 0) + offsetY,
+            originX: (card as any).originX || 'center',
+            originY: (card as any).originY || 'center',
+            angle: (card as any).angle || 0,
+            scaleX: (card as any).scaleX || 1,
+            scaleY: (card as any).scaleY || 1,
+            selectable: true,
+            evented: true
+        });
+        clonedCard.isProductCard = true;
+        clonedCard.isSmartObject = true;
+        clonedCard.parentZoneId = newZoneId;
+        clonedCard.parentFrameId = zoneFrameId;
+        clonedCard.clipPath = null;
+        delete (clonedCard as any)._frameClipOwner;
+        const slot = (card as any)?._zoneSlot;
+        clonedCard._zoneSlot = slot && typeof slot === 'object'
+            ? {
+                ...slot,
+                zoneId: newZoneId,
+                left: Number(slot.left || 0) + offsetX,
+                top: Number(slot.top || 0) + offsetY
+            }
+            : null;
+        clonedCard.setCoords?.();
+        cardClones.push(clonedCard);
+    }
+
+    const clones = [clonedZone, ...cardClones];
+    clones.forEach((clone: any) => canvas.value?.add(clone));
+    finalizeDuplicatedObjects(clones);
+    syncZoneCardFrameBindings(clonedZone, cardClones);
+    if (cardClones.length > 0) {
+        recalculateZoneLayout(clonedZone, cardClones, {
+            save: false,
+            requestRender: false,
+            trustCachedChildren: true,
+            preserveStyles: true
+        });
+    }
+    targetGridZone.value = clonedZone;
+    targetGridZones.value = resolveRelatedImportZones(clonedZone);
+    canvas.value.setActiveObject(clonedZone);
+    safeRequestRenderAll();
+    refreshCanvasObjects();
+    updateSelection();
+    return clones;
+};
+
 const duplicateActiveObjectWithContext = async (
     active: any,
     opts: { offsetX?: number; offsetY?: number } = {}
@@ -16105,6 +16198,13 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         if (looksLikeFrame) {
             const duplicatedFrame = await duplicateFrameWithContents(active);
             if (duplicatedFrame) return;
+        }
+        if (isLikelyProductZone(active)) {
+            const clones = await duplicateProductZoneWithCards(active, { offsetX: DUPLICATE_OFFSET, offsetY: DUPLICATE_OFFSET });
+            if (clones.length) {
+                saveCurrentState({ reason: 'duplicate-zone' });
+                return;
+            }
         }
 
         try {
@@ -22660,6 +22760,13 @@ const handleAction = async (action: string) => {
         if (looksLikeFrame) {
             const duplicatedFrame = await duplicateFrameWithContents(active);
             if (duplicatedFrame) return;
+        }
+        if (isLikelyProductZone(active)) {
+            const clones = await duplicateProductZoneWithCards(active, { offsetX: DUPLICATE_OFFSET, offsetY: DUPLICATE_OFFSET });
+            if (clones.length) {
+                saveCurrentState({ reason: 'duplicate-zone-action' });
+                return;
+            }
         }
         try {
             const clones = await duplicateActiveObjectWithContext(active, { offsetX: DUPLICATE_OFFSET, offsetY: DUPLICATE_OFFSET });
@@ -39854,6 +39961,30 @@ const getZoneChildren = (zone: any) => {
     const zoneBounds = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
     const zoneFrameId = getResolvedZoneFrameId(zone);
     const zoneId = String((zone as any)?._customId || '').trim();
+    const zonesByIdForFrameRepair = new Map<string, any>();
+    try {
+        (canvas.value.getObjects?.() || []).forEach((obj: any) => {
+            if (!obj || !isLikelyProductZone(obj)) return;
+            const id = String((obj as any)?._customId || '').trim();
+            if (id) zonesByIdForFrameRepair.set(id, obj);
+        });
+    } catch {
+        // best-effort repair map only
+    }
+    const isCardFrameCompatibleWithZone = (card: any) => {
+        const cardFrameId = String((card as any)?.parentFrameId || '').trim();
+        if (!zoneFrameId || !cardFrameId) return true;
+        return cardFrameId === zoneFrameId;
+    };
+    const pointsToZoneInAnotherFrame = (zoneIdRaw: any, card: any) => {
+        const otherZoneId = String(zoneIdRaw || '').trim();
+        if (!otherZoneId || otherZoneId === zoneId) return false;
+        const cardFrameId = String((card as any)?.parentFrameId || '').trim();
+        if (!zoneFrameId || !cardFrameId || cardFrameId !== zoneFrameId) return false;
+        const otherZone = zonesByIdForFrameRepair.get(otherZoneId);
+        const otherFrameId = otherZone ? String(getResolvedZoneFrameId(otherZone) || (otherZone as any)?.parentFrameId || '').trim() : '';
+        return !!otherFrameId && otherFrameId !== cardFrameId;
+    };
     const recoveryCenterMargin = (() => {
         const pad = typeof (zone as any)._zonePadding === 'number' ? (zone as any)._zonePadding : 20;
         const base = Math.min(zoneBounds.width || 0, zoneBounds.height || 0);
@@ -39970,6 +40101,7 @@ const getZoneChildren = (zone: any) => {
 
         const boundId = String((o as any)?.parentZoneId || '').trim();
         if (zoneId && boundId && boundId === zoneId) {
+            if (!isCardFrameCompatibleWithZone(o)) return;
             normalizeLegacyCard(o, explicitCard);
             applyCardFrameBinding(o, zoneFrameId);
             explicitBound.push(o);
@@ -39979,6 +40111,7 @@ const getZoneChildren = (zone: any) => {
         // Keep deterministic binding when slot metadata exists (important after undo/reload).
         const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
         if (zoneId && slotZoneId && slotZoneId === zoneId) {
+            if (!isCardFrameCompatibleWithZone(o)) return;
             // CORRECAO A5: se boundId existe e aponta para OUTRA zona, o parentZoneId
             // e autoritativo — nao sequestrar o card aqui. Isso evita que um card
             // pertencente a Z1 apareca tambem em Z2 so porque _zoneSlot ficou stale
@@ -39990,6 +40123,24 @@ const getZoneChildren = (zone: any) => {
             o.parentZoneId = zoneId;
             applyCardFrameBinding(o, zoneFrameId);
             slotBound.push(o);
+            return;
+        }
+
+        // Frame-duplicate repair: copied cards can keep parentZoneId/_zoneSlot from the
+        // original zone while parentFrameId already points at the copied frame. In that
+        // state, replacing products in the copied zone edits/removes the original zone.
+        // If the card is physically in this zone's frame and near this zone, rebind it here.
+        if (
+            zoneId &&
+            zoneFrameId &&
+            (pointsToZoneInAnotherFrame(boundId, o) || pointsToZoneInAnotherFrame(slotZoneId, o)) &&
+            canSafelyRecoverCard(o)
+        ) {
+            normalizeLegacyCard(o, explicitCard);
+            o.parentZoneId = zoneId;
+            (o as any)._zoneSlot = null;
+            applyCardFrameBinding(o, zoneFrameId);
+            explicitBound.push(o);
             return;
         }
 
@@ -41444,9 +41595,17 @@ const rehydrateCanvasZones = (
             if (card._cardHeight == null) card._cardHeight = card.height;
 
             // If card already has a valid parentZoneId from saved data, preserve it
+            // only when the zone lives in the same frame. Older duplicated frames can
+            // contain cards whose parentFrameId points at the copy while parentZoneId
+            // still points at the original zone, making replacement hit the original.
             if (card.parentZoneId && zonesById.has(card.parentZoneId)) {
-                cardsWithSavedParentZone.add(card);
-                return;
+                const boundZone = zonesById.get(card.parentZoneId);
+                const boundZoneFrameId = String(getResolvedZoneFrameId(boundZone) || (boundZone as any)?.parentFrameId || '').trim();
+                const currentCardFrameId = String((card as any)?.parentFrameId || '').trim();
+                if (!currentCardFrameId || !boundZoneFrameId || currentCardFrameId === boundZoneFrameId) {
+                    cardsWithSavedParentZone.add(card);
+                    return;
+                }
             }
             
             // Only repair cards that are missing parentZoneId
