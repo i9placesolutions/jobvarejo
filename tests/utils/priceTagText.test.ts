@@ -8,6 +8,7 @@ import {
   resolveAtacVariantKeyFromPrice,
   inferUnitLabelFromProduct,
   computePackLine,
+  formatPriceValue,
   PRICE_INTEGER_DECIMAL_GAP_PX
 } from '~/utils/priceTagText'
 
@@ -357,5 +358,40 @@ describe('computePackLine — texto da linha de pack atacarejo', () => {
       packUnit: 'UN',
       packPrice: '23,99'
     })).toBe('FD C/12UN: R$ 23,99')
+  })
+})
+
+describe('formatPriceValue', () => {
+  it('null/undefined/vazio retornam ""', () => {
+    expect(formatPriceValue(null)).toBe('')
+    expect(formatPriceValue(undefined)).toBe('')
+    expect(formatPriceValue('')).toBe('')
+    expect(formatPriceValue('   ')).toBe('')
+  })
+
+  it('number: aplica toFixed(2) e troca . por ,', () => {
+    expect(formatPriceValue(20.99)).toBe('20,99')
+    expect(formatPriceValue(1.5)).toBe('1,50')
+    expect(formatPriceValue(100)).toBe('100,00')
+    expect(formatPriceValue(0)).toBe('0,00')
+  })
+
+  it('string com virgula: preserva (ja BR)', () => {
+    expect(formatPriceValue('1,99')).toBe('1,99')
+    expect(formatPriceValue('1.299,99')).toBe('1.299,99')
+  })
+
+  it('string com ponto e parts[1] de 1-2 chars: troca por virgula', () => {
+    expect(formatPriceValue('1.99')).toBe('1,99')
+    expect(formatPriceValue('20.5')).toBe('20,5')
+  })
+
+  it('string com ponto e parts[1] de 3+ chars (milhar): preserva', () => {
+    // "1.299" parece milhar, nao decimal — preservar
+    expect(formatPriceValue('1.299')).toBe('1.299')
+  })
+
+  it('integer-only sem separador: preserva', () => {
+    expect(formatPriceValue('100')).toBe('100')
   })
 })

@@ -166,6 +166,35 @@ export const resolveAtacVariantKeyFromPrice = (raw: any): AtacVariantKey => {
 };
 
 /**
+ * Converte preco arbitrario (number ou string) para string no formato BR
+ * com virgula decimal, preservando valores ja formatados.
+ *
+ * Regras:
+ *  - null/undefined → ''
+ *  - number: toFixed(2) com '.' → ',' (20.99 → "20,99")
+ *  - string com ',': preserva (ja BR)
+ *  - string com '.' e parts[1] tem 1-2 chars: troca por ','
+ *  - string com '.' e parts[1] tem 3+ chars (milhar): preserva
+ *  - outros: trim() e retorna
+ */
+export const formatPriceValue = (value: any): string => {
+    if (value === null || value === undefined) return ''
+    if (typeof value === 'number') {
+        return value.toFixed(2).replace('.', ',')
+    }
+    const str = String(value).trim()
+    if (!str) return ''
+    if (str.includes(',')) return str
+    if (str.includes('.')) {
+        const parts = str.split('.')
+        if (parts.length === 2 && parts[1] && parts[1].length <= 2) {
+            return str.replace('.', ',')
+        }
+    }
+    return str
+}
+
+/**
  * Forma minima do produto que `inferUnitLabelFromProduct` consome.
  * Aceita dados parciais (qualquer fonte importadora pode preencher subsets).
  */

@@ -19,6 +19,7 @@ import {
     resolveAtacVariantKeyFromPrice,
     inferUnitLabelFromProduct,
     computePackLine,
+    formatPriceValue,
     PRICE_INTEGER_DECIMAL_GAP_PX
 } from '~/utils/priceTagText'
 import {
@@ -25595,25 +25596,7 @@ const getSpecialConditionFromProduct = (product: any): string | null => {
 /**
  * Converte valor de preço para string no formato brasileiro (vírgula decimal)
  */
-const formatPriceValue = (value: any): string => {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'number') {
-        // Converter número para formato brasileiro (20.99 -> "20,99")
-        return value.toFixed(2).replace('.', ',');
-    }
-    const str = String(value).trim();
-    if (!str) return '';
-    // Se já tem vírgula como separador decimal, usar como está
-    if (str.includes(',')) return str;
-    // Se tem ponto como separador decimal, converter para vírgula
-    if (str.includes('.')) {
-        const parts = str.split('.');
-        if (parts.length === 2 && parts[1] && parts[1].length <= 2) {
-            return str.replace('.', ',');
-        }
-    }
-    return str;
-};
+// formatPriceValue extraido para utils/priceTagText.ts.
 
 /**
  * Retorna TODOS os preços disponíveis para o produto, ordenados por prioridade de exibição.
