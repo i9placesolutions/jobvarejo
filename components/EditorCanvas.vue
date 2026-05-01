@@ -146,6 +146,7 @@ import {
     MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH,
     compareMissingProductImageRecoveryCandidates,
     getMissingProductImageRecoveryBatchLimit,
+    measureMissingProductImageRecoveryPriority,
     type RecoveryLookupResult,
     type MissingProductImageRecoveryViewportRect,
     type MissingProductImageRecoveryPriority,
@@ -24052,57 +24053,7 @@ const getMissingProductImageRecoveryActiveCard = (): any | null => {
     return findProductCardParentGroup(active);
 };
 
-const measureMissingProductImageRecoveryPriority = (
-    card: any,
-    viewportRect: MissingProductImageRecoveryViewportRect | null,
-    activeCard: any | null
-): MissingProductImageRecoveryPriority => {
-    const selected = !!(activeCard && activeCard === card);
-    const culled = card?.visible === false || !!(card as any)?.__viewportCulled;
-    if (!viewportRect || typeof card?.getBoundingRect !== 'function') {
-        return {
-            selected,
-            inView: selected,
-            coverage: 0,
-            distanceSq: selected ? 0 : Number.MAX_SAFE_INTEGER,
-            culled
-        };
-    }
-
-    try {
-        const bounds = card.getBoundingRect(true, true);
-        const left = Number(bounds?.left || 0);
-        const top = Number(bounds?.top || 0);
-        const width = Math.max(0, Number(bounds?.width || 0));
-        const height = Math.max(0, Number(bounds?.height || 0));
-        const right = left + width;
-        const bottom = top + height;
-        const intersectWidth = Math.max(0, Math.min(right, viewportRect.right) - Math.max(left, viewportRect.left));
-        const intersectHeight = Math.max(0, Math.min(bottom, viewportRect.bottom) - Math.max(top, viewportRect.top));
-        const visibleArea = intersectWidth * intersectHeight;
-        const area = Math.max(1, width * height);
-        const coverage = visibleArea > 0 ? visibleArea / area : 0;
-        const centerX = left + (width / 2);
-        const centerY = top + (height / 2);
-        const dx = centerX - viewportRect.centerX;
-        const dy = centerY - viewportRect.centerY;
-        return {
-            selected,
-            inView: visibleArea > 0 && !culled,
-            coverage,
-            distanceSq: (dx * dx) + (dy * dy),
-            culled
-        };
-    } catch {
-        return {
-            selected,
-            inView: selected,
-            coverage: 0,
-            distanceSq: selected ? 0 : Number.MAX_SAFE_INTEGER,
-            culled
-        };
-    }
-};
+// measureMissingProductImageRecoveryPriority extraido para utils/missingProductImageRecovery.ts.
 
 // compareMissingProductImageRecoveryCandidates e getMissingProductImageRecoveryBatchLimit
 // extraidos para utils/missingProductImageRecovery.ts.
