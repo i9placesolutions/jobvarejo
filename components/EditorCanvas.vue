@@ -65,6 +65,7 @@ import {
 import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
+import { mapLimit } from '~/utils/asyncHelpers'
 import {
     isObjectIntersectingCullRect,
     shouldSkipViewportCullObject,
@@ -11316,23 +11317,7 @@ const normalizeLegacyProductCardImageTransformsInCanvasData = (
     return { cardsScanned, imagesScanned, imagesRepaired, needsPostLoadRepair };
 };
 
-const mapLimit = async <T>(
-    items: T[],
-    concurrency: number,
-    worker: (item: T, index: number) => Promise<void>
-): Promise<void> => {
-    const limit = Math.max(1, Math.floor(concurrency || 1));
-    let cursor = 0;
-    const runWorker = async () => {
-        while (true) {
-            const index = cursor++;
-            if (index >= items.length) return;
-            await worker(items[index] as T, index);
-        }
-    };
-    const tasks = Array.from({ length: Math.min(limit, items.length) }, () => runWorker());
-    await Promise.all(tasks);
-};
+// mapLimit extraido para utils/asyncHelpers.ts.
 
 const collectContaboImageNodes = (canvasData: any): any[] => {
     const images: any[] = [];
