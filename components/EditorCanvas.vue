@@ -158,6 +158,11 @@ import {
     type MissingProductImageRecoveryCandidate
 } from '~/utils/missingProductImageRecovery'
 import {
+    DEFAULT_PASTE_IMAGE_MATCH_MODE,
+    resolveImageMatchMode,
+    type ImageMatchMode
+} from '~/utils/imageMatchMode'
+import {
     clonePlainForZoneSnapshot,
     finiteZoneSnapshotNumber,
     firstDefinedZoneSnapshotValue
@@ -7403,7 +7408,7 @@ const isConfirmingProductImport = ref(false)
 type ImportTargetMode = 'zone' | 'multi-frame'
 type FrameAssignment = { productId: string; frameId: string | null }
 type ZoneAssignment = { productId: string; zoneId: string | null }
-type ImageMatchMode = 'precise' | 'fast'
+// ImageMatchMode tipo extraido para utils/imageMatchMode.ts.
 type ProductImportOptions = {
     mode?: 'replace' | 'append'
     labelTemplateId?: string
@@ -23943,10 +23948,8 @@ const normalizeRecoveryImageUrl = (src: string): string => {
 // Tipos RecoveryLookupResult, MissingProductImageRecoveryViewportRect,
 // MissingProductImageRecoveryPriority e MissingProductImageRecoveryCandidate
 // + constantes MIN_BATCH/MAX_BATCH extraidas para utils/missingProductImageRecovery.ts.
-const DEFAULT_PASTE_IMAGE_MATCH_MODE: ImageMatchMode = 'precise';
-const resolveImageMatchMode = (value?: string): ImageMatchMode => {
-    return String(value || 'precise').toLowerCase() === 'fast' ? 'fast' : 'precise';
-};
+// DEFAULT_PASTE_IMAGE_MATCH_MODE e resolveImageMatchMode extraidos para
+// utils/imageMatchMode.ts.
 
 // isAuthLookupError extraido para utils/canvasValidation.ts.
 
