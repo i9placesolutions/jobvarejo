@@ -10,6 +10,22 @@
 
 import { isControlLikeObject, isTransientCanvasObject } from './controlObjectClassifiers'
 
+/**
+ * Numero minimo de objetos no canvas para ATIVAR viewport culling.
+ * Abaixo disso, culling adiciona mais overhead que economiza — Fabric
+ * ja tem render culling proprio que e suficiente em casos pequenos.
+ *
+ * 1200 e' o limiar empirico onde o ganho de pular renders compensa
+ * o custo de calcular bounds + comparacoes.
+ */
+export const VIEWPORT_CULL_MIN_OBJECTS = 1200
+
+/**
+ * Intervalo minimo (ms) entre runs de culling check. Evita re-checar
+ * a cada frame quando ha muitos objetos.
+ */
+export const VIEWPORT_CULL_INTERVAL_MS = 140
+
 export type CullRect = {
     left: number
     top: number

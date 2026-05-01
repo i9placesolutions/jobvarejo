@@ -4,6 +4,8 @@ import {
   shouldSkipViewportCullObject,
   computeViewportCullRect,
   VIEWPORT_CULL_PADDING,
+  VIEWPORT_CULL_MIN_OBJECTS,
+  VIEWPORT_CULL_INTERVAL_MS,
   restoreViewportCulledObjects
 } from '~/utils/viewportCulling'
 
@@ -303,5 +305,21 @@ describe('restoreViewportCulledObjects', () => {
     const b = makeObj({ __viewportCulled: false }) // sera ignorado
     const c = makeObj()
     expect(restoreViewportCulledObjects([a, b, c])).toBe(2)
+  })
+})
+
+describe('VIEWPORT_CULL_MIN_OBJECTS', () => {
+  it('e numero positivo significativo (limiar empirico)', () => {
+    expect(typeof VIEWPORT_CULL_MIN_OBJECTS).toBe('number')
+    expect(VIEWPORT_CULL_MIN_OBJECTS).toBeGreaterThan(0)
+    expect(VIEWPORT_CULL_MIN_OBJECTS).toBe(1200)
+  })
+})
+
+describe('VIEWPORT_CULL_INTERVAL_MS', () => {
+  it('e intervalo curto (< 1 frame de 60fps * 10)', () => {
+    expect(typeof VIEWPORT_CULL_INTERVAL_MS).toBe('number')
+    expect(VIEWPORT_CULL_INTERVAL_MS).toBeGreaterThan(0)
+    expect(VIEWPORT_CULL_INTERVAL_MS).toBe(140)
   })
 })

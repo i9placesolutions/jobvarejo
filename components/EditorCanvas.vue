@@ -108,6 +108,8 @@ import {
     shouldSkipViewportCullObject,
     computeViewportCullRect,
     VIEWPORT_CULL_PADDING,
+    VIEWPORT_CULL_MIN_OBJECTS,
+    VIEWPORT_CULL_INTERVAL_MS,
     restoreViewportCulledObjects
 } from '~/utils/viewportCulling'
 import {
@@ -6140,9 +6142,8 @@ const updateScrollbars = () => {
     // Culling still runs on wheel/pan/object-move paths.
 }
 
-const VIEWPORT_CULL_MIN_OBJECTS = 1200
-// VIEWPORT_CULL_PADDING extraido para utils/viewportCulling.ts
-const VIEWPORT_CULL_INTERVAL_MS = 140
+// VIEWPORT_CULL_MIN_OBJECTS, VIEWPORT_CULL_INTERVAL_MS extraidos para
+// utils/viewportCulling.ts. VIEWPORT_CULL_PADDING ja extraido.
 const EDITOR_PERF_STORAGE_KEY = 'editor:perf-metrics:v1'
 const EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS = 120
 const editorPerfMetricsEnabled = ref(true)
