@@ -13,7 +13,7 @@
 import { isTransparentLikeTemplateColor } from './colorHelpers'
 import { normalizeVisibleScale } from './mathHelpers'
 import { collectTemplateJsonNodesDeep } from './canvasJsonClassifiers'
-import { isTextLikeObject } from './fabricObjectClassifiers'
+import { isTextLikeObject, collectObjectsDeep, findByName } from './fabricObjectClassifiers'
 
 export type ReviveRedBurstOpts = {
     fallbackFill?: string
@@ -143,6 +143,27 @@ export const sanitizeRedBurstTemplateGroupJson = (groupJson: any): any => {
         fallbackText: ',00'
     })
     return groupJson
+}
+
+/**
+ * Detecta se um priceGroup Fabric e' do tipo Red Burst — checa
+ * presenca de TODOS os 6 nodes-chave do template:
+ * price_bg, price_header_bg, price_header_text, price_burst_line_a,
+ * price_integer_text, price_decimal_text.
+ *
+ * Pure: usa collectObjectsDeep + findByName (operam sobre Fabric).
+ */
+export const isRedBurstPriceGroup = (priceGroup: any): boolean => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false
+    const all = collectObjectsDeep(priceGroup)
+    return !!(
+        findByName(all, 'price_bg') &&
+        findByName(all, 'price_header_bg') &&
+        findByName(all, 'price_header_text') &&
+        findByName(all, 'price_burst_line_a') &&
+        findByName(all, 'price_integer_text') &&
+        findByName(all, 'price_decimal_text')
+    )
 }
 
 /**

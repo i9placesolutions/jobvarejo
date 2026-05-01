@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   reviveRedBurstJsonNode,
-  sanitizeRedBurstTemplateGroupJson
+  sanitizeRedBurstTemplateGroupJson,
+  isRedBurstPriceGroup
 } from '~/utils/redBurstTemplateRevive'
 
 describe('reviveRedBurstJsonNode', () => {
@@ -155,5 +156,62 @@ describe('sanitizeRedBurstTemplateGroupJson', () => {
     // visible nao foi tocado pq sanitize fez early return
     expect(grp.objects[0].visible).toBe(false)
     expect(result).toBe(grp)
+  })
+})
+
+describe('isRedBurstPriceGroup', () => {
+  const makeGroup = (children: any[]) => ({
+    getObjects: () => children
+  })
+
+  it('null/undefined: false', () => {
+    expect(isRedBurstPriceGroup(null)).toBe(false)
+    expect(isRedBurstPriceGroup(undefined)).toBe(false)
+  })
+
+  it('group sem getObjects: false', () => {
+    expect(isRedBurstPriceGroup({ type: 'group' })).toBe(false)
+  })
+
+  it('group com TODOS os 6 nodes-chave: true', () => {
+    const grp = makeGroup([
+      { name: 'price_bg' },
+      { name: 'price_header_bg' },
+      { name: 'price_header_text' },
+      { name: 'price_burst_line_a' },
+      { name: 'price_integer_text' },
+      { name: 'price_decimal_text' }
+    ])
+    expect(isRedBurstPriceGroup(grp)).toBe(true)
+  })
+
+  it('group sem 1 node: false', () => {
+    const grp = makeGroup([
+      { name: 'price_bg' },
+      { name: 'price_header_bg' },
+      { name: 'price_header_text' },
+      // sem price_burst_line_a
+      { name: 'price_integer_text' },
+      { name: 'price_decimal_text' }
+    ])
+    expect(isRedBurstPriceGroup(grp)).toBe(false)
+  })
+
+  it('aceita nodes nested (collectObjectsDeep recursivo)', () => {
+    const innerGroup = {
+      type: 'group',
+      getObjects: () => [
+        { name: 'price_burst_line_a' },
+        { name: 'price_integer_text' },
+        { name: 'price_decimal_text' }
+      ]
+    }
+    const grp = makeGroup([
+      { name: 'price_bg' },
+      { name: 'price_header_bg' },
+      { name: 'price_header_text' },
+      innerGroup
+    ])
+    expect(isRedBurstPriceGroup(grp)).toBe(true)
   })
 })

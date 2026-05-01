@@ -125,7 +125,7 @@ import {
 import { parseViewSettings, serializeViewSettings, VIEW_SETTINGS_STORAGE_KEY } from '~/utils/viewSettings'
 import { isCollaboratorsCacheValid } from '~/utils/collaboratorsCache'
 import { splitTextIntoChunks } from '~/utils/textChunking'
-import { reviveRedBurstObjectNode, sanitizeRedBurstTemplateGroupJson } from '~/utils/redBurstTemplateRevive'
+import { reviveRedBurstObjectNode, sanitizeRedBurstTemplateGroupJson, isRedBurstPriceGroup } from '~/utils/redBurstTemplateRevive'
 import { normalizeGlobalStyles as normalizeGlobalStylesHelper } from '~/utils/globalStylesNormalize'
 import {
     extractWeightTokenForHeader,
@@ -30610,18 +30610,7 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
     return { pillW: totalW, pillH: totalH };
 };
 
-function isRedBurstPriceGroup(priceGroup: any): boolean {
-    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;
-    const all = collectObjectsDeep(priceGroup);
-    return !!(
-        findByName(all, 'price_bg') &&
-        findByName(all, 'price_header_bg') &&
-        findByName(all, 'price_header_text') &&
-        findByName(all, 'price_burst_line_a') &&
-        findByName(all, 'price_integer_text') &&
-        findByName(all, 'price_decimal_text')
-    );
-}
+// isRedBurstPriceGroup extraido para utils/redBurstTemplateRevive.ts.
 
 // parseTemplateColorRgba e isTransparentLikeTemplateColor extraidos para
 // utils/colorHelpers.ts. normalizeVisibleTemplateScale extraido para
