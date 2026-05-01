@@ -47,6 +47,14 @@ import {
     toggleFill
 } from '~/utils/fabricStyleHelpers'
 import {
+    getFrameBounds,
+    isFrameLikeObject,
+    isObjectCenterInsideFrame,
+    isObjectVisuallyInsideFrame,
+    isObjectIntersectingFrame,
+    isObjectMostlyInsideFrame
+} from '~/utils/frameGeometry'
+import {
     walkCanvasObjects,
     getJsonGroupChildren,
     isStandalonePriceGroupJson,
@@ -1328,38 +1336,7 @@ watch(showLabelTemplatesModal, async (open) => {
 
 const FRAME_SPAWN_GAP = 48;
 
-const getFrameBounds = (frame: any) => {
-    if (!frame) return null;
-    const angle = Math.abs(Number(frame.angle || 0)) % 360;
-    if (angle > 0.001) {
-        try {
-            const rotatedBounds = frame.getBoundingRect?.(true);
-            if (
-                rotatedBounds &&
-                Number.isFinite(rotatedBounds.left) &&
-                Number.isFinite(rotatedBounds.top) &&
-                Number.isFinite(rotatedBounds.width) &&
-                Number.isFinite(rotatedBounds.height) &&
-                rotatedBounds.width > 0 &&
-                rotatedBounds.height > 0
-            ) {
-                return rotatedBounds;
-            }
-        } catch {
-            // fallback below
-        }
-    }
-
-    const width = Math.abs((Number(frame.width) || 0) * (Number(frame.scaleX) || 1));
-    const height = Math.abs((Number(frame.height) || 0) * (Number(frame.scaleY) || 1));
-    const center = typeof frame.getCenterPoint === 'function'
-        ? frame.getCenterPoint()
-        : { x: Number(frame.left) || 0, y: Number(frame.top) || 0 };
-    const left = Number(center.x || 0) - (width / 2);
-    const top = Number(center.y || 0) - (height / 2);
-    if (!Number.isFinite(left) || !Number.isFinite(top) || width <= 0 || height <= 0) return null;
-    return { left, top, width, height };
-};
+// getFrameBounds extraido para utils/frameGeometry.ts.
 
 const getFrameSpawnPosition = (referenceFrame: any, nextFrameWidth: number, nextFrameHeight: number) => {
     const fallback = {
@@ -1504,20 +1481,7 @@ const ensureFramesBelowContents = () => {
     applyArrangedOrder(canvas.value, desiredOrder);
 };
 
-const isFrameLikeObject = (obj: any) => {
-    if (!obj) return false;
-    if (obj.isFrame) return true;
-
-    const layerName = String(obj.layerName || '').trim().toUpperCase();
-    const name = String(obj.name || '').trim();
-    if (layerName === 'FRAMER' || layerName === 'FRAME' || /^FRAMER?\s+\d+\s*$/i.test(layerName)) return true;
-    if (/^FRAMER(?:\s+\d+)?$/i.test(name) || /^FRAME(?:\s+\d+)?\s*$/i.test(name)) return true;
-
-    const isRect = isRectObject(obj) || String(obj.type || '').toLowerCase() === 'rect';
-    if (isRect && (obj.isGridCell === true || String(obj.gridGroupId || '').trim().length > 0)) return true;
-
-    return false;
-};
+// isFrameLikeObject extraido para utils/frameGeometry.ts.
 
 const normalizeFrameRuntimeProps = (obj: any) => {
     if (!obj || !isFrameLikeObject(obj)) return null;
@@ -2047,106 +2011,9 @@ const getFrameDescendants = (frame: any) => {
     return cachedFrameDescendantsById?.get(String(frame._customId).trim()) || [];
 };
 
-const isObjectCenterInsideFrame = (obj: any, frame: any) => {
-    if (!obj || !frame || typeof obj.getBoundingRect !== 'function' || typeof frame.getBoundingRect !== 'function') {
-        return false;
-    }
-    const objBounds = obj.getBoundingRect(true);
-    const frameBounds = frame.getBoundingRect(true);
-    if (!objBounds || !frameBounds) return false;
-    const cx = objBounds.left + (objBounds.width / 2);
-    const cy = objBounds.top + (objBounds.height / 2);
-    const minX = frameBounds.left;
-    const maxX = frameBounds.left + frameBounds.width;
-    const minY = frameBounds.top;
-    const maxY = frameBounds.top + frameBounds.height;
-    return cx >= minX && cx <= maxX && cy >= minY && cy <= maxY;
-};
-
-const isObjectVisuallyInsideFrame = (obj: any, frame: any) => {
-    if (!obj || !frame || typeof obj.getBoundingRect !== 'function' || typeof frame.getBoundingRect !== 'function') {
-        return false;
-    }
-
-    if (isObjectCenterInsideFrame(obj, frame)) return true;
-
-    const objBounds = obj.getBoundingRect(true);
-    const frameBounds = frame.getBoundingRect(true);
-    if (!objBounds || !frameBounds) return false;
-
-    const left = Math.max(objBounds.left, frameBounds.left);
-    const top = Math.max(objBounds.top, frameBounds.top);
-    const right = Math.min(objBounds.left + objBounds.width, frameBounds.left + frameBounds.width);
-    const bottom = Math.min(objBounds.top + objBounds.height, frameBounds.top + frameBounds.height);
-    const overlapW = Math.max(0, right - left);
-    const overlapH = Math.max(0, bottom - top);
-    const overlapArea = overlapW * overlapH;
-    const objArea = Math.max(1, objBounds.width * objBounds.height);
-
-    return overlapArea / objArea >= 0.2;
-};
-
-const isObjectIntersectingFrame = (obj: any, frame: any) => {
-    if (!obj || !frame) return false;
-
-    if (isObjectCenterInsideFrame(obj, frame)) return true;
-
-    try {
-        if (typeof frame.intersectsWithObject === 'function' && frame.intersectsWithObject(obj)) return true;
-    } catch {
-        // ignore intersection API failures and fallback to bounds
-    }
-
-    if (typeof obj.getBoundingRect !== 'function' || typeof frame.getBoundingRect !== 'function') {
-        return false;
-    }
-
-    const objBounds = obj.getBoundingRect(true);
-    const frameBounds = frame.getBoundingRect(true);
-    if (!objBounds || !frameBounds) return false;
-
-    const left = Math.max(objBounds.left, frameBounds.left);
-    const top = Math.max(objBounds.top, frameBounds.top);
-    const right = Math.min(objBounds.left + objBounds.width, frameBounds.left + frameBounds.width);
-    const bottom = Math.min(objBounds.top + objBounds.height, frameBounds.top + frameBounds.height);
-    const overlapW = Math.max(0, right - left);
-    const overlapH = Math.max(0, bottom - top);
-    const overlapArea = overlapW * overlapH;
-
-    return overlapArea > 0;
-};
-
-const isObjectMostlyInsideFrame = (obj: any, frame: any, minOverlapRatio = 0.6) => {
-    if (!obj || !frame || typeof obj.getBoundingRect !== 'function' || typeof frame.getBoundingRect !== 'function') {
-        return false;
-    }
-
-    const objBounds = obj.getBoundingRect(true);
-    const frameBounds = frame.getBoundingRect(true);
-    if (!objBounds || !frameBounds) return false;
-
-    // Decoracoes (boneco, splash, titulo) costumam estourar a borda do frame mas tem
-    // o centro ancorado dentro dele. Manter o binding nesse caso preserva o clip.
-    const cx = objBounds.left + objBounds.width / 2;
-    const cy = objBounds.top + objBounds.height / 2;
-    const centerInside =
-        cx >= frameBounds.left &&
-        cx <= frameBounds.left + frameBounds.width &&
-        cy >= frameBounds.top &&
-        cy <= frameBounds.top + frameBounds.height;
-    if (centerInside) return true;
-
-    const left = Math.max(objBounds.left, frameBounds.left);
-    const top = Math.max(objBounds.top, frameBounds.top);
-    const right = Math.min(objBounds.left + objBounds.width, frameBounds.left + frameBounds.width);
-    const bottom = Math.min(objBounds.top + objBounds.height, frameBounds.top + frameBounds.height);
-    const overlapW = Math.max(0, right - left);
-    const overlapH = Math.max(0, bottom - top);
-    const overlapArea = overlapW * overlapH;
-    const objArea = Math.max(1, objBounds.width * objBounds.height);
-
-    return (overlapArea / objArea) >= minOverlapRatio;
-};
+// isObjectCenterInsideFrame / isObjectVisuallyInsideFrame /
+// isObjectIntersectingFrame / isObjectMostlyInsideFrame extraidos
+// para utils/frameGeometry.ts.
 
 const collectFrameVisibilityTargets = (rootFrame: any) => {
     if (!canvas.value || !rootFrame) return [rootFrame].filter(Boolean);
