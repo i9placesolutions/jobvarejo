@@ -221,6 +221,94 @@ export const setJsonObjectCenterInParentPlane = (
 }
 
 /**
+ * Versao "retorna array" do walk — retorna lista plana de todos os
+ * descendentes do group JSON. Equivalente a:
+ *   const out = []; walkCanvasObjects(g, n => out.push(n)); return out;
+ * mas reimplementada para evitar overhead de callback em hot-paths.
+ */
+export const collectTemplateJsonNodes = (root: any): any[] => {
+    const out: any[] = []
+    const stack: any[] = Array.isArray(root?.objects) ? [...root.objects] : []
+    while (stack.length) {
+        const cur = stack.pop()
+        if (!cur || typeof cur !== 'object') continue
+        out.push(cur)
+        if (Array.isArray(cur.objects)) {
+            for (const child of cur.objects) stack.push(child)
+        }
+    }
+    return out
+}
+
+/**
+ * Verifica se um template JSON tem o minimo necessario para renderizar.
+ * Aceita:
+ *  - atacarejo (3 backgrounds: retail/banner/wholesale)
+ *  - single-price com price_bg + texto principal de preco
+ *  - fallback generico: ao menos 1 rect e 1 texto
+ *
+ * Util para detectar templates "vazios" em recovery / auto-heal antes
+ * de cair em variantes ou fallback default.
+ */
+export const isTemplateGroupJsonRenderable = (groupJson: any): boolean => {
+    if (!groupJson || typeof groupJson !== 'object') return false
+    const objects = collectTemplateJsonNodes(groupJson)
+    if (!objects.length) return false
+
+    const hasName = (name: string) => objects.some((o: any) => String(o?.name || '') === name)
+    const hasAtac =
+        hasName('atac_retail_bg') &&
+        hasName('atac_banner_bg') &&
+        hasName('atac_wholesale_bg')
+    if (hasAtac) return true
+
+    const hasSinglePriceCore =
+        hasName('price_bg') &&
+        (
+            hasName('price_integer_text') ||
+            hasName('price_value_text') ||
+            hasName('smart_price')
+        )
+    if (hasSinglePriceCore) return true
+
+    let hasRect = false
+    let hasText = false
+    for (const node of objects) {
+        const t = String(node?.type || '').toLowerCase()
+        if (t === 'rect') hasRect = true
+        if (t === 'text' || t === 'i-text' || t === 'itext' || t === 'textbox') hasText = true
+        if (hasRect && hasText) return true
+    }
+    return false
+}
+
+/**
+ * Detecta template atacarejo (2-tier) via presenca de `atac_retail_bg`.
+ */
+export const isAtacarejoTemplateGroupJson = (groupJson: any): boolean => {
+    if (!groupJson || typeof groupJson !== 'object') return false
+    const nodes = collectTemplateJsonNodes(groupJson)
+    return nodes.some((o: any) => String(o?.name || '') === 'atac_retail_bg')
+}
+
+/**
+ * Detecta template "Red Burst" via combinacao de 6 nomes especificos.
+ */
+export const isRedBurstTemplateGroupJson = (groupJson: any): boolean => {
+    if (!groupJson || typeof groupJson !== 'object') return false
+    const nodes = collectTemplateJsonNodes(groupJson)
+    const names = new Set(nodes.map((o: any) => String(o?.name || '')))
+    return (
+        names.has('price_bg') &&
+        names.has('price_header_bg') &&
+        names.has('price_header_text') &&
+        names.has('price_burst_line_a') &&
+        names.has('price_integer_text') &&
+        names.has('price_decimal_text')
+    )
+}
+
+/**
  * DFS no JSON retornando uma lista plana { node, parent } de todos os
  * descendentes do group. Util para reparos/normalizacoes que precisam
  * conhecer o pai imediato de cada nodo (ex: re-vincular cards a zones).

@@ -9,7 +9,11 @@ import {
   getJsonObjectSize,
   getJsonObjectCenterInParentPlane,
   setJsonObjectCenterInParentPlane,
-  collectJsonDescendantsWithParent
+  collectJsonDescendantsWithParent,
+  collectTemplateJsonNodes,
+  isTemplateGroupJsonRenderable,
+  isAtacarejoTemplateGroupJson,
+  isRedBurstTemplateGroupJson
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -442,5 +446,140 @@ describe('collectJsonDescendantsWithParent', () => {
   it('group sem children retorna []', () => {
     expect(collectJsonDescendantsWithParent({ type: 'group' })).toEqual([])
     expect(collectJsonDescendantsWithParent({})).toEqual([])
+  })
+})
+
+describe('collectTemplateJsonNodes', () => {
+  it('lista vazia para input invalido', () => {
+    expect(collectTemplateJsonNodes(null)).toEqual([])
+    expect(collectTemplateJsonNodes({})).toEqual([])
+    expect(collectTemplateJsonNodes({ objects: 'not-array' })).toEqual([])
+  })
+
+  it('coleta filhos diretos e descendentes profundos', () => {
+    const leaf = { id: 'leaf' }
+    const inner = { id: 'inner', type: 'group', objects: [leaf] }
+    const root = { type: 'group', objects: [inner, { id: 'sibling' }] }
+    const ids = collectTemplateJsonNodes(root).map((n: any) => n.id).sort()
+    expect(ids).toEqual(['inner', 'leaf', 'sibling'])
+  })
+
+  it('ignora null/non-object dentro de objects', () => {
+    const r = collectTemplateJsonNodes({
+      objects: [null, 'str' as any, { id: 'a' }, undefined]
+    })
+    expect(r.length).toBe(1)
+    expect(r[0]).toEqual({ id: 'a' })
+  })
+})
+
+describe('isAtacarejoTemplateGroupJson', () => {
+  it('aceita por nome atac_retail_bg', () => {
+    expect(isAtacarejoTemplateGroupJson({
+      type: 'group',
+      objects: [{ name: 'atac_retail_bg', type: 'rect' }]
+    })).toBe(true)
+  })
+
+  it('aceita atac_retail_bg em qualquer profundidade', () => {
+    expect(isAtacarejoTemplateGroupJson({
+      type: 'group',
+      objects: [{ type: 'group', objects: [{ name: 'atac_retail_bg' }] }]
+    })).toBe(true)
+  })
+
+  it('rejeita templates sem atac_retail_bg', () => {
+    expect(isAtacarejoTemplateGroupJson({
+      objects: [{ name: 'price_bg' }, { name: 'price_integer_text' }]
+    })).toBe(false)
+    expect(isAtacarejoTemplateGroupJson({})).toBe(false)
+    expect(isAtacarejoTemplateGroupJson(null)).toBe(false)
+  })
+})
+
+describe('isRedBurstTemplateGroupJson', () => {
+  it('aceita quando todos os 6 nomes estao presentes', () => {
+    const tpl = {
+      objects: [
+        { name: 'price_bg' },
+        { name: 'price_header_bg' },
+        { name: 'price_header_text' },
+        { name: 'price_burst_line_a' },
+        { name: 'price_integer_text' },
+        { name: 'price_decimal_text' }
+      ]
+    }
+    expect(isRedBurstTemplateGroupJson(tpl)).toBe(true)
+  })
+
+  it('rejeita quando algum nome esta faltando', () => {
+    const partial = {
+      objects: [
+        { name: 'price_bg' },
+        { name: 'price_header_bg' },
+        { name: 'price_header_text' },
+        // falta price_burst_line_a
+        { name: 'price_integer_text' },
+        { name: 'price_decimal_text' }
+      ]
+    }
+    expect(isRedBurstTemplateGroupJson(partial)).toBe(false)
+  })
+
+  it('rejeita null/template vazio', () => {
+    expect(isRedBurstTemplateGroupJson(null)).toBe(false)
+    expect(isRedBurstTemplateGroupJson({})).toBe(false)
+    expect(isRedBurstTemplateGroupJson({ objects: [] })).toBe(false)
+  })
+})
+
+describe('isTemplateGroupJsonRenderable', () => {
+  it('rejeita null/template vazio/sem children', () => {
+    expect(isTemplateGroupJsonRenderable(null)).toBe(false)
+    expect(isTemplateGroupJsonRenderable({})).toBe(false)
+    expect(isTemplateGroupJsonRenderable({ objects: [] })).toBe(false)
+  })
+
+  it('aceita template atacarejo (3 backgrounds)', () => {
+    expect(isTemplateGroupJsonRenderable({
+      objects: [
+        { name: 'atac_retail_bg', type: 'rect' },
+        { name: 'atac_banner_bg', type: 'rect' },
+        { name: 'atac_wholesale_bg', type: 'rect' }
+      ]
+    })).toBe(true)
+  })
+
+  it('aceita single-price com price_bg + texto principal', () => {
+    expect(isTemplateGroupJsonRenderable({
+      objects: [
+        { name: 'price_bg', type: 'rect' },
+        { name: 'price_integer_text', type: 'text' }
+      ]
+    })).toBe(true)
+    expect(isTemplateGroupJsonRenderable({
+      objects: [
+        { name: 'price_bg', type: 'rect' },
+        { name: 'smart_price', type: 'text' }
+      ]
+    })).toBe(true)
+  })
+
+  it('aceita fallback generico (rect + texto)', () => {
+    expect(isTemplateGroupJsonRenderable({
+      objects: [
+        { type: 'rect', name: 'random' },
+        { type: 'i-text', name: 'qualquer' }
+      ]
+    })).toBe(true)
+  })
+
+  it('rejeita templates so com texto OU so com rect', () => {
+    expect(isTemplateGroupJsonRenderable({
+      objects: [{ type: 'text' }, { type: 'text' }]
+    })).toBe(false)
+    expect(isTemplateGroupJsonRenderable({
+      objects: [{ type: 'rect' }, { type: 'rect' }]
+    })).toBe(false)
   })
 })

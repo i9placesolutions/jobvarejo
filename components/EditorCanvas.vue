@@ -50,7 +50,11 @@ import {
     getJsonObjectSize,
     getJsonObjectCenterInParentPlane,
     setJsonObjectCenterInParentPlane,
-    collectJsonDescendantsWithParent
+    collectJsonDescendantsWithParent,
+    collectTemplateJsonNodes,
+    isTemplateGroupJsonRenderable,
+    isAtacarejoTemplateGroupJson,
+    isRedBurstTemplateGroupJson
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -35429,72 +35433,9 @@ const seedManualTemplateOriginalMetrics = (group: any) => {
     });
 };
 
-const collectTemplateJsonNodes = (root: any): any[] => {
-    const out: any[] = [];
-    const stack: any[] = Array.isArray(root?.objects) ? [...root.objects] : [];
-    while (stack.length) {
-        const cur = stack.pop();
-        if (!cur || typeof cur !== 'object') continue;
-        out.push(cur);
-        if (Array.isArray(cur.objects)) {
-            for (const child of cur.objects) stack.push(child);
-        }
-    }
-    return out;
-};
-
-const isTemplateGroupJsonRenderable = (groupJson: any): boolean => {
-    if (!groupJson || typeof groupJson !== 'object') return false;
-    const objects = collectTemplateJsonNodes(groupJson);
-    if (!objects.length) return false;
-
-    const hasName = (name: string) => objects.some((o: any) => String(o?.name || '') === name);
-    const hasAtac =
-        hasName('atac_retail_bg') &&
-        hasName('atac_banner_bg') &&
-        hasName('atac_wholesale_bg');
-    if (hasAtac) return true;
-
-    const hasSinglePriceCore =
-        hasName('price_bg') &&
-        (
-            hasName('price_integer_text') ||
-            hasName('price_value_text') ||
-            hasName('smart_price')
-        );
-    if (hasSinglePriceCore) return true;
-
-    // Generic fallback: at least one rect and one text-like node.
-    let hasRect = false;
-    let hasText = false;
-    for (const node of objects) {
-        const t = String(node?.type || '').toLowerCase();
-        if (t === 'rect') hasRect = true;
-        if (t === 'text' || t === 'i-text' || t === 'itext' || t === 'textbox') hasText = true;
-        if (hasRect && hasText) return true;
-    }
-    return false;
-};
-
-const isAtacarejoTemplateGroupJson = (groupJson: any): boolean => {
-    if (!groupJson || typeof groupJson !== 'object') return false;
-    const nodes = collectTemplateJsonNodes(groupJson);
-    return nodes.some((o: any) => String(o?.name || '') === 'atac_retail_bg');
-};
-
-const isRedBurstTemplateGroupJson = (groupJson: any): boolean => {
-    if (!groupJson || typeof groupJson !== 'object') return false;
-    const nodes = collectTemplateJsonNodes(groupJson);
-    const names = new Set(nodes.map((o: any) => String(o?.name || '')));
-    return (
-        names.has('price_bg') &&
-        names.has('price_header_bg') &&
-        names.has('price_header_text') &&
-        names.has('price_burst_line_a') &&
-        names.has('price_integer_text') &&
-        names.has('price_decimal_text')
-    );
-};
+// collectTemplateJsonNodes / isTemplateGroupJsonRenderable /
+// isAtacarejoTemplateGroupJson / isRedBurstTemplateGroupJson foram
+// extraidos para utils/canvasJsonClassifiers.ts.
 
 const pickRenderableTemplateGroupJson = (tpl: LabelTemplate, preferredVariantKey?: AtacVariantKey) => {
     const baseGroupJson: any = (tpl as any)?.group;
