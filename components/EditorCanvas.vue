@@ -201,7 +201,8 @@ import {
     buildPreparedCanvasDataCacheKey,
     getLegacyProductCardImageRepairMode as getLegacyProductCardImageRepairModeHelper,
     collectContaboImageNodes,
-    isPotentiallyBrokenRemoteImageSrc
+    isPotentiallyBrokenRemoteImageSrc,
+    replaceContaboImagesWithPlaceholder
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -11376,31 +11377,7 @@ const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOption
  * quando URLs expiraram/foram removidas (proxy 404, Contabo, Wasabi etc.).
  * Preserva layout e processa grupos aninhados recursivamente.
  */
-const replaceContaboImagesWithPlaceholder = (canvasData: any, opts: { clone?: boolean } = {}): any => {
-    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData);
-    if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned;
-    
-    let count = 0;
-    walkCanvasObjects(cloned, (obj) => {
-        const objType = (obj.type || '').toLowerCase();
-        
-        // Se é uma imagem remota potencialmente quebrada, substituir pelo placeholder
-        if (
-            objType === 'image' &&
-            typeof obj.src === 'string' &&
-            isPotentiallyBrokenRemoteImageSrc(obj.src)
-        ) {
-            if (!obj.__originalSrc) {
-                obj.__originalSrc = obj.src;
-            }
-            obj.src = PLACEHOLDER_IMAGE_DATA_URL;
-            count++;
-        }
-    });
-    
-    if (count > 0) console.warn(`⚠️ Substituindo ${count} imagem(ns) remota(s) por placeholder`);
-    return cloned;
-};
+// replaceContaboImagesWithPlaceholder extraido para utils/canvasJsonClassifiers.ts.
 
 // removeImageObjectsDeep extraido para utils/canvasJsonClassifiers.ts.
 

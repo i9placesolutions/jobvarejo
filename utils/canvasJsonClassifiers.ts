@@ -486,6 +486,40 @@ export const isPotentiallyBrokenRemoteImageSrc = (src: string): boolean => {
 }
 
 /**
+ * Substitui src de imagens remotas potencialmente quebradas por placeholder
+ * para permitir loadFromJSON quando URLs expiraram (Contabo/Wasabi/proxy
+ * 404 etc). Preserva __originalSrc para recovery posterior.
+ *
+ * Por default clona o canvasData (nao muta input). Use `opts.clone: false`
+ * para mutacao in-place quando o caller ja tem copia.
+ *
+ * Recursivo via walkCanvasObjects — imagens em groups aninhados tambem
+ * sao tratadas.
+ */
+export const replaceContaboImagesWithPlaceholder = (
+    canvasData: any,
+    opts: { clone?: boolean } = {}
+): any => {
+    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData)
+    if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned
+
+    walkCanvasObjects(cloned, (obj) => {
+        const objType = (obj.type || '').toLowerCase()
+        if (
+            objType === 'image' &&
+            typeof obj.src === 'string' &&
+            isPotentiallyBrokenRemoteImageSrc(obj.src)
+        ) {
+            if (!obj.__originalSrc) {
+                obj.__originalSrc = obj.src
+            }
+            obj.src = CANVAS_IMAGE_PLACEHOLDER_DATA_URL
+        }
+    })
+    return cloned
+}
+
+/**
  * Decodifica %3A em URLs da Contabo (bucket "tenant%3Abucket" → "tenant:bucket").
  *
  * O Fabric/Vue as vezes serializa com encoding URI no path; o backend

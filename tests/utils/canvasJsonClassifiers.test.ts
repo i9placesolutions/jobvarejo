@@ -32,7 +32,8 @@ import {
   buildPreparedCanvasDataCacheKey,
   getLegacyProductCardImageRepairMode,
   collectContaboImageNodes,
-  isPotentiallyBrokenRemoteImageSrc
+  isPotentiallyBrokenRemoteImageSrc,
+  replaceContaboImagesWithPlaceholder
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -1260,5 +1261,65 @@ describe('isPotentiallyBrokenRemoteImageSrc', () => {
   it('case insensitive', () => {
     expect(isPotentiallyBrokenRemoteImageSrc('HTTPS://EXAMPLE.COM/X.PNG')).toBe(true)
     expect(isPotentiallyBrokenRemoteImageSrc('Data:image/png')).toBe(false)
+  })
+})
+
+describe('replaceContaboImagesWithPlaceholder', () => {
+  it('substitui src remota por placeholder e preserva __originalSrc', () => {
+    const data = {
+      objects: [
+        { type: 'image', src: 'https://eu2.contabostorage.com/k.png' },
+        { type: 'image', src: 'data:image/png;base64,AAAA' } // inline, nao toca
+      ]
+    }
+    const result = replaceContaboImagesWithPlaceholder(data)
+    expect(result.objects[0].src).toContain('data:image/png;base64,')
+    expect(result.objects[0].src).not.toContain('contabostorage.com')
+    expect(result.objects[0].__originalSrc).toBe('https://eu2.contabostorage.com/k.png')
+    // imagem inline preservada
+    expect(result.objects[1].src).toBe('data:image/png;base64,AAAA')
+  })
+
+  it('clona por default (nao muta input)', () => {
+    const data = { objects: [{ type: 'image', src: 'https://example.com/x.png' }] }
+    const original = data.objects[0].src
+    replaceContaboImagesWithPlaceholder(data)
+    expect(data.objects[0].src).toBe(original) // intacto
+  })
+
+  it('opts.clone=false: mutacao in-place', () => {
+    const data = { objects: [{ type: 'image', src: 'https://example.com/x.png' }] }
+    replaceContaboImagesWithPlaceholder(data, { clone: false })
+    expect(data.objects[0].src).not.toBe('https://example.com/x.png')
+    expect((data.objects[0] as any).__originalSrc).toBe('https://example.com/x.png')
+  })
+
+  it('preserva __originalSrc se ja existir (nao sobrescreve)', () => {
+    const data = {
+      objects: [{
+        type: 'image',
+        src: 'https://eu2.contabostorage.com/k.png',
+        __originalSrc: 'https://original.com/file.png'
+      }]
+    }
+    const result = replaceContaboImagesWithPlaceholder(data)
+    expect(result.objects[0].__originalSrc).toBe('https://original.com/file.png')
+  })
+
+  it('sem objects: retorna o canvasData', () => {
+    expect(replaceContaboImagesWithPlaceholder({ version: '1' })).toEqual({ version: '1' })
+  })
+
+  it('aninhado em group: recursivo', () => {
+    const data = {
+      objects: [{
+        type: 'group',
+        objects: [
+          { type: 'image', src: 'https://eu2.contabostorage.com/k.png' }
+        ]
+      }]
+    }
+    const result = replaceContaboImagesWithPlaceholder(data)
+    expect(result.objects[0].objects[0].src).not.toContain('contabostorage.com')
   })
 })
