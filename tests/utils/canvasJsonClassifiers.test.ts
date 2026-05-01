@@ -41,7 +41,8 @@ import {
   PREPARED_CANVAS_LOAD_CACHE_LIMIT,
   DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD,
   DEFERRED_PRODUCT_IMAGE_LOAD_MAX,
-  repairHiddenPriceGroupTexts
+  repairHiddenPriceGroupTexts,
+  sanitizeFabricJsonTreeForLoad
 } from '~/utils/canvasJsonClassifiers'
 
 describe('PREPARED_CANVAS_LOAD_CACHE_LIMIT', () => {
@@ -1676,5 +1677,102 @@ describe('repairHiddenPriceGroupTexts', () => {
     repairHiddenPriceGroupTexts(json)
     const pg = json.objects[0].objects[1] as any
     expect(pg.objects[1].visible).toBe(false)
+  })
+})
+
+describe('sanitizeFabricJsonTreeForLoad', () => {
+  it('null/non-object: { 0, 0 }', () => {
+    expect(sanitizeFabricJsonTreeForLoad(null)).toEqual({ removed: 0, fixedGroupTypes: 0 })
+    expect(sanitizeFabricJsonTreeForLoad('str')).toEqual({ removed: 0, fixedGroupTypes: 0 })
+  })
+
+  it('forca type=group em node sem type mas com objects[]', () => {
+    const root = { objects: [{ type: 'rect' }] }
+    const stats = sanitizeFabricJsonTreeForLoad(root as any)
+    expect((root as any).type).toBe('group')
+    expect(stats.fixedGroupTypes).toBe(1)
+  })
+
+  it('com allowRootWithoutType: nao toca no type do root', () => {
+    const root: any = { objects: [{ type: 'rect' }] }
+    const stats = sanitizeFabricJsonTreeForLoad(root, { allowRootWithoutType: true })
+    expect(root.type).toBeUndefined()
+    expect(stats.fixedGroupTypes).toBe(0)
+  })
+
+  it('remove children invalidos (null, sem type, type vazio)', () => {
+    const root = {
+      type: 'group',
+      objects: [
+        { type: 'rect' },
+        null,
+        { type: '' },
+        { type: 'undefined' },
+        { type: 'unknown' },
+        'string-not-object'
+      ]
+    }
+    const stats = sanitizeFabricJsonTreeForLoad(root as any)
+    expect(stats.removed).toBe(5)
+    expect((root as any).objects.length).toBe(1)
+  })
+
+  it('recursivo em sub-groups', () => {
+    const root: any = {
+      type: 'group',
+      objects: [
+        {
+          objects: [{ type: 'rect' }, { type: '' }] // sub-group sem type, com 1 invalido
+        }
+      ]
+    }
+    const stats = sanitizeFabricJsonTreeForLoad(root)
+    expect(stats.fixedGroupTypes).toBe(1) // sub-group recebeu type
+    expect(stats.removed).toBe(1) // child com type vazio removido
+    expect(root.objects[0].type).toBe('group')
+    expect(root.objects[0].objects.length).toBe(1)
+  })
+
+  it('recursivo em clipPath', () => {
+    const root: any = {
+      type: 'rect',
+      clipPath: { objects: [{ type: 'rect' }, null] }
+    }
+    sanitizeFabricJsonTreeForLoad(root)
+    expect(root.clipPath.type).toBe('group')
+    expect(root.clipPath.objects.length).toBe(1)
+  })
+
+  it('preserva arvore quando tudo e' + ' valido (no-op)', () => {
+    const root: any = {
+      type: 'group',
+      objects: [
+        { type: 'rect', name: 'a' },
+        { type: 'group', objects: [{ type: 'text' }] }
+      ]
+    }
+    const stats = sanitizeFabricJsonTreeForLoad(root)
+    expect(stats).toEqual({ removed: 0, fixedGroupTypes: 0 })
+  })
+
+  it('case-insensitive type check', () => {
+    const root: any = {
+      type: 'group',
+      objects: [
+        { type: 'RECT' }, { type: 'Group', objects: [] }
+      ]
+    }
+    const stats = sanitizeFabricJsonTreeForLoad(root)
+    expect(stats.removed).toBe(0)
+  })
+
+  it('nao reescreve objects[] quando nada mudou', () => {
+    const root: any = {
+      type: 'group',
+      objects: [{ type: 'rect' }]
+    }
+    const before = root.objects
+    sanitizeFabricJsonTreeForLoad(root)
+    expect(root.objects).toBe(before)
   })
 })

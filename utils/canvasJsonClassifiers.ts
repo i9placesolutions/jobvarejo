@@ -1084,3 +1084,86 @@ export const repairHiddenPriceGroupTexts = (json: any): number => {
 
     return repaired
 }
+
+/**
+ * Sanitiza arvore JSON Fabric pre-load:
+ *  1. Garante que groups com `objects[]` mas sem `type` recebem
+ *     `type: 'group'` (Fabric exige type para hidratar)
+ *  2. Remove children invalidos (null, non-object, type vazio/'undefined'/'null'/'unknown')
+ *  3. Recursivo em `clipPath` e em `objects[]` filhos
+ *  4. Aplica em `clipPath` da raiz tambem
+ *
+ * Mutates a entrada in place. Retorna estatisticas de quantos
+ * elementos foram removidos e quantos groups receberam type forcado.
+ *
+ *  - allowRootWithoutType: se true, NAO forca type='group' no root
+ *    (util quando root e' o canvas JSON, nao um group)
+ */
+export const sanitizeFabricJsonTreeForLoad = (
+    root: any,
+    opts: { allowRootWithoutType?: boolean } = {}
+): { removed: number; fixedGroupTypes: number } => {
+    if (!root || typeof root !== 'object') return { removed: 0, fixedGroupTypes: 0 }
+
+    let removed = 0
+    let fixedGroupTypes = 0
+    const allowRootWithoutType = opts.allowRootWithoutType === true
+
+    const ensureGroupType = (node: any) => {
+        if (!node || typeof node !== 'object') return
+        if (!Array.isArray((node as any).objects)) return
+        const rawType = String((node as any).type || '').trim().toLowerCase()
+        if (rawType) return
+        (node as any).type = 'group'
+        fixedGroupTypes += 1
+    }
+
+    const visitClipPath = (clip: any) => {
+        if (!clip || typeof clip !== 'object') return
+        ensureGroupType(clip)
+        sanitizeContainer(clip)
+        if ((clip as any).clipPath && typeof (clip as any).clipPath === 'object') {
+            visitClipPath((clip as any).clipPath)
+        }
+    }
+
+    const sanitizeContainer = (container: any) => {
+        if (!container || typeof container !== 'object') return
+        const children = Array.isArray((container as any).objects) ? (container as any).objects : null
+        if (!children) return
+
+        const INVALID_TYPES = new Set(['', 'undefined', 'null', 'unknown'])
+
+        const nextChildren: any[] = []
+        for (const child of children) {
+            if (!child || typeof child !== 'object') {
+                removed += 1
+                continue
+            }
+            ensureGroupType(child)
+            const rawType = (child as any).type
+            const childType = (rawType == null ? '' : String(rawType)).trim().toLowerCase()
+            if (!childType || INVALID_TYPES.has(childType)) {
+                removed += 1
+                continue
+            }
+            sanitizeContainer(child)
+            if ((child as any).clipPath && typeof (child as any).clipPath === 'object') {
+                visitClipPath((child as any).clipPath)
+            }
+            nextChildren.push(child)
+        }
+
+        if (nextChildren.length !== children.length) {
+            (container as any).objects = nextChildren
+        }
+    }
+
+    if (!allowRootWithoutType) ensureGroupType(root)
+    sanitizeContainer(root)
+    if ((root as any).clipPath && typeof (root as any).clipPath === 'object') {
+        visitClipPath((root as any).clipPath)
+    }
+
+    return { removed, fixedGroupTypes }
+}
