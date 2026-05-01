@@ -6,6 +6,13 @@
  * Cobertura: tests/utils/fabricObjectOps.test.ts
  */
 
+/**
+ * Numero minimo de objetos selecionados para o object-mask flow estar
+ * disponivel. Mascarar 1 objeto sozinho nao faz sentido (precisa de
+ * pelo menos 2: o "mask" e o objeto que sera mascarado).
+ */
+export const OBJECT_MASK_MIN_SELECTION = 2
+
 import { makeId } from './makeId'
 import { isTextStyleObject } from './editorSelectionSnapshot'
 import {

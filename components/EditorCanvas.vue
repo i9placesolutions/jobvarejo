@@ -124,6 +124,7 @@ import {
 } from '~/utils/perfHelpers'
 import { parseViewSettings, serializeViewSettings, VIEW_SETTINGS_STORAGE_KEY } from '~/utils/viewSettings'
 import { isCollaboratorsCacheValid } from '~/utils/collaboratorsCache'
+import { splitTextIntoChunks } from '~/utils/textChunking'
 import {
     SCROLLBAR_IGNORED_IDS,
     SCROLLBAR_PADDING,
@@ -285,7 +286,8 @@ import {
     clearObjectMaskMetadata,
     normalizeRectScale,
     normalizeGroupRects,
-    recalcAllTextMetrics
+    recalcAllTextMetrics,
+    OBJECT_MASK_MIN_SELECTION
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -20684,7 +20686,7 @@ const clearText3DEffect = (textObj: any) => {
     textObj.dirty = true;
 };
 
-const OBJECT_MASK_MIN_SELECTION = 2;
+// OBJECT_MASK_MIN_SELECTION extraida para utils/fabricObjectOps.ts.
 
 // isObjectMaskCandidate extraido para utils/fabricObjectOps.ts.
 
@@ -24744,28 +24746,10 @@ const _mapParsedProduct = (p: any, i: number) => ({
     color: '#ffffff'
 });
 
-const CHUNK_CHAR_LIMIT = 15_000;
-
-const _splitTextIntoChunks = (text: string, limit = CHUNK_CHAR_LIMIT): string[] => {
-    const trimmed = text.trim();
-    if (trimmed.length <= limit) return [trimmed];
-    const lines = trimmed.split(/\r?\n/);
-    const chunks: string[] = [];
-    let current = '';
-    for (const line of lines) {
-        if (current.length + line.length + 1 > limit && current.length > 0) {
-            chunks.push(current);
-            current = line;
-        } else {
-            current = current ? current + '\n' + line : line;
-        }
-    }
-    if (current) chunks.push(current);
-    return chunks;
-};
+// CHUNK_CHAR_LIMIT + splitTextIntoChunks extraidos para utils/textChunking.ts.
 
 const parseTextWithAI = async (text: string): Promise<any[]> => {
-    const chunks = _splitTextIntoChunks(text);
+    const chunks = splitTextIntoChunks(text);
     if (chunks.length <= 1) {
         const result = await _fetchParseWithRetry<{ products?: any[] }>({ text });
         if (!result?.products || !Array.isArray(result.products)) return [];
