@@ -71,7 +71,12 @@ import {
     computeViewportCullRect,
     VIEWPORT_CULL_PADDING
 } from '~/utils/viewportCulling'
-import { getEditorPerfNow, roundEditorPerf } from '~/utils/perfHelpers'
+import {
+    getEditorPerfNow,
+    roundEditorPerf,
+    parseEditorPerfPreference,
+    serializeEditorPerfPreference
+} from '~/utils/perfHelpers'
 import { parseViewSettings, serializeViewSettings } from '~/utils/viewSettings'
 import {
     getCanvasObjectsRefreshIntervalMs,
@@ -6351,13 +6356,12 @@ let editorPerfFpsMax = 0
 
 // getEditorPerfNow e roundEditorPerf extraidos para utils/perfHelpers.ts.
 
+// Wrapper local que injeta storage no helper puro.
 const persistEditorPerfPreference = (enabled: boolean) => {
     if (!import.meta.client) return
     try {
-        localStorage.setItem(EDITOR_PERF_STORAGE_KEY, enabled ? '1' : '0')
-    } catch {
-        // ignore
-    }
+        localStorage.setItem(EDITOR_PERF_STORAGE_KEY, serializeEditorPerfPreference(enabled))
+    } catch { /* ignore */ }
 }
 
 const resetEditorRenderPerfCounters = () => {
@@ -6381,15 +6385,12 @@ const setEditorPerfMetricsEnabled = (enabled: boolean) => {
     }
 }
 
+// Wrapper local que injeta storage no parse puro.
 const loadEditorPerfPreference = () => {
     if (!import.meta.client) return
     try {
         const raw = localStorage.getItem(EDITOR_PERF_STORAGE_KEY)
-        if (raw === null) {
-            setEditorPerfMetricsEnabled(true)
-            return
-        }
-        setEditorPerfMetricsEnabled(raw !== '0')
+        setEditorPerfMetricsEnabled(parseEditorPerfPreference(raw))
     } catch {
         setEditorPerfMetricsEnabled(true)
     }
