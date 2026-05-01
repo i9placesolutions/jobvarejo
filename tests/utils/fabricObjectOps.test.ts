@@ -8,7 +8,9 @@ import {
   applyObjectVisibility,
   safeAddWithUpdate,
   ensureObjectPersistentId,
-  ensurePersistentContentFlags
+  ensurePersistentContentFlags,
+  isObjectMaskCandidate,
+  stripPersistentIdsRecursive
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -685,5 +687,119 @@ describe('ensurePersistentContentFlags', () => {
     const b: any = { name: 'product-card-42', excludeFromExport: true }
     ensurePersistentContentFlags(b)
     expect(b.excludeFromExport).toBe(false)
+  })
+})
+
+describe('isObjectMaskCandidate', () => {
+  it('null/undefined/non-object → false', () => {
+    expect(isObjectMaskCandidate(null)).toBe(false)
+    expect(isObjectMaskCandidate(undefined)).toBe(false)
+    expect(isObjectMaskCandidate('string' as any)).toBe(false)
+  })
+
+  it('artboard-bg → false', () => {
+    expect(isObjectMaskCandidate({ id: 'artboard-bg', type: 'rect' })).toBe(false)
+  })
+
+  it('frame → false', () => {
+    expect(isObjectMaskCandidate({ isFrame: true, type: 'group' })).toBe(false)
+  })
+
+  it('product zone → false', () => {
+    expect(isObjectMaskCandidate({ type: 'group', isGridZone: true })).toBe(false)
+  })
+
+  it('product card container → false', () => {
+    expect(isObjectMaskCandidate({ type: 'group', isProductCard: true })).toBe(false)
+  })
+
+  it('objeto livre (sem parent group) → true', () => {
+    expect(isObjectMaskCandidate({ type: 'rect', width: 100, height: 100 })).toBe(true)
+    expect(isObjectMaskCandidate({ type: 'image' })).toBe(true)
+  })
+
+  it('objeto dentro de group regular → false', () => {
+    expect(isObjectMaskCandidate({ type: 'rect', group: { type: 'group' } })).toBe(false)
+  })
+
+  it('objeto dentro de activeselection → true (efêmero)', () => {
+    expect(isObjectMaskCandidate({ type: 'rect', group: { type: 'activeselection' } })).toBe(true)
+    expect(isObjectMaskCandidate({ type: 'rect', group: { type: 'ActiveSelection' } })).toBe(true)
+  })
+})
+
+describe('stripPersistentIdsRecursive', () => {
+  it('null/undefined/non-object: no-op silencioso', () => {
+    expect(() => stripPersistentIdsRecursive(null)).not.toThrow()
+    expect(() => stripPersistentIdsRecursive(undefined)).not.toThrow()
+    expect(() => stripPersistentIdsRecursive('string' as any)).not.toThrow()
+  })
+
+  it('remove _customId e id do nodo raiz', () => {
+    const node: any = { _customId: 'abc', id: '123', name: 'foo' }
+    stripPersistentIdsRecursive(node)
+    expect(node._customId).toBeUndefined()
+    expect(node.id).toBeUndefined()
+    expect(node.name).toBe('foo')
+  })
+
+  it('desce recursivamente em getObjects()', () => {
+    const child: any = { _customId: 'c1', id: 'i1' }
+    const grandchild: any = { _customId: 'gc1', id: 'gi1' }
+    child.getObjects = () => [grandchild]
+    const root: any = {
+      _customId: 'r1', id: 'ri1',
+      getObjects: () => [child]
+    }
+    stripPersistentIdsRecursive(root)
+    expect(root._customId).toBeUndefined()
+    expect(child._customId).toBeUndefined()
+    expect(grandchild._customId).toBeUndefined()
+  })
+
+  it('desce em _objects quando getObjects ausente', () => {
+    const child: any = { _customId: 'c1' }
+    const root: any = {
+      _customId: 'r1',
+      _objects: [child]
+    }
+    stripPersistentIdsRecursive(root)
+    expect(root._customId).toBeUndefined()
+    expect(child._customId).toBeUndefined()
+  })
+
+  it('desce em clipPath aninhado', () => {
+    const clip: any = { _customId: 'clip1', id: 'ci1' }
+    const root: any = { _customId: 'r1', clipPath: clip }
+    stripPersistentIdsRecursive(root)
+    expect(root._customId).toBeUndefined()
+    expect(clip._customId).toBeUndefined()
+    expect(clip.id).toBeUndefined()
+  })
+
+  it('clipPath nested.clipPath: tambem desce', () => {
+    const innerClip: any = { _customId: 'inner' }
+    const outerClip: any = { _customId: 'outer', clipPath: innerClip }
+    const root: any = { _customId: 'r', clipPath: outerClip }
+    stripPersistentIdsRecursive(root)
+    expect(innerClip._customId).toBeUndefined()
+    expect(outerClip._customId).toBeUndefined()
+  })
+
+  it('captura erro de delete em props readonly silenciosamente', () => {
+    const node: any = {}
+    Object.defineProperty(node, '_customId', {
+      value: 'frozen',
+      writable: false,
+      configurable: false
+    })
+    expect(() => stripPersistentIdsRecursive(node)).not.toThrow()
+    expect(node._customId).toBe('frozen')
+  })
+
+  it('ignora children sem getObjects nem _objects', () => {
+    const root: any = { _customId: 'r1' }
+    expect(() => stripPersistentIdsRecursive(root)).not.toThrow()
+    expect(root._customId).toBeUndefined()
   })
 })

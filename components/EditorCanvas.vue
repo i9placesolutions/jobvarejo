@@ -160,7 +160,9 @@ import {
     applyObjectVisibility,
     safeAddWithUpdate,
     ensureObjectPersistentId,
-    ensurePersistentContentFlags
+    ensurePersistentContentFlags,
+    isObjectMaskCandidate,
+    stripPersistentIdsRecursive
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -21276,35 +21278,11 @@ const clearText3DEffect = (textObj: any) => {
 
 const OBJECT_MASK_MIN_SELECTION = 2;
 
-const isObjectMaskCandidate = (obj: any): boolean => {
-    if (!obj || typeof obj !== 'object') return false;
-    if (obj.id === 'artboard-bg') return false;
-    if (isTransientCanvasObject(obj)) return false;
-    if (obj.isFrame || isFrameLikeObject(obj)) return false;
-    if (isLikelyProductZone(obj)) return false;
-    if (isProductCardContainer(obj)) return false;
-    const parentGroup = (obj as any).group;
-    if (parentGroup && String(parentGroup?.type || '').toLowerCase() !== 'activeselection') return false;
-    return true;
-};
+// isObjectMaskCandidate extraido para utils/fabricObjectOps.ts.
 
 // hasObjectMaskApplied extraido para utils/fabricObjectClassifiers.ts.
 
-const stripPersistentIdsRecursive = (node: any) => {
-    if (!node || typeof node !== 'object') return;
-    try { delete node._customId; } catch {}
-    try { delete node.id; } catch {}
-
-    const children = typeof node.getObjects === 'function'
-        ? (node.getObjects() || [])
-        : (Array.isArray(node._objects) ? node._objects : []);
-    children.forEach((child: any) => stripPersistentIdsRecursive(child));
-
-    const nestedClip = (node as any).clipPath;
-    if (nestedClip && typeof nestedClip === 'object') {
-        stripPersistentIdsRecursive(nestedClip);
-    }
-};
+// stripPersistentIdsRecursive extraido para utils/fabricObjectOps.ts.
 
 const createObjectMaskClipForTarget = async (maskSource: any, target: any): Promise<any | null> => {
     if (!fabric?.util || !canvas.value) return null;

@@ -8,10 +8,18 @@
 
 import { makeId } from './makeId'
 import { isTextStyleObject } from './editorSelectionSnapshot'
-import { isLikelyProductCard } from './fabricObjectClassifiers'
+import {
+    isLikelyProductCard,
+    isLikelyProductZone,
+    isProductCardContainer
+} from './fabricObjectClassifiers'
 import { isValidClipPath } from './canvasValidation'
-import { isControlLikeObject } from './controlObjectClassifiers'
+import {
+    isControlLikeObject,
+    isTransientCanvasObject
+} from './controlObjectClassifiers'
 import { isUserGuideObject } from './userGuideHelpers'
+import { isFrameLikeObject } from './frameGeometry'
 
 /**
  * Adiciona um objeto a um group Fabric com fallback compatibilidade
@@ -425,4 +433,48 @@ export const setVisible = (obj: any, visible: boolean): void => {
     // visible=false sozinho pode afetar bounds do group em Fabric;
     // scale-to-zero colapsa o objeto e evita selecao gigante.
     obj.set({ visible: false, scaleX: 0, scaleY: 0 })
+}
+
+/**
+ * Detecta se um objeto pode receber uma mascara (clipPath custom):
+ * exclui artboard, transients, frames, product zones, product cards
+ * e objetos dentro de groups (exceto activeselection efêmero).
+ *
+ * Pure: depende apenas dos classifiers ja-extraidos.
+ */
+export const isObjectMaskCandidate = (obj: any): boolean => {
+    if (!obj || typeof obj !== 'object') return false
+    if (obj.id === 'artboard-bg') return false
+    if (isTransientCanvasObject(obj)) return false
+    if (obj.isFrame || isFrameLikeObject(obj)) return false
+    if (isLikelyProductZone(obj)) return false
+    if (isProductCardContainer(obj)) return false
+    const parentGroup = (obj as any).group
+    if (parentGroup && String(parentGroup?.type || '').toLowerCase() !== 'activeselection') return false
+    return true
+}
+
+/**
+ * Remove `_customId` e `id` do nodo e descendentes recursivamente,
+ * incluindo clipPath aninhado. Usado quando um objeto e clonado para
+ * uso como mascara/decoracao para evitar colisao de IDs persistentes
+ * com o objeto original.
+ *
+ * Mutativo. Usa try/catch em cada delete (alguns objetos Fabric
+ * congelam props readonly).
+ */
+export const stripPersistentIdsRecursive = (node: any): void => {
+    if (!node || typeof node !== 'object') return
+    try { delete node._customId } catch {}
+    try { delete node.id } catch {}
+
+    const children = typeof node.getObjects === 'function'
+        ? (node.getObjects() || [])
+        : (Array.isArray(node._objects) ? node._objects : [])
+    children.forEach((child: any) => stripPersistentIdsRecursive(child))
+
+    const nestedClip = (node as any).clipPath
+    if (nestedClip && typeof nestedClip === 'object') {
+        stripPersistentIdsRecursive(nestedClip)
+    }
 }
