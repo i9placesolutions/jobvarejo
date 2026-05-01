@@ -326,7 +326,8 @@ import {
     collectContaboImageNodes,
     isPotentiallyBrokenRemoteImageSrc,
     replaceContaboImagesWithPlaceholder,
-    isLikelyPlaceholderImageSrc
+    isLikelyPlaceholderImageSrc,
+    restoreNamesFromJson
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -33090,34 +33091,7 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
 
     // FIX: Fabric v7 enlivenObjects does NOT restore `name` and custom props on children.
     // Re-apply them from the original JSON so setPriceOnPriceGroup can find named text fields.
-    const restoreNamesFromJson = (objects: any[], jsonArr: any[]) => {
-        for (let i = 0; i < objects.length && i < jsonArr.length; i++) {
-            const obj = objects[i];
-            const json = jsonArr[i];
-            if (!obj || !json) continue;
-            // Restore name if missing
-            if (json.name && !obj.name) {
-                obj.name = json.name;
-            }
-            // FIX: Restore `visible` from JSON — Fabric v7 may reset it to true during enlivenObjects.
-            // This is critical for templates with hidden unit text (e.g. black/yellow template).
-            if (json.visible === false && obj.visible !== false) {
-                obj.visible = false;
-            }
-            // Restore custom _ e __ props (template metadata, zone bindings, product data)
-            for (const key of Object.keys(json)) {
-                if (key.startsWith('_') && obj[key] === undefined) {
-                    obj[key] = json[key];
-                }
-            }
-            // Recurse into nested groups
-            const childObjs = typeof obj.getObjects === 'function' ? obj.getObjects() : null;
-            const childJsons = Array.isArray(json.objects) ? json.objects : null;
-            if (childObjs && childJsons && childObjs.length > 0 && childJsons.length > 0) {
-                restoreNamesFromJson(childObjs, childJsons);
-            }
-        }
-    };
+    // restoreNamesFromJson extraido para utils/canvasJsonClassifiers.ts.
     restoreNamesFromJson(enlivened, objectsJson);
 
     const g = new fabric.Group(enlivened, groupOpts);

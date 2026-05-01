@@ -852,3 +852,40 @@ export const getCardBaseSizeForContainmentJson = (card: any): { w: number; h: nu
 
     return null
 }
+
+/**
+ * Restaura props perdidas no enlivenObjects (Fabric v7) a partir do
+ * JSON original:
+ *  - name (Fabric v7 nao restaura name de children)
+ *  - visible=false (Fabric v7 reseta para true em alguns casos)
+ *  - props prefixadas com `_` (custom: _zoneSlot, _customId, _cardWidth,
+ *    _productData, etc) — apenas se o objeto enlivened nao tiver
+ *
+ * Recursivo em groups aninhados (via getObjects).
+ *
+ * Mutativo no array de objects passado. Pure no sentido de nao acessar
+ * canvas/refs.
+ */
+export const restoreNamesFromJson = (objects: any[], jsonArr: any[]): void => {
+    for (let i = 0; i < objects.length && i < jsonArr.length; i++) {
+        const obj = objects[i]
+        const json = jsonArr[i]
+        if (!obj || !json) continue
+        if (json.name && !obj.name) {
+            obj.name = json.name
+        }
+        if (json.visible === false && obj.visible !== false) {
+            obj.visible = false
+        }
+        for (const key of Object.keys(json)) {
+            if (key.startsWith('_') && obj[key] === undefined) {
+                obj[key] = json[key]
+            }
+        }
+        const childObjs = typeof obj.getObjects === 'function' ? obj.getObjects() : null
+        const childJsons = Array.isArray(json.objects) ? json.objects : null
+        if (childObjs && childJsons && childObjs.length > 0 && childJsons.length > 0) {
+            restoreNamesFromJson(childObjs, childJsons)
+        }
+    }
+}

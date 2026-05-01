@@ -35,7 +35,8 @@ import {
   isPotentiallyBrokenRemoteImageSrc,
   replaceContaboImagesWithPlaceholder,
   isLikelyPlaceholderImageSrc,
-  CANVAS_IMAGE_PLACEHOLDER_DATA_URL
+  CANVAS_IMAGE_PLACEHOLDER_DATA_URL,
+  restoreNamesFromJson
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -1351,5 +1352,88 @@ describe('isLikelyPlaceholderImageSrc', () => {
   it('numero/objeto → stringificado e comparado', () => {
     expect(isLikelyPlaceholderImageSrc(0 as any)).toBe(true)  // String(0||'')=String('')='' → trim '' → true
     expect(isLikelyPlaceholderImageSrc({} as any)).toBe(false)  // '[object Object]' nao bate
+  })
+})
+
+describe('restoreNamesFromJson', () => {
+  it('arrays vazios: no-op', () => {
+    expect(() => restoreNamesFromJson([], [])).not.toThrow()
+  })
+
+  it('restaura name quando obj.name vazio', () => {
+    const obj: any = {}
+    restoreNamesFromJson([obj], [{ name: 'foo' }])
+    expect(obj.name).toBe('foo')
+  })
+
+  it('NAO sobrescreve name pre-existente', () => {
+    const obj: any = { name: 'existing' }
+    restoreNamesFromJson([obj], [{ name: 'fromJson' }])
+    expect(obj.name).toBe('existing')
+  })
+
+  it('restaura visible=false quando obj.visible nao false', () => {
+    const obj: any = { visible: true }
+    restoreNamesFromJson([obj], [{ visible: false }])
+    expect(obj.visible).toBe(false)
+  })
+
+  it('NAO altera visible quando JSON tem visible=true', () => {
+    const obj: any = { visible: true }
+    restoreNamesFromJson([obj], [{ visible: true }])
+    expect(obj.visible).toBe(true)
+  })
+
+  it('restaura props com _ prefix quando obj nao tem', () => {
+    const obj: any = {}
+    restoreNamesFromJson([obj], [{
+      _customId: 'abc',
+      _zoneSlot: { col: 0 },
+      _cardWidth: 200
+    }])
+    expect(obj._customId).toBe('abc')
+    expect(obj._zoneSlot).toEqual({ col: 0 })
+    expect(obj._cardWidth).toBe(200)
+  })
+
+  it('NAO sobrescreve props com _ prefix existentes', () => {
+    const obj: any = { _customId: 'preserved' }
+    restoreNamesFromJson([obj], [{ _customId: 'fromJson' }])
+    expect(obj._customId).toBe('preserved')
+  })
+
+  it('descend recursivamente em groups com getObjects', () => {
+    const innerObj: any = {}
+    const rootObj: any = {
+      getObjects: () => [innerObj]
+    }
+    restoreNamesFromJson(
+      [rootObj],
+      [{
+        objects: [{ name: 'innerName', _customId: 'inner-id' }]
+      }]
+    )
+    expect(innerObj.name).toBe('innerName')
+    expect(innerObj._customId).toBe('inner-id')
+  })
+
+  it('null/undefined entries pulados', () => {
+    expect(() => restoreNamesFromJson([null, undefined], [{ name: 'a' }, { name: 'b' }]))
+      .not.toThrow()
+  })
+
+  it('arrays de tamanhos diferentes: para no menor', () => {
+    const obj1: any = {}
+    const obj2: any = {}
+    restoreNamesFromJson([obj1, obj2], [{ name: 'first' }])
+    expect(obj1.name).toBe('first')
+    expect(obj2.name).toBeUndefined()
+  })
+
+  it('JSON sem _ props: nada e copiado', () => {
+    const obj: any = { existing: true }
+    restoreNamesFromJson([obj], [{ name: 'ok', other: 'noUnderscore' }])
+    expect(obj.name).toBe('ok')
+    expect(obj.other).toBeUndefined()
   })
 })
