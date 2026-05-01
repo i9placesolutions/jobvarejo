@@ -128,7 +128,7 @@ import {
     LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
     isLightweightGlobalStyleProp
 } from '~/utils/globalStylePropClassifiers'
-import { clamp } from '~/utils/mathHelpers'
+import { clamp, toFinite } from '~/utils/mathHelpers'
 import {
     PRICE_LAYOUT_NODE_PREFIXES,
     PRICE_LAYOUT_NODE_EXACT,
@@ -27322,14 +27322,6 @@ function normalizeGlobalStyles(styles?: Partial<GlobalStyles> | null): GlobalSty
         return opts.allowUndefined ? undefined : fallback;
     };
 
-    const toFinite = (value: any, fallback: number, min?: number, max?: number): number => {
-        const n = Number(value);
-        if (!Number.isFinite(n)) return fallback;
-        if (typeof min === 'number' && n < min) return min;
-        if (typeof max === 'number' && n > max) return max;
-        return n;
-    };
-
     const normalized: GlobalStyles = {
         ...merged,
         cardColor: normalizeHexColor(merged.cardColor, defaultColor.cardColor, { allowTransparent: true }),
@@ -32338,11 +32330,6 @@ const layoutManualTemplateGroup = (priceGroup: any, cardW: number, cardH: number
     if (isRedBurstPriceGroup(priceGroup)) {
         tuneRedBurstPriceGroupLayout(priceGroup);
     }
-    const toFinite = (v: any, fb: number) => {
-        const n = Number(v);
-        return Number.isFinite(n) ? n : fb;
-    };
-
     // Keep the exact Mini Editor geometry. We only apply a UNIFORM scale to fit card bounds.
     // Never recalculate child text/object positions here.
     let baseW = Number((priceGroup as any).__manualTemplateBaseW);
