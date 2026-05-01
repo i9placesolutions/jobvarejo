@@ -122,6 +122,12 @@ import {
     isTransientPasteError
 } from '~/utils/pasteListErrorHelpers'
 import {
+    DEBOUNCED_GLOBAL_STYLE_PROPS,
+    isDebouncedGlobalStyleProp,
+    LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
+    isLightweightGlobalStyleProp
+} from '~/utils/globalStylePropClassifiers'
+import {
     isObjectShownForBounds,
     getObjectHorizontalBoundsLocal,
     measureHorizontalBoundsLocal,
@@ -27401,19 +27407,8 @@ function getZoneGlobalStyles(zone?: any): GlobalStyles {
     return normalizeGlobalStyles(productZoneState.globalStyles.value);
 }
 
-const DEBOUNCED_GLOBAL_STYLE_PROPS = new Set<string>([
-    'cardBorderRadius',
-    'cardBorderWidth',
-    'splashScale',
-    'splashTextScale',
-    'splashRoundness',
-    'splashOffsetY',
-    'prodNameScale',
-    'prodNameLineHeight',
-    'prodNameOffsetY'
-]);
-
-const isDebouncedGlobalStyleProp = (prop: string) => DEBOUNCED_GLOBAL_STYLE_PROPS.has(String(prop || ''));
+// DEBOUNCED_GLOBAL_STYLE_PROPS e isDebouncedGlobalStyleProp extraidos para
+// utils/globalStylePropClassifiers.ts.
 
 const scheduleGlobalStylesStateSave = (prop: string) => {
     const immediate = !isDebouncedGlobalStyleProp(prop);
@@ -28463,41 +28458,8 @@ const updateZoneOnCanvas = async (propOrPayload: string | Record<string, any>, v
     refreshSelectedRef();
 }
 
-const LIGHTWEIGHT_GLOBAL_STYLE_PROPS = new Set<string>([
-    'cardColor',
-    'isProdBgTransparent',
-    'cardBorderColor',
-    'cardBorderWidth',
-    'cardBorderRadius',
-    'prodNameFont',
-    'prodNameColor',
-    'prodNameWeight',
-    'prodNameAlign',
-    'prodNameTransform',
-    'prodNameLineHeight',
-    'prodNameScale',
-    'prodNameOffsetY',
-    'limitFont',
-    'limitColor',
-    'splashColor',
-    'accentColor',
-    'splashTextColor',
-    'priceTextColor',
-    'priceCurrencyColor',
-    'priceFont',
-    'priceFontWeight',
-    'priceFontStyle',
-    'splashTextScale',
-    'splashFill',
-    'splashScale',
-    'splashOffsetY',
-    'splashRoundness',
-    'currencySymbol',
-    'priceFontSize',
-    'splashStrokeWidth'
-]);
-
-const isLightweightGlobalStyleProp = (prop: string) => LIGHTWEIGHT_GLOBAL_STYLE_PROPS.has(String(prop || '').trim());
+// LIGHTWEIGHT_GLOBAL_STYLE_PROPS e isLightweightGlobalStyleProp extraidos para
+// utils/globalStylePropClassifiers.ts.
 
 const getCardBackgroundRect = (card: any) => {
     if (!card || typeof card.getObjects !== 'function') return null;
