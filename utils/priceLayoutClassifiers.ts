@@ -85,6 +85,56 @@ export const isMisnamedProductCardGroup = (group: any): boolean => {
 }
 
 /**
+ * Detecta se um valor coerce para Number e e finito. Usado para
+ * validar coordenadas, escalas e fontSizes em layouts de preco
+ * (snapshot/restore protege contra NaN/Infinity).
+ */
+export const isFiniteLayoutNumber = (value: any): boolean => {
+    const n = Number(value)
+    return Number.isFinite(n)
+}
+
+/**
+ * Sobe pela cadeia `obj.group` ate encontrar um group que parece
+ * ser o card host (smartObject, productCard, name `product-card*`,
+ * ou contendo offerBackground). Retorna null se nao houver.
+ *
+ * Usado para resolver o card que contem um price group filho.
+ */
+export const getCardHostForPriceGroup = (group: any): any | null => {
+    let cur: any = group?.group || null
+    while (cur) {
+        const name = String(cur?.name || '')
+        const isCardLike =
+            (String(cur?.type || '').toLowerCase() === 'group') &&
+            (
+                !!cur?.isSmartObject ||
+                !!cur?.isProductCard ||
+                name.startsWith('product-card') ||
+                (typeof cur.getObjects === 'function' && (cur.getObjects() || []).some((o: any) => String(o?.name || '') === 'offerBackground'))
+            )
+        if (isCardLike) return cur
+        cur = cur.group || null
+    }
+    return null
+}
+
+/**
+ * Resolve as dimensoes do card host de um price group: prefere
+ * `_cardWidth`/`_cardHeight` (manualmente seteadas), senao usa
+ * `width`/`height` ou `getScaledWidth/Height`. Retorna null se
+ * dimensoes invalidas (NaN, < 20px, sem host).
+ */
+export const getCardSizeForPriceGroup = (group: any): { width: number; height: number } | null => {
+    const host = getCardHostForPriceGroup(group)
+    if (!host) return null
+    const width = Math.abs(Number(host?._cardWidth ?? host?.width ?? host?.getScaledWidth?.() ?? 0) || 0)
+    const height = Math.abs(Number(host?._cardHeight ?? host?.height ?? host?.getScaledHeight?.() ?? 0) || 0)
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 20 || height < 20) return null
+    return { width, height }
+}
+
+/**
  * Cria uma factory de chaves para mapear nodos por (name|type) +
  * indice de ocorrencia. Usado para correlacionar nodos antes/depois
  * de uma re-renderizacao do template (preserva metadata/runtime).

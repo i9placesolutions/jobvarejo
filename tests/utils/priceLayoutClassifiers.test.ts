@@ -5,7 +5,10 @@ import {
   isPriceLayoutNode,
   isCardContainerLikeGroup,
   isMisnamedProductCardGroup,
-  makePriceLayoutKeyBuilder
+  makePriceLayoutKeyBuilder,
+  isFiniteLayoutNumber,
+  getCardHostForPriceGroup,
+  getCardSizeForPriceGroup
 } from '~/utils/priceLayoutClassifiers'
 
 describe('PRICE_LAYOUT_NODE_EXACT / PREFIXES', () => {
@@ -176,5 +179,146 @@ describe('makePriceLayoutKeyBuilder', () => {
     b1({ name: 'x' })
     b1({ name: 'x' })
     expect(b2({ name: 'x' })).toBe('x#0')
+  })
+})
+
+describe('isFiniteLayoutNumber', () => {
+  it('numeros finitos → true', () => {
+    expect(isFiniteLayoutNumber(0)).toBe(true)
+    expect(isFiniteLayoutNumber(1)).toBe(true)
+    expect(isFiniteLayoutNumber(-100.5)).toBe(true)
+    expect(isFiniteLayoutNumber(1e10)).toBe(true)
+  })
+
+  it('strings parseaveis para numero finito → true', () => {
+    expect(isFiniteLayoutNumber('42')).toBe(true)
+    expect(isFiniteLayoutNumber('-3.14')).toBe(true)
+    expect(isFiniteLayoutNumber('0')).toBe(true)
+  })
+
+  it('NaN/Infinity → false', () => {
+    expect(isFiniteLayoutNumber(NaN)).toBe(false)
+    expect(isFiniteLayoutNumber(Infinity)).toBe(false)
+    expect(isFiniteLayoutNumber(-Infinity)).toBe(false)
+  })
+
+  it('strings invalidas → false', () => {
+    expect(isFiniteLayoutNumber('abc')).toBe(false)
+    expect(isFiniteLayoutNumber('NaN')).toBe(false)
+  })
+
+  it('null → true (Number(null)=0), undefined → false (Number(undefined)=NaN)', () => {
+    expect(isFiniteLayoutNumber(null)).toBe(true)
+    expect(isFiniteLayoutNumber(undefined)).toBe(false)
+  })
+
+  it('empty string → true (Number("")=0)', () => {
+    expect(isFiniteLayoutNumber('')).toBe(true)
+  })
+})
+
+describe('getCardHostForPriceGroup', () => {
+  it('retorna null quando sem parent group', () => {
+    expect(getCardHostForPriceGroup({})).toBeNull()
+    expect(getCardHostForPriceGroup({ group: null })).toBeNull()
+  })
+
+  it('encontra parent com isSmartObject', () => {
+    const card = { type: 'group', isSmartObject: true, getObjects: () => [] }
+    const priceGroup = { group: card }
+    expect(getCardHostForPriceGroup(priceGroup)).toBe(card)
+  })
+
+  it('encontra parent com isProductCard', () => {
+    const card = { type: 'group', isProductCard: true, getObjects: () => [] }
+    const priceGroup = { group: card }
+    expect(getCardHostForPriceGroup(priceGroup)).toBe(card)
+  })
+
+  it('encontra parent com name product-card*', () => {
+    const card = { type: 'group', name: 'product-card-1', getObjects: () => [] }
+    const priceGroup = { group: card }
+    expect(getCardHostForPriceGroup(priceGroup)).toBe(card)
+  })
+
+  it('encontra parent com offerBackground entre children', () => {
+    const card = {
+      type: 'group',
+      getObjects: () => [{ name: 'offerBackground' }, { name: 'priceGroup' }]
+    }
+    const priceGroup = { group: card }
+    expect(getCardHostForPriceGroup(priceGroup)).toBe(card)
+  })
+
+  it('sobe varios niveis de aninhamento', () => {
+    const card = { type: 'group', isSmartObject: true, getObjects: () => [] }
+    const middle = { type: 'group', getObjects: () => [], group: card }
+    const priceGroup = { group: middle }
+    expect(getCardHostForPriceGroup(priceGroup)).toBe(card)
+  })
+
+  it('retorna null quando nada na cadeia parece card', () => {
+    const middle = { type: 'group', getObjects: () => [{ name: 'random' }] }
+    const priceGroup = { group: middle }
+    expect(getCardHostForPriceGroup(priceGroup)).toBeNull()
+  })
+})
+
+describe('getCardSizeForPriceGroup', () => {
+  it('retorna null se sem host', () => {
+    expect(getCardSizeForPriceGroup({})).toBeNull()
+  })
+
+  it('prefere _cardWidth/_cardHeight', () => {
+    const card = {
+      type: 'group',
+      isSmartObject: true,
+      _cardWidth: 200,
+      _cardHeight: 280,
+      width: 100, height: 150,
+      getObjects: () => []
+    }
+    expect(getCardSizeForPriceGroup({ group: card })).toEqual({ width: 200, height: 280 })
+  })
+
+  it('cai para width/height nativos', () => {
+    const card = {
+      type: 'group',
+      isSmartObject: true,
+      width: 150, height: 200,
+      getObjects: () => []
+    }
+    expect(getCardSizeForPriceGroup({ group: card })).toEqual({ width: 150, height: 200 })
+  })
+
+  it('cai para getScaledWidth/Height', () => {
+    const card = {
+      type: 'group',
+      isSmartObject: true,
+      getScaledWidth: () => 120,
+      getScaledHeight: () => 180,
+      getObjects: () => []
+    }
+    expect(getCardSizeForPriceGroup({ group: card })).toEqual({ width: 120, height: 180 })
+  })
+
+  it('retorna null se dimensoes < 20px (degenerate)', () => {
+    const card = {
+      type: 'group',
+      isSmartObject: true,
+      _cardWidth: 10, _cardHeight: 10,
+      getObjects: () => []
+    }
+    expect(getCardSizeForPriceGroup({ group: card })).toBeNull()
+  })
+
+  it('valores negativos sao tratados em abs', () => {
+    const card = {
+      type: 'group',
+      isSmartObject: true,
+      _cardWidth: -200, _cardHeight: -280,
+      getObjects: () => []
+    }
+    expect(getCardSizeForPriceGroup({ group: card })).toEqual({ width: 200, height: 280 })
   })
 })

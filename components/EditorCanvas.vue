@@ -133,7 +133,10 @@ import {
     isPriceLayoutNode,
     isCardContainerLikeGroup,
     isMisnamedProductCardGroup,
-    makePriceLayoutKeyBuilder
+    makePriceLayoutKeyBuilder,
+    isFiniteLayoutNumber,
+    getCardHostForPriceGroup,
+    getCardSizeForPriceGroup
 } from '~/utils/priceLayoutClassifiers'
 import {
     isObjectShownForBounds,
@@ -32914,37 +32917,8 @@ const isLikelyPriceGroupObject = (group: any) => {
 
 // makePriceLayoutKeyBuilder extraido para utils/priceLayoutClassifiers.ts.
 
-const isFiniteLayoutNumber = (value: any) => {
-    const n = Number(value);
-    return Number.isFinite(n);
-};
-
-const getCardHostForPriceGroup = (group: any): any | null => {
-    let cur: any = group?.group || null;
-    while (cur) {
-        const name = String(cur?.name || '');
-        const isCardLike =
-            (String(cur?.type || '').toLowerCase() === 'group') &&
-            (
-                !!cur?.isSmartObject ||
-                !!cur?.isProductCard ||
-                name.startsWith('product-card') ||
-                (typeof cur.getObjects === 'function' && (cur.getObjects() || []).some((o: any) => String(o?.name || '') === 'offerBackground'))
-            );
-        if (isCardLike) return cur;
-        cur = cur.group || null;
-    }
-    return null;
-};
-
-const getCardSizeForPriceGroup = (group: any) => {
-    const host = getCardHostForPriceGroup(group);
-    if (!host) return null;
-    const width = Math.abs(Number(host?._cardWidth ?? host?.width ?? host?.getScaledWidth?.() ?? 0) || 0);
-    const height = Math.abs(Number(host?._cardHeight ?? host?.height ?? host?.getScaledHeight?.() ?? 0) || 0);
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 20 || height < 20) return null;
-    return { width, height };
-};
+// isFiniteLayoutNumber, getCardHostForPriceGroup e getCardSizeForPriceGroup
+// extraidos para utils/priceLayoutClassifiers.ts.
 
 const hasCorruptedPriceLayout = (group: any) => {
     if (!group || typeof group.getObjects !== 'function') return false;
