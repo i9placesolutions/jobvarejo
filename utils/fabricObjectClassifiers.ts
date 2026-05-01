@@ -216,3 +216,26 @@ export const collectObjectsDeep = (root: any): any[] => {
  */
 export const findByName = (objects: any[], name: string): any =>
     objects.find((o: any) => o?.name === name)
+
+/**
+ * Detecta um segmento "close path" (Z) num path SVG. Aceita tanto
+ * formato array (`['Z']`) quanto string (`'Z'`), ambos case-insensitive.
+ */
+export const isPathCloseCommand = (segment: any): boolean => {
+    if (Array.isArray(segment)) {
+        return String(segment[0] || '').toLowerCase() === 'z'
+    }
+    return String(segment || '').toLowerCase() === 'z'
+}
+
+/**
+ * Verifica se um fabric.Path tem o caminho fechado:
+ *  - flag `isClosedPath: true` (definida quando criado pelo pen tool)
+ *  - OU pelo menos um segmento Z em `path[]`
+ */
+export const isVectorPathClosed = (pathObj: any): boolean => {
+    if (!pathObj) return false
+    if (pathObj.isClosedPath === true) return true
+    const segments = Array.isArray(pathObj.path) ? pathObj.path : []
+    return segments.some(isPathCloseCommand)
+}

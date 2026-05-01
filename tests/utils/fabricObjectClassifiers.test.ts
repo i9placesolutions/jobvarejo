@@ -8,7 +8,9 @@ import {
   isTextLikeObject,
   collectObjectsDeep,
   findByName,
-  isPriceGroupOrPriceChild
+  isPriceGroupOrPriceChild,
+  isPathCloseCommand,
+  isVectorPathClosed
 } from '~/utils/fabricObjectClassifiers'
 
 // Helpers de mock — todos seguem duck typing de Fabric.
@@ -325,5 +327,57 @@ describe('isPriceGroupOrPriceChild', () => {
     expect(isPriceGroupOrPriceChild(null)).toBe(false)
     expect(isPriceGroupOrPriceChild({})).toBe(false)
     expect(isPriceGroupOrPriceChild({ name: 'card', group: { name: 'whatever' } })).toBe(false)
+  })
+})
+
+describe('isPathCloseCommand', () => {
+  it('aceita "Z" / "z" como string solta', () => {
+    expect(isPathCloseCommand('Z')).toBe(true)
+    expect(isPathCloseCommand('z')).toBe(true)
+  })
+
+  it('aceita ["Z"] / ["z"] como array', () => {
+    expect(isPathCloseCommand(['Z'])).toBe(true)
+    expect(isPathCloseCommand(['z'])).toBe(true)
+    expect(isPathCloseCommand(['z', 0, 0])).toBe(true) // primeiro item importa
+  })
+
+  it('rejeita outros comandos', () => {
+    expect(isPathCloseCommand('M')).toBe(false)
+    expect(isPathCloseCommand(['L', 1, 2])).toBe(false)
+    expect(isPathCloseCommand(['C', 0, 0, 0, 0])).toBe(false)
+  })
+
+  it('rejeita null/undefined/array vazio', () => {
+    expect(isPathCloseCommand(null)).toBe(false)
+    expect(isPathCloseCommand(undefined)).toBe(false)
+    expect(isPathCloseCommand([])).toBe(false)
+  })
+})
+
+describe('isVectorPathClosed', () => {
+  it('aceita por flag isClosedPath', () => {
+    expect(isVectorPathClosed({ isClosedPath: true })).toBe(true)
+  })
+
+  it('aceita quando ha segmento Z em path[]', () => {
+    expect(isVectorPathClosed({
+      path: [['M', 0, 0], ['L', 10, 10], ['Z']]
+    })).toBe(true)
+  })
+
+  it('rejeita path aberto (sem Z, sem flag)', () => {
+    expect(isVectorPathClosed({
+      path: [['M', 0, 0], ['L', 10, 10]]
+    })).toBe(false)
+  })
+
+  it('rejeita null/sem path', () => {
+    expect(isVectorPathClosed(null)).toBe(false)
+    expect(isVectorPathClosed({})).toBe(false)
+  })
+
+  it('path com elementos invalidos cai em segments=[]', () => {
+    expect(isVectorPathClosed({ path: 'not-array' })).toBe(false)
   })
 })

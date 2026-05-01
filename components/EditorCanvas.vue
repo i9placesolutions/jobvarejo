@@ -30,8 +30,15 @@ import {
     isTextLikeObject,
     collectObjectsDeep,
     findByName,
-    isPriceGroupOrPriceChild
+    isPriceGroupOrPriceChild,
+    isPathCloseCommand,
+    isVectorPathClosed
 } from '~/utils/fabricObjectClassifiers'
+import {
+    isCanvasContextError,
+    isValidFabricCanvasObject,
+    isValidClipPath
+} from '~/utils/canvasValidation'
 import {
     isObjectShownForBounds,
     getObjectHorizontalBoundsLocal,
@@ -632,10 +639,7 @@ const ensureCanvasContextsReady = (fc: any): boolean => {
     }
 };
 
-const isCanvasContextError = (err: any): boolean => {
-    const msg = String(err?.message || err || '').toLowerCase();
-    return msg.includes('clearrect') || msg.includes('contextcontainer') || msg.includes('getcontext');
-};
+// isCanvasContextError extraido para utils/canvasValidation.ts.
 
 /**
  * Pré-processa o JSON do canvas antes do loadFromJSON:
@@ -724,56 +728,7 @@ const loadFromJsonSafe = async (json: any): Promise<void> => {
  * Validates if a clipPath is a valid Fabric.js object
  * A valid clipPath must have required Fabric methods and properties
  */
-const isValidClipPath = (clipPath: any): boolean => {
-    if (!clipPath) return false;
-
-    // Must be an object
-    if (typeof clipPath !== 'object' || Array.isArray(clipPath)) return false;
-
-    // Must have Fabric-specific properties
-    if (!clipPath.type) return false;
-
-    // CRITICAL: _objects must ALWAYS be an array if it exists
-    // fabric.js createClipPathLayer calls forEach on _objects
-    if (clipPath._objects !== undefined && !Array.isArray(clipPath._objects)) {
-        console.warn('[clipPath] _objects não é um array:', clipPath._objects);
-        return false;
-    }
-
-    // Ensure _objects is initialized as empty array for group-like objects
-    // This prevents "forEach of undefined" errors in fabric.js
-    if (clipPath._objects === undefined &&
-        (clipPath.type === 'group' || clipPath.type === 'activeSelection')) {
-        console.warn('[clipPath] Group sem _objects array:', clipPath.type);
-        return false;
-    }
-
-    // Must have render method
-    if (typeof clipPath.render !== 'function') return false;
-
-    // RECURSIVELY validate nested clipPaths
-    if (clipPath.clipPath && !isValidClipPath(clipPath.clipPath)) {
-        console.warn('[clipPath] clipPath aninhado inválido');
-        return false;
-    }
-
-    // Validate all child objects have proper _objects arrays
-    if (Array.isArray(clipPath._objects)) {
-        for (const child of clipPath._objects) {
-            if (child && child._objects !== undefined && !Array.isArray(child._objects)) {
-                console.warn('[clipPath] Child com _objects inválido:', child.type);
-                return false;
-            }
-            // Check nested clipPath on child
-            if (child && child.clipPath && !isValidClipPath(child.clipPath)) {
-                console.warn('[clipPath] Child com clipPath aninhado inválido');
-                return false;
-            }
-        }
-    }
-
-    return true;
-};
+// isValidClipPath extraido para utils/canvasValidation.ts.
 
 /**
  * Clears invalid clipPath from an object
@@ -3057,19 +3012,8 @@ const getTargetVectorPath = (): any | null => {
     return null;
 };
 
-const isPathCloseCommand = (segment: any): boolean => {
-    if (Array.isArray(segment)) {
-        return String(segment[0] || '').toLowerCase() === 'z';
-    }
-    return String(segment || '').toLowerCase() === 'z';
-};
-
-const isVectorPathClosed = (pathObj: any): boolean => {
-    if (!pathObj) return false;
-    if (pathObj.isClosedPath === true) return true;
-    const segments = Array.isArray(pathObj.path) ? pathObj.path : [];
-    return segments.some(isPathCloseCommand);
-};
+// isPathCloseCommand e isVectorPathClosed extraidos para
+// utils/fabricObjectClassifiers.ts.
 
 const buildPathStringFromPenData = (pathData: any[], closed = false): string => {
     if (!Array.isArray(pathData) || pathData.length === 0) return '';
@@ -4781,15 +4725,7 @@ const applyArrangedOrder = (container: any, newOrder: any[]) => {
     }
 };
 
-const isValidFabricCanvasObject = (o: any): boolean => {
-    if (!o || typeof o !== 'object') return false;
-    return (
-        typeof o.render === 'function' &&
-        typeof o.setCoords === 'function' &&
-        typeof o.set === 'function' &&
-        typeof o.toObject === 'function'
-    );
-};
+// isValidFabricCanvasObject extraido para utils/canvasValidation.ts.
 
 const sanitizeCanvasObjectStack = (canvasInstance: any, reason: string = 'unknown'): number => {
     if (!canvasInstance) return 0;
