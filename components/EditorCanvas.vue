@@ -125,6 +125,7 @@ import {
 import { parseViewSettings, serializeViewSettings, VIEW_SETTINGS_STORAGE_KEY } from '~/utils/viewSettings'
 import { isCollaboratorsCacheValid } from '~/utils/collaboratorsCache'
 import { splitTextIntoChunks } from '~/utils/textChunking'
+import { reviveRedBurstJsonNode, sanitizeRedBurstTemplateGroupJson } from '~/utils/redBurstTemplateRevive'
 import {
     SCROLLBAR_IGNORED_IDS,
     SCROLLBAR_PADDING,
@@ -30825,107 +30826,8 @@ function ensureRedBurstPriceGroupVisibility(priceGroup: any): boolean {
 
 // collectTemplateJsonNodesDeep extraido para utils/canvasJsonClassifiers.ts.
 
-function reviveRedBurstJsonNode(
-    node: any,
-    opts: { fallbackFill?: string; fallbackFontSize?: number; fallbackText?: string; forceVisible?: boolean } = {}
-): boolean {
-    if (!node || typeof node !== 'object') return false;
-    let changed = false;
-    const forceVisible = opts.forceVisible !== false;
-
-    if (forceVisible && node.visible === false) {
-        node.visible = true;
-        changed = true;
-    }
-    const opacity = Number(node.opacity ?? 1);
-    if (!Number.isFinite(opacity) || opacity <= 0) {
-        node.opacity = 1;
-        changed = true;
-    }
-
-    const nextScaleX = normalizeVisibleTemplateScale(
-        (node as any).__visibleScaleX ?? (node as any).__originalScaleX,
-        node.scaleX
-    );
-    const nextScaleY = normalizeVisibleTemplateScale(
-        (node as any).__visibleScaleY ?? (node as any).__originalScaleY,
-        node.scaleY
-    );
-    if (!Number.isFinite(Number(node.scaleX)) || Math.abs(Number(node.scaleX || 0)) < 0.0001) {
-        node.scaleX = nextScaleX;
-        changed = true;
-    }
-    if (!Number.isFinite(Number(node.scaleY)) || Math.abs(Number(node.scaleY || 0)) < 0.0001) {
-        node.scaleY = nextScaleY;
-        changed = true;
-    }
-
-    const type = String(node.type || '').toLowerCase();
-    const isTextNode = type === 'text' || type === 'i-text' || type === 'itext' || type === 'textbox';
-    if (isTextNode) {
-        const currentFont = Number(node.fontSize);
-        const fallbackFont = Number(opts.fallbackFontSize ?? (node as any).__originalFontSize ?? currentFont);
-        if (!Number.isFinite(currentFont) || currentFont <= 0) {
-            node.fontSize = Number.isFinite(fallbackFont) && fallbackFont > 0 ? fallbackFont : 18;
-            changed = true;
-        }
-        if (typeof opts.fallbackText === 'string' && !String(node.text || '').trim()) {
-            node.text = opts.fallbackText;
-            changed = true;
-        }
-        if (typeof opts.fallbackFill === 'string' && isTransparentLikeTemplateColor(node.fill)) {
-            node.fill = opts.fallbackFill;
-            changed = true;
-        }
-    }
-
-    return changed;
-}
-
-function sanitizeRedBurstTemplateGroupJson(groupJson: any): any {
-    if (!groupJson || typeof groupJson !== 'object') return groupJson;
-    const nodes = collectTemplateJsonNodesDeep(groupJson);
-    const byName = (name: string) => nodes.find((node: any) => String(node?.name || '') === name);
-    const priceBg = byName('price_bg');
-    const headerBg = byName('price_header_bg');
-    const headerText = byName('price_header_text');
-    const burst = byName('price_burst_line_a');
-    const currencyText = byName('price_currency_text');
-    const priceInteger = byName('price_integer_text');
-    const priceDecimal = byName('price_decimal_text');
-    if (!(priceBg && headerBg && headerText && burst && priceInteger && priceDecimal)) return groupJson;
-
-    const ensureShellVisible = (node: any) => {
-        if (!node || typeof node !== 'object') return;
-        const opacity = Number(node.opacity ?? 1);
-        if (node.visible === false) node.visible = true;
-        if (!Number.isFinite(opacity) || opacity <= 0) node.opacity = 1;
-    };
-
-    ensureShellVisible(priceBg);
-    ensureShellVisible(headerBg);
-    reviveRedBurstJsonNode(headerText, {
-        fallbackFill: '#ffd94c',
-        fallbackFontSize: 28,
-        fallbackText: 'OFERTA'
-    });
-    reviveRedBurstJsonNode(currencyText, {
-        fallbackFill: '#ffffff',
-        fallbackFontSize: 30,
-        fallbackText: 'R$'
-    });
-    reviveRedBurstJsonNode(priceInteger, {
-        fallbackFill: '#ffffff',
-        fallbackFontSize: 92,
-        fallbackText: '0'
-    });
-    reviveRedBurstJsonNode(priceDecimal, {
-        fallbackFill: '#ffffff',
-        fallbackFontSize: 44,
-        fallbackText: ',00'
-    });
-    return groupJson;
-}
+// reviveRedBurstJsonNode + sanitizeRedBurstTemplateGroupJson extraidos
+// para utils/redBurstTemplateRevive.ts.
 
 function shouldPreserveManualTemplateVisual(priceGroup: any): boolean {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;
