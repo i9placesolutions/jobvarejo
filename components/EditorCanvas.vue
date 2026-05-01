@@ -100,7 +100,8 @@ import {
     clampCornerRadii,
     isTransparentPaint,
     toggleFill,
-    toggleStroke
+    toggleStroke,
+    applyRectCornerRadiiPatch
 } from '~/utils/fabricStyleHelpers'
 import {
     getFrameBounds,
@@ -2021,51 +2022,7 @@ const moveFrameDescendants = (frame: any, dx: number, dy: number, descendants?: 
 // --- Shape Utilities (Figma-ish) ---
 // isRectObject e clampCornerRadii foram extraidos para utils/fabricStyleHelpers.ts.
 
-// Per-corner rounding by patching Fabric's Rect `_render` (keeps Rect behavior + resizing).
-const applyRectCornerRadiiPatch = (rect: any) => {
-    if (!rect || !isRectObject(rect) || typeof rect._renderPaintInOrder !== 'function') return;
-    const radii = rect.cornerRadii;
-    const has = !!(radii && typeof radii === 'object');
-
-    if (!has) {
-        // No custom corner radii - restore original render method
-        // This allows Fabric.js's native rx/ry to work correctly
-        if ((rect as any).__origRender) {
-            rect._render = (rect as any).__origRender;
-            delete (rect as any).__origRender;
-            rect.dirty = true;
-        }
-        return;
-    }
-
-    if (!(rect as any).__origRender) (rect as any).__origRender = rect._render;
-
-    rect._render = function (ctx: CanvasRenderingContext2D) {
-        const w = this.width;
-        const h = this.height;
-        const x = -w / 2;
-        const y = -h / 2;
-        const k = 1 - 0.5522847498;
-        const r = clampCornerRadii(this.cornerRadii, w, h);
-
-        ctx.beginPath();
-        ctx.moveTo(x + r.tl, y);
-        ctx.lineTo(x + w - r.tr, y);
-        r.tr && ctx.bezierCurveTo(x + w - k * r.tr, y, x + w, y + k * r.tr, x + w, y + r.tr);
-        ctx.lineTo(x + w, y + h - r.br);
-        r.br && ctx.bezierCurveTo(x + w, y + h - k * r.br, x + w - k * r.br, y + h, x + w - r.br, y + h);
-        ctx.lineTo(x + r.bl, y + h);
-        r.bl && ctx.bezierCurveTo(x + k * r.bl, y + h, x, y + h - k * r.bl, x, y + h - r.bl);
-        ctx.lineTo(x, y + r.tl);
-        r.tl && ctx.bezierCurveTo(x, y + k * r.tl, x + k * r.tl, y, x + r.tl, y);
-        ctx.closePath();
-        this._renderPaintInOrder(ctx);
-    };
-    // Avoid double rounding via rx/ry - ONLY when using custom cornerRadii
-    // This ensures Fabric.js's native rx/ry works when not using custom radii
-    rect.set?.({ rx: 0, ry: 0 });
-    rect.dirty = true;
-};
+// applyRectCornerRadiiPatch extraido para utils/fabricStyleHelpers.ts.
 
 // isTransparentPaint e toggleFill extraidos para utils/fabricStyleHelpers.ts.
 

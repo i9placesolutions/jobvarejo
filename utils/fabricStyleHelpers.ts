@@ -57,6 +57,62 @@ export const isTransparentPaint = (v: any): boolean => {
 }
 
 /**
+ * Patches `rect._render` to draw per-corner rounding (cornerRadii) usando
+ * arcos Bezier. Preserva o `_render` original em `__origRender` para
+ * que possa ser restaurado se cornerRadii for removido depois.
+ *
+ * Sem cornerRadii: restaura `_render` original (Fabric volta a usar rx/ry
+ * nativo).
+ *
+ * Com cornerRadii: substitui `_render` por uma versao que desenha o
+ * caminho usando 4 curvas Bezier (uma por canto). Tambem zera rx/ry para
+ * evitar arredondamento duplo.
+ *
+ * Constante k = 1 - 0.5522847498 deriva da aproximacao Bezier de um arco
+ * de quadrante (formula classica para circulos via cubicas).
+ */
+export const applyRectCornerRadiiPatch = (rect: any): void => {
+    if (!rect || !isRectObject(rect) || typeof rect._renderPaintInOrder !== 'function') return
+    const radii = rect.cornerRadii
+    const has = !!(radii && typeof radii === 'object')
+
+    if (!has) {
+        if ((rect as any).__origRender) {
+            rect._render = (rect as any).__origRender
+            delete (rect as any).__origRender
+            rect.dirty = true
+        }
+        return
+    }
+
+    if (!(rect as any).__origRender) (rect as any).__origRender = rect._render
+
+    rect._render = function (ctx: CanvasRenderingContext2D) {
+        const w = this.width
+        const h = this.height
+        const x = -w / 2
+        const y = -h / 2
+        const k = 1 - 0.5522847498
+        const r = clampCornerRadii(this.cornerRadii, w, h)
+
+        ctx.beginPath()
+        ctx.moveTo(x + r.tl, y)
+        ctx.lineTo(x + w - r.tr, y)
+        r.tr && ctx.bezierCurveTo(x + w - k * r.tr, y, x + w, y + k * r.tr, x + w, y + r.tr)
+        ctx.lineTo(x + w, y + h - r.br)
+        r.br && ctx.bezierCurveTo(x + w, y + h - k * r.br, x + w - k * r.br, y + h, x + w - r.br, y + h)
+        ctx.lineTo(x + r.bl, y + h)
+        r.bl && ctx.bezierCurveTo(x + k * r.bl, y + h, x, y + h - k * r.bl, x, y + h - r.bl)
+        ctx.lineTo(x, y + r.tl)
+        r.tl && ctx.bezierCurveTo(x, y + k * r.tl, x + k * r.tl, y, x + r.tl, y)
+        ctx.closePath()
+        this._renderPaintInOrder(ctx)
+    }
+    rect.set?.({ rx: 0, ry: 0 })
+    rect.dirty = true
+}
+
+/**
  * Liga/desliga o fill de um objeto Fabric preservando o valor anterior.
  *
  * - Hide: salva fill atual em __fillBackup e aplica rgba(0,0,0,0).

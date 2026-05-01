@@ -4,7 +4,8 @@ import {
   clampCornerRadii,
   isTransparentPaint,
   toggleFill,
-  toggleStroke
+  toggleStroke,
+  applyRectCornerRadiiPatch
 } from '~/utils/fabricStyleHelpers'
 
 describe('isRectObject', () => {
@@ -199,5 +200,89 @@ describe('toggleStroke', () => {
     expect(o.stroke).toBe('#abc')
     expect(o.strokeWidth).toBe(3)
     expect(o.strokeDashArray).toEqual([2, 2])
+  })
+})
+
+describe('applyRectCornerRadiiPatch', () => {
+  const makeRect = (overrides: any = {}) => {
+    const calls: Array<{ k: any; v: any }> = []
+    const r: any = {
+      type: 'rect',
+      width: 100,
+      height: 50,
+      cornerRadii: null,
+      _render: function () {},
+      _renderPaintInOrder: function () {},
+      ...overrides
+    }
+    r.set = (k: any, v?: any) => {
+      if (typeof k === 'string') {
+        calls.push({ k, v })
+        ;(r as any)[k] = v
+      } else {
+        Object.entries(k).forEach(([key, val]) => {
+          calls.push({ k: key, v: val })
+          ;(r as any)[key] = val
+        })
+      }
+    }
+    r._calls = calls
+    return r
+  }
+
+  it('null/non-rect/sem _renderPaintInOrder: no-op', () => {
+    expect(() => applyRectCornerRadiiPatch(null)).not.toThrow()
+    expect(() => applyRectCornerRadiiPatch({ type: 'image', _renderPaintInOrder: () => {} })).not.toThrow()
+    expect(() => applyRectCornerRadiiPatch({ type: 'rect' })).not.toThrow() // sem _renderPaintInOrder
+  })
+
+  it('sem cornerRadii: restaura _render original quando havia patch', () => {
+    const r = makeRect()
+    const original = r._render
+    ;(r as any).__origRender = original
+    r._render = function () { /* patched */ } // simula que ja foi patched
+    applyRectCornerRadiiPatch(r)
+    expect(r._render).toBe(original)
+    expect((r as any).__origRender).toBeUndefined()
+    expect(r.dirty).toBe(true)
+  })
+
+  it('sem cornerRadii e sem patch previo: no-op (mantem _render como esta)', () => {
+    const r = makeRect()
+    const orig = r._render
+    applyRectCornerRadiiPatch(r)
+    expect(r._render).toBe(orig)
+  })
+
+  it('com cornerRadii: salva _render original e patcha', () => {
+    const original = function () {}
+    const r = makeRect({
+      _render: original,
+      cornerRadii: { tl: 10, tr: 10, br: 10, bl: 10 }
+    })
+    applyRectCornerRadiiPatch(r)
+    expect((r as any).__origRender).toBe(original)
+    expect(r._render).not.toBe(original)
+    expect(r.rx).toBe(0)
+    expect(r.ry).toBe(0)
+    expect(r.dirty).toBe(true)
+  })
+
+  it('com cornerRadii e __origRender ja existente: nao sobrescreve original', () => {
+    const truelyOriginal = function () { /* original */ }
+    const r = makeRect({
+      _render: function () { /* already patched */ },
+      cornerRadii: { tl: 5 }
+    })
+    ;(r as any).__origRender = truelyOriginal
+    applyRectCornerRadiiPatch(r)
+    expect((r as any).__origRender).toBe(truelyOriginal) // preservado
+  })
+
+  it('cornerRadii nao-objeto e tratado como ausente', () => {
+    const r = makeRect({ cornerRadii: 'invalid' })
+    const orig = r._render
+    applyRectCornerRadiiPatch(r)
+    expect(r._render).toBe(orig)
   })
 })
