@@ -256,6 +256,41 @@ export const measureContentBoundsLocal = (objects: any[]): ContentBounds | null 
 }
 
 /**
+ * Calcula o centro do viewport em coordenadas do mundo (canvas), dado
+ * o viewportTransform (matriz 6-array Fabric), zoom, width e height
+ * da tela. Usa a equacao inversa: world = (screen - translate) / zoom.
+ *
+ *   screen_x = world_x * zoom + vpt[4]
+ *   screen_y = world_y * zoom + vpt[5]
+ *   world_x = (screen_x - vpt[4]) / zoom
+ *
+ * Centro da tela: (width/2, height/2). Retorna { x, y } ou {0, 0}
+ * quando vpt invalido / dimensoes invalidas.
+ *
+ * Pure: nao acessa canvas/refs.
+ */
+export const computeViewportCenterInWorld = (
+    viewportTransform: number[] | null | undefined,
+    width: number,
+    height: number,
+    zoom: number = 1
+): { x: number; y: number } => {
+    if (!Array.isArray(viewportTransform) || viewportTransform.length < 6) {
+        return { x: 0, y: 0 }
+    }
+    const w = Number(width) || 0
+    const h = Number(height) || 0
+    const z = Number(zoom) || 1
+    if (!w || !h || !z) return { x: 0, y: 0 }
+    const tx = Number(viewportTransform[4]) || 0
+    const ty = Number(viewportTransform[5]) || 0
+    return {
+        x: (w / 2 - tx) / z,
+        y: (h / 2 - ty) / z
+    }
+}
+
+/**
  * Setter pareado com getObjectCenterInParentPlane: aplica um centro
  * (cx, cy) no plano do parent. Pode usar setPositionByOrigin (Fabric)
  * com Point construido pelo factory injetado, ou fallback que ajusta

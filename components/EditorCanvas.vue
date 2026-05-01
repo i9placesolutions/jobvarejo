@@ -189,7 +189,8 @@ import {
     getObjectAbsoluteCenter,
     computeCentersBoundingCenter,
     guessAiSizeFromObject,
-    setObjectCenterInParentPlane as setObjectCenterInParentPlaneHelper
+    setObjectCenterInParentPlane as setObjectCenterInParentPlaneHelper,
+    computeViewportCenterInWorld
 } from '~/utils/fabricMeasure'
 import {
     setText,
@@ -23673,24 +23674,15 @@ const handleGenerateInstitutional = async (payload: {
     }
 }
 
-// Helper: Get Center of current Viewport
+// Wrapper local: usa o helper puro computeViewportCenterInWorld.
 const getCenterOfView = () => {
     if (!canvas.value) return { x: 0, y: 0 };
-    const vpt = canvas.value.viewportTransform;
-    const zoom = canvas.value.getZoom?.() || 1;
-    const width = canvas.value.getWidth?.() || 0;
-    const height = canvas.value.getHeight?.() || 0;
-    if (!vpt || !Array.isArray(vpt) || vpt.length < 6 || !width || !height) {
-        // Fallback: treat origin as the center for empty/initial canvas.
-        return { x: 0, y: 0 };
-    }
-
-    // Convert screen center to world (canvas) coordinates.
-    // screen = world * zoom + translate  =>  world = (screen - translate) / zoom
-    return {
-        x: (width / 2 - vpt[4]) / zoom,
-        y: (height / 2 - vpt[5]) / zoom
-    };
+    return computeViewportCenterInWorld(
+        canvas.value.viewportTransform,
+        canvas.value.getWidth?.() || 0,
+        canvas.value.getHeight?.() || 0,
+        canvas.value.getZoom?.() || 1
+    );
 }
 
 const { uploadFile } = useUpload()

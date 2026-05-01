@@ -10,7 +10,8 @@ import {
   getObjectAbsoluteCenter,
   computeCentersBoundingCenter,
   guessAiSizeFromObject,
-  setObjectCenterInParentPlane
+  setObjectCenterInParentPlane,
+  computeViewportCenterInWorld
 } from '~/utils/fabricMeasure'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -409,5 +410,59 @@ describe('setObjectCenterInParentPlane', () => {
   it('obj sem .set tampouco: nao crasha', () => {
     const obj: any = { left: 0, top: 0 }
     expect(() => setObjectCenterInParentPlane(obj, 50, 75)).not.toThrow()
+  })
+})
+
+describe('computeViewportCenterInWorld', () => {
+  it('vpt invalido (null/undefined): {0, 0}', () => {
+    expect(computeViewportCenterInWorld(null, 800, 600, 1)).toEqual({ x: 0, y: 0 })
+    expect(computeViewportCenterInWorld(undefined, 800, 600, 1)).toEqual({ x: 0, y: 0 })
+  })
+
+  it('vpt array com menos de 6 elementos: {0, 0}', () => {
+    expect(computeViewportCenterInWorld([1, 0, 0, 1], 800, 600, 1)).toEqual({ x: 0, y: 0 })
+  })
+
+  it('vpt identidade + sem translate: centro = (w/2, h/2)', () => {
+    expect(computeViewportCenterInWorld([1, 0, 0, 1, 0, 0], 800, 600, 1))
+      .toEqual({ x: 400, y: 300 })
+  })
+
+  it('vpt com translate: subtrai translate antes de dividir por zoom', () => {
+    // vpt[4]=100, vpt[5]=50, zoom=1, w=800, h=600
+    // x = (400 - 100) / 1 = 300
+    // y = (300 - 50) / 1 = 250
+    expect(computeViewportCenterInWorld([1, 0, 0, 1, 100, 50], 800, 600, 1))
+      .toEqual({ x: 300, y: 250 })
+  })
+
+  it('zoom 2x: dividida por 2 apos translate', () => {
+    // vpt[4]=0, zoom=2, w=800: x = (400 - 0) / 2 = 200
+    expect(computeViewportCenterInWorld([2, 0, 0, 2, 0, 0], 800, 600, 2))
+      .toEqual({ x: 200, y: 150 })
+  })
+
+  it('width/height zero: {0, 0}', () => {
+    expect(computeViewportCenterInWorld([1, 0, 0, 1, 0, 0], 0, 600, 1))
+      .toEqual({ x: 0, y: 0 })
+    expect(computeViewportCenterInWorld([1, 0, 0, 1, 0, 0], 800, 0, 1))
+      .toEqual({ x: 0, y: 0 })
+  })
+
+  it('zoom zero: cai para zoom=1 (fallback Number(0) || 1)', () => {
+    // Documentado: o `Number(zoom) || 1` faz zoom=0 virar 1, evita div/0
+    expect(computeViewportCenterInWorld([1, 0, 0, 1, 0, 0], 800, 600, 0))
+      .toEqual({ x: 400, y: 300 })
+  })
+
+  it('zoom default 1 quando omitido', () => {
+    expect(computeViewportCenterInWorld([1, 0, 0, 1, 0, 0], 800, 600))
+      .toEqual({ x: 400, y: 300 })
+  })
+
+  it('translate negativo: usuario panou pra direita (mundo deslocou)', () => {
+    // vpt[4]=-200, zoom=1, w=800: x = (400 - (-200)) / 1 = 600
+    expect(computeViewportCenterInWorld([1, 0, 0, 1, -200, -100], 800, 600, 1))
+      .toEqual({ x: 600, y: 400 })
   })
 })
