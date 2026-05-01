@@ -4,6 +4,49 @@ export type ExportImageFormat = 'png' | 'jpg'
 export type ExportQualityPreset = 'print-300' | 'ultra-600'
 
 /**
+ * Multiplicador padrao de scale para export de alta resolucao (6x).
+ * Suficiente para impressao em 300dpi a partir de canvas em viewport
+ * de tela.
+ */
+export const HIGH_RES_EXPORT_SCALE = 6
+
+/**
+ * Qualidade JPG para export de alta resolucao (1.0 = max). PNG ignora
+ * este valor (e lossless), mas mantemos a constante unificada.
+ */
+export const HIGH_RES_EXPORT_QUALITY = 1
+
+/**
+ * Saturacao aplicada na pos-pipeline de export para realcar cores
+ * impressas (impressoras tendem a "comer" 5-10% da saturacao).
+ */
+export const EXPORT_COLOR_SATURATION = 1.12
+
+/**
+ * Contraste aplicado na pos-pipeline de export. Compensa perda de
+ * contraste em papel comum.
+ */
+export const EXPORT_COLOR_CONTRAST = 1.08
+
+/**
+ * Brilho aplicado na pos-pipeline de export. Pequeno ajuste para
+ * manter brancos puros mesmo apos contraste/saturacao.
+ */
+export const EXPORT_COLOR_BRIGHTNESS = 1.02
+
+/**
+ * Quality preset default quando o usuario nao seleciona explicitamente.
+ * 'ultra-600' = 600dpi (overkill mas seguro para qualquer impressao).
+ */
+export const DEFAULT_EXPORT_QUALITY_PRESET: ExportQualityPreset = 'ultra-600'
+
+/**
+ * Modo default para export de multiplos frames: 'zip' agrupa em um
+ * unico download, 'separate' faz N downloads individuais.
+ */
+export const DEFAULT_MULTI_FILE_MODE: 'zip' | 'separate' = 'zip'
+
+/**
  * Normaliza string vinda da UI para um ExportImageFormat valido.
  * Aceita "jpeg" ou "jpg" como sinonimos para 'jpg'; qualquer outro
  * valor cai no default 'png'.

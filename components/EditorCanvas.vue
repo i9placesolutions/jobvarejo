@@ -396,6 +396,13 @@ import {
     sanitizeExportFileToken,
     normalizeExportImageFormat,
     normalizeExportQualityPreset,
+    HIGH_RES_EXPORT_SCALE,
+    HIGH_RES_EXPORT_QUALITY,
+    EXPORT_COLOR_SATURATION,
+    EXPORT_COLOR_CONTRAST,
+    EXPORT_COLOR_BRIGHTNESS,
+    DEFAULT_EXPORT_QUALITY_PRESET,
+    DEFAULT_MULTI_FILE_MODE,
     type ExportImageFormat,
     type ExportQualityPreset
 } from '~/utils/editorExportPipeline'
@@ -7659,13 +7666,8 @@ const handleHotspotClick = (targetIndex: any) => {
     startPresentation(Number(targetIndex));
 }
 
-const HIGH_RES_EXPORT_SCALE = 6
-const HIGH_RES_EXPORT_QUALITY = 1
-const EXPORT_COLOR_SATURATION = 1.12
-const EXPORT_COLOR_CONTRAST = 1.08
-const EXPORT_COLOR_BRIGHTNESS = 1.02
-const DEFAULT_EXPORT_QUALITY_PRESET: ExportQualityPreset = 'ultra-600'
-const DEFAULT_MULTI_FILE_MODE = 'zip' as const
+// HIGH_RES_EXPORT_*, EXPORT_COLOR_*, DEFAULT_EXPORT_QUALITY_PRESET,
+// DEFAULT_MULTI_FILE_MODE extraidos para utils/editorExportPipeline.ts.
 
 const exportSettings = ref({
     format: 'png',
