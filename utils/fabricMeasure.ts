@@ -255,6 +255,58 @@ export const measureContentBoundsLocal = (objects: any[]): ContentBounds | null 
     }
 }
 
+export type ViewportBounds = {
+    left: number
+    top: number
+    right: number
+    bottom: number
+    width: number
+    height: number
+    centerX: number
+    centerY: number
+}
+
+/**
+ * Calcula os bounds do viewport em coordenadas do mundo, dado:
+ *  - viewportTransform array (matriz 6: [a, b, c, d, tx, ty])
+ *  - width/height da tela em pixels
+ *  - invertTransform: funcao injetada (geralmente fabric.util.invertTransform)
+ *  - transformPoint: funcao injetada (geralmente fabric.util.transformPoint)
+ *
+ * Pure: nao acessa fabric global. Caller injeta as duas helpers Fabric.
+ * Retorna null quando vpt invalido / dimensoes zero / helpers ausentes.
+ */
+export const computeViewportBoundsInWorld = (
+    viewportTransform: number[] | null | undefined,
+    width: number,
+    height: number,
+    invertTransform: ((m: number[]) => number[]) | null | undefined,
+    transformPoint: ((p: { x: number; y: number }, m: number[]) => { x: number; y: number }) | null | undefined
+): ViewportBounds | null => {
+    if (!Array.isArray(viewportTransform) || viewportTransform.length < 6) return null
+    if (typeof invertTransform !== 'function' || typeof transformPoint !== 'function') return null
+    const w = Number(width) || 0
+    const h = Number(height) || 0
+    if (!w || !h) return null
+    const inv = invertTransform(viewportTransform)
+    const tl = transformPoint({ x: 0, y: 0 }, inv)
+    const br = transformPoint({ x: w, y: h }, inv)
+    const left = Math.min(tl.x, br.x)
+    const top = Math.min(tl.y, br.y)
+    const right = Math.max(tl.x, br.x)
+    const bottom = Math.max(tl.y, br.y)
+    return {
+        left,
+        top,
+        right,
+        bottom,
+        width: right - left,
+        height: bottom - top,
+        centerX: left + ((right - left) / 2),
+        centerY: top + ((bottom - top) / 2)
+    }
+}
+
 /**
  * Calcula o centro do viewport em coordenadas do mundo (canvas), dado
  * o viewportTransform (matriz 6-array Fabric), zoom, width e height

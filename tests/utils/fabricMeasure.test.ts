@@ -11,7 +11,8 @@ import {
   computeCentersBoundingCenter,
   guessAiSizeFromObject,
   setObjectCenterInParentPlane,
-  computeViewportCenterInWorld
+  computeViewportCenterInWorld,
+  computeViewportBoundsInWorld
 } from '~/utils/fabricMeasure'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -464,5 +465,83 @@ describe('computeViewportCenterInWorld', () => {
     // vpt[4]=-200, zoom=1, w=800: x = (400 - (-200)) / 1 = 600
     expect(computeViewportCenterInWorld([1, 0, 0, 1, -200, -100], 800, 600, 1))
       .toEqual({ x: 600, y: 400 })
+  })
+})
+
+describe('computeViewportBoundsInWorld', () => {
+  // Identity transform helpers (sem aplicar transformacao)
+  const identity = (m: number[]) => m
+  const transformIdentity = (p: { x: number; y: number }) => ({ x: p.x, y: p.y })
+
+  // Helpers que invertem um vpt simples [zoom, 0, 0, zoom, tx, ty]
+  // inv = [1/z, 0, 0, 1/z, -tx/z, -ty/z]
+  const invertSimple = (m: number[]) => {
+    const [a, b, c, d, tx, ty] = m
+    return [1 / a, b, c, 1 / d, -tx / a, -ty / d]
+  }
+  const transformAffine = (p: { x: number; y: number }, m: number[]) => ({
+    x: m[0] * p.x + m[2] * p.y + m[4],
+    y: m[1] * p.x + m[3] * p.y + m[5]
+  })
+
+  it('vpt invalido (null/undefined): null', () => {
+    expect(computeViewportBoundsInWorld(null, 800, 600, identity, transformIdentity)).toBeNull()
+    expect(computeViewportBoundsInWorld(undefined, 800, 600, identity, transformIdentity)).toBeNull()
+  })
+
+  it('vpt array short: null', () => {
+    expect(computeViewportBoundsInWorld([1, 0, 0, 1], 800, 600, identity, transformIdentity)).toBeNull()
+  })
+
+  it('helpers ausentes: null', () => {
+    expect(computeViewportBoundsInWorld([1, 0, 0, 1, 0, 0], 800, 600, null, transformIdentity)).toBeNull()
+    expect(computeViewportBoundsInWorld([1, 0, 0, 1, 0, 0], 800, 600, identity, null)).toBeNull()
+  })
+
+  it('width/height zero: null', () => {
+    expect(computeViewportBoundsInWorld([1, 0, 0, 1, 0, 0], 0, 600, identity, transformIdentity)).toBeNull()
+    expect(computeViewportBoundsInWorld([1, 0, 0, 1, 0, 0], 800, 0, identity, transformIdentity)).toBeNull()
+  })
+
+  it('zoom 1, sem translate: bounds [0,0]→[w,h]', () => {
+    const r = computeViewportBoundsInWorld([1, 0, 0, 1, 0, 0], 800, 600, invertSimple, transformAffine)
+    expect(r).toEqual({
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 600,
+      width: 800,
+      height: 600,
+      centerX: 400,
+      centerY: 300
+    })
+  })
+
+  it('zoom 2x, sem translate: viewport ve metade do mundo', () => {
+    const r = computeViewportBoundsInWorld([2, 0, 0, 2, 0, 0], 800, 600, invertSimple, transformAffine)
+    expect(r?.width).toBe(400)
+    expect(r?.height).toBe(300)
+    expect(r?.centerX).toBe(200)
+    expect(r?.centerY).toBe(150)
+  })
+
+  it('zoom 1, com translate: deslocamento aplica inversamente', () => {
+    // vpt[4]=100 (pan +100 px na tela) → mundo desloca -100
+    const r = computeViewportBoundsInWorld([1, 0, 0, 1, 100, 50], 800, 600, invertSimple, transformAffine)
+    expect(r?.left).toBe(-100)
+    expect(r?.top).toBe(-50)
+    expect(r?.right).toBe(700)
+    expect(r?.bottom).toBe(550)
+  })
+
+  it('Min/Max usado para garantir bounds positivos com flip', () => {
+    // transformPoint que retorna pontos invertidos (br < tl)
+    const flipTransform = (p: { x: number; y: number }) => ({ x: -p.x, y: -p.y })
+    const r = computeViewportBoundsInWorld([1, 0, 0, 1, 0, 0], 800, 600, identity, flipTransform)
+    // tl=(0,0) → (0,0). br=(800,600) → (-800,-600).
+    // left = min(0, -800) = -800; right = max(0, -800) = 0 (ou -0 em JS)
+    expect(r?.left).toBe(-800)
+    expect(r?.right === 0 || Object.is(r?.right, -0)).toBe(true)
+    expect(r?.width).toBe(800)
   })
 })

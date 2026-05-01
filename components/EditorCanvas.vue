@@ -190,7 +190,8 @@ import {
     computeCentersBoundingCenter,
     guessAiSizeFromObject,
     setObjectCenterInParentPlane as setObjectCenterInParentPlaneHelper,
-    computeViewportCenterInWorld
+    computeViewportCenterInWorld,
+    computeViewportBoundsInWorld
 } from '~/utils/fabricMeasure'
 import {
     setText,
@@ -19494,27 +19495,16 @@ const updatePageSettings = (prop: string, value: any) => {
     }
 }
 
+// Wrapper local: injeta fabric.util.invertTransform/transformPoint no helper puro.
 const getViewportBounds = () => {
     if (!canvas.value || !fabric?.util) return null;
-    const vpt = canvas.value.viewportTransform;
-    if (!vpt) return null;
-    const inv = fabric.util.invertTransform(vpt);
-    const tl = fabric.util.transformPoint({ x: 0, y: 0 }, inv);
-    const br = fabric.util.transformPoint({ x: canvas.value.getWidth(), y: canvas.value.getHeight() }, inv);
-    const left = Math.min(tl.x, br.x);
-    const top = Math.min(tl.y, br.y);
-    const right = Math.max(tl.x, br.x);
-    const bottom = Math.max(tl.y, br.y);
-    return {
-        left,
-        top,
-        right,
-        bottom,
-        width: right - left,
-        height: bottom - top,
-        centerX: left + ((right - left) / 2),
-        centerY: top + ((bottom - top) / 2)
-    };
+    return computeViewportBoundsInWorld(
+        canvas.value.viewportTransform,
+        canvas.value.getWidth(),
+        canvas.value.getHeight(),
+        fabric.util.invertTransform,
+        fabric.util.transformPoint
+    );
 };
 
 const alignSelectionHorizontally = (mode: 'left' | 'center' | 'right') => {
