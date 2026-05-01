@@ -8,7 +8,8 @@ import {
   getProductImportIdentityKey,
   isDefaultProductZoneName,
   BASE_PRODUCT_ZONE_NAME,
-  getNextProductZoneIndexName
+  getNextProductZoneIndexName,
+  ensureZoneNamesDistinct
 } from '~/utils/product-zone-helpers'
 
 describe('parsePrice — entrada heterogenea de fontes diversas', () => {
@@ -224,5 +225,72 @@ describe('getNextProductZoneIndexName', () => {
     expect(getNextProductZoneIndexName([
       'Zona de Produtos 1', 'Zona de Produtos 2', 'Zona de Produtos 3'
     ])).toBe('Zona de Produtos 4')
+  })
+})
+
+describe('ensureZoneNamesDistinct', () => {
+  it('lista vazia/null: no-op', () => {
+    expect(() => ensureZoneNamesDistinct([])).not.toThrow()
+    expect(() => ensureZoneNamesDistinct(null as any)).not.toThrow()
+  })
+
+  it('zonas sem zoneName: atribui defaults sequenciais', () => {
+    const z1: any = {}
+    const z2: any = {}
+    const z3: any = {}
+    ensureZoneNamesDistinct([z1, z2, z3])
+    expect(z1.zoneName).toBe('Zona de Produtos 1')
+    expect(z2.zoneName).toBe('Zona de Produtos 2')
+    expect(z3.zoneName).toBe('Zona de Produtos 3')
+  })
+
+  it('preserva nomes customizados existentes', () => {
+    const z1: any = { zoneName: 'Minha Zona' }
+    const z2: any = {}
+    ensureZoneNamesDistinct([z1, z2])
+    expect(z1.zoneName).toBe('Minha Zona')
+    expect(z2.zoneName).toBe('Zona de Produtos 1')
+  })
+
+  it('renomeia duplicatas customizadas (mantem primeira)', () => {
+    const z1: any = { zoneName: 'Minha Zona' }
+    const z2: any = { zoneName: 'Minha Zona' }
+    ensureZoneNamesDistinct([z1, z2])
+    expect(z1.zoneName).toBe('Minha Zona')
+    expect(z2.zoneName).toBe('Zona de Produtos 1')
+  })
+
+  it('default names tratados como "trocaveis": atribuidos sequencialmente na ordem', () => {
+    // Pass 1 IGNORA defaults (nao reserva). Pass 2 atribui novos defaults
+    // partindo de N=1 — entao z1 vira "1", z2 vira "2", etc.
+    const z1: any = { zoneName: 'Zona de Produtos 1' }
+    const z2: any = {}
+    const z3: any = {}
+    ensureZoneNamesDistinct([z1, z2, z3])
+    expect(z1.zoneName).toBe('Zona de Produtos 1')
+    expect(z2.zoneName).toBe('Zona de Produtos 2')
+    expect(z3.zoneName).toBe('Zona de Produtos 3')
+  })
+
+  it('case-insensitive na deteccao de duplicatas', () => {
+    const z1: any = { zoneName: 'minha zona' }
+    const z2: any = { zoneName: 'MINHA ZONA' }
+    ensureZoneNamesDistinct([z1, z2])
+    expect(z1.zoneName).toBe('minha zona')
+    expect(z2.zoneName).toBe('Zona de Produtos 1')
+  })
+
+  it('whitespace-only e tratado como vazio', () => {
+    const z1: any = { zoneName: '   ' }
+    ensureZoneNamesDistinct([z1])
+    expect(z1.zoneName).toBe('Zona de Produtos 1')
+  })
+
+  it('ordem de iteracao do array determina prioridade', () => {
+    const z1: any = { zoneName: 'A' }
+    const z2: any = { zoneName: 'A' }
+    ensureZoneNamesDistinct([z2, z1])
+    expect(z2.zoneName).toBe('A')        // primeira na lista mantem
+    expect(z1.zoneName).toBe('Zona de Produtos 1')
   })
 })

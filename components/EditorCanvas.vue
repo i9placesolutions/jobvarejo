@@ -4557,7 +4557,8 @@ import {
     getProductImportIdentityKey,
     isDefaultProductZoneName,
     BASE_PRODUCT_ZONE_NAME,
-    getNextProductZoneIndexName
+    getNextProductZoneIndexName,
+    ensureZoneNamesDistinct
 } from '~/utils/product-zone-helpers'
 import { DEFAULT_GLOBAL_STYLES, DEFAULT_PRODUCT_ZONE } from '~/types/product-zone'
 import type { ProductZone, GlobalStyles } from '~/types/product-zone'
@@ -7484,49 +7485,13 @@ const getNextProductZoneName = (excludeZone?: any): string => {
     return getNextProductZoneIndexName(zoneNames);
 }
 
+// Wrapper local: filtra+ordena zonas + delega para o helper puro
+// ensureZoneNamesDistinct.
 const ensureProductZoneNamesDistinct = (zonesInput?: any[]) => {
     const zones = (Array.isArray(zonesInput) ? zonesInput : (canvas.value?.getObjects?.() || []))
         .filter((obj: any) => isLikelyProductZone(obj))
     if (!zones.length) return
-
-    const reservedNames = new Set<string>()
-    const usedNumbers = new Set<number>()
-    const ordered = sortProductZonesByVisualOrder(zones)
-    ordered.forEach((zone: any) => {
-        const current = String((zone as any)?.zoneName || '').trim()
-        if (!current || isDefaultProductZoneName(current)) return
-        const key = current.toLowerCase()
-        if (reservedNames.has(key)) return
-        reservedNames.add(key)
-        const match = /^Zona de Produtos\s+(\d+)$/i.exec(current)
-        if (match) {
-            const n = Number(match[1])
-            if (Number.isInteger(n) && n > 0) usedNumbers.add(n)
-        }
-    })
-
-    let nextIndex = 1
-    const nextDefaultName = () => {
-        while (usedNumbers.has(nextIndex) || reservedNames.has(`${BASE_PRODUCT_ZONE_NAME} ${nextIndex}`.toLowerCase())) {
-            nextIndex += 1
-        }
-        const name = `${BASE_PRODUCT_ZONE_NAME} ${nextIndex}`
-        usedNumbers.add(nextIndex)
-        reservedNames.add(name.toLowerCase())
-        nextIndex += 1
-        return name
-    }
-
-    const seenCustomNames = new Set<string>()
-    ordered.forEach((zone: any) => {
-        const current = String((zone as any)?.zoneName || '').trim()
-        const key = current.toLowerCase()
-        if (!current || isDefaultProductZoneName(current) || seenCustomNames.has(key)) {
-            ;(zone as any).zoneName = nextDefaultName()
-            return
-        }
-        seenCustomNames.add(key)
-    })
+    ensureZoneNamesDistinct(sortProductZonesByVisualOrder(zones))
 }
 
 const openProductReviewForZone = (zone: any, opts: { mode?: 'replace' | 'append' } = {}): boolean => {

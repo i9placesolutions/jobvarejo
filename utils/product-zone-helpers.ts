@@ -742,6 +742,63 @@ export const isDefaultProductZoneName = (value: any): boolean => {
 export const BASE_PRODUCT_ZONE_NAME = 'Zona de Produtos'
 
 /**
+ * Garante que cada zona em `orderedZones` tenha um zoneName distinto.
+ * Mutativo: altera `zone.zoneName` quando ha conflito ou nome default.
+ *
+ * Algoritmo em 2 passes:
+ *  1. Coleta nomes customizados ja em uso + indices usados (formato
+ *     "Zona de Produtos N"). Duplicatas customizadas mantem apenas a
+ *     primeira ocorrencia.
+ *  2. Para cada zona com nome vazio/default ou duplicado, atribui o
+ *     proximo "Zona de Produtos N" disponivel.
+ *
+ * Pure no sentido de nao acessar canvas/refs. Mutativo nas zones
+ * passadas — caller deve passar o array ja ordenado.
+ */
+export const ensureZoneNamesDistinct = (orderedZones: ReadonlyArray<any>): void => {
+    if (!Array.isArray(orderedZones) || !orderedZones.length) return
+
+    const reservedNames = new Set<string>()
+    const usedNumbers = new Set<number>()
+
+    orderedZones.forEach((zone: any) => {
+        const current = String((zone as any)?.zoneName || '').trim()
+        if (!current || isDefaultProductZoneName(current)) return
+        const key = current.toLowerCase()
+        if (reservedNames.has(key)) return
+        reservedNames.add(key)
+        const match = /^Zona de Produtos\s+(\d+)$/i.exec(current)
+        if (match) {
+            const n = Number(match[1])
+            if (Number.isInteger(n) && n > 0) usedNumbers.add(n)
+        }
+    })
+
+    let nextIndex = 1
+    const nextDefaultName = (): string => {
+        while (usedNumbers.has(nextIndex) || reservedNames.has(`${BASE_PRODUCT_ZONE_NAME} ${nextIndex}`.toLowerCase())) {
+            nextIndex += 1
+        }
+        const name = `${BASE_PRODUCT_ZONE_NAME} ${nextIndex}`
+        usedNumbers.add(nextIndex)
+        reservedNames.add(name.toLowerCase())
+        nextIndex += 1
+        return name
+    }
+
+    const seenCustomNames = new Set<string>()
+    orderedZones.forEach((zone: any) => {
+        const current = String((zone as any)?.zoneName || '').trim()
+        const key = current.toLowerCase()
+        if (!current || isDefaultProductZoneName(current) || seenCustomNames.has(key)) {
+            ;(zone as any).zoneName = nextDefaultName()
+            return
+        }
+        seenCustomNames.add(key)
+    })
+}
+
+/**
  * Gera o proximo nome disponivel ("Zona de Produtos N") a partir de
  * uma lista de zoneNames existentes. Algoritmo:
  *
