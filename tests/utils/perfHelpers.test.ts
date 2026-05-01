@@ -3,7 +3,9 @@ import {
   getEditorPerfNow,
   roundEditorPerf,
   parseEditorPerfPreference,
-  serializeEditorPerfPreference
+  serializeEditorPerfPreference,
+  EDITOR_PERF_STORAGE_KEY,
+  EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS
 } from '~/utils/perfHelpers'
 
 describe('getEditorPerfNow', () => {
@@ -90,5 +92,21 @@ describe('serializeEditorPerfPreference', () => {
   it('roundtrip parse(serialize(x)) === x', () => {
     expect(parseEditorPerfPreference(serializeEditorPerfPreference(true))).toBe(true)
     expect(parseEditorPerfPreference(serializeEditorPerfPreference(false))).toBe(false)
+  })
+})
+
+describe('EDITOR_PERF_STORAGE_KEY', () => {
+  it('contem prefixo "editor:" e versionado', () => {
+    expect(EDITOR_PERF_STORAGE_KEY).toBe('editor:perf-metrics:v1')
+    expect(EDITOR_PERF_STORAGE_KEY).toMatch(/^editor:/)
+    expect(EDITOR_PERF_STORAGE_KEY).toMatch(/:v\d+$/)
+  })
+})
+
+describe('EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS', () => {
+  it('e numero positivo (intervalo de throttle)', () => {
+    expect(typeof EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS).toBe('number')
+    expect(EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS).toBeGreaterThan(0)
+    expect(EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS).toBe(120)
   })
 })

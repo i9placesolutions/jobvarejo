@@ -116,7 +116,9 @@ import {
     getEditorPerfNow,
     roundEditorPerf,
     parseEditorPerfPreference,
-    serializeEditorPerfPreference
+    serializeEditorPerfPreference,
+    EDITOR_PERF_STORAGE_KEY,
+    EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS
 } from '~/utils/perfHelpers'
 import { parseViewSettings, serializeViewSettings } from '~/utils/viewSettings'
 import {
@@ -6144,8 +6146,8 @@ const updateScrollbars = () => {
 
 // VIEWPORT_CULL_MIN_OBJECTS, VIEWPORT_CULL_INTERVAL_MS extraidos para
 // utils/viewportCulling.ts. VIEWPORT_CULL_PADDING ja extraido.
-const EDITOR_PERF_STORAGE_KEY = 'editor:perf-metrics:v1'
-const EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS = 120
+// EDITOR_PERF_STORAGE_KEY, EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS extraidos
+// para utils/perfHelpers.ts.
 const editorPerfMetricsEnabled = ref(true)
 const editorPerfMetrics = shallowRef({
     enabled: true,

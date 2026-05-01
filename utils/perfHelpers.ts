@@ -6,6 +6,22 @@
  */
 
 /**
+ * Chave usada em localStorage para persistir flag de "metrics enabled"
+ * + snapshot serializado das metricas de perf. Versionada (`:v1`) para
+ * permitir invalidar caches antigos quando a estrutura muda.
+ */
+export const EDITOR_PERF_STORAGE_KEY = 'editor:perf-metrics:v1'
+
+/**
+ * Intervalo minimo (ms) entre commits de metric updates ao reactive
+ * shallowRef. Sem essa throttle, metric updates rodam a cada frame e
+ * triggem re-renders Vue desnecessarios.
+ *
+ * 120ms = ~8 commits/sec, suficiente para UI viva sem inundar reatividade.
+ */
+export const EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS = 120
+
+/**
  * Retorna timestamp de alta resolucao em milissegundos. Prefere
  * `performance.now()` (subms-precision), cai para `Date.now()` quando
  * Performance API nao disponivel (SSR, ambientes restritos).
