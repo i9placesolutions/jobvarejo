@@ -130,6 +130,10 @@ import {
 } from '~/utils/globalStylePropClassifiers'
 import { clamp, toFinite } from '~/utils/mathHelpers'
 import {
+    getSpecialConditionFromProduct,
+    getAvailablePrices
+} from '~/utils/productPriceHelpers'
+import {
     PRICE_LAYOUT_NODE_PREFIXES,
     PRICE_LAYOUT_NODE_EXACT,
     isPriceLayoutNode,
@@ -24997,34 +25001,7 @@ const extractLimitFromName = (rawName: any): { cleanedName: string; extractedLim
 // normalizeLimitText / stripAccents / normalizeSpecialCondition
 // extraidos para utils/productTextNormalize.ts.
 
-const getSpecialConditionFromProduct = (product: any): string | null => {
-    if (!product || typeof product !== 'object') return null;
-
-    const directCandidates = [
-        product.specialCondition,
-        product.condition,
-        product.observation,
-        product.observations,
-        product.observacao,
-        product.observacoes,
-        product.obs
-    ];
-
-    for (const c of directCandidates) {
-        const normalized = normalizeSpecialCondition(c);
-        if (normalized) return normalized;
-    }
-
-    for (const [k, v] of Object.entries(product)) {
-        const nk = stripAccents(String(k || '').toUpperCase());
-        if (!nk) continue;
-        if (!nk.includes('OBSERV') && !nk.includes('CONDI') && nk !== 'OBS') continue;
-        const normalized = normalizeSpecialCondition(v);
-        if (normalized) return normalized;
-    }
-
-    return null;
-};
+// getSpecialConditionFromProduct extraido para utils/productPriceHelpers.ts.
 
 /**
  * Converte valor de preço para string no formato brasileiro (vírgula decimal)
@@ -25035,74 +25012,7 @@ const getSpecialConditionFromProduct = (product: any): string | null => {
  * Retorna TODOS os preços disponíveis para o produto, ordenados por prioridade de exibição.
  * Retorna um objeto com informações dinâmicas baseadas no que realmente existe.
  */
-const getAvailablePrices = (product: any) => {
-    const prices: Array<{ label: string; value: string; type: 'main' | 'special' | 'pack' }> = [];
-    const condition = getSpecialConditionFromProduct(product);
-
-    // Helper para verificar e formatar preço
-    const addPrice = (value: any, label: string, type: 'main' | 'special' | 'pack') => {
-        const formatted = formatPriceValue(value);
-        if (formatted) {
-            prices.push({ label, value: formatted, type });
-            return true;
-        }
-        return false;
-    };
-
-    // PRIORIDADE: preços unitários são preferidos para exibição na etiqueta
-    // O atacarejo geralmente mostra: preço unitário avulso (varejo) vs preço especial unitário (atacado)
-
-    // Preço especial unitário (maior prioridade para atacado)
-    const hasSpecialUnit = addPrice(product.priceSpecialUnit, '', 'special');
-
-    // Preço especial de embalagem (só se não tem especial unitário)
-    if (!hasSpecialUnit) {
-        addPrice(product.priceSpecial, product.packageLabel || 'CX', 'special');
-    }
-
-    // Preço unitário avulso (preço principal varejo)
-    // Se já tem um preço especial (atacado), o priceUnit é o preço de varejo (main).
-    // Se NÃO tem preço especial, o priceUnit é o preço principal (main) — NUNCA classificar como 'special'
-    // pois isso faria um produto simples aparecer com etiqueta atacarejo.
-    const hasSpecial = prices.some(p => p.type === 'special');
-    const hasUnitPrice = addPrice(product.priceUnit, '', 'main');
-
-    // Preço de embalagem avulsa (só como complemento, não substitui unitário)
-    if (!hasUnitPrice) {
-        addPrice(product.pricePack, product.packageLabel || 'CX', hasSpecial ? 'main' : 'pack');
-    } else {
-        // Adicionar pricePack como info extra se diferente do priceUnit
-        const packFormatted = formatPriceValue(product.pricePack);
-        const unitFormatted = formatPriceValue(product.priceUnit);
-        if (packFormatted && packFormatted !== unitFormatted) {
-            addPrice(product.pricePack, product.packageLabel || 'CX', 'pack');
-        }
-    }
-
-    // Fallback para preço legado
-    if (prices.length === 0) {
-        addPrice(product.price, '', 'main');
-    }
-
-    // CORRECAO: se houver preco 'main' (varejo), ele deve ser o mainPrice,
-    // nao o primeiro da lista (que pode ser 'special'/atacado).
-    // Template simples (sem exibicao de preco especial) estava mostrando
-    // atacado como preco comum. Fallback: pack -> special -> primeiro da lista.
-    const pickByType = (type: 'main' | 'special' | 'pack') =>
-        prices.find(p => p.type === type)?.value;
-    const mainPrice = pickByType('main')
-        || pickByType('pack')
-        || pickByType('special')
-        || prices[0]?.value
-        || '0,00';
-
-    return {
-        prices,
-        condition,
-        hasSpecial: prices.some(p => p.type === 'special'),
-        mainPrice
-    };
-};
+// getAvailablePrices extraido para utils/productPriceHelpers.ts.
 
 // Smart Object Generator (Product Card)
 const createSmartObject = async (
