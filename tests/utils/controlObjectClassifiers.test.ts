@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   TRANSIENT_CONTROL_NAMES,
-  isControlLikeObject
+  isControlLikeObject,
+  isTransientCanvasObject
 } from '~/utils/controlObjectClassifiers'
 
 describe('TRANSIENT_CONTROL_NAMES', () => {
@@ -55,5 +56,59 @@ describe('isControlLikeObject', () => {
     // Apenas as drag-guides (vertical/horizontal) sao control;
     // user guides (guide-user-N) sao persistidas, nao transient.
     expect(isControlLikeObject({ id: 'guide-user-1' })).toBe(false)
+  })
+})
+
+describe('isTransientCanvasObject', () => {
+  it('com _customId valido nunca e transient', () => {
+    expect(isTransientCanvasObject({
+      _customId: 'abc',
+      excludeFromExport: true
+    })).toBe(false)
+  })
+
+  it('control-like sem _customId e transient', () => {
+    expect(isTransientCanvasObject({ name: 'path_node' })).toBe(true)
+  })
+
+  it('circle pequeno com excludeFromExport e transient', () => {
+    expect(isTransientCanvasObject({
+      type: 'circle',
+      radius: 5,
+      excludeFromExport: true
+    })).toBe(true)
+  })
+
+  it('circle grande NAO e transient', () => {
+    expect(isTransientCanvasObject({
+      type: 'circle',
+      radius: 50,
+      excludeFromExport: true
+    })).toBe(false)
+  })
+
+  it('line/path com excludeFromExport sao transient', () => {
+    expect(isTransientCanvasObject({ type: 'line', excludeFromExport: true })).toBe(true)
+    expect(isTransientCanvasObject({ type: 'path', excludeFromExport: true })).toBe(true)
+  })
+
+  it('vector path NAO e transient mesmo com excludeFromExport', () => {
+    expect(isTransientCanvasObject({
+      type: 'path',
+      isVectorPath: true,
+      excludeFromExport: true
+    })).toBe(false)
+  })
+
+  it('content persistente com excludeFromExport NAO e transient', () => {
+    expect(isTransientCanvasObject({ type: 'group', isFrame: true, excludeFromExport: true })).toBe(false)
+    expect(isTransientCanvasObject({ type: 'group', isProductZone: true, excludeFromExport: true })).toBe(false)
+    expect(isTransientCanvasObject({ id: 'artboard-bg', excludeFromExport: true })).toBe(false)
+  })
+
+  it('null/objeto sem sinais especiais nao e transient', () => {
+    expect(isTransientCanvasObject(null)).toBe(false)
+    expect(isTransientCanvasObject({})).toBe(false)
+    expect(isTransientCanvasObject({ type: 'rect' })).toBe(false)
   })
 })

@@ -91,7 +91,9 @@ import {
     resetDuplicatedObjectRuntime,
     clearInvalidClipPath,
     applyObjectVisibility,
-    safeAddWithUpdate
+    safeAddWithUpdate,
+    ensureObjectPersistentId,
+    ensurePersistentContentFlags
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -114,7 +116,8 @@ import {
 } from '~/utils/frameGeometry'
 import {
     TRANSIENT_CONTROL_NAMES,
-    isControlLikeObject
+    isControlLikeObject,
+    isTransientCanvasObject
 } from '~/utils/controlObjectClassifiers'
 import {
     getLabelTemplateTimestamp,
@@ -8343,67 +8346,9 @@ const normalizeProductCardIdentity = (
 
 // isControlLikeObject extraido para utils/controlObjectClassifiers.ts.
 
-const ensureObjectPersistentId = (obj: any) => {
-    if (!obj || typeof obj !== 'object') return;
-    if (obj._customId) return;
-    if (isControlLikeObject(obj)) return;
-    // User guides are persisted by `id` (guide-user-*) and should never become layers (_customId).
-    try { if (isUserGuideObject(obj)) return; } catch {}
-    obj._customId = makeCanvasObjectId();
-};
-
-const isTransientCanvasObject = (obj: any) => {
-    if (!obj || typeof obj !== 'object') return false;
-    const name = String(obj.name || '');
-    const id = String(obj.id || '');
-    const hasCustomId = typeof obj._customId === 'string' && obj._customId.trim().length > 0;
-
-    if (hasCustomId) return false;
-    if (isControlLikeObject(obj)) return true;
-    if (obj.type === 'circle' && obj.radius && obj.radius <= 10 && !hasCustomId && !!obj.excludeFromExport) return true;
-    if (obj.type === 'line' && !hasCustomId && !!obj.excludeFromExport) return true;
-    if (obj.type === 'path' && !hasCustomId && !obj.isVectorPath && !!obj.excludeFromExport) return true;
-
-    if (obj.excludeFromExport === true) {
-        const isPersistentContent =
-            !!obj.isFrame ||
-            !!obj.isSmartObject ||
-            !!obj.isProductCard ||
-            !!obj.isGridZone ||
-            !!obj.isProductZone ||
-            !!obj.parentZoneId ||
-            name === 'gridZone' ||
-            name === 'productZoneContainer' ||
-            name === 'priceGroup' ||
-            name.startsWith('product-card') ||
-            id === 'artboard-bg';
-        if (isPersistentContent) return false;
-        // Avoid removing regular user content by mistake. For non-persistent objects,
-        // only treat as transient when they look like control/guide objects.
-        return isControlLikeObject(obj);
-    }
-
-    return false;
-};
-
-const ensurePersistentContentFlags = (obj: any) => {
-    if (!obj || typeof obj !== 'object') return;
-    ensureObjectPersistentId(obj);
-    const name = String(obj.name || '');
-    const isPersistentContent =
-        !!obj.isFrame ||
-        !!obj.isSmartObject ||
-        !!obj.isProductCard ||
-        !!obj.isGridZone ||
-        !!obj.isProductZone ||
-        !!obj.parentZoneId ||
-        name === 'gridZone' ||
-        name === 'productZoneContainer' ||
-        name.startsWith('product-card');
-    if (isPersistentContent && obj.excludeFromExport) {
-        obj.excludeFromExport = false;
-    }
-};
+// ensureObjectPersistentId / ensurePersistentContentFlags extraidos para
+// utils/fabricObjectOps.ts.
+// isTransientCanvasObject extraido para utils/controlObjectClassifiers.ts.
 
 const showDeletePageModal = ref(false)
 

@@ -6,7 +6,9 @@ import {
   resetDuplicatedObjectRuntime,
   clearInvalidClipPath,
   applyObjectVisibility,
-  safeAddWithUpdate
+  safeAddWithUpdate,
+  ensureObjectPersistentId,
+  ensurePersistentContentFlags
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -601,5 +603,87 @@ describe('safeAddWithUpdate', () => {
     safeAddWithUpdate(g, 42 as any)
     expect(g.addWithUpdateCount).toBe(0)
     consoleErr.mockRestore()
+  })
+})
+
+describe('ensureObjectPersistentId', () => {
+  it('null/undefined nao quebra', () => {
+    expect(() => ensureObjectPersistentId(null)).not.toThrow()
+    expect(() => ensureObjectPersistentId(undefined)).not.toThrow()
+  })
+
+  it('atribui _customId quando faltando', () => {
+    const obj: any = { type: 'rect' }
+    ensureObjectPersistentId(obj)
+    expect(typeof obj._customId).toBe('string')
+    expect(obj._customId.length).toBeGreaterThan(0)
+  })
+
+  it('NO-OP quando _customId ja existe', () => {
+    const obj: any = { _customId: 'existing-id' }
+    ensureObjectPersistentId(obj)
+    expect(obj._customId).toBe('existing-id')
+  })
+
+  it('NO-OP em control-like (path_node)', () => {
+    const obj: any = { name: 'path_node' }
+    ensureObjectPersistentId(obj)
+    expect(obj._customId).toBeUndefined()
+  })
+
+  it('NO-OP em user guides (id guide-user-*)', () => {
+    const obj: any = { id: 'guide-user-1' }
+    ensureObjectPersistentId(obj)
+    expect(obj._customId).toBeUndefined()
+  })
+
+  it('NO-OP em user guides (isUserGuide=true)', () => {
+    const obj: any = { isUserGuide: true }
+    ensureObjectPersistentId(obj)
+    expect(obj._customId).toBeUndefined()
+  })
+})
+
+describe('ensurePersistentContentFlags', () => {
+  it('null/undefined nao quebra', () => {
+    expect(() => ensurePersistentContentFlags(null)).not.toThrow()
+  })
+
+  it('atribui _customId via ensureObjectPersistentId', () => {
+    const obj: any = { type: 'group', isFrame: true }
+    ensurePersistentContentFlags(obj)
+    expect(typeof obj._customId).toBe('string')
+  })
+
+  it('REGRESSAO: content persistente com excludeFromExport tem flag removida', () => {
+    const obj: any = { type: 'group', isFrame: true, excludeFromExport: true }
+    ensurePersistentContentFlags(obj)
+    expect(obj.excludeFromExport).toBe(false)
+  })
+
+  it('content nao-persistente: nao mexe em excludeFromExport', () => {
+    const obj: any = { type: 'rect', excludeFromExport: true }
+    ensurePersistentContentFlags(obj)
+    expect(obj.excludeFromExport).toBe(true)
+  })
+
+  it('aceita por isProductZone/parentZoneId', () => {
+    const z: any = { type: 'group', isProductZone: true, excludeFromExport: true }
+    ensurePersistentContentFlags(z)
+    expect(z.excludeFromExport).toBe(false)
+
+    const c: any = { type: 'group', parentZoneId: 'z1', excludeFromExport: true }
+    ensurePersistentContentFlags(c)
+    expect(c.excludeFromExport).toBe(false)
+  })
+
+  it('aceita por name (gridZone/productZoneContainer/product-card-*)', () => {
+    const a: any = { name: 'gridZone', excludeFromExport: true }
+    ensurePersistentContentFlags(a)
+    expect(a.excludeFromExport).toBe(false)
+
+    const b: any = { name: 'product-card-42', excludeFromExport: true }
+    ensurePersistentContentFlags(b)
+    expect(b.excludeFromExport).toBe(false)
   })
 })
