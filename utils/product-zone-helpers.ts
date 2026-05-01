@@ -709,3 +709,27 @@ export const validateProductZone = (zone: Partial<ProductZone>): { valid: boolea
     errors
   };
 };
+
+// =============================================================================
+// PRODUCT IDENTITY / ZONE NAMING
+// =============================================================================
+
+/**
+ * Gera uma chave de identidade para um produto durante importacao.
+ * Prefere productInstanceId > id > fallback indexado.
+ * Usado para correlacionar produtos entre paste-list/file-upload e cards
+ * existentes na zona.
+ */
+export const getProductImportIdentityKey = (product: any, index: number): string => {
+    return String(product?.productInstanceId || product?.id || `tmp-product-${index + 1}`).trim();
+};
+
+/**
+ * Detecta se um nome de zona e' o default ("Zona de Produtos" ou
+ * "Zona de Produtos N"). Usado para decidir se o nome pode ser
+ * sobrescrito automaticamente sem destruir customizacao do usuario.
+ */
+export const isDefaultProductZoneName = (value: any): boolean => {
+    const name = String(value || '').trim();
+    return !name || /^Zona de Produtos(?:\s+\d+)?$/i.test(name);
+};

@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   isCanvasContextError,
   isValidFabricCanvasObject,
-  isValidClipPath
+  isValidClipPath,
+  isAuthLookupError
 } from '~/utils/canvasValidation'
 
 describe('isCanvasContextError', () => {
@@ -151,5 +152,41 @@ describe('isValidClipPath', () => {
       type: 'group',
       _objects: [childWithBadClip]
     }))).toBe(false)
+  })
+})
+
+describe('isAuthLookupError', () => {
+  it('aceita HTTP 401/403', () => {
+    expect(isAuthLookupError({ statusCode: 401 })).toBe(true)
+    expect(isAuthLookupError({ status: 403 })).toBe(true)
+    expect(isAuthLookupError({ response: { status: 401 } })).toBe(true)
+  })
+
+  it('rejeita outros status codes', () => {
+    expect(isAuthLookupError({ status: 500 })).toBe(false)
+    expect(isAuthLookupError({ statusCode: 404 })).toBe(false)
+  })
+
+  it('aceita por mensagem contendo termos de auth', () => {
+    expect(isAuthLookupError(new Error('Unauthorized'))).toBe(true)
+    expect(isAuthLookupError(new Error('Forbidden'))).toBe(true)
+    expect(isAuthLookupError(new Error('Sua sessão expirada'))).toBe(true)
+    expect(isAuthLookupError(new Error('session token invalid'))).toBe(true)
+  })
+
+  it('case insensitive na mensagem', () => {
+    expect(isAuthLookupError(new Error('UNAUTHORIZED'))).toBe(true)
+    expect(isAuthLookupError(new Error('SESSÃO EXPIRADA'))).toBe(true)
+  })
+
+  it('aceita string direta', () => {
+    expect(isAuthLookupError('unauthorized request')).toBe(true)
+    expect(isAuthLookupError('foo bar')).toBe(false)
+  })
+
+  it('rejeita err sem msg e sem status', () => {
+    expect(isAuthLookupError({})).toBe(false)
+    expect(isAuthLookupError(null)).toBe(false)
+    expect(isAuthLookupError(undefined)).toBe(false)
   })
 })

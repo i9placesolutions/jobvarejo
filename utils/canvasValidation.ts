@@ -20,6 +20,24 @@ export const isCanvasContextError = (err: any): boolean => {
 }
 
 /**
+ * Detecta erros de autenticacao/autorizacao em respostas HTTP/fetch.
+ * Aceita codigo 401/403 ou mensagem contendo termos de sessao expirada.
+ *
+ * Usado para distinguir "preciso reautenticar" de outros erros transitorios
+ * em fluxos de busca de imagem por produto.
+ */
+export const isAuthLookupError = (err: any): boolean => {
+    const code = Number(err?.statusCode || err?.status || err?.response?.status || 0)
+    if (code === 401 || code === 403) return true
+    const msg = String(err?.message || err || '').toLowerCase()
+    if (!msg) return false
+    return msg.includes('sessão expirada') ||
+        msg.includes('session') ||
+        msg.includes('unauthorized') ||
+        msg.includes('forbidden')
+}
+
+/**
  * Valida que um objeto e' um Fabric.Object real, com a API basica
  * que o canvas espera (render, setCoords, set, toObject).
  *

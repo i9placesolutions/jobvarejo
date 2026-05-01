@@ -37,7 +37,8 @@ import {
 import {
     isCanvasContextError,
     isValidFabricCanvasObject,
-    isValidClipPath
+    isValidClipPath,
+    isAuthLookupError
 } from '~/utils/canvasValidation'
 import {
     getPreferredProductImageFromGroup,
@@ -79,6 +80,7 @@ import {
     isLikelyProductCardJson,
     getCardBaseSizeForContainmentJson,
     cloneTemplateGroupJson,
+    clonePlainMetadata,
     getJsonObjectSize,
     getJsonObjectCenterInParentPlane,
     setJsonObjectCenterInParentPlane,
@@ -4812,7 +4814,12 @@ const updateNodePosition = (e: any) => {
 
 // ... (existing code)
 import { parseProductList } from '~/lib/utils'
-import { calculateGridLayout, getAspectRatioValue } from '~/utils/product-zone-helpers'
+import {
+    calculateGridLayout,
+    getAspectRatioValue,
+    getProductImportIdentityKey,
+    isDefaultProductZoneName
+} from '~/utils/product-zone-helpers'
 import { DEFAULT_GLOBAL_STYLES, DEFAULT_PRODUCT_ZONE } from '~/types/product-zone'
 import type { ProductZone, GlobalStyles } from '~/types/product-zone'
 import { useProject } from '~/composables/useProject'
@@ -7946,9 +7953,7 @@ type SmartGridRunOptions = {
     persist?: boolean
 }
 
-const getProductImportIdentityKey = (product: any, index: number): string => {
-    return String(product?.productInstanceId || product?.id || `tmp-product-${index + 1}`).trim();
-};
+// getProductImportIdentityKey extraido para utils/product-zone-helpers.ts.
 
 // isPriceGroupOrPriceChild extraido para utils/fabricObjectClassifiers.ts
 
@@ -8111,10 +8116,7 @@ const getImportZonesExistingCount = (zones: any[]): number => {
 }
 
 const BASE_PRODUCT_ZONE_NAME = 'Zona de Produtos'
-const isDefaultProductZoneName = (value: any): boolean => {
-    const name = String(value || '').trim()
-    return !name || /^Zona de Produtos(?:\s+\d+)?$/i.test(name)
-}
+// isDefaultProductZoneName extraido para utils/product-zone-helpers.ts.
 
 const getNextProductZoneName = (excludeZone?: any): string => {
     const used = new Set<number>()
@@ -8552,23 +8554,7 @@ const makeCanvasObjectId = () => makeId();
 const makeProductInstanceId = () => `item_${makeId()}`;
 const TRANSIENT_CONTROL_NAMES = new Set(['path_node', 'bezier_handle', 'control_point', 'handle_line']);
 
-const clonePlainMetadata = (value: any): any => {
-    if (value == null) return value;
-    try {
-        return JSON.parse(JSON.stringify(value));
-    } catch {
-        if (Array.isArray(value)) return value.map((item) => clonePlainMetadata(item));
-        if (typeof value === 'object') {
-            const out: Record<string, any> = {};
-            Object.entries(value).forEach(([key, entry]: [string, any]) => {
-                if (typeof entry === 'function') return;
-                out[key] = clonePlainMetadata(entry);
-            });
-            return out;
-        }
-        return value;
-    }
-};
+// clonePlainMetadata extraido para utils/canvasJsonClassifiers.ts.
 
 const normalizeProductCardIdentity = (
     card: any,
@@ -25416,13 +25402,7 @@ const resolveImageMatchMode = (value?: string): ImageMatchMode => {
     return String(value || 'precise').toLowerCase() === 'fast' ? 'fast' : 'precise';
 };
 
-const isAuthLookupError = (err: any): boolean => {
-    const code = Number(err?.statusCode || err?.status || err?.response?.status || 0);
-    if (code === 401 || code === 403) return true;
-    const msg = String(err?.message || err || '').toLowerCase();
-    if (!msg) return false;
-    return msg.includes('sessão expirada') || msg.includes('session') || msg.includes('unauthorized') || msg.includes('forbidden');
-};
+// isAuthLookupError extraido para utils/canvasValidation.ts.
 
 const fetchRecoveryImageUrlForCard = async (
     card: any,

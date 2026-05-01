@@ -386,6 +386,36 @@ export const collectJsonDescendantsWithParent = (group: any): Array<{ node: any;
 }
 
 /**
+ * Clone profundo "best-effort" de metadados (productData, _zone*Snapshot, etc).
+ *
+ * Tenta JSON.parse(JSON.stringify(...)) primeiro. Se falhar (referencias
+ * circulares, valores nao-serializaveis), cai em recursao manual que:
+ *  - Preserva arrays
+ *  - Preserva objetos descartando entries que sao funcoes
+ *  - Retorna primitivos sem mutacao
+ *
+ * Diferente de cloneTemplateGroupJson: este e' generico para qualquer
+ * payload "plain", sem assumir estrutura `{ objects: [...] }`.
+ */
+export const clonePlainMetadata = (value: any): any => {
+    if (value == null) return value
+    try {
+        return JSON.parse(JSON.stringify(value))
+    } catch {
+        if (Array.isArray(value)) return value.map((item) => clonePlainMetadata(item))
+        if (typeof value === 'object') {
+            const out: Record<string, any> = {}
+            Object.entries(value).forEach(([key, entry]: [string, any]) => {
+                if (typeof entry === 'function') return
+                out[key] = clonePlainMetadata(entry)
+            })
+            return out
+        }
+        return value
+    }
+}
+
+/**
  * Clone profundo de um group JSON (template de etiqueta, normalmente).
  *
  * Estrategia em camadas:

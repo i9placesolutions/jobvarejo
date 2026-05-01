@@ -6,6 +6,7 @@ import {
   isLikelyProductCardJson,
   getCardBaseSizeForContainmentJson,
   cloneTemplateGroupJson,
+  clonePlainMetadata,
   getJsonObjectSize,
   getJsonObjectCenterInParentPlane,
   setJsonObjectCenterInParentPlane,
@@ -705,5 +706,44 @@ describe('isPriceGroupVisualShellNode', () => {
     expect(isPriceGroupVisualShellNode(null)).toBe(false)
     expect(isPriceGroupVisualShellNode({})).toBe(false)
     expect(isPriceGroupVisualShellNode({ type: '' })).toBe(false)
+  })
+})
+
+describe('clonePlainMetadata', () => {
+  it('null/undefined retornam o proprio valor', () => {
+    expect(clonePlainMetadata(null)).toBeNull()
+    expect(clonePlainMetadata(undefined)).toBeUndefined()
+  })
+
+  it('primitivos passam direto', () => {
+    expect(clonePlainMetadata('foo')).toBe('foo')
+    expect(clonePlainMetadata(42)).toBe(42)
+    expect(clonePlainMetadata(true)).toBe(true)
+  })
+
+  it('objetos sao deep-cloned', () => {
+    const original: any = { a: 1, b: { c: 2 } }
+    const cloned = clonePlainMetadata(original)
+    expect(cloned).toEqual(original)
+    expect(cloned).not.toBe(original)
+    cloned.b.c = 999
+    expect(original.b.c).toBe(2) // intacto
+  })
+
+  it('arrays sao deep-cloned', () => {
+    const original = [{ a: 1 }, { b: 2 }]
+    const cloned = clonePlainMetadata(original)
+    expect(cloned).toEqual(original)
+    cloned[0].a = 999
+    expect(original[0].a).toBe(1)
+  })
+
+  it('fallback descarta funcoes (nao-serializavel)', () => {
+    // JSON.stringify ignora funcoes silenciosamente, entao no caminho
+    // feliz a funcao some. No fallback (refs circulares) tambem some.
+    const obj: any = { keep: 'this', cb: () => 42 }
+    const cloned = clonePlainMetadata(obj)
+    expect(cloned.keep).toBe('this')
+    expect(cloned.cb).toBeUndefined()
   })
 })

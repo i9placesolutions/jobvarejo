@@ -4,7 +4,9 @@ import {
   formatPriceBR,
   splitPrice,
   getPackPrice,
-  getPromoPrice
+  getPromoPrice,
+  getProductImportIdentityKey,
+  isDefaultProductZoneName
 } from '~/utils/product-zone-helpers'
 
 describe('parsePrice — entrada heterogenea de fontes diversas', () => {
@@ -112,5 +114,53 @@ describe('getPackPrice / getPromoPrice — calculos auxiliares', () => {
     expect(getPromoPrice(100, 10)).toBe(90)
     expect(getPromoPrice(47.99, 50)).toBeCloseTo(23.995, 3)
     expect(getPromoPrice(100, 0)).toBe(100)
+  })
+})
+
+describe('getProductImportIdentityKey', () => {
+  it('prefere productInstanceId', () => {
+    expect(getProductImportIdentityKey({
+      productInstanceId: 'inst-1',
+      id: 'prod-1'
+    }, 0)).toBe('inst-1')
+  })
+
+  it('cai para id quando nao ha productInstanceId', () => {
+    expect(getProductImportIdentityKey({ id: 'prod-1' }, 5)).toBe('prod-1')
+  })
+
+  it('fallback indexado quando nao ha nenhum identificador', () => {
+    expect(getProductImportIdentityKey({}, 0)).toBe('tmp-product-1')
+    expect(getProductImportIdentityKey({}, 4)).toBe('tmp-product-5')
+    expect(getProductImportIdentityKey(null, 0)).toBe('tmp-product-1')
+  })
+
+  it('trim em strings', () => {
+    expect(getProductImportIdentityKey({ id: '  prod-1  ' }, 0)).toBe('prod-1')
+  })
+})
+
+describe('isDefaultProductZoneName', () => {
+  it('vazio/null/whitespace e default', () => {
+    expect(isDefaultProductZoneName('')).toBe(true)
+    expect(isDefaultProductZoneName(null)).toBe(true)
+    expect(isDefaultProductZoneName(undefined)).toBe(true)
+    expect(isDefaultProductZoneName('   ')).toBe(true)
+  })
+
+  it('formato base "Zona de Produtos" e default', () => {
+    expect(isDefaultProductZoneName('Zona de Produtos')).toBe(true)
+    expect(isDefaultProductZoneName('zona de produtos')).toBe(true)
+  })
+
+  it('formato indexado "Zona de Produtos N" e default', () => {
+    expect(isDefaultProductZoneName('Zona de Produtos 1')).toBe(true)
+    expect(isDefaultProductZoneName('Zona de Produtos 99')).toBe(true)
+  })
+
+  it('nome customizado nao e default', () => {
+    expect(isDefaultProductZoneName('Minha Zona')).toBe(false)
+    expect(isDefaultProductZoneName('Atacado')).toBe(false)
+    expect(isDefaultProductZoneName('Zona de Produtos especial')).toBe(false)
   })
 })
