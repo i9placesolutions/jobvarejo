@@ -406,7 +406,8 @@ import {
     repairHiddenPriceGroupTexts,
     sanitizeFabricJsonTreeForLoad,
     buildProgressiveProductCardImageLoadPayload,
-    normalizeLegacyProductCardImageTransformsInCanvasData
+    normalizeLegacyProductCardImageTransformsInCanvasData,
+    sanitizeCanvasJsonBeforeLoad as sanitizeCanvasJsonBeforeLoadHelper
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -5268,58 +5269,20 @@ const repairLivePriceGroupBackgrounds = (c: any): number => {
     return repaired
 }
 
-function sanitizeCanvasJsonBeforeLoad(json: any): { removed: number; fixedGroupTypes: number } {
-    if (!json || typeof json !== 'object') return { removed: 0, fixedGroupTypes: 0 };
-
-    // FIX: Repair hidden price texts before any other processing
-    const repairedHidden = repairHiddenPriceGroupTexts(json);
-    if (repairedHidden > 0) {
-        console.warn(`[loadFromJSON] Repaired ${repairedHidden} orphan-hidden element(s) in price groups`);
-    }
-
-    let removed = 0;
-    let fixedGroupTypes = 0;
-    const mergeStats = (stats: { removed: number; fixedGroupTypes: number }) => {
-        removed += Number(stats?.removed || 0);
-        fixedGroupTypes += Number(stats?.fixedGroupTypes || 0);
-    };
-
-    mergeStats(sanitizeFabricJsonTreeForLoad(json, { allowRootWithoutType: true }));
-
-    const templates = Array.isArray((json as any)?.[LABEL_TEMPLATES_JSON_KEY])
-        ? (json as any)[LABEL_TEMPLATES_JSON_KEY]
-        : [];
-    templates.forEach((tpl: any) => {
-        const group = tpl?.group;
-        if (!group || typeof group !== 'object') return;
-        sanitizeRedBurstTemplateGroupJson(group);
-        mergeStats(sanitizeFabricJsonTreeForLoad(group));
-    });
-
-    const stack: any[] = Array.isArray((json as any).objects) ? [...(json as any).objects] : [];
-    while (stack.length > 0) {
-        const node = stack.pop();
-        if (!node || typeof node !== 'object') continue;
-
-        const snapshot = (node as any)._zoneTemplateSnapshot;
-        if (snapshot && typeof snapshot === 'object') {
-            sanitizeRedBurstTemplateGroupJson(snapshot);
-            mergeStats(sanitizeFabricJsonTreeForLoad(snapshot));
-        }
-
-        const children = Array.isArray((node as any).objects) ? (node as any).objects : [];
-        for (let i = children.length - 1; i >= 0; i--) stack.push(children[i]);
-        const clip = (node as any).clipPath;
-        if (clip && typeof clip === 'object') stack.push(clip);
-    }
-
-    if (removed > 0 || fixedGroupTypes > 0) {
+// sanitizeCanvasJsonBeforeLoad extraido para utils/canvasJsonClassifiers.ts.
+// Wrapper local injeta LABEL_TEMPLATES_JSON_KEY + sanitizeRedBurstTemplateGroupJson
+// e adiciona o log de saneamento.
+const sanitizeCanvasJsonBeforeLoad = (json: any): { removed: number; fixedGroupTypes: number } => {
+    const stats = sanitizeCanvasJsonBeforeLoadHelper(json, {
+        labelTemplatesJsonKey: LABEL_TEMPLATES_JSON_KEY,
+        sanitizeRedBurstTemplate: sanitizeRedBurstTemplateGroupJson
+    })
+    if (stats.removed > 0 || stats.fixedGroupTypes > 0) {
         console.warn(
-            `[loadFromJSON] JSON saneado antes do Fabric: ${removed} nó(s) inválido(s) removido(s), ${fixedGroupTypes} grupo(s) sem type corrigido(s)`
-        );
+            `[loadFromJSON] JSON saneado antes do Fabric: ${stats.removed} nó(s) inválido(s) removido(s), ${stats.fixedGroupTypes} grupo(s) sem type corrigido(s)`
+        )
     }
-
-    return { removed, fixedGroupTypes };
+    return stats
 }
 
 const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Promise<void> => {

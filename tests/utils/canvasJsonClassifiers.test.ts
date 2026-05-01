@@ -43,7 +43,8 @@ import {
   DEFERRED_PRODUCT_IMAGE_LOAD_MAX,
   repairHiddenPriceGroupTexts,
   sanitizeFabricJsonTreeForLoad,
-  buildProgressiveProductCardImageLoadPayload
+  buildProgressiveProductCardImageLoadPayload,
+  sanitizeCanvasJsonBeforeLoad
 } from '~/utils/canvasJsonClassifiers'
 
 describe('PREPARED_CANVAS_LOAD_CACHE_LIMIT', () => {
@@ -1852,5 +1853,63 @@ describe('buildProgressiveProductCardImageLoadPayload', () => {
     const result = buildProgressiveProductCardImageLoadPayload(json, { totalImageCount: 30 })
     const firstCard = result.data.objects[0]
     expect(firstCard.objects[0].__originalSrc).toBe('http://example.com/orig-0.jpg')
+  })
+})
+
+describe('sanitizeCanvasJsonBeforeLoad', () => {
+  const noopSanitizeRb = (g: any) => g
+
+  it('null/non-object: { 0, 0 }', () => {
+    expect(sanitizeCanvasJsonBeforeLoad(null as any, {
+      labelTemplatesJsonKey: '__labelTemplates',
+      sanitizeRedBurstTemplate: noopSanitizeRb
+    })).toEqual({ removed: 0, fixedGroupTypes: 0 })
+  })
+
+  it('chama sanitizeFabric (remove children invalidos)', () => {
+    const json: any = {
+      objects: [
+        {
+          objects: [{ type: '' }] // sem type → removido
+        }
+      ]
+    }
+    const stats = sanitizeCanvasJsonBeforeLoad(json, {
+      labelTemplatesJsonKey: '__labelTemplates',
+      sanitizeRedBurstTemplate: noopSanitizeRb
+    })
+    expect(stats.removed).toBeGreaterThan(0)
+  })
+
+  it('chama sanitizeRedBurstTemplate em cada label template', () => {
+    let calls = 0
+    const sanitize = (g: any) => { calls += 1; return g }
+    const json: any = {
+      objects: [],
+      __labelTemplates: [
+        { id: 'a', group: { type: 'group', objects: [] } },
+        { id: 'b', group: { type: 'group', objects: [] } }
+      ]
+    }
+    sanitizeCanvasJsonBeforeLoad(json, {
+      labelTemplatesJsonKey: '__labelTemplates',
+      sanitizeRedBurstTemplate: sanitize
+    })
+    expect(calls).toBe(2)
+  })
+
+  it('chama sanitizeRedBurstTemplate em _zoneTemplateSnapshot', () => {
+    let calls = 0
+    const sanitize = (g: any) => { calls += 1; return g }
+    const json: any = {
+      objects: [
+        { type: 'group', _zoneTemplateSnapshot: { type: 'group', objects: [] } }
+      ]
+    }
+    sanitizeCanvasJsonBeforeLoad(json, {
+      labelTemplatesJsonKey: '__labelTemplates',
+      sanitizeRedBurstTemplate: sanitize
+    })
+    expect(calls).toBe(1)
   })
 })

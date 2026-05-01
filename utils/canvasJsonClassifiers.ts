@@ -1339,3 +1339,68 @@ export const normalizeLegacyProductCardImageTransformsInCanvasData = (
 
     return { cardsScanned, imagesScanned, imagesRepaired, needsPostLoadRepair }
 }
+
+/**
+ * Orquestrador master de sanitize do canvas JSON antes do load:
+ *  1. Repara textos ocultos em price groups
+ *  2. Sanitiza arvore Fabric raiz
+ *  3. Sanitiza cada label template (tpl.group) — aplica Red Burst revive
+ *     (via DI `sanitizeRedBurstTemplate`) + sanitize tree
+ *  4. Walk em todos os nodes — sanitiza `_zoneTemplateSnapshot` quando presente
+ *
+ * Caller injeta:
+ *  - `labelTemplatesJsonKey`: chave usada para encontrar templates no JSON
+ *    (tipicamente `'__labelTemplates'`)
+ *  - `sanitizeRedBurstTemplate`: funcao para reviver groupJson Red Burst
+ *
+ * Mutates o JSON in place. Retorna stats agregadas.
+ */
+export const sanitizeCanvasJsonBeforeLoad = (
+    json: any,
+    deps: {
+        labelTemplatesJsonKey: string
+        sanitizeRedBurstTemplate: (groupJson: any) => any
+    }
+): { removed: number; fixedGroupTypes: number } => {
+    if (!json || typeof json !== 'object') return { removed: 0, fixedGroupTypes: 0 }
+
+    repairHiddenPriceGroupTexts(json)
+
+    let removed = 0
+    let fixedGroupTypes = 0
+    const mergeStats = (stats: { removed: number; fixedGroupTypes: number }) => {
+        removed += Number(stats?.removed || 0)
+        fixedGroupTypes += Number(stats?.fixedGroupTypes || 0)
+    }
+
+    mergeStats(sanitizeFabricJsonTreeForLoad(json, { allowRootWithoutType: true }))
+
+    const templates = Array.isArray((json as any)?.[deps.labelTemplatesJsonKey])
+        ? (json as any)[deps.labelTemplatesJsonKey]
+        : []
+    templates.forEach((tpl: any) => {
+        const group = tpl?.group
+        if (!group || typeof group !== 'object') return
+        deps.sanitizeRedBurstTemplate(group)
+        mergeStats(sanitizeFabricJsonTreeForLoad(group))
+    })
+
+    const stack: any[] = Array.isArray((json as any).objects) ? [...(json as any).objects] : []
+    while (stack.length > 0) {
+        const node = stack.pop()
+        if (!node || typeof node !== 'object') continue
+
+        const snapshot = (node as any)._zoneTemplateSnapshot
+        if (snapshot && typeof snapshot === 'object') {
+            deps.sanitizeRedBurstTemplate(snapshot)
+            mergeStats(sanitizeFabricJsonTreeForLoad(snapshot))
+        }
+
+        const children = Array.isArray((node as any).objects) ? (node as any).objects : []
+        for (let i = children.length - 1; i >= 0; i--) stack.push(children[i])
+        const clip = (node as any).clipPath
+        if (clip && typeof clip === 'object') stack.push(clip)
+    }
+
+    return { removed, fixedGroupTypes }
+}
