@@ -138,6 +138,11 @@ import {
     firstDefinedZoneSnapshotValue
 } from '~/utils/zoneSnapshotHelpers'
 import {
+    templateSnapshotHasAtacStructure,
+    shouldForceCanonicalAtacForTemplateJson,
+    shouldUseAtacVariantSnapshotsForTemplate
+} from '~/utils/templateSnapshotHelpers'
+import {
     getSpecialConditionFromProduct,
     getAvailablePrices
 } from '~/utils/productPriceHelpers'
@@ -33505,40 +33510,9 @@ const pickRenderableTemplateGroupJson = (tpl: LabelTemplate, preferredVariantKey
     return null;
 };
 
-const templateSnapshotHasAtacStructure = (snapshot: any) => {
-    if (!snapshot || typeof snapshot !== 'object') return false;
-    if (String((snapshot as any).name || '') === 'atac_retail_bg') return true;
-    const stack: any[] = [];
-    const rootJsonChildren = Array.isArray((snapshot as any).objects) ? (snapshot as any).objects : [];
-    const rootFabricChildren = Array.isArray((snapshot as any)._objects)
-        ? (snapshot as any)._objects
-        : (typeof (snapshot as any).getObjects === 'function' ? (snapshot as any).getObjects() : []);
-    if (rootJsonChildren.length) stack.push(...rootJsonChildren);
-    if (rootFabricChildren.length) stack.push(...rootFabricChildren);
-    while (stack.length) {
-        const obj = stack.pop();
-        if (!obj || typeof obj !== 'object') continue;
-        if (String((obj as any).name || '') === 'atac_retail_bg') return true;
-        const nestedJson = Array.isArray((obj as any).objects) ? (obj as any).objects : [];
-        const nestedFabric = Array.isArray((obj as any)._objects)
-            ? (obj as any)._objects
-            : (typeof (obj as any).getObjects === 'function' ? (obj as any).getObjects() : []);
-        if (nestedJson.length) stack.push(...nestedJson);
-        if (nestedFabric.length) stack.push(...nestedFabric);
-    }
-    return false;
-};
-
-const shouldForceCanonicalAtacForTemplateJson = (snapshot: any) => {
-    // Only honor the explicit flag. Atacarejo structure alone should NOT force code-driven reflow,
-    // otherwise Mini Editor templates won't persist exactly as authored.
-    return !!(snapshot && typeof snapshot === 'object' && (snapshot as any).__forceAtacarejoCanonical === true);
-};
-
-const shouldUseAtacVariantSnapshotsForTemplate = (_snapshot: any) => {
-    // Fixed Atacarejo layout: do not select per-variant snapshots in runtime.
-    return false;
-};
+// templateSnapshotHasAtacStructure, shouldForceCanonicalAtacForTemplateJson e
+// shouldUseAtacVariantSnapshotsForTemplate extraidos para
+// utils/templateSnapshotHelpers.ts.
 
 async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { atacVariantKey?: AtacVariantKey }): Promise<any> {
     const preferredVariantKey = opts?.atacVariantKey;
