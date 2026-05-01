@@ -40,7 +40,8 @@ import {
   collectTemplateJsonNodesDeep,
   PREPARED_CANVAS_LOAD_CACHE_LIMIT,
   DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD,
-  DEFERRED_PRODUCT_IMAGE_LOAD_MAX
+  DEFERRED_PRODUCT_IMAGE_LOAD_MAX,
+  repairHiddenPriceGroupTexts
 } from '~/utils/canvasJsonClassifiers'
 
 describe('PREPARED_CANVAS_LOAD_CACHE_LIMIT', () => {
@@ -1514,5 +1515,166 @@ describe('collectTemplateJsonNodesDeep', () => {
 
   it('node sem objects → so o root', () => {
     expect(collectTemplateJsonNodesDeep({ id: 'lonely' })).toEqual([{ id: 'lonely' }])
+  })
+})
+
+describe('repairHiddenPriceGroupTexts', () => {
+  it('null/non-object: 0', () => {
+    expect(repairHiddenPriceGroupTexts(null)).toBe(0)
+    expect(repairHiddenPriceGroupTexts({})).toBe(0)
+    expect(repairHiddenPriceGroupTexts({ objects: 'not-array' as any })).toBe(0)
+  })
+
+  it('json sem product cards: 0', () => {
+    expect(repairHiddenPriceGroupTexts({ objects: [{ type: 'Rect' }] })).toBe(0)
+  })
+
+  it('repara textos ocultos em priceGroup com nome', () => {
+    const json = {
+      objects: [
+        {
+          type: 'Group',
+          objects: [
+            { type: 'Textbox', text: 'Title' }, // top-level text → produto card
+            {
+              type: 'Group',
+              name: 'priceGroup',
+              objects: [
+                { type: 'Rect', name: 'price_bg', visible: true },
+                { type: 'IText', name: 'price_integer_text', visible: false }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    const repaired = repairHiddenPriceGroupTexts(json)
+    expect(repaired).toBeGreaterThan(0)
+    const pg = json.objects[0].objects[1] as any
+    expect(pg.objects[1].visible).toBe(true)
+  })
+
+  it('repara backgrounds ocultos quando ha textos visiveis', () => {
+    const json = {
+      objects: [
+        {
+          type: 'Group',
+          objects: [
+            { type: 'Textbox', text: 'Title' },
+            {
+              type: 'Group',
+              name: 'priceGroup',
+              objects: [
+                { type: 'Rect', name: 'price_bg', visible: false },
+                { type: 'IText', name: 'price_integer_text', visible: true, text: '99' }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    repairHiddenPriceGroupTexts(json)
+    const pg = json.objects[0].objects[1] as any
+    expect(pg.objects[0].visible).toBe(true)
+  })
+
+  it('repara recursivamente sub-grupos (atacarejo)', () => {
+    const json = {
+      objects: [
+        {
+          type: 'Group',
+          objects: [
+            { type: 'Textbox', text: 'Title' },
+            {
+              type: 'Group',
+              name: 'priceGroup',
+              objects: [
+                { type: 'Rect', name: 'atac_retail_bg', visible: true },
+                {
+                  type: 'Group',
+                  name: 'retail_group',
+                  objects: [
+                    { type: 'IText', name: 'atac_retail_price', visible: false }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    repairHiddenPriceGroupTexts(json)
+    const retail = (json.objects[0] as any).objects[1].objects[1]
+    expect(retail.objects[0].visible).toBe(true)
+  })
+
+  it('repara price_bg com fill transparent', () => {
+    const json: any = {
+      objects: [
+        {
+          type: 'Group',
+          objects: [
+            { type: 'Textbox', text: 'Title' },
+            {
+              type: 'Group',
+              name: 'priceGroup',
+              objects: [
+                { type: 'Rect', name: 'price_bg', fill: 'transparent' }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    repairHiddenPriceGroupTexts(json)
+    const pg = json.objects[0].objects[1]
+    expect(pg.objects[0].fill).toBe('#000000')
+  })
+
+  it('preserva fill de price_bg quando NAO transparent', () => {
+    const json: any = {
+      objects: [
+        {
+          type: 'Group',
+          objects: [
+            { type: 'Textbox', text: 'Title' },
+            {
+              type: 'Group',
+              name: 'priceGroup',
+              objects: [
+                { type: 'Rect', name: 'price_bg', fill: '#abcdef' }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    repairHiddenPriceGroupTexts(json)
+    const pg = json.objects[0].objects[1]
+    expect(pg.objects[0].fill).toBe('#abcdef')
+  })
+
+  it('NAO toca em price_currency_bg (intencionalmente oculto)', () => {
+    const json = {
+      objects: [
+        {
+          type: 'Group',
+          objects: [
+            { type: 'Textbox', text: 'Title' },
+            {
+              type: 'Group',
+              name: 'priceGroup',
+              objects: [
+                { type: 'IText', name: 'price_integer_text', visible: true, text: '99' },
+                { type: 'Circle', name: 'price_currency_bg', visible: false }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    repairHiddenPriceGroupTexts(json)
+    const pg = json.objects[0].objects[1] as any
+    expect(pg.objects[1].visible).toBe(false)
   })
 })

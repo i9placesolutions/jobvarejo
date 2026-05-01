@@ -934,3 +934,153 @@ export const restoreNamesFromJson = (objects: any[], jsonArr: any[]): void => {
         }
     }
 }
+
+/**
+ * Repara elementos ocultos dentro de priceGroups em produtos, no JSON
+ * pre-load. Viewport culling pode persistir `visible: false` em
+ * elementos que deveriam ficar visiveis (backgrounds, texts, imagens).
+ *
+ * Estrategia:
+ *  1. Identifica priceGroups pelo nome 'priceGroup' OU pela estrutura
+ *     (Rect + textos com nomes conhecidos)
+ *  2. Se ha qualquer texto visivel, restaura visibilidade de TODOS os
+ *     elementos estruturais (Rect/Image de fundo, textos de preco)
+ *  3. Se NENHUM elemento esta visivel mas ha conteudo, restaura tudo
+ *     (caso raro de corrupcao total por culling)
+ *  4. Recursivo em sub-grupos (atacarejo retail+wholesale)
+ *  5. Repara `price_bg` com fill transparente: restaura
+ *     `__originalFill` ou `'#000000'`.
+ *
+ * Mutates o JSON in place. Retorna numero de elementos reparados.
+ */
+export const repairHiddenPriceGroupTexts = (json: any): number => {
+    if (!json || !Array.isArray(json.objects)) return 0
+    let repaired = 0
+
+    const isProductCardGroup = (obj: any): boolean => {
+        if (obj?.type !== 'Group' && obj?.type !== 'group') return false
+        const children = Array.isArray(obj.objects) ? obj.objects : []
+        const hasTextbox = children.some((c: any) => c?.type === 'Textbox')
+        const hasNestedGroup = children.some((c: any) => c?.type === 'Group' || c?.type === 'group')
+        return hasTextbox && hasNestedGroup
+    }
+
+    const PRICE_BG_NAMES = new Set([
+        'price_bg', 'price_bg_image', 'splash_image',
+        'price_header_bg', 'offerBackground',
+        'atac_banner_bg', 'atac_wholesale_bg', 'atac_retail_bg'
+    ])
+    const PRICE_TEXT_NAMES = new Set([
+        'price_currency_text', 'price_integer_text', 'price_decimal_text',
+        'price_unit_text', 'price_value_text', 'smart_price',
+        'price_header_text', 'price_header_unit_text',
+        'priceInteger', 'priceDecimal', 'price_integer', 'price_decimal',
+        'atac_retail_price', 'atac_wholesale_price',
+        'atac_retail_unit', 'atac_wholesale_unit',
+        'atac_retail_label', 'atac_wholesale_label'
+    ])
+
+    const isTextType = (t: string) => t === 'IText' || t === 'Textbox' || t === 'Text'
+    const isBackgroundType = (t: string) => t === 'Rect' || t === 'Circle' || t === 'Ellipse' || t === 'Image' || t === 'Path'
+
+    const collectAllDeep = (objs: any[]): any[] => {
+        const out: any[] = []
+        const stack = [...objs]
+        while (stack.length) {
+            const o = stack.pop()
+            if (!o || typeof o !== 'object') continue
+            out.push(o)
+            if (Array.isArray(o.objects)) {
+                for (let i = o.objects.length - 1; i >= 0; i--) stack.push(o.objects[i])
+            }
+        }
+        return out
+    }
+
+    const repairPriceGroup = (pg: any) => {
+        const children = Array.isArray(pg.objects) ? pg.objects : []
+        if (!children.length) return
+
+        const allDeep = collectAllDeep(children)
+
+        const pgName = String(pg.name || '')
+        const isPriceGroupByName = pgName === 'priceGroup'
+        const hasNamedPriceElements = allDeep.some((o: any) =>
+            PRICE_BG_NAMES.has(String(o?.name || '')) || PRICE_TEXT_NAMES.has(String(o?.name || ''))
+        )
+        if (!isPriceGroupByName && !hasNamedPriceElements) return
+
+        const visibleTexts = allDeep.filter((o: any) => isTextType(String(o?.type || '')) && o.visible !== false)
+        const hiddenTexts = allDeep.filter((o: any) => isTextType(String(o?.type || '')) && o.visible === false)
+        const hiddenBgs = allDeep.filter((o: any) => {
+            if (o.visible !== false) return false
+            const name = String(o?.name || '')
+            const type = String(o?.type || '')
+            if (name === 'price_currency_bg') return false
+            return PRICE_BG_NAMES.has(name) || (isBackgroundType(type) && !isTextType(type))
+        })
+
+        const hasAnyVisible = visibleTexts.length > 0 || allDeep.some((o: any) => o.visible !== false)
+        const shouldRepairBgs = visibleTexts.length > 0 || !hasAnyVisible
+
+        if (shouldRepairBgs) {
+            for (const bg of hiddenBgs) {
+                bg.visible = true
+                repaired++
+            }
+        }
+
+        for (const txt of hiddenTexts) {
+            const name = String(txt?.name || '')
+            if (PRICE_TEXT_NAMES.has(name)) {
+                txt.visible = true
+                repaired++
+                continue
+            }
+            const visibleRects = children.filter((c: any) => c?.type === 'Rect' && c.visible !== false)
+            for (const rect of visibleRects) {
+                const rTop = rect.top ?? 0
+                const rBottom = rTop + (rect.height ?? 0)
+                const tTop = txt.top ?? 0
+                if (tTop >= rTop - 25 && tTop < rBottom) {
+                    txt.visible = true
+                    repaired++
+                    break
+                }
+            }
+        }
+
+        if (pg.visible === false && allDeep.length > 0) {
+            pg.visible = true
+            repaired++
+        }
+
+        const priceBgNode = allDeep.find((o: any) => o?.name === 'price_bg')
+        const hasBgImageNode = allDeep.some((o: any) => isRenderablePriceGroupTemplateImageNode(o))
+        if (priceBgNode && !hasBgImageNode) {
+            const curFill = priceBgNode.fill
+            if (!curFill || curFill === 'transparent' || curFill === '') {
+                priceBgNode.fill = priceBgNode.__originalFill || '#000000'
+                repaired++
+            }
+        }
+
+        for (const child of children) {
+            if ((child?.type === 'Group' || child?.type === 'group') && Array.isArray(child.objects)) {
+                repairPriceGroup(child)
+            }
+        }
+    }
+
+    for (const obj of json.objects) {
+        if (!isProductCardGroup(obj)) continue
+        const children = Array.isArray(obj.objects) ? obj.objects : []
+        for (const child of children) {
+            if ((child?.type === 'Group' || child?.type === 'group') && Array.isArray(child.objects)) {
+                repairPriceGroup(child)
+            }
+        }
+    }
+
+    return repaired
+}
