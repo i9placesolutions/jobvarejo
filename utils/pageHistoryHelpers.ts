@@ -43,3 +43,20 @@ export const historyItemIsLatest = (idx: number, items: PageHistoryItem[]): bool
     const item = items[0]
     return !!item && item.source !== 'current'
 }
+
+/**
+ * Extrai o id da pagina ativa de um project (forma generica).
+ *
+ * Recebe `pages` array e `activePageIndex` — caller (composable) injeta
+ * de refs reativos. Retorna string vazia (NAO null) quando nao ha
+ * pagina ou id, para compat com callers que comparam strings com `===`.
+ */
+export const getActiveProjectPageId = (
+    pages: any[] | null | undefined,
+    activePageIndex: number | undefined
+): string => {
+    const list = Array.isArray(pages) ? pages : []
+    const idx = Number(activePageIndex) || 0
+    const page = list[idx]
+    return String(page?.id || '').trim()
+}

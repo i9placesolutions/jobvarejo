@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   getHistoryRestoreKey,
-  historyItemIsLatest
+  historyItemIsLatest,
+  getActiveProjectPageId
 } from '~/utils/pageHistoryHelpers'
 import type { PageHistoryItem } from '~/utils/pageHistoryHelpers'
 
@@ -75,5 +76,45 @@ describe('historyItemIsLatest', () => {
 
   it('lista vazia → false', () => {
     expect(historyItemIsLatest(0, [])).toBe(false)
+  })
+})
+
+describe('getActiveProjectPageId', () => {
+  it('retorna id da pagina ativa', () => {
+    expect(getActiveProjectPageId([
+      { id: 'p1' },
+      { id: 'p2' }
+    ], 1)).toBe('p2')
+  })
+
+  it('aplica trim', () => {
+    expect(getActiveProjectPageId([{ id: '  page-1  ' }], 0)).toBe('page-1')
+  })
+
+  it('pagina inexistente: string vazia', () => {
+    expect(getActiveProjectPageId([{ id: 'p1' }], 99)).toBe('')
+  })
+
+  it('pages null/undefined: string vazia', () => {
+    expect(getActiveProjectPageId(null, 0)).toBe('')
+    expect(getActiveProjectPageId(undefined, 0)).toBe('')
+  })
+
+  it('activePageIndex undefined cai para 0', () => {
+    expect(getActiveProjectPageId([{ id: 'p1' }, { id: 'p2' }], undefined)).toBe('p1')
+  })
+
+  it('NaN/string em activePageIndex cai para 0', () => {
+    expect(getActiveProjectPageId([{ id: 'first' }], NaN as any)).toBe('first')
+  })
+
+  it('lista vazia: string vazia', () => {
+    expect(getActiveProjectPageId([], 0)).toBe('')
+  })
+
+  it('id ausente/null: string vazia', () => {
+    expect(getActiveProjectPageId([{ id: '' }], 0)).toBe('')
+    expect(getActiveProjectPageId([{ id: null }], 0)).toBe('')
+    expect(getActiveProjectPageId([{}], 0)).toBe('')
   })
 })

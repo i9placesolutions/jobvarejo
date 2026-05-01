@@ -79,7 +79,8 @@ import {
 } from '~/utils/refreshThrottle'
 import {
     getHistoryRestoreKey,
-    historyItemIsLatest as historyItemIsLatestHelper
+    historyItemIsLatest as historyItemIsLatestHelper,
+    getActiveProjectPageId as getActiveProjectPageIdHelper
 } from '~/utils/pageHistoryHelpers'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
 import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
@@ -5718,10 +5719,9 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     }
 }
 
-const getActiveProjectPageId = (): string => {
-    const page = project.pages?.[project.activePageIndex]
-    return String(page?.id || '').trim()
-}
+// Wrapper local que injeta project.pages e activePageIndex no helper puro.
+const getActiveProjectPageId = (): string =>
+    getActiveProjectPageIdHelper(project.pages, project.activePageIndex)
 
 const scheduleIdleStatePersistence = (opts: any, timeoutMs = 2200) => {
     const scheduledForPageId = getActiveProjectPageId()
