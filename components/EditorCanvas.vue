@@ -63,8 +63,14 @@ import {
     isObjectCenterInsideFrame,
     isObjectVisuallyInsideFrame,
     isObjectIntersectingFrame,
-    isObjectMostlyInsideFrame
+    isObjectMostlyInsideFrame,
+    getFrameSpawnPosition,
+    FRAME_SPAWN_GAP
 } from '~/utils/frameGeometry'
+import {
+    getLabelTemplateTimestamp,
+    shouldUseIncomingTemplateSnapshot
+} from '~/utils/labelTemplateHelpers'
 import {
     walkCanvasObjects,
     getJsonGroupChildren,
@@ -883,10 +889,7 @@ const MANUAL_TEMPLATE_STABLE_PROPS = ['__manualTemplateBaseW', '__manualTemplate
 const MANUAL_TEMPLATE_DERIVED_PROPS = ['__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors'] as const;
 const autoHealedLabelTemplateIds = new Set<string>()
 
-const getLabelTemplateTimestamp = (tpl: any): number => {
-    const ts = Date.parse(String(tpl?.updatedAt || tpl?.createdAt || ''));
-    return Number.isFinite(ts) ? ts : Number.NaN;
-};
+// getLabelTemplateTimestamp extraido para utils/labelTemplateHelpers.ts.
 
 const isBuiltInLabelTemplateId = (value: any): boolean => {
     const id = String(value || '').trim()
@@ -918,27 +921,7 @@ const normalizeLabelTemplateRecordAsManual = (tpl: any) => {
     } as any;
 };
 
-const shouldUseIncomingTemplateSnapshot = (prev: any, incoming: any): boolean => {
-    const prevTs = getLabelTemplateTimestamp(prev);
-    const incomingTs = getLabelTemplateTimestamp(incoming);
-    const incomingIsLocalOverride = !!(incoming as any)?.__localOverride;
-    const prevIsLocalOverride = !!(prev as any)?.__localOverride;
-
-    // Local override always wins over non-local data.
-    if (incomingIsLocalOverride !== prevIsLocalOverride) {
-        return incomingIsLocalOverride;
-    }
-
-    // Same tier (both local or both non-local): prefer newer timestamp.
-    if (Number.isFinite(incomingTs) && Number.isFinite(prevTs)) {
-        return incomingTs >= prevTs;
-    }
-    if (Number.isFinite(incomingTs) && !Number.isFinite(prevTs)) return true;
-    if (!Number.isFinite(incomingTs) && Number.isFinite(prevTs)) return false;
-
-    // Legacy payloads without timestamp: keep incoming on hydration path.
-    return true;
-};
+// shouldUseIncomingTemplateSnapshot extraido para utils/labelTemplateHelpers.ts.
 
 const serializeLabelTemplatesForProject = () => {
     // Persist all current templates in the project so manual layouts never regress
@@ -1283,23 +1266,11 @@ watch(showLabelTemplatesModal, async (open) => {
     await ensureLabelTemplatesReady();
 });
 
-const FRAME_SPAWN_GAP = 48;
+// FRAME_SPAWN_GAP movido para utils/frameGeometry.ts.
 
 // getFrameBounds extraido para utils/frameGeometry.ts.
 
-const getFrameSpawnPosition = (referenceFrame: any, nextFrameWidth: number, nextFrameHeight: number) => {
-    const fallback = {
-        left: nextFrameWidth / 2,
-        top: nextFrameHeight / 2
-    };
-    const bounds = getFrameBounds(referenceFrame);
-    if (!bounds) return fallback;
-
-    return {
-        left: bounds.left + bounds.width + FRAME_SPAWN_GAP + nextFrameWidth / 2,
-        top: bounds.top + bounds.height / 2
-    };
-};
+// getFrameSpawnPosition + FRAME_SPAWN_GAP extraidos para utils/frameGeometry.ts.
 
 const addFrame = (opts: { width?: number; height?: number } = {}) => {
     if (!canvas.value) return;

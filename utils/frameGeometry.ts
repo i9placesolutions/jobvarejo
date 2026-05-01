@@ -168,6 +168,35 @@ export const isObjectIntersectingFrame = (obj: any, frame: any): boolean => {
 }
 
 /**
+ * Gap default em pixels entre frames quando geramos um novo frame
+ * proximo a um frame de referencia. Mantem visual de "pagina" separada.
+ */
+export const FRAME_SPAWN_GAP = 48
+
+/**
+ * Calcula posicao de spawn (centro) para um novo frame, posicionando-o
+ * a direita do frame de referencia. Quando nao ha referencia disponivel,
+ * cai no centro do nextFrame (left=width/2, top=height/2).
+ */
+export const getFrameSpawnPosition = (
+    referenceFrame: any,
+    nextFrameWidth: number,
+    nextFrameHeight: number
+): { left: number; top: number } => {
+    const fallback = {
+        left: nextFrameWidth / 2,
+        top: nextFrameHeight / 2
+    }
+    const bounds = getFrameBounds(referenceFrame)
+    if (!bounds) return fallback
+
+    return {
+        left: bounds.left + bounds.width + FRAME_SPAWN_GAP + nextFrameWidth / 2,
+        top: bounds.top + bounds.height / 2
+    }
+}
+
+/**
  * Heuristica "majoritariamente dentro": center inside OU overlap >=
  * `minOverlapRatio` da area do objeto. Default 0.6 (60%).
  *

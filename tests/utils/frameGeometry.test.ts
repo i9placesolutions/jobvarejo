@@ -5,7 +5,9 @@ import {
   isObjectCenterInsideFrame,
   isObjectVisuallyInsideFrame,
   isObjectIntersectingFrame,
-  isObjectMostlyInsideFrame
+  isObjectMostlyInsideFrame,
+  getFrameSpawnPosition,
+  FRAME_SPAWN_GAP
 } from '~/utils/frameGeometry'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -223,5 +225,42 @@ describe('isObjectMostlyInsideFrame', () => {
     const partial = obj({ left: 10, top: 0, width: 200, height: 100 })
     expect(isObjectMostlyInsideFrame(partial, frame, 0.4)).toBe(true)  // 0.45 >= 0.4
     expect(isObjectMostlyInsideFrame(partial, frame, 0.5)).toBe(false) // 0.45 < 0.5
+  })
+})
+
+describe('getFrameSpawnPosition', () => {
+  it('FRAME_SPAWN_GAP e' + ' 48 (default)', () => {
+    expect(FRAME_SPAWN_GAP).toBe(48)
+  })
+
+  it('sem referencia: cai no centro do nextFrame', () => {
+    expect(getFrameSpawnPosition(null, 200, 100)).toEqual({ left: 100, top: 50 })
+    expect(getFrameSpawnPosition(undefined, 50, 80)).toEqual({ left: 25, top: 40 })
+  })
+
+  it('com referencia: posiciona a direita do frame de referencia', () => {
+    const reference = {
+      angle: 0,
+      width: 100,
+      height: 80,
+      scaleX: 1,
+      scaleY: 1,
+      getCenterPoint: () => ({ x: 50, y: 40 })
+    }
+    // bounds: left=0, top=0, w=100, h=80
+    // newFrame: 200x100 → spawn at left=100+48+100=248, top=40
+    expect(getFrameSpawnPosition(reference, 200, 100)).toEqual({ left: 248, top: 40 })
+  })
+
+  it('referencia com bounds invalidos cai no fallback', () => {
+    const broken = {
+      angle: 0,
+      width: 0, // invalido
+      height: 100,
+      scaleX: 1,
+      scaleY: 1,
+      getCenterPoint: () => ({ x: 0, y: 0 })
+    }
+    expect(getFrameSpawnPosition(broken, 100, 100)).toEqual({ left: 50, top: 50 })
   })
 })
