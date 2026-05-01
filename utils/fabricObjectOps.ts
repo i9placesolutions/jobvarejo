@@ -538,3 +538,71 @@ export const stripPersistentIdsRecursive = (node: any): void => {
         stripPersistentIdsRecursive(nestedClip)
     }
 }
+
+/**
+ * Normaliza o scale de um retangulo Fabric: converte scaleX/scaleY em
+ * width/height reais (preserva dimensoes apos resize) e ajusta o
+ * border-radius proporcionalmente, limitando-o a metade da menor
+ * dimensao final.
+ *
+ * Critico para evitar:
+ *  - cantos quebrados (rx > width/2)
+ *  - drift de aparencia ao redimensionar (escala dupla)
+ *  - flips persistentes (flipX/Y resetados)
+ *
+ * Mutativo. No-op silencioso se obj null ou nao-rect ou ja com scale=1.
+ * Retorna { width, height, rx, ry } final ou void.
+ */
+export const normalizeRectScale = (
+    obj: any,
+    minSize: number = 1
+): { width: number; height: number; rx: number; ry: number } | void => {
+    if (!obj) return
+    if (obj.type !== 'rect') return
+    if (obj.scaleX === 1 && obj.scaleY === 1) return
+
+    const newWidth = Math.max(minSize, Math.abs(obj.getScaledWidth?.() ?? (obj.width * obj.scaleX)))
+    const newHeight = Math.max(minSize, Math.abs(obj.getScaledHeight?.() ?? (obj.height * obj.scaleY)))
+
+    const originalRx = obj.rx || 0
+    const scaleFatorX = newWidth / obj.width
+    const scaleFatorY = newHeight / obj.height
+
+    const newRadius = Math.min(
+        (originalRx * Math.max(scaleFatorX, scaleFatorY)),
+        newWidth / 2,
+        newHeight / 2
+    )
+
+    obj.set({
+        width: newWidth,
+        height: newHeight,
+        rx: newRadius,
+        ry: newRadius,
+        scaleX: 1,
+        scaleY: 1,
+        flipX: false,
+        flipY: false
+    })
+
+    obj.setCoords?.()
+    return { width: newWidth, height: newHeight, rx: newRadius, ry: newRadius }
+}
+
+/**
+ * Aplica normalizeRectScale recursivamente em um group e seus
+ * descendentes. Percorre via getObjects(), descendo em groups
+ * aninhados. No-op silencioso se group null ou nao-group.
+ */
+export const normalizeGroupRects = (group: any): void => {
+    if (!group || !group.getObjects || group.type !== 'group') return
+    const objects = group.getObjects()
+    if (!Array.isArray(objects)) return
+    objects.forEach((obj: any) => {
+        if (obj.type === 'rect') {
+            normalizeRectScale(obj)
+        } else if (obj.type === 'group') {
+            normalizeGroupRects(obj)
+        }
+    })
+}

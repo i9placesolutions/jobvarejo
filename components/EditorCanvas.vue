@@ -204,7 +204,9 @@ import {
     isObjectMaskCandidate,
     stripPersistentIdsRecursive,
     findNearestMaskSourceBelowTarget as findNearestMaskSourceBelowTargetHelper,
-    clearObjectMaskMetadata
+    clearObjectMaskMetadata,
+    normalizeRectScale,
+    normalizeGroupRects
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -37667,73 +37669,7 @@ const applyZoneScaleToRect = (zone: any, minSize = 60) => {
     return { width: nextWidth, height: nextHeight };
 }
 
-/**
- * Normaliza o scale de retângulos após redimensionamento.
- * Converte scaleX/scaleY em width/height reais e preserva o border-radius proporcional.
- * Igual ao Figma: usa dimensões reais em vez de scale para evitar distorção dos cantos.
- */
-const normalizeRectScale = (obj: any, minSize = 1) => {
-    if (!obj) return;
-
-    // Apenas para retângulos (rect, Rect)
-    if (obj.type !== 'rect') return;
-
-    // Se não há scale para normalizar, retorna
-    if (obj.scaleX === 1 && obj.scaleY === 1) return;
-
-    const newWidth = Math.max(minSize, Math.abs(obj.getScaledWidth?.() ?? (obj.width * obj.scaleX)));
-    const newHeight = Math.max(minSize, Math.abs(obj.getScaledHeight?.() ?? (obj.height * obj.scaleY)));
-
-    // Calcular o novo border-radius proporcional, limitado a metade da menor dimensão
-    // Isso evita cantos quebrados e mantém a aparência visual consistente
-    const originalRx = obj.rx || 0;
-    const originalRy = obj.ry || 0;
-
-    // Fator de escala aplicado
-    const scaleFatorX = newWidth / obj.width;
-    const scaleFatorY = newHeight / obj.height;
-
-    // Novo radius proporcional (média dos fatores de escala para manter aparência)
-    const newRadius = Math.min(
-        (originalRx * Math.max(scaleFatorX, scaleFatorY)),
-        newWidth / 2,
-        newHeight / 2
-    );
-
-    obj.set({
-        width: newWidth,
-        height: newHeight,
-        rx: newRadius,
-        ry: newRadius,
-        scaleX: 1,
-        scaleY: 1,
-        flipX: false,
-        flipY: false
-    });
-
-    obj.setCoords();
-    return { width: newWidth, height: newHeight, rx: newRadius, ry: newRadius };
-};
-
-/**
- * Normaliza o scale de grupos que contêm retângulos com border-radius.
- * Percorre todos os objetos dentro do grupo e normaliza os retângulos.
- */
-const normalizeGroupRects = (group: any) => {
-    if (!group || !group.getObjects || group.type !== 'group') return;
-
-    const objects = group.getObjects();
-    if (!Array.isArray(objects)) return;
-
-    objects.forEach((obj: any) => {
-        if (obj.type === 'rect') {
-            normalizeRectScale(obj);
-        } else if (obj.type === 'group') {
-            // Recursivo para grupos aninhados
-            normalizeGroupRects(obj);
-        }
-    });
-};
+// normalizeRectScale e normalizeGroupRects extraidos para utils/fabricObjectOps.ts.
 
 // stableHash32 e getZoneHighlightPredicate extraidos para
 // utils/zoneHighlightHelpers.ts.

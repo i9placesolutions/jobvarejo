@@ -12,7 +12,9 @@ import {
   isObjectMaskCandidate,
   stripPersistentIdsRecursive,
   findNearestMaskSourceBelowTarget,
-  clearObjectMaskMetadata
+  clearObjectMaskMetadata,
+  normalizeRectScale,
+  normalizeGroupRects
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -949,5 +951,138 @@ describe('clearObjectMaskMetadata', () => {
     const o: any = { objectMaskEnabled: true, clipPath: 'x', set: function() {}, dirty: false }
     expect(() => clearObjectMaskMetadata(o, hasMask)).not.toThrow()
     expect(o.dirty).toBe(true)
+  })
+})
+
+describe('normalizeRectScale', () => {
+  const makeRect = (overrides: any = {}) => {
+    let coords = 0
+    const setCalls: any[] = []
+    const o: any = {
+      type: 'rect',
+      width: 100,
+      height: 50,
+      scaleX: 1,
+      scaleY: 1,
+      rx: 0,
+      ry: 0,
+      flipX: false,
+      flipY: false,
+      _setCoords: () => coords,
+      set(props: any) { Object.assign(this, props); setCalls.push(props) },
+      setCoords() { coords += 1 },
+      getScaledWidth() { return this.width * this.scaleX },
+      getScaledHeight() { return this.height * this.scaleY },
+      _calls: setCalls,
+      ...overrides
+    }
+    return o
+  }
+
+  it('null/non-rect: no-op', () => {
+    expect(normalizeRectScale(null)).toBeUndefined()
+    expect(normalizeRectScale({ type: 'image' })).toBeUndefined()
+  })
+
+  it('scale=1 ja: no-op (return undefined)', () => {
+    const r = makeRect()
+    expect(normalizeRectScale(r)).toBeUndefined()
+    expect(r._calls).toHaveLength(0)
+  })
+
+  it('converte scale em width/height reais', () => {
+    const r = makeRect({ width: 100, scaleX: 2, scaleY: 1.5 })
+    const result = normalizeRectScale(r)
+    expect(result?.width).toBe(200)
+    expect(result?.height).toBe(75) // 50 * 1.5
+    expect(r.scaleX).toBe(1)
+    expect(r.scaleY).toBe(1)
+  })
+
+  it('reseta flipX/flipY', () => {
+    const r = makeRect({ scaleX: 2, scaleY: 2, flipX: true, flipY: true })
+    normalizeRectScale(r)
+    expect(r.flipX).toBe(false)
+    expect(r.flipY).toBe(false)
+  })
+
+  it('escala border-radius proporcionalmente', () => {
+    const r = makeRect({ width: 100, height: 100, rx: 20, scaleX: 2, scaleY: 2 })
+    const result = normalizeRectScale(r)
+    // newRadius = min(20 * max(2, 2), 200/2, 200/2) = min(40, 100, 100) = 40
+    expect(result?.rx).toBe(40)
+    expect(result?.ry).toBe(40)
+  })
+
+  it('clampa border-radius em metade da menor dimensao', () => {
+    const r = makeRect({ width: 50, height: 100, rx: 30, scaleX: 1, scaleY: 1.1 })
+    const result = normalizeRectScale(r)
+    // newRadius = min(30 * 1.1, 50/2, 110/2) = min(33, 25, 55) = 25
+    expect(result?.rx).toBe(25)
+  })
+
+  it('minSize customizado', () => {
+    const r = makeRect({ width: 0.001, scaleX: 0.001 })
+    const result = normalizeRectScale(r, 10)
+    expect(result?.width).toBe(10)
+  })
+
+  it('aplica abs em scale negativo', () => {
+    const r = makeRect({ width: 100, scaleX: -2 })
+    const result = normalizeRectScale(r)
+    expect(result?.width).toBe(200)
+  })
+})
+
+describe('normalizeGroupRects', () => {
+  const makeRect = (overrides: any = {}) => ({
+    type: 'rect',
+    width: 100, height: 50,
+    scaleX: 1, scaleY: 1, rx: 0,
+    flipX: false, flipY: false,
+    set(props: any) { Object.assign(this, props) },
+    setCoords() {},
+    getScaledWidth() { return this.width * this.scaleX },
+    getScaledHeight() { return this.height * this.scaleY },
+    ...overrides
+  })
+
+  it('null/non-group: no-op', () => {
+    expect(() => normalizeGroupRects(null)).not.toThrow()
+    expect(() => normalizeGroupRects({ type: 'image' })).not.toThrow()
+    expect(() => normalizeGroupRects({ type: 'group' })).not.toThrow() // sem getObjects
+  })
+
+  it('group com rects: normaliza cada um', () => {
+    const r1 = makeRect({ scaleX: 2 })
+    const r2 = makeRect({ scaleX: 3 })
+    const group = { type: 'group', getObjects: () => [r1, r2] }
+    normalizeGroupRects(group)
+    expect(r1.scaleX).toBe(1)
+    expect(r2.scaleX).toBe(1)
+  })
+
+  it('ignora non-rect children', () => {
+    const r = makeRect({ scaleX: 2 })
+    const text = { type: 'text', scaleX: 5 } as any
+    const group = { type: 'group', getObjects: () => [r, text] }
+    normalizeGroupRects(group)
+    expect(r.scaleX).toBe(1)
+    expect(text.scaleX).toBe(5) // intacto
+  })
+
+  it('desce em groups aninhados', () => {
+    const innerR = makeRect({ scaleX: 2 })
+    const innerGroup = { type: 'group', getObjects: () => [innerR] }
+    const outerR = makeRect({ scaleX: 3 })
+    const outerGroup = { type: 'group', getObjects: () => [innerGroup, outerR] }
+    normalizeGroupRects(outerGroup)
+    expect(innerR.scaleX).toBe(1)
+    expect(outerR.scaleX).toBe(1)
+  })
+
+  it('group com getObjects retornando non-array: no-op', () => {
+    const group = { type: 'group', getObjects: () => null }
+    expect(() => normalizeGroupRects(group)).not.toThrow()
   })
 })
