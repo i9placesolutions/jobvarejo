@@ -128,6 +128,14 @@ import {
     isLightweightGlobalStyleProp
 } from '~/utils/globalStylePropClassifiers'
 import {
+    PRICE_LAYOUT_NODE_PREFIXES,
+    PRICE_LAYOUT_NODE_EXACT,
+    isPriceLayoutNode,
+    isCardContainerLikeGroup,
+    isMisnamedProductCardGroup,
+    makePriceLayoutKeyBuilder
+} from '~/utils/priceLayoutClassifiers'
+import {
     isObjectShownForBounds,
     getObjectHorizontalBoundsLocal,
     measureHorizontalBoundsLocal,
@@ -32888,46 +32896,11 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 
 const priceGroupAtacarejoProbeCache = new WeakMap<any, { childCount: number; hasAtacarejo: boolean }>();
 
-const PRICE_LAYOUT_NODE_PREFIXES = ['price_', 'retail_', 'wholesale_', 'atac_'];
-const PRICE_LAYOUT_NODE_EXACT = new Set([
-    'priceGroup',
-    'priceSymbol',
-    'price_currency',
-    'priceInteger',
-    'priceDecimal',
-    'priceUnit',
-    'smart_price',
-    'price_value_text'
-]);
+// PRICE_LAYOUT_NODE_PREFIXES, PRICE_LAYOUT_NODE_EXACT e isPriceLayoutNode
+// extraidos para utils/priceLayoutClassifiers.ts.
 
-const isPriceLayoutNode = (obj: any) => {
-    if (!obj || typeof obj !== 'object') return false;
-    const name = String(obj?.name || '').trim();
-    if (!name) return false;
-    if (PRICE_LAYOUT_NODE_EXACT.has(name)) return true;
-    return PRICE_LAYOUT_NODE_PREFIXES.some((prefix) => name.startsWith(prefix));
-};
-
-const isCardContainerLikeGroup = (group: any) => {
-    if (!group || String(group?.type || '').toLowerCase() !== 'group') return false;
-    if (group?.isSmartObject || group?.isProductCard) return true;
-    if (String(group?.name || '').startsWith('product-card')) return true;
-    if (String((group as any)?.parentZoneId || '').trim()) return true;
-    if (String((group as any)?.smartGridId || '').trim()) return true;
-    if (typeof group.getObjects !== 'function') return false;
-    const children = group.getObjects() || [];
-    if (!children.length) return false;
-    return children.some((child: any) => {
-        const n = String(child?.name || '');
-        return n === 'offerBackground' || n === 'smart_title' || n === 'smart_limit' || n === 'smart_image' || n === 'product_image' || n === 'productImage';
-    });
-};
-
-const isMisnamedProductCardGroup = (group: any) => {
-    if (!group || String(group?.type || '').toLowerCase() !== 'group') return false;
-    if (String(group?.name || '') !== 'priceGroup') return false;
-    return isCardContainerLikeGroup(group);
-};
+// isCardContainerLikeGroup e isMisnamedProductCardGroup extraidos para
+// utils/priceLayoutClassifiers.ts.
 
 const isLikelyPriceGroupObject = (group: any) => {
     if (!group || String(group?.type || '').toLowerCase() !== 'group') return false;
@@ -32939,15 +32912,7 @@ const isLikelyPriceGroupObject = (group: any) => {
     return (group.getObjects() || []).some((child: any) => isPriceLayoutNode(child));
 };
 
-const makePriceLayoutKeyBuilder = () => {
-    const counters = new Map<string, number>();
-    return (obj: any) => {
-        const base = String(obj?.name || obj?.type || 'node');
-        const idx = counters.get(base) ?? 0;
-        counters.set(base, idx + 1);
-        return `${base}#${idx}`;
-    };
-};
+// makePriceLayoutKeyBuilder extraido para utils/priceLayoutClassifiers.ts.
 
 const isFiniteLayoutNumber = (value: any) => {
     const n = Number(value);
