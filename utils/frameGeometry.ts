@@ -327,6 +327,86 @@ export const isObjectMostlyInsideFrame = (obj: any, frame: any, minOverlapRatio 
 }
 
 /**
+ * Resultado de prepareJsonObjectsForLazyFrameLoad: contem o JSON
+ * preparado (subset de objects) + um Map de filhos diferidos (por
+ * frameId) para criacao posterior quando o frame ficar visivel.
+ */
+export type PrepareJsonForLazyFrameLoadResult = {
+    objects: any[]
+    deferredByFrameId: Map<string, any[]>
+    totalDeferred: number
+    invisibleFrameCount: number
+}
+
+/**
+ * Pre-processa o array de `objects` de um canvas JSON antes do load:
+ * detecta frames com visible=false (e filhos de frames invisíveis,
+ * via BFS) e separa os children em um Map `deferredByFrameId` para
+ * criacao tardia (quando o usuario ligar a visibilidade do frame).
+ *
+ * Reduz drasticamente o tempo de carregamento em projetos grandes
+ * com muitas paginas/frames ocultos.
+ *
+ * Pure: nao muta o array de input. O Map retornado e novo.
+ */
+export const prepareJsonObjectsForLazyFrameLoad = (
+    objects: ReadonlyArray<any>
+): PrepareJsonForLazyFrameLoadResult => {
+    const deferredByFrameId = new Map<string, any[]>()
+    if (!Array.isArray(objects) || objects.length === 0) {
+        return { objects: [], deferredByFrameId, totalDeferred: 0, invisibleFrameCount: 0 }
+    }
+
+    const invisibleFrameIds = new Set<string>()
+    for (const obj of objects) {
+        if (obj?.isFrame && obj.visible === false) {
+            const id = String(obj._customId || obj.customId || '').trim()
+            if (id) invisibleFrameIds.add(id)
+        }
+    }
+    if (invisibleFrameIds.size === 0) {
+        return {
+            objects: objects.slice(),
+            deferredByFrameId,
+            totalDeferred: 0,
+            invisibleFrameCount: 0
+        }
+    }
+
+    let changed = true
+    while (changed) {
+        changed = false
+        for (const obj of objects) {
+            if (!obj?.isFrame) continue
+            const id = String(obj._customId || obj.customId || '').trim()
+            const parentId = String(obj.parentFrameId || '').trim()
+            if (id && !invisibleFrameIds.has(id) && parentId && invisibleFrameIds.has(parentId)) {
+                invisibleFrameIds.add(id)
+                changed = true
+            }
+        }
+    }
+
+    const kept: any[] = []
+    for (const obj of objects) {
+        const parentId = String(obj?.parentFrameId || '').trim()
+        if (parentId && invisibleFrameIds.has(parentId)) {
+            if (!deferredByFrameId.has(parentId)) deferredByFrameId.set(parentId, [])
+            deferredByFrameId.get(parentId)!.push(obj)
+        } else {
+            kept.push(obj)
+        }
+    }
+
+    return {
+        objects: kept,
+        deferredByFrameId,
+        totalDeferred: objects.length - kept.length,
+        invisibleFrameCount: invisibleFrameIds.size
+    }
+}
+
+/**
  * Encontra o frame mais "interno" (menor area) que contem o objeto
  * `obj` na lista `frames`. Pure: dado obj + frames + thresholds.
  *

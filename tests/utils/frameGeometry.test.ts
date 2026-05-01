@@ -13,7 +13,8 @@ import {
   buildFrameLabelViewportSignature,
   buildFrameLabelSelectionSignature,
   normalizeFrameRuntimeProps,
-  findFrameUnderObjectInList
+  findFrameUnderObjectInList,
+  prepareJsonObjectsForLazyFrameLoad
 } from '~/utils/frameGeometry'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -550,5 +551,94 @@ describe('findFrameUnderObjectInList', () => {
     const badFrame = {} as any
     const obj = makeObj(40, 40, 20, 20)
     expect(findFrameUnderObjectInList(obj, [badFrame, goodFrame])).toBe(goodFrame)
+  })
+})
+
+describe('prepareJsonObjectsForLazyFrameLoad', () => {
+  it('lista vazia: result vazio', () => {
+    const r = prepareJsonObjectsForLazyFrameLoad([])
+    expect(r.objects).toEqual([])
+    expect(r.deferredByFrameId.size).toBe(0)
+    expect(r.totalDeferred).toBe(0)
+    expect(r.invisibleFrameCount).toBe(0)
+  })
+
+  it('non-array: result vazio', () => {
+    const r = prepareJsonObjectsForLazyFrameLoad(null as any)
+    expect(r.objects).toEqual([])
+  })
+
+  it('sem frames invisiveis: retorna copia dos objects, sem defer', () => {
+    const objects = [
+      { type: 'rect', _customId: 'r1' },
+      { type: 'group', isFrame: true, visible: true, _customId: 'f1' }
+    ]
+    const r = prepareJsonObjectsForLazyFrameLoad(objects)
+    expect(r.objects).toEqual(objects)
+    expect(r.objects).not.toBe(objects) // copia
+    expect(r.totalDeferred).toBe(0)
+    expect(r.invisibleFrameCount).toBe(0)
+  })
+
+  it('frame invisivel: filhos diferidos, frame mantido', () => {
+    const frame = { type: 'group', isFrame: true, visible: false, _customId: 'f1' }
+    const child1 = { type: 'rect', parentFrameId: 'f1' }
+    const child2 = { type: 'text', parentFrameId: 'f1' }
+    const free = { type: 'image' }
+    const r = prepareJsonObjectsForLazyFrameLoad([frame, child1, child2, free])
+    expect(r.objects).toEqual([frame, free])
+    expect(r.deferredByFrameId.get('f1')).toEqual([child1, child2])
+    expect(r.totalDeferred).toBe(2)
+    expect(r.invisibleFrameCount).toBe(1)
+  })
+
+  it('frame aninhado em frame invisivel: tambem fica invisivel (BFS)', () => {
+    const outerFrame = { type: 'group', isFrame: true, visible: false, _customId: 'f1' }
+    const innerFrame = { type: 'group', isFrame: true, visible: true, _customId: 'f2', parentFrameId: 'f1' }
+    const innerChild = { type: 'rect', parentFrameId: 'f2' }
+    const r = prepareJsonObjectsForLazyFrameLoad([outerFrame, innerFrame, innerChild])
+    expect(r.objects).toEqual([outerFrame])
+    expect(r.invisibleFrameCount).toBe(2)
+    expect(r.deferredByFrameId.get('f1')).toEqual([innerFrame])
+    expect(r.deferredByFrameId.get('f2')).toEqual([innerChild])
+  })
+
+  it('aceita customId (legado) alem de _customId', () => {
+    const frame = { type: 'group', isFrame: true, visible: false, customId: 'legacy-id' }
+    const child = { type: 'rect', parentFrameId: 'legacy-id' }
+    const r = prepareJsonObjectsForLazyFrameLoad([frame, child])
+    expect(r.deferredByFrameId.get('legacy-id')).toEqual([child])
+  })
+
+  it('frame invisivel sem _customId/customId: ignorado', () => {
+    const frame = { type: 'group', isFrame: true, visible: false }
+    const r = prepareJsonObjectsForLazyFrameLoad([frame, { type: 'rect' }])
+    expect(r.invisibleFrameCount).toBe(0)
+  })
+
+  it('multiplos frames invisiveis irmaos', () => {
+    const f1 = { type: 'group', isFrame: true, visible: false, _customId: 'f1' }
+    const f2 = { type: 'group', isFrame: true, visible: false, _customId: 'f2' }
+    const c1 = { parentFrameId: 'f1' }
+    const c2 = { parentFrameId: 'f2' }
+    const r = prepareJsonObjectsForLazyFrameLoad([f1, f2, c1, c2])
+    expect(r.objects).toEqual([f1, f2])
+    expect(r.deferredByFrameId.size).toBe(2)
+    expect(r.totalDeferred).toBe(2)
+  })
+
+  it('Map retornado e novo (nao reusa)', () => {
+    const r1 = prepareJsonObjectsForLazyFrameLoad([])
+    const r2 = prepareJsonObjectsForLazyFrameLoad([])
+    expect(r1.deferredByFrameId).not.toBe(r2.deferredByFrameId)
+  })
+
+  it('preserva ordem dos objects mantidos', () => {
+    const a = { type: 'rect', _customId: 'a' }
+    const b = { type: 'group', isFrame: true, visible: false, _customId: 'b' }
+    const c = { type: 'image', _customId: 'c' }
+    const cb = { type: 'text', parentFrameId: 'b' }
+    const r = prepareJsonObjectsForLazyFrameLoad([a, b, cb, c])
+    expect(r.objects.map((o: any) => o._customId)).toEqual(['a', 'b', 'c'])
   })
 })

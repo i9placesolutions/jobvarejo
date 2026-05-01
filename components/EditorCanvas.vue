@@ -231,7 +231,8 @@ import {
     buildFrameLabelViewportSignature,
     buildFrameLabelSelectionSignature,
     normalizeFrameRuntimeProps,
-    findFrameUnderObjectInList
+    findFrameUnderObjectInList,
+    prepareJsonObjectsForLazyFrameLoad
 } from '~/utils/frameGeometry'
 import {
     TRANSIENT_CONTROL_NAMES,
@@ -828,55 +829,24 @@ const ensureCanvasContextsReady = (fc: any): boolean => {
  * deferredFrameChildren para criação posterior (quando o olho for ligado).
  * Reduz drasticamente o tempo de carregamento em projetos grandes.
  */
+// Wrapper local: chama o helper puro prepareJsonObjectsForLazyFrameLoad
+// e popula o Map global deferredFrameChildren.
 const prepareJsonForLoad = (json: any): any => {
     deferredFrameChildren.clear()
     const objects: any[] = Array.isArray(json?.objects) ? json.objects : []
     if (objects.length === 0) return json
 
-    // 1. Identificar frames diretamente invisíveis
-    const invisibleFrameIds = new Set<string>()
-    for (const obj of objects) {
-        if (obj.isFrame && obj.visible === false) {
-            const id = String(obj._customId || obj.customId || '').trim()
-            if (id) invisibleFrameIds.add(id)
-        }
-    }
-    if (invisibleFrameIds.size === 0) return json
+    const result = prepareJsonObjectsForLazyFrameLoad(objects)
+    if (result.deferredByFrameId.size === 0) return json
 
-    // 2. Expandir para frames filhos de frames invisíveis (BFS)
-    let changed = true
-    while (changed) {
-        changed = false
-        for (const obj of objects) {
-            if (obj.isFrame) {
-                const id = String(obj._customId || obj.customId || '').trim()
-                const parentId = String(obj.parentFrameId || '').trim()
-                if (id && !invisibleFrameIds.has(id) && parentId && invisibleFrameIds.has(parentId)) {
-                    invisibleFrameIds.add(id)
-                    changed = true
-                }
-            }
-        }
-    }
+    result.deferredByFrameId.forEach((children, frameId) => {
+        deferredFrameChildren.set(frameId, children)
+    })
 
-    // 3. Separar: manter frames invisíveis (border rect) mas remover seus filhos
-    const kept: any[] = []
-    for (const obj of objects) {
-        const parentId = String(obj.parentFrameId || '').trim()
-        if (parentId && invisibleFrameIds.has(parentId)) {
-            // Filho de frame invisível → diferir
-            if (!deferredFrameChildren.has(parentId)) deferredFrameChildren.set(parentId, [])
-            deferredFrameChildren.get(parentId)!.push(obj)
-        } else {
-            kept.push(obj)
-        }
+    if (result.totalDeferred > 0) {
+        console.log(`[lazy-frames] ${result.totalDeferred} objeto(s) diferidos de ${result.invisibleFrameCount} frame(s) invisível(is); carregando ${result.objects.length} objeto(s).`)
     }
-
-    const totalDeferred = objects.length - kept.length
-    if (totalDeferred > 0) {
-        console.log(`[lazy-frames] ${totalDeferred} objeto(s) diferidos de ${invisibleFrameIds.size} frame(s) invisível(is); carregando ${kept.length} objeto(s).`)
-    }
-    return { ...json, objects: kept }
+    return { ...json, objects: result.objects }
 }
 
 const loadFromJsonSafe = async (json: any): Promise<void> => {
