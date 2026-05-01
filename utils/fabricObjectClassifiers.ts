@@ -218,6 +218,18 @@ export const findByName = (objects: any[], name: string): any =>
     objects.find((o: any) => o?.name === name)
 
 /**
+ * Detecta se um objeto tem mascara aplicada via "object mask" (clipPath
+ * com flag `objectMaskEnabled`, distinto do clip de frame que tem
+ * `_frameClipOwner`).
+ */
+export const hasObjectMaskApplied = (obj: any): boolean => {
+    if (!obj || typeof obj !== 'object') return false
+    if (!obj.clipPath) return false
+    if (obj._frameClipOwner) return false
+    return !!obj.objectMaskEnabled
+}
+
+/**
  * Detecta um segmento "close path" (Z) num path SVG. Aceita tanto
  * formato array (`['Z']`) quanto string (`'Z'`), ambos case-insensitive.
  */

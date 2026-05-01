@@ -28,6 +28,25 @@ export const getPreferredProductImageFromGroup = (group: any): any | null => {
 }
 
 /**
+ * Extrai a URL de origem de uma fabric.Image, tentando 3 caminhos:
+ *  1. `img.src` direto (mais comum)
+ *  2. `img.getSrc()` (Fabric API oficial)
+ *  3. `img._element.src` (HTMLImageElement subjacente)
+ *
+ * Retorna string vazia quando nada disponivel.
+ */
+export const getImageSourceFromObject = (img: any): string => {
+    const direct = String((img as any)?.src || '').trim()
+    if (direct) return direct
+    const fromGetter = typeof (img as any)?.getSrc === 'function'
+        ? String((img as any).getSrc() || '').trim()
+        : ''
+    if (fromGetter) return fromGetter
+    const fromEl = String((img as any)?._element?.src || '').trim()
+    return fromEl
+}
+
+/**
  * Calcula dimensoes "uteis" de uma imagem Fabric considerando se ja
  * existe um crop aplicado:
  *  - se ha cropX/cropY > 0 (crop ativo): usa width/height correntes do

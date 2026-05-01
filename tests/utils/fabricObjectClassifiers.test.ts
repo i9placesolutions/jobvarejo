@@ -10,7 +10,8 @@ import {
   findByName,
   isPriceGroupOrPriceChild,
   isPathCloseCommand,
-  isVectorPathClosed
+  isVectorPathClosed,
+  hasObjectMaskApplied
 } from '~/utils/fabricObjectClassifiers'
 
 // Helpers de mock — todos seguem duck typing de Fabric.
@@ -379,5 +380,39 @@ describe('isVectorPathClosed', () => {
 
   it('path com elementos invalidos cai em segments=[]', () => {
     expect(isVectorPathClosed({ path: 'not-array' })).toBe(false)
+  })
+})
+
+describe('hasObjectMaskApplied', () => {
+  it('aceita quando tem clipPath + objectMaskEnabled + sem _frameClipOwner', () => {
+    expect(hasObjectMaskApplied({
+      clipPath: { type: 'rect' },
+      objectMaskEnabled: true
+    })).toBe(true)
+  })
+
+  it('rejeita sem clipPath', () => {
+    expect(hasObjectMaskApplied({ objectMaskEnabled: true })).toBe(false)
+    expect(hasObjectMaskApplied({})).toBe(false)
+  })
+
+  it('rejeita com _frameClipOwner (clip de frame, nao mask)', () => {
+    expect(hasObjectMaskApplied({
+      clipPath: { type: 'rect' },
+      objectMaskEnabled: true,
+      _frameClipOwner: { id: 'frame-1' }
+    })).toBe(false)
+  })
+
+  it('rejeita sem flag objectMaskEnabled', () => {
+    expect(hasObjectMaskApplied({
+      clipPath: { type: 'rect' }
+    })).toBe(false)
+  })
+
+  it('rejeita null/undefined/primitivo', () => {
+    expect(hasObjectMaskApplied(null)).toBe(false)
+    expect(hasObjectMaskApplied(undefined)).toBe(false)
+    expect(hasObjectMaskApplied('foo')).toBe(false)
   })
 })

@@ -32,7 +32,8 @@ import {
     findByName,
     isPriceGroupOrPriceChild,
     isPathCloseCommand,
-    isVectorPathClosed
+    isVectorPathClosed,
+    hasObjectMaskApplied
 } from '~/utils/fabricObjectClassifiers'
 import {
     isCanvasContextError,
@@ -42,8 +43,18 @@ import {
 } from '~/utils/canvasValidation'
 import {
     getPreferredProductImageFromGroup,
-    getImageTrimmedDimensions
+    getImageTrimmedDimensions,
+    getImageSourceFromObject
 } from '~/utils/fabricImageHelpers'
+import {
+    isUserGuideObject,
+    getUserGuideAxisAndPos
+} from '~/utils/userGuideHelpers'
+import {
+    isBlockedObjectForScopedExport,
+    isExportableSelectionObject,
+    getSelectedObjectExportFileBaseName
+} from '~/utils/exportSelectionHelpers'
 import {
     isObjectShownForBounds,
     getObjectHorizontalBoundsLocal,
@@ -17412,20 +17423,7 @@ const USER_GUIDE_EXTENT = 100000
 
 const userGuidesIndex = ref<Array<{ id: string; axis: 'x' | 'y'; pos: number }>>([])
 
-const isUserGuideObject = (o: any): boolean => {
-    const id = String(o?.id || '')
-    return !!o && (o.isUserGuide === true || o.guideAxis === 'x' || o.guideAxis === 'y' || id.startsWith('guide-user-'))
-}
-
-const getUserGuideAxisAndPos = (o: any): { axis: 'x' | 'y'; pos: number } | null => {
-    if (!o) return null
-    const axis = (o.guideAxis === 'x' || o.guideAxis === 'y')
-        ? o.guideAxis
-        : (typeof o.x1 === 'number' && typeof o.x2 === 'number' && Math.abs(o.x1 - o.x2) < 1e-6 ? 'x' : 'y')
-    const pos = axis === 'x' ? Number(o.x1 ?? o.left ?? 0) : Number(o.y1 ?? o.top ?? 0)
-    if (!Number.isFinite(pos)) return null
-    return { axis, pos }
-}
+// isUserGuideObject e getUserGuideAxisAndPos extraidos para utils/userGuideHelpers.ts.
 
 const refreshUserGuidesIndex = () => {
     if (!canvas.value) {
@@ -22355,12 +22353,7 @@ const isObjectMaskCandidate = (obj: any): boolean => {
     return true;
 };
 
-const hasObjectMaskApplied = (obj: any): boolean => {
-    if (!obj || typeof obj !== 'object') return false;
-    if (!obj.clipPath) return false;
-    if (obj._frameClipOwner) return false;
-    return !!obj.objectMaskEnabled;
-};
+// hasObjectMaskApplied extraido para utils/fabricObjectClassifiers.ts.
 
 const stripPersistentIdsRecursive = (node: any) => {
     if (!node || typeof node !== 'object') return;
@@ -23780,26 +23773,8 @@ const exportDesign = () => {
     showExportModal.value = true;
 }
 
-const isBlockedObjectForScopedExport = (obj: any): boolean => {
-    if (!obj) return true;
-    if ((obj as any).excludeFromExport) return true;
-    if ((obj as any).isFrame) return true;
-    if (isLikelyProductZone(obj)) return true;
-    return false;
-};
-
-const isExportableSelectionObject = (obj: any): boolean => {
-    if (!obj) return false;
-    if (isBlockedObjectForScopedExport(obj)) return false;
-
-    if (obj?.type === 'activeSelection' && typeof obj?.getObjects === 'function') {
-        const children = (obj.getObjects() || []).filter(Boolean);
-        if (!children.length) return false;
-        if (children.some((child: any) => isBlockedObjectForScopedExport(child))) return false;
-    }
-
-    return true;
-};
+// isBlockedObjectForScopedExport e isExportableSelectionObject extraidos
+// para utils/exportSelectionHelpers.ts.
 
 const resolveExportableSelectedObject = (preferred?: any): any | null => {
     const candidates: any[] = [];
@@ -23818,15 +23793,7 @@ const resolveExportableSelectedObject = (preferred?: any): any | null => {
     return null;
 };
 
-const getSelectedObjectExportFileBaseName = (obj: any): string => {
-    const baseName = String((obj as any)?.layerName || obj?.name || obj?.type || 'objeto')
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-    return baseName || 'objeto';
-};
+// getSelectedObjectExportFileBaseName extraido para utils/exportSelectionHelpers.ts.
 
 const hasExportableSelectedObject = computed(() => !!resolveExportableSelectedObject());
 
@@ -25312,14 +25279,7 @@ const isLikelyPlaceholderImageSrc = (src: string): boolean => {
     return value === PLACEHOLDER_IMAGE_DATA_URL;
 };
 
-const getImageSourceFromObject = (img: any): string => {
-    const direct = String((img as any)?.src || '').trim();
-    if (direct) return direct;
-    const fromGetter = typeof (img as any)?.getSrc === 'function' ? String((img as any).getSrc() || '').trim() : '';
-    if (fromGetter) return fromGetter;
-    const fromEl = String((img as any)?._element?.src || '').trim();
-    return fromEl;
-};
+// getImageSourceFromObject extraido para utils/fabricImageHelpers.ts.
 
 const normalizeRecoveryImageUrl = (src: string): string => {
     const value = String(src || '').trim();

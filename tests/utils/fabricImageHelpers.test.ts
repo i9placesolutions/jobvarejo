@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   getPreferredProductImageFromGroup,
-  getImageTrimmedDimensions
+  getImageTrimmedDimensions,
+  getImageSourceFromObject
 } from '~/utils/fabricImageHelpers'
 
 const group = (children: any[]) => ({
@@ -108,5 +109,44 @@ describe('getImageTrimmedDimensions', () => {
       height: 75,
       getElement: () => ({ naturalWidth: 0, naturalHeight: 0 })
     })).toEqual({ width: 50, height: 75 })
+  })
+})
+
+describe('getImageSourceFromObject', () => {
+  it('prioriza img.src direto', () => {
+    expect(getImageSourceFromObject({ src: 'https://example.com/a.png' }))
+      .toBe('https://example.com/a.png')
+  })
+
+  it('cai para getSrc() quando img.src vazio', () => {
+    expect(getImageSourceFromObject({
+      src: '',
+      getSrc: () => 'https://example.com/b.png'
+    })).toBe('https://example.com/b.png')
+  })
+
+  it('cai para _element.src como ultimo recurso', () => {
+    expect(getImageSourceFromObject({
+      _element: { src: 'https://example.com/c.png' }
+    })).toBe('https://example.com/c.png')
+  })
+
+  it('retorna string vazia quando nada disponivel', () => {
+    expect(getImageSourceFromObject({})).toBe('')
+    expect(getImageSourceFromObject(null)).toBe('')
+    expect(getImageSourceFromObject(undefined)).toBe('')
+  })
+
+  it('aplica trim', () => {
+    expect(getImageSourceFromObject({ src: '  https://example.com/x.png  ' }))
+      .toBe('https://example.com/x.png')
+  })
+
+  it('getSrc nao-funcao e ignorado', () => {
+    expect(getImageSourceFromObject({
+      src: '',
+      getSrc: 'not-a-function',
+      _element: { src: 'fallback' }
+    })).toBe('fallback')
   })
 })
