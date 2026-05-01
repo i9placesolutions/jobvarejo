@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildCardRelayoutSignature } from '~/utils/cardRelayoutSignature'
+import { buildCardRelayoutSignature, resolvePriceGroupBaseScale } from '~/utils/cardRelayoutSignature'
 
 describe('buildCardRelayoutSignature', () => {
   const baseGroup = (overrides: any = {}) => ({
@@ -113,5 +113,60 @@ describe('buildCardRelayoutSignature', () => {
   it('null/undefined styles → todos campos null/empty mas sem crash', () => {
     expect(() => buildCardRelayoutSignature(baseGroup(), 100, 200, undefined)).not.toThrow()
     expect(() => buildCardRelayoutSignature(baseGroup(), 100, 200, null as any)).not.toThrow()
+  })
+})
+
+describe('resolvePriceGroupBaseScale', () => {
+  it('prioriza __originalScaleX/Y se valido', () => {
+    expect(resolvePriceGroupBaseScale({ __originalScaleX: 1.5 }, 'x', 1)).toBe(1.5)
+    expect(resolvePriceGroupBaseScale({ __originalScaleY: 2 }, 'y', 1)).toBe(2)
+  })
+
+  it('__original* < 0.02: ignorado, cai em fallback', () => {
+    const pg = { __originalScaleX: 0.01, scaleX: 1.5 }
+    expect(resolvePriceGroupBaseScale(pg, 'x', 1)).toBe(1.5)
+  })
+
+  it('flip negativo preservado em magnitude (Math.abs)', () => {
+    expect(resolvePriceGroupBaseScale({ __originalScaleX: -1.5 }, 'x', 1)).toBe(1.5)
+  })
+
+  it('sem __original*: infere base = current/zoneScale', () => {
+    const pg = { scaleX: 2 }
+    expect(resolvePriceGroupBaseScale(pg, 'x', 0.5)).toBe(4) // 2 / 0.5 = 4
+  })
+
+  it('zoneScale invalido (<= 0.02): retorna scale atual', () => {
+    const pg = { scaleX: 1.7 }
+    expect(resolvePriceGroupBaseScale(pg, 'x', 0)).toBe(1.7)
+    expect(resolvePriceGroupBaseScale(pg, 'x', NaN)).toBe(1.7)
+  })
+
+  it('current scale invalido: usa 1 como safeCurrent, multiplica /zone', () => {
+    const pg = { scaleX: 0 }
+    // safeCurrent = 1; zoneScale 2: inferred = 1/2 = 0.5
+    expect(resolvePriceGroupBaseScale(pg, 'x', 2)).toBe(0.5)
+  })
+
+  it('inferred base < 0.02: retorna safeCurrent', () => {
+    // current=0.1, zone=100 → inferred = 0.001 < 0.02 → fallback
+    const pg = { scaleX: 0.1 }
+    expect(resolvePriceGroupBaseScale(pg, 'x', 100)).toBe(0.1)
+  })
+
+  it('axis x usa scaleX/__originalScaleX, axis y usa scaleY/__originalScaleY', () => {
+    const pg = {
+      scaleX: 1.1,
+      scaleY: 2.2,
+      __originalScaleX: 3.3,
+      __originalScaleY: 4.4
+    }
+    expect(resolvePriceGroupBaseScale(pg, 'x', 1)).toBe(3.3)
+    expect(resolvePriceGroupBaseScale(pg, 'y', 1)).toBe(4.4)
+  })
+
+  it('null/undefined priceGroup: retorna 1 (safeCurrent default)', () => {
+    expect(resolvePriceGroupBaseScale(null, 'x', 1)).toBe(1)
+    expect(resolvePriceGroupBaseScale(undefined, 'y', 0.5)).toBe(2) // 1/0.5
   })
 })

@@ -146,7 +146,7 @@ import {
     stableHash32,
     getZoneHighlightPredicate
 } from '~/utils/zoneHighlightHelpers'
-import { buildCardRelayoutSignature } from '~/utils/cardRelayoutSignature'
+import { buildCardRelayoutSignature, resolvePriceGroupBaseScale } from '~/utils/cardRelayoutSignature'
 import {
     PRICE_LAYOUT_NODE_PREFIXES,
     PRICE_LAYOUT_NODE_EXACT,
@@ -36353,26 +36353,7 @@ async function handleUpdateTemplateFromMiniEditor(
 // Helper for Responsive Card Layout
 // buildCardRelayoutSignature extraido para utils/cardRelayoutSignature.ts.
 
-const resolvePriceGroupBaseScale = (priceGroup: any, axis: 'x' | 'y', zoneScale: number) => {
-    const originalKey = axis === 'x' ? '__originalScaleX' : '__originalScaleY';
-    const scaleKey = axis === 'x' ? 'scaleX' : 'scaleY';
-    const originalScale = Math.abs(Number((priceGroup as any)?.[originalKey]));
-    if (Number.isFinite(originalScale) && originalScale > 0.02) {
-        return originalScale;
-    }
-
-    const currentScale = Math.abs(Number((priceGroup as any)?.[scaleKey]));
-    const safeCurrentScale = Number.isFinite(currentScale) && currentScale > 0.02 ? currentScale : 1;
-    const safeZoneScale = Math.abs(Number(zoneScale));
-    if (Number.isFinite(safeZoneScale) && safeZoneScale > 0.02) {
-        const inferredBase = safeCurrentScale / safeZoneScale;
-        if (Number.isFinite(inferredBase) && inferredBase > 0.02) {
-            return inferredBase;
-        }
-    }
-
-    return safeCurrentScale;
-};
+// resolvePriceGroupBaseScale extraido para utils/cardRelayoutSignature.ts.
 
 const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
     // FIX: Permanently disable Fabric v7 LayoutManager on product card groups.

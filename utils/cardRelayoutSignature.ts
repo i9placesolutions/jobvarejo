@@ -113,3 +113,41 @@ export const buildCardRelayoutSignature = (
         pricingSig
     })
 }
+
+/**
+ * Resolve a escala base de um price group em um eixo (x|y), levando
+ * em conta:
+ *  1. __originalScaleX/Y (escala "manual" do template original)
+ *  2. zoneScale (escala atual da zona, para inferir base = current / zone)
+ *  3. fallback: scale atual do priceGroup
+ *
+ * Tudo clampado em > 0.02 (escalas menores sao tratadas como invalidas
+ * — provavelmente colapso por bug). Math.abs() sempre aplicado para
+ * preservar magnitude mesmo com flip horizontal/vertical.
+ *
+ * Pure: opera sobre o priceGroup duck-typed.
+ */
+export const resolvePriceGroupBaseScale = (
+    priceGroup: any,
+    axis: 'x' | 'y',
+    zoneScale: number
+): number => {
+    const originalKey = axis === 'x' ? '__originalScaleX' : '__originalScaleY'
+    const scaleKey = axis === 'x' ? 'scaleX' : 'scaleY'
+    const originalScale = Math.abs(Number((priceGroup as any)?.[originalKey]))
+    if (Number.isFinite(originalScale) && originalScale > 0.02) {
+        return originalScale
+    }
+
+    const currentScale = Math.abs(Number((priceGroup as any)?.[scaleKey]))
+    const safeCurrentScale = Number.isFinite(currentScale) && currentScale > 0.02 ? currentScale : 1
+    const safeZoneScale = Math.abs(Number(zoneScale))
+    if (Number.isFinite(safeZoneScale) && safeZoneScale > 0.02) {
+        const inferredBase = safeCurrentScale / safeZoneScale
+        if (Number.isFinite(inferredBase) && inferredBase > 0.02) {
+            return inferredBase
+        }
+    }
+
+    return safeCurrentScale
+}
