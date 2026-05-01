@@ -199,7 +199,9 @@ import {
     getPreferredProductImageFromCardJson,
     countCanvasJsonObjectsAndImages,
     buildPreparedCanvasDataCacheKey,
-    getLegacyProductCardImageRepairMode as getLegacyProductCardImageRepairModeHelper
+    getLegacyProductCardImageRepairMode as getLegacyProductCardImageRepairModeHelper,
+    collectContaboImageNodes,
+    isPotentiallyBrokenRemoteImageSrc
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -11298,17 +11300,7 @@ const normalizeLegacyProductCardImageTransformsInCanvasData = (
 
 // mapLimit extraido para utils/asyncHelpers.ts.
 
-const collectContaboImageNodes = (canvasData: any): any[] => {
-    const images: any[] = [];
-    walkCanvasObjects(canvasData, (node) => {
-        const src = String(node?.src || '');
-        if (String(node?.type || '').toLowerCase() !== 'image') return;
-        if (!src) return;
-        if (!src.includes('contabostorage.com') && !src.includes('usc1.contabostorage.com')) return;
-        images.push(node);
-    });
-    return images;
-};
+// collectContaboImageNodes extraido para utils/canvasJsonClassifiers.ts.
 
 const refreshContaboUrlsInCanvasData = async (
     canvasData: any,
@@ -11377,18 +11369,7 @@ const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOption
     return prepareCanvasDataForLoadEntry(raw, opts)?.prepared ?? raw;
 }
 
-const isPotentiallyBrokenRemoteImageSrc = (src: string): boolean => {
-    const value = String(src || '').trim().toLowerCase();
-    if (!value) return false;
-    if (value.startsWith('data:')) return false;
-    if (value.startsWith('blob:')) return true;
-    if (value.includes('contabostorage.com')) return true;
-    if (value.includes('wasabisys.com')) return true;
-    if (value.includes('/api/storage/proxy')) return true;
-    if (value.includes('/api/storage/p')) return true;
-    if (value.startsWith('http://') || value.startsWith('https://')) return true;
-    return false;
-};
+// isPotentiallyBrokenRemoteImageSrc extraido para utils/canvasJsonClassifiers.ts.
 
 /**
  * Substitui src de imagens remotas por placeholder para permitir loadFromJSON

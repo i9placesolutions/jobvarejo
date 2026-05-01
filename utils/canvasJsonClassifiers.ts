@@ -440,6 +440,52 @@ export const getCanvasLoadCacheToken = (canvasData: any): string => {
 }
 
 /**
+ * Walk no canvasData JSON coletando todos os nodos image que apontam
+ * para Contabo Storage (contabostorage.com / usc1.contabostorage.com).
+ *
+ * Util para regenerar URLs presignadas em batch antes do load.
+ */
+export const collectContaboImageNodes = (canvasData: any): any[] => {
+    const images: any[] = []
+    walkCanvasObjects(canvasData, (node) => {
+        const src = String(node?.src || '')
+        if (String(node?.type || '').toLowerCase() !== 'image') return
+        if (!src) return
+        if (!src.includes('contabostorage.com') && !src.includes('usc1.contabostorage.com')) return
+        images.push(node)
+    })
+    return images
+}
+
+/**
+ * Detecta se um src de imagem e' "potencialmente quebrado" — uma URL
+ * remota cuja conexao pode ter expirado ou que precisa de proxy. Util
+ * para decidir se vale tentar refresh/proxy antes do load.
+ *
+ * Aceita:
+ *  - blob: URLs (efemeros)
+ *  - URLs Contabo / Wasabi
+ *  - URLs do proxy interno (/api/storage/proxy ou /api/storage/p)
+ *  - qualquer http(s) remoto
+ *
+ * Rejeita:
+ *  - vazio
+ *  - data: URLs (inline, nao quebra)
+ */
+export const isPotentiallyBrokenRemoteImageSrc = (src: string): boolean => {
+    const value = String(src || '').trim().toLowerCase()
+    if (!value) return false
+    if (value.startsWith('data:')) return false
+    if (value.startsWith('blob:')) return true
+    if (value.includes('contabostorage.com')) return true
+    if (value.includes('wasabisys.com')) return true
+    if (value.includes('/api/storage/proxy')) return true
+    if (value.includes('/api/storage/p')) return true
+    if (value.startsWith('http://') || value.startsWith('https://')) return true
+    return false
+}
+
+/**
  * Decodifica %3A em URLs da Contabo (bucket "tenant%3Abucket" → "tenant:bucket").
  *
  * O Fabric/Vue as vezes serializa com encoding URI no path; o backend

@@ -30,7 +30,9 @@ import {
   getPreferredProductImageFromCardJson,
   countCanvasJsonObjectsAndImages,
   buildPreparedCanvasDataCacheKey,
-  getLegacyProductCardImageRepairMode
+  getLegacyProductCardImageRepairMode,
+  collectContaboImageNodes,
+  isPotentiallyBrokenRemoteImageSrc
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -1174,5 +1176,89 @@ describe('getLegacyProductCardImageRepairMode', () => {
       imagesRepaired: 0,
       needsPostLoadRepair: false
     })).toBe('skip')
+  })
+})
+
+describe('collectContaboImageNodes', () => {
+  it('coleta imagens com URL Contabo', () => {
+    const data = {
+      objects: [
+        { type: 'image', src: 'https://eu2.contabostorage.com/bucket/key.png' },
+        { type: 'image', src: 'https://other.com/x.png' },
+        { type: 'rect', src: 'irrelevant' },
+        { type: 'image', src: 'https://usc1.contabostorage.com/k.png' }
+      ]
+    }
+    const r = collectContaboImageNodes(data)
+    expect(r.length).toBe(2)
+    // Ordem do walk e LIFO no root — verifica conjunto, nao indices
+    const srcs = r.map((n: any) => n.src).sort()
+    expect(srcs[0]).toContain('eu2.contabostorage.com')
+    expect(srcs[1]).toContain('usc1.contabostorage.com')
+  })
+
+  it('lista vazia: []', () => {
+    expect(collectContaboImageNodes(null)).toEqual([])
+    expect(collectContaboImageNodes({})).toEqual([])
+    expect(collectContaboImageNodes({ objects: [] })).toEqual([])
+  })
+
+  it('aninhado em group: encontra recursivamente', () => {
+    const data = {
+      objects: [{
+        type: 'group',
+        objects: [
+          { type: 'image', src: 'https://eu2.contabostorage.com/k.png' }
+        ]
+      }]
+    }
+    expect(collectContaboImageNodes(data).length).toBe(1)
+  })
+
+  it('ignora imagens sem src', () => {
+    expect(collectContaboImageNodes({
+      objects: [{ type: 'image', src: '' }, { type: 'image' }]
+    })).toEqual([])
+  })
+
+  it('ignora nao-imagens com URL Contabo no src (improvavel mas defensivo)', () => {
+    expect(collectContaboImageNodes({
+      objects: [{ type: 'rect', src: 'https://eu2.contabostorage.com/x.png' }]
+    })).toEqual([])
+  })
+})
+
+describe('isPotentiallyBrokenRemoteImageSrc', () => {
+  it('vazio retorna false', () => {
+    expect(isPotentiallyBrokenRemoteImageSrc('')).toBe(false)
+    expect(isPotentiallyBrokenRemoteImageSrc('   ')).toBe(false)
+  })
+
+  it('data: URL retorna false (inline, nunca quebra)', () => {
+    expect(isPotentiallyBrokenRemoteImageSrc('data:image/png;base64,AAAA')).toBe(false)
+  })
+
+  it('blob: URL retorna true (efemero)', () => {
+    expect(isPotentiallyBrokenRemoteImageSrc('blob:https://example.com/abc')).toBe(true)
+  })
+
+  it('URLs Contabo/Wasabi retornam true', () => {
+    expect(isPotentiallyBrokenRemoteImageSrc('https://eu2.contabostorage.com/x.png')).toBe(true)
+    expect(isPotentiallyBrokenRemoteImageSrc('https://s3.wasabisys.com/x.png')).toBe(true)
+  })
+
+  it('URLs do proxy interno retornam true', () => {
+    expect(isPotentiallyBrokenRemoteImageSrc('/api/storage/proxy?key=x')).toBe(true)
+    expect(isPotentiallyBrokenRemoteImageSrc('/api/storage/p?key=x')).toBe(true)
+  })
+
+  it('http(s) generico retorna true', () => {
+    expect(isPotentiallyBrokenRemoteImageSrc('https://example.com/x.png')).toBe(true)
+    expect(isPotentiallyBrokenRemoteImageSrc('http://example.com/x.png')).toBe(true)
+  })
+
+  it('case insensitive', () => {
+    expect(isPotentiallyBrokenRemoteImageSrc('HTTPS://EXAMPLE.COM/X.PNG')).toBe(true)
+    expect(isPotentiallyBrokenRemoteImageSrc('Data:image/png')).toBe(false)
   })
 })
