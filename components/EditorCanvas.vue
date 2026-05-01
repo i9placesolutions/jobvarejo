@@ -131,6 +131,7 @@ import {
 } from '~/utils/globalStylePropClassifiers'
 import { clamp, toFinite, formatDisplayNumber } from '~/utils/mathHelpers'
 import { normalizeHexColor } from '~/utils/colorHelpers'
+import { resolveZoneUpdatesPayload } from '~/utils/zoneUpdatesPayload'
 import {
     getSpecialConditionFromProduct,
     getAvailablePrices
@@ -27998,19 +27999,7 @@ const resolveZoneTargetsForUpdates = (opts: { allowAllFallback?: boolean; target
     return resolved;
 }
 
-const resolveZoneUpdatesPayload = (propOrPayload: any, val: any): Record<string, any> => {
-    if (typeof propOrPayload === 'string' && propOrPayload.trim()) {
-        return { [propOrPayload]: val };
-    }
-    if (propOrPayload && typeof propOrPayload === 'object' && !Array.isArray(propOrPayload)) {
-        const payload = propOrPayload as Record<string, any>;
-        if (typeof payload.prop === 'string' && payload.prop.trim()) {
-            return { [payload.prop]: payload.value };
-        }
-        return { ...payload };
-    }
-    return {};
-};
+// resolveZoneUpdatesPayload extraido para utils/zoneUpdatesPayload.ts.
 
 const handleUpdateZone = async (propOrPayload: string | Record<string, any>, val?: any, meta?: ZoneUpdateTargetMeta) => {
     const updates = resolveZoneUpdatesPayload(propOrPayload, val);
