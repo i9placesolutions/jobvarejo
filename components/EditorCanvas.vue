@@ -42,7 +42,8 @@ import {
     isCanvasContextError,
     isValidFabricCanvasObject,
     isValidClipPath,
-    isAuthLookupError
+    isAuthLookupError,
+    isUsableFabricObjectClone
 } from '~/utils/canvasValidation'
 import {
     getPreferredProductImageFromGroup,
@@ -70,7 +71,10 @@ import {
     measureHorizontalBoundsLocal,
     getObjectVerticalBoundsLocal,
     measureContentBoundsLocal,
-    getObjectCenterInParentPlane
+    getObjectCenterInParentPlane,
+    getCardBaseSizeForContainment,
+    getObjectAbsoluteCenter,
+    computeCentersBoundingCenter
 } from '~/utils/fabricMeasure'
 import { setText, setVisible, assignNewCustomIdsDeep } from '~/utils/fabricObjectOps'
 import {
@@ -9702,33 +9706,7 @@ const ensureCardZoneBinding = (card: any, opts: { allowNearest?: boolean } = {})
     return zone;
 };
 
-const getCardBaseSizeForContainment = (card: any): { w: number; h: number } | null => {
-    if (!card) return null;
-    const w0 = Number((card as any)._cardWidth);
-    const h0 = Number((card as any)._cardHeight);
-    if (Number.isFinite(w0) && w0 > 0 && Number.isFinite(h0) && h0 > 0) {
-        return { w: w0, h: h0 };
-    }
-    try {
-        if (card.type === 'group' && typeof card.getObjects === 'function') {
-            const bg = card.getObjects().find((c: any) => c?.name === 'offerBackground' && (c?.type === 'rect' || c?.type === 'Rect'));
-            const bw = Number(bg?.width);
-            const bh = Number(bg?.height);
-            if (Number.isFinite(bw) && bw > 0 && Number.isFinite(bh) && bh > 0) {
-                return { w: bw, h: bh };
-            }
-        }
-    } catch {
-        // ignore
-    }
-
-    const w1 = Number(card?.width);
-    const h1 = Number(card?.height);
-    if (Number.isFinite(w1) && w1 > 0 && Number.isFinite(h1) && h1 > 0) {
-        return { w: w1, h: h1 };
-    }
-    return null;
-};
+// getCardBaseSizeForContainment extraido para utils/fabricMeasure.ts.
 
 const applyContainmentConstraints = (obj: any) => {
     if (!obj || !canvas.value) return;
@@ -14155,10 +14133,7 @@ const remapDuplicatedSelectionBindings = (
     }
 };
 
-const isUsableFabricObjectClone = (obj: any) => {
-    if (!obj || typeof obj !== 'object') return false;
-    return typeof obj.set === 'function' && typeof obj.setCoords === 'function';
-};
+// isUsableFabricObjectClone extraido para utils/canvasValidation.ts.
 
 const cloneFabricObjectSafely = async (
     original: any,
@@ -14839,29 +14814,7 @@ const hydrateRuntimeClipboardFromCrossTabPayload = async (payload: any): Promise
     };
 };
 
-const getObjectAbsoluteCenter = (obj: any): { x: number; y: number } => {
-    if (!obj) return { x: 0, y: 0 };
-    try {
-        const p = obj.getCenterPoint?.();
-        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return { x: Number(p.x), y: Number(p.y) };
-    } catch { /* ignore */ }
-    return { x: Number(obj.left || 0) || 0, y: Number(obj.top || 0) || 0 };
-};
-
-const computeCentersBoundingCenter = (centers: Array<{ x: number; y: number }>): { x: number; y: number } => {
-    if (!Array.isArray(centers) || centers.length === 0) return { x: 0, y: 0 };
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    centers.forEach((p) => {
-        const x = Number(p?.x || 0) || 0;
-        const y = Number(p?.y || 0) || 0;
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-    });
-    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) return { x: 0, y: 0 };
-    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
-};
+// getObjectAbsoluteCenter + computeCentersBoundingCenter extraidos para utils/fabricMeasure.ts.
 
 const regenerateCustomIdsRecursive = (root: any, idMap: Map<string, string>) => {
     if (!root || typeof root !== 'object') return;

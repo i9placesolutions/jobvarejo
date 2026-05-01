@@ -5,7 +5,10 @@ import {
   measureHorizontalBoundsLocal,
   getObjectVerticalBoundsLocal,
   measureContentBoundsLocal,
-  getObjectCenterInParentPlane
+  getObjectCenterInParentPlane,
+  getCardBaseSizeForContainment,
+  getObjectAbsoluteCenter,
+  computeCentersBoundingCenter
 } from '~/utils/fabricMeasure'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -218,5 +221,101 @@ describe('getObjectCenterInParentPlane', () => {
     expect(getObjectCenterInParentPlane({
       left: 0, top: 0, width: 100, height: 100, scaleX: -1, scaleY: -1
     })).toEqual({ x: 50, y: 50 })
+  })
+})
+
+describe('getCardBaseSizeForContainment', () => {
+  it('null retorna null', () => {
+    expect(getCardBaseSizeForContainment(null)).toBeNull()
+  })
+
+  it('prioridade 1: _cardWidth/_cardHeight', () => {
+    expect(getCardBaseSizeForContainment({
+      _cardWidth: 200,
+      _cardHeight: 280,
+      width: 999, height: 999
+    })).toEqual({ w: 200, h: 280 })
+  })
+
+  it('prioridade 2: offerBackground via getObjects', () => {
+    const card = {
+      type: 'group',
+      getObjects: () => [
+        { type: 'rect', name: 'offerBackground', width: 150, height: 200 }
+      ]
+    }
+    expect(getCardBaseSizeForContainment(card)).toEqual({ w: 150, h: 200 })
+  })
+
+  it('prioridade 3: card.width/card.height', () => {
+    expect(getCardBaseSizeForContainment({ width: 100, height: 130 }))
+      .toEqual({ w: 100, h: 130 })
+  })
+
+  it('null quando nada disponivel', () => {
+    expect(getCardBaseSizeForContainment({})).toBeNull()
+    expect(getCardBaseSizeForContainment({ width: 0, height: 0 })).toBeNull()
+  })
+
+  it('getObjects que joga erro nao quebra', () => {
+    expect(getCardBaseSizeForContainment({
+      type: 'group',
+      getObjects: () => { throw new Error('boom') },
+      width: 50, height: 50
+    })).toEqual({ w: 50, h: 50 })
+  })
+})
+
+describe('getObjectAbsoluteCenter', () => {
+  it('null retorna { 0, 0 }', () => {
+    expect(getObjectAbsoluteCenter(null)).toEqual({ x: 0, y: 0 })
+  })
+
+  it('usa getCenterPoint quando disponivel', () => {
+    expect(getObjectAbsoluteCenter({
+      getCenterPoint: () => ({ x: 100, y: 50 })
+    })).toEqual({ x: 100, y: 50 })
+  })
+
+  it('fallback para left/top', () => {
+    expect(getObjectAbsoluteCenter({ left: 50, top: 75 })).toEqual({ x: 50, y: 75 })
+  })
+
+  it('getCenterPoint que joga erro cai em fallback', () => {
+    expect(getObjectAbsoluteCenter({
+      getCenterPoint: () => { throw new Error('boom') },
+      left: 10, top: 20
+    })).toEqual({ x: 10, y: 20 })
+  })
+
+  it('NaN/missing left/top viram 0', () => {
+    expect(getObjectAbsoluteCenter({})).toEqual({ x: 0, y: 0 })
+    expect(getObjectAbsoluteCenter({ left: 'abc' })).toEqual({ x: 0, y: 0 })
+  })
+})
+
+describe('computeCentersBoundingCenter', () => {
+  it('lista vazia retorna { 0, 0 }', () => {
+    expect(computeCentersBoundingCenter([])).toEqual({ x: 0, y: 0 })
+    expect(computeCentersBoundingCenter(null as any)).toEqual({ x: 0, y: 0 })
+  })
+
+  it('um ponto retorna o proprio', () => {
+    expect(computeCentersBoundingCenter([{ x: 50, y: 75 }])).toEqual({ x: 50, y: 75 })
+  })
+
+  it('multiplos pontos retornam o centro do AABB', () => {
+    expect(computeCentersBoundingCenter([
+      { x: 0, y: 0 },
+      { x: 100, y: 100 },
+      { x: 50, y: 50 }
+    ])).toEqual({ x: 50, y: 50 })
+  })
+
+  it('AABB assimetrico', () => {
+    expect(computeCentersBoundingCenter([
+      { x: 10, y: 20 },
+      { x: 90, y: 80 }
+    ])).toEqual({ x: 50, y: 50 })
   })
 })

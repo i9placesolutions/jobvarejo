@@ -77,6 +77,90 @@ export const getObjectVerticalBoundsLocal = (obj: any): VerticalBounds | null =>
 }
 
 /**
+ * Extrai a dimensao "base" do card (largura x altura) na arvore Fabric
+ * runtime. Tenta na ordem:
+ *   1. _cardWidth/_cardHeight (engine signal mais confiavel)
+ *   2. offerBackground rect dentro do group
+ *   3. card.width/card.height
+ *
+ * Espelha getCardBaseSizeForContainmentJson de canvasJsonClassifiers,
+ * mas opera em objetos Fabric ao vivo (com getObjects()).
+ */
+export const getCardBaseSizeForContainment = (card: any): { w: number; h: number } | null => {
+    if (!card) return null
+    const w0 = Number((card as any)._cardWidth)
+    const h0 = Number((card as any)._cardHeight)
+    if (Number.isFinite(w0) && w0 > 0 && Number.isFinite(h0) && h0 > 0) {
+        return { w: w0, h: h0 }
+    }
+    try {
+        if (card.type === 'group' && typeof card.getObjects === 'function') {
+            const bg = card.getObjects().find((c: any) =>
+                c?.name === 'offerBackground' && (c?.type === 'rect' || c?.type === 'Rect')
+            )
+            const bw = Number(bg?.width)
+            const bh = Number(bg?.height)
+            if (Number.isFinite(bw) && bw > 0 && Number.isFinite(bh) && bh > 0) {
+                return { w: bw, h: bh }
+            }
+        }
+    } catch {
+        // ignore
+    }
+
+    const w1 = Number(card?.width)
+    const h1 = Number(card?.height)
+    if (Number.isFinite(w1) && w1 > 0 && Number.isFinite(h1) && h1 > 0) {
+        return { w: w1, h: h1 }
+    }
+    return null
+}
+
+/**
+ * Centro absoluto do objeto via Fabric `getCenterPoint()`. Cai para
+ * left/top quando getCenterPoint nao disponivel ou retorna NaN.
+ *
+ * Diferente de getObjectCenterInParentPlane: aqui usamos sempre o
+ * centro absoluto (top-level), nao o relativo ao parent group.
+ */
+export const getObjectAbsoluteCenter = (obj: any): { x: number; y: number } => {
+    if (!obj) return { x: 0, y: 0 }
+    try {
+        const p = obj.getCenterPoint?.()
+        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+            return { x: Number(p.x), y: Number(p.y) }
+        }
+    } catch {
+        // ignore
+    }
+    return { x: Number(obj.left || 0) || 0, y: Number(obj.top || 0) || 0 }
+}
+
+/**
+ * Calcula o "centro do envelope" de uma lista de pontos — a media do
+ * AABB que envolve todos os centros. Util para alinhar/distribuir
+ * grupos de objetos em torno de um pivot comum.
+ *
+ * Retorna { x: 0, y: 0 } para lista vazia ou pontos invalidos.
+ */
+export const computeCentersBoundingCenter = (centers: Array<{ x: number; y: number }>): { x: number; y: number } => {
+    if (!Array.isArray(centers) || centers.length === 0) return { x: 0, y: 0 }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    centers.forEach((p) => {
+        const x = Number(p?.x || 0) || 0
+        const y = Number(p?.y || 0) || 0
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+    })
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+        return { x: 0, y: 0 }
+    }
+    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+}
+
+/**
  * Calcula o centro de um objeto Fabric no plano do PARENT (group/canvas),
  * com 3 caminhos:
  *  1. `getRelativeCenterPoint()` (preferido para objetos em group)

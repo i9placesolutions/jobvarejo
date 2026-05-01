@@ -38,6 +38,19 @@ export const isAuthLookupError = (err: any): boolean => {
 }
 
 /**
+ * Versao "leve" para detectar se um objeto resultante de clone/enliven
+ * pode ser USADO (set + setCoords disponiveis). Diferente do mais
+ * estrito isValidFabricCanvasObject que tambem exige render/toObject.
+ *
+ * Usado em fluxos de duplicate/clone onde queremos saber se vale
+ * tentar manipular o resultado antes de descartar.
+ */
+export const isUsableFabricObjectClone = (obj: any): boolean => {
+    if (!obj || typeof obj !== 'object') return false
+    return typeof obj.set === 'function' && typeof obj.setCoords === 'function'
+}
+
+/**
  * Valida que um objeto e' um Fabric.Object real, com a API basica
  * que o canvas espera (render, setCoords, set, toObject).
  *

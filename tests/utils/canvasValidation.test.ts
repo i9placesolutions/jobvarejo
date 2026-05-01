@@ -3,7 +3,8 @@ import {
   isCanvasContextError,
   isValidFabricCanvasObject,
   isValidClipPath,
-  isAuthLookupError
+  isAuthLookupError,
+  isUsableFabricObjectClone
 } from '~/utils/canvasValidation'
 
 describe('isCanvasContextError', () => {
@@ -188,5 +189,33 @@ describe('isAuthLookupError', () => {
     expect(isAuthLookupError({})).toBe(false)
     expect(isAuthLookupError(null)).toBe(false)
     expect(isAuthLookupError(undefined)).toBe(false)
+  })
+})
+
+describe('isUsableFabricObjectClone', () => {
+  it('aceita objeto com set + setCoords', () => {
+    expect(isUsableFabricObjectClone({
+      set: () => {},
+      setCoords: () => {}
+    })).toBe(true)
+  })
+
+  it('rejeita null/undefined/primitivos', () => {
+    expect(isUsableFabricObjectClone(null)).toBe(false)
+    expect(isUsableFabricObjectClone(undefined)).toBe(false)
+    expect(isUsableFabricObjectClone('str')).toBe(false)
+    expect(isUsableFabricObjectClone(42)).toBe(false)
+  })
+
+  it('rejeita objeto sem set', () => {
+    expect(isUsableFabricObjectClone({ setCoords: () => {} })).toBe(false)
+  })
+
+  it('rejeita objeto sem setCoords', () => {
+    expect(isUsableFabricObjectClone({ set: () => {} })).toBe(false)
+  })
+
+  it('rejeita quando set/setCoords nao sao funcoes', () => {
+    expect(isUsableFabricObjectClone({ set: 'str', setCoords: () => {} })).toBe(false)
   })
 })
