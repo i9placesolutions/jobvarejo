@@ -7023,9 +7023,7 @@ const commitCanvasObjectsRefresh = () => {
     const source = canvasObjectsRefreshPendingSource || canvas.value?.getObjects?.() || []
     canvasObjectsRefreshPendingSource = null
     canvasObjects.value = Array.isArray(source) ? [...source] : []
-    lastCanvasObjectsRefreshAt = (typeof performance !== 'undefined' && typeof performance.now === 'function')
-        ? performance.now()
-        : Date.now()
+    lastCanvasObjectsRefreshAt = getEditorPerfNow()
 }
 
 const refreshCanvasObjects = (opts: { immediate?: boolean; source?: any[] } = {}) => {
@@ -7050,9 +7048,7 @@ const refreshCanvasObjects = (opts: { immediate?: boolean; source?: any[] } = {}
     }
 
     if (canvasObjectsRefreshRafId !== null) return
-    const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
-        ? performance.now()
-        : Date.now()
+    const now = getEditorPerfNow()
     const elapsed = now - lastCanvasObjectsRefreshAt
     const minIntervalMs = getRefreshIntervalForCurrentObjects()
 
@@ -29915,7 +29911,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
         return;
     }
 
-    const perfStart = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
+    const perfStart = getEditorPerfNow();
 
     // Gather ALL zones in canvas first (for fallback).
     const allZones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
@@ -30004,7 +30000,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
                 totalFullRelayout += Number(stats?.fullRelayout || 0);
             });
             if (import.meta.dev) {
-                const perfEnd = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
+                const perfEnd = getEditorPerfNow();
                 const elapsedMs = Math.max(0, perfEnd - perfStart);
                 console.log('[perf:global-styles]', {
                     prop,
