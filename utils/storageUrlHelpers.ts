@@ -58,6 +58,65 @@ export const extractWasabiKey = (url: string, configuredBucket: string): string 
     }
 }
 
+/**
+ * Extrai bucket e key de URL Contabo. Logica similar ao extractWasabiKey
+ * mas detecta path-style com formato `tenant:bucket` (bucket Contabo
+ * usa ':' no nome).
+ *
+ *  - Path-style "tenant:bucket/key/path": retorna { bucket: "tenant:bucket", key: "key/path" }
+ *  - Virtual-host "bucket.s3.contabo.com/key": retorna { bucket: "bucket", key: "key" }
+ *  - URL fora do bucket configurado: { bucket: null, key: pathInteiro } — proxy decide default
+ *
+ * Recebe `configuredBucket` injetado.
+ */
+export const extractContaboBucketAndKey = (
+    url: string,
+    configuredBucket: string
+): { bucket: string | null; key: string | null } => {
+    try {
+        const decodedUrl = decodeURIComponent(url)
+        const urlObj = new URL(decodedUrl)
+        const decodedPathname = decodeURIComponent(urlObj.pathname)
+        const pathParts = decodedPathname.split('/').filter(p => p)
+
+        if (pathParts.length === 0) {
+            return { bucket: null, key: null }
+        }
+
+        const candidates = new Set<string>()
+        if (configuredBucket) candidates.add(configuredBucket)
+
+        const first = pathParts[0] ?? ''
+        const firstLooksLikeBucket = first.includes(':') || candidates.has(first)
+        const hostLooksLikeVirtualHost = [...candidates].some(b =>
+            b && urlObj.hostname.startsWith(`${b.toLowerCase()}.`)
+        )
+
+        let bucket: string | null = null
+        let keyParts: string[]
+
+        if (firstLooksLikeBucket && !hostLooksLikeVirtualHost) {
+            bucket = first
+            keyParts = pathParts.slice(1)
+        } else if (hostLooksLikeVirtualHost) {
+            const hostParts = urlObj.hostname.split('.')
+            bucket = hostParts[0] || null
+            keyParts = pathParts
+        } else {
+            bucket = null
+            keyParts = pathParts
+        }
+
+        const key = keyParts.join('/')
+        if (!key || key.length === 0) {
+            return { bucket: null, key: null }
+        }
+        return { bucket, key }
+    } catch {
+        return { bucket: null, key: null }
+    }
+}
+
 export const extractWasabiBucketAndKey = (url: string): { bucket: string | null; key: string | null } => {
     try {
         const urlObj = new URL(url)

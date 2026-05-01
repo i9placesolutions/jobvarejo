@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   extractWasabiBucketAndKey,
-  extractWasabiKey
+  extractWasabiKey,
+  extractContaboBucketAndKey
 } from '~/utils/storageUrlHelpers'
 
 describe('extractWasabiBucketAndKey', () => {
@@ -94,5 +95,61 @@ describe('extractWasabiKey', () => {
     // bucket "jobvarejo", URL com first "outro-bucket" → NAO remove
     expect(extractWasabiKey('https://s3.wasabisys.com/outro-bucket/key.png', BUCKET))
       .toBe('outro-bucket/key.png')
+  })
+})
+
+describe('extractContaboBucketAndKey', () => {
+  const BUCKET = 'tenant:jobupload'
+
+  it('path-style com tenant:bucket → extrai bucket', () => {
+    expect(extractContaboBucketAndKey(
+      'https://eu2.contabostorage.com/tenant:jobupload/projects/u1/file.png',
+      BUCKET
+    )).toEqual({ bucket: 'tenant:jobupload', key: 'projects/u1/file.png' })
+  })
+
+  it('virtual-host: extrai bucket simples (sem ":") do hostname', () => {
+    // Hostname com ":" e' invalido; teste com bucket simples
+    expect(extractContaboBucketAndKey(
+      'https://mybucket.contabostorage.com/projects/u1/file.png',
+      'mybucket'
+    )).toEqual({ bucket: 'mybucket', key: 'projects/u1/file.png' })
+  })
+
+  it('first com ":" sem match: ainda e tratado como bucket', () => {
+    expect(extractContaboBucketAndKey(
+      'https://eu2.contabostorage.com/foo:bar/key.png',
+      BUCKET
+    )).toEqual({ bucket: 'foo:bar', key: 'key.png' })
+  })
+
+  it('URL fora do bucket configurado: bucket=null, key=path inteiro', () => {
+    expect(extractContaboBucketAndKey(
+      'https://eu2.contabostorage.com/random/key.png',
+      BUCKET
+    )).toEqual({ bucket: null, key: 'random/key.png' })
+  })
+
+  it('URL invalida: null/null', () => {
+    expect(extractContaboBucketAndKey('not-a-url', BUCKET)).toEqual({ bucket: null, key: null })
+  })
+
+  it('apenas hostname sem path: null/null', () => {
+    expect(extractContaboBucketAndKey('https://eu2.contabostorage.com/', BUCKET))
+      .toEqual({ bucket: null, key: null })
+  })
+
+  it('apenas bucket sem key (path-style): null/null', () => {
+    expect(extractContaboBucketAndKey('https://eu2.contabostorage.com/tenant:jobupload', BUCKET))
+      .toEqual({ bucket: null, key: null })
+    expect(extractContaboBucketAndKey('https://eu2.contabostorage.com/tenant:jobupload/', BUCKET))
+      .toEqual({ bucket: null, key: null })
+  })
+
+  it('configuredBucket vazio: nao reconhece como bucket configurado', () => {
+    expect(extractContaboBucketAndKey(
+      'https://eu2.contabostorage.com/tenant:jobupload/key.png',
+      ''
+    )).toEqual({ bucket: 'tenant:jobupload', key: 'key.png' }) // first com ':' ainda e bucket
   })
 })

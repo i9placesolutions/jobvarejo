@@ -68,7 +68,8 @@ import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
 import {
     extractWasabiBucketAndKey,
-    extractWasabiKey as extractWasabiKeyHelper
+    extractWasabiKey as extractWasabiKeyHelper,
+    extractContaboBucketAndKey as extractContaboBucketAndKeyHelper
 } from '~/utils/storageUrlHelpers'
 import {
     isObjectIntersectingCullRect,
@@ -10919,61 +10920,12 @@ const generatePresignedUrl = async (urlOrKey: string): Promise<string | null> =>
  */
 // decodeContaboUrls extraido para utils/canvasJsonClassifiers.ts.
 
-/**
- * Extrai bucket e key de uma URL da Contabo.
- */
+// Wrapper local que injeta configuredBucket de useRuntimeConfig.
 const extractContaboBucketAndKey = (url: string): { bucket: string | null; key: string | null } => {
-    try {
-        const decodedUrl = decodeURIComponent(url);
-        const urlObj = new URL(decodedUrl);
-        const decodedPathname = decodeURIComponent(urlObj.pathname);
-        const pathParts = decodedPathname.split('/').filter(p => p);
-
-        if (pathParts.length === 0) {
-            return { bucket: null, key: null };
-        }
-
-        const cfg = (useRuntimeConfig()?.public?.contabo as any) || {};
-        const configuredBucket = (cfg.bucket || '475a29e42e55430abff00915da2fa4bc:jobupload').toString();
-        const candidates = new Set<string>();
-        if (configuredBucket) candidates.add(configuredBucket);
-
-        const first = pathParts[0] ?? '';
-        // Check if first part is bucket (may have : or match configured buckets)
-        const firstLooksLikeBucket = first.includes(':') || candidates.has(first);
-        const hostLooksLikeVirtualHost = [...candidates].some(b => b && urlObj.hostname.startsWith(`${b.toLowerCase()}.`));
-
-        // Path-style: primeira parte do path é bucket/tenant:bucket → extrair bucket
-        // Virtual-host: host já contém bucket → usar bucket configurado
-        let bucket: string | null = null;
-        let keyParts: string[];
-
-        if (firstLooksLikeBucket && !hostLooksLikeVirtualHost) {
-            bucket = first;
-            keyParts = pathParts.slice(1);
-        } else if (hostLooksLikeVirtualHost) {
-            // Extrair bucket do hostname (virtual-host style)
-            const hostParts = urlObj.hostname.split('.');
-            bucket = hostParts[0] || null;
-            keyParts = pathParts;
-        } else {
-            // Usar bucket padrão
-            bucket = null; // Deixa o proxy usar o padrão
-            keyParts = pathParts;
-        }
-
-        const key = keyParts.join('/');
-
-        if (!key || key.length === 0) {
-            return { bucket: null, key: null };
-        }
-
-        return { bucket, key };
-    } catch (err) {
-        console.error(`❌ Erro ao extrair bucket e key da URL: ${url.substring(0, 100)}`, err);
-        return { bucket: null, key: null };
-    }
-};
+    const cfg = (useRuntimeConfig()?.public?.contabo as any) || {}
+    const configuredBucket = (cfg.bucket || '475a29e42e55430abff00915da2fa4bc:jobupload').toString()
+    return extractContaboBucketAndKeyHelper(url, configuredBucket)
+}
 
 /**
  * Extrai bucket e key de uma URL do Wasabi S3.
