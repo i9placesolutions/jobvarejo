@@ -9,7 +9,8 @@ import {
   getThumbnailMinIntervalMs,
   canGenerateThumbnailNow,
   shouldSkipByFingerprint,
-  isDuplicateHistoryEntry
+  isDuplicateHistoryEntry,
+  PERIODIC_SAVE_INTERVAL_MS
 } from '~/utils/editorSavePolicy'
 
 describe('getAdaptiveCoalesceDelayMs — coalesce dinamico por carga', () => {
@@ -225,5 +226,17 @@ describe('isDuplicateHistoryEntry', () => {
     expect(isDuplicateHistoryEntry('a', 'a')).toBe(true)
     expect(isDuplicateHistoryEntry('a', 'b')).toBe(false)
     expect(isDuplicateHistoryEntry(undefined, 'a')).toBe(false)
+  })
+})
+
+describe('PERIODIC_SAVE_INTERVAL_MS', () => {
+  it('= 90 segundos (balanco perda-vs-custo)', () => {
+    expect(PERIODIC_SAVE_INTERVAL_MS).toBe(90_000)
+    expect(PERIODIC_SAVE_INTERVAL_MS).toBeGreaterThan(0)
+  })
+
+  it('e numero finito (passavel para setInterval)', () => {
+    expect(typeof PERIODIC_SAVE_INTERVAL_MS).toBe('number')
+    expect(Number.isFinite(PERIODIC_SAVE_INTERVAL_MS)).toBe(true)
   })
 })

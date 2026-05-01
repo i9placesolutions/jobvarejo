@@ -1,3 +1,14 @@
+/**
+ * Intervalo (ms) entre runs do periodic-save loop. A cada tick, se ha
+ * mudancas nao-salvas (`hasUnsavedChanges` ou pagina marcada `dirty`),
+ * o sistema sobe o snapshot atual para o Wasabi.
+ *
+ * 90s = balanco entre risco de perda de trabalho e custo de upload.
+ * Canvas events apenas atualizam estado em-memoria; persistencia ocorre
+ * neste loop e em momentos chave (close, navigate-away).
+ */
+export const PERIODIC_SAVE_INTERVAL_MS = 90_000
+
 export type SaveSource = 'user' | 'system'
 
 export type SaveStatePolicyInput = {

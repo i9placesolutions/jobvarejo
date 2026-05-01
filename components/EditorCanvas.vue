@@ -430,7 +430,8 @@ import {
     shouldRunHeavySanitizeForReason,
     shouldSkipAutoSave,
     shouldSkipByFingerprint,
-    shouldSkipLifecycleSave
+    shouldSkipLifecycleSave,
+    PERIODIC_SAVE_INTERVAL_MS
 } from '~/utils/editorSavePolicy'
 import {
     createRenderScheduler,
@@ -6680,9 +6681,10 @@ onUnmounted(() => {
     }
 })
 
-// Periodic save: upload to Wasabi every 90s if there are unsaved changes.
-// Canvas events only update in-memory state + undo history (no upload).
-const PERIODIC_SAVE_INTERVAL_MS = 90_000
+// Periodic save: upload to Wasabi every PERIODIC_SAVE_INTERVAL_MS if there
+// are unsaved changes. Canvas events only update in-memory state + undo
+// history (no upload). PERIODIC_SAVE_INTERVAL_MS extraido para
+// utils/editorSavePolicy.ts.
 let periodicSaveIntervalId: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
     periodicSaveIntervalId = setInterval(() => {
