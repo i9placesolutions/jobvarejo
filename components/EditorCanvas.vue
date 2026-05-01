@@ -72,6 +72,10 @@ import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
 import {
+    isTrackableImageSrc,
+    collectTrackableImageSrcCounts
+} from '~/utils/canvasImageTracking'
+import {
     extractWasabiBucketAndKey,
     extractWasabiKey as extractWasabiKeyHelper,
     extractContaboBucketAndKey as extractContaboBucketAndKeyHelper,
@@ -4796,50 +4800,7 @@ const scheduleImageProgressFlush = () => {
     })
 }
 
-const collectTrackableImageSrcCounts = (canvasData: any): Map<string, number> => {
-    const counts = new Map<string, number>()
-    const visited = new Set<any>()
-
-    const isTrackableSrc = (src: string): boolean => {
-        const s = String(src || '').trim()
-        if (!s) return false
-        // We only track remote-ish images; data URLs are instant and would just spam the counter.
-        if (s.startsWith('data:')) return false
-        if (s.startsWith('blob:')) return false
-        return true
-    }
-
-    const walk = (node: any) => {
-        if (!node) return
-        if (typeof node === 'object') {
-            if (visited.has(node)) return
-            visited.add(node)
-        }
-
-        if (Array.isArray(node)) {
-            node.forEach(walk)
-            return
-        }
-
-        if (typeof node !== 'object') return
-
-        const t = String((node as any).type || '').toLowerCase()
-        if (t === 'image') {
-            const src = String((node as any).src || (node as any).__originalSrc || '').trim()
-            if (src && isTrackableSrc(src)) {
-                counts.set(src, (counts.get(src) || 0) + 1)
-            }
-        }
-
-        const children = (node as any).objects
-        if (Array.isArray(children)) walk(children)
-        const clip = (node as any).clipPath
-        if (clip && typeof clip === 'object') walk(clip)
-    }
-
-    walk(canvasData)
-    return counts
-}
+// collectTrackableImageSrcCounts extraido para utils/canvasImageTracking.ts.
 
 /**
  * Pré-aquece o cache do browser para as imagens do canvas antes de loadFromJSON.
