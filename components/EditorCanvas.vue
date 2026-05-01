@@ -65,6 +65,10 @@ import {
 import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
+import {
+    isObjectIntersectingCullRect,
+    shouldSkipViewportCullObject
+} from '~/utils/viewportCulling'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
 import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import {
@@ -6538,32 +6542,8 @@ const getViewportCullRect = () => {
     }
 }
 
-const isObjectIntersectingCullRect = (obj: any, rect: { left: number; top: number; right: number; bottom: number }) => {
-    if (!obj || !rect || typeof obj.getBoundingRect !== 'function') return true
-    try {
-        const b = obj.getBoundingRect(true, true)
-        if (!b) return true
-        const right = b.left + b.width
-        const bottom = b.top + b.height
-        if (right < rect.left) return false
-        if (b.left > rect.right) return false
-        if (bottom < rect.top) return false
-        if (b.top > rect.bottom) return false
-        return true
-    } catch {
-        return true
-    }
-}
-
-const shouldSkipViewportCullObject = (obj: any, activeSet: Set<any>) => {
-    if (!obj || typeof obj !== 'object') return true
-    if (obj.group) return true
-    if (activeSet.has(obj)) return true
-    if (obj.isEditing) return true
-    if (obj.id === 'artboard-bg') return true
-    if (isControlLikeObject(obj) || isTransientCanvasObject(obj)) return true
-    return false
-}
+// isObjectIntersectingCullRect e shouldSkipViewportCullObject extraidos
+// para utils/viewportCulling.ts.
 
 const restoreViewportCulledObjects = (objects: any[]) => {
     let restored = 0
