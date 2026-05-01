@@ -38,3 +38,16 @@ export const toFinite = (
     if (typeof max === 'number' && n > max) return max
     return n
 }
+
+/**
+ * Formata um numero para display "limpo": NaN/Infinity → '0',
+ * inteiros (ou quase-inteiros, abs(n - round(n)) < 0.01) sem casas
+ * decimais, demais com 2 casas. Util para badges de dimensao em
+ * labels (`123` em vez de `123.00`, mas `123.45`).
+ */
+export const formatDisplayNumber = (n: number): string => {
+    if (!Number.isFinite(n)) return '0'
+    const rounded = Math.round(n)
+    if (Math.abs(n - rounded) < 0.01) return String(rounded)
+    return n.toFixed(2)
+}

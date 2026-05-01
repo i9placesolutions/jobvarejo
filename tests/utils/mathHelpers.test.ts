@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { clamp, toFinite } from '~/utils/mathHelpers'
+import { clamp, toFinite, formatDisplayNumber } from '~/utils/mathHelpers'
 
 describe('clamp', () => {
   it('valor dentro do intervalo: retorna o valor', () => {
@@ -95,5 +95,39 @@ describe('toFinite', () => {
 
   it('NaN ainda cai em fallback (nao cap por min/max)', () => {
     expect(toFinite(NaN, 7, 0, 100)).toBe(7)
+  })
+})
+
+describe('formatDisplayNumber', () => {
+  it('inteiros sem casas decimais', () => {
+    expect(formatDisplayNumber(0)).toBe('0')
+    expect(formatDisplayNumber(123)).toBe('123')
+    expect(formatDisplayNumber(-50)).toBe('-50')
+  })
+
+  it('quase-inteiros (diff < 0.01) viram int', () => {
+    expect(formatDisplayNumber(123.005)).toBe('123')
+    expect(formatDisplayNumber(99.999)).toBe('100')
+  })
+
+  it('decimais com diff >= 0.01: 2 casas', () => {
+    expect(formatDisplayNumber(123.45)).toBe('123.45')
+    expect(formatDisplayNumber(123.456)).toBe('123.46') // round
+    expect(formatDisplayNumber(0.5)).toBe('0.50')
+  })
+
+  it('NaN/Infinity → "0"', () => {
+    expect(formatDisplayNumber(NaN)).toBe('0')
+    expect(formatDisplayNumber(Infinity)).toBe('0')
+    expect(formatDisplayNumber(-Infinity)).toBe('0')
+  })
+
+  it('zero exato: "0"', () => {
+    expect(formatDisplayNumber(0)).toBe('0')
+  })
+
+  it('negativos com decimais', () => {
+    expect(formatDisplayNumber(-3.14)).toBe('-3.14')
+    expect(formatDisplayNumber(-3.001)).toBe('-3')
   })
 })

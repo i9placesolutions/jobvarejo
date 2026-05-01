@@ -129,7 +129,7 @@ import {
     LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
     isLightweightGlobalStyleProp
 } from '~/utils/globalStylePropClassifiers'
-import { clamp, toFinite } from '~/utils/mathHelpers'
+import { clamp, toFinite, formatDisplayNumber } from '~/utils/mathHelpers'
 import {
     getSpecialConditionFromProduct,
     getAvailablePrices
@@ -6012,12 +6012,7 @@ const updateFrameLabels = () => {
     const activeObj = canvas.value.getActiveObject();
     const viewportBounds = getViewportBounds();
     const worldMargin = Math.max(48, 140 / Math.max(zoomVal, 0.01));
-    const fmt = (n: number) => {
-        if (!Number.isFinite(n)) return '0';
-        const rounded = Math.round(n);
-        if (Math.abs(n - rounded) < 0.01) return String(rounded);
-        return n.toFixed(2);
-    };
+    const fmt = formatDisplayNumber;
     const labels: typeof frameLabels.value = [];
     for (const frame of frames) {
         if (frame?.visible === false) continue;
