@@ -126,6 +126,7 @@ import { parseViewSettings, serializeViewSettings, VIEW_SETTINGS_STORAGE_KEY } f
 import { isCollaboratorsCacheValid } from '~/utils/collaboratorsCache'
 import { splitTextIntoChunks } from '~/utils/textChunking'
 import { reviveRedBurstObjectNode, sanitizeRedBurstTemplateGroupJson } from '~/utils/redBurstTemplateRevive'
+import { normalizeGlobalStyles as normalizeGlobalStylesHelper } from '~/utils/globalStylesNormalize'
 import {
     extractWeightTokenForHeader,
     normalizeHeaderWeightToken,
@@ -26332,88 +26333,10 @@ const simulateSmartGrid = async (
 
 // === ZONE LOGIC ===
 
-function normalizeGlobalStyles(styles?: Partial<GlobalStyles> | null): GlobalStyles {
-    const source = (styles && typeof styles === 'object') ? styles : {};
-    const merged = {
-        ...DEFAULT_GLOBAL_STYLES,
-        ...source
-    };
-    const defaultColor = {
-        cardColor: DEFAULT_GLOBAL_STYLES.cardColor || '#ffffff',
-        cardBorderColor: DEFAULT_GLOBAL_STYLES.cardBorderColor || '#000000',
-        accentColor: DEFAULT_GLOBAL_STYLES.accentColor || '#dc2626',
-        prodNameColor: DEFAULT_GLOBAL_STYLES.prodNameColor || '#000000',
-        limitColor: DEFAULT_GLOBAL_STYLES.limitColor || '#ef4444',
-        splashColor: DEFAULT_GLOBAL_STYLES.splashColor || '#dc2626',
-        splashTextColor: DEFAULT_GLOBAL_STYLES.splashTextColor || '#ffffff',
-        splashFill: DEFAULT_GLOBAL_STYLES.splashFill || '#000000'
-    };
-    const defaultNumber = {
-        cardBorderRadius: DEFAULT_GLOBAL_STYLES.cardBorderRadius ?? 8,
-        cardBorderWidth: DEFAULT_GLOBAL_STYLES.cardBorderWidth ?? 0,
-        prodNameScale: DEFAULT_GLOBAL_STYLES.prodNameScale ?? 1,
-        prodNameLineHeight: DEFAULT_GLOBAL_STYLES.prodNameLineHeight ?? 1.05,
-        prodNameOffsetY: DEFAULT_GLOBAL_STYLES.prodNameOffsetY ?? 0,
-        splashScale: DEFAULT_GLOBAL_STYLES.splashScale ?? 1,
-        splashTextScale: DEFAULT_GLOBAL_STYLES.splashTextScale ?? 1,
-        splashRoundness: DEFAULT_GLOBAL_STYLES.splashRoundness ?? 1,
-        splashOffsetY: DEFAULT_GLOBAL_STYLES.splashOffsetY ?? 0,
-        priceFontSize: DEFAULT_GLOBAL_STYLES.priceFontSize ?? 60,
-        splashStrokeWidth: DEFAULT_GLOBAL_STYLES.splashStrokeWidth ?? 0
-    };
-
-    const normalized: GlobalStyles = {
-        ...merged,
-        cardColor: normalizeHexColor(merged.cardColor, defaultColor.cardColor, { allowTransparent: true }),
-        cardBorderColor: normalizeHexColor(merged.cardBorderColor, defaultColor.cardBorderColor),
-        accentColor: normalizeHexColor(merged.accentColor, defaultColor.accentColor),
-        prodNameColor: normalizeHexColor(merged.prodNameColor, defaultColor.prodNameColor),
-        limitColor: normalizeHexColor(merged.limitColor, defaultColor.limitColor),
-        splashColor: normalizeHexColor(merged.splashColor, defaultColor.splashColor),
-        splashTextColor: normalizeHexColor(merged.splashTextColor, defaultColor.splashTextColor),
-        splashFill: normalizeHexColor(merged.splashFill, defaultColor.splashFill),
-        isProdBgTransparent: !!merged.isProdBgTransparent,
-        cardBorderRadius: toFinite(merged.cardBorderRadius, defaultNumber.cardBorderRadius, 0, 120),
-        cardBorderWidth: toFinite(merged.cardBorderWidth, defaultNumber.cardBorderWidth, 0, 24),
-        prodNameScale: toFinite(merged.prodNameScale, defaultNumber.prodNameScale, 0.5, 2.5),
-        prodNameLineHeight: toFinite(merged.prodNameLineHeight, defaultNumber.prodNameLineHeight, 0.7, 2.2),
-        prodNameOffsetY: toFinite(merged.prodNameOffsetY, defaultNumber.prodNameOffsetY, -300, 300),
-        splashScale: toFinite(merged.splashScale, defaultNumber.splashScale, 0.35, 3),
-        splashTextScale: toFinite(merged.splashTextScale, defaultNumber.splashTextScale, 0.4, 2.8),
-        splashRoundness: toFinite(merged.splashRoundness, defaultNumber.splashRoundness, 0, 1),
-        splashOffsetY: toFinite(merged.splashOffsetY, defaultNumber.splashOffsetY, -300, 300),
-        priceFontSize: toFinite(merged.priceFontSize, defaultNumber.priceFontSize, 24, 160),
-        splashStrokeWidth: merged.splashStrokeWidth === undefined || merged.splashStrokeWidth === null
-            ? undefined
-            : toFinite(merged.splashStrokeWidth, defaultNumber.splashStrokeWidth, 0, 24),
-        priceTextColor: normalizeHexColor(merged.priceTextColor, defaultColor.splashTextColor, { allowUndefined: true }),
-        priceCurrencyColor: normalizeHexColor(merged.priceCurrencyColor, defaultColor.splashTextColor, { allowUndefined: true }),
-        priceFontWeight: merged.priceFontWeight === '' || merged.priceFontWeight === null ? undefined : merged.priceFontWeight,
-        priceFontStyle: String(merged.priceFontStyle ?? DEFAULT_GLOBAL_STYLES.priceFontStyle ?? 'normal').trim().toLowerCase() === 'italic'
-            ? 'italic'
-            : 'normal'
-    };
-
-    const align = String(normalized.prodNameAlign || '').toLowerCase();
-    if (align !== 'left' && align !== 'center' && align !== 'right') {
-        normalized.prodNameAlign = DEFAULT_GLOBAL_STYLES.prodNameAlign;
-    }
-    const transform = String(normalized.prodNameTransform || '').toLowerCase();
-    if (transform !== 'none' && transform !== 'upper' && transform !== 'lower') {
-        normalized.prodNameTransform = DEFAULT_GLOBAL_STYLES.prodNameTransform;
-    }
-    if (typeof normalized.priceFont !== 'string' || !normalized.priceFont.trim()) {
-        normalized.priceFont = DEFAULT_GLOBAL_STYLES.priceFont;
-    }
-    if (typeof normalized.prodNameFont !== 'string' || !normalized.prodNameFont.trim()) {
-        normalized.prodNameFont = DEFAULT_GLOBAL_STYLES.prodNameFont;
-    }
-    if (normalized.priceFontStyle !== 'italic') {
-        normalized.priceFontStyle = 'normal';
-    }
-
-    return normalized;
-}
+// normalizeGlobalStyles extraido para utils/globalStylesNormalize.ts.
+// Wrapper local injeta DEFAULT_GLOBAL_STYLES.
+const normalizeGlobalStyles = (styles?: Partial<GlobalStyles> | null): GlobalStyles =>
+    normalizeGlobalStylesHelper(styles, DEFAULT_GLOBAL_STYLES)
 
 function getZoneGlobalStyles(zone?: any): GlobalStyles {
     if (zone && typeof (zone as any)._zoneGlobalStyles === 'object' && (zone as any)._zoneGlobalStyles !== null) {
