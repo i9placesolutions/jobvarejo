@@ -138,6 +138,10 @@ import { clamp, toFinite, formatDisplayNumber } from '~/utils/mathHelpers'
 import { normalizeHexColor } from '~/utils/colorHelpers'
 import { resolveZoneUpdatesPayload } from '~/utils/zoneUpdatesPayload'
 import {
+    computeExportPreflightCounts,
+    buildExportPreflightWarnings
+} from '~/utils/exportPreflightChecks'
+import {
     clonePlainForZoneSnapshot,
     finiteZoneSnapshotNumber,
     firstDefinedZoneSnapshotValue
@@ -22985,56 +22989,14 @@ const maybeWarnLargeBatchExport = (frames: any[], qualityPreset: ExportQualityPr
 // Preflight bloqueante de export: detecta problemas comerciais/visuais obvios
 // antes de gerar o arquivo final. Retorna lista de avisos (vazia = tudo OK).
 // Pode ser estendido com mais validacoes conforme novas regras aparecerem.
+// Wrapper local: injeta canvas.value.getObjects() + isLikelyProductZone.
 const runExportPreflightChecks = (): string[] => {
-    const warnings: string[] = []
-    if (!canvas.value) return warnings
-    try {
-        const objects: any[] = canvas.value.getObjects?.() || []
-        let brokenImages = 0
-        let emptyProductCards = 0
-        const seenZones = new Set<string>()
-        let emptyZones = 0
-
-        const walk = (list: any[]): void => {
-            for (const obj of list || []) {
-                if (!obj) continue
-                const t = String(obj.type || '').toLowerCase()
-                if (t === 'image') {
-                    const hasSrc = !!(obj._element?.src || obj.src)
-                    const failed = obj._element?.naturalWidth === 0 || (obj as any).__loadFailed === true
-                    if (!hasSrc || failed) brokenImages++
-                }
-                if (isLikelyProductZone(obj)) {
-                    const zoneId = String((obj as any)._customId || '').trim()
-                    if (zoneId) seenZones.add(zoneId)
-                    const cards = objects.filter((o: any) => String((o as any).parentZoneId || '').trim() === zoneId)
-                    if (cards.length === 0) emptyZones++
-                }
-                if ((obj as any).isProductCard) {
-                    const name = String((obj as any).productName || '').trim()
-                    const price = String((obj as any).productPrice || '').trim()
-                    if (!name && !price) emptyProductCards++
-                }
-                if (typeof obj.getObjects === 'function') {
-                    walk(obj.getObjects() || [])
-                }
-            }
-        }
-        walk(objects)
-
-        if (brokenImages > 0) {
-            warnings.push(`${brokenImages} imagem(ns) nao carregaram — elas aparecerao em branco no export.`)
-        }
-        if (emptyZones > 0) {
-            warnings.push(`${emptyZones} zona(s) de produto sem cards — o layout pode ficar vazio.`)
-        }
-        if (emptyProductCards > 0) {
-            warnings.push(`${emptyProductCards} card(s) de produto sem nome/preco — informacoes comerciais podem estar incompletas.`)
-        }
-    } catch (err) {
-        console.warn('[export-preflight] Falha ao executar checagens:', err)
-    }
-    return warnings
+    if (!canvas.value) return []
+    const counts = computeExportPreflightCounts({
+        objects: canvas.value.getObjects?.() || [],
+        isLikelyProductZone
+    })
+    return buildExportPreflightWarnings(counts)
 }
 
 const performExport = async () => {
