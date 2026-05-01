@@ -3,7 +3,8 @@ import {
   setText,
   setVisible,
   assignNewCustomIdsDeep,
-  resetDuplicatedObjectRuntime
+  resetDuplicatedObjectRuntime,
+  clearInvalidClipPath
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -313,5 +314,125 @@ describe('resetDuplicatedObjectRuntime', () => {
     const o = makeNode({ isEditing: true })
     o.exitEditing = () => { throw new Error('boom') }
     expect(() => resetDuplicatedObjectRuntime(o)).not.toThrow()
+  })
+})
+
+describe('clearInvalidClipPath', () => {
+  const makeObj = (overrides: any = {}) => {
+    const o: any = {
+      type: 'rect',
+      ...overrides
+    }
+    o.set = (k: string, v: any) => { (o as any)[k] = v }
+    return o
+  }
+
+  it('null nao quebra', () => {
+    expect(() => clearInvalidClipPath(null)).not.toThrow()
+    expect(() => clearInvalidClipPath(undefined)).not.toThrow()
+  })
+
+  it('objeto sem clipPath e sem _objects: no-op', () => {
+    const o = makeObj()
+    clearInvalidClipPath(o)
+    expect(o.clipPath).toBeUndefined()
+  })
+
+  it('clipPath valido permanece intacto', () => {
+    const validClip = {
+      type: 'rect',
+      _objects: [],
+      render: () => {}
+    }
+    const o = makeObj({ clipPath: validClip })
+    clearInvalidClipPath(o)
+    expect(o.clipPath).toBe(validClip)
+  })
+
+  it('clipPath com _objects undefined ganha array vazio (fix-up)', () => {
+    const clip = { type: 'rect', render: () => {} }
+    const o = makeObj({ clipPath: clip })
+    clearInvalidClipPath(o)
+    expect(clip._objects).toEqual([])
+  })
+
+  it('clipPath com _objects nao-array e removido + limpa _frameClipOwner', () => {
+    const o = makeObj({
+      clipPath: { type: 'rect', _objects: 'invalido' },
+      _frameClipOwner: { id: 'frame-1' }
+    })
+    clearInvalidClipPath(o)
+    expect(o.clipPath).toBeNull()
+    expect(o._frameClipOwner).toBeUndefined()
+  })
+
+  it('clipPath nested invalido tambem dispara remocao', () => {
+    const o = makeObj({
+      clipPath: {
+        type: 'rect',
+        _objects: [],
+        clipPath: { _objects: 'invalido' }
+      }
+    })
+    clearInvalidClipPath(o)
+    expect(o.clipPath).toBeNull()
+  })
+
+  it('clipPath que falha em isValidClipPath e removido', () => {
+    // sem render -> isValidClipPath retorna false
+    const o = makeObj({
+      clipPath: { type: 'rect', _objects: [] }
+    })
+    clearInvalidClipPath(o)
+    expect(o.clipPath).toBeNull()
+  })
+
+  it('_objects nao-array no proprio objeto vira array vazio', () => {
+    const o = makeObj({ _objects: 'foo' })
+    clearInvalidClipPath(o)
+    expect(o._objects).toEqual([])
+  })
+
+  it('recursive=true desce em _objects array', () => {
+    const child: any = makeObj({
+      _objects: 'invalido' // sera consertado
+    })
+    const root = makeObj({
+      _objects: [child]
+    })
+    clearInvalidClipPath(root, true)
+    expect(child._objects).toEqual([])
+  })
+
+  it('recursive=true desce em getObjects()', () => {
+    const child: any = makeObj({
+      clipPath: { type: 'rect', _objects: 'invalido' }
+    })
+    const root: any = makeObj({
+      type: 'group',
+      getObjects: () => [child]
+    })
+    clearInvalidClipPath(root, true)
+    expect(child.clipPath).toBeNull()
+  })
+
+  it('recursive=false NAO desce em filhos', () => {
+    const child: any = makeObj({
+      _objects: 'invalido'
+    })
+    const root: any = makeObj({
+      _objects: [child]
+    })
+    clearInvalidClipPath(root, false)
+    expect(child._objects).toBe('invalido') // nao tocado
+  })
+
+  it('REGRESSAO: erro silencioso quando obj.set falha', () => {
+    const o: any = {
+      type: 'rect',
+      clipPath: { type: 'rect', _objects: 'bad' },
+      set: () => { throw new Error('boom') }
+    }
+    expect(() => clearInvalidClipPath(o)).not.toThrow()
   })
 })

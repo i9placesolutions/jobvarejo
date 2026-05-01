@@ -83,7 +83,8 @@ import {
     setText,
     setVisible,
     assignNewCustomIdsDeep,
-    resetDuplicatedObjectRuntime
+    resetDuplicatedObjectRuntime,
+    clearInvalidClipPath
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -769,78 +770,7 @@ const loadFromJsonSafe = async (json: any): Promise<void> => {
  * @param obj - Fabric object to check
  * @param recursive - Whether to check children in groups
  */
-const clearInvalidClipPath = (obj: any, recursive: boolean = false): void => {
-    if (!obj) return;
-
-    try {
-        // First, fix any clipPath that has malformed _objects
-        if (obj.clipPath) {
-            const clip = obj.clipPath;
-            // CRITICAL FIX: Ensure _objects is ALWAYS an array for clipPaths
-            // fabric.js createClipPathLayer calls forEach on _objects without checking
-            if (clip._objects === undefined || clip._objects === null) {
-                clip._objects = [];
-            } else if (!Array.isArray(clip._objects)) {
-                console.warn('[clipPath] _objects não é um array em:', obj.type || 'unknown', '- removendo clipPath');
-                obj.set('clipPath', null);
-                if (obj._frameClipOwner) {
-                    delete obj._frameClipOwner;
-                }
-                return;
-            }
-            // Also fix nested clipPath
-            if (clip.clipPath) {
-                if (clip.clipPath._objects === undefined || clip.clipPath._objects === null) {
-                    clip.clipPath._objects = [];
-                } else if (!Array.isArray(clip.clipPath._objects)) {
-                    obj.set('clipPath', null);
-                    if (obj._frameClipOwner) {
-                        delete obj._frameClipOwner;
-                    }
-                    return;
-                }
-            }
-        }
-
-        // Check if object has an invalid clipPath (after fixing attempt)
-        if (obj.clipPath && !isValidClipPath(obj.clipPath)) {
-            console.warn('[clipPath] Removendo clipPath inválido de objeto:', obj.type || 'unknown', obj.id || 'no-id');
-            obj.set('clipPath', null);
-
-            // Also clear the frame owner reference if it exists
-            if (obj._frameClipOwner) {
-                delete obj._frameClipOwner;
-            }
-        }
-
-        // Also check and fix malformed _objects arrays on the object itself
-        // This happens when fabric.js objects are deserialized incorrectly
-        if (obj._objects !== undefined && !Array.isArray(obj._objects)) {
-            console.warn('[clipPath] Fixing _objects não-array em:', obj.type || 'unknown');
-            obj._objects = [];
-        }
-
-        // Recursively check children in groups
-        if (recursive && obj._objects && Array.isArray(obj._objects)) {
-            obj._objects.forEach((child: any) => {
-                clearInvalidClipPath(child, true);
-            });
-        }
-
-        // Also check objects in groups via getObjects if available
-        if (recursive && typeof obj.getObjects === 'function') {
-            const children = obj.getObjects();
-            if (Array.isArray(children)) {
-                children.forEach((child: any) => {
-                    clearInvalidClipPath(child, true);
-                });
-            }
-        }
-    } catch (e) {
-        // Silently handle errors during clipPath clearing
-        console.warn('[clipPath] Erro ao limpar clipPath:', e);
-    }
-};
+// clearInvalidClipPath extraido para utils/fabricObjectOps.ts.
 
 /**
  * Validates and sanitizes all clipPaths in the canvas.

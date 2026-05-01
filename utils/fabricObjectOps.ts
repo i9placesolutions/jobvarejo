@@ -9,6 +9,80 @@
 import { makeId } from './makeId'
 import { isTextStyleObject } from './editorSelectionSnapshot'
 import { isLikelyProductCard } from './fabricObjectClassifiers'
+import { isValidClipPath } from './canvasValidation'
+
+/**
+ * Sanitiza recursivamente clipPaths corrompidos em um objeto Fabric.
+ * Critico apos desserializacao para evitar "forEach of undefined" no
+ * fabric.js createClipPathLayer.
+ *
+ * Estrategia em 3 camadas:
+ *  1. Tenta consertar `_objects` undefined/null → array vazio
+ *  2. Se `_objects` nao e' array, remove clipPath inteiro + _frameClipOwner
+ *  3. Se passa em isValidClipPath, deixa como esta; senao remove
+ *
+ * Tambem normaliza _objects do proprio objeto (nao so do clipPath) e
+ * desce em groups quando `recursive=true`.
+ *
+ * Captura erros silenciosamente — nao quebra render se falhar.
+ */
+export const clearInvalidClipPath = (obj: any, recursive: boolean = false): void => {
+    if (!obj) return
+
+    try {
+        if (obj.clipPath) {
+            const clip = obj.clipPath
+            if (clip._objects === undefined || clip._objects === null) {
+                clip._objects = []
+            } else if (!Array.isArray(clip._objects)) {
+                obj.set('clipPath', null)
+                if (obj._frameClipOwner) {
+                    delete obj._frameClipOwner
+                }
+                return
+            }
+            if (clip.clipPath) {
+                if (clip.clipPath._objects === undefined || clip.clipPath._objects === null) {
+                    clip.clipPath._objects = []
+                } else if (!Array.isArray(clip.clipPath._objects)) {
+                    obj.set('clipPath', null)
+                    if (obj._frameClipOwner) {
+                        delete obj._frameClipOwner
+                    }
+                    return
+                }
+            }
+        }
+
+        if (obj.clipPath && !isValidClipPath(obj.clipPath)) {
+            obj.set('clipPath', null)
+            if (obj._frameClipOwner) {
+                delete obj._frameClipOwner
+            }
+        }
+
+        if (obj._objects !== undefined && !Array.isArray(obj._objects)) {
+            obj._objects = []
+        }
+
+        if (recursive && obj._objects && Array.isArray(obj._objects)) {
+            obj._objects.forEach((child: any) => {
+                clearInvalidClipPath(child, true)
+            })
+        }
+
+        if (recursive && typeof obj.getObjects === 'function') {
+            const children = obj.getObjects()
+            if (Array.isArray(children)) {
+                children.forEach((child: any) => {
+                    clearInvalidClipPath(child, true)
+                })
+            }
+        }
+    } catch {
+        // Silently handle errors during clipPath clearing
+    }
+}
 
 /**
  * Reseta estado de runtime de um objeto Fabric clonado/duplicado:
