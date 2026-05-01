@@ -134,6 +134,10 @@ import {
     getAvailablePrices
 } from '~/utils/productPriceHelpers'
 import {
+    getRenderedTextboxLinesForPersistence,
+    buildPersistedCardTitleText
+} from '~/utils/cardTitlePersistence'
+import {
     PRICE_LAYOUT_NODE_PREFIXES,
     PRICE_LAYOUT_NODE_EXACT,
     isPriceLayoutNode,
@@ -28418,31 +28422,8 @@ const resolveCardTitleStateFromTarget = (target: any): { card: any | null; title
     return { card, titleObj };
 };
 
-const getRenderedTextboxLinesForPersistence = (textObj: any): string[] => {
-    if (!textObj || String(textObj?.type || '').toLowerCase() !== 'textbox') return [];
-    if (typeof textObj.initDimensions === 'function') textObj.initDimensions();
-
-    const rawLines = Array.isArray((textObj as any).textLines)
-        ? (textObj as any).textLines
-        : (Array.isArray((textObj as any)._textLines) ? (textObj as any)._textLines : []);
-
-    return rawLines
-        .map((line: any) => Array.isArray(line) ? line.join('') : String(line ?? ''))
-        .map((line: string) => line.replace(/\r/g, ''))
-        .filter((line: string, idx: number, arr: string[]) => line.length > 0 || arr.length === 1 || idx < arr.length - 1);
-};
-
-const buildPersistedCardTitleText = (titleObj: any): string => {
-    const rawText = String((titleObj as any)?.text ?? '').replace(/\r\n?/g, '\n');
-    if (rawText.includes('\n')) return rawText;
-
-    const renderedLines = getRenderedTextboxLinesForPersistence(titleObj)
-        .filter((line: string) => line.trim().length > 0);
-    if (renderedLines.length > 1) {
-        return renderedLines.join('\n');
-    }
-    return rawText;
-};
+// getRenderedTextboxLinesForPersistence e buildPersistedCardTitleText
+// extraidos para utils/cardTitlePersistence.ts.
 
 function syncCardProductDataTitleWidthFromTarget(target: any): boolean {
     const { card, titleObj } = resolveCardTitleStateFromTarget(target);
