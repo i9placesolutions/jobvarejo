@@ -341,3 +341,18 @@ export const isVectorPathClosed = (pathObj: any): boolean => {
     const segments = Array.isArray(pathObj.path) ? pathObj.path : []
     return segments.some(isPathCloseCommand)
 }
+
+/**
+ * Detecta se um objeto deve ser submetido a containment constraints
+ * (manter dentro do bounding rect do parent zone/group):
+ *
+ *  - image: sim, apenas se estiver dentro de um group
+ *  - group: sim, apenas se tiver parentZoneId binding
+ *  - outros: nao
+ */
+export const shouldApplyContainmentConstraints = (obj: any): boolean => {
+    if (!obj) return false
+    if (obj.type === 'image') return !!obj.group
+    if (obj.type === 'group') return hasParentZoneBinding(obj)
+    return false
+}

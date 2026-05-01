@@ -38,7 +38,8 @@ import {
     isActiveSelectionObject,
     hasParentZoneBinding,
     isCardLikeForZoneBinding,
-    countFabricObjectsAndImages
+    countFabricObjectsAndImages,
+    shouldApplyContainmentConstraints
 } from '~/utils/fabricObjectClassifiers'
 import {
     isCanvasContextError,
@@ -8939,12 +8940,7 @@ const setObjectCenterInParentPlane = (obj: any, cx: number, cy: number) => {
     }
 };
 
-const shouldApplyContainmentConstraints = (obj: any) => {
-    if (!obj) return false;
-    if (obj.type === 'image') return !!obj.group;
-    if (obj.type === 'group') return hasParentZoneBinding(obj);
-    return false;
-};
+// shouldApplyContainmentConstraints extraido para utils/fabricObjectClassifiers.ts.
 
 const getContainmentZoneById = (zoneId: any) => {
     if (!canvas.value) return null;

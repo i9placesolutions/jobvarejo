@@ -15,7 +15,8 @@ import {
   isActiveSelectionObject,
   hasParentZoneBinding,
   isCardLikeForZoneBinding,
-  countFabricObjectsAndImages
+  countFabricObjectsAndImages,
+  shouldApplyContainmentConstraints
 } from '~/utils/fabricObjectClassifiers'
 
 // Helpers de mock — todos seguem duck typing de Fabric.
@@ -549,5 +550,39 @@ describe('countFabricObjectsAndImages', () => {
     const a: any = { type: 'group' }
     a.getObjects = () => [a]
     expect(countFabricObjectsAndImages({ getObjects: () => [a] })).toEqual({ objects: 1, images: 0 })
+  })
+})
+
+describe('shouldApplyContainmentConstraints', () => {
+  it('null/undefined → false', () => {
+    expect(shouldApplyContainmentConstraints(null)).toBe(false)
+    expect(shouldApplyContainmentConstraints(undefined)).toBe(false)
+  })
+
+  it('image dentro de group → true', () => {
+    expect(shouldApplyContainmentConstraints({ type: 'image', group: { type: 'group' } }))
+      .toBe(true)
+  })
+
+  it('image livre (sem group) → false', () => {
+    expect(shouldApplyContainmentConstraints({ type: 'image' })).toBe(false)
+    expect(shouldApplyContainmentConstraints({ type: 'image', group: null })).toBe(false)
+  })
+
+  it('group com parentZoneId → true', () => {
+    expect(shouldApplyContainmentConstraints({ type: 'group', parentZoneId: 'z1' }))
+      .toBe(true)
+  })
+
+  it('group sem parentZoneId → false', () => {
+    expect(shouldApplyContainmentConstraints({ type: 'group' })).toBe(false)
+    expect(shouldApplyContainmentConstraints({ type: 'group', parentZoneId: '' }))
+      .toBe(false)
+  })
+
+  it('outros tipos (rect, text, path) → false', () => {
+    expect(shouldApplyContainmentConstraints({ type: 'rect' })).toBe(false)
+    expect(shouldApplyContainmentConstraints({ type: 'text' })).toBe(false)
+    expect(shouldApplyContainmentConstraints({ type: 'path' })).toBe(false)
   })
 })
