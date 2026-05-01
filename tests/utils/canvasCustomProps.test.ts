@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CANVAS_CUSTOM_PROPS } from '~/utils/canvasCustomProps'
+import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS } from '~/utils/canvasCustomProps'
 
 describe('CANVAS_CUSTOM_PROPS', () => {
   it('e um array nao-vazio', () => {
@@ -115,5 +115,37 @@ describe('CANVAS_CUSTOM_PROPS', () => {
   it('todas as strings sao unicas (sem duplicatas)', () => {
     const set = new Set(CANVAS_CUSTOM_PROPS)
     expect(set.size).toBe(CANVAS_CUSTOM_PROPS.length)
+  })
+})
+
+describe('DUPLICATE_CLONE_PROPS', () => {
+  it('inclui todas as CANVAS_CUSTOM_PROPS', () => {
+    for (const prop of CANVAS_CUSTOM_PROPS) {
+      expect(DUPLICATE_CLONE_PROPS).toContain(prop)
+    }
+  })
+
+  it('inclui transform/visual base props', () => {
+    expect(DUPLICATE_CLONE_PROPS).toContain('opacity')
+    expect(DUPLICATE_CLONE_PROPS).toContain('flipX')
+    expect(DUPLICATE_CLONE_PROPS).toContain('flipY')
+    expect(DUPLICATE_CLONE_PROPS).toContain('filters')
+    expect(DUPLICATE_CLONE_PROPS).toContain('clipPath')
+    expect(DUPLICATE_CLONE_PROPS).toContain('src')
+    expect(DUPLICATE_CLONE_PROPS).toContain('originX')
+    expect(DUPLICATE_CLONE_PROPS).toContain('originY')
+    expect(DUPLICATE_CLONE_PROPS).toContain('angle')
+    expect(DUPLICATE_CLONE_PROPS).toContain('scaleX')
+    expect(DUPLICATE_CLONE_PROPS).toContain('scaleY')
+    expect(DUPLICATE_CLONE_PROPS).toContain('data')
+  })
+
+  it('todos os elementos sao unicos (Array.from(Set))', () => {
+    const set = new Set(DUPLICATE_CLONE_PROPS)
+    expect(set.size).toBe(DUPLICATE_CLONE_PROPS.length)
+  })
+
+  it('e maior que CANVAS_CUSTOM_PROPS (tem props extras de transform)', () => {
+    expect(DUPLICATE_CLONE_PROPS.length).toBeGreaterThanOrEqual(CANVAS_CUSTOM_PROPS.length)
   })
 })

@@ -228,3 +228,41 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     // Manual template anchors
     '__manualSingleAnchors'
 ]
+
+/**
+ * Props extras a serem cloned ao duplicar um objeto Fabric. Inclui
+ * tudo de CANVAS_CUSTOM_PROPS + props base de transform/imagem
+ * (opacity, scaleX/Y, flipX/Y, src, etc) que nao estao no array
+ * principal mas sao essenciais para preservar visual no clone.
+ *
+ * Caller usa em fabric.Object.clone(callback, ['propsToInclude']).
+ */
+export const DUPLICATE_CLONE_PROPS: ReadonlyArray<string> = Array.from(new Set([
+    ...CANVAS_CUSTOM_PROPS,
+    'data',
+    'opacity',
+    'flipX',
+    'flipY',
+    'filters',
+    'clipPath',
+    'src',
+    'originX',
+    'originY',
+    'angle',
+    'scaleX',
+    'scaleY',
+    'parentFrameId',
+    'parentZoneId',
+    'isSmartObject',
+    'isProductCard',
+    'name',
+    'layerName',
+    'clipContent',
+    'smartGridId',
+    '_cardWidth',
+    '_cardHeight',
+    '_zoneOrder',
+    '_zoneSlot',
+    'subTargetCheck',
+    'interactive'
+]))

@@ -72,7 +72,7 @@ import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
 import { scheduleIdleWork } from '~/utils/idleSchedule'
-import { CANVAS_CUSTOM_PROPS } from '~/utils/canvasCustomProps'
+import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS } from '~/utils/canvasCustomProps'
 import {
     isTrackableImageSrc,
     collectTrackableImageSrcCounts
@@ -12679,35 +12679,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
 };
 
 const DUPLICATE_OFFSET = 20;
-const DUPLICATE_CLONE_PROPS = Array.from(new Set([
-    ...CANVAS_CUSTOM_PROPS,
-    'data',
-    'opacity',
-    'flipX',
-    'flipY',
-    'filters',
-    'clipPath',
-    'src',
-    'originX',
-    'originY',
-    'angle',
-    'scaleX',
-    'scaleY',
-    'parentFrameId',
-    'parentZoneId',
-    'isSmartObject',
-    'isProductCard',
-    'name',
-    'layerName',
-    'clipContent',
-    'smartGridId',
-    '_cardWidth',
-    '_cardHeight',
-    '_zoneOrder',
-    '_zoneSlot',
-    'subTargetCheck',
-    'interactive',
-]));
+// DUPLICATE_CLONE_PROPS extraido para utils/canvasCustomProps.ts.
 
 // isActiveSelectionObject extraido para utils/fabricObjectClassifiers.ts.
 
