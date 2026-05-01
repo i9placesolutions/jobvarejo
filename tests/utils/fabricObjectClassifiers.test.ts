@@ -16,7 +16,8 @@ import {
   hasParentZoneBinding,
   isCardLikeForZoneBinding,
   countFabricObjectsAndImages,
-  shouldApplyContainmentConstraints
+  shouldApplyContainmentConstraints,
+  isTransformRelatedToSource
 } from '~/utils/fabricObjectClassifiers'
 
 // Helpers de mock — todos seguem duck typing de Fabric.
@@ -584,5 +585,54 @@ describe('shouldApplyContainmentConstraints', () => {
     expect(shouldApplyContainmentConstraints({ type: 'rect' })).toBe(false)
     expect(shouldApplyContainmentConstraints({ type: 'text' })).toBe(false)
     expect(shouldApplyContainmentConstraints({ type: 'path' })).toBe(false)
+  })
+})
+
+describe('isTransformRelatedToSource', () => {
+  it('null/undefined args → false', () => {
+    expect(isTransformRelatedToSource(null, {})).toBe(false)
+    expect(isTransformRelatedToSource({}, null)).toBe(false)
+    expect(isTransformRelatedToSource(null, null)).toBe(false)
+  })
+
+  it('mesmo objeto → true', () => {
+    const obj = { type: 'rect' }
+    expect(isTransformRelatedToSource(obj, obj)).toBe(true)
+  })
+
+  it('source group + transformTarget filho do group → true', () => {
+    const child = { type: 'text' }
+    const group = { type: 'group' }
+    ;(child as any).group = group
+    expect(isTransformRelatedToSource(group, child)).toBe(true)
+  })
+
+  it('source group e transformTarget NAO filho → false', () => {
+    const group = { type: 'group' }
+    const unrelated = { type: 'text' }
+    expect(isTransformRelatedToSource(group, unrelated)).toBe(false)
+  })
+
+  it('source com parent group: transformTarget = parent → true', () => {
+    const parent = { type: 'group' }
+    const source = { type: 'rect', group: parent }
+    expect(isTransformRelatedToSource(source, parent)).toBe(true)
+  })
+
+  it('source com parent group: transformTarget = sibling (mesmo parent) → true', () => {
+    const parent = { type: 'group' }
+    const source = { type: 'rect', group: parent }
+    const sibling = { type: 'text', group: parent }
+    expect(isTransformRelatedToSource(source, sibling)).toBe(true)
+  })
+
+  it('objetos completamente desconectados → false', () => {
+    expect(isTransformRelatedToSource({ type: 'rect' }, { type: 'image' })).toBe(false)
+  })
+
+  it('source nao-group e transformTarget tem group diferente → false', () => {
+    const source = { type: 'rect' }
+    const target = { type: 'text', group: { type: 'group' } }
+    expect(isTransformRelatedToSource(source, target)).toBe(false)
   })
 })

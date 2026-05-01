@@ -356,3 +356,27 @@ export const shouldApplyContainmentConstraints = (obj: any): boolean => {
     if (obj.type === 'group') return hasParentZoneBinding(obj)
     return false
 }
+
+/**
+ * Detecta se um `transformTarget` (alvo do gesture atual) e' relacionado
+ * ao `source` (objeto inicialmente clicado). Usado em alt+drag para
+ * decidir se um clique em group filho/parent ainda deve continuar
+ * duplicando o source escolhido.
+ *
+ * Relacao positiva:
+ *  - source === transformTarget (mesmo objeto)
+ *  - source e' group e transformTarget e' filho dele (transformTarget.group === source)
+ *  - source.group existe e transformTarget e o parent (=== sourceParent)
+ *    ou um sibling (transformTarget.group === sourceParent)
+ *
+ * Pure: nao acessa refs/canvas.
+ */
+export const isTransformRelatedToSource = (source: any, transformTarget: any): boolean => {
+    if (!source || !transformTarget) return false
+    if (transformTarget === source) return true
+    const sourceType = String(source?.type || '').toLowerCase()
+    if (sourceType === 'group' && transformTarget.group === source) return true
+    const sourceParent = source?.group
+    if (sourceParent && (transformTarget === sourceParent || transformTarget.group === sourceParent)) return true
+    return false
+}

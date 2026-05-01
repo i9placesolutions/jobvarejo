@@ -39,7 +39,8 @@ import {
     hasParentZoneBinding,
     isCardLikeForZoneBinding,
     countFabricObjectsAndImages,
-    shouldApplyContainmentConstraints
+    shouldApplyContainmentConstraints,
+    isTransformRelatedToSource
 } from '~/utils/fabricObjectClassifiers'
 import {
     isCanvasContextError,
@@ -3864,15 +3865,7 @@ const setupAltDragDuplicate = () => {
         return source;
     };
 
-    const isTransformRelatedToSource = (source: any, transformTarget: any) => {
-        if (!source || !transformTarget) return false;
-        if (transformTarget === source) return true;
-        const sourceType = String(source?.type || '').toLowerCase();
-        if (sourceType === 'group' && transformTarget.group === source) return true;
-        const sourceParent = source?.group;
-        if (sourceParent && (transformTarget === sourceParent || transformTarget.group === sourceParent)) return true;
-        return false;
-    };
+    // isTransformRelatedToSource extraido para utils/fabricObjectClassifiers.ts.
 
     const syncCloneToPointerDelta = () => {
         if (!state.clone || !isValidFabricObject(state.clone)) return;
