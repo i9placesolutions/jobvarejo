@@ -70,6 +70,10 @@ import {
     shouldSkipViewportCullObject
 } from '~/utils/viewportCulling'
 import { getEditorPerfNow, roundEditorPerf } from '~/utils/perfHelpers'
+import {
+    getCanvasObjectsRefreshIntervalMs,
+    CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS
+} from '~/utils/refreshThrottle'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
 import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import {
@@ -7026,19 +7030,17 @@ let canvasObjectsRefreshRafId: number | null = null
 let canvasObjectsRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let canvasObjectsRefreshPendingSource: any[] | null = null
 let lastCanvasObjectsRefreshAt = 0
-const CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS = 42
-const getCanvasObjectsRefreshIntervalMs = () => {
+// CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS + getCanvasObjectsRefreshIntervalMs
+// extraidos para utils/refreshThrottle.ts. Wrapper local injeta
+// objectCount a partir das refs reativas do componente.
+const getRefreshIntervalForCurrentObjects = () => {
     const objectCount = Number(
         canvasObjectsRefreshPendingSource?.length ??
         canvas.value?.getObjects?.().length ??
         canvasObjects.value.length ??
         0
-    );
-    if (objectCount > 1000) return 220;
-    if (objectCount > 650) return 160;
-    if (objectCount > 320) return 96;
-    if (objectCount > 180) return 64;
-    return CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS;
+    )
+    return getCanvasObjectsRefreshIntervalMs(objectCount)
 }
 
 const commitCanvasObjectsRefresh = () => {
@@ -7077,7 +7079,7 @@ const refreshCanvasObjects = (opts: { immediate?: boolean; source?: any[] } = {}
         ? performance.now()
         : Date.now()
     const elapsed = now - lastCanvasObjectsRefreshAt
-    const minIntervalMs = getCanvasObjectsRefreshIntervalMs()
+    const minIntervalMs = getRefreshIntervalForCurrentObjects()
 
     const scheduleRaf = () => {
         if (canvasObjectsRefreshRafId !== null) return
