@@ -109,7 +109,11 @@ import {
     stripAccents,
     normalizeLimitText,
     normalizeSpecialCondition,
-    normalizeImageSearch
+    normalizeImageSearch,
+    normalizeImageSearchText,
+    normalizeImageSearchKey,
+    dedupeImageSearchTokens,
+    uniqueImageSearchHints
 } from '~/utils/productTextNormalize'
 import {
     isObjectShownForBounds,
@@ -25560,49 +25564,8 @@ const handleImportProductList = () => {
     showProductReviewModal.value = true;
 }
 
-const normalizeImageSearchText = (value: any): string =>
-    String(value || '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-const normalizeImageSearchKey = (value: string): string =>
-    normalizeImageSearchText(value)
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-const dedupeImageSearchTokens = (value: any): string => {
-    const tokens = normalizeImageSearchText(value).split(' ').filter(Boolean);
-    const seen = new Set<string>();
-    const out: string[] = [];
-
-    for (const token of tokens) {
-        const key = normalizeImageSearchKey(token);
-        if (!key) continue;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(token);
-    }
-
-    return out.join(' ').trim();
-};
-
-const uniqueImageSearchHints = (variants: string[]): string[] => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const entry of variants) {
-        const compact = dedupeImageSearchTokens(entry);
-        if (!compact) continue;
-        const key = normalizeImageSearchKey(compact);
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        out.push(compact);
-    }
-    return out;
-};
+// normalizeImageSearchText, normalizeImageSearchKey, dedupeImageSearchTokens
+// e uniqueImageSearchHints extraidos para utils/productTextNormalize.ts.
 
 // Paste List Handlers — shared helpers
 const getPasteHttpStatus = (err: any): number => {

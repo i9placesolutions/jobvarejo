@@ -56,3 +56,75 @@ export const normalizeSpecialCondition = (raw: any): string | null => {
     const cleaned = txt.replace(/^[\-:;,.\s]+/, '').replace(/[\-:;,.\s]+$/, '').trim()
     return cleaned || null
 }
+
+/**
+ * Normaliza texto livre para uso como hint de busca de imagem:
+ *  - String() coerce
+ *  - colapsa whitespace
+ *  - trim
+ *
+ * Diferente de normalizeImageSearch: preserva case e acentos. Usado
+ * como "forma exibivel" do hint (vai para a UI).
+ */
+export const normalizeImageSearchText = (value: any): string =>
+    String(value || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+/**
+ * Normaliza texto para chave de comparacao de hints (deduplicacao):
+ *  - chama normalizeImageSearchText
+ *  - lowercase + strip accents
+ *  - remove caracteres nao-alfanumericos
+ *  - colapsa whitespace
+ *
+ * Apenas para comparacao (Set keys), nunca para exibicao.
+ */
+export const normalizeImageSearchKey = (value: any): string =>
+    normalizeImageSearchText(value)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+/**
+ * Remove tokens duplicados (case/accent-insensitive) de uma string,
+ * preservando a ordem original e a forma exibivel do primeiro
+ * encontro de cada chave.
+ *
+ * Ex: "Banana banana BANANA Maca" → "Banana Maca"
+ */
+export const dedupeImageSearchTokens = (value: any): string => {
+    const tokens = normalizeImageSearchText(value).split(' ').filter(Boolean)
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const token of tokens) {
+        const key = normalizeImageSearchKey(token)
+        if (!key) continue
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(token)
+    }
+    return out.join(' ').trim()
+}
+
+/**
+ * Recebe varias variantes de string (ex: nome, sinonimos) e devolve
+ * apenas as unicas (em forma exibivel) apos dedupeImageSearchTokens
+ * + dedup global por chave normalizada.
+ */
+export const uniqueImageSearchHints = (variants: ReadonlyArray<string>): string[] => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const entry of variants) {
+        const compact = dedupeImageSearchTokens(entry)
+        if (!compact) continue
+        const key = normalizeImageSearchKey(compact)
+        if (!key || seen.has(key)) continue
+        seen.add(key)
+        out.push(compact)
+    }
+    return out
+}
