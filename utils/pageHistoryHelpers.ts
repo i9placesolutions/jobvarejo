@@ -28,3 +28,18 @@ export type PageHistoryItem = {
  */
 export const getHistoryRestoreKey = (item: PageHistoryItem): string =>
     `${item.source}:${item.key}:${item.versionId || ''}`
+
+/**
+ * Decide se o item de historico no indice `idx` deve receber a badge
+ * "Mais recente". Regras:
+ *  - apenas o primeiro item da lista (idx === 0) e candidato
+ *  - exclui itens com source='current' (que ja' mostram badge "Versao atual")
+ *
+ * Recebe a lista como parametro (vez de ler de ref reativo) para que
+ * a funcao continue pura e testavel.
+ */
+export const historyItemIsLatest = (idx: number, items: PageHistoryItem[]): boolean => {
+    if (idx !== 0) return false
+    const item = items[0]
+    return !!item && item.source !== 'current'
+}

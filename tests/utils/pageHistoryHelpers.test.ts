@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { getHistoryRestoreKey } from '~/utils/pageHistoryHelpers'
+import {
+  getHistoryRestoreKey,
+  historyItemIsLatest
+} from '~/utils/pageHistoryHelpers'
 import type { PageHistoryItem } from '~/utils/pageHistoryHelpers'
 
 const makeItem = (overrides: Partial<PageHistoryItem> = {}): PageHistoryItem => ({
@@ -48,5 +51,29 @@ describe('getHistoryRestoreKey', () => {
     const a = makeItem({ source: 'version', key: 'p', versionId: 'v' })
     const b = makeItem({ source: 'history', key: 'p', versionId: 'v' })
     expect(getHistoryRestoreKey(a)).not.toBe(getHistoryRestoreKey(b))
+  })
+})
+
+describe('historyItemIsLatest', () => {
+  const a = makeItem({ source: 'version', key: 'a' })
+  const b = makeItem({ source: 'history', key: 'b' })
+  const c = makeItem({ source: 'current', key: 'c' })
+
+  it('idx > 0 sempre false', () => {
+    expect(historyItemIsLatest(1, [a, b])).toBe(false)
+    expect(historyItemIsLatest(2, [a, b, c])).toBe(false)
+  })
+
+  it('idx 0 com source nao-current → true', () => {
+    expect(historyItemIsLatest(0, [a, b])).toBe(true)
+    expect(historyItemIsLatest(0, [b])).toBe(true)
+  })
+
+  it('idx 0 com source=current → false (ja tem outra badge)', () => {
+    expect(historyItemIsLatest(0, [c, a])).toBe(false)
+  })
+
+  it('lista vazia → false', () => {
+    expect(historyItemIsLatest(0, [])).toBe(false)
   })
 })

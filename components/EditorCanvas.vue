@@ -77,7 +77,10 @@ import {
     getFrameLabelUpdateIntervalMs as getFrameLabelUpdateIntervalMsHelper,
     CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS
 } from '~/utils/refreshThrottle'
-import { getHistoryRestoreKey } from '~/utils/pageHistoryHelpers'
+import {
+    getHistoryRestoreKey,
+    historyItemIsLatest as historyItemIsLatestHelper
+} from '~/utils/pageHistoryHelpers'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
 import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import {
@@ -5178,12 +5181,9 @@ const historyLoading = ref(false)
 const historyError = ref<string>('')
 const historyItems = ref<PageHistoryItem[]>([])
 // formatHistoryDateTime e formatHistoryRelative extraidos para utils/dateTimeFormat.ts.
-const historyItemIsLatest = (idx: number) => {
-    if (idx !== 0) return false
-    const item = historyItems.value[0]
-    // 'current' already shows "Versao atual" badge — don't also show "Mais recente"
-    return item && (item as any).source !== 'current'
-}
+// Wrapper local que injeta historyItems.value no helper puro.
+const historyItemIsLatest = (idx: number) =>
+    historyItemIsLatestHelper(idx, historyItems.value)
 
 const openHistoryModal = async () => {
     if (!canRecoverLatestNonEmpty.value) return
