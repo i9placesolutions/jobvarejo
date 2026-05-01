@@ -53,6 +53,35 @@ export const formatDisplayNumber = (n: number): string => {
 }
 
 /**
+ * Normaliza uma escala "visivel" para um range seguro:
+ *
+ *  - input nao-finito ou zero: retorna `fallback` (clampado para
+ *    valor nao-zero finito; senao 1)
+ *  - clampa magnitude em [min, max] (defaults: 0.08 e 3.2)
+ *  - preserva sinal (flip negativo continua negativo)
+ *
+ * Util para evitar escalas absurdas (e.g. 0.0001 → fica invisivel,
+ * 99 → vira gigante) quando carregando dados de fontes externas.
+ *
+ * Defaults [0.08, 3.2] correspondem aos limites usados pelo
+ * editor para evitar colapso visual ou tela inteira.
+ */
+export const normalizeVisibleScale = (
+    raw: any,
+    fallback: any,
+    min: number = 0.08,
+    max: number = 3.2
+): number => {
+    const fallbackNum = Number(fallback)
+    const safeFallback = Number.isFinite(fallbackNum) && Math.abs(fallbackNum) > 0 ? fallbackNum : 1
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed) || parsed === 0) return safeFallback
+    const sign = parsed < 0 ? -1 : 1
+    const mag = Math.min(max, Math.max(min, Math.abs(parsed)))
+    return sign * mag
+}
+
+/**
  * Constraint 1D: dado o centro atual do objeto (cardCenter), seu
  * tamanho (cardSize) e o range do container [containerStart,
  * containerStart+containerSize], retorna o centro constrained:

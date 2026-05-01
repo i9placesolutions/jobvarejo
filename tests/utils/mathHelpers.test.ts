@@ -3,7 +3,8 @@ import {
   clamp,
   toFinite,
   formatDisplayNumber,
-  constrainCenterAxisInsideContainer
+  constrainCenterAxisInsideContainer,
+  normalizeVisibleScale
 } from '~/utils/mathHelpers'
 
 describe('clamp', () => {
@@ -177,5 +178,54 @@ describe('constrainCenterAxisInsideContainer', () => {
 
   it('cardSize 0: degenera mas nao crasha', () => {
     expect(constrainCenterAxisInsideContainer(50, 0, 0, 100)).toBe(50)
+  })
+})
+
+describe('normalizeVisibleScale', () => {
+  it('escala valida no range: passa', () => {
+    expect(normalizeVisibleScale(1, 1)).toBe(1)
+    expect(normalizeVisibleScale(2, 1)).toBe(2)
+    expect(normalizeVisibleScale(0.5, 1)).toBe(0.5)
+  })
+
+  it('clampa em [0.08, 3.2] (defaults)', () => {
+    expect(normalizeVisibleScale(99, 1)).toBe(3.2)
+    expect(normalizeVisibleScale(0.001, 1)).toBe(0.08)
+  })
+
+  it('preserva sinal negativo (flip)', () => {
+    expect(normalizeVisibleScale(-2, 1)).toBe(-2)
+    expect(normalizeVisibleScale(-99, 1)).toBe(-3.2)
+    expect(normalizeVisibleScale(-0.001, 1)).toBe(-0.08)
+  })
+
+  it('zero → fallback', () => {
+    expect(normalizeVisibleScale(0, 1.5)).toBe(1.5)
+    expect(normalizeVisibleScale(0, -0.5)).toBe(-0.5)
+  })
+
+  it('NaN/Infinity → fallback', () => {
+    expect(normalizeVisibleScale(NaN, 1.5)).toBe(1.5)
+    expect(normalizeVisibleScale(Infinity, 1.5)).toBe(1.5)
+    expect(normalizeVisibleScale('abc', 1.5)).toBe(1.5)
+  })
+
+  it('fallback invalido → 1', () => {
+    expect(normalizeVisibleScale(0, NaN)).toBe(1)
+    expect(normalizeVisibleScale(0, 0)).toBe(1)
+    expect(normalizeVisibleScale(0, undefined)).toBe(1)
+  })
+
+  it('min/max customizados', () => {
+    expect(normalizeVisibleScale(99, 1, 0.5, 2)).toBe(2)
+    expect(normalizeVisibleScale(0.001, 1, 0.5, 2)).toBe(0.5)
+  })
+
+  it('strings parseaveis: viram numero', () => {
+    expect(normalizeVisibleScale('1.5', 1)).toBe(1.5)
+  })
+
+  it('null fallback usa 1 como safe default', () => {
+    expect(normalizeVisibleScale(0, null as any)).toBe(1)
   })
 })

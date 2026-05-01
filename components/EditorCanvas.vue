@@ -144,9 +144,14 @@ import {
     clamp,
     toFinite,
     formatDisplayNumber,
-    constrainCenterAxisInsideContainer
+    constrainCenterAxisInsideContainer,
+    normalizeVisibleScale
 } from '~/utils/mathHelpers'
-import { normalizeHexColor } from '~/utils/colorHelpers'
+import {
+    normalizeHexColor,
+    parseTemplateColorRgba,
+    isTransparentLikeTemplateColor
+} from '~/utils/colorHelpers'
 import { resolveZoneUpdatesPayload } from '~/utils/zoneUpdatesPayload'
 import {
     computeExportPreflightCounts,
@@ -31030,64 +31035,10 @@ function isRedBurstPriceGroup(priceGroup: any): boolean {
     );
 }
 
-function parseTemplateColorRgba(value: any): { r: number; g: number; b: number; a: number } | null {
-    if (typeof value !== 'string') return null;
-    const raw = value.trim();
-    if (!raw) return null;
-
-    if (raw.startsWith('#')) {
-        const hex = raw.slice(1);
-        if (hex.length === 3 || hex.length === 4) {
-            const expanded = hex.split('').map((c) => c + c).join('');
-            const r = parseInt(expanded.slice(0, 2), 16);
-            const g = parseInt(expanded.slice(2, 4), 16);
-            const b = parseInt(expanded.slice(4, 6), 16);
-            const a = expanded.length === 8 ? parseInt(expanded.slice(6, 8), 16) / 255 : 1;
-            return { r, g, b, a };
-        }
-        if (hex.length === 6 || hex.length === 8) {
-            const r = parseInt(hex.slice(0, 2), 16);
-            const g = parseInt(hex.slice(2, 4), 16);
-            const b = parseInt(hex.slice(4, 6), 16);
-            const a = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1;
-            return { r, g, b, a };
-        }
-        return null;
-    }
-
-    const rgbaMatch = raw.match(/^rgba?\(([^)]+)\)$/i);
-    if (!rgbaMatch) return null;
-    const parts = rgbaMatch[1]!.split(',').map((part) => part.trim());
-    if (parts.length < 3) return null;
-    const r = Number(parts[0] || 0);
-    const g = Number(parts[1] || 0);
-    const b = Number(parts[2] || 0);
-    const a = parts.length >= 4 ? Number(parts[3] || 1) : 1;
-    if (![r, g, b, a].every((n) => Number.isFinite(n))) return null;
-    return {
-        r: Math.max(0, Math.min(255, r)),
-        g: Math.max(0, Math.min(255, g)),
-        b: Math.max(0, Math.min(255, b)),
-        a: Math.max(0, Math.min(1, a))
-    };
-}
-
-function isTransparentLikeTemplateColor(value: any): boolean {
-    if (value === null || value === undefined) return true;
-    if (typeof value !== 'string') return false;
-    const rgba = parseTemplateColorRgba(value);
-    return !!rgba && rgba.a <= 0.12;
-}
-
-function normalizeVisibleTemplateScale(raw: any, fallback: any, min = 0.08, max = 3.2): number {
-    const fallbackNum = Number(fallback);
-    const safeFallback = Number.isFinite(fallbackNum) && Math.abs(fallbackNum) > 0 ? fallbackNum : 1;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed === 0) return safeFallback;
-    const sign = parsed < 0 ? -1 : 1;
-    const mag = Math.min(max, Math.max(min, Math.abs(parsed)));
-    return sign * mag;
-}
+// parseTemplateColorRgba e isTransparentLikeTemplateColor extraidos para
+// utils/colorHelpers.ts. normalizeVisibleTemplateScale extraido para
+// utils/mathHelpers.ts (renomeado para normalizeVisibleScale).
+const normalizeVisibleTemplateScale = normalizeVisibleScale;
 
 function reviveRedBurstObjectNode(
     obj: any,
