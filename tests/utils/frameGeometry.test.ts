@@ -11,7 +11,8 @@ import {
   getFrameDisplayNameForExport,
   serializeFrameLabelMetric,
   buildFrameLabelViewportSignature,
-  buildFrameLabelSelectionSignature
+  buildFrameLabelSelectionSignature,
+  normalizeFrameRuntimeProps
 } from '~/utils/frameGeometry'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -418,5 +419,49 @@ describe('buildFrameLabelSelectionSignature', () => {
       type: 'i-text',
       id: 'text-1'
     })).toBe('selection:i-text:text-1:object')
+  })
+})
+
+describe('normalizeFrameRuntimeProps', () => {
+  it('null/non-frame: retorna null sem mutar', () => {
+    expect(normalizeFrameRuntimeProps(null)).toBeNull()
+    expect(normalizeFrameRuntimeProps({ type: 'rect' })).toBeNull()
+  })
+
+  it('frame normalizado: gera _customId, isFrame=true, clipContent=true, layerName=FRAMER', () => {
+    const f: any = { isFrame: true }
+    const result = normalizeFrameRuntimeProps(f)
+    expect(result).toBe(f)
+    expect(typeof f._customId).toBe('string')
+    expect(f._customId.length).toBeGreaterThan(0)
+    expect(f.isFrame).toBe(true)
+    expect(f.clipContent).toBe(true)
+    expect(f.layerName).toBe('FRAMER')
+  })
+
+  it('preserva _customId pre-existente', () => {
+    const f: any = { isFrame: true, _customId: 'preset-id' }
+    normalizeFrameRuntimeProps(f)
+    expect(f._customId).toBe('preset-id')
+  })
+
+  it('preserva clipContent=false explicito', () => {
+    const f: any = { isFrame: true, clipContent: false }
+    normalizeFrameRuntimeProps(f)
+    expect(f.clipContent).toBe(false)
+  })
+
+  it('preserva layerName customizado', () => {
+    const f: any = { isFrame: true, layerName: 'My Frame' }
+    normalizeFrameRuntimeProps(f)
+    expect(f.layerName).toBe('My Frame')
+  })
+
+  it('rect com isGridCell e tratado como frame e normalizado', () => {
+    const f: any = { type: 'rect', isGridCell: true }
+    const result = normalizeFrameRuntimeProps(f)
+    expect(result).toBe(f)
+    expect(f.isFrame).toBe(true)
+    expect(f._customId).toBeDefined()
   })
 })

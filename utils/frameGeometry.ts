@@ -14,6 +14,7 @@
  */
 
 import { isRectObject } from './fabricStyleHelpers'
+import { makeId } from './makeId'
 
 export type FrameBounds = {
     left: number
@@ -323,4 +324,23 @@ export const isObjectMostlyInsideFrame = (obj: any, frame: any, minOverlapRatio 
     const objArea = Math.max(1, objBounds.width * objBounds.height)
 
     return (overlapArea / objArea) >= minOverlapRatio
+}
+
+/**
+ * Normaliza props de runtime de um objeto Frame: garante _customId,
+ * isFrame=true, clipContent boolean (default true) e layerName.
+ *
+ * Mutativo. Retorna o proprio obj se ele e' frame-like (apos normalizar);
+ * null caso contrario. Pure no sentido de nao acessar canvas/refs.
+ *
+ * Util na carga inicial do canvas para garantir que frames serializados
+ * sem flags voltem ao estado canonico.
+ */
+export const normalizeFrameRuntimeProps = (obj: any): any | null => {
+    if (!obj || !isFrameLikeObject(obj)) return null
+    if (!obj._customId) obj._customId = makeId()
+    if (!obj.isFrame) obj.isFrame = true
+    if (typeof obj.clipContent !== 'boolean') obj.clipContent = true
+    if (!obj.layerName) obj.layerName = 'FRAMER'
+    return obj
 }

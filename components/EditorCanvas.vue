@@ -223,7 +223,8 @@ import {
     getFrameDisplayNameForExport,
     serializeFrameLabelMetric,
     buildFrameLabelViewportSignature,
-    buildFrameLabelSelectionSignature
+    buildFrameLabelSelectionSignature,
+    normalizeFrameRuntimeProps
 } from '~/utils/frameGeometry'
 import {
     TRANSIENT_CONTROL_NAMES,
@@ -1490,14 +1491,7 @@ const ensureFramesBelowContents = () => {
 
 // isFrameLikeObject extraido para utils/frameGeometry.ts.
 
-const normalizeFrameRuntimeProps = (obj: any) => {
-    if (!obj || !isFrameLikeObject(obj)) return null;
-    if (!obj._customId) obj._customId = makeId();
-    if (!obj.isFrame) obj.isFrame = true;
-    if (typeof obj.clipContent !== 'boolean') obj.clipContent = true;
-    if (!obj.layerName) obj.layerName = 'FRAMER';
-    return obj;
-};
+// normalizeFrameRuntimeProps extraido para utils/frameGeometry.ts.
 
 let cachedFrameObjects: any[] | null = null;
 let cachedFrameById: Map<string, any> | null = null;
