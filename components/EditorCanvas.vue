@@ -134,7 +134,12 @@ import {
     LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
     isLightweightGlobalStyleProp
 } from '~/utils/globalStylePropClassifiers'
-import { clamp, toFinite, formatDisplayNumber } from '~/utils/mathHelpers'
+import {
+    clamp,
+    toFinite,
+    formatDisplayNumber,
+    constrainCenterAxisInsideContainer
+} from '~/utils/mathHelpers'
 import { normalizeHexColor } from '~/utils/colorHelpers'
 import { resolveZoneUpdatesPayload } from '~/utils/zoneUpdatesPayload'
 import {
@@ -9033,27 +9038,9 @@ const applyContainmentConstraints = (obj: any) => {
         const zoneWidth = zoneRight - zoneLeft;
         const zoneHeight = zoneBottom - zoneTop;
         
-        // Calculate constraints
-        let constrainedCx = center.x;
-        let constrainedCy = center.y;
-        
-        // Constrain horizontally
-        if (cardWidth >= zoneWidth) {
-            constrainedCx = zoneLeft + (zoneWidth / 2);
-        } else if (cardLeft < zoneLeft) {
-            constrainedCx = zoneLeft + cardWidth / 2;
-        } else if (cardRight > zoneRight) {
-            constrainedCx = zoneRight - cardWidth / 2;
-        }
-        
-        // Constrain vertically
-        if (cardHeight >= zoneHeight) {
-            constrainedCy = zoneTop + (zoneHeight / 2);
-        } else if (cardTop < zoneTop) {
-            constrainedCy = zoneTop + cardHeight / 2;
-        } else if (cardBottom > zoneBottom) {
-            constrainedCy = zoneBottom - cardHeight / 2;
-        }
+        // Calculate constraints (via helper puro constrainCenterAxisInsideContainer)
+        const constrainedCx = constrainCenterAxisInsideContainer(center.x, cardWidth, zoneLeft, zoneWidth);
+        const constrainedCy = constrainCenterAxisInsideContainer(center.y, cardHeight, zoneTop, zoneHeight);
         
         // Apply constraints if needed
         if (constrainedCx !== center.x || constrainedCy !== center.y) {

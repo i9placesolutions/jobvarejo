@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { clamp, toFinite, formatDisplayNumber } from '~/utils/mathHelpers'
+import {
+  clamp,
+  toFinite,
+  formatDisplayNumber,
+  constrainCenterAxisInsideContainer
+} from '~/utils/mathHelpers'
 
 describe('clamp', () => {
   it('valor dentro do intervalo: retorna o valor', () => {
@@ -129,5 +134,48 @@ describe('formatDisplayNumber', () => {
   it('negativos com decimais', () => {
     expect(formatDisplayNumber(-3.14)).toBe('-3.14')
     expect(formatDisplayNumber(-3.001)).toBe('-3')
+  })
+})
+
+describe('constrainCenterAxisInsideContainer', () => {
+  it('card dentro do container: nao muda centro', () => {
+    // container [0, 100], card 20px com center=50 → permanece
+    expect(constrainCenterAxisInsideContainer(50, 20, 0, 100)).toBe(50)
+  })
+
+  it('card excede pela esquerda: encosta na borda esquerda', () => {
+    // card 20px com center=5 → cardLeft=-5 (fora) → encosta com center=10
+    expect(constrainCenterAxisInsideContainer(5, 20, 0, 100)).toBe(10)
+  })
+
+  it('card excede pela direita: encosta na borda direita', () => {
+    // card 20px com center=95 → cardRight=105 (fora) → encosta com center=90
+    expect(constrainCenterAxisInsideContainer(95, 20, 0, 100)).toBe(90)
+  })
+
+  it('card MAIOR que container: centra no container', () => {
+    // card 200px com center qualquer → vai pra centro do container
+    expect(constrainCenterAxisInsideContainer(0, 200, 50, 100)).toBe(100) // 50 + 100/2
+    expect(constrainCenterAxisInsideContainer(999, 200, 50, 100)).toBe(100)
+  })
+
+  it('card == container: centra (>=, nao >)', () => {
+    expect(constrainCenterAxisInsideContainer(0, 100, 0, 100)).toBe(50)
+  })
+
+  it('container deslocado (start != 0): respeita start', () => {
+    // container [100, 200], card 20px com center=110 → cardLeft=100 (ok) → permanece 110
+    expect(constrainCenterAxisInsideContainer(110, 20, 100, 100)).toBe(110)
+    // card center=105 → cardLeft=95 (< 100) → encosta com center = 100 + 10 = 110
+    expect(constrainCenterAxisInsideContainer(105, 20, 100, 100)).toBe(110)
+  })
+
+  it('container negativo (mundo Fabric com left negativo)', () => {
+    // container [-50, 50], card 10px com center=-100 → encosta com center=-45
+    expect(constrainCenterAxisInsideContainer(-100, 10, -50, 100)).toBe(-45)
+  })
+
+  it('cardSize 0: degenera mas nao crasha', () => {
+    expect(constrainCenterAxisInsideContainer(50, 0, 0, 100)).toBe(50)
   })
 })

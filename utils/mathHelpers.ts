@@ -51,3 +51,38 @@ export const formatDisplayNumber = (n: number): string => {
     if (Math.abs(n - rounded) < 0.01) return String(rounded)
     return n.toFixed(2)
 }
+
+/**
+ * Constraint 1D: dado o centro atual do objeto (cardCenter), seu
+ * tamanho (cardSize) e o range do container [containerStart,
+ * containerStart+containerSize], retorna o centro constrained:
+ *
+ *  - cardSize >= containerSize: centra no container (objeto maior
+ *    que o range, fica centralizado)
+ *  - card excede pela esquerda/cima: encosta na borda
+ *  - card excede pela direita/baixo: encosta na borda
+ *  - dentro: retorna o cardCenter inalterado
+ *
+ * Pure: aritmetica simples, sem efeito colateral.
+ */
+export const constrainCenterAxisInsideContainer = (
+    cardCenter: number,
+    cardSize: number,
+    containerStart: number,
+    containerSize: number
+): number => {
+    const cardEdgeStart = cardCenter - cardSize / 2
+    const cardEdgeEnd = cardCenter + cardSize / 2
+    const containerEnd = containerStart + containerSize
+
+    if (cardSize >= containerSize) {
+        return containerStart + (containerSize / 2)
+    }
+    if (cardEdgeStart < containerStart) {
+        return containerStart + cardSize / 2
+    }
+    if (cardEdgeEnd > containerEnd) {
+        return containerEnd - cardSize / 2
+    }
+    return cardCenter
+}
