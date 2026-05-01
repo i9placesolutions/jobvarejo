@@ -380,3 +380,57 @@ export const isTransformRelatedToSource = (source: any, transformTarget: any): b
     if (sourceParent && (transformTarget === sourceParent || transformTarget.group === sourceParent)) return true
     return false
 }
+
+/**
+ * Encontra o group imediato que contem `obj` em uma lista de objetos
+ * do canvas. Pure: dado allObjects + target, faz busca DFS:
+ *
+ *  1. Se obj.group ja esta setado, retorna direto
+ *  2. Varre interactive groups primeiro (subTargetCheck / interactive=true)
+ *     que sao os "ativos" de edicao
+ *  3. Fallback: varre todos os groups
+ *
+ * Match por identidade (===) ou por _customId quando disponivel.
+ * Retorna o group imediato (mais profundo) que contem o target —
+ * nao o root.
+ */
+export const findParentGroupForObjectInList = (allObjects: any[], obj: any): any => {
+    if (!obj) return null
+    if (obj.group) return obj.group
+    if (!Array.isArray(allObjects)) return null
+
+    const searchInGroup = (group: any): { group: any; depth: number } | null => {
+        if (!group || typeof group.getObjects !== 'function') return null
+        const children = group.getObjects() || []
+        for (const child of children) {
+            if (child === obj || (obj._customId && child._customId === obj._customId)) {
+                return { group, depth: 0 }
+            }
+            const t = String(child?.type || '').toLowerCase()
+            if (t === 'group') {
+                const deeper = searchInGroup(child)
+                if (deeper) return deeper
+            }
+        }
+        return null
+    }
+
+    for (const canvasObj of allObjects) {
+        const t = String(canvasObj?.type || '').toLowerCase()
+        if (t !== 'group') continue
+        const isInteractive = canvasObj.interactive === true || canvasObj.subTargetCheck === true
+        if (isInteractive) {
+            const result = searchInGroup(canvasObj)
+            if (result) return result.group
+        }
+    }
+
+    for (const canvasObj of allObjects) {
+        const t = String(canvasObj?.type || '').toLowerCase()
+        if (t !== 'group') continue
+        const result = searchInGroup(canvasObj)
+        if (result) return result.group
+    }
+
+    return null
+}

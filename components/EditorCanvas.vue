@@ -40,7 +40,8 @@ import {
     isCardLikeForZoneBinding,
     countFabricObjectsAndImages,
     shouldApplyContainmentConstraints,
-    isTransformRelatedToSource
+    isTransformRelatedToSource,
+    findParentGroupForObjectInList
 } from '~/utils/fabricObjectClassifiers'
 import {
     isCanvasContextError,
@@ -3697,59 +3698,10 @@ const groupLocalToCanvasPoint = (group: any, x: number, y: number): { x: number;
 };
 
 // === GLOBAL HELPER: Find parent group for an object (used by delete and other operations) ===
+// Wrapper local: injeta canvas.value.getObjects() no helper puro extraido.
 const findParentGroupForObjectGlobal = (obj: any): any => {
-    if (!obj || !canvas.value) return null;
-    
-    // First check if object has direct group reference
-    if (obj.group) return obj.group;
-    
-    const allObjects = canvas.value.getObjects();
-    
-    // Search function that finds the IMMEDIATE parent group containing the object
-    const searchInGroup = (group: any, depth: number = 0): { group: any, depth: number } | null => {
-        if (!group || typeof group.getObjects !== 'function') return null;
-        
-        const children = group.getObjects() || [];
-        
-        for (const child of children) {
-            // Direct match
-            if (child === obj || (obj._customId && child._customId === obj._customId)) {
-                return { group, depth };
-            }
-            
-            // If child is also a group, search deeper
-            if (child.type === 'group' || child.type === 'Group') {
-                const deeper = searchInGroup(child, depth + 1);
-                if (deeper) {
-                    return deeper; // Return the deepest match (immediate parent)
-                }
-            }
-        }
-        
-        return null;
-    };
-    
-    // Look for groups that are in ACTIVE edit mode first
-    for (const canvasObj of allObjects) {
-        if (canvasObj.type === 'group' || canvasObj.type === 'Group') {
-            const isInteractive = canvasObj.interactive === true || canvasObj.subTargetCheck === true;
-            
-            if (isInteractive) {
-                const result = searchInGroup(canvasObj, 0);
-                if (result) return result.group;
-            }
-        }
-    }
-    
-    // Fallback: search all groups
-    for (const canvasObj of allObjects) {
-        if (canvasObj.type === 'group' || canvasObj.type === 'Group') {
-            const result = searchInGroup(canvasObj, 0);
-            if (result) return result.group;
-        }
-    }
-    
-    return null;
+    if (!canvas.value) return null;
+    return findParentGroupForObjectInList(canvas.value.getObjects(), obj);
 };
 
 // === ALT/OPTION + DRAG DUPLICATE (Figma/Canva-like) ===

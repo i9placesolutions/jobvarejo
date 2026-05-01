@@ -17,7 +17,8 @@ import {
   isCardLikeForZoneBinding,
   countFabricObjectsAndImages,
   shouldApplyContainmentConstraints,
-  isTransformRelatedToSource
+  isTransformRelatedToSource,
+  findParentGroupForObjectInList
 } from '~/utils/fabricObjectClassifiers'
 
 // Helpers de mock — todos seguem duck typing de Fabric.
@@ -634,5 +635,81 @@ describe('isTransformRelatedToSource', () => {
     const source = { type: 'rect' }
     const target = { type: 'text', group: { type: 'group' } }
     expect(isTransformRelatedToSource(source, target)).toBe(false)
+  })
+})
+
+describe('findParentGroupForObjectInList', () => {
+  it('null/undefined obj → null', () => {
+    expect(findParentGroupForObjectInList([], null)).toBeNull()
+    expect(findParentGroupForObjectInList([{}], undefined)).toBeNull()
+  })
+
+  it('obj.group ja setado: retorna direto', () => {
+    const parent = { type: 'group' }
+    const obj = { type: 'rect', group: parent }
+    expect(findParentGroupForObjectInList([], obj)).toBe(parent)
+  })
+
+  it('allObjects nao-array → null', () => {
+    expect(findParentGroupForObjectInList(null as any, { type: 'rect' })).toBeNull()
+  })
+
+  it('encontra parent direto', () => {
+    const child = { type: 'rect' }
+    const group = { type: 'group', getObjects: () => [child] }
+    expect(findParentGroupForObjectInList([group], child)).toBe(group)
+  })
+
+  it('encontra parent profundo (mais imediato)', () => {
+    const target = { type: 'text' }
+    const innerGroup = { type: 'group', getObjects: () => [target] }
+    const outerGroup = { type: 'group', getObjects: () => [innerGroup] }
+    // findParent retorna o IMEDIATO (innerGroup), nao o outer
+    expect(findParentGroupForObjectInList([outerGroup], target)).toBe(innerGroup)
+  })
+
+  it('match por _customId quando objetos nao sao a mesma referencia', () => {
+    const target = { type: 'text', _customId: 'abc' }
+    const childWithSameId = { type: 'text', _customId: 'abc' }
+    const group = { type: 'group', getObjects: () => [childWithSameId] }
+    expect(findParentGroupForObjectInList([group], target)).toBe(group)
+  })
+
+  it('prioriza interactive groups sobre groups regulares', () => {
+    const target = { type: 'text' }
+    const regular = { type: 'group', getObjects: () => [target] }
+    const interactive = { type: 'group', interactive: true, getObjects: () => [target] }
+    // interactive vem primeiro
+    expect(findParentGroupForObjectInList([regular, interactive], target)).toBe(interactive)
+  })
+
+  it('subTargetCheck=true tambem conta como interactive', () => {
+    const target = { type: 'text' }
+    const regular = { type: 'group', getObjects: () => [target] }
+    const subTarget = { type: 'group', subTargetCheck: true, getObjects: () => [target] }
+    expect(findParentGroupForObjectInList([regular, subTarget], target)).toBe(subTarget)
+  })
+
+  it('alvo nao encontrado em nenhum group: null', () => {
+    const target = { type: 'text' }
+    const otherGroup = { type: 'group', getObjects: () => [{ type: 'rect' }] }
+    expect(findParentGroupForObjectInList([otherGroup], target)).toBeNull()
+  })
+
+  it('lista vazia: null', () => {
+    expect(findParentGroupForObjectInList([], { type: 'rect' })).toBeNull()
+  })
+
+  it('non-group objects skipados', () => {
+    const target = { type: 'text' }
+    expect(findParentGroupForObjectInList([
+      { type: 'rect' }, { type: 'image' }
+    ], target)).toBeNull()
+  })
+
+  it('case-insensitive em type=Group/group', () => {
+    const child = { type: 'rect' }
+    const group = { type: 'Group', getObjects: () => [child] }
+    expect(findParentGroupForObjectInList([group], child)).toBe(group)
   })
 })
