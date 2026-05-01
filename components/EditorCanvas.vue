@@ -140,7 +140,8 @@ import {
     isTransparentPaint,
     toggleFill,
     toggleStroke,
-    applyRectCornerRadiiPatch
+    applyRectCornerRadiiPatch,
+    snapshotTextShadow
 } from '~/utils/fabricStyleHelpers'
 import {
     getFrameBounds,
@@ -21240,15 +21241,7 @@ const applyTextGradientPreset = (textObj: any, preset: 'gold' | 'sunset' = 'gold
     textObj.dirty = true;
 };
 
-const snapshotTextShadow = (shadow: any) => {
-    if (!shadow) return null;
-    return {
-        color: String(shadow.color || 'rgba(0,0,0,0.5)'),
-        blur: Number(shadow.blur || 0),
-        offsetX: Number(shadow.offsetX || 0),
-        offsetY: Number(shadow.offsetY || 0)
-    };
-};
+// snapshotTextShadow extraido para utils/fabricStyleHelpers.ts.
 
 const applyText3DGoldPreset = (textObj: any) => {
     if (!(textObj as any).__text3dBackup) {

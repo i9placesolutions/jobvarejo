@@ -5,7 +5,8 @@ import {
   isTransparentPaint,
   toggleFill,
   toggleStroke,
-  applyRectCornerRadiiPatch
+  applyRectCornerRadiiPatch,
+  snapshotTextShadow
 } from '~/utils/fabricStyleHelpers'
 
 describe('isRectObject', () => {
@@ -284,5 +285,59 @@ describe('applyRectCornerRadiiPatch', () => {
     const orig = r._render
     applyRectCornerRadiiPatch(r)
     expect(r._render).toBe(orig)
+  })
+})
+
+describe('snapshotTextShadow', () => {
+  it('null/undefined retornam null', () => {
+    expect(snapshotTextShadow(null)).toBeNull()
+    expect(snapshotTextShadow(undefined)).toBeNull()
+    expect(snapshotTextShadow(0)).toBeNull()
+  })
+
+  it('normaliza shadow completo', () => {
+    expect(snapshotTextShadow({
+      color: '#ff0000',
+      blur: 10,
+      offsetX: 5,
+      offsetY: -3
+    })).toEqual({
+      color: '#ff0000',
+      blur: 10,
+      offsetX: 5,
+      offsetY: -3
+    })
+  })
+
+  it('aplica defaults para campos ausentes', () => {
+    expect(snapshotTextShadow({})).toEqual({
+      color: 'rgba(0,0,0,0.5)',
+      blur: 0,
+      offsetX: 0,
+      offsetY: 0
+    })
+  })
+
+  it('coerce string para numero em blur/offsets', () => {
+    expect(snapshotTextShadow({
+      color: 'red',
+      blur: '5',
+      offsetX: '10',
+      offsetY: '-2'
+    })).toEqual({
+      color: 'red',
+      blur: 5,
+      offsetX: 10,
+      offsetY: -2
+    })
+  })
+
+  it('coerce color para string', () => {
+    expect(snapshotTextShadow({ color: 123, blur: 0 })).toEqual({
+      color: '123',
+      blur: 0,
+      offsetX: 0,
+      offsetY: 0
+    })
   })
 })

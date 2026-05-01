@@ -43,6 +43,26 @@ export const clampCornerRadii = (radii: any, w: number, h: number): CornerRadii 
 }
 
 /**
+ * Snapshot do shadow de um text object para backup/restore. Retorna
+ * null se shadow ausente; senao normaliza os 4 campos com defaults
+ * seguros.
+ */
+export const snapshotTextShadow = (shadow: any): {
+    color: string
+    blur: number
+    offsetX: number
+    offsetY: number
+} | null => {
+    if (!shadow) return null
+    return {
+        color: String(shadow.color || 'rgba(0,0,0,0.5)'),
+        blur: Number(shadow.blur || 0),
+        offsetX: Number(shadow.offsetX || 0),
+        offsetY: Number(shadow.offsetY || 0)
+    }
+}
+
+/**
  * Detecta uma "cor transparente" segundo o que o editor considera
  * "sem fill efetivo": null, undefined, '', 'transparent', ou rgba(...,0).
  *
