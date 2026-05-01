@@ -69,6 +69,7 @@ import {
     isObjectIntersectingCullRect,
     shouldSkipViewportCullObject
 } from '~/utils/viewportCulling'
+import { getEditorPerfNow, roundEditorPerf } from '~/utils/perfHelpers'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
 import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import {
@@ -6364,13 +6365,7 @@ let editorPerfFpsAvg = 0
 let editorPerfFpsMin = Number.POSITIVE_INFINITY
 let editorPerfFpsMax = 0
 
-const getEditorPerfNow = () => (
-    typeof performance !== 'undefined' && typeof performance.now === 'function'
-        ? performance.now()
-        : Date.now()
-)
-
-const roundEditorPerf = (value: number) => Number(Number.isFinite(value) ? value.toFixed(2) : '0')
+// getEditorPerfNow e roundEditorPerf extraidos para utils/perfHelpers.ts.
 
 const persistEditorPerfPreference = (enabled: boolean) => {
     if (!import.meta.client) return
