@@ -74,6 +74,7 @@ import {
 import { getEditorPerfNow, roundEditorPerf } from '~/utils/perfHelpers'
 import {
     getCanvasObjectsRefreshIntervalMs,
+    getFrameLabelUpdateIntervalMs as getFrameLabelUpdateIntervalMsHelper,
     CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS
 } from '~/utils/refreshThrottle'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
@@ -5941,15 +5942,10 @@ const resetFrameLabelLayoutState = () => {
     lastFrameLabelViewportSignature = '';
     lastFrameLabelSelectionSignature = '';
 };
-const getFrameLabelUpdateIntervalMs = () => {
-    const count = lastKnownFrameLabelCount;
-    if (count > 520) return 420;
-    if (count > 320) return 320;
-    if (count > 240) return 280;
-    if (count > 120) return 180;
-    if (count > 60) return 120;
-    return 80;
-};
+// getFrameLabelUpdateIntervalMs (versao pura) extraido para
+// utils/refreshThrottle.ts. Wrapper local injeta lastKnownFrameLabelCount.
+const getFrameLabelUpdateIntervalMsForCurrent = () =>
+    getFrameLabelUpdateIntervalMsHelper(lastKnownFrameLabelCount)
 const throttledUpdateFrameLabels = () => {
     if (frameLabelUpdatePending) return;
     if (!shouldScheduleFrameLabelUpdate()) return;
@@ -5964,7 +5960,7 @@ const throttledUpdateFrameLabels = () => {
         });
     };
 
-    const intervalMs = getFrameLabelUpdateIntervalMs();
+    const intervalMs = getFrameLabelUpdateIntervalMsForCurrent();
     const now = performance.now();
     const elapsed = now - lastFrameLabelUpdateAt;
     if (elapsed >= intervalMs) {
