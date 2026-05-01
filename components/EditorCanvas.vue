@@ -121,6 +121,7 @@ import {
     EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS
 } from '~/utils/perfHelpers'
 import { parseViewSettings, serializeViewSettings, VIEW_SETTINGS_STORAGE_KEY } from '~/utils/viewSettings'
+import { isCollaboratorsCacheValid } from '~/utils/collaboratorsCache'
 import {
     SCROLLBAR_IGNORED_IDS,
     SCROLLBAR_PADDING,
@@ -4677,14 +4678,18 @@ const collaborators = ref<any[]>([])
 let collaboratorsLoadPromise: Promise<void> | null = null
 let collaboratorsLoadedAt = 0
 let collaboratorsLoadedUserId: string | null = null
-const COLLABORATORS_CACHE_MS = 15_000
+// COLLABORATORS_CACHE_MS + isCollaboratorsCacheValid extraidos para
+// utils/collaboratorsCache.ts.
 
 const loadCollaborators = async (force = false) => {
   const currentUserId = currentUser.value?.id ?? null
-  const cacheValid = !force &&
-    collaborators.value.length > 0 &&
-    collaboratorsLoadedUserId === currentUserId &&
-    (Date.now() - collaboratorsLoadedAt) < COLLABORATORS_CACHE_MS
+  const cacheValid = isCollaboratorsCacheValid({
+    force,
+    cacheLength: collaborators.value.length,
+    cachedUserId: collaboratorsLoadedUserId,
+    currentUserId,
+    loadedAt: collaboratorsLoadedAt
+  })
 
   if (cacheValid) return
   if (collaboratorsLoadPromise) return collaboratorsLoadPromise
