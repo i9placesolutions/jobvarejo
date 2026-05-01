@@ -292,6 +292,61 @@ export const isAtacarejoTemplateGroupJson = (groupJson: any): boolean => {
 }
 
 /**
+ * Tipos de texto Fabric que aparecem em price groups (text, textbox, i-text).
+ */
+export const PRICE_GROUP_TEXT_TYPES = new Set(['text', 'textbox', 'i-text'])
+
+/**
+ * Detecta um src "placeholder" de imagem (data URL gerado quando uma
+ * inline image grande foi stripada na serializacao). Heuristica:
+ * data:image/* com tamanho < 200 chars (1x1 placeholder).
+ *
+ * Usado pelo price-group renderable check para nao tratar placeholders
+ * como imagens reais que precisam de carregamento.
+ */
+export const isTinyPlaceholderImageSrc = (src: string): boolean => {
+    const normalized = String(src || '').trim()
+    return /^data:image\//i.test(normalized) && normalized.length > 0 && normalized.length < 200
+}
+
+/**
+ * Detecta um nodo JSON do tipo image (case-insensitive).
+ */
+export const isPriceGroupTemplateImageNode = (node: any): boolean =>
+    String(node?.type || '').toLowerCase() === 'image'
+
+/**
+ * Detecta uma imagem RENDERAVEL no template do price group (tem image
+ * type, src nao-vazio, src nao-stripado e nao-placeholder).
+ */
+export const isRenderablePriceGroupTemplateImageNode = (node: any): boolean => {
+    if (!isPriceGroupTemplateImageNode(node)) return false
+    const src = String(node?.src || '').trim()
+    if (!src) return false
+    if ((node as any)?.__srcStripped === true) return false
+    if (isTinyPlaceholderImageSrc(src)) return false
+    return true
+}
+
+/**
+ * Detecta um nodo "shell" visual do price group — qualquer elemento
+ * que NAO e' texto, NAO e' group e NAO e' o background de moeda
+ * (price_currency_bg, intencionalmente oculto em alguns templates).
+ *
+ * Util para forcar visibilidade de backgrounds estruturais durante
+ * auto-heal de templates corrompidos por viewport culling.
+ */
+export const isPriceGroupVisualShellNode = (node: any): boolean => {
+    if (!node || typeof node !== 'object') return false
+    const type = String(node?.type || '').toLowerCase()
+    if (!type || PRICE_GROUP_TEXT_TYPES.has(type)) return false
+    if (type === 'group') return false
+    const name = String(node?.name || '')
+    if (name === 'price_currency_bg') return false
+    return true
+}
+
+/**
  * Detecta template "Red Burst" via combinacao de 6 nomes especificos.
  */
 export const isRedBurstTemplateGroupJson = (groupJson: any): boolean => {

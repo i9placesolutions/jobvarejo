@@ -13,7 +13,12 @@ import {
   collectTemplateJsonNodes,
   isTemplateGroupJsonRenderable,
   isAtacarejoTemplateGroupJson,
-  isRedBurstTemplateGroupJson
+  isRedBurstTemplateGroupJson,
+  PRICE_GROUP_TEXT_TYPES,
+  isTinyPlaceholderImageSrc,
+  isPriceGroupTemplateImageNode,
+  isRenderablePriceGroupTemplateImageNode,
+  isPriceGroupVisualShellNode
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -581,5 +586,124 @@ describe('isTemplateGroupJsonRenderable', () => {
     expect(isTemplateGroupJsonRenderable({
       objects: [{ type: 'rect' }, { type: 'rect' }]
     })).toBe(false)
+  })
+})
+
+describe('PRICE_GROUP_TEXT_TYPES', () => {
+  it('contem text/textbox/i-text', () => {
+    expect(PRICE_GROUP_TEXT_TYPES.has('text')).toBe(true)
+    expect(PRICE_GROUP_TEXT_TYPES.has('textbox')).toBe(true)
+    expect(PRICE_GROUP_TEXT_TYPES.has('i-text')).toBe(true)
+  })
+
+  it('rejeita outros types', () => {
+    expect(PRICE_GROUP_TEXT_TYPES.has('rect')).toBe(false)
+    expect(PRICE_GROUP_TEXT_TYPES.has('image')).toBe(false)
+    expect(PRICE_GROUP_TEXT_TYPES.has('group')).toBe(false)
+  })
+})
+
+describe('isTinyPlaceholderImageSrc', () => {
+  it('aceita data URLs pequenos (< 200 chars)', () => {
+    expect(isTinyPlaceholderImageSrc('data:image/png;base64,AAAA')).toBe(true)
+    expect(isTinyPlaceholderImageSrc('data:image/jpeg;base64,iVBORw0K')).toBe(true)
+  })
+
+  it('rejeita data URLs grandes (>= 200 chars)', () => {
+    const big = 'data:image/png;base64,' + 'A'.repeat(200)
+    expect(isTinyPlaceholderImageSrc(big)).toBe(false)
+  })
+
+  it('rejeita URLs nao-data', () => {
+    expect(isTinyPlaceholderImageSrc('https://example.com/img.png')).toBe(false)
+    expect(isTinyPlaceholderImageSrc('blob:foo')).toBe(false)
+  })
+
+  it('rejeita vazio/null', () => {
+    expect(isTinyPlaceholderImageSrc('')).toBe(false)
+    expect(isTinyPlaceholderImageSrc(null as any)).toBe(false)
+    expect(isTinyPlaceholderImageSrc(undefined as any)).toBe(false)
+  })
+
+  it('case insensitive no prefixo data:image/', () => {
+    expect(isTinyPlaceholderImageSrc('DATA:IMAGE/PNG;base64,AA')).toBe(true)
+  })
+})
+
+describe('isPriceGroupTemplateImageNode', () => {
+  it('aceita nodes com type=image (case insensitive)', () => {
+    expect(isPriceGroupTemplateImageNode({ type: 'image' })).toBe(true)
+    expect(isPriceGroupTemplateImageNode({ type: 'IMAGE' })).toBe(true)
+  })
+
+  it('rejeita outros types', () => {
+    expect(isPriceGroupTemplateImageNode({ type: 'rect' })).toBe(false)
+    expect(isPriceGroupTemplateImageNode({ type: 'text' })).toBe(false)
+    expect(isPriceGroupTemplateImageNode(null)).toBe(false)
+    expect(isPriceGroupTemplateImageNode({})).toBe(false)
+  })
+})
+
+describe('isRenderablePriceGroupTemplateImageNode', () => {
+  it('aceita imagem com src valido', () => {
+    expect(isRenderablePriceGroupTemplateImageNode({
+      type: 'image',
+      src: 'https://example.com/img.png'
+    })).toBe(true)
+  })
+
+  it('rejeita quando src e vazio', () => {
+    expect(isRenderablePriceGroupTemplateImageNode({ type: 'image', src: '' })).toBe(false)
+    expect(isRenderablePriceGroupTemplateImageNode({ type: 'image' })).toBe(false)
+  })
+
+  it('rejeita quando src foi stripado (__srcStripped=true)', () => {
+    expect(isRenderablePriceGroupTemplateImageNode({
+      type: 'image',
+      src: 'https://example.com/img.png',
+      __srcStripped: true
+    })).toBe(false)
+  })
+
+  it('rejeita placeholder data URL pequeno', () => {
+    expect(isRenderablePriceGroupTemplateImageNode({
+      type: 'image',
+      src: 'data:image/png;base64,AAAA'
+    })).toBe(false)
+  })
+
+  it('rejeita nao-imagens', () => {
+    expect(isRenderablePriceGroupTemplateImageNode({ type: 'rect' })).toBe(false)
+  })
+})
+
+describe('isPriceGroupVisualShellNode', () => {
+  it('aceita rect/image (shells visuais)', () => {
+    expect(isPriceGroupVisualShellNode({ type: 'rect' })).toBe(true)
+    expect(isPriceGroupVisualShellNode({ type: 'image' })).toBe(true)
+    expect(isPriceGroupVisualShellNode({ type: 'circle' })).toBe(true)
+  })
+
+  it('rejeita textos (text/textbox/i-text)', () => {
+    expect(isPriceGroupVisualShellNode({ type: 'text' })).toBe(false)
+    expect(isPriceGroupVisualShellNode({ type: 'textbox' })).toBe(false)
+    expect(isPriceGroupVisualShellNode({ type: 'i-text' })).toBe(false)
+  })
+
+  it('rejeita group (deve descer recursivamente, nao tratar como shell)', () => {
+    expect(isPriceGroupVisualShellNode({ type: 'group' })).toBe(false)
+  })
+
+  it('rejeita price_currency_bg (intencionalmente oculto em alguns templates)', () => {
+    expect(isPriceGroupVisualShellNode({
+      type: 'circle',
+      name: 'price_currency_bg'
+    })).toBe(false)
+  })
+
+  it('rejeita null/sem type', () => {
+    expect(isPriceGroupVisualShellNode(null)).toBe(false)
+    expect(isPriceGroupVisualShellNode({})).toBe(false)
+    expect(isPriceGroupVisualShellNode({ type: '' })).toBe(false)
   })
 })

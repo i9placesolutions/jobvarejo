@@ -86,7 +86,12 @@ import {
     collectTemplateJsonNodes,
     isTemplateGroupJsonRenderable,
     isAtacarejoTemplateGroupJson,
-    isRedBurstTemplateGroupJson
+    isRedBurstTemplateGroupJson,
+    PRICE_GROUP_TEXT_TYPES,
+    isTinyPlaceholderImageSrc,
+    isPriceGroupTemplateImageNode,
+    isRenderablePriceGroupTemplateImageNode,
+    isPriceGroupVisualShellNode
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -5662,36 +5667,9 @@ function sanitizeFabricJsonTreeForLoad(
     return { removed, fixedGroupTypes };
 }
 
-const PRICE_GROUP_TEXT_TYPES = new Set(['text', 'textbox', 'i-text']);
-
-const isTinyPlaceholderImageSrc = (src: string): boolean => {
-    const normalized = String(src || '').trim();
-    return /^data:image\//i.test(normalized) && normalized.length > 0 && normalized.length < 200;
-};
-
-const isPriceGroupTemplateImageNode = (node: any): boolean => {
-    return String(node?.type || '').toLowerCase() === 'image';
-};
-
-const isRenderablePriceGroupTemplateImageNode = (node: any): boolean => {
-    if (!isPriceGroupTemplateImageNode(node)) return false;
-    const src = String(node?.src || '').trim();
-    if (!src) return false;
-    if ((node as any)?.__srcStripped === true) return false;
-    if (isTinyPlaceholderImageSrc(src)) return false;
-    return true;
-};
-
-const isPriceGroupVisualShellNode = (node: any): boolean => {
-    if (!node || typeof node !== 'object') return false;
-    const type = String(node?.type || '').toLowerCase();
-    if (!type || PRICE_GROUP_TEXT_TYPES.has(type)) return false;
-    if (type === 'group') return false;
-    // Não forçar visibilidade do círculo de moeda — pode ser intencionalmente oculto (ex: Barlow Black)
-    const name = String(node?.name || '');
-    if (name === 'price_currency_bg') return false;
-    return true;
-};
+// PRICE_GROUP_TEXT_TYPES, isTinyPlaceholderImageSrc,
+// isPriceGroupTemplateImageNode, isRenderablePriceGroupTemplateImageNode,
+// isPriceGroupVisualShellNode extraidos para utils/canvasJsonClassifiers.ts.
 
 /**
  * FIX: Repara elementos ocultos dentro de price groups de product cards.
