@@ -9,7 +9,9 @@ import {
   SNAP_MOVE_EPSILON_PX_RECT_IMAGE,
   SNAP_RANGE_FACTOR_RECT_IMAGE,
   SNAP_FAST_MOVE_SUPPRESSION_PX,
-  SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE
+  SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE,
+  USER_GUIDE_COLOR,
+  USER_GUIDE_EXTENT
 } from '~/utils/snapConstants'
 
 describe('snap constants', () => {
@@ -61,5 +63,28 @@ describe('snap constants', () => {
     expect(SNAP_MOVE_EPSILON_PX).toBeGreaterThan(0)
     expect(SNAP_RANGE_FACTOR_RECT_IMAGE).toBeGreaterThan(0)
     expect(SNAP_FAST_MOVE_SUPPRESSION_PX).toBeGreaterThan(0)
+  })
+})
+
+describe('USER_GUIDE_COLOR', () => {
+  it('e azul claro distinta do magenta dos smart guides', () => {
+    expect(USER_GUIDE_COLOR).toBe('#38bdf8')
+    expect(USER_GUIDE_COLOR).not.toBe(GUIDE_COLOR)
+  })
+
+  it('formato hex valido', () => {
+    expect(USER_GUIDE_COLOR).toMatch(/^#[0-9a-f]{6}$/i)
+  })
+})
+
+describe('USER_GUIDE_EXTENT', () => {
+  it('e numero finito grande (suficiente para canvases enormes)', () => {
+    expect(USER_GUIDE_EXTENT).toBe(100_000)
+    expect(Number.isFinite(USER_GUIDE_EXTENT)).toBe(true)
+    expect(USER_GUIDE_EXTENT).toBeGreaterThan(10_000)
+  })
+
+  it('NAO e Infinity (evita stress numerico)', () => {
+    expect(USER_GUIDE_EXTENT).not.toBe(Infinity)
   })
 })

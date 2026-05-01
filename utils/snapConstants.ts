@@ -68,3 +68,17 @@ export const SNAP_FAST_MOVE_SUPPRESSION_PX = 7
  * rect/image mais "macios" no snap geral.
  */
 export const SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE = 9
+
+/**
+ * Cor das guias do usuario (manuais, criadas via toolbar — distinta das
+ * smart guides automaticas que usam GUIDE_COLOR magenta). Azul claro
+ * (#38bdf8) para diferenciar visualmente.
+ */
+export const USER_GUIDE_COLOR = '#38bdf8'
+
+/**
+ * Comprimento (em pixels world) das guias do usuario. Sao linhas
+ * "infinitas" praticas — 100k px e' suficiente para qualquer canvas
+ * realista, evita stress numerico de Infinity.
+ */
+export const USER_GUIDE_EXTENT = 100_000

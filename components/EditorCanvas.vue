@@ -90,7 +90,9 @@ import {
     SNAP_MOVE_EPSILON_PX_RECT_IMAGE,
     SNAP_RANGE_FACTOR_RECT_IMAGE,
     SNAP_FAST_MOVE_SUPPRESSION_PX,
-    SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE
+    SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE,
+    USER_GUIDE_COLOR,
+    USER_GUIDE_EXTENT
 } from '~/utils/snapConstants'
 import {
     isTrackableImageSrc,
@@ -15800,8 +15802,7 @@ const loadFonts = () => {
 }
 
 // --- User Guides (persistent, draggable via rulers) ---
-const USER_GUIDE_COLOR = '#38bdf8'
-const USER_GUIDE_EXTENT = 100000
+// USER_GUIDE_COLOR, USER_GUIDE_EXTENT extraidos para utils/snapConstants.ts.
 
 const userGuidesIndex = ref<Array<{ id: string; axis: 'x' | 'y'; pos: number }>>([])
 
