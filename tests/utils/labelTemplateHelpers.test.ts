@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   getLabelTemplateTimestamp,
-  shouldUseIncomingTemplateSnapshot
+  shouldUseIncomingTemplateSnapshot,
+  isBuiltInLabelTemplateId,
+  BUILTIN_LABEL_TEMPLATE_IDS,
+  BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
+  BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
+  BUILTIN_RED_BURST_LABEL_TEMPLATE_ID
 } from '~/utils/labelTemplateHelpers'
 
 describe('getLabelTemplateTimestamp', () => {
@@ -83,5 +88,52 @@ describe('shouldUseIncomingTemplateSnapshot', () => {
   it('nenhum dos dois tem timestamp: incoming vence (legacy hydration)', () => {
     expect(shouldUseIncomingTemplateSnapshot({}, {})).toBe(true)
     expect(shouldUseIncomingTemplateSnapshot(null, null)).toBe(true)
+  })
+})
+
+describe('BUILTIN_LABEL_TEMPLATE_IDS', () => {
+  it('contem os 6 IDs built-in', () => {
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.size).toBe(6)
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_default')).toBe(true)
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_atacarejo_10fd')).toBe(true)
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_black_yellow')).toBe(true)
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_red_burst')).toBe(true)
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_oferta_amarela')).toBe(true)
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_barlow_black')).toBe(true)
+  })
+
+  it('constantes individuais batem com IDs do Set', () => {
+    expect(BUILTIN_DEFAULT_LABEL_TEMPLATE_ID).toBe('tpl_default')
+    expect(BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID).toBe('tpl_atacarejo_10fd')
+    expect(BUILTIN_RED_BURST_LABEL_TEMPLATE_ID).toBe('tpl_red_burst')
+  })
+})
+
+describe('isBuiltInLabelTemplateId', () => {
+  it('aceita IDs built-in', () => {
+    expect(isBuiltInLabelTemplateId('tpl_default')).toBe(true)
+    expect(isBuiltInLabelTemplateId('tpl_atacarejo_10fd')).toBe(true)
+    expect(isBuiltInLabelTemplateId('tpl_red_burst')).toBe(true)
+  })
+
+  it('rejeita IDs custom', () => {
+    expect(isBuiltInLabelTemplateId('tpl_user_123')).toBe(false)
+    expect(isBuiltInLabelTemplateId('custom_label')).toBe(false)
+  })
+
+  it('aplica trim antes de comparar', () => {
+    expect(isBuiltInLabelTemplateId('  tpl_default  ')).toBe(true)
+  })
+
+  it('null/undefined/vazio/whitespace retornam false', () => {
+    expect(isBuiltInLabelTemplateId(null)).toBe(false)
+    expect(isBuiltInLabelTemplateId(undefined)).toBe(false)
+    expect(isBuiltInLabelTemplateId('')).toBe(false)
+    expect(isBuiltInLabelTemplateId('   ')).toBe(false)
+    expect(isBuiltInLabelTemplateId(0)).toBe(false)
+  })
+
+  it('case-sensitive (IDs sao em snake_case)', () => {
+    expect(isBuiltInLabelTemplateId('TPL_DEFAULT')).toBe(false)
   })
 })

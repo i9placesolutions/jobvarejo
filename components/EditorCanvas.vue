@@ -121,7 +121,15 @@ import {
 } from '~/utils/controlObjectClassifiers'
 import {
     getLabelTemplateTimestamp,
-    shouldUseIncomingTemplateSnapshot
+    shouldUseIncomingTemplateSnapshot,
+    isBuiltInLabelTemplateId,
+    BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
+    BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
+    BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID,
+    BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
+    BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID,
+    BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID,
+    BUILTIN_LABEL_TEMPLATE_IDS
 } from '~/utils/labelTemplateHelpers'
 import {
     walkCanvasObjects,
@@ -842,20 +850,8 @@ const labelTemplates = ref<LabelTemplate[]>([])
 const hasLoadedLabelTemplatesFromDb = ref(false)
 
 const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
-const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
-const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
-const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
-const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
-const BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID = 'tpl_oferta_amarela'
-const BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID = 'tpl_barlow_black'
-const BUILTIN_LABEL_TEMPLATE_IDS = new Set([
-    BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
-    BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
-    BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID,
-    BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
-    BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID,
-    BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID
-])
+// BUILTIN_*_LABEL_TEMPLATE_ID + BUILTIN_LABEL_TEMPLATE_IDS extraidos para
+// utils/labelTemplateHelpers.ts.
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const BUILTIN_RED_BURST_SEED_VERSION = 2
 const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
@@ -866,10 +862,7 @@ const autoHealedLabelTemplateIds = new Set<string>()
 
 // getLabelTemplateTimestamp extraido para utils/labelTemplateHelpers.ts.
 
-const isBuiltInLabelTemplateId = (value: any): boolean => {
-    const id = String(value || '').trim()
-    return !!id && BUILTIN_LABEL_TEMPLATE_IDS.has(id)
-}
+// isBuiltInLabelTemplateId extraido para utils/labelTemplateHelpers.ts.
 
 const normalizeLabelTemplateGroupAsManual = (group: any) => {
     if (!group || typeof group !== 'object') return group;

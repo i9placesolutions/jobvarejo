@@ -7,6 +7,37 @@
  * Cobertura: tests/utils/labelTemplateHelpers.test.ts
  */
 
+// IDs dos templates built-in (seed do app, nao customizados pelo usuario).
+export const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
+export const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
+export const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
+export const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
+export const BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID = 'tpl_oferta_amarela'
+export const BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID = 'tpl_barlow_black'
+
+/**
+ * Set de todos os IDs built-in. Templates com id nesse set NUNCA devem
+ * ser deletados ou tratados como custom.
+ */
+export const BUILTIN_LABEL_TEMPLATE_IDS: ReadonlySet<string> = new Set([
+    BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
+    BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
+    BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID,
+    BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
+    BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID,
+    BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID
+])
+
+/**
+ * Detecta se um id pertence aos templates built-in seedados pelo app.
+ * Aceita qualquer valor (coerced para string com trim); retorna false
+ * para vazio/whitespace.
+ */
+export const isBuiltInLabelTemplateId = (value: any): boolean => {
+    const id = String(value || '').trim()
+    return !!id && BUILTIN_LABEL_TEMPLATE_IDS.has(id)
+}
+
 /**
  * Extrai timestamp do template (preferindo updatedAt > createdAt) como
  * numero. Retorna NaN se ambos estiverem ausentes/invalidos — caller
