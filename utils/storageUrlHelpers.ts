@@ -16,6 +16,48 @@
  *
  * Erros de parse (URL invalida) retornam { bucket: null, key: null }.
  */
+/**
+ * Extrai a "key" (path do objeto no bucket) de uma URL Wasabi.
+ *
+ * Suporta dois formatos:
+ *  - Path-style: https://s3.wasabisys.com/bucket/key/path...
+ *    → key = "key/path..." (remove o bucket do inicio)
+ *  - Virtual-host: https://bucket.s3.wasabisys.com/key/path...
+ *    → key = "key/path..." (path inteiro, hostname tem o bucket)
+ *
+ * Heuristica do bucket: comparado com `configuredBucket` ou contendo ':'
+ * (formato "tenant:bucket"). Quando o hostname contem o bucket configurado,
+ * assume virtual-host e nao remove a primeira parte.
+ *
+ * Recebe `configuredBucket` como parametro injetado.
+ */
+export const extractWasabiKey = (url: string, configuredBucket: string): string | null => {
+    try {
+        const decodedUrl = decodeURIComponent(url)
+        const urlObj = new URL(decodedUrl)
+        const decodedPathname = decodeURIComponent(urlObj.pathname)
+        const pathParts = decodedPathname.split('/').filter(p => p)
+
+        if (pathParts.length === 0) return null
+
+        const bucket = String(configuredBucket || 'jobvarejo')
+        const hostname = (urlObj.hostname || '').toLowerCase()
+        const first = pathParts[0] ?? ''
+        const firstLooksLikeBucket = first === bucket || first.includes(':')
+        const hostLooksLikeVirtualHost = hostname.includes(`${bucket.toLowerCase()}.`)
+
+        const keyParts = (firstLooksLikeBucket && !hostLooksLikeVirtualHost)
+            ? pathParts.slice(1)
+            : pathParts
+        const key = keyParts.join('/')
+
+        if (!key || key.length === 0) return null
+        return key
+    } catch {
+        return null
+    }
+}
+
 export const extractWasabiBucketAndKey = (url: string): { bucket: string | null; key: string | null } => {
     try {
         const urlObj = new URL(url)

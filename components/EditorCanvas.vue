@@ -66,7 +66,10 @@ import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
-import { extractWasabiBucketAndKey } from '~/utils/storageUrlHelpers'
+import {
+    extractWasabiBucketAndKey,
+    extractWasabiKey as extractWasabiKeyHelper
+} from '~/utils/storageUrlHelpers'
 import {
     isObjectIntersectingCullRect,
     shouldSkipViewportCullObject,
@@ -10820,70 +10823,12 @@ const CANVAS_CUSTOM_PROPS = [
 	    '__manualSingleAnchors'
 	] as string[];
 
-// Helper function to extract key/path from Wasabi URL (presigned or permanent)
+// Wrapper local que injeta configuredBucket do useRuntimeConfig no helper puro.
 const extractWasabiKey = (url: string): string | null => {
-    try {
-        // CRITICAL: Decode URL first to handle encoded characters
-        const decodedUrl = decodeURIComponent(url);
-        const urlObj = new URL(decodedUrl);
-
-        // Formatos Wasabi:
-        // - Path-style: https://s3.wasabisys.com/bucket/key...
-        //
-        // OBS: a "key" é SEMPRE o caminho completo do objeto no bucket (ex.: projects/{userId}/...)
-
-        // Decode pathname as well to handle any encoded characters
-        const decodedPathname = decodeURIComponent(urlObj.pathname);
-        const pathParts = decodedPathname.split('/').filter(p => p);
-        if (import.meta.dev) {
-            console.log(`🔍 extractWasabiKey - URL: ${url.substring(0, 100)}...`);
-            console.log(`   decodedUrl: ${decodedUrl.substring(0, 100)}...`);
-            console.log(`   pathname: ${decodedPathname}`);
-            console.log(`   pathParts: [${pathParts.join(', ')}]`);
-        }
-
-        if (pathParts.length === 0) {
-            if (import.meta.dev) console.warn(`⚠️ Não foi possível extrair chave da URL (path vazio): ${url.substring(0, 100)}`);
-            return null;
-        }
-
-        const cfg = useRuntimeConfig()?.public?.wasabi || {};
-        const configuredBucket = (cfg.bucket || 'jobvarejo').toString();
-
-        if (import.meta.dev) console.log(`   configuredBucket: ${configuredBucket}`);
-
-        const hostname = (urlObj.hostname || '').toLowerCase();
-        const first = pathParts[0] ?? '';
-        // Check if first part is bucket
-        const firstLooksLikeBucket = first === configuredBucket || first.includes(':');
-        const hostLooksLikeVirtualHost = hostname.includes(`${configuredBucket.toLowerCase()}.`);
-
-        if (import.meta.dev) {
-            console.log(`   first: ${first}`);
-            console.log(`   firstLooksLikeBucket: ${firstLooksLikeBucket}`);
-            console.log(`   hostLooksLikeVirtualHost: ${hostLooksLikeVirtualHost}`);
-        }
-
-        // Path-style: primeira parte do path é bucket → remover
-        // Virtual-host: host já contém bucket → NÃO remover nada do path
-        const keyParts = (firstLooksLikeBucket && !hostLooksLikeVirtualHost) ? pathParts.slice(1) : pathParts;
-        const key = keyParts.join('/');
-
-        if (import.meta.dev) {
-            console.log(`   keyParts: [${keyParts.join(', ')}]`);
-            console.log(`   key extraída: ${key}`);
-        }
-
-        if (!key || key.length === 0) {
-            if (import.meta.dev) console.warn(`⚠️ Chave extraída está vazia da URL: ${url.substring(0, 100)}`);
-            return null;
-        }
-        return key;
-    } catch (err) {
-        if (import.meta.dev) console.error(`❌ Erro ao extrair chave da URL: ${url.substring(0, 100)}`, err);
-        return null;
-    }
-};
+    const cfg = useRuntimeConfig()?.public?.wasabi || {}
+    const configuredBucket = (cfg.bucket || 'jobvarejo').toString()
+    return extractWasabiKeyHelper(url, configuredBucket)
+}
 
 // Helper function to convert presigned URL to permanent URL (Wasabi)
 const convertPresignedToPermanentUrl = (url: string): string => {
