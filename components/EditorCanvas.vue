@@ -51,7 +51,9 @@ import {
     getPreferredProductImageFromGroup,
     getImageTrimmedDimensions,
     getImageSourceFromObject,
-    findImageTargetInSelection
+    findImageTargetInSelection,
+    applyImageTrimBounds,
+    fitImageIntoSlot
 } from '~/utils/fabricImageHelpers'
 import {
     isUserGuideObject,
@@ -2186,52 +2188,19 @@ const detectImageTrimBounds = (fabricImg: any): { left: number; top: number; wid
 
 // getImageTrimmedDimensions extraido para utils/fabricImageHelpers.ts.
 
+// Wrapper local: detecta trim bounds + aplica via helper puro extraido.
 const applyAutoTrimToProductImage = (img: any) => {
     if (!img) return null;
     const trimBounds = detectImageTrimBounds(img);
-    if (!trimBounds) return null;
-    img.set({
-        cropX: trimBounds.left,
-        cropY: trimBounds.top,
-        width: trimBounds.width,
-        height: trimBounds.height,
-        dirty: true
-    });
-    return trimBounds;
+    return applyImageTrimBounds(img, trimBounds);
 };
 
+// Wrapper local: delega ao helper puro fitImageIntoSlot.
 const fitProductImageIntoSlot = (
     img: any,
     slot: { width?: number; height?: number; left?: number; top?: number; originX?: string; originY?: string; name?: string },
     opts: { maxScale?: number } = {}
-) => {
-    if (!img) return;
-    const slotWidth = Math.max(1, Number(slot?.width || 0) || 1);
-    const slotHeight = Math.max(1, Number(slot?.height || 0) || 1);
-    const trimmed = getImageTrimmedDimensions(img);
-    const scale = Math.min(
-        slotWidth / trimmed.width,
-        slotHeight / trimmed.height,
-        Math.max(1, Number(opts.maxScale ?? 3) || 3)
-    );
-
-    img.set({
-        scaleX: scale,
-        scaleY: scale,
-        originX: slot?.originX || 'center',
-        originY: slot?.originY || 'center',
-        left: Number(slot?.left || 0),
-        top: Number(slot?.top || 0),
-        name: slot?.name || 'smart_image',
-        visible: true,
-        opacity: 1,
-        lockScalingFlip: true,
-        lockSkewingX: true,
-        lockSkewingY: true,
-        dirty: true
-    });
-    img.setCoords?.();
-};
+) => fitImageIntoSlot(img, slot, opts);
 
 /**
  * Generate a professional sticker outline canvas from source alpha.

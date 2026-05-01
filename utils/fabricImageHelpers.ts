@@ -90,3 +90,79 @@ export const getImageTrimmedDimensions = (img: any): { width: number; height: nu
     const naturalHeight = Math.max(1, Number(img?.getElement?.()?.naturalHeight || 0) || currentHeight)
     return { width: naturalWidth, height: naturalHeight }
 }
+
+/**
+ * Aplica trim bounds (detectImageTrimBounds resultado) a uma imagem Fabric:
+ *  - cropX/cropY: posicao do crop dentro da textura
+ *  - width/height: dimensoes do crop
+ *  - dirty=true para forcar re-render
+ *
+ * Mutativo. No-op silencioso se img null ou trimBounds null.
+ */
+export const applyImageTrimBounds = (
+    img: any,
+    trimBounds: { left: number; top: number; width: number; height: number } | null
+): { left: number; top: number; width: number; height: number } | null => {
+    if (!img || !trimBounds) return null
+    img.set?.({
+        cropX: trimBounds.left,
+        cropY: trimBounds.top,
+        width: trimBounds.width,
+        height: trimBounds.height,
+        dirty: true
+    })
+    return trimBounds
+}
+
+/**
+ * Encaixa uma imagem dentro de um slot retangular (proporcional, sem
+ * deformar). Calcula a escala necessaria para que a imagem caiba no
+ * slot mantendo aspect ratio (clampada em opts.maxScale, default 3).
+ *
+ * Le getImageTrimmedDimensions(img) para considerar crop ja aplicado.
+ * Posiciona em slot.left/top com originX/Y configuraveis (default
+ * center/center). Tambem aplica defaults seguros: visible=true,
+ * opacity=1, lock flips/skews para evitar drift visual.
+ *
+ * Mutativo. No-op se img null.
+ */
+export const fitImageIntoSlot = (
+    img: any,
+    slot: {
+        width?: number
+        height?: number
+        left?: number
+        top?: number
+        originX?: string
+        originY?: string
+        name?: string
+    },
+    opts: { maxScale?: number } = {}
+): void => {
+    if (!img) return
+    const slotWidth = Math.max(1, Number(slot?.width || 0) || 1)
+    const slotHeight = Math.max(1, Number(slot?.height || 0) || 1)
+    const trimmed = getImageTrimmedDimensions(img)
+    const scale = Math.min(
+        slotWidth / trimmed.width,
+        slotHeight / trimmed.height,
+        Math.max(1, Number(opts.maxScale ?? 3) || 3)
+    )
+
+    img.set?.({
+        scaleX: scale,
+        scaleY: scale,
+        originX: slot?.originX || 'center',
+        originY: slot?.originY || 'center',
+        left: Number(slot?.left || 0),
+        top: Number(slot?.top || 0),
+        name: slot?.name || 'smart_image',
+        visible: true,
+        opacity: 1,
+        lockScalingFlip: true,
+        lockSkewingX: true,
+        lockSkewingY: true,
+        dirty: true
+    })
+    img.setCoords?.()
+}

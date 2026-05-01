@@ -3,7 +3,9 @@ import {
   getPreferredProductImageFromGroup,
   getImageTrimmedDimensions,
   getImageSourceFromObject,
-  findImageTargetInSelection
+  findImageTargetInSelection,
+  applyImageTrimBounds,
+  fitImageIntoSlot
 } from '~/utils/fabricImageHelpers'
 
 const group = (children: any[]) => ({
@@ -195,5 +197,105 @@ describe('findImageTargetInSelection', () => {
 
   it('case insensitive no type', () => {
     expect(findImageTargetInSelection({ type: 'IMAGE' })?.parent).toBeNull()
+  })
+})
+
+describe('applyImageTrimBounds', () => {
+  const makeImg = () => {
+    const setCalls: any[] = []
+    return {
+      cropX: 0, cropY: 0, width: 0, height: 0, dirty: false,
+      _calls: setCalls,
+      set(props: any) { Object.assign(this, props); setCalls.push(props) }
+    } as any
+  }
+
+  it('img null/trimBounds null: retorna null sem mutar', () => {
+    expect(applyImageTrimBounds(null, { left: 0, top: 0, width: 1, height: 1 })).toBeNull()
+    const img = makeImg()
+    expect(applyImageTrimBounds(img, null)).toBeNull()
+    expect(img._calls).toHaveLength(0)
+  })
+
+  it('aplica cropX/cropY/width/height + dirty', () => {
+    const img = makeImg()
+    const trim = { left: 10, top: 20, width: 100, height: 80 }
+    expect(applyImageTrimBounds(img, trim)).toBe(trim)
+    expect(img.cropX).toBe(10)
+    expect(img.cropY).toBe(20)
+    expect(img.width).toBe(100)
+    expect(img.height).toBe(80)
+    expect(img.dirty).toBe(true)
+  })
+})
+
+describe('fitImageIntoSlot', () => {
+  const makeImg = (overrides: any = {}) => {
+    const setCalls: any[] = []
+    let coords = 0
+    return {
+      width: 100,
+      height: 100,
+      cropX: 0,
+      cropY: 0,
+      _calls: setCalls,
+      _setCoords: () => coords,
+      set(props: any) { Object.assign(this, props); setCalls.push(props) },
+      setCoords() { coords += 1 },
+      ...overrides
+    } as any
+  }
+
+  it('img null: no-op', () => {
+    expect(() => fitImageIntoSlot(null, { width: 100, height: 100 })).not.toThrow()
+  })
+
+  it('escala proporcional para caber no slot', () => {
+    const img = makeImg({ width: 200, height: 100 })
+    fitImageIntoSlot(img, { width: 100, height: 100 })
+    // trimmed 200x100 → scale = min(100/200, 100/100, 3) = 0.5
+    expect(img.scaleX).toBe(0.5)
+    expect(img.scaleY).toBe(0.5)
+  })
+
+  it('clamp em maxScale (default 3)', () => {
+    const img = makeImg({ width: 10, height: 10 })
+    fitImageIntoSlot(img, { width: 1000, height: 1000 })
+    // 1000/10 = 100 mas clamp em 3
+    expect(img.scaleX).toBe(3)
+  })
+
+  it('aceita maxScale customizado', () => {
+    const img = makeImg({ width: 10, height: 10 })
+    fitImageIntoSlot(img, { width: 100, height: 100 }, { maxScale: 5 })
+    // 100/10 = 10 → clamp em 5
+    expect(img.scaleX).toBe(5)
+  })
+
+  it('aplica origin/left/top/name + defaults seguros', () => {
+    const img = makeImg()
+    fitImageIntoSlot(img, { width: 100, height: 100, left: 50, top: 25, name: 'custom' })
+    expect(img.left).toBe(50)
+    expect(img.top).toBe(25)
+    expect(img.originX).toBe('center')
+    expect(img.originY).toBe('center')
+    expect(img.name).toBe('custom')
+    expect(img.visible).toBe(true)
+    expect(img.opacity).toBe(1)
+    expect(img.lockScalingFlip).toBe(true)
+  })
+
+  it('originX/Y customizado', () => {
+    const img = makeImg()
+    fitImageIntoSlot(img, { width: 100, height: 100, originX: 'left', originY: 'top' })
+    expect(img.originX).toBe('left')
+    expect(img.originY).toBe('top')
+  })
+
+  it('slot dimensions invalidas (0/NaN) tratadas como 1', () => {
+    const img = makeImg({ width: 100, height: 100 })
+    fitImageIntoSlot(img, { width: 0, height: NaN as any })
+    // slotWidth/Height fallback 1, scale = min(1/100, 1/100, 3) = 0.01
+    expect(img.scaleX).toBeCloseTo(0.01)
   })
 })
