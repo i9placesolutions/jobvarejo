@@ -150,6 +150,7 @@ import {
     getCardTitleText,
     getCardLimitText
 } from '~/utils/productCardLookup'
+import { buildCardRecoverySearchPayload } from '~/utils/cardRecoveryPayload'
 import {
     stableHash32,
     getZoneHighlightPredicate
@@ -24222,30 +24223,7 @@ const normalizeRecoveryImageUrl = (src: string): string => {
     return value;
 };
 
-const buildCardRecoverySearchPayload = (card: any): { term: string; brand?: string; flavor?: string; weight?: string } | null => {
-    const pd = ((card as any)?._productData && typeof (card as any)._productData === 'object') ? (card as any)._productData : {};
-    const titleObj = typeof getCardTitleText === 'function' ? getCardTitleText(card) : null;
-    const titleText = String((titleObj as any)?.text || '').trim();
-    const name = String(pd?.name || titleText || (card as any)?.layerName || '').trim();
-    const brand = String(pd?.brand || '').trim();
-    const flavor = String(pd?.flavor || '').trim();
-    const weight = String(pd?.weight || '').trim();
-    if (!name) return null;
-
-    const parts = [name];
-    if (brand && !name.toLowerCase().includes(brand.toLowerCase())) parts.push(brand);
-    if (flavor && !name.toLowerCase().includes(flavor.toLowerCase())) parts.push(flavor);
-    if (weight && !name.toLowerCase().includes(weight.toLowerCase())) parts.push(weight);
-
-    const term = parts.join(' ').trim();
-    if (!term) return null;
-    return {
-        term,
-        ...(brand ? { brand } : {}),
-        ...(flavor ? { flavor } : {}),
-        ...(weight ? { weight } : {})
-    };
-};
+// buildCardRecoverySearchPayload extraido para utils/cardRecoveryPayload.ts.
 
 type RecoveryLookupResult = {
     status: 'ok' | 'empty' | 'auth' | 'error';
