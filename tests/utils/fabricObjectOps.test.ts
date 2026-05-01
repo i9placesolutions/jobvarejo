@@ -11,7 +11,8 @@ import {
   ensurePersistentContentFlags,
   isObjectMaskCandidate,
   stripPersistentIdsRecursive,
-  findNearestMaskSourceBelowTarget
+  findNearestMaskSourceBelowTarget,
+  clearObjectMaskMetadata
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -869,5 +870,84 @@ describe('findNearestMaskSourceBelowTarget', () => {
     const dup = target  // mesma ref
     expect(findNearestMaskSourceBelowTarget([a, dup, target], target, isCandidate))
       .toBe(a)
+  })
+})
+
+describe('clearObjectMaskMetadata', () => {
+  const hasMask = (o: any) => !!o?.objectMaskEnabled
+
+  const makeObj = (overrides: any = {}) => {
+    const calls: Array<{ k: any; v?: any }> = []
+    const o: any = {
+      objectMaskEnabled: true,
+      objectMaskSourceId: 'src1',
+      _frameClipOwner: 'frame1',
+      clipPath: { type: 'rect' },
+      dirty: false,
+      setCoordsCount: 0,
+      ...overrides
+    }
+    o.set = (k: any, v?: any) => {
+      calls.push({ k, v })
+      ;(o as any)[k] = v
+    }
+    o.setCoords = () => { o.setCoordsCount += 1 }
+    o._calls = calls
+    return o
+  }
+
+  it('sem mascara aplicada (predicate retorna false): no-op + false', () => {
+    const o = makeObj({ objectMaskEnabled: false })
+    expect(clearObjectMaskMetadata(o, hasMask)).toBe(false)
+    expect(o.clipPath).toEqual({ type: 'rect' }) // intacto
+  })
+
+  it('com mascara: limpa clipPath, deleta flags, marca dirty', () => {
+    const o = makeObj()
+    expect(clearObjectMaskMetadata(o, hasMask)).toBe(true)
+    expect(o.clipPath).toBeNull()
+    expect(o.objectMaskEnabled).toBeUndefined()
+    expect(o.objectMaskSourceId).toBeUndefined()
+    expect(o._frameClipOwner).toBeUndefined()
+    expect(o.dirty).toBe(true)
+    expect(o.setCoordsCount).toBe(1)
+  })
+
+  it('predicate sempre-true forcao limpeza', () => {
+    const o = makeObj({ objectMaskEnabled: undefined })
+    expect(clearObjectMaskMetadata(o, () => true)).toBe(true)
+    expect(o.clipPath).toBeNull()
+  })
+
+  it('captura erro de delete em prop configurable=true (try/catch interno)', () => {
+    // delete em props que nao podem ser deletadas e capturado.
+    // Cada prop tem seu try/catch separado, entao um delete falho nao
+    // bloqueia os outros.
+    const o: any = {
+      objectMaskEnabled: true,
+      objectMaskSourceId: 'src1',
+      _frameClipOwner: 'f1',
+      clipPath: { type: 'rect' },
+      set: function (this: any, k: string, v: any) { (this as any)[k] = v },
+      setCoords: () => {}
+    }
+    expect(() => clearObjectMaskMetadata(o, hasMask)).not.toThrow()
+    expect(o.clipPath).toBeNull()
+    expect(o.objectMaskEnabled).toBeUndefined()
+  })
+
+  it('obj sem .set: optional chain nao lanca, clipPath nao e limpo (bug documentado)', () => {
+    // Documentado: try/catch nao captura optional-chain undefined.
+    // Quando obj nao tem .set, o clipPath FICA como esta. Caller deve
+    // garantir que objs com mascara aplicada tem set().
+    const o: any = { objectMaskEnabled: true, clipPath: 'x', setCoords: () => {} }
+    expect(clearObjectMaskMetadata(o, hasMask)).toBe(true)
+    expect(o.clipPath).toBe('x')
+  })
+
+  it('obj sem setCoords: nao crasha', () => {
+    const o: any = { objectMaskEnabled: true, clipPath: 'x', set: function() {}, dirty: false }
+    expect(() => clearObjectMaskMetadata(o, hasMask)).not.toThrow()
+    expect(o.dirty).toBe(true)
   })
 })

@@ -192,7 +192,8 @@ import {
     ensurePersistentContentFlags,
     isObjectMaskCandidate,
     stripPersistentIdsRecursive,
-    findNearestMaskSourceBelowTarget as findNearestMaskSourceBelowTargetHelper
+    findNearestMaskSourceBelowTarget as findNearestMaskSourceBelowTargetHelper,
+    clearObjectMaskMetadata
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -21365,17 +21366,14 @@ const createObjectMaskClipForTarget = async (maskSource: any, target: any): Prom
     return clipClone;
 };
 
+// Wrapper local: usa o helper puro extraido + re-aplica clipPath de frame
+// se o objeto pertencer a um frame.
 const clearObjectMaskFromObject = (obj: any): boolean => {
-    if (!hasObjectMaskApplied(obj)) return false;
-    try { obj.set?.('clipPath', null); } catch { obj.clipPath = null; }
-    try { delete (obj as any).objectMaskEnabled; } catch { obj.objectMaskEnabled = false; }
-    try { delete (obj as any).objectMaskSourceId; } catch { obj.objectMaskSourceId = undefined; }
-    try { delete (obj as any)._frameClipOwner; } catch {}
+    const cleared = clearObjectMaskMetadata(obj, hasObjectMaskApplied);
+    if (!cleared) return false;
     if (obj?.parentFrameId) {
         syncObjectFrameClip(obj);
     }
-    obj.setCoords?.();
-    obj.dirty = true;
     return true;
 };
 

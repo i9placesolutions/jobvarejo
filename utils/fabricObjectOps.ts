@@ -455,6 +455,33 @@ export const isObjectMaskCandidate = (obj: any): boolean => {
 }
 
 /**
+ * Limpa metadata de mascara aplicada em um objeto Fabric:
+ *  - clipPath = null
+ *  - delete __objectMaskEnabled / __objectMaskSourceId / _frameClipOwner
+ *  - setCoords + dirty
+ *
+ * Pure: nao re-aplica clipPath de frame (responsabilidade do caller).
+ * Retorna true se houve cleanup, false se nada foi feito (sem mascara
+ * aplicada).
+ *
+ * Caller deve passar `hasMaskApplied` (predicate injetado) — geralmente
+ * `hasObjectMaskApplied` de fabricObjectClassifiers.
+ */
+export const clearObjectMaskMetadata = (
+    obj: any,
+    hasMaskApplied: (o: any) => boolean
+): boolean => {
+    if (!hasMaskApplied(obj)) return false
+    try { obj.set?.('clipPath', null) } catch { obj.clipPath = null }
+    try { delete (obj as any).objectMaskEnabled } catch { obj.objectMaskEnabled = false }
+    try { delete (obj as any).objectMaskSourceId } catch { obj.objectMaskSourceId = undefined }
+    try { delete (obj as any)._frameClipOwner } catch {}
+    obj.setCoords?.()
+    obj.dirty = true
+    return true
+}
+
+/**
  * Encontra o vizinho de baixo (no z-order) que pode ser usado como
  * mascara para um target. Pure: recebe array de objetos + target +
  * predicate isCandidate, varre de target.indexOf - 1 ate 0,
