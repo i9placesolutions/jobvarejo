@@ -14,7 +14,9 @@ import {
   BUILTIN_ATACAREJO_SEED_VERSION,
   BUILTIN_RED_BURST_SEED_VERSION,
   LABEL_TEMPLATE_PREVIEW_RENDER_VERSION,
-  MANUAL_SINGLE_ANCHOR_VERSION
+  MANUAL_SINGLE_ANCHOR_VERSION,
+  normalizeLabelTemplateGroupAsManual,
+  normalizeLabelTemplateRecordAsManual
 } from '~/utils/labelTemplateHelpers'
 
 describe('getLabelTemplateTimestamp', () => {
@@ -243,5 +245,86 @@ describe('MANUAL_SINGLE_ANCHOR_VERSION', () => {
     expect(typeof MANUAL_SINGLE_ANCHOR_VERSION).toBe('number')
     expect(MANUAL_SINGLE_ANCHOR_VERSION).toBeGreaterThan(0)
     expect(MANUAL_SINGLE_ANCHOR_VERSION).toBe(2)
+  })
+})
+
+describe('normalizeLabelTemplateGroupAsManual', () => {
+  const noopSanitize = (g: any) => g
+
+  it('null/non-object: retorna input', () => {
+    expect(normalizeLabelTemplateGroupAsManual(null, noopSanitize)).toBe(null)
+    expect(normalizeLabelTemplateGroupAsManual('str', noopSanitize)).toBe('str')
+  })
+
+  it('default: forceAtacarejoCanonical=false, preserveManualLayout=true, isCustomTemplate=true', () => {
+    const grp: any = {}
+    const result = normalizeLabelTemplateGroupAsManual(grp, noopSanitize)
+    expect(result.__forceAtacarejoCanonical).toBe(false)
+    expect(result.__preserveManualLayout).toBe(true)
+    expect(result.__isCustomTemplate).toBe(true)
+  })
+
+  it('forceAtacarejoCanonical=true: preserveManualLayout=false, isCustomTemplate=false', () => {
+    const grp: any = { __forceAtacarejoCanonical: true }
+    const result = normalizeLabelTemplateGroupAsManual(grp, noopSanitize)
+    expect(result.__forceAtacarejoCanonical).toBe(true)
+    expect(result.__preserveManualLayout).toBe(false)
+    expect(result.__isCustomTemplate).toBe(false)
+  })
+
+  it('chama sanitize antes de aplicar flags', () => {
+    let called = false
+    const sanitize = (g: any) => { called = true; return g }
+    normalizeLabelTemplateGroupAsManual({}, sanitize)
+    expect(called).toBe(true)
+  })
+
+  it('respeita boolean ja-existente', () => {
+    const grp: any = {
+      __forceAtacarejoCanonical: true,
+      __preserveManualLayout: true, // explicitamente true mesmo com forceAtac
+      __isCustomTemplate: false
+    }
+    const result = normalizeLabelTemplateGroupAsManual(grp, noopSanitize)
+    expect(result.__preserveManualLayout).toBe(true)
+    expect(result.__isCustomTemplate).toBe(false)
+  })
+})
+
+describe('normalizeLabelTemplateRecordAsManual', () => {
+  const noopSanitize = (g: any) => g
+
+  it('null/non-object: retorna input', () => {
+    expect(normalizeLabelTemplateRecordAsManual(null, noopSanitize)).toBe(null)
+    expect(normalizeLabelTemplateRecordAsManual('str', noopSanitize)).toBe('str')
+  })
+
+  it('isBuiltIn deduzido pelo id', () => {
+    const result = normalizeLabelTemplateRecordAsManual({ id: 'tpl_default' }, noopSanitize)
+    expect(result.isBuiltIn).toBe(true)
+  })
+
+  it('isBuiltIn=false para id custom', () => {
+    const result = normalizeLabelTemplateRecordAsManual({ id: 'tpl_user_123' }, noopSanitize)
+    expect(result.isBuiltIn).toBe(false)
+  })
+
+  it('isBuiltIn explicit=true sempre vence', () => {
+    const result = normalizeLabelTemplateRecordAsManual({ id: 'custom', isBuiltIn: true }, noopSanitize)
+    expect(result.isBuiltIn).toBe(true)
+  })
+
+  it('group e' + ' normalizado via group helper', () => {
+    const result = normalizeLabelTemplateRecordAsManual({ id: 'x', group: {} }, noopSanitize)
+    expect(result.group.__forceAtacarejoCanonical).toBe(false)
+    expect(result.group.__preserveManualLayout).toBe(true)
+  })
+
+  it('retorna novo objeto (nao mutates input)', () => {
+    const tpl: any = { id: 'x', name: 'y' }
+    const result = normalizeLabelTemplateRecordAsManual(tpl, noopSanitize)
+    expect(result).not.toBe(tpl)
+    expect(result.id).toBe('x')
+    expect(result.name).toBe('y')
   })
 })

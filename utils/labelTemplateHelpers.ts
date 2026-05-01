@@ -117,6 +117,62 @@ export const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
 export const MANUAL_SINGLE_ANCHOR_VERSION = 2
 
 /**
+ * Normaliza um group JSON de label template para o formato "manual"
+ * — garante que os 3 flags relevantes (`__forceAtacarejoCanonical`,
+ * `__preserveManualLayout`, `__isCustomTemplate`) tenham valores boolean
+ * estaveis, derivados em cascata:
+ *
+ *  - `__forceAtacarejoCanonical` = false (default)
+ *  - `__preserveManualLayout` = !forceAtacarejoCanonical
+ *  - `__isCustomTemplate` = preserveManualLayout
+ *
+ * Aplica sanitize do Red Burst antes (para garantir node revives).
+ *
+ * Mutates o input em place + retorna por chaining.
+ *
+ * Caller deve injetar `sanitize` (impl de sanitizeRedBurstTemplateGroupJson)
+ * para evitar dependencia circular entre labelTemplateHelpers e
+ * redBurstTemplateRevive.
+ */
+export const normalizeLabelTemplateGroupAsManual = (
+    group: any,
+    sanitize: (g: any) => any
+): any => {
+    if (!group || typeof group !== 'object') return group
+    sanitize(group)
+    if (typeof (group as any).__forceAtacarejoCanonical !== 'boolean') {
+        (group as any).__forceAtacarejoCanonical = false
+    }
+    if (typeof (group as any).__preserveManualLayout !== 'boolean') {
+        (group as any).__preserveManualLayout = (group as any).__forceAtacarejoCanonical !== true
+    }
+    if (typeof (group as any).__isCustomTemplate !== 'boolean') {
+        (group as any).__isCustomTemplate = (group as any).__preserveManualLayout === true
+    }
+    return group
+}
+
+/**
+ * Normaliza um record completo de label template — popula `isBuiltIn`
+ * com base em `isBuiltInLabelTemplateId(record.id)` e aplica
+ * `normalizeLabelTemplateGroupAsManual` no `group`.
+ *
+ * Retorna novo objeto (spread) — nao mutates o input.
+ */
+export const normalizeLabelTemplateRecordAsManual = (
+    tpl: any,
+    sanitize: (g: any) => any
+): any => {
+    if (!tpl || typeof tpl !== 'object') return tpl
+    const isBuiltIn = !!(tpl as any).isBuiltIn || isBuiltInLabelTemplateId((tpl as any).id)
+    return {
+        ...tpl,
+        group: normalizeLabelTemplateGroupAsManual((tpl as any).group, sanitize),
+        isBuiltIn
+    }
+}
+
+/**
  * Lista de props extras que devem ser persistidas em label templates
  * (alem das props padrao do Fabric). Inclui customId, name, fontFamily,
  * charSpacing, e todos os flags de manual template (`__preserveManualLayout`,

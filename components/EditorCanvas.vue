@@ -343,7 +343,9 @@ import {
     BUILTIN_ATACAREJO_SEED_VERSION,
     BUILTIN_RED_BURST_SEED_VERSION,
     LABEL_TEMPLATE_PREVIEW_RENDER_VERSION,
-    MANUAL_SINGLE_ANCHOR_VERSION
+    MANUAL_SINGLE_ANCHOR_VERSION,
+    normalizeLabelTemplateGroupAsManual as normalizeLabelTemplateGroupAsManualHelper,
+    normalizeLabelTemplateRecordAsManual as normalizeLabelTemplateRecordAsManualHelper
 } from '~/utils/labelTemplateHelpers'
 import {
     walkCanvasObjects,
@@ -1066,30 +1068,14 @@ const autoHealedLabelTemplateIds = new Set<string>()
 
 // isBuiltInLabelTemplateId extraido para utils/labelTemplateHelpers.ts.
 
-const normalizeLabelTemplateGroupAsManual = (group: any) => {
-    if (!group || typeof group !== 'object') return group;
-    sanitizeRedBurstTemplateGroupJson(group);
-    if (typeof (group as any).__forceAtacarejoCanonical !== 'boolean') {
-        (group as any).__forceAtacarejoCanonical = false;
-    }
-    if (typeof (group as any).__preserveManualLayout !== 'boolean') {
-        (group as any).__preserveManualLayout = (group as any).__forceAtacarejoCanonical !== true;
-    }
-    if (typeof (group as any).__isCustomTemplate !== 'boolean') {
-        (group as any).__isCustomTemplate = (group as any).__preserveManualLayout === true;
-    }
-    return group;
-};
-
-const normalizeLabelTemplateRecordAsManual = (tpl: any) => {
-    if (!tpl || typeof tpl !== 'object') return tpl;
-    const isBuiltIn = !!(tpl as any).isBuiltIn || isBuiltInLabelTemplateId((tpl as any).id);
-    return {
-        ...tpl,
-        group: normalizeLabelTemplateGroupAsManual((tpl as any).group),
-        isBuiltIn
-    } as any;
-};
+// normalizeLabelTemplateGroupAsManual + normalizeLabelTemplateRecordAsManual
+// extraidos para utils/labelTemplateHelpers.ts. Wrappers locais injetam
+// sanitizeRedBurstTemplateGroupJson para evitar import circular entre
+// labelTemplateHelpers e redBurstTemplateRevive.
+const normalizeLabelTemplateGroupAsManual = (group: any) =>
+    normalizeLabelTemplateGroupAsManualHelper(group, sanitizeRedBurstTemplateGroupJson)
+const normalizeLabelTemplateRecordAsManual = (tpl: any) =>
+    normalizeLabelTemplateRecordAsManualHelper(tpl, sanitizeRedBurstTemplateGroupJson)
 
 // shouldUseIncomingTemplateSnapshot extraido para utils/labelTemplateHelpers.ts.
 
