@@ -66,6 +66,7 @@ import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
+import { extractWasabiBucketAndKey } from '~/utils/storageUrlHelpers'
 import {
     isObjectIntersectingCullRect,
     shouldSkipViewportCullObject,
@@ -11030,29 +11031,7 @@ const extractContaboBucketAndKey = (url: string): { bucket: string | null; key: 
  * Extrai bucket e key de uma URL do Wasabi S3.
  * Formato esperado: https://s3.wasabisys.com/bucket/key...
  */
-const extractWasabiBucketAndKey = (url: string): { bucket: string | null; key: string | null } => {
-    try {
-        const urlObj = new URL(url);
-        const pathParts = urlObj.pathname.split('/').filter(p => p);
-
-        if (pathParts.length === 0) {
-            return { bucket: null, key: null };
-        }
-
-        // Wasabi path-style: /bucket/key...
-        const bucket = pathParts[0] || null;
-        const key = pathParts.slice(1).join('/');
-
-        if (!key || key.length === 0) {
-            return { bucket: null, key: null };
-        }
-
-        return { bucket, key };
-    } catch (err) {
-        console.error(`❌ Erro ao extrair bucket e key da URL Wasabi: ${url.substring(0, 100)}`, err);
-        return { bucket: null, key: null };
-    }
-};
+// extractWasabiBucketAndKey extraido para utils/storageUrlHelpers.ts.
 
 /**
  * Converte URLs da Contabo/Wasabi para usar o proxy local.
