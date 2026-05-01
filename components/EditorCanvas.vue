@@ -138,6 +138,11 @@ import {
     buildPersistedCardTitleText
 } from '~/utils/cardTitlePersistence'
 import {
+    getCardBackgroundRect,
+    getCardTitleText,
+    getCardLimitText
+} from '~/utils/productCardLookup'
+import {
     PRICE_LAYOUT_NODE_PREFIXES,
     PRICE_LAYOUT_NODE_EXACT,
     isPriceLayoutNode,
@@ -28350,56 +28355,8 @@ const updateZoneOnCanvas = async (propOrPayload: string | Record<string, any>, v
 // LIGHTWEIGHT_GLOBAL_STYLE_PROPS e isLightweightGlobalStyleProp extraidos para
 // utils/globalStylePropClassifiers.ts.
 
-const getCardBackgroundRect = (card: any) => {
-    if (!card || typeof card.getObjects !== 'function') return null;
-    const objects = card.getObjects() || [];
-    const byName = objects.find((o: any) => String(o?.name || '') === 'offerBackground' && String(o?.type || '').toLowerCase() === 'rect');
-    if (byName) return byName;
-    const byPattern = objects.find((o: any) => String(o?.type || '').toLowerCase() === 'rect' && /(offerBackground|background|bg)/i.test(String(o?.name || '')));
-    if (byPattern) return byPattern;
-    let largestRect: any = null;
-    let largestArea = -1;
-    objects.forEach((o: any) => {
-        if (String(o?.type || '').toLowerCase() !== 'rect') return;
-        const area = Number(o?.width || 0) * Number(o?.height || 0) * Number(o?.scaleX || 1) * Number(o?.scaleY || 1);
-        if (area > largestArea) {
-            largestArea = area;
-            largestRect = o;
-        }
-    });
-    return largestRect;
-};
-
-const getCardTitleText = (card: any) => {
-    if (!card || typeof card.getObjects !== 'function') return null;
-    const objects = card.getObjects() || [];
-    const named = objects.find((o: any) => String(o?.name || '') === 'smart_title');
-    if (named) return named;
-    let topMostText: any = null;
-    let topMost = Number.POSITIVE_INFINITY;
-    objects.forEach((o: any) => {
-        const t = String(o?.type || '').toLowerCase();
-        const isText = t === 'text' || t === 'i-text' || t === 'textbox';
-        if (!isText) return;
-        const top = Number.isFinite(Number(o?.top)) ? Number(o.top) : Number.POSITIVE_INFINITY;
-        if (top <= topMost) {
-            topMost = top;
-            topMostText = o;
-        }
-    });
-    return topMostText;
-};
-
-const getCardLimitText = (card: any) => {
-    if (!card || typeof card.getObjects !== 'function') return null;
-    const objects = card.getObjects() || [];
-    return objects.find((o: any) =>
-        String(o?.name || '') === 'smart_limit' ||
-        String(o?.name || '') === 'limitText' ||
-        String(o?.name || '') === 'product_limit' ||
-        String(o?.data?.smartType || '') === 'product-limit'
-    ) || null;
-};
+// getCardBackgroundRect, getCardTitleText e getCardLimitText extraidos
+// para utils/productCardLookup.ts.
 
 const resolveCardTitleStateFromTarget = (target: any): { card: any | null; titleObj: any | null } => {
     if (!target) return { card: null, titleObj: null };
