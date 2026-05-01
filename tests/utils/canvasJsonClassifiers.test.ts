@@ -42,7 +42,8 @@ import {
   DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD,
   DEFERRED_PRODUCT_IMAGE_LOAD_MAX,
   repairHiddenPriceGroupTexts,
-  sanitizeFabricJsonTreeForLoad
+  sanitizeFabricJsonTreeForLoad,
+  buildProgressiveProductCardImageLoadPayload
 } from '~/utils/canvasJsonClassifiers'
 
 describe('PREPARED_CANVAS_LOAD_CACHE_LIMIT', () => {
@@ -1774,5 +1775,82 @@ describe('sanitizeFabricJsonTreeForLoad', () => {
     const before = root.objects
     sanitizeFabricJsonTreeForLoad(root)
     expect(root.objects).toBe(before)
+  })
+})
+
+describe('buildProgressiveProductCardImageLoadPayload', () => {
+  it('canvas vazio: { data, deferredCount: 0, totalImageCount: 0 }', () => {
+    const result = buildProgressiveProductCardImageLoadPayload({ objects: [] })
+    expect(result.deferredCount).toBe(0)
+    expect(result.totalImageCount).toBe(0)
+  })
+
+  it('canvasData null: { ..., 0, 0 }', () => {
+    const result = buildProgressiveProductCardImageLoadPayload(null)
+    expect(result.deferredCount).toBe(0)
+    expect(result.totalImageCount).toBe(0)
+  })
+
+  it('totalImageCount < threshold: nao defer', () => {
+    const json = {
+      objects: [
+        { type: 'group', objects: [{ type: 'image', src: 'http://example.com/a.jpg' }] }
+      ]
+    }
+    const result = buildProgressiveProductCardImageLoadPayload(json)
+    expect(result.deferredCount).toBe(0)
+  })
+
+  it('totalImageCount >= threshold: defer ate MAX cards', () => {
+    const cards: any[] = []
+    for (let i = 0; i < 30; i++) {
+      cards.push({
+        type: 'group',
+        isProductCard: true,
+        _customId: `card-${i}`,
+        objects: [
+          { type: 'image', name: 'product_image', src: `http://example.com/img-${i}.jpg` }
+        ]
+      })
+    }
+    const json = { objects: cards }
+    const result = buildProgressiveProductCardImageLoadPayload(json, { totalImageCount: 30 })
+    expect(result.deferredCount).toBeGreaterThan(0)
+    expect(result.totalImageCount).toBe(30)
+  })
+
+  it('opts.clone=false: usa o mesmo input (mutates)', () => {
+    const cards: any[] = []
+    for (let i = 0; i < 30; i++) {
+      cards.push({
+        type: 'group',
+        isProductCard: true,
+        _customId: `card-${i}`,
+        objects: [
+          { type: 'image', name: 'product_image', src: `http://example.com/img-${i}.jpg` }
+        ]
+      })
+    }
+    const json: any = { objects: cards }
+    const result = buildProgressiveProductCardImageLoadPayload(json, { clone: false, totalImageCount: 30 })
+    expect(result.data).toBe(json)
+  })
+
+  it('preserva __originalSrc quando ja existe', () => {
+    const cards: any[] = []
+    for (let i = 0; i < 30; i++) {
+      cards.push({
+        type: 'group',
+        isProductCard: true,
+        _customId: `card-${i}`,
+        objects: [
+          { type: 'image', name: 'product_image', src: 'placeholder', __originalSrc: `http://example.com/orig-${i}.jpg` }
+        ]
+      })
+    }
+    const json = { objects: cards }
+    const result = buildProgressiveProductCardImageLoadPayload(json, { totalImageCount: 30 })
+    const firstCard = result.data.objects[0]
+    expect(firstCard.objects[0].__originalSrc).toBe('http://example.com/orig-0.jpg')
   })
 })

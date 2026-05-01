@@ -403,7 +403,8 @@ import {
     DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD,
     DEFERRED_PRODUCT_IMAGE_LOAD_MAX,
     repairHiddenPriceGroupTexts,
-    sanitizeFabricJsonTreeForLoad
+    sanitizeFabricJsonTreeForLoad,
+    buildProgressiveProductCardImageLoadPayload
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -10275,54 +10276,7 @@ const prepareCanvasDataForLoadEntry = (
 
 // getPreferredProductImageFromCardJson extraido para utils/canvasJsonClassifiers.ts.
 
-const buildProgressiveProductCardImageLoadPayload = (
-    canvasData: any,
-    opts: { clone?: boolean; totalImageCount?: number | null } = {}
-): { data: any; deferredCount: number; totalImageCount: number } => {
-    const rootObjects = Array.isArray(canvasData?.objects) ? canvasData.objects : [];
-    if (!rootObjects.length) {
-        return { data: canvasData, deferredCount: 0, totalImageCount: 0 };
-    }
-
-    const providedTotalImageCount = Number(opts.totalImageCount);
-    const totalImageCount = Number.isFinite(providedTotalImageCount) && providedTotalImageCount > 0
-        ? providedTotalImageCount
-        : countCanvasJsonObjectsAndImages(canvasData).images;
-
-    if (!Number.isFinite(totalImageCount) || totalImageCount < DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD) {
-        return { data: canvasData, deferredCount: 0, totalImageCount: Number.isFinite(totalImageCount) ? totalImageCount : 0 };
-    }
-
-    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData);
-    const clonedRootObjects = Array.isArray(cloned?.objects) ? cloned.objects : [];
-    if (!clonedRootObjects.length) {
-        return { data: cloned, deferredCount: 0, totalImageCount };
-    }
-
-    let deferredCount = 0;
-    clonedRootObjects.forEach((card: any) => {
-        if (deferredCount >= DEFERRED_PRODUCT_IMAGE_LOAD_MAX) return;
-        if (!isLikelyProductCardJson(card)) return;
-
-        const imageNode = getPreferredProductImageFromCardJson(card);
-        if (!imageNode) return;
-
-        const currentSrc = String((imageNode as any)?.src || '').trim();
-        const originalSrc = String((imageNode as any)?.__originalSrc || '').trim();
-        const sourceToKeep = originalSrc || currentSrc;
-        if (!isDeferredProductImageCandidateSrc(sourceToKeep)) return;
-        if (currentSrc === PLACEHOLDER_IMAGE_DATA_URL) return;
-
-        if (!originalSrc) {
-            (imageNode as any).__originalSrc = currentSrc;
-        }
-        imageNode.src = PLACEHOLDER_IMAGE_DATA_URL;
-        imageNode.crossOrigin = 'anonymous';
-        deferredCount += 1;
-    });
-
-    return { data: cloned, deferredCount, totalImageCount };
-};
+// buildProgressiveProductCardImageLoadPayload extraido para utils/canvasJsonClassifiers.ts.
 
 const normalizeLegacyProductCardImageTransformsInCanvasData = (
     canvasData: any

@@ -1167,3 +1167,66 @@ export const sanitizeFabricJsonTreeForLoad = (
 
     return { removed, fixedGroupTypes }
 }
+
+/**
+ * Constroi o payload "progressivo" para load do canvas: troca o src
+ * das imagens de produtos por um placeholder, salvando o src original
+ * em `__originalSrc`. Permite o canvas renderizar logo (com placeholders)
+ * e carregar as imagens reais em background.
+ *
+ * Comportamento:
+ *  - Aborta cedo se ha < DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD imagens
+ *  - Por default clona o canvasData (opts.clone=false reutiliza)
+ *  - Aplica defer em ate DEFERRED_PRODUCT_IMAGE_LOAD_MAX cards
+ *  - Pula cards/imagens cujo src nao e candidato (data:, blob:, etc)
+ *
+ * Retorna `{ data, deferredCount, totalImageCount }`.
+ */
+export const buildProgressiveProductCardImageLoadPayload = (
+    canvasData: any,
+    opts: { clone?: boolean; totalImageCount?: number | null } = {}
+): { data: any; deferredCount: number; totalImageCount: number } => {
+    const rootObjects = Array.isArray(canvasData?.objects) ? canvasData.objects : []
+    if (!rootObjects.length) {
+        return { data: canvasData, deferredCount: 0, totalImageCount: 0 }
+    }
+
+    const providedTotalImageCount = Number(opts.totalImageCount)
+    const totalImageCount = Number.isFinite(providedTotalImageCount) && providedTotalImageCount > 0
+        ? providedTotalImageCount
+        : countCanvasJsonObjectsAndImages(canvasData).images
+
+    if (!Number.isFinite(totalImageCount) || totalImageCount < DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD) {
+        return { data: canvasData, deferredCount: 0, totalImageCount: Number.isFinite(totalImageCount) ? totalImageCount : 0 }
+    }
+
+    const cloned = opts.clone === false ? canvasData : cloneCanvasDataForLoad(canvasData)
+    const clonedRootObjects = Array.isArray(cloned?.objects) ? cloned.objects : []
+    if (!clonedRootObjects.length) {
+        return { data: cloned, deferredCount: 0, totalImageCount }
+    }
+
+    let deferredCount = 0
+    clonedRootObjects.forEach((card: any) => {
+        if (deferredCount >= DEFERRED_PRODUCT_IMAGE_LOAD_MAX) return
+        if (!isLikelyProductCardJson(card)) return
+
+        const imageNode = getPreferredProductImageFromCardJson(card)
+        if (!imageNode) return
+
+        const currentSrc = String((imageNode as any)?.src || '').trim()
+        const originalSrc = String((imageNode as any)?.__originalSrc || '').trim()
+        const sourceToKeep = originalSrc || currentSrc
+        if (!isDeferredProductImageCandidateSrc(sourceToKeep)) return
+        if (currentSrc === CANVAS_IMAGE_PLACEHOLDER_DATA_URL) return
+
+        if (!originalSrc) {
+            (imageNode as any).__originalSrc = currentSrc
+        }
+        imageNode.src = CANVAS_IMAGE_PLACEHOLDER_DATA_URL
+        imageNode.crossOrigin = 'anonymous'
+        deferredCount += 1
+    })
+
+    return { data: cloned, deferredCount, totalImageCount }
+}
