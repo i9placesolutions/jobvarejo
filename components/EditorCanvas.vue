@@ -133,6 +133,11 @@ import { clamp, toFinite, formatDisplayNumber } from '~/utils/mathHelpers'
 import { normalizeHexColor } from '~/utils/colorHelpers'
 import { resolveZoneUpdatesPayload } from '~/utils/zoneUpdatesPayload'
 import {
+    clonePlainForZoneSnapshot,
+    finiteZoneSnapshotNumber,
+    firstDefinedZoneSnapshotValue
+} from '~/utils/zoneSnapshotHelpers'
+import {
     getSpecialConditionFromProduct,
     getAvailablePrices
 } from '~/utils/productPriceHelpers'
@@ -27381,35 +27386,8 @@ const getZoneCardDiagnosticsPayload = (zone: any, zoneCardsOverride?: any[]) => 
     });
 }
 
-const clonePlainForZoneSnapshot = (value: any): any => {
-    if (value == null) return value;
-    try {
-        return JSON.parse(JSON.stringify(value));
-    } catch {
-        if (Array.isArray(value)) return value.map((item) => clonePlainForZoneSnapshot(item));
-        if (typeof value === 'object') {
-            const out: Record<string, any> = {};
-            Object.entries(value).forEach(([key, entry]: [string, any]) => {
-                if (typeof entry === 'function') return;
-                out[key] = clonePlainForZoneSnapshot(entry);
-            });
-            return out;
-        }
-        return value;
-    }
-}
-
-const finiteZoneSnapshotNumber = (value: any, fallback = 0) => {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-}
-
-const firstDefinedZoneSnapshotValue = (...values: any[]) => {
-    for (const value of values) {
-        if (typeof value !== 'undefined' && value !== null && value !== '') return value;
-    }
-    return null;
-}
+// clonePlainForZoneSnapshot, finiteZoneSnapshotNumber e firstDefinedZoneSnapshotValue
+// extraidos para utils/zoneSnapshotHelpers.ts.
 
 const buildZoneCardStateSnapshot = (card: any, index: number) => {
     const productData = card?._productData && typeof card._productData === 'object' ? card._productData : {};
