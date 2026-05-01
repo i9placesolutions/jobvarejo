@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { parseViewSettings, serializeViewSettings } from '~/utils/viewSettings'
+import { parseViewSettings, serializeViewSettings, VIEW_SETTINGS_STORAGE_KEY } from '~/utils/viewSettings'
 import type { ViewSettings } from '~/utils/viewSettings'
+
+describe('VIEW_SETTINGS_STORAGE_KEY', () => {
+  it('e versionada (:v1) e prefixada (editor:)', () => {
+    expect(VIEW_SETTINGS_STORAGE_KEY).toBe('editor:viewSettings:v1')
+    expect(VIEW_SETTINGS_STORAGE_KEY).toMatch(/^editor:/)
+    expect(VIEW_SETTINGS_STORAGE_KEY).toMatch(/:v\d+$/)
+  })
+})
 
 const fullSettings: ViewSettings = {
   viewShowGrid: true,

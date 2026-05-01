@@ -120,7 +120,7 @@ import {
     EDITOR_PERF_STORAGE_KEY,
     EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS
 } from '~/utils/perfHelpers'
-import { parseViewSettings, serializeViewSettings } from '~/utils/viewSettings'
+import { parseViewSettings, serializeViewSettings, VIEW_SETTINGS_STORAGE_KEY } from '~/utils/viewSettings'
 import {
     SCROLLBAR_IGNORED_IDS,
     SCROLLBAR_PADDING,
@@ -7157,7 +7157,7 @@ const snapToGuides = ref(true)
 const snapToGrid = ref(false)
 const gridSize = ref(20)
 
-const VIEW_SETTINGS_KEY = 'editor:viewSettings:v1'
+// VIEW_SETTINGS_STORAGE_KEY extraido para utils/viewSettings.ts.
 let viewSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 // Wrappers locais que aplicam parse/serialize do helper puro
@@ -7165,7 +7165,7 @@ let viewSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
 const loadViewSettings = () => {
     if (!import.meta.client) return
     try {
-        const parsed = parseViewSettings(localStorage.getItem(VIEW_SETTINGS_KEY))
+        const parsed = parseViewSettings(localStorage.getItem(VIEW_SETTINGS_STORAGE_KEY))
         if (parsed.viewShowGrid !== undefined) viewShowGrid.value = parsed.viewShowGrid
         if (parsed.viewShowRulers !== undefined) viewShowRulers.value = parsed.viewShowRulers
         if (parsed.viewShowGuides !== undefined) viewShowGuides.value = parsed.viewShowGuides
@@ -7179,7 +7179,7 @@ const loadViewSettings = () => {
 const persistViewSettings = () => {
     if (!import.meta.client) return
     try {
-        localStorage.setItem(VIEW_SETTINGS_KEY, serializeViewSettings({
+        localStorage.setItem(VIEW_SETTINGS_STORAGE_KEY, serializeViewSettings({
             viewShowGrid: viewShowGrid.value,
             viewShowRulers: viewShowRulers.value,
             viewShowGuides: viewShowGuides.value,

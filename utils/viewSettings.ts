@@ -5,6 +5,13 @@
  * Cobertura: tests/utils/viewSettings.test.ts
  */
 
+/**
+ * Chave usada em localStorage para persistir view settings. Versionada
+ * (`:v1`) para permitir invalidar persistencia antiga quando o shape
+ * de ViewSettings mudar.
+ */
+export const VIEW_SETTINGS_STORAGE_KEY = 'editor:viewSettings:v1'
+
 export type ViewSettings = {
     viewShowGrid: boolean
     viewShowRulers: boolean
