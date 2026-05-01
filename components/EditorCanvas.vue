@@ -125,7 +125,7 @@ import {
 import { parseViewSettings, serializeViewSettings, VIEW_SETTINGS_STORAGE_KEY } from '~/utils/viewSettings'
 import { isCollaboratorsCacheValid } from '~/utils/collaboratorsCache'
 import { splitTextIntoChunks } from '~/utils/textChunking'
-import { reviveRedBurstJsonNode, sanitizeRedBurstTemplateGroupJson } from '~/utils/redBurstTemplateRevive'
+import { reviveRedBurstObjectNode, sanitizeRedBurstTemplateGroupJson } from '~/utils/redBurstTemplateRevive'
 import {
     SCROLLBAR_IGNORED_IDS,
     SCROLLBAR_PADDING,
@@ -30710,65 +30710,7 @@ function isRedBurstPriceGroup(priceGroup: any): boolean {
 // utils/mathHelpers.ts (renomeado para normalizeVisibleScale).
 const normalizeVisibleTemplateScale = normalizeVisibleScale;
 
-function reviveRedBurstObjectNode(
-    obj: any,
-    opts: { fallbackFill?: string; fallbackFontSize?: number; fallbackText?: string; forceVisible?: boolean } = {}
-): boolean {
-    if (!obj || typeof obj.set !== 'function') return false;
-    let changed = false;
-    const next: Record<string, any> = {};
-    const forceVisible = opts.forceVisible !== false;
-
-    if (forceVisible && obj.visible === false) {
-        next.visible = true;
-        changed = true;
-    }
-    const opacity = Number(obj.opacity ?? 1);
-    if (!Number.isFinite(opacity) || opacity <= 0) {
-        next.opacity = 1;
-        changed = true;
-    }
-
-    const restoreScaleX = normalizeVisibleTemplateScale(
-        (obj as any).__visibleScaleX ?? (obj as any).__originalScaleX,
-        obj.scaleX
-    );
-    const restoreScaleY = normalizeVisibleTemplateScale(
-        (obj as any).__visibleScaleY ?? (obj as any).__originalScaleY,
-        obj.scaleY
-    );
-    if (!Number.isFinite(Number(obj.scaleX)) || Math.abs(Number(obj.scaleX || 0)) < 0.0001) {
-        next.scaleX = restoreScaleX;
-        changed = true;
-    }
-    if (!Number.isFinite(Number(obj.scaleY)) || Math.abs(Number(obj.scaleY || 0)) < 0.0001) {
-        next.scaleY = restoreScaleY;
-        changed = true;
-    }
-
-    if (Object.keys(next).length) obj.set(next);
-
-    if (isTextLikeObject(obj)) {
-        const currentFont = Number(obj.fontSize);
-        const fallbackFont = Number(opts.fallbackFontSize ?? (obj as any).__originalFontSize ?? currentFont);
-        if (!Number.isFinite(currentFont) || currentFont <= 0) {
-            obj.set('fontSize', Number.isFinite(fallbackFont) && fallbackFont > 0 ? fallbackFont : 18);
-            changed = true;
-        }
-        if (typeof opts.fallbackText === 'string' && !String(obj.text || '').trim()) {
-            obj.set('text', opts.fallbackText);
-            changed = true;
-        }
-        if (typeof opts.fallbackFill === 'string' && isTransparentLikeTemplateColor(obj.fill)) {
-            obj.set('fill', opts.fallbackFill);
-            changed = true;
-        }
-        obj.initDimensions?.();
-    }
-
-    obj.setCoords?.();
-    return changed;
-}
+// reviveRedBurstObjectNode extraido para utils/redBurstTemplateRevive.ts.
 
 function ensureRedBurstPriceGroupVisibility(priceGroup: any): boolean {
     if (!isRedBurstPriceGroup(priceGroup)) return false;

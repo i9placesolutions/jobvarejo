@@ -13,6 +13,7 @@
 import { isTransparentLikeTemplateColor } from './colorHelpers'
 import { normalizeVisibleScale } from './mathHelpers'
 import { collectTemplateJsonNodesDeep } from './canvasJsonClassifiers'
+import { isTextLikeObject } from './fabricObjectClassifiers'
 
 export type ReviveRedBurstOpts = {
     fallbackFill?: string
@@ -142,4 +143,73 @@ export const sanitizeRedBurstTemplateGroupJson = (groupJson: any): any => {
         fallbackText: ',00'
     })
     return groupJson
+}
+
+/**
+ * Versao runtime do `reviveRedBurstJsonNode` — opera sobre OBJETOS
+ * Fabric (nao JSON). Diferenca: usa `obj.set(...)` em batch, chama
+ * `initDimensions()` e `setCoords()` ao final, e `isTextLikeObject`
+ * em vez de comparar `type`.
+ *
+ * Mantem a mesma logica de fallback (visible, opacity, scale, fontSize,
+ * text, fill) com mesma semantica do JSON variant.
+ */
+export const reviveRedBurstObjectNode = (
+    obj: any,
+    opts: ReviveRedBurstOpts = {}
+): boolean => {
+    if (!obj || typeof obj.set !== 'function') return false
+    let changed = false
+    const next: Record<string, any> = {}
+    const forceVisible = opts.forceVisible !== false
+
+    if (forceVisible && obj.visible === false) {
+        next.visible = true
+        changed = true
+    }
+    const opacity = Number(obj.opacity ?? 1)
+    if (!Number.isFinite(opacity) || opacity <= 0) {
+        next.opacity = 1
+        changed = true
+    }
+
+    const restoreScaleX = normalizeVisibleScale(
+        (obj as any).__visibleScaleX ?? (obj as any).__originalScaleX,
+        obj.scaleX
+    )
+    const restoreScaleY = normalizeVisibleScale(
+        (obj as any).__visibleScaleY ?? (obj as any).__originalScaleY,
+        obj.scaleY
+    )
+    if (!Number.isFinite(Number(obj.scaleX)) || Math.abs(Number(obj.scaleX || 0)) < 0.0001) {
+        next.scaleX = restoreScaleX
+        changed = true
+    }
+    if (!Number.isFinite(Number(obj.scaleY)) || Math.abs(Number(obj.scaleY || 0)) < 0.0001) {
+        next.scaleY = restoreScaleY
+        changed = true
+    }
+
+    if (Object.keys(next).length) obj.set(next)
+
+    if (isTextLikeObject(obj)) {
+        const currentFont = Number(obj.fontSize)
+        const fallbackFont = Number(opts.fallbackFontSize ?? (obj as any).__originalFontSize ?? currentFont)
+        if (!Number.isFinite(currentFont) || currentFont <= 0) {
+            obj.set('fontSize', Number.isFinite(fallbackFont) && fallbackFont > 0 ? fallbackFont : 18)
+            changed = true
+        }
+        if (typeof opts.fallbackText === 'string' && !String(obj.text || '').trim()) {
+            obj.set('text', opts.fallbackText)
+            changed = true
+        }
+        if (typeof opts.fallbackFill === 'string' && isTransparentLikeTemplateColor(obj.fill)) {
+            obj.set('fill', opts.fallbackFill)
+            changed = true
+        }
+        obj.initDimensions?.()
+    }
+
+    obj.setCoords?.()
+    return changed
 }
