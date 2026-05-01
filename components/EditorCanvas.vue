@@ -4542,7 +4542,9 @@ import {
     calculateGridLayout,
     getAspectRatioValue,
     getProductImportIdentityKey,
-    isDefaultProductZoneName
+    isDefaultProductZoneName,
+    BASE_PRODUCT_ZONE_NAME,
+    getNextProductZoneIndexName
 } from '~/utils/product-zone-helpers'
 import { DEFAULT_GLOBAL_STYLES, DEFAULT_PRODUCT_ZONE } from '~/types/product-zone'
 import type { ProductZone, GlobalStyles } from '~/types/product-zone'
@@ -7586,28 +7588,14 @@ const getImportZonesExistingCount = (zones: any[]): number => {
     }, 0)
 }
 
-const BASE_PRODUCT_ZONE_NAME = 'Zona de Produtos'
-// isDefaultProductZoneName extraido para utils/product-zone-helpers.ts.
-
+// BASE_PRODUCT_ZONE_NAME e getNextProductZoneIndexName extraidos para
+// utils/product-zone-helpers.ts. Wrapper local injeta zoneNames das
+// zonas existentes no canvas.
 const getNextProductZoneName = (excludeZone?: any): string => {
-    const used = new Set<number>()
-    const zones = (canvas.value?.getObjects?.() || []).filter((obj: any) => isLikelyProductZone(obj) && obj !== excludeZone)
-    zones.forEach((zone: any) => {
-        const name = String((zone as any)?.zoneName || '').trim()
-        if (!name) return
-        if (name.toLowerCase() === BASE_PRODUCT_ZONE_NAME.toLowerCase()) {
-            used.add(1)
-            return
-        }
-        const match = /^Zona de Produtos\s+(\d+)$/i.exec(name)
-        if (match) {
-            const n = Number(match[1])
-            if (Number.isInteger(n) && n > 0) used.add(n)
-        }
-    })
-    let index = 1
-    while (used.has(index)) index += 1
-    return `${BASE_PRODUCT_ZONE_NAME} ${index}`
+    const zoneNames = (canvas.value?.getObjects?.() || [])
+        .filter((obj: any) => isLikelyProductZone(obj) && obj !== excludeZone)
+        .map((zone: any) => String((zone as any)?.zoneName || '').trim());
+    return getNextProductZoneIndexName(zoneNames);
 }
 
 const ensureProductZoneNamesDistinct = (zonesInput?: any[]) => {

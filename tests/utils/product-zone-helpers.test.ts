@@ -6,7 +6,9 @@ import {
   getPackPrice,
   getPromoPrice,
   getProductImportIdentityKey,
-  isDefaultProductZoneName
+  isDefaultProductZoneName,
+  BASE_PRODUCT_ZONE_NAME,
+  getNextProductZoneIndexName
 } from '~/utils/product-zone-helpers'
 
 describe('parsePrice — entrada heterogenea de fontes diversas', () => {
@@ -162,5 +164,65 @@ describe('isDefaultProductZoneName', () => {
     expect(isDefaultProductZoneName('Minha Zona')).toBe(false)
     expect(isDefaultProductZoneName('Atacado')).toBe(false)
     expect(isDefaultProductZoneName('Zona de Produtos especial')).toBe(false)
+  })
+})
+
+describe('BASE_PRODUCT_ZONE_NAME', () => {
+  it('e a constante "Zona de Produtos"', () => {
+    expect(BASE_PRODUCT_ZONE_NAME).toBe('Zona de Produtos')
+  })
+})
+
+describe('getNextProductZoneIndexName', () => {
+  it('lista vazia → "Zona de Produtos 1"', () => {
+    expect(getNextProductZoneIndexName([])).toBe('Zona de Produtos 1')
+  })
+
+  it('"Zona de Produtos" sozinha (sem N) → trata como N=1, proximo e 2', () => {
+    expect(getNextProductZoneIndexName(['Zona de Produtos'])).toBe('Zona de Produtos 2')
+  })
+
+  it('"Zona de Produtos 1" presente → proximo e 2', () => {
+    expect(getNextProductZoneIndexName(['Zona de Produtos 1'])).toBe('Zona de Produtos 2')
+  })
+
+  it('preenche o primeiro gap', () => {
+    expect(getNextProductZoneIndexName([
+      'Zona de Produtos 1', 'Zona de Produtos 3'
+    ])).toBe('Zona de Produtos 2')
+  })
+
+  it('com nomes nao-default: ignora-os', () => {
+    expect(getNextProductZoneIndexName([
+      'Minha Zona Especial', 'Outra Coisa'
+    ])).toBe('Zona de Produtos 1')
+  })
+
+  it('case-insensitive na deteccao de nome base', () => {
+    expect(getNextProductZoneIndexName(['ZONA DE PRODUTOS'])).toBe('Zona de Produtos 2')
+    expect(getNextProductZoneIndexName(['zona de produtos 5'])).toBe('Zona de Produtos 1')
+  })
+
+  it('strings vazias/whitespace ignoradas', () => {
+    expect(getNextProductZoneIndexName(['', '   ', 'Zona de Produtos 1']))
+      .toBe('Zona de Produtos 2')
+  })
+
+  it('numero invalido (0/negativo): nao adiciona ao set', () => {
+    expect(getNextProductZoneIndexName([
+      'Zona de Produtos 0', 'Zona de Produtos -1', 'Zona de Produtos 2'
+    ])).toBe('Zona de Produtos 1')
+  })
+
+  it('lista com gap depois de muitos: pula corretamente', () => {
+    expect(getNextProductZoneIndexName([
+      'Zona de Produtos 1', 'Zona de Produtos 2', 'Zona de Produtos 4'
+    ])).toBe('Zona de Produtos 3')
+  })
+
+  it('lista contigua: continua na sequencia', () => {
+    expect(getNextProductZoneIndexName([
+      'Zona de Produtos 1', 'Zona de Produtos 2', 'Zona de Produtos 3'
+    ])).toBe('Zona de Produtos 4')
   })
 })

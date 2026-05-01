@@ -733,3 +733,42 @@ export const isDefaultProductZoneName = (value: any): boolean => {
     const name = String(value || '').trim();
     return !name || /^Zona de Produtos(?:\s+\d+)?$/i.test(name);
 };
+
+/**
+ * Nome canonico base para zonas de produto. Usado tanto para
+ * detectar nomes default quanto para gerar novos nomes ("Zona de
+ * Produtos 1", "Zona de Produtos 2", etc).
+ */
+export const BASE_PRODUCT_ZONE_NAME = 'Zona de Produtos'
+
+/**
+ * Gera o proximo nome disponivel ("Zona de Produtos N") a partir de
+ * uma lista de zoneNames existentes. Algoritmo:
+ *
+ *  1. Extrai todos os indices N que ja foram usados (via regex
+ *     /^Zona de Produtos\s+(\d+)$/i, e tambem o nome base sem numero
+ *     que e' tratado como N=1).
+ *  2. Procura o primeiro N >= 1 nao usado.
+ *  3. Retorna "Zona de Produtos N".
+ *
+ * Pure: opera apenas sobre o array de strings.
+ */
+export const getNextProductZoneIndexName = (existingZoneNames: ReadonlyArray<string>): string => {
+    const used = new Set<number>()
+    existingZoneNames.forEach((name) => {
+        const trimmed = String(name || '').trim()
+        if (!trimmed) return
+        if (trimmed.toLowerCase() === BASE_PRODUCT_ZONE_NAME.toLowerCase()) {
+            used.add(1)
+            return
+        }
+        const match = /^Zona de Produtos\s+(\d+)$/i.exec(trimmed)
+        if (match) {
+            const n = Number(match[1])
+            if (Number.isInteger(n) && n > 0) used.add(n)
+        }
+    })
+    let index = 1
+    while (used.has(index)) index += 1
+    return `${BASE_PRODUCT_ZONE_NAME} ${index}`
+}
