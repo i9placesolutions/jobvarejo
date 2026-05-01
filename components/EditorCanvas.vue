@@ -63,6 +63,7 @@ import {
 import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
+import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import {
     stripAccents,
     normalizeLimitText,
@@ -5246,36 +5247,7 @@ const showHistoryModal = ref(false)
 const historyLoading = ref(false)
 const historyError = ref<string>('')
 const historyItems = ref<PageHistoryItem[]>([])
-const formatHistoryDateTime = (value: string) => {
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) return value
-    return d.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    })
-}
-const formatHistoryRelative = (value: string) => {
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) return ''
-    const now = Date.now()
-    const diffMs = now - d.getTime()
-    const diffSec = Math.floor(diffMs / 1000)
-    if (diffSec < 60) return 'agora mesmo'
-    const diffMin = Math.floor(diffSec / 60)
-    if (diffMin < 60) return `${diffMin} min atras`
-    const diffH = Math.floor(diffMin / 60)
-    if (diffH < 24) return `${diffH}h atras`
-    const diffD = Math.floor(diffH / 24)
-    if (diffD === 1) return 'ontem'
-    if (diffD < 30) return `${diffD} dias atras`
-    const diffM = Math.floor(diffD / 30)
-    if (diffM === 1) return '1 mes atras'
-    return `${diffM} meses atras`
-}
+// formatHistoryDateTime e formatHistoryRelative extraidos para utils/dateTimeFormat.ts.
 const historyItemIsLatest = (idx: number) => {
     if (idx !== 0) return false
     const item = historyItems.value[0]
