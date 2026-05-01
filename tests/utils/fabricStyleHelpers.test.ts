@@ -3,7 +3,8 @@ import {
   isRectObject,
   clampCornerRadii,
   isTransparentPaint,
-  toggleFill
+  toggleFill,
+  toggleStroke
 } from '~/utils/fabricStyleHelpers'
 
 describe('isRectObject', () => {
@@ -135,5 +136,68 @@ describe('toggleFill', () => {
     toggleFill(o, false)
     toggleFill(o, true)
     expect(o.fill).toBe('#123456')
+  })
+})
+
+describe('toggleStroke', () => {
+  const makeObj = (overrides: any = {}) => {
+    const o: any = {
+      stroke: '#000000',
+      strokeWidth: 2,
+      strokeDashArray: null,
+      ...overrides
+    }
+    o.set = (k: any, v?: any) => {
+      if (typeof k === 'string') {
+        ;(o as any)[k] = v
+      } else {
+        Object.assign(o, k)
+      }
+    }
+    return o
+  }
+
+  it('null/undefined no-op', () => {
+    expect(() => toggleStroke(null, true)).not.toThrow()
+    expect(() => toggleStroke(undefined, false)).not.toThrow()
+  })
+
+  it('disable: salva backups e zera stroke/width/dash', () => {
+    const o = makeObj({ stroke: '#ff0000', strokeWidth: 4, strokeDashArray: [5, 5] })
+    toggleStroke(o, false)
+    expect(o.__strokeBackup).toBe('#ff0000')
+    expect(o.__strokeWidthBackup).toBe(4)
+    expect(o.__strokeDashBackup).toEqual([5, 5])
+    expect(o.stroke).toBe('rgba(0,0,0,0)')
+    expect(o.strokeWidth).toBe(0)
+    expect(o.strokeDashArray).toBeNull()
+    expect(o.__strokeEnabled).toBe(false)
+  })
+
+  it('enable apos disable: restaura backups', () => {
+    const o = makeObj({ stroke: '#ff0000', strokeWidth: 4, strokeDashArray: [10, 10] })
+    toggleStroke(o, false)
+    toggleStroke(o, true)
+    expect(o.stroke).toBe('#ff0000')
+    expect(o.strokeWidth).toBe(4)
+    expect(o.strokeDashArray).toEqual([10, 10])
+    expect(o.__strokeEnabled).toBe(true)
+  })
+
+  it('enable sem backups validos: defaults #000000 / strokeWidth 1', () => {
+    const o = makeObj({ stroke: '', strokeWidth: 0 })
+    toggleStroke(o, true)
+    expect(o.stroke).toBe('#000000')
+    expect(o.strokeWidth).toBe(1)
+  })
+
+  it('roundtrip preserva valores originais', () => {
+    const o = makeObj({ stroke: '#abc', strokeWidth: 3, strokeDashArray: [2, 2] })
+    toggleStroke(o, true)
+    toggleStroke(o, false)
+    toggleStroke(o, true)
+    expect(o.stroke).toBe('#abc')
+    expect(o.strokeWidth).toBe(3)
+    expect(o.strokeDashArray).toEqual([2, 2])
   })
 })

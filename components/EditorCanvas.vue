@@ -55,7 +55,8 @@ import {
     isRectObject,
     clampCornerRadii,
     isTransparentPaint,
-    toggleFill
+    toggleFill,
+    toggleStroke
 } from '~/utils/fabricStyleHelpers'
 import {
     getFrameBounds,
@@ -2142,25 +2143,7 @@ const applyRectCornerRadiiPatch = (rect: any) => {
 
 // isTransparentPaint e toggleFill extraidos para utils/fabricStyleHelpers.ts.
 
-const toggleStroke = (obj: any, enabled: boolean) => {
-    if (!obj) return;
-    (obj as any).__strokeEnabled = !!enabled;
-    if (enabled) {
-        const strokePrev = (obj as any).__strokeBackup;
-        const widthPrev = (obj as any).__strokeWidthBackup;
-        const dashPrev = (obj as any).__strokeDashBackup;
-        if (strokePrev) obj.set?.('stroke', strokePrev);
-        if (widthPrev != null) obj.set?.('strokeWidth', Number(widthPrev) || 1);
-        if (dashPrev != null) obj.set?.('strokeDashArray', dashPrev);
-        if (!obj.stroke) obj.set?.('stroke', '#000000');
-        if (!obj.strokeWidth || obj.strokeWidth <= 0) obj.set?.('strokeWidth', 1);
-    } else {
-        (obj as any).__strokeBackup = obj.stroke;
-        (obj as any).__strokeWidthBackup = obj.strokeWidth;
-        (obj as any).__strokeDashBackup = obj.strokeDashArray;
-        obj.set?.({ stroke: 'rgba(0,0,0,0)', strokeWidth: 0, strokeDashArray: null });
-    }
-};
+// toggleStroke extraido para utils/fabricStyleHelpers.ts.
 
 // ─── Sticker Outline (alpha-based contour) ───────────────────────────────
 // Generates an outline that follows the alpha channel of PNGs (not a bounding-box border).

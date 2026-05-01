@@ -79,3 +79,34 @@ export const toggleFill = (obj: any, enabled: boolean): void => {
         obj.set?.('fill', 'rgba(0,0,0,0)')
     }
 }
+
+/**
+ * Liga/desliga stroke + strokeWidth + strokeDashArray de um objeto Fabric,
+ * preservando os valores anteriores em __stroke*Backup.
+ *
+ * - Hide: salva stroke/strokeWidth/strokeDashArray atuais em backups e
+ *   aplica rgba(0,0,0,0) / 0 / null.
+ * - Show: restaura backups; se nada valido disponivel, default '#000000'
+ *   com strokeWidth 1.
+ *
+ * Operacao mutativa; no-op silencioso se obj e null.
+ */
+export const toggleStroke = (obj: any, enabled: boolean): void => {
+    if (!obj) return
+    ;(obj as any).__strokeEnabled = !!enabled
+    if (enabled) {
+        const strokePrev = (obj as any).__strokeBackup
+        const widthPrev = (obj as any).__strokeWidthBackup
+        const dashPrev = (obj as any).__strokeDashBackup
+        if (strokePrev) obj.set?.('stroke', strokePrev)
+        if (widthPrev != null) obj.set?.('strokeWidth', Number(widthPrev) || 1)
+        if (dashPrev != null) obj.set?.('strokeDashArray', dashPrev)
+        if (!obj.stroke) obj.set?.('stroke', '#000000')
+        if (!obj.strokeWidth || obj.strokeWidth <= 0) obj.set?.('strokeWidth', 1)
+    } else {
+        ;(obj as any).__strokeBackup = obj.stroke
+        ;(obj as any).__strokeWidthBackup = obj.strokeWidth
+        ;(obj as any).__strokeDashBackup = obj.strokeDashArray
+        obj.set?.({ stroke: 'rgba(0,0,0,0)', strokeWidth: 0, strokeDashArray: null })
+    }
+}
