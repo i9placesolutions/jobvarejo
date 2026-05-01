@@ -89,6 +89,38 @@ export const isObjectIntersectingCullRect = (obj: any, rect: CullRect): boolean 
 }
 
 /**
+ * Restaura objetos previamente cullados ao seu estado pre-cull.
+ * Le os 3 backups (__viewportCullPrevVisible/Evented/Selectable),
+ * aplica via .set() + escrita direta (defesa para Fabric internals),
+ * remove os backups e o flag __viewportCulled.
+ *
+ * Retorna a quantidade de objetos efetivamente restaurados — caller
+ * pode usar para decidir se precisa rerender.
+ */
+export const restoreViewportCulledObjects = (objects: any[]): number => {
+    let restored = 0
+    objects.forEach((obj: any) => {
+        if (!obj || !(obj as any).__viewportCulled) return
+        const prevVisible = (obj as any).__viewportCullPrevVisible
+        const prevEvented = (obj as any).__viewportCullPrevEvented
+        const prevSelectable = (obj as any).__viewportCullPrevSelectable
+        obj.set?.('visible', prevVisible === undefined ? true : prevVisible)
+        obj.set?.('evented', prevEvented === undefined ? true : prevEvented)
+        obj.set?.('selectable', prevSelectable === undefined ? true : prevSelectable)
+        obj.visible = prevVisible === undefined ? true : prevVisible
+        obj.evented = prevEvented === undefined ? true : prevEvented
+        obj.selectable = prevSelectable === undefined ? true : prevSelectable
+        obj.dirty = true
+        delete (obj as any).__viewportCullPrevVisible
+        delete (obj as any).__viewportCullPrevEvented
+        delete (obj as any).__viewportCullPrevSelectable
+        delete (obj as any).__viewportCulled
+        restored++
+    })
+    return restored
+}
+
+/**
  * Detecta se um objeto deve ser PULADO no viewport culling — ou seja,
  * NUNCA pode ser cullado independente de intersecao com o viewport.
  *

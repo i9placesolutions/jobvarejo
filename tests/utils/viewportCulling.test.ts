@@ -3,7 +3,8 @@ import {
   isObjectIntersectingCullRect,
   shouldSkipViewportCullObject,
   computeViewportCullRect,
-  VIEWPORT_CULL_PADDING
+  VIEWPORT_CULL_PADDING,
+  restoreViewportCulledObjects
 } from '~/utils/viewportCulling'
 
 describe('isObjectIntersectingCullRect', () => {
@@ -223,5 +224,84 @@ describe('computeViewportCullRect', () => {
     })
     expect(r.left).toBe(-50)
     expect(r.right).toBe(100 + 50)
+  })
+})
+
+describe('restoreViewportCulledObjects', () => {
+  const makeObj = (overrides: any = {}) => {
+    const o: any = {
+      visible: false,
+      evented: false,
+      selectable: false,
+      __viewportCulled: true,
+      __viewportCullPrevVisible: true,
+      __viewportCullPrevEvented: true,
+      __viewportCullPrevSelectable: true,
+      ...overrides
+    }
+    o.set = (k: string, v: any) => { (o as any)[k] = v }
+    return o
+  }
+
+  it('restaura objeto cullado para estado pre-cull', () => {
+    const o = makeObj()
+    const restored = restoreViewportCulledObjects([o])
+    expect(restored).toBe(1)
+    expect(o.visible).toBe(true)
+    expect(o.evented).toBe(true)
+    expect(o.selectable).toBe(true)
+    expect(o.dirty).toBe(true)
+    expect(o.__viewportCulled).toBeUndefined()
+    expect(o.__viewportCullPrevVisible).toBeUndefined()
+    expect(o.__viewportCullPrevEvented).toBeUndefined()
+    expect(o.__viewportCullPrevSelectable).toBeUndefined()
+  })
+
+  it('ignora objetos sem flag __viewportCulled', () => {
+    const o = makeObj({ __viewportCulled: false })
+    const restored = restoreViewportCulledObjects([o])
+    expect(restored).toBe(0)
+    expect(o.visible).toBe(false) // intacto
+  })
+
+  it('backups undefined defaultam para true', () => {
+    const o = makeObj({
+      __viewportCullPrevVisible: undefined,
+      __viewportCullPrevEvented: undefined,
+      __viewportCullPrevSelectable: undefined
+    })
+    restoreViewportCulledObjects([o])
+    expect(o.visible).toBe(true)
+    expect(o.evented).toBe(true)
+    expect(o.selectable).toBe(true)
+  })
+
+  it('backups false sao restaurados como false (preservados)', () => {
+    const o = makeObj({
+      __viewportCullPrevVisible: false,
+      __viewportCullPrevEvented: false,
+      __viewportCullPrevSelectable: false
+    })
+    restoreViewportCulledObjects([o])
+    expect(o.visible).toBe(false)
+    expect(o.evented).toBe(false)
+    expect(o.selectable).toBe(false)
+  })
+
+  it('lista vazia: 0 restaurados', () => {
+    expect(restoreViewportCulledObjects([])).toBe(0)
+  })
+
+  it('null/undefined em lista nao quebra', () => {
+    const o = makeObj()
+    const restored = restoreViewportCulledObjects([null, o, undefined])
+    expect(restored).toBe(1)
+  })
+
+  it('multiplos objetos restaurados independentemente', () => {
+    const a = makeObj()
+    const b = makeObj({ __viewportCulled: false }) // sera ignorado
+    const c = makeObj()
+    expect(restoreViewportCulledObjects([a, b, c])).toBe(2)
   })
 })

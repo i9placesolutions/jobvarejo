@@ -69,7 +69,8 @@ import {
     isObjectIntersectingCullRect,
     shouldSkipViewportCullObject,
     computeViewportCullRect,
-    VIEWPORT_CULL_PADDING
+    VIEWPORT_CULL_PADDING,
+    restoreViewportCulledObjects
 } from '~/utils/viewportCulling'
 import {
     getEditorPerfNow,
@@ -6519,28 +6520,7 @@ const getViewportCullRect = () => {
 // isObjectIntersectingCullRect e shouldSkipViewportCullObject extraidos
 // para utils/viewportCulling.ts.
 
-const restoreViewportCulledObjects = (objects: any[]) => {
-    let restored = 0
-    objects.forEach((obj: any) => {
-        if (!obj || !(obj as any).__viewportCulled) return
-        const prevVisible = (obj as any).__viewportCullPrevVisible
-        const prevEvented = (obj as any).__viewportCullPrevEvented
-        const prevSelectable = (obj as any).__viewportCullPrevSelectable
-        obj.set?.('visible', prevVisible === undefined ? true : prevVisible)
-        obj.set?.('evented', prevEvented === undefined ? true : prevEvented)
-        obj.set?.('selectable', prevSelectable === undefined ? true : prevSelectable)
-        obj.visible = prevVisible === undefined ? true : prevVisible
-        obj.evented = prevEvented === undefined ? true : prevEvented
-        obj.selectable = prevSelectable === undefined ? true : prevSelectable
-        obj.dirty = true
-        delete (obj as any).__viewportCullPrevVisible
-        delete (obj as any).__viewportCullPrevEvented
-        delete (obj as any).__viewportCullPrevSelectable
-        delete (obj as any).__viewportCulled
-        restored++
-    })
-    return restored
-}
+// restoreViewportCulledObjects extraido para utils/viewportCulling.ts.
 
 const applyViewportCulling = (reason: string = 'unknown') => {
     if (!canvas.value || isCanvasDestroyed.value) return
