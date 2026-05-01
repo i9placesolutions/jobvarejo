@@ -9,6 +9,27 @@
  */
 
 /**
+ * Encontra a primeira imagem dentro de uma selecao Fabric (objeto unico
+ * ou activeSelection/group). Retorna a imagem + parent quando aplicavel.
+ *
+ *  - Se obj e' image: retorna { img: obj, parent: null }
+ *  - Se obj e' group/activeSelection com imagem dentro: retorna
+ *    { img, parent: obj }
+ *  - Caso contrario: null
+ */
+export const findImageTargetInSelection = (obj: any): { img: any; parent: any | null } | null => {
+    if (!obj) return null
+    const t = String(obj.type || '').toLowerCase()
+    if (t === 'image') return { img: obj, parent: null }
+    if (t === 'group' || t === 'activeselection') {
+        const list = typeof obj.getObjects === 'function' ? obj.getObjects() : []
+        const img = (list || []).find((o: any) => String(o?.type || '').toLowerCase() === 'image')
+        return img ? { img, parent: obj } : null
+    }
+    return null
+}
+
+/**
  * Busca a imagem "preferida" dentro de um group (tipicamente um card
  * de produto). Prioriza nomes conhecidos do engine (smart_image,
  * product_image, productImage) e cai para a primeira imagem qualquer.

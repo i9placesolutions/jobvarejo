@@ -8,7 +8,8 @@ import {
   getObjectCenterInParentPlane,
   getCardBaseSizeForContainment,
   getObjectAbsoluteCenter,
-  computeCentersBoundingCenter
+  computeCentersBoundingCenter,
+  guessAiSizeFromObject
 } from '~/utils/fabricMeasure'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -317,5 +318,42 @@ describe('computeCentersBoundingCenter', () => {
       { x: 10, y: 20 },
       { x: 90, y: 80 }
     ])).toEqual({ x: 50, y: 50 })
+  })
+})
+
+describe('guessAiSizeFromObject', () => {
+  it('quadrado → 1024x1024', () => {
+    expect(guessAiSizeFromObject({ width: 100, height: 100 })).toBe('1024x1024')
+  })
+
+  it('paisagem (ar > 1.15) → 1536x1024', () => {
+    expect(guessAiSizeFromObject({ width: 200, height: 100 })).toBe('1536x1024')
+  })
+
+  it('retrato (ar < 0.87) → 1024x1536', () => {
+    expect(guessAiSizeFromObject({ width: 100, height: 200 })).toBe('1024x1536')
+  })
+
+  it('quase-quadrado dentro do limiar permanece 1024x1024', () => {
+    expect(guessAiSizeFromObject({ width: 100, height: 90 })).toBe('1024x1024')   // ar=1.11
+    expect(guessAiSizeFromObject({ width: 90, height: 100 })).toBe('1024x1024')   // ar=0.9
+  })
+
+  it('aplica scaleX/Y quando getScaledWidth nao disponivel', () => {
+    expect(guessAiSizeFromObject({ width: 100, height: 100, scaleX: 2, scaleY: 1 }))
+      .toBe('1536x1024')
+  })
+
+  it('prefere getScaledWidth/Height quando disponivel', () => {
+    expect(guessAiSizeFromObject({
+      width: 999, height: 999,
+      getScaledWidth: () => 200,
+      getScaledHeight: () => 100
+    })).toBe('1536x1024')
+  })
+
+  it('null/undefined cai em ar=1 → 1024x1024', () => {
+    expect(guessAiSizeFromObject(null)).toBe('1024x1024')
+    expect(guessAiSizeFromObject({})).toBe('1024x1024')
   })
 })

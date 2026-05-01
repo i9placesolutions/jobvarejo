@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   getPreferredProductImageFromGroup,
   getImageTrimmedDimensions,
-  getImageSourceFromObject
+  getImageSourceFromObject,
+  findImageTargetInSelection
 } from '~/utils/fabricImageHelpers'
 
 const group = (children: any[]) => ({
@@ -148,5 +149,51 @@ describe('getImageSourceFromObject', () => {
       getSrc: 'not-a-function',
       _element: { src: 'fallback' }
     })).toBe('fallback')
+  })
+})
+
+describe('findImageTargetInSelection', () => {
+  it('null retorna null', () => {
+    expect(findImageTargetInSelection(null)).toBeNull()
+    expect(findImageTargetInSelection(undefined)).toBeNull()
+  })
+
+  it('image direta: retorna { img, parent: null }', () => {
+    const img = { type: 'image' }
+    expect(findImageTargetInSelection(img)).toEqual({ img, parent: null })
+  })
+
+  it('group com imagem dentro: retorna { img, parent: group }', () => {
+    const img = { type: 'image' }
+    const group = {
+      type: 'group',
+      getObjects: () => [{ type: 'rect' }, img]
+    }
+    expect(findImageTargetInSelection(group)).toEqual({ img, parent: group })
+  })
+
+  it('activeSelection com imagem dentro funciona', () => {
+    const img = { type: 'image' }
+    const sel = {
+      type: 'activeSelection',
+      getObjects: () => [img]
+    }
+    expect(findImageTargetInSelection(sel)).toEqual({ img, parent: sel })
+  })
+
+  it('group sem imagem retorna null', () => {
+    expect(findImageTargetInSelection({
+      type: 'group',
+      getObjects: () => [{ type: 'rect' }, { type: 'text' }]
+    })).toBeNull()
+  })
+
+  it('outros tipos (rect, text) retornam null', () => {
+    expect(findImageTargetInSelection({ type: 'rect' })).toBeNull()
+    expect(findImageTargetInSelection({ type: 'text' })).toBeNull()
+  })
+
+  it('case insensitive no type', () => {
+    expect(findImageTargetInSelection({ type: 'IMAGE' })?.parent).toBeNull()
   })
 })

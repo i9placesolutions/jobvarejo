@@ -48,7 +48,8 @@ import {
 import {
     getPreferredProductImageFromGroup,
     getImageTrimmedDimensions,
-    getImageSourceFromObject
+    getImageSourceFromObject,
+    findImageTargetInSelection
 } from '~/utils/fabricImageHelpers'
 import {
     isUserGuideObject,
@@ -63,7 +64,8 @@ import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
 import {
     stripAccents,
     normalizeLimitText,
-    normalizeSpecialCondition
+    normalizeSpecialCondition,
+    normalizeImageSearch
 } from '~/utils/productTextNormalize'
 import {
     isObjectShownForBounds,
@@ -74,7 +76,8 @@ import {
     getObjectCenterInParentPlane,
     getCardBaseSizeForContainment,
     getObjectAbsoluteCenter,
-    computeCentersBoundingCenter
+    computeCentersBoundingCenter,
+    guessAiSizeFromObject
 } from '~/utils/fabricMeasure'
 import {
     setText,
@@ -377,11 +380,7 @@ const refreshAiStudioUploads = async () => {
     }
 }
 
-const normalizeImageSearch = (value: string) => String(value || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
+// normalizeImageSearch extraido para utils/productTextNormalize.ts.
 
 const filteredProductImageUploads = computed(() => {
     const list = Array.isArray(aiStudioUploads.value) ? aiStudioUploads.value : [];
@@ -393,26 +392,9 @@ const filteredProductImageUploads = computed(() => {
     });
 });
 
-const guessAiSizeFromObject = (obj: any): '1024x1024' | '1024x1536' | '1536x1024' => {
-    const w = Math.max(1, Number(obj?.getScaledWidth?.() ?? ((obj?.width || 1) * (obj?.scaleX || 1))) || 1)
-    const h = Math.max(1, Number(obj?.getScaledHeight?.() ?? ((obj?.height || 1) * (obj?.scaleY || 1))) || 1)
-    const ar = w / h
-    if (ar > 1.15) return '1536x1024'
-    if (ar < 0.87) return '1024x1536'
-    return '1024x1024'
-}
+// guessAiSizeFromObject extraido para utils/fabricMeasure.ts.
 
-const findImageTargetInSelection = (obj: any): { img: any; parent: any | null } | null => {
-    if (!obj) return null
-    const t = String(obj.type || '').toLowerCase()
-    if (t === 'image') return { img: obj, parent: null }
-    if (t === 'group' || t === 'activeselection') {
-        const list = typeof obj.getObjects === 'function' ? obj.getObjects() : []
-        const img = (list || []).find((o: any) => String(o?.type || '').toLowerCase() === 'image')
-        return img ? { img, parent: obj } : null
-    }
-    return null
-}
+// findImageTargetInSelection extraido para utils/fabricImageHelpers.ts.
 
 // getPreferredProductImageFromGroup extraido para utils/fabricImageHelpers.ts.
 

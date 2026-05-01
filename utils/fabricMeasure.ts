@@ -77,6 +77,24 @@ export const getObjectVerticalBoundsLocal = (obj: any): VerticalBounds | null =>
 }
 
 /**
+ * Detecta o melhor tamanho de geracao de imagem AI para um objeto Fabric
+ * baseado na razao largura/altura.
+ *  - ar > 1.15 (paisagem)  → '1536x1024'
+ *  - ar < 0.87 (retrato)   → '1024x1536'
+ *  - quase quadrado        → '1024x1024'
+ *
+ * Usa getScaledWidth/Height quando disponivel, senao width*scaleX.
+ */
+export const guessAiSizeFromObject = (obj: any): '1024x1024' | '1024x1536' | '1536x1024' => {
+    const w = Math.max(1, Number(obj?.getScaledWidth?.() ?? ((obj?.width || 1) * (obj?.scaleX || 1))) || 1)
+    const h = Math.max(1, Number(obj?.getScaledHeight?.() ?? ((obj?.height || 1) * (obj?.scaleY || 1))) || 1)
+    const ar = w / h
+    if (ar > 1.15) return '1536x1024'
+    if (ar < 0.87) return '1024x1536'
+    return '1024x1024'
+}
+
+/**
  * Extrai a dimensao "base" do card (largura x altura) na arvore Fabric
  * runtime. Tenta na ordem:
  *   1. _cardWidth/_cardHeight (engine signal mais confiavel)

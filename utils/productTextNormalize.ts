@@ -14,6 +14,14 @@ export const stripAccents = (s: string): string =>
     s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 
 /**
+ * Normaliza texto para busca: lowercase + remove acentos + trim.
+ * Util para filtros "search-as-you-type" (query e valores normalizados
+ * antes de `.includes()`).
+ */
+export const normalizeImageSearch = (value: string): string =>
+    stripAccents(String(value || '').toLowerCase()).trim()
+
+/**
  * Normaliza um texto livre de "limite por cliente" para a forma
  * canonica usada na etiqueta:
  *  - vazio/null → null

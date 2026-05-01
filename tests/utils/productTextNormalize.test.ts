@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   stripAccents,
   normalizeLimitText,
-  normalizeSpecialCondition
+  normalizeSpecialCondition,
+  normalizeImageSearch
 } from '~/utils/productTextNormalize'
 
 describe('stripAccents', () => {
@@ -81,5 +82,27 @@ describe('normalizeSpecialCondition', () => {
   it('preserva pontuacao no meio', () => {
     expect(normalizeSpecialCondition('na compra de 3, leve 4'))
       .toBe('na compra de 3, leve 4')
+  })
+})
+
+describe('normalizeImageSearch', () => {
+  it('lowercase + remove acentos + trim', () => {
+    expect(normalizeImageSearch('  CAFÉ Açúcar  ')).toBe('cafe acucar')
+  })
+
+  it('null/undefined/vazio → ""', () => {
+    expect(normalizeImageSearch(null as any)).toBe('')
+    expect(normalizeImageSearch(undefined as any)).toBe('')
+    expect(normalizeImageSearch('')).toBe('')
+  })
+
+  it('preserva pontuacao no meio', () => {
+    expect(normalizeImageSearch('Coca-Cola 2L')).toBe('coca-cola 2l')
+  })
+
+  it('roundtrip: query e valor normalizados batem para .includes()', () => {
+    const value = normalizeImageSearch('Pão de Açúcar 500G')
+    const query = normalizeImageSearch('  ACUCAR  ')
+    expect(value.includes(query)).toBe(true)
   })
 })
