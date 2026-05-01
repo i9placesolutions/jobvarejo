@@ -69,7 +69,8 @@ import { mapLimit } from '~/utils/asyncHelpers'
 import {
     extractWasabiBucketAndKey,
     extractWasabiKey as extractWasabiKeyHelper,
-    extractContaboBucketAndKey as extractContaboBucketAndKeyHelper
+    extractContaboBucketAndKey as extractContaboBucketAndKeyHelper,
+    convertPresignedToPermanentUrl as convertPresignedToPermanentUrlHelper
 } from '~/utils/storageUrlHelpers'
 import {
     isObjectIntersectingCullRect,
@@ -10831,43 +10832,13 @@ const extractWasabiKey = (url: string): string | null => {
     return extractWasabiKeyHelper(url, configuredBucket)
 }
 
-// Helper function to convert presigned URL to permanent URL (Wasabi)
+// Wrapper local que injeta endpoint e bucket de useRuntimeConfig.
 const convertPresignedToPermanentUrl = (url: string): string => {
-    // If it's not a Wasabi URL, return as-is
-    if (!url.includes('wasabisys.com')) {
-        return url;
-    }
-
-    // If it's already a permanent URL (no query params), return as-is
-    try {
-        const urlObj = new URL(url);
-        if (!urlObj.search) {
-            if (import.meta.dev) console.log(`🔗 URL já é permanente (sem query params): ${url.substring(0, 80)}...`);
-            return url;
-        }
-
-        // Extract key from presigned URL
-        const key = extractWasabiKey(url);
-        if (!key) {
-            console.warn(`⚠️ Não foi possível extrair key da URL presignada: ${url.substring(0, 100)}`);
-            return url; // Can't extract key, return original
-        }
-
-        // Build permanent URL for Wasabi
-        const config = useRuntimeConfig().public?.wasabi || {};
-        const endpoint = config.endpoint || 's3.wasabisys.com';
-        const bucket = config.bucket || 'jobvarejo';
-        const permanentUrl = `https://${endpoint}/${bucket}/${key}`;
-        console.log(`🔄 Convertendo presigned → permanent (Wasabi):`);
-        console.log(`   De: ${url.substring(0, 100)}...`);
-        console.log(`   Para: ${permanentUrl.substring(0, 100)}...`);
-        console.log(`   Key extraída: ${key}`);
-        return permanentUrl;
-    } catch (err) {
-        console.error(`❌ Erro ao converter URL presignada para permanente:`, err);
-        return url; // Error parsing, return original
-    }
-};
+    const config = useRuntimeConfig().public?.wasabi || {}
+    const endpoint = config.endpoint || 's3.wasabisys.com'
+    const bucket = config.bucket || 'jobvarejo'
+    return convertPresignedToPermanentUrlHelper(url, endpoint, bucket)
+}
 
 // Helper function to generate new presigned URL from permanent URL or key
 const generatePresignedUrl = async (urlOrKey: string): Promise<string | null> => {

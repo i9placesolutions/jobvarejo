@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   extractWasabiBucketAndKey,
   extractWasabiKey,
-  extractContaboBucketAndKey
+  extractContaboBucketAndKey,
+  convertPresignedToPermanentUrl
 } from '~/utils/storageUrlHelpers'
 
 describe('extractWasabiBucketAndKey', () => {
@@ -151,5 +152,52 @@ describe('extractContaboBucketAndKey', () => {
       'https://eu2.contabostorage.com/tenant:jobupload/key.png',
       ''
     )).toEqual({ bucket: 'tenant:jobupload', key: 'key.png' }) // first com ':' ainda e bucket
+  })
+})
+
+describe('convertPresignedToPermanentUrl', () => {
+  const ENDPOINT = 's3.wasabisys.com'
+  const BUCKET = 'jobvarejo'
+
+  it('URL nao-Wasabi: retorna como esta', () => {
+    expect(convertPresignedToPermanentUrl('https://example.com/x.png', ENDPOINT, BUCKET))
+      .toBe('https://example.com/x.png')
+    expect(convertPresignedToPermanentUrl('https://eu2.contabostorage.com/x.png', ENDPOINT, BUCKET))
+      .toBe('https://eu2.contabostorage.com/x.png')
+  })
+
+  it('URL Wasabi sem querystring (ja permanente): retorna como esta', () => {
+    expect(convertPresignedToPermanentUrl(
+      'https://s3.wasabisys.com/jobvarejo/projects/file.png',
+      ENDPOINT, BUCKET
+    )).toBe('https://s3.wasabisys.com/jobvarejo/projects/file.png')
+  })
+
+  it('URL Wasabi presignada: extrai key e gera URL permanente', () => {
+    const presigned = 'https://s3.wasabisys.com/jobvarejo/projects/u1/file.png?X-Amz-Signature=abc123&X-Amz-Expires=3600'
+    expect(convertPresignedToPermanentUrl(presigned, ENDPOINT, BUCKET))
+      .toBe('https://s3.wasabisys.com/jobvarejo/projects/u1/file.png')
+  })
+
+  it('URL Wasabi sem key extraivel: retorna original', () => {
+    const url = 'https://s3.wasabisys.com/jobvarejo?something=foo'
+    expect(convertPresignedToPermanentUrl(url, ENDPOINT, BUCKET)).toBe(url)
+  })
+
+  it('URL invalida: retorna original', () => {
+    expect(convertPresignedToPermanentUrl('not-a-url-but-has-wasabisys.com', ENDPOINT, BUCKET))
+      .toBe('not-a-url-but-has-wasabisys.com')
+  })
+
+  it('endpoint customizado e usado na URL gerada', () => {
+    const presigned = 'https://s3.wasabisys.com/jobvarejo/k.png?sig=1'
+    expect(convertPresignedToPermanentUrl(presigned, 's3.eu-central-1.wasabisys.com', BUCKET))
+      .toBe('https://s3.eu-central-1.wasabisys.com/jobvarejo/k.png')
+  })
+
+  it('endpoint/bucket vazios caem para defaults', () => {
+    const presigned = 'https://s3.wasabisys.com/jobvarejo/k.png?sig=1'
+    expect(convertPresignedToPermanentUrl(presigned, '', ''))
+      .toBe('https://s3.wasabisys.com/jobvarejo/k.png')
   })
 })

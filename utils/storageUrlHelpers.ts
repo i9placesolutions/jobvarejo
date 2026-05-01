@@ -59,6 +59,38 @@ export const extractWasabiKey = (url: string, configuredBucket: string): string 
 }
 
 /**
+ * Converte uma URL presignada do Wasabi para a forma permanente
+ * (sem query string). Pure: recebe `endpoint` e `configuredBucket`
+ * injetados pelo caller — nao acessa useRuntimeConfig.
+ *
+ * Comportamento:
+ *  - URL nao-Wasabi (sem 'wasabisys.com'): retorna como esta
+ *  - URL sem querystring (ja permanente): retorna como esta
+ *  - URL invalida ou sem key extraivel: retorna original
+ *  - Caso contrario: `https://${endpoint}/${bucket}/${key}`
+ */
+export const convertPresignedToPermanentUrl = (
+    url: string,
+    endpoint: string,
+    configuredBucket: string
+): string => {
+    if (!url.includes('wasabisys.com')) return url
+    try {
+        const urlObj = new URL(url)
+        if (!urlObj.search) return url
+
+        const key = extractWasabiKey(url, configuredBucket)
+        if (!key) return url
+
+        const ep = String(endpoint || 's3.wasabisys.com')
+        const bucket = String(configuredBucket || 'jobvarejo')
+        return `https://${ep}/${bucket}/${key}`
+    } catch {
+        return url
+    }
+}
+
+/**
  * Extrai bucket e key de URL Contabo. Logica similar ao extractWasabiKey
  * mas detecta path-style com formato `tenant:bucket` (bucket Contabo
  * usa ':' no nome).
