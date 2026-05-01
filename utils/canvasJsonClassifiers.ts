@@ -854,6 +854,30 @@ export const getCardBaseSizeForContainmentJson = (card: any): { w: number; h: nu
 }
 
 /**
+ * DFS iterativo que retorna lista achatada de TODOS os nodos
+ * descendentes (incluindo o root) em um JSON serializado. Diferente
+ * de walkCanvasObjects que recebe visitor; este retorna array.
+ *
+ * Inclui o root no resultado (ao contrario de walkCanvasObjects que
+ * comeca de root.objects).
+ *
+ * Pure: nao acessa canvas/refs.
+ */
+export const collectTemplateJsonNodesDeep = (root: any): any[] => {
+    if (!root || typeof root !== 'object') return []
+    const out: any[] = []
+    const stack: any[] = [root]
+    while (stack.length) {
+        const node = stack.pop()
+        if (!node || typeof node !== 'object') continue
+        out.push(node)
+        const objects = Array.isArray((node as any).objects) ? (node as any).objects : []
+        for (let i = objects.length - 1; i >= 0; i--) stack.push(objects[i])
+    }
+    return out
+}
+
+/**
  * Restaura props perdidas no enlivenObjects (Fabric v7) a partir do
  * JSON original:
  *  - name (Fabric v7 nao restaura name de children)

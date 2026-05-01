@@ -335,7 +335,8 @@ import {
     isPotentiallyBrokenRemoteImageSrc,
     replaceContaboImagesWithPlaceholder,
     isLikelyPlaceholderImageSrc,
-    restoreNamesFromJson
+    restoreNamesFromJson,
+    collectTemplateJsonNodesDeep
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -31154,19 +31155,7 @@ function ensureRedBurstPriceGroupVisibility(priceGroup: any): boolean {
     return changed;
 }
 
-function collectTemplateJsonNodesDeep(root: any): any[] {
-    if (!root || typeof root !== 'object') return [];
-    const out: any[] = [];
-    const stack = [root];
-    while (stack.length) {
-        const node = stack.pop();
-        if (!node || typeof node !== 'object') continue;
-        out.push(node);
-        const objects = Array.isArray((node as any).objects) ? (node as any).objects : [];
-        for (let i = objects.length - 1; i >= 0; i--) stack.push(objects[i]);
-    }
-    return out;
-}
+// collectTemplateJsonNodesDeep extraido para utils/canvasJsonClassifiers.ts.
 
 function reviveRedBurstJsonNode(
     node: any,

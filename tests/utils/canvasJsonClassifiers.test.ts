@@ -36,7 +36,8 @@ import {
   replaceContaboImagesWithPlaceholder,
   isLikelyPlaceholderImageSrc,
   CANVAS_IMAGE_PLACEHOLDER_DATA_URL,
-  restoreNamesFromJson
+  restoreNamesFromJson,
+  collectTemplateJsonNodesDeep
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -1435,5 +1436,65 @@ describe('restoreNamesFromJson', () => {
     restoreNamesFromJson([obj], [{ name: 'ok', other: 'noUnderscore' }])
     expect(obj.name).toBe('ok')
     expect(obj.other).toBeUndefined()
+  })
+})
+
+describe('collectTemplateJsonNodesDeep', () => {
+  it('null/undefined → []', () => {
+    expect(collectTemplateJsonNodesDeep(null)).toEqual([])
+    expect(collectTemplateJsonNodesDeep(undefined)).toEqual([])
+  })
+
+  it('non-object → []', () => {
+    expect(collectTemplateJsonNodesDeep('string')).toEqual([])
+    expect(collectTemplateJsonNodesDeep(42)).toEqual([])
+  })
+
+  it('inclui o root no resultado', () => {
+    const root = { id: 'root', objects: [] }
+    expect(collectTemplateJsonNodesDeep(root)).toEqual([root])
+  })
+
+  it('flat: root + children diretos', () => {
+    const c1 = { id: 'c1' }
+    const c2 = { id: 'c2' }
+    const root = { id: 'root', objects: [c1, c2] }
+    const result = collectTemplateJsonNodesDeep(root)
+    expect(result).toContain(root)
+    expect(result).toContain(c1)
+    expect(result).toContain(c2)
+    expect(result).toHaveLength(3)
+  })
+
+  it('descend recursivamente em groups aninhados', () => {
+    const leaf = { id: 'leaf' }
+    const inner = { id: 'inner', objects: [leaf] }
+    const root = { id: 'root', objects: [inner] }
+    const result = collectTemplateJsonNodesDeep(root)
+    expect(result).toHaveLength(3)
+    expect(result.map((n: any) => n.id)).toContain('root')
+    expect(result.map((n: any) => n.id)).toContain('inner')
+    expect(result.map((n: any) => n.id)).toContain('leaf')
+  })
+
+  it('niveis profundos (1000) sem stack overflow', () => {
+    let deepest: any = { id: 'leaf' }
+    for (let i = 0; i < 1000; i += 1) {
+      deepest = { id: `n${i}`, objects: [deepest] }
+    }
+    const result = collectTemplateJsonNodesDeep({ id: 'root', objects: [deepest] })
+    // root + n0..n999 + leaf = 1002
+    expect(result).toHaveLength(1002)
+  })
+
+  it('null/non-object children pulados', () => {
+    const valid = { id: 'valid' }
+    const root = { id: 'root', objects: [null, 'string', valid, undefined] }
+    const result = collectTemplateJsonNodesDeep(root)
+    expect(result).toHaveLength(2) // root + valid
+  })
+
+  it('node sem objects → so o root', () => {
+    expect(collectTemplateJsonNodesDeep({ id: 'lonely' })).toEqual([{ id: 'lonely' }])
   })
 })
