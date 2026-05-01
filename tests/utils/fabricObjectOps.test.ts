@@ -4,7 +4,8 @@ import {
   setVisible,
   assignNewCustomIdsDeep,
   resetDuplicatedObjectRuntime,
-  clearInvalidClipPath
+  clearInvalidClipPath,
+  applyObjectVisibility
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -434,5 +435,78 @@ describe('clearInvalidClipPath', () => {
       set: () => { throw new Error('boom') }
     }
     expect(() => clearInvalidClipPath(o)).not.toThrow()
+  })
+})
+
+describe('applyObjectVisibility', () => {
+  const makeEntry = (overrides: any = {}) => {
+    const o: any = {
+      visible: true,
+      evented: true,
+      selectable: true,
+      ...overrides
+    }
+    o.set = (k: any, v: any) => {
+      if (typeof k === 'string') (o as any)[k] = v
+      else Object.assign(o, k)
+    }
+    o.setCoords = () => { o.setCoordsCount = (o.setCoordsCount || 0) + 1 }
+    return o
+  }
+
+  it('null/undefined nao quebra', () => {
+    expect(() => applyObjectVisibility(null, false)).not.toThrow()
+    expect(() => applyObjectVisibility(undefined, true)).not.toThrow()
+  })
+
+  it('hide: salva evented/selectable em backups e zera', () => {
+    const o = makeEntry({ evented: true, selectable: true })
+    applyObjectVisibility(o, false)
+    expect(o.visible).toBe(false)
+    expect(o.evented).toBe(false)
+    expect(o.selectable).toBe(false)
+    expect(o.__prevEventedBeforeEyeToggle).toBe(true)
+    expect(o.__prevSelectableBeforeEyeToggle).toBe(true)
+  })
+
+  it('show apos hide: restaura backups', () => {
+    const o = makeEntry({ evented: false, selectable: false })
+    applyObjectVisibility(o, false) // primeiro hide grava backup
+    applyObjectVisibility(o, true)  // depois show restaura
+    expect(o.visible).toBe(true)
+    expect(o.evented).toBe(false) // backup tinha false
+    expect(o.selectable).toBe(false)
+    expect(o.__prevEventedBeforeEyeToggle).toBeUndefined()
+  })
+
+  it('show sem backup: defaults true', () => {
+    const o = makeEntry({ visible: false, evented: false, selectable: false })
+    applyObjectVisibility(o, true)
+    expect(o.visible).toBe(true)
+    expect(o.evented).toBe(true)
+    expect(o.selectable).toBe(true)
+  })
+
+  it('hide multiplo nao sobrescreve backup', () => {
+    const o = makeEntry({ evented: true, selectable: true })
+    applyObjectVisibility(o, false)
+    o.evented = false // simulando que algo mexeu
+    applyObjectVisibility(o, false) // hide de novo
+    expect(o.__prevEventedBeforeEyeToggle).toBe(true) // backup original preservado
+  })
+
+  it('roundtrip preserva valores originais', () => {
+    const o = makeEntry({ evented: true, selectable: false })
+    applyObjectVisibility(o, false)
+    applyObjectVisibility(o, true)
+    expect(o.evented).toBe(true)
+    expect(o.selectable).toBe(false)
+  })
+
+  it('marca dirty=true e chama setCoords', () => {
+    const o = makeEntry()
+    applyObjectVisibility(o, false)
+    expect(o.dirty).toBe(true)
+    expect(o.setCoordsCount).toBe(1)
   })
 })

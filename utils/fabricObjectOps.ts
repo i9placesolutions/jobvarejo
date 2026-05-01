@@ -12,6 +12,60 @@ import { isLikelyProductCard } from './fabricObjectClassifiers'
 import { isValidClipPath } from './canvasValidation'
 
 /**
+ * Aplica visibilidade a um objeto Fabric, salvando estado evented/
+ * selectable em backups (`__prevEventedBeforeEyeToggle`/
+ * `__prevSelectableBeforeEyeToggle`) ao esconder, e restaurando ao mostrar.
+ *
+ * Reduz custo de interacao enquanto invisivel: evented=false impede
+ * hit-tests e mouse events. Defaults true ao mostrar quando backup
+ * estiver ausente.
+ *
+ * Usado pelo "olho" da camadas para esconder/mostrar objetos sem
+ * perder o estado de interacao original.
+ */
+export const applyObjectVisibility = (entry: any, visible: boolean): void => {
+    if (!entry) return
+
+    entry.set?.('visible', visible)
+    entry.visible = visible
+
+    if (!visible) {
+        if ((entry as any).__prevEventedBeforeEyeToggle === undefined) {
+            ;(entry as any).__prevEventedBeforeEyeToggle = entry.evented
+        }
+        if ((entry as any).__prevSelectableBeforeEyeToggle === undefined) {
+            ;(entry as any).__prevSelectableBeforeEyeToggle = entry.selectable
+        }
+        entry.set?.('evented', false)
+        entry.set?.('selectable', false)
+        entry.evented = false
+        entry.selectable = false
+    } else {
+        const prevEvented = (entry as any).__prevEventedBeforeEyeToggle
+        const prevSelectable = (entry as any).__prevSelectableBeforeEyeToggle
+        if (prevEvented !== undefined) {
+            entry.set?.('evented', prevEvented)
+            entry.evented = prevEvented
+            delete (entry as any).__prevEventedBeforeEyeToggle
+        } else {
+            entry.set?.('evented', true)
+            entry.evented = true
+        }
+        if (prevSelectable !== undefined) {
+            entry.set?.('selectable', prevSelectable)
+            entry.selectable = prevSelectable
+            delete (entry as any).__prevSelectableBeforeEyeToggle
+        } else {
+            entry.set?.('selectable', true)
+            entry.selectable = true
+        }
+    }
+
+    entry.dirty = true
+    entry.setCoords?.()
+}
+
+/**
  * Sanitiza recursivamente clipPaths corrompidos em um objeto Fabric.
  * Critico apos desserializacao para evitar "forEach of undefined" no
  * fabric.js createClipPathLayer.

@@ -84,7 +84,8 @@ import {
     setVisible,
     assignNewCustomIdsDeep,
     resetDuplicatedObjectRuntime,
-    clearInvalidClipPath
+    clearInvalidClipPath,
+    applyObjectVisibility
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -1998,48 +1999,7 @@ const collectFrameVisibilityTargets = (rootFrame: any) => {
     return Array.from(targetSet);
 };
 
-const applyObjectVisibility = (entry: any, visible: boolean) => {
-    if (!entry) return;
-
-    entry.set?.('visible', visible);
-    entry.visible = visible;
-
-    // Reduce interaction cost while hidden and restore previous state on show.
-    if (!visible) {
-        if ((entry as any).__prevEventedBeforeEyeToggle === undefined) {
-            (entry as any).__prevEventedBeforeEyeToggle = entry.evented;
-        }
-        if ((entry as any).__prevSelectableBeforeEyeToggle === undefined) {
-            (entry as any).__prevSelectableBeforeEyeToggle = entry.selectable;
-        }
-        entry.set?.('evented', false);
-        entry.set?.('selectable', false);
-        entry.evented = false;
-        entry.selectable = false;
-    } else {
-        const prevEvented = (entry as any).__prevEventedBeforeEyeToggle;
-        const prevSelectable = (entry as any).__prevSelectableBeforeEyeToggle;
-        if (prevEvented !== undefined) {
-            entry.set?.('evented', prevEvented);
-            entry.evented = prevEvented;
-            delete (entry as any).__prevEventedBeforeEyeToggle;
-        } else {
-            entry.set?.('evented', true);
-            entry.evented = true;
-        }
-        if (prevSelectable !== undefined) {
-            entry.set?.('selectable', prevSelectable);
-            entry.selectable = prevSelectable;
-            delete (entry as any).__prevSelectableBeforeEyeToggle;
-        } else {
-            entry.set?.('selectable', true);
-            entry.selectable = true;
-        }
-    }
-
-    entry.dirty = true;
-    entry.setCoords?.();
-};
+// applyObjectVisibility extraido para utils/fabricObjectOps.ts.
 
 const moveFrameDescendants = (frame: any, dx: number, dy: number, descendants?: any[]) => {
     if (!canvas.value) return;
@@ -27217,29 +27177,26 @@ const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
 const addGridZone = () => {
     if (!canvas.value) return;
 
-    // FIX: Prevent duplicate zones. If the active frame already has a zone,
-    // select it instead of creating another one.
+    // Cada frame so pode ter uma zona de produtos vinculada — duplicar zonas no
+    // mesmo frame quebra o roteamento de cards e a importacao inteligente
+    // (ambos usam parentFrameId para resolver o destino). Para o caso "fora de
+    // frame" o usuario PODE ter quantas zonas livres quiser: bloquear isso
+    // fazia o botao "Adicionar zona" devolver a zona existente em silencio,
+    // dando a impressao de que so a primeira zona reagia a edicoes/imports.
     const activeFrame = canvas.value.getActiveObject() as any;
     const activeFrameId = activeFrame?.isFrame ? String(activeFrame._customId || '').trim() : '';
-    const existingZones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
 
     if (activeFrameId) {
-        const zoneForFrame = existingZones.find((z: any) =>
-            String((z as any).parentFrameId || '').trim() === activeFrameId
-        );
+        const zoneForFrame = canvas.value
+            .getObjects()
+            .find((z: any) =>
+                isLikelyProductZone(z) &&
+                String((z as any).parentFrameId || '').trim() === activeFrameId
+            );
         if (zoneForFrame) {
             canvas.value.setActiveObject(zoneForFrame);
             safeRequestRenderAll();
             notifyEditorInfo('Este frame já possui uma zona de produtos.');
-            return;
-        }
-    } else if (existingZones.length > 0) {
-        // No active frame — check if any unbound zone exists already
-        const unboundZone = existingZones.find((z: any) => !String((z as any).parentFrameId || '').trim());
-        if (unboundZone) {
-            canvas.value.setActiveObject(unboundZone);
-            safeRequestRenderAll();
-            notifyEditorInfo('Já existe uma zona de produtos no canvas.');
             return;
         }
     }
@@ -27265,6 +27222,20 @@ const addGridZone = () => {
         zoneCenterY = center.y;
         zoneInnerWidth = 400;
         zoneInnerHeight = 600;
+        // Quando ja existem zonas livres, deslocamos a nova um pouco para baixo
+        // e para a direita para o usuario perceber que de fato criou outra
+        // zona (sem o offset, a copia ficaria perfeitamente atras da anterior).
+        const unboundCount = canvas.value
+            .getObjects()
+            .filter((o: any) =>
+                isLikelyProductZone(o) &&
+                !String((o as any).parentFrameId || '').trim()
+            ).length;
+        if (unboundCount > 0) {
+            const stepIndex = Math.min(unboundCount, 6);
+            zoneCenterX += stepIndex * 32;
+            zoneCenterY += stepIndex * 32;
+        }
     }
     const zone = new fabric.Rect({
         width: zoneInnerWidth,
