@@ -142,6 +142,16 @@ import {
     buildExportPreflightWarnings
 } from '~/utils/exportPreflightChecks'
 import {
+    MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH,
+    MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH,
+    compareMissingProductImageRecoveryCandidates,
+    getMissingProductImageRecoveryBatchLimit,
+    type RecoveryLookupResult,
+    type MissingProductImageRecoveryViewportRect,
+    type MissingProductImageRecoveryPriority,
+    type MissingProductImageRecoveryCandidate
+} from '~/utils/missingProductImageRecovery'
+import {
     clonePlainForZoneSnapshot,
     finiteZoneSnapshotNumber,
     firstDefinedZoneSnapshotValue
@@ -23992,40 +24002,9 @@ const normalizeRecoveryImageUrl = (src: string): string => {
 
 // buildCardRecoverySearchPayload extraido para utils/cardRecoveryPayload.ts.
 
-type RecoveryLookupResult = {
-    status: 'ok' | 'empty' | 'auth' | 'error';
-    url: string | null;
-};
-
-type MissingProductImageRecoveryViewportRect = {
-    left: number;
-    top: number;
-    right: number;
-    bottom: number;
-    centerX: number;
-    centerY: number;
-};
-
-type MissingProductImageRecoveryPriority = {
-    selected: boolean;
-    inView: boolean;
-    coverage: number;
-    distanceSq: number;
-    culled: boolean;
-};
-
-type MissingProductImageRecoveryCandidate = {
-    card: any;
-    imageObj: any;
-    hasImageObject: boolean;
-    triedMap: Record<string, true>;
-    normalizedCandidates: string[];
-    needsRemoteLookup: boolean;
-    priority: MissingProductImageRecoveryPriority;
-};
-
-const MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH = 8;
-const MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH = 16;
+// Tipos RecoveryLookupResult, MissingProductImageRecoveryViewportRect,
+// MissingProductImageRecoveryPriority e MissingProductImageRecoveryCandidate
+// + constantes MIN_BATCH/MAX_BATCH extraidas para utils/missingProductImageRecovery.ts.
 const DEFAULT_PASTE_IMAGE_MATCH_MODE: ImageMatchMode = 'precise';
 const resolveImageMatchMode = (value?: string): ImageMatchMode => {
     return String(value || 'precise').toLowerCase() === 'fast' ? 'fast' : 'precise';
@@ -24175,29 +24154,8 @@ const measureMissingProductImageRecoveryPriority = (
     }
 };
 
-const compareMissingProductImageRecoveryCandidates = (
-    a: MissingProductImageRecoveryCandidate,
-    b: MissingProductImageRecoveryCandidate
-): number => {
-    if (a.priority.selected !== b.priority.selected) return a.priority.selected ? -1 : 1;
-    if (a.priority.inView !== b.priority.inView) return a.priority.inView ? -1 : 1;
-    if (a.priority.culled !== b.priority.culled) return a.priority.culled ? 1 : -1;
-    if (Math.abs(a.priority.coverage - b.priority.coverage) > 0.0001) return b.priority.coverage - a.priority.coverage;
-    if (a.priority.distanceSq !== b.priority.distanceSq) return a.priority.distanceSq - b.priority.distanceSq;
-    return 0;
-};
-
-const getMissingProductImageRecoveryBatchLimit = (candidates: MissingProductImageRecoveryCandidate[]): number => {
-    if (!Array.isArray(candidates) || candidates.length <= MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH) {
-        return Array.isArray(candidates) ? candidates.length : 0;
-    }
-    const visibleCount = candidates.filter((candidate) => candidate.priority.selected || candidate.priority.inView).length;
-    const target = visibleCount > 0 ? visibleCount + 4 : MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH;
-    return Math.max(
-        MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH,
-        Math.min(MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH, target, candidates.length)
-    );
-};
+// compareMissingProductImageRecoveryCandidates e getMissingProductImageRecoveryBatchLimit
+// extraidos para utils/missingProductImageRecovery.ts.
 
 const recoverMissingProductCardImages = async (
     opts: { expectedPageId?: string | null } = {}
