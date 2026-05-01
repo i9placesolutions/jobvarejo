@@ -7,7 +7,8 @@ import {
   normalizeImageSearchText,
   normalizeImageSearchKey,
   dedupeImageSearchTokens,
-  uniqueImageSearchHints
+  uniqueImageSearchHints,
+  extractLimitFromName
 } from '~/utils/productTextNormalize'
 
 describe('stripAccents', () => {
@@ -180,5 +181,77 @@ describe("uniqueImageSearchHints", () => {
 
   it("array vazio → array vazio", () => {
     expect(uniqueImageSearchHints([])).toEqual([])
+  })
+})
+
+describe("extractLimitFromName", () => {
+  it("nome sem LIMITE: retorna nome inteiro, limite null", () => {
+    expect(extractLimitFromName("Coca Lata 350ml")).toEqual({
+      cleanedName: "Coca Lata 350ml",
+      extractedLimit: null
+    })
+  })
+
+  it("nome com LIMITE: separa em cleanedName + extractedLimit", () => {
+    expect(extractLimitFromName("Coca Lata 350ml LIMITE 6UN")).toEqual({
+      cleanedName: "Coca Lata 350ml",
+      extractedLimit: "LIMITE 6UN"
+    })
+  })
+
+  it("LIMITE case-insensitive (limite/LIMITE/Limite)", () => {
+    expect(extractLimitFromName("Banana limite 3").extractedLimit).toBe("limite 3")
+    expect(extractLimitFromName("Banana Limite 3").extractedLimit).toBe("Limite 3")
+  })
+
+  it("remove pontuacao terminal grudada no LIMITE (sem whitespace entre)", () => {
+    // Regex remove [-–—|:]+$ ANTES do trim, entao so funciona quando
+    // pontuacao esta grudada (sem espaco entre pontuacao e LIMITE).
+    expect(extractLimitFromName("Banana-LIMITE 3").cleanedName).toBe("Banana")
+    expect(extractLimitFromName("Banana—LIMITE 3").cleanedName).toBe("Banana")
+    expect(extractLimitFromName("Banana|LIMITE 3").cleanedName).toBe("Banana")
+    expect(extractLimitFromName("Banana:LIMITE 3").cleanedName).toBe("Banana")
+  })
+
+  it("pontuacao com whitespace antes de LIMITE permanece (apenas trim)", () => {
+    // Documentado: "Banana - LIMITE 3" → cleanedName "Banana -"
+    expect(extractLimitFromName("Banana - LIMITE 3").cleanedName).toBe("Banana -")
+  })
+
+  it("multiplos chars de pontuacao terminais removidos", () => {
+    expect(extractLimitFromName("Banana ---LIMITE 3").cleanedName).toBe("Banana")
+  })
+
+  it("se cleanedName ficar vazio: retorna nome original", () => {
+    expect(extractLimitFromName("LIMITE 3UN")).toEqual({
+      cleanedName: "LIMITE 3UN",
+      extractedLimit: "LIMITE 3UN"
+    })
+  })
+
+  it("nome vazio/null: defaults", () => {
+    expect(extractLimitFromName("")).toEqual({ cleanedName: "", extractedLimit: null })
+    expect(extractLimitFromName(null)).toEqual({ cleanedName: "", extractedLimit: null })
+    expect(extractLimitFromName(undefined)).toEqual({ cleanedName: "", extractedLimit: null })
+  })
+
+  it("LIMITED nao quebra (word boundary)", () => {
+    expect(extractLimitFromName("Banana LIMITED edition").extractedLimit).toBeNull()
+  })
+
+  it("LIMITE no meio com palavra antes/depois (\\b match)", () => {
+    expect(extractLimitFromName("foo LIMITE bar").extractedLimit).toBe("LIMITE bar")
+  })
+
+  it("extractedLimit so com whitespace apos LIMITE: extractedLimit='LIMITE' (apos trim do slice)", () => {
+    // Documentado: slice(idx) = "LIMITE   ", apos trim = "LIMITE", nao vazio.
+    expect(extractLimitFromName("Banana LIMITE   ")).toEqual({
+      cleanedName: "Banana",
+      extractedLimit: "LIMITE"
+    })
+  })
+
+  it("input numerico/objeto: stringificado e validado", () => {
+    expect(extractLimitFromName(123)).toEqual({ cleanedName: "123", extractedLimit: null })
   })
 })

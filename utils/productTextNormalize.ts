@@ -111,6 +111,37 @@ export const dedupeImageSearchTokens = (value: any): string => {
 }
 
 /**
+ * Extrai o sufixo "LIMITE ..." do nome do produto, retornando o nome
+ * limpo separadamente. Util quando a fonte (planilha/lista colada)
+ * concatena nome + limite em um campo unico:
+ *
+ *   "Coca Lata 350ml LIMITE 6UN" → { cleanedName: "Coca Lata 350ml",
+ *                                     extractedLimit: "LIMITE 6UN" }
+ *
+ *  - Busca case-insensitive por `\bLIMITE\b` (limite com word boundary)
+ *  - Remove pontuacao terminal (- – — | :) do nome limpo
+ *  - Se nome ficar vazio apos limpeza, retorna o nome original
+ *  - Sem LIMITE no nome: retorna {cleanedName: nome, extractedLimit: null}
+ */
+export const extractLimitFromName = (rawName: any): {
+    cleanedName: string
+    extractedLimit: string | null
+} => {
+    const name = String(rawName ?? '').trim()
+    if (!name) return { cleanedName: '', extractedLimit: null }
+
+    const idx = name.toUpperCase().search(/\bLIMITE\b/)
+    if (idx === -1) return { cleanedName: name, extractedLimit: null }
+
+    const extractedLimit = name.slice(idx).trim()
+    const cleanedName = name
+        .slice(0, idx)
+        .replace(/[-–—|:]+$/g, '')
+        .trim()
+    return { cleanedName: cleanedName || name, extractedLimit: extractedLimit || null }
+}
+
+/**
  * Recebe varias variantes de string (ex: nome, sinonimos) e devolve
  * apenas as unicas (em forma exibivel) apos dedupeImageSearchTokens
  * + dedup global por chave normalizada.

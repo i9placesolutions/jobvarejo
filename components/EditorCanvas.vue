@@ -113,7 +113,8 @@ import {
     normalizeImageSearchText,
     normalizeImageSearchKey,
     dedupeImageSearchTokens,
-    uniqueImageSearchHints
+    uniqueImageSearchHints,
+    extractLimitFromName
 } from '~/utils/productTextNormalize'
 import {
     getPasteHttpStatus,
@@ -24997,20 +24998,7 @@ const clearCanvas = () => {
     saveCurrentState();
 }
 
-const extractLimitFromName = (rawName: any): { cleanedName: string; extractedLimit: string | null } => {
-    const name = String(rawName ?? '').trim();
-    if (!name) return { cleanedName: '', extractedLimit: null };
-
-    const idx = name.toUpperCase().search(/\bLIMITE\b/);
-    if (idx === -1) return { cleanedName: name, extractedLimit: null };
-
-    const extractedLimit = name.slice(idx).trim();
-    const cleanedName = name
-        .slice(0, idx)
-        .replace(/[-–—|:]+$/g, '')
-        .trim();
-    return { cleanedName: cleanedName || name, extractedLimit: extractedLimit || null };
-};
+// extractLimitFromName extraido para utils/productTextNormalize.ts.
 
 // normalizeLimitText / stripAccents / normalizeSpecialCondition
 // extraidos para utils/productTextNormalize.ts.
