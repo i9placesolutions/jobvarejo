@@ -8,7 +8,8 @@ import {
   makePriceLayoutKeyBuilder,
   isFiniteLayoutNumber,
   getCardHostForPriceGroup,
-  getCardSizeForPriceGroup
+  getCardSizeForPriceGroup,
+  hasCorruptedPriceLayout
 } from '~/utils/priceLayoutClassifiers'
 
 describe('PRICE_LAYOUT_NODE_EXACT / PREFIXES', () => {
@@ -320,5 +321,100 @@ describe('getCardSizeForPriceGroup', () => {
       getObjects: () => []
     }
     expect(getCardSizeForPriceGroup({ group: card })).toEqual({ width: 200, height: 280 })
+  })
+})
+
+describe('hasCorruptedPriceLayout', () => {
+  const makeGroup = (groupProps: any, children: any[]) => ({
+    type: 'group',
+    scaleX: 1, scaleY: 1,
+    ...groupProps,
+    getObjects: () => children
+  })
+
+  const validNode = (overrides: any = {}) => ({
+    name: 'priceInteger',
+    type: 'text',
+    left: 0, top: 0,
+    scaleX: 1, scaleY: 1,
+    fontSize: 12,
+    visible: true,
+    ...overrides
+  })
+
+  it('null/sem getObjects → false (no-op)', () => {
+    expect(hasCorruptedPriceLayout(null)).toBe(false)
+    expect(hasCorruptedPriceLayout({})).toBe(false)
+  })
+
+  it('group sem nodos de price layout → false', () => {
+    const group = makeGroup({}, [{ name: 'random', type: 'rect' }])
+    expect(hasCorruptedPriceLayout(group)).toBe(false)
+  })
+
+  it('group com nodos validos → false', () => {
+    const group = makeGroup({}, [validNode()])
+    expect(hasCorruptedPriceLayout(group)).toBe(false)
+  })
+
+  it('scaleX/Y do group invalido (NaN) → true', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({ scaleX: NaN }, [validNode()]))).toBe(true)
+    expect(hasCorruptedPriceLayout(makeGroup({ scaleY: NaN }, [validNode()]))).toBe(true)
+  })
+
+  it('scaleX/Y do group ~0 → true', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({ scaleX: 0.00001 }, [validNode()]))).toBe(true)
+    expect(hasCorruptedPriceLayout(makeGroup({ scaleY: 0 }, [validNode()]))).toBe(true)
+  })
+
+  it('node left/top NaN → true', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({}, [validNode({ left: NaN })]))).toBe(true)
+    expect(hasCorruptedPriceLayout(makeGroup({}, [validNode({ top: NaN })]))).toBe(true)
+  })
+
+  it('node scaleX/Y NaN → true', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({}, [validNode({ scaleX: NaN })]))).toBe(true)
+  })
+
+  it('node coords > 100k → true (deslocamento absurdo)', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({}, [validNode({ left: 100001 })]))).toBe(true)
+    expect(hasCorruptedPriceLayout(makeGroup({}, [validNode({ top: -100001 })]))).toBe(true)
+  })
+
+  it('node visible escala ~0 → true', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({}, [validNode({ scaleX: 0.00001 })]))).toBe(true)
+  })
+
+  it('node hidden com escala ~0 → false (e ok ficar invisivel)', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({}, [
+      validNode({ visible: false, scaleX: 0 })
+    ]))).toBe(false)
+  })
+
+  it('text node visivel com fontSize <= 0 → true', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({}, [validNode({ fontSize: 0 })]))).toBe(true)
+    expect(hasCorruptedPriceLayout(makeGroup({}, [validNode({ fontSize: -5 })]))).toBe(true)
+    expect(hasCorruptedPriceLayout(makeGroup({}, [validNode({ fontSize: NaN })]))).toBe(true)
+  })
+
+  it('text node hidden com fontSize 0 → false (ok escondido)', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({}, [
+      validNode({ visible: false, fontSize: 0 })
+    ]))).toBe(false)
+  })
+
+  it('non-text node com fontSize 0 → false (so afeta texto)', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({}, [
+      validNode({ type: 'rect', fontSize: 0 })
+    ]))).toBe(false)
+  })
+
+  it('itext/textbox tambem validados', () => {
+    expect(hasCorruptedPriceLayout(makeGroup({}, [
+      validNode({ type: 'i-text', fontSize: 0 })
+    ]))).toBe(true)
+    expect(hasCorruptedPriceLayout(makeGroup({}, [
+      validNode({ type: 'textbox', fontSize: 0 })
+    ]))).toBe(true)
   })
 })

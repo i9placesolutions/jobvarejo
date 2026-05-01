@@ -136,7 +136,8 @@ import {
     makePriceLayoutKeyBuilder,
     isFiniteLayoutNumber,
     getCardHostForPriceGroup,
-    getCardSizeForPriceGroup
+    getCardSizeForPriceGroup,
+    hasCorruptedPriceLayout
 } from '~/utils/priceLayoutClassifiers'
 import {
     isObjectShownForBounds,
@@ -32920,33 +32921,7 @@ const isLikelyPriceGroupObject = (group: any) => {
 // isFiniteLayoutNumber, getCardHostForPriceGroup e getCardSizeForPriceGroup
 // extraidos para utils/priceLayoutClassifiers.ts.
 
-const hasCorruptedPriceLayout = (group: any) => {
-    if (!group || typeof group.getObjects !== 'function') return false;
-    if (!isFiniteLayoutNumber(group?.scaleX) || !isFiniteLayoutNumber(group?.scaleY)) return true;
-    if (Math.abs(Number(group?.scaleX || 0)) < 0.0001 || Math.abs(Number(group?.scaleY || 0)) < 0.0001) return true;
-
-    const nodes = collectObjectsDeep(group).filter((o: any) => isPriceLayoutNode(o));
-    if (!nodes.length) return false;
-
-    for (const node of nodes) {
-        if (!isFiniteLayoutNumber(node?.left) || !isFiniteLayoutNumber(node?.top)) return true;
-        if (!isFiniteLayoutNumber(node?.scaleX) || !isFiniteLayoutNumber(node?.scaleY)) return true;
-        if (Math.abs(Number(node?.left || 0)) > 100000 || Math.abs(Number(node?.top || 0)) > 100000) return true;
-
-        const hidden = node?.visible === false;
-        if (!hidden) {
-            if (Math.abs(Number(node?.scaleX || 0)) < 0.0001 || Math.abs(Number(node?.scaleY || 0)) < 0.0001) return true;
-        }
-
-        const tt = String(node?.type || '').toLowerCase();
-        const isText = tt === 'text' || tt === 'i-text' || tt === 'itext' || tt === 'textbox';
-        if (isText && !hidden) {
-            if (!isFiniteLayoutNumber(node?.fontSize) || Number(node?.fontSize || 0) <= 0) return true;
-        }
-    }
-
-    return false;
-};
+// hasCorruptedPriceLayout extraido para utils/priceLayoutClassifiers.ts.
 
 const rememberPriceLayoutSnapshot = (group: any) => {
     if (!group || typeof group.getObjects !== 'function') return false;

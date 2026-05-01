@@ -10,6 +10,8 @@
  * Cobertura: tests/utils/priceLayoutClassifiers.test.ts
  */
 
+import { collectObjectsDeep } from './fabricObjectClassifiers'
+
 /**
  * Prefixos de nome que identificam um nodo de price layout. Cada
  * prefixo cobre uma variante de etiqueta (regular, varejo, atacado).
@@ -132,6 +134,45 @@ export const getCardSizeForPriceGroup = (group: any): { width: number; height: n
     const height = Math.abs(Number(host?._cardHeight ?? host?.height ?? host?.getScaledHeight?.() ?? 0) || 0)
     if (!Number.isFinite(width) || !Number.isFinite(height) || width < 20 || height < 20) return null
     return { width, height }
+}
+
+/**
+ * Detecta um price layout corrompido — coordenadas/escalas NaN/Infinity,
+ * escala zero (objeto invisivel mas presente), coordenadas absurdas
+ * (>100k px), ou fontSize invalido em texto visivel.
+ *
+ * Usado como guard antes de salvar snapshot: nao adianta tentar
+ * preservar layout de um group que foi corrompido por bug em outra
+ * parte do pipeline.
+ *
+ * Pure: opera apenas sobre o objeto duck-typed.
+ */
+export const hasCorruptedPriceLayout = (group: any): boolean => {
+    if (!group || typeof group.getObjects !== 'function') return false
+    if (!isFiniteLayoutNumber(group?.scaleX) || !isFiniteLayoutNumber(group?.scaleY)) return true
+    if (Math.abs(Number(group?.scaleX || 0)) < 0.0001 || Math.abs(Number(group?.scaleY || 0)) < 0.0001) return true
+
+    const nodes = collectObjectsDeep(group).filter((o: any) => isPriceLayoutNode(o))
+    if (!nodes.length) return false
+
+    for (const node of nodes) {
+        if (!isFiniteLayoutNumber(node?.left) || !isFiniteLayoutNumber(node?.top)) return true
+        if (!isFiniteLayoutNumber(node?.scaleX) || !isFiniteLayoutNumber(node?.scaleY)) return true
+        if (Math.abs(Number(node?.left || 0)) > 100000 || Math.abs(Number(node?.top || 0)) > 100000) return true
+
+        const hidden = node?.visible === false
+        if (!hidden) {
+            if (Math.abs(Number(node?.scaleX || 0)) < 0.0001 || Math.abs(Number(node?.scaleY || 0)) < 0.0001) return true
+        }
+
+        const tt = String(node?.type || '').toLowerCase()
+        const isText = tt === 'text' || tt === 'i-text' || tt === 'itext' || tt === 'textbox'
+        if (isText && !hidden) {
+            if (!isFiniteLayoutNumber(node?.fontSize) || Number(node?.fontSize || 0) <= 0) return true
+        }
+    }
+
+    return false
 }
 
 /**
