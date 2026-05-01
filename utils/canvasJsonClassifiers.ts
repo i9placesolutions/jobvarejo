@@ -11,6 +11,13 @@
  * Funcoes 100% puras. Cobertura: tests/utils/canvasJsonClassifiers.test.ts
  */
 
+// Espelho da constante exportada por utils/canvasAssetUrls.ts.
+// Inlineado aqui para que este modulo pure permaneca livre da
+// dependencia transitiva de Nuxt (`#imports`) que canvasAssetUrls
+// puxa, e portanto continue testavel em ambiente Node puro (vitest).
+const CANVAS_IMAGE_PLACEHOLDER_DATA_URL =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
 /**
  * DFS no JSON do canvas. Visitor recebe cada nodo (root.objects + descendentes
  * de qualquer profundidade). Implementacao iterativa para evitar stack overflow
@@ -327,6 +334,51 @@ export const isRenderablePriceGroupTemplateImageNode = (node: any): boolean => {
     if (isTinyPlaceholderImageSrc(src)) return false
     return true
 }
+
+/**
+ * Detecta se um src de imagem e' candidato a "deferred load" — uma URL
+ * remota que vale a pena adiar o carregamento ate o frame ficar visivel.
+ *
+ * Rejeita:
+ *  - vazio
+ *  - placeholder oficial do editor
+ *  - data: URLs (ja inline, nao tem o que adiar)
+ *  - blob: URLs (efemeros, podem expirar)
+ *
+ * Aceita: HTTP(S) e outros que justificam deferral.
+ */
+export const isDeferredProductImageCandidateSrc = (src: string): boolean => {
+    const value = String(src || '').trim()
+    if (!value) return false
+    if (value === CANVAS_IMAGE_PLACEHOLDER_DATA_URL) return false
+    if (value.startsWith('data:')) return false
+    if (value.startsWith('blob:')) return false
+    return true
+}
+
+/**
+ * Detecta nodo JSON image que pode ser substituido por imagem nova
+ * via "Replace Image" UI. Aceita imagens com smartType=product-image
+ * ou nomes conhecidos (smart_image/product_image/productImage), exceto
+ * imagens estruturais (price_bg_image, splash_image).
+ */
+export const isProductCardImageSelectionCandidateJson = (obj: any): boolean => {
+    if (!obj || String(obj?.type || '').toLowerCase() !== 'image') return false
+    const smartType = String((obj as any)?.data?.smartType || '').toLowerCase()
+    const name = String((obj as any)?.name || '').toLowerCase()
+    if (name === 'price_bg_image' || name === 'splash_image') return false
+    if (smartType === 'product-image') return true
+    if (name === 'smart_image' || name === 'product_image' || name === 'productimage') return true
+    if (name.startsWith('extra_image_')) return true
+    return true
+}
+
+/**
+ * Normaliza chave de cache de canvas-load (trim de whitespace).
+ * Retorna string vazia para null/undefined/whitespace.
+ */
+export const normalizePreparedCanvasLoadCacheKey = (value?: string | null): string =>
+    String(value || '').trim()
 
 /**
  * Detecta um nodo "shell" visual do price group — qualquer elemento

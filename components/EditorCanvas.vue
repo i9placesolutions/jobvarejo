@@ -104,7 +104,10 @@ import {
     isTinyPlaceholderImageSrc,
     isPriceGroupTemplateImageNode,
     isRenderablePriceGroupTemplateImageNode,
-    isPriceGroupVisualShellNode
+    isPriceGroupVisualShellNode,
+    isDeferredProductImageCandidateSrc,
+    isProductCardImageSelectionCandidateJson,
+    normalizePreparedCanvasLoadCacheKey
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -11731,7 +11734,7 @@ const preparedCanvasDataLoadCache = new WeakMap<object, PreparedCanvasLoadCacheE
 const preparedCanvasDataLoadCacheByKey = new Map<string, PreparedCanvasLoadCacheEntry>();
 const PREPARED_CANVAS_LOAD_CACHE_LIMIT = 24;
 
-const normalizePreparedCanvasLoadCacheKey = (value?: string | null): string => String(value || '').trim();
+// normalizePreparedCanvasLoadCacheKey extraido para utils/canvasJsonClassifiers.ts.
 
 const rememberPreparedCanvasLoadCacheByKey = (cacheKey: string, entry: PreparedCanvasLoadCacheEntry) => {
     const normalizedKey = normalizePreparedCanvasLoadCacheKey(cacheKey);
@@ -11834,25 +11837,8 @@ const getCanvasLoadCacheToken = (canvasData: any): string => {
 const DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD = 24;
 const DEFERRED_PRODUCT_IMAGE_LOAD_MAX = 72;
 
-const isDeferredProductImageCandidateSrc = (src: string): boolean => {
-    const value = String(src || '').trim();
-    if (!value) return false;
-    if (value === PLACEHOLDER_IMAGE_DATA_URL) return false;
-    if (value.startsWith('data:')) return false;
-    if (value.startsWith('blob:')) return false;
-    return true;
-};
-
-const isProductCardImageSelectionCandidateJson = (obj: any) => {
-    if (!obj || String(obj?.type || '').toLowerCase() !== 'image') return false;
-    const smartType = String((obj as any)?.data?.smartType || '').toLowerCase();
-    const name = String((obj as any)?.name || '').toLowerCase();
-    if (name === 'price_bg_image' || name === 'splash_image') return false;
-    if (smartType === 'product-image') return true;
-    if (name === 'smart_image' || name === 'product_image' || name === 'productimage') return true;
-    if (name.startsWith('extra_image_')) return true;
-    return true;
-};
+// isDeferredProductImageCandidateSrc + isProductCardImageSelectionCandidateJson
+// extraidos para utils/canvasJsonClassifiers.ts.
 
 const getPreferredProductImageFromCardJson = (card: any): any | null => {
     const children = getJsonGroupChildren(card).filter((child: any) => isProductCardImageSelectionCandidateJson(child));

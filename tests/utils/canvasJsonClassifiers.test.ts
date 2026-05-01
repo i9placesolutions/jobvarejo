@@ -19,7 +19,10 @@ import {
   isTinyPlaceholderImageSrc,
   isPriceGroupTemplateImageNode,
   isRenderablePriceGroupTemplateImageNode,
-  isPriceGroupVisualShellNode
+  isPriceGroupVisualShellNode,
+  isDeferredProductImageCandidateSrc,
+  isProductCardImageSelectionCandidateJson,
+  normalizePreparedCanvasLoadCacheKey
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -745,5 +748,85 @@ describe('clonePlainMetadata', () => {
     const cloned = clonePlainMetadata(obj)
     expect(cloned.keep).toBe('this')
     expect(cloned.cb).toBeUndefined()
+  })
+})
+
+describe('isDeferredProductImageCandidateSrc', () => {
+  it('aceita HTTP(S) urls remotas', () => {
+    expect(isDeferredProductImageCandidateSrc('https://example.com/x.png')).toBe(true)
+    expect(isDeferredProductImageCandidateSrc('http://example.com/x.png')).toBe(true)
+    expect(isDeferredProductImageCandidateSrc('//cdn.example.com/x.png')).toBe(true)
+  })
+
+  it('rejeita data: URLs', () => {
+    expect(isDeferredProductImageCandidateSrc('data:image/png;base64,AAAA')).toBe(false)
+  })
+
+  it('rejeita blob: URLs (efemeros)', () => {
+    expect(isDeferredProductImageCandidateSrc('blob:https://example.com/abc')).toBe(false)
+  })
+
+  it('rejeita vazio/whitespace', () => {
+    expect(isDeferredProductImageCandidateSrc('')).toBe(false)
+    expect(isDeferredProductImageCandidateSrc('   ')).toBe(false)
+    expect(isDeferredProductImageCandidateSrc(null as any)).toBe(false)
+  })
+})
+
+describe('isProductCardImageSelectionCandidateJson', () => {
+  it('aceita imagem com smartType=product-image', () => {
+    expect(isProductCardImageSelectionCandidateJson({
+      type: 'image',
+      data: { smartType: 'product-image' }
+    })).toBe(true)
+  })
+
+  it('aceita imagens com nomes conhecidos', () => {
+    expect(isProductCardImageSelectionCandidateJson({ type: 'image', name: 'smart_image' })).toBe(true)
+    expect(isProductCardImageSelectionCandidateJson({ type: 'image', name: 'product_image' })).toBe(true)
+    expect(isProductCardImageSelectionCandidateJson({ type: 'image', name: 'productImage' })).toBe(true)
+  })
+
+  it('aceita imagens com prefixo extra_image_', () => {
+    expect(isProductCardImageSelectionCandidateJson({
+      type: 'image',
+      name: 'extra_image_1'
+    })).toBe(true)
+  })
+
+  it('rejeita imagens estruturais (price_bg_image, splash_image)', () => {
+    expect(isProductCardImageSelectionCandidateJson({
+      type: 'image',
+      name: 'price_bg_image'
+    })).toBe(false)
+    expect(isProductCardImageSelectionCandidateJson({
+      type: 'image',
+      name: 'splash_image'
+    })).toBe(false)
+  })
+
+  it('rejeita nao-imagens', () => {
+    expect(isProductCardImageSelectionCandidateJson({ type: 'rect' })).toBe(false)
+    expect(isProductCardImageSelectionCandidateJson(null)).toBe(false)
+  })
+
+  it('aceita imagem generica (fallback true)', () => {
+    expect(isProductCardImageSelectionCandidateJson({
+      type: 'image',
+      name: 'random'
+    })).toBe(true)
+  })
+})
+
+describe('normalizePreparedCanvasLoadCacheKey', () => {
+  it('aplica trim', () => {
+    expect(normalizePreparedCanvasLoadCacheKey('  abc  ')).toBe('abc')
+    expect(normalizePreparedCanvasLoadCacheKey('foo')).toBe('foo')
+  })
+
+  it('null/undefined/whitespace viram string vazia', () => {
+    expect(normalizePreparedCanvasLoadCacheKey(null)).toBe('')
+    expect(normalizePreparedCanvasLoadCacheKey(undefined)).toBe('')
+    expect(normalizePreparedCanvasLoadCacheKey('   ')).toBe('')
   })
 })
