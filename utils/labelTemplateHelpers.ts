@@ -79,6 +79,35 @@ export const shouldUseIncomingTemplateSnapshot = (prev: any, incoming: any): boo
 }
 
 /**
+ * Chave usada para armazenar o array de label templates dentro do
+ * JSON do projeto (project.canvasData[LABEL_TEMPLATES_JSON_KEY]).
+ * Prefixo `__` evita colisao com props normais do canvas.
+ */
+export const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
+
+/**
+ * Versao do seed do template Atacarejo. Incrementado quando o template
+ * built-in muda — projetos antigos que ja seedearam uma versao anterior
+ * vao re-seed automaticamente quando esse valor avanca.
+ */
+export const BUILTIN_ATACAREJO_SEED_VERSION = 4
+
+/**
+ * Versao do seed do template Red Burst. Mesma semantica do Atacarejo.
+ */
+export const BUILTIN_RED_BURST_SEED_VERSION = 2
+
+/**
+ * Versao do render do preview de label template. Cada template
+ * armazena o ultimo render version usado em `__previewRenderVersion`;
+ * quando esse valor diverge da versao atual, o preview e' regenerado.
+ *
+ * Incrementar este numero forca regeneracao de TODOS os previews
+ * (util quando a estrategia de preview muda — fonte, tamanho, etc).
+ */
+export const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
+
+/**
  * Lista de props extras que devem ser persistidas em label templates
  * (alem das props padrao do Fabric). Inclui customId, name, fontFamily,
  * charSpacing, e todos os flags de manual template (`__preserveManualLayout`,

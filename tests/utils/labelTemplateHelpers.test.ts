@@ -9,7 +9,11 @@ import {
   BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
   LABEL_TEMPLATE_EXTRA_PROPS,
   MANUAL_TEMPLATE_STABLE_PROPS,
-  MANUAL_TEMPLATE_DERIVED_PROPS
+  MANUAL_TEMPLATE_DERIVED_PROPS,
+  LABEL_TEMPLATES_JSON_KEY,
+  BUILTIN_ATACAREJO_SEED_VERSION,
+  BUILTIN_RED_BURST_SEED_VERSION,
+  LABEL_TEMPLATE_PREVIEW_RENDER_VERSION
 } from '~/utils/labelTemplateHelpers'
 
 describe('getLabelTemplateTimestamp', () => {
@@ -205,5 +209,30 @@ describe('MANUAL_TEMPLATE_DERIVED_PROPS', () => {
     const derived = new Set(MANUAL_TEMPLATE_DERIVED_PROPS)
     for (const prop of stable) expect(derived.has(prop)).toBe(false)
     for (const prop of derived) expect(stable.has(prop)).toBe(false)
+  })
+})
+
+describe('label template version constants', () => {
+  it('LABEL_TEMPLATES_JSON_KEY = "__labelTemplates"', () => {
+    expect(LABEL_TEMPLATES_JSON_KEY).toBe('__labelTemplates')
+  })
+
+  it('BUILTIN_ATACAREJO_SEED_VERSION e numero positivo', () => {
+    expect(typeof BUILTIN_ATACAREJO_SEED_VERSION).toBe('number')
+    expect(BUILTIN_ATACAREJO_SEED_VERSION).toBeGreaterThan(0)
+  })
+
+  it('BUILTIN_RED_BURST_SEED_VERSION e numero positivo', () => {
+    expect(typeof BUILTIN_RED_BURST_SEED_VERSION).toBe('number')
+    expect(BUILTIN_RED_BURST_SEED_VERSION).toBeGreaterThan(0)
+  })
+
+  it('LABEL_TEMPLATE_PREVIEW_RENDER_VERSION e numero positivo', () => {
+    expect(typeof LABEL_TEMPLATE_PREVIEW_RENDER_VERSION).toBe('number')
+    expect(LABEL_TEMPLATE_PREVIEW_RENDER_VERSION).toBeGreaterThan(0)
+  })
+
+  it('JSON_KEY usa prefixo __ (evita colisao com props normais)', () => {
+    expect(LABEL_TEMPLATES_JSON_KEY).toMatch(/^__/)
   })
 })

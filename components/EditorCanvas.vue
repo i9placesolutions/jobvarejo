@@ -327,7 +327,11 @@ import {
     BUILTIN_LABEL_TEMPLATE_IDS,
     LABEL_TEMPLATE_EXTRA_PROPS,
     MANUAL_TEMPLATE_STABLE_PROPS,
-    MANUAL_TEMPLATE_DERIVED_PROPS
+    MANUAL_TEMPLATE_DERIVED_PROPS,
+    LABEL_TEMPLATES_JSON_KEY,
+    BUILTIN_ATACAREJO_SEED_VERSION,
+    BUILTIN_RED_BURST_SEED_VERSION,
+    LABEL_TEMPLATE_PREVIEW_RENDER_VERSION
 } from '~/utils/labelTemplateHelpers'
 import {
     walkCanvasObjects,
@@ -1033,12 +1037,11 @@ const showLabelTemplatesModal = ref(false)
 const labelTemplates = ref<LabelTemplate[]>([])
 const hasLoadedLabelTemplatesFromDb = ref(false)
 
-const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
+// LABEL_TEMPLATES_JSON_KEY, BUILTIN_*_SEED_VERSION,
+// LABEL_TEMPLATE_PREVIEW_RENDER_VERSION extraidos para
+// utils/labelTemplateHelpers.ts.
 // BUILTIN_*_LABEL_TEMPLATE_ID + BUILTIN_LABEL_TEMPLATE_IDS extraidos para
 // utils/labelTemplateHelpers.ts.
-const BUILTIN_ATACAREJO_SEED_VERSION = 4
-const BUILTIN_RED_BURST_SEED_VERSION = 2
-const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
 // LABEL_TEMPLATE_EXTRA_PROPS, MANUAL_TEMPLATE_STABLE_PROPS,
 // MANUAL_TEMPLATE_DERIVED_PROPS extraidos para utils/labelTemplateHelpers.ts.
 const autoHealedLabelTemplateIds = new Set<string>()
