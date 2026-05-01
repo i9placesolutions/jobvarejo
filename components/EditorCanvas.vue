@@ -81,6 +81,18 @@ import { mapLimit } from '~/utils/asyncHelpers'
 import { scheduleIdleWork } from '~/utils/idleSchedule'
 import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS } from '~/utils/canvasCustomProps'
 import {
+    GUIDE_COLOR,
+    GUIDE_STROKE_WIDTH,
+    SNAP_RANGE_PX,
+    SNAP_HYSTERESIS_HOLD_FACTOR,
+    SNAP_HYSTERESIS_HOLD_FACTOR_RECT_IMAGE,
+    SNAP_MOVE_EPSILON_PX,
+    SNAP_MOVE_EPSILON_PX_RECT_IMAGE,
+    SNAP_RANGE_FACTOR_RECT_IMAGE,
+    SNAP_FAST_MOVE_SUPPRESSION_PX,
+    SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE
+} from '~/utils/snapConstants'
+import {
     isTrackableImageSrc,
     collectTrackableImageSrcCounts
 } from '~/utils/canvasImageTracking'
@@ -15926,16 +15938,8 @@ const rulerGuides = computed(() => (viewShowGuides.value ? userGuidesIndex.value
 
 // --- Guias Inteligentes (Smart Guides) ---
 // More visible + consistent at any zoom (strokeUniform).
-const GUIDE_COLOR = '#ff2fb3';
-const GUIDE_STROKE_WIDTH = 2;
-const SNAP_RANGE_PX = 12;
-const SNAP_HYSTERESIS_HOLD_FACTOR = 1.6;
-const SNAP_HYSTERESIS_HOLD_FACTOR_RECT_IMAGE = 1.08;
-const SNAP_MOVE_EPSILON_PX = 1.8;
-const SNAP_MOVE_EPSILON_PX_RECT_IMAGE = 9;
-const SNAP_RANGE_FACTOR_RECT_IMAGE = 0.28;
-const SNAP_FAST_MOVE_SUPPRESSION_PX = 7;
-const SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE = 9;
+// GUIDE_COLOR, GUIDE_STROKE_WIDTH, SNAP_* constantes extraidas para
+// utils/snapConstants.ts.
 
 const setupSnapping = () => {
     if (!canvas.value) return;
