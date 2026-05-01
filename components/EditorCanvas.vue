@@ -128,6 +128,7 @@ import {
     LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
     isLightweightGlobalStyleProp
 } from '~/utils/globalStylePropClassifiers'
+import { clamp } from '~/utils/mathHelpers'
 import {
     PRICE_LAYOUT_NODE_PREFIXES,
     PRICE_LAYOUT_NODE_EXACT,
@@ -9287,7 +9288,6 @@ const applyContainmentConstraints = (obj: any) => {
         // Use CENTER-based clamping regardless of current origin.
         // This avoids "teleport to corner" when Fabric temporarily changes origin during scale gestures.
         const center = getObjectCenterInParentPlane(obj);
-        const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
         // If image is larger than card, range inverts naturally; keep min<=max by using Math.min/Math.max.
         const minCx = Math.min(cardLeft + (imgWidth / 2), cardRight - (imgWidth / 2));
@@ -17101,7 +17101,6 @@ const setupSnapping = () => {
             if (zone) {
                 const boundZone = zone;
                 const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
-                const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
                 const objW = obj.getScaledWidth?.() ?? 0;
                 const objH = obj.getScaledHeight?.() ?? 0;
 
@@ -18415,7 +18414,6 @@ const setupReactivity = () => {
 
         const original = transform?.original || {};
         const abs = (n: any) => Math.abs(Number(n ?? 0) || 0);
-        const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
         // Consider flips: a flipped image swaps left/right or top/bottom behavior.
         const flipX = !!img.flipX;
@@ -30027,7 +30025,6 @@ const repairCollapsedSinglePriceTemplateGeometry = (priceGroup: any, reason: str
     const legacyPrice = findByName(all, 'price_value_text') || findByName(all, 'smart_price');
     if (!(legacyPrice || (integer && decimal))) return false;
 
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const getW = (obj: any) => {
         if (!obj) return 0;
         if (typeof obj.getScaledWidth === 'function') return Number(obj.getScaledWidth()) || 0;
@@ -30299,7 +30296,6 @@ const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean }
 	        if (isTextLikeObject(obj) && typeof obj.initDimensions === 'function') obj.initDimensions();
 	    });
 
-	    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 	    const getOriginalNumber = (obj: any, key: string, fallback: any) => {
 	        const raw = Number(obj?.[key]);
 	        return Number.isFinite(raw) ? raw : Number(fallback);
@@ -30440,7 +30436,6 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
         readSingleManualPriceAnchors(priceGroup) ||
         readSingleManualPriceAnchors(priceGroup, { force: true }) ||
         {};
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const getW = (obj: any) => (obj && typeof obj.getScaledWidth === 'function') ? Number(obj.getScaledWidth()) : 0;
 
     const minScale = 0.34;
@@ -30691,7 +30686,6 @@ const constrainSinglePriceTextInsideBackground = (priceGroup: any) => {
     const bgWidth = bgBounds ? Math.max(0, bgBounds.right - bgBounds.left) : 0;
     if (!bgBounds || bgWidth <= 0) return;
 
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const unitVisible = isObjectShownForBounds(unit) && String(unit?.text || '').trim().length > 0;
     const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[];
     const hasCurrencyCircle = !!(currencyCircle && isObjectShownForBounds(currencyCircle));
@@ -30907,7 +30901,6 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
     const bannerBg = findByName(all, 'atac_banner_bg');
     if (!retailBg) return;
 
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const normalizeTemplateScale = (raw: any, fallback: any, min = 0.12, max = 3.2) => {
         const fallbackNum = Number(fallback);
         const safeFallback = Number.isFinite(fallbackNum) && Math.abs(fallbackNum) > 0 ? fallbackNum : 1;
@@ -31522,7 +31515,6 @@ const layoutAtacarejoPriceGroup = (priceGroup: any, cardW: number, cardH: number
         });
     }
 
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
     // Canonical Atacarejo style (fixed visual language, dynamic values).
     // Values can vary, but geometry/font hierarchy stays consistent.
@@ -32202,7 +32194,6 @@ function tuneRedBurstPriceGroupLayout(priceGroup: any) {
     const priceDecimal = findByName(all, 'price_decimal_text');
     if (!priceBg || !headerBg || !headerText || !currencyText || !priceInteger || !priceDecimal) return false;
 
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const bgW = Math.max(1, Number(priceBg.width || 0));
     const bgH = Math.max(1, Number(priceBg.height || 0));
     const headerW = Math.max(1, Number(headerBg.width || (bgW * 0.92)));
@@ -32347,7 +32338,6 @@ const layoutManualTemplateGroup = (priceGroup: any, cardW: number, cardH: number
     if (isRedBurstPriceGroup(priceGroup)) {
         tuneRedBurstPriceGroupLayout(priceGroup);
     }
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const toFinite = (v: any, fb: number) => {
         const n = Number(v);
         return Number.isFinite(n) ? n : fb;
@@ -32564,7 +32554,6 @@ function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     const priceBg = all.find((o: any) => o.name === 'price_bg');
     const priceBgImage = all.find((o: any) => o.name === 'price_bg_image' || o.name === 'splash_image');
 
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
     // Get original template dimensions from priceBg metadata
     const originalW = typeof (priceBg as any)?.__originalWidth === 'number'
@@ -33266,7 +33255,6 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
         return null;
     }
     
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
     // Scale label by overall card size (avoid "stretch wide" when cards are wide).
     const base = Math.min(cardW, cardH);
@@ -36675,7 +36663,6 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
     const halfH = h / 2;
     const _refH = Number((styles as any)?.__refCellH) || h;
     const baseSize = Math.min(w, h);
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const objects = group.getObjects();
     let bg: any = null;
     let title: any = null;
@@ -38440,7 +38427,6 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
     
     // 3. Setup Grid Vars
     const zoneRect = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const minSlotSize = 12;
 
     const rawPadding = Math.max(0, Number(typeof zone._zonePadding === 'number' ? zone._zonePadding : (zone.padding ?? 20)) || 0);
