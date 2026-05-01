@@ -149,6 +149,38 @@ export const extractContaboBucketAndKey = (
     }
 }
 
+/**
+ * Normaliza uma URL de imagem de recovery para uma URL acessivel
+ * pelo proxy local. Aplica em ordem:
+ *
+ *  1. trim e early return em vazio
+ *  2. toWasabiProxyUrl (callback injetado): se converteu, retorna
+ *  3. URL Contabo: extrai bucket+key e mapeia para /api/storage/p
+ *  4. fallback: retorna URL original
+ *
+ * Pure: nao acessa runtime config — caller injeta os 2 helpers.
+ */
+export const normalizeRecoveryImageUrl = (
+    src: string,
+    toWasabiProxyUrl: (s: string) => string | null,
+    extractContabo: (s: string) => { bucket: string | null; key: string | null }
+): string => {
+    const value = String(src || '').trim()
+    if (!value) return ''
+    const proxied = toWasabiProxyUrl(value)
+    if (proxied && proxied !== value) return proxied
+    if (value.includes('contabostorage.com')) {
+        const { bucket, key } = extractContabo(value)
+        if (key) {
+            if (bucket) {
+                return `/api/storage/p?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`
+            }
+            return `/api/storage/p?key=${encodeURIComponent(key)}`
+        }
+    }
+    return value
+}
+
 export const extractWasabiBucketAndKey = (url: string): { bucket: string | null; key: string | null } => {
     try {
         const urlObj = new URL(url)

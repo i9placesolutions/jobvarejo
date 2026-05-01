@@ -75,7 +75,8 @@ import {
     extractWasabiBucketAndKey,
     extractWasabiKey as extractWasabiKeyHelper,
     extractContaboBucketAndKey as extractContaboBucketAndKeyHelper,
-    convertPresignedToPermanentUrl as convertPresignedToPermanentUrlHelper
+    convertPresignedToPermanentUrl as convertPresignedToPermanentUrlHelper,
+    normalizeRecoveryImageUrl as normalizeRecoveryImageUrlHelper
 } from '~/utils/storageUrlHelpers'
 import {
     isObjectIntersectingCullRect,
@@ -23927,22 +23928,9 @@ let isRecoveringMissingProductImages = false;
 
 // getImageSourceFromObject extraido para utils/fabricImageHelpers.ts.
 
-const normalizeRecoveryImageUrl = (src: string): string => {
-    const value = String(src || '').trim();
-    if (!value) return '';
-    const proxied = toWasabiProxyUrl(value);
-    if (proxied && proxied !== value) return proxied;
-    if (value.includes('contabostorage.com')) {
-        const { bucket, key } = extractContaboBucketAndKey(value);
-        if (key) {
-            if (bucket) {
-                return `/api/storage/p?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
-            }
-            return `/api/storage/p?key=${encodeURIComponent(key)}`;
-        }
-    }
-    return value;
-};
+// Wrapper local: injeta toWasabiProxyUrl + extractContaboBucketAndKey no helper puro.
+const normalizeRecoveryImageUrl = (src: string): string =>
+    normalizeRecoveryImageUrlHelper(src, toWasabiProxyUrl, extractContaboBucketAndKey);
 
 // buildCardRecoverySearchPayload extraido para utils/cardRecoveryPayload.ts.
 

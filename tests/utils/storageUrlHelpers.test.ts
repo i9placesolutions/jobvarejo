@@ -3,7 +3,8 @@ import {
   extractWasabiBucketAndKey,
   extractWasabiKey,
   extractContaboBucketAndKey,
-  convertPresignedToPermanentUrl
+  convertPresignedToPermanentUrl,
+  normalizeRecoveryImageUrl
 } from '~/utils/storageUrlHelpers'
 
 describe('extractWasabiBucketAndKey', () => {
@@ -199,5 +200,90 @@ describe('convertPresignedToPermanentUrl', () => {
     const presigned = 'https://s3.wasabisys.com/jobvarejo/k.png?sig=1'
     expect(convertPresignedToPermanentUrl(presigned, '', ''))
       .toBe('https://s3.wasabisys.com/jobvarejo/k.png')
+  })
+})
+
+describe('normalizeRecoveryImageUrl', () => {
+  const proxiedNoOp = (s: string) => s
+  const proxiedToWasabi = (s: string) =>
+    s.includes('wasabisys') ? `/api/storage/wasabi-proxy?url=${encodeURIComponent(s)}` : null
+  const extractContaboMock = (s: string) => {
+    if (s.includes('tenant:bucket1/img.png')) return { bucket: 'tenant:bucket1', key: 'img.png' }
+    if (s.includes('contabostorage.com/foo/bar.png')) return { bucket: null, key: 'foo/bar.png' }
+    return { bucket: null, key: null }
+  }
+
+  it('vazio/null → ""', () => {
+    expect(normalizeRecoveryImageUrl('', proxiedNoOp, extractContaboMock)).toBe('')
+    expect(normalizeRecoveryImageUrl(null as any, proxiedNoOp, extractContaboMock)).toBe('')
+    expect(normalizeRecoveryImageUrl('   ', proxiedNoOp, extractContaboMock)).toBe('')
+  })
+
+  it('toWasabiProxyUrl converteu: retorna proxied', () => {
+    const r = normalizeRecoveryImageUrl(
+      'https://s3.wasabisys.com/bucket/foo.png',
+      proxiedToWasabi,
+      extractContaboMock
+    )
+    expect(r).toContain('/api/storage/wasabi-proxy')
+  })
+
+  it('toWasabiProxyUrl no-op (retorna mesma url): cai pro proximo', () => {
+    expect(normalizeRecoveryImageUrl(
+      'https://example.com/x.png',
+      proxiedNoOp,
+      extractContaboMock
+    )).toBe('https://example.com/x.png')
+  })
+
+  it('toWasabiProxyUrl null: cai pro proximo', () => {
+    expect(normalizeRecoveryImageUrl(
+      'https://example.com/x.png',
+      () => null,
+      extractContaboMock
+    )).toBe('https://example.com/x.png')
+  })
+
+  it('Contabo URL com bucket+key: gera /api/storage/p?bucket=&key=', () => {
+    const r = normalizeRecoveryImageUrl(
+      'https://eu2.contabostorage.com/tenant:bucket1/img.png',
+      () => null,
+      extractContaboMock
+    )
+    expect(r).toBe('/api/storage/p?bucket=tenant%3Abucket1&key=img.png')
+  })
+
+  it('Contabo URL sem bucket: gera /api/storage/p?key=', () => {
+    const r = normalizeRecoveryImageUrl(
+      'https://eu2.contabostorage.com/foo/bar.png',
+      () => null,
+      extractContaboMock
+    )
+    expect(r).toBe('/api/storage/p?key=foo%2Fbar.png')
+  })
+
+  it('URL nao-Contabo nao-Wasabi: retorna como esta', () => {
+    expect(normalizeRecoveryImageUrl(
+      'https://random-cdn.com/foo.png',
+      () => null,
+      extractContaboMock
+    )).toBe('https://random-cdn.com/foo.png')
+  })
+
+  it('Contabo URL sem key extraivel: retorna original', () => {
+    expect(normalizeRecoveryImageUrl(
+      'https://eu2.contabostorage.com/incomplete',
+      () => null,
+      () => ({ bucket: null, key: null })
+    )).toBe('https://eu2.contabostorage.com/incomplete')
+  })
+
+  it('trim aplicado antes da deteccao', () => {
+    const r = normalizeRecoveryImageUrl(
+      '  https://eu2.contabostorage.com/tenant:bucket1/img.png  ',
+      () => null,
+      extractContaboMock
+    )
+    expect(r).toBe('/api/storage/p?bucket=tenant%3Abucket1&key=img.png')
   })
 })
