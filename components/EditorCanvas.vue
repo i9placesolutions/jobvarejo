@@ -67,7 +67,9 @@ import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import {
     isObjectIntersectingCullRect,
-    shouldSkipViewportCullObject
+    shouldSkipViewportCullObject,
+    computeViewportCullRect,
+    VIEWPORT_CULL_PADDING
 } from '~/utils/viewportCulling'
 import { getEditorPerfNow, roundEditorPerf } from '~/utils/perfHelpers'
 import {
@@ -6334,7 +6336,7 @@ const updateScrollbars = () => {
 }
 
 const VIEWPORT_CULL_MIN_OBJECTS = 1200
-const VIEWPORT_CULL_PADDING = 240
+// VIEWPORT_CULL_PADDING extraido para utils/viewportCulling.ts
 const VIEWPORT_CULL_INTERVAL_MS = 140
 const EDITOR_PERF_STORAGE_KEY = 'editor:perf-metrics:v1'
 const EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS = 120
@@ -6524,21 +6526,17 @@ onUnmounted(() => {
     resetEditorRenderPerfCounters()
 })
 
+// Wrapper local que injeta dados do canvas.value no helper puro
+// computeViewportCullRect (utils/viewportCulling.ts).
 const getViewportCullRect = () => {
     if (!canvas.value) return null
     const c = canvas.value
-    const vpt = c.viewportTransform || [1, 0, 0, 1, 0, 0]
-    const zoom = Math.max(0.0001, Number(c.getZoom?.() || 1) || 1)
-    const width = Number(c.getWidth?.() || 0) / zoom
-    const height = Number(c.getHeight?.() || 0) / zoom
-    const left = (-Number(vpt[4] || 0) / zoom) - VIEWPORT_CULL_PADDING
-    const top = (-Number(vpt[5] || 0) / zoom) - VIEWPORT_CULL_PADDING
-    return {
-        left,
-        top,
-        right: left + width + (VIEWPORT_CULL_PADDING * 2),
-        bottom: top + height + (VIEWPORT_CULL_PADDING * 2)
-    }
+    return computeViewportCullRect({
+        viewportTransform: c.viewportTransform || [1, 0, 0, 1, 0, 0],
+        zoom: Number(c.getZoom?.() || 1) || 1,
+        width: Number(c.getWidth?.() || 0),
+        height: Number(c.getHeight?.() || 0)
+    })
 }
 
 // isObjectIntersectingCullRect e shouldSkipViewportCullObject extraidos

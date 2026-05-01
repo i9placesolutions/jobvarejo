@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   isObjectIntersectingCullRect,
-  shouldSkipViewportCullObject
+  shouldSkipViewportCullObject,
+  computeViewportCullRect,
+  VIEWPORT_CULL_PADDING
 } from '~/utils/viewportCulling'
 
 describe('isObjectIntersectingCullRect', () => {
@@ -130,5 +132,96 @@ describe('shouldSkipViewportCullObject', () => {
       type: 'rect',
       _customId: 'rect-1'
     }, new Set())).toBe(false)
+  })
+})
+
+describe('VIEWPORT_CULL_PADDING', () => {
+  it('e 240px (paddng default)', () => {
+    expect(VIEWPORT_CULL_PADDING).toBe(240)
+  })
+})
+
+describe('computeViewportCullRect', () => {
+  it('viewportTransform identidade + zoom 1: rect = [0,0, w, h] + padding', () => {
+    const r = computeViewportCullRect({
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      zoom: 1,
+      width: 1000,
+      height: 800
+    })
+    // Sem deslocamento, left/top = -PADDING (cobertura world maior que canvas)
+    expect(r.left).toBe(-VIEWPORT_CULL_PADDING)
+    expect(r.top).toBe(-VIEWPORT_CULL_PADDING)
+    expect(r.right).toBe(1000 + VIEWPORT_CULL_PADDING)
+    expect(r.bottom).toBe(800 + VIEWPORT_CULL_PADDING)
+  })
+
+  it('viewportTransform com pan: rect descolocado em world coords', () => {
+    // Pan -100 em x e -50 em y (canvas mostra (100, 50) em diante).
+    const r = computeViewportCullRect({
+      viewportTransform: [1, 0, 0, 1, -100, -50],
+      zoom: 1,
+      width: 800,
+      height: 600
+    })
+    expect(r.left).toBe(100 - VIEWPORT_CULL_PADDING)
+    expect(r.top).toBe(50 - VIEWPORT_CULL_PADDING)
+  })
+
+  it('zoom 2: world width e' + ' metade de canvas width', () => {
+    const r = computeViewportCullRect({
+      viewportTransform: [2, 0, 0, 2, 0, 0],
+      zoom: 2,
+      width: 1000,
+      height: 800
+    })
+    // canvas mostra 500x400 em world coords (pixels / zoom)
+    expect(r.right - r.left).toBe(500 + (VIEWPORT_CULL_PADDING * 2))
+    expect(r.bottom - r.top).toBe(400 + (VIEWPORT_CULL_PADDING * 2))
+  })
+
+  it('zoom 0.5: world width e' + ' o dobro de canvas width', () => {
+    const r = computeViewportCullRect({
+      viewportTransform: [0.5, 0, 0, 0.5, 0, 0],
+      zoom: 0.5,
+      width: 1000,
+      height: 800
+    })
+    expect(r.right - r.left).toBe(2000 + (VIEWPORT_CULL_PADDING * 2))
+    expect(r.bottom - r.top).toBe(1600 + (VIEWPORT_CULL_PADDING * 2))
+  })
+
+  it('zoom invalido (0/negativo) e' + ' clampado para 0.0001', () => {
+    const r = computeViewportCullRect({
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      zoom: 0,
+      width: 1000,
+      height: 800
+    })
+    // 1000 / 0.0001 = 10_000_000 (mas funcao deve produzir valor finito)
+    expect(Number.isFinite(r.right - r.left)).toBe(true)
+  })
+
+  it('viewportTransform null/missing: usa identidade', () => {
+    const r = computeViewportCullRect({
+      viewportTransform: null as any,
+      zoom: 1,
+      width: 100,
+      height: 100
+    })
+    expect(r.left).toBe(-VIEWPORT_CULL_PADDING)
+    expect(r.top).toBe(-VIEWPORT_CULL_PADDING)
+  })
+
+  it('padding customizavel via opt', () => {
+    const r = computeViewportCullRect({
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      zoom: 1,
+      width: 100,
+      height: 100,
+      padding: 50
+    })
+    expect(r.left).toBe(-50)
+    expect(r.right).toBe(100 + 50)
   })
 })
