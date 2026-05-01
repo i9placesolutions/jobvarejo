@@ -455,6 +455,36 @@ export const isObjectMaskCandidate = (obj: any): boolean => {
 }
 
 /**
+ * Recalcula dimensions de todos os textos descendentes de um objeto
+ * Fabric (recursivo). Usado apos mudanca de fonte ou clearFontCache
+ * para garantir que textos re-renderizem com metrics atualizadas.
+ *
+ * Mutativo. Para cada text/i-text/textbox descobertos:
+ *  - chama initDimensions (Fabric recalcula textLines, height, etc)
+ *  - marca dirty
+ *  - setCoords
+ *
+ * Para groups (que tem getObjects):
+ *  - desce recursivamente
+ *  - tambem marca dirty
+ *
+ * Pure no sentido de nao acessar canvas/refs globais.
+ */
+export const recalcAllTextMetrics = (obj: any): void => {
+    if (!obj) return
+    const t = String(obj.type || '').toLowerCase()
+    if (t === 'i-text' || t === 'textbox' || t === 'text') {
+        if (typeof obj.initDimensions === 'function') obj.initDimensions()
+        obj.set?.('dirty', true)
+        if (typeof obj.setCoords === 'function') obj.setCoords()
+    }
+    if (typeof obj.getObjects === 'function') {
+        obj.getObjects().forEach((child: any) => recalcAllTextMetrics(child))
+        obj.set?.('dirty', true)
+    }
+}
+
+/**
  * Limpa metadata de mascara aplicada em um objeto Fabric:
  *  - clipPath = null
  *  - delete __objectMaskEnabled / __objectMaskSourceId / _frameClipOwner

@@ -246,7 +246,8 @@ import {
     findNearestMaskSourceBelowTarget as findNearestMaskSourceBelowTargetHelper,
     clearObjectMaskMetadata,
     normalizeRectScale,
-    normalizeGroupRects
+    normalizeGroupRects,
+    recalcAllTextMetrics
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -5744,21 +5745,7 @@ const refreshLoadedCanvasTextMetrics = (canvasInstance: any) => {
         // ignore
     }
 
-    const recalcAllText = (obj: any) => {
-        if (!obj) return;
-        const t = String(obj.type || '').toLowerCase();
-        if (t === 'i-text' || t === 'textbox' || t === 'text') {
-            if (typeof obj.initDimensions === 'function') obj.initDimensions();
-            obj.set('dirty', true);
-            if (typeof obj.setCoords === 'function') obj.setCoords();
-        }
-        if (typeof obj.getObjects === 'function') {
-            obj.getObjects().forEach(recalcAllText);
-            obj.set('dirty', true);
-        }
-    };
-
-    canvasInstance.getObjects().forEach(recalcAllText);
+    canvasInstance.getObjects().forEach(recalcAllTextMetrics);
     refitManualLabelTemplatesAfterFontMetrics(canvasInstance);
 };
 

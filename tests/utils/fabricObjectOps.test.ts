@@ -14,7 +14,8 @@ import {
   findNearestMaskSourceBelowTarget,
   clearObjectMaskMetadata,
   normalizeRectScale,
-  normalizeGroupRects
+  normalizeGroupRects,
+  recalcAllTextMetrics
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -1084,5 +1085,80 @@ describe('normalizeGroupRects', () => {
   it('group com getObjects retornando non-array: no-op', () => {
     const group = { type: 'group', getObjects: () => null }
     expect(() => normalizeGroupRects(group)).not.toThrow()
+  })
+})
+
+describe('recalcAllTextMetrics', () => {
+  const makeText = (overrides: any = {}) => {
+    let initCalls = 0
+    let coordsCalls = 0
+    return {
+      type: 'text',
+      ...overrides,
+      initDimensions() { initCalls += 1 },
+      set(_k: string, _v: any) {},
+      setCoords() { coordsCalls += 1 },
+      _initCount: () => initCalls,
+      _coordsCount: () => coordsCalls
+    }
+  }
+
+  it('null/undefined: no-op', () => {
+    expect(() => recalcAllTextMetrics(null)).not.toThrow()
+    expect(() => recalcAllTextMetrics(undefined)).not.toThrow()
+  })
+
+  it('text node: chama initDimensions + setCoords', () => {
+    const t = makeText({ type: 'i-text' })
+    recalcAllTextMetrics(t)
+    expect(t._initCount()).toBe(1)
+    expect(t._coordsCount()).toBe(1)
+  })
+
+  it('aceita text/i-text/textbox', () => {
+    const types = ['text', 'i-text', 'textbox', 'TEXT', 'I-Text', 'TextBox']
+    for (const type of types) {
+      const t = makeText({ type })
+      recalcAllTextMetrics(t)
+      expect(t._initCount()).toBe(1)
+    }
+  })
+
+  it('non-text com getObjects: nao chama initDimensions', () => {
+    const child = makeText({ type: 'i-text' })
+    const group = {
+      type: 'group',
+      getObjects: () => [child],
+      set(_k: string, _v: any) {}
+    }
+    recalcAllTextMetrics(group)
+    expect(child._initCount()).toBe(1) // child sim
+    // group nao tem initDimensions, nao crasha
+  })
+
+  it('descend recursivamente em groups aninhados', () => {
+    const leaf = makeText({ type: 'text' })
+    const inner = {
+      type: 'group',
+      getObjects: () => [leaf],
+      set(_k: string, _v: any) {}
+    }
+    const outer = {
+      type: 'group',
+      getObjects: () => [inner],
+      set(_k: string, _v: any) {}
+    }
+    recalcAllTextMetrics(outer)
+    expect(leaf._initCount()).toBe(1)
+  })
+
+  it('non-text sem getObjects: no-op', () => {
+    const rect = { type: 'rect', set(_k: string, _v: any) {} }
+    expect(() => recalcAllTextMetrics(rect)).not.toThrow()
+  })
+
+  it('text sem initDimensions (Fabric antigo): nao crasha', () => {
+    const t: any = { type: 'text', set(_k: string, _v: any) {}, setCoords() {} }
+    expect(() => recalcAllTextMetrics(t)).not.toThrow()
   })
 })
