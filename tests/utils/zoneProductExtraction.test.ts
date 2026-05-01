@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   mapCardToZoneReviewProduct,
-  sortCardsByZoneOrder
+  sortCardsByZoneOrder,
+  sortZonesByVisualOrder,
+  compareZonesByVisualOrder
 } from '~/utils/zoneProductExtraction'
 
 const card = (overrides: any = {}) => ({
@@ -174,5 +176,110 @@ describe('sortCardsByZoneOrder', () => {
     const sorted = sortCardsByZoneOrder([a, b])
     expect(sorted[0]).toBe(a)
     expect(sorted[1]).toBe(b)
+  })
+})
+
+describe('compareZonesByVisualOrder', () => {
+  it('ambas com _zoneOrder diferentes: usa zoneOrder', () => {
+    const a = { _zoneOrder: 5 }
+    const b = { _zoneOrder: 1 }
+    expect(compareZonesByVisualOrder(a, b, null, null)).toBe(4)  // 5 - 1
+    expect(compareZonesByVisualOrder(b, a, null, null)).toBe(-4)
+  })
+
+  it('apenas a com _zoneOrder: a vem primeiro', () => {
+    expect(compareZonesByVisualOrder(
+      { _zoneOrder: 5 }, {}, null, null
+    )).toBe(-1)
+  })
+
+  it('apenas b com _zoneOrder: b vem primeiro', () => {
+    expect(compareZonesByVisualOrder(
+      {}, { _zoneOrder: 5 }, null, null
+    )).toBe(1)
+  })
+
+  it('ambas com mesmo _zoneOrder: cai em metrics', () => {
+    expect(compareZonesByVisualOrder(
+      { _zoneOrder: 1 }, { _zoneOrder: 1 },
+      { top: 100, left: 0 }, { top: 50, left: 0 }
+    )).toBe(50)  // a.top - b.top
+  })
+
+  it('sem _zoneOrder: usa metrics top, diff > 2px', () => {
+    expect(compareZonesByVisualOrder({}, {},
+      { top: 100, left: 0 }, { top: 50, left: 0 }
+    )).toBe(50)
+    expect(compareZonesByVisualOrder({}, {},
+      { top: 50, left: 0 }, { top: 100, left: 0 }
+    )).toBe(-50)
+  })
+
+  it('top diff <= 2px: desempata por left', () => {
+    expect(compareZonesByVisualOrder({}, {},
+      { top: 100, left: 200 }, { top: 101, left: 50 }
+    )).toBe(150)  // a.left - b.left
+  })
+
+  it('metrics null: usa default {top: 0, left: 0}', () => {
+    expect(compareZonesByVisualOrder({}, {}, null, null)).toBe(0)
+  })
+
+  it('metrics undefined: tambem usa default', () => {
+    expect(compareZonesByVisualOrder({}, {}, undefined, undefined)).toBe(0)
+  })
+})
+
+describe('sortZonesByVisualOrder', () => {
+  const isProdZone = (obj: any) => !!obj?.isZone
+
+  it('lista vazia/null: array vazio', () => {
+    expect(sortZonesByVisualOrder([], isProdZone, () => null)).toEqual([])
+    expect(sortZonesByVisualOrder(null as any, isProdZone, () => null)).toEqual([])
+  })
+
+  it('filtra non-zone via predicate', () => {
+    const z1 = { isZone: true, _zoneOrder: 1 }
+    const z2 = { isZone: false, _zoneOrder: 2 }
+    expect(sortZonesByVisualOrder([z1, z2], isProdZone, () => null)).toEqual([z1])
+  })
+
+  it('ordena por _zoneOrder primario', () => {
+    const a = { isZone: true, _zoneOrder: 3 }
+    const b = { isZone: true, _zoneOrder: 1 }
+    const c = { isZone: true, _zoneOrder: 2 }
+    expect(sortZonesByVisualOrder([a, b, c], isProdZone, () => null))
+      .toEqual([b, c, a])
+  })
+
+  it('ordena por metrics quando sem _zoneOrder', () => {
+    const a = { isZone: true, _zoneOrder: undefined }
+    const b = { isZone: true, _zoneOrder: undefined }
+    const metricsMap = new Map([
+      [a, { top: 200, left: 0 }],
+      [b, { top: 50, left: 0 }]
+    ])
+    const result = sortZonesByVisualOrder(
+      [a, b], isProdZone, (z: any) => metricsMap.get(z) ?? null
+    )
+    expect(result).toEqual([b, a])
+  })
+
+  it('nao muta o input array', () => {
+    const z1 = { isZone: true, _zoneOrder: 2 }
+    const z2 = { isZone: true, _zoneOrder: 1 }
+    const input = [z1, z2]
+    const snapshot = [...input]
+    sortZonesByVisualOrder(input, isProdZone, () => null)
+    expect(input).toEqual(snapshot)
+  })
+
+  it('null entries filtradas', () => {
+    const z1 = { isZone: true, _zoneOrder: 1 }
+    expect(sortZonesByVisualOrder(
+      [null, z1, undefined as any],
+      isProdZone,
+      () => null
+    )).toEqual([z1])
   })
 })

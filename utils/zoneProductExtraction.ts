@@ -123,3 +123,49 @@ export const sortCardsByZoneOrder = (cards: any[]): any[] => {
             return 0
         })
 }
+
+/**
+ * Comparator de ordenacao visual de zonas: prioriza _zoneOrder
+ * (numerico), com fallback para top/left dos metrics passados.
+ *
+ * Quando _zoneOrder esta definido para ambas, usa-o. Quando definido
+ * para apenas uma, ela vem primeiro. Quando nenhuma, ordena por
+ * (top, left) — diff de top > 2px usa apenas top, senao desempata
+ * por left.
+ *
+ * Pure: recebe (a, b, metricsA, metricsB).
+ */
+export const compareZonesByVisualOrder = (
+    a: any,
+    b: any,
+    metricsA: { top?: number; left?: number } | null | undefined,
+    metricsB: { top?: number; left?: number } | null | undefined
+): number => {
+    const ao = Number(a?._zoneOrder)
+    const bo = Number(b?._zoneOrder)
+    if (Number.isFinite(ao) && Number.isFinite(bo) && ao !== bo) return ao - bo
+    if (Number.isFinite(ao) && !Number.isFinite(bo)) return -1
+    if (!Number.isFinite(ao) && Number.isFinite(bo)) return 1
+
+    const ar = metricsA ?? { top: 0, left: 0 }
+    const br = metricsB ?? { top: 0, left: 0 }
+    const topDelta = Number(ar.top || 0) - Number(br.top || 0)
+    if (Math.abs(topDelta) > 2) return topDelta
+    return Number(ar.left || 0) - Number(br.left || 0)
+}
+
+/**
+ * Filtra + ordena zonas por ordem visual. Recebe array bruto de
+ * objetos Fabric, predicate isLikelyProductZone e callback que
+ * retorna metrics da zona (ou null). Pure.
+ */
+export const sortZonesByVisualOrder = (
+    objects: any[],
+    isLikelyProductZone: (obj: any) => boolean,
+    getMetrics: (zone: any) => { top?: number; left?: number } | null
+): any[] => {
+    return (objects || [])
+        .filter((zone: any) => !!zone && isLikelyProductZone(zone))
+        .slice()
+        .sort((a: any, b: any) => compareZonesByVisualOrder(a, b, getMetrics(a), getMetrics(b)))
+}

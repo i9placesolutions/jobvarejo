@@ -195,7 +195,9 @@ import {
 import { buildCardRecoverySearchPayload } from '~/utils/cardRecoveryPayload'
 import {
     mapCardToZoneReviewProduct,
-    sortCardsByZoneOrder
+    sortCardsByZoneOrder,
+    sortZonesByVisualOrder,
+    compareZonesByVisualOrder
 } from '~/utils/zoneProductExtraction'
 import {
     stableHash32,
@@ -7412,23 +7414,14 @@ const resolveImportTargetZone = (): any | null => resolveImportTargetZoneHelper(
     resolveZoneForProductImport
 })
 
+// Wrapper local: injeta isLikelyProductZone + getZoneMetrics (com fallback
+// para getBoundingRect) no helper puro sortZonesByVisualOrder.
 const sortProductZonesByVisualOrder = (zones: any[]): any[] => {
-    return zones
-        .filter((zone: any) => !!zone && isLikelyProductZone(zone))
-        .slice()
-        .sort((a: any, b: any) => {
-            const ao = Number((a as any)?._zoneOrder)
-            const bo = Number((b as any)?._zoneOrder)
-            if (Number.isFinite(ao) && Number.isFinite(bo) && ao !== bo) return ao - bo
-            if (Number.isFinite(ao) && !Number.isFinite(bo)) return -1
-            if (!Number.isFinite(ao) && Number.isFinite(bo)) return 1
-
-            const ar = getZoneMetrics(a) ?? a?.getBoundingRect?.(true) ?? { top: 0, left: 0 }
-            const br = getZoneMetrics(b) ?? b?.getBoundingRect?.(true) ?? { top: 0, left: 0 }
-            const topDelta = Number(ar?.top || 0) - Number(br?.top || 0)
-            if (Math.abs(topDelta) > 2) return topDelta
-            return Number(ar?.left || 0) - Number(br?.left || 0)
-        })
+    return sortZonesByVisualOrder(
+        zones,
+        isLikelyProductZone,
+        (zone: any) => getZoneMetrics(zone) ?? zone?.getBoundingRect?.(true) ?? null
+    )
 }
 
 const resolveRelatedImportZones = (primaryZone: any): any[] => {
