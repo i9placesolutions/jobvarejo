@@ -146,6 +146,7 @@ import {
     stableHash32,
     getZoneHighlightPredicate
 } from '~/utils/zoneHighlightHelpers'
+import { buildCardRelayoutSignature } from '~/utils/cardRelayoutSignature'
 import {
     PRICE_LAYOUT_NODE_PREFIXES,
     PRICE_LAYOUT_NODE_EXACT,
@@ -36350,85 +36351,7 @@ async function handleUpdateTemplateFromMiniEditor(
 }
 
 // Helper for Responsive Card Layout
-const buildCardRelayoutSignature = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
-    const num = (v: any, precision = 3) => {
-        const n = Number(v);
-        if (!Number.isFinite(n)) return null;
-        return Number(n.toFixed(precision));
-    };
-    const txt = (v: any) => {
-        if (v === null || v === undefined) return '';
-        return String(v);
-    };
-
-    const productData = ((group as any)?._productData && typeof (group as any)._productData === 'object')
-        ? ((group as any)._productData as Record<string, any>)
-        : {};
-    const s = (styles && typeof styles === 'object') ? styles : ({} as Partial<GlobalStyles>);
-
-    // Include ALL visual style values so resizeSmartObject re-applies when any style changes.
-    const styleSig = {
-        __refCellW: num((s as any).__refCellW),
-        __refCellH: num((s as any).__refCellH),
-        splashTemplateId: txt((s as any).splashTemplateId),
-        splashScale: num((s as any).splashScale),
-        splashOffsetY: num((s as any).splashOffsetY),
-        splashTextScale: num((s as any).splashTextScale),
-        splashFill: txt((s as any).splashFill),
-        splashColor: txt((s as any).splashColor ?? (s as any).accentColor),
-        splashTextColor: txt((s as any).splashTextColor),
-        splashStrokeWidth: num((s as any).splashStrokeWidth),
-        priceTextColor: txt((s as any).priceTextColor),
-        priceCurrencyColor: txt((s as any).priceCurrencyColor),
-        priceFont: txt((s as any).priceFont),
-        priceFontSize: num((s as any).priceFontSize),
-        priceFontWeight: txt((s as any).priceFontWeight),
-        priceFontStyle: txt((s as any).priceFontStyle),
-        currencySymbol: txt((s as any).currencySymbol),
-        prodNameScale: num((s as any).prodNameScale),
-        prodNameTransform: txt((s as any).prodNameTransform),
-        prodNameLineHeight: num((s as any).prodNameLineHeight),
-        prodNameOffsetY: num((s as any).prodNameOffsetY),
-        cardBorderRadius: num((s as any).cardBorderRadius),
-        // Visual props — invalidate cache when colors/fonts change
-        cardColor: txt((s as any).cardColor),
-        isProdBgTransparent: !!(s as any).isProdBgTransparent,
-        cardBorderColor: txt((s as any).cardBorderColor),
-        cardBorderWidth: num((s as any).cardBorderWidth),
-        prodNameColor: txt((s as any).prodNameColor),
-        prodNameFont: txt((s as any).prodNameFont),
-        prodNameWeight: txt((s as any).prodNameWeight),
-        prodNameAlign: txt((s as any).prodNameAlign),
-        limitColor: txt((s as any).limitColor),
-        limitFont: txt((s as any).limitFont)
-    };
-
-    const pricingSig = {
-        price: txt((group as any)?.price ?? productData.price),
-        pricePack: txt((group as any)?.pricePack ?? productData.pricePack),
-        priceUnit: txt((group as any)?.priceUnit ?? productData.priceUnit),
-        priceSpecial: txt((group as any)?.priceSpecial ?? productData.priceSpecial),
-        priceSpecialUnit: txt((group as any)?.priceSpecialUnit ?? productData.priceSpecialUnit),
-        priceWholesale: txt((group as any)?.priceWholesale ?? productData.priceWholesale),
-        wholesaleTrigger: txt((group as any)?.wholesaleTrigger ?? productData.wholesaleTrigger),
-        wholesaleTriggerUnit: txt((group as any)?.wholesaleTriggerUnit ?? productData.wholesaleTriggerUnit),
-        packQuantity: txt((group as any)?.packQuantity ?? productData.packQuantity),
-        packUnit: txt((group as any)?.packUnit ?? productData.packUnit),
-        packageLabel: txt((group as any)?.packageLabel ?? productData.packageLabel),
-        specialCondition: txt((group as any)?.specialCondition ?? productData.specialCondition),
-        imageUrl: txt((group as any)?.imageUrl ?? productData.imageUrl ?? productData.image),
-        // Product name and limit affect internal layout (title height, badge visibility)
-        name: txt(productData.name),
-        limitText: txt(productData.limitText || productData.limit)
-    };
-
-    return JSON.stringify({
-        w: num(w),
-        h: num(h),
-        styleSig,
-        pricingSig
-    });
-};
+// buildCardRelayoutSignature extraido para utils/cardRelayoutSignature.ts.
 
 const resolvePriceGroupBaseScale = (priceGroup: any, axis: 'x' | 'y', zoneScale: number) => {
     const originalKey = axis === 'x' ? '__originalScaleX' : '__originalScaleY';
