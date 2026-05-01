@@ -186,7 +186,8 @@ import {
     getCardBaseSizeForContainment,
     getObjectAbsoluteCenter,
     computeCentersBoundingCenter,
-    guessAiSizeFromObject
+    guessAiSizeFromObject,
+    setObjectCenterInParentPlane as setObjectCenterInParentPlaneHelper
 } from '~/utils/fabricMeasure'
 import {
     setText,
@@ -8931,13 +8932,12 @@ const invalidateContainmentZoneCache = () => {
 // hasParentZoneBinding extraido para utils/fabricObjectClassifiers.ts.
 // getObjectCenterInParentPlane extraido para utils/fabricMeasure.ts.
 
+// Wrapper local: injeta factory de fabric.Point no helper puro.
 const setObjectCenterInParentPlane = (obj: any, cx: number, cy: number) => {
-    if (!obj) return;
-    if (fabric?.Point && typeof obj.setPositionByOrigin === 'function') {
-        obj.setPositionByOrigin(new fabric.Point(cx, cy), 'center', 'center');
-    } else {
-        obj.set({ left: cx, top: cy, originX: 'center', originY: 'center' });
-    }
+    setObjectCenterInParentPlaneHelper(
+        obj, cx, cy,
+        fabric?.Point ? (x: number, y: number) => new fabric.Point(x, y) : undefined
+    );
 };
 
 // shouldApplyContainmentConstraints extraido para utils/fabricObjectClassifiers.ts.

@@ -254,3 +254,29 @@ export const measureContentBoundsLocal = (objects: any[]): ContentBounds | null 
         height: Math.max(0, bottom - top)
     }
 }
+
+/**
+ * Setter pareado com getObjectCenterInParentPlane: aplica um centro
+ * (cx, cy) no plano do parent. Pode usar setPositionByOrigin (Fabric)
+ * com Point construido pelo factory injetado, ou fallback que ajusta
+ * left/top + origin.
+ *
+ * Caller passa `pointFactory` (geralmente `(x, y) => new fabric.Point(x, y)`).
+ * Quando pointFactory ausente OU obj sem setPositionByOrigin, cai no
+ * fallback simples.
+ *
+ * Mutativo. No-op silencioso se obj null.
+ */
+export const setObjectCenterInParentPlane = (
+    obj: any,
+    cx: number,
+    cy: number,
+    pointFactory?: (x: number, y: number) => any
+): void => {
+    if (!obj) return
+    if (pointFactory && typeof obj.setPositionByOrigin === 'function') {
+        obj.setPositionByOrigin(pointFactory(cx, cy), 'center', 'center')
+    } else {
+        obj.set?.({ left: cx, top: cy, originX: 'center', originY: 'center' })
+    }
+}

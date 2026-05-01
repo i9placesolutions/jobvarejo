@@ -9,7 +9,8 @@ import {
   getCardBaseSizeForContainment,
   getObjectAbsoluteCenter,
   computeCentersBoundingCenter,
-  guessAiSizeFromObject
+  guessAiSizeFromObject,
+  setObjectCenterInParentPlane
 } from '~/utils/fabricMeasure'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -355,5 +356,58 @@ describe('guessAiSizeFromObject', () => {
   it('null/undefined cai em ar=1 → 1024x1024', () => {
     expect(guessAiSizeFromObject(null)).toBe('1024x1024')
     expect(guessAiSizeFromObject({})).toBe('1024x1024')
+  })
+})
+
+describe('setObjectCenterInParentPlane', () => {
+  const makeObj = (overrides: any = {}) => {
+    const o: any = {
+      left: 0, top: 0, originX: 'left', originY: 'top',
+      setPositionByOrigin(point: any, ox: string, oy: string) {
+        this.lastPositionCall = { point, ox, oy }
+      },
+      set(props: any) { Object.assign(this, props) },
+      ...overrides
+    }
+    return o
+  }
+
+  it('null/undefined: no-op', () => {
+    expect(() => setObjectCenterInParentPlane(null, 100, 200)).not.toThrow()
+    expect(() => setObjectCenterInParentPlane(undefined, 100, 200)).not.toThrow()
+  })
+
+  it('com pointFactory: usa setPositionByOrigin com Point construido', () => {
+    const obj = makeObj()
+    const factory = (x: number, y: number) => ({ x, y, _isPoint: true })
+    setObjectCenterInParentPlane(obj, 50, 75, factory)
+    expect(obj.lastPositionCall).toEqual({
+      point: { x: 50, y: 75, _isPoint: true },
+      ox: 'center',
+      oy: 'center'
+    })
+  })
+
+  it('sem pointFactory: fallback set({left, top, origin})', () => {
+    const obj = makeObj()
+    setObjectCenterInParentPlane(obj, 50, 75)
+    expect(obj.left).toBe(50)
+    expect(obj.top).toBe(75)
+    expect(obj.originX).toBe('center')
+    expect(obj.originY).toBe('center')
+    expect(obj.lastPositionCall).toBeUndefined() // nao chamou
+  })
+
+  it('obj sem setPositionByOrigin: fallback mesmo com factory', () => {
+    const obj = { left: 0, top: 0, set(props: any) { Object.assign(this, props) } } as any
+    const factory = (x: number, y: number) => ({ x, y })
+    setObjectCenterInParentPlane(obj, 100, 200, factory)
+    expect(obj.left).toBe(100)
+    expect(obj.top).toBe(200)
+  })
+
+  it('obj sem .set tampouco: nao crasha', () => {
+    const obj: any = { left: 0, top: 0 }
+    expect(() => setObjectCenterInParentPlane(obj, 50, 75)).not.toThrow()
   })
 })
