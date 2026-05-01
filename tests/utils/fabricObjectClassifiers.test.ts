@@ -14,7 +14,8 @@ import {
   hasObjectMaskApplied,
   isActiveSelectionObject,
   hasParentZoneBinding,
-  isCardLikeForZoneBinding
+  isCardLikeForZoneBinding,
+  countFabricObjectsAndImages
 } from '~/utils/fabricObjectClassifiers'
 
 // Helpers de mock — todos seguem duck typing de Fabric.
@@ -489,5 +490,64 @@ describe('isCardLikeForZoneBinding', () => {
 
   it('rejeita group sem nenhum sinal', () => {
     expect(isCardLikeForZoneBinding({ type: 'group' })).toBe(false)
+  })
+})
+
+describe('countFabricObjectsAndImages', () => {
+  it('canvas null/undefined retorna { 0, 0 }', () => {
+    expect(countFabricObjectsAndImages(null)).toEqual({ objects: 0, images: 0 })
+    expect(countFabricObjectsAndImages(undefined)).toEqual({ objects: 0, images: 0 })
+  })
+
+  it('canvas sem getObjects: { 0, 0 }', () => {
+    expect(countFabricObjectsAndImages({})).toEqual({ objects: 0, images: 0 })
+  })
+
+  it('canvas com objetos top-level', () => {
+    const canvas = {
+      getObjects: () => [
+        { type: 'rect' },
+        { type: 'image' },
+        { type: 'text' }
+      ]
+    }
+    expect(countFabricObjectsAndImages(canvas)).toEqual({ objects: 3, images: 1 })
+  })
+
+  it('groups aninhados via getObjects', () => {
+    const innerGroup = {
+      type: 'group',
+      getObjects: () => [{ type: 'image' }]
+    }
+    const outerGroup = {
+      type: 'group',
+      getObjects: () => [{ type: 'rect' }, innerGroup]
+    }
+    const canvas = { getObjects: () => [outerGroup] }
+    expect(countFabricObjectsAndImages(canvas)).toEqual({ objects: 4, images: 1 })
+  })
+
+  it('clipPath conta como objeto', () => {
+    const canvas = {
+      getObjects: () => [{ type: 'rect', clipPath: { type: 'rect' } }]
+    }
+    expect(countFabricObjectsAndImages(canvas)).toEqual({ objects: 2, images: 0 })
+  })
+
+  it('getObjects que joga erro nao quebra contagem (parcial OK)', () => {
+    const broken = {
+      type: 'group',
+      getObjects: () => { throw new Error('boom') }
+    }
+    const canvas = {
+      getObjects: () => [broken, { type: 'image' }]
+    }
+    expect(countFabricObjectsAndImages(canvas)).toEqual({ objects: 2, images: 1 })
+  })
+
+  it('referencia circular nao causa loop', () => {
+    const a: any = { type: 'group' }
+    a.getObjects = () => [a]
+    expect(countFabricObjectsAndImages({ getObjects: () => [a] })).toEqual({ objects: 1, images: 0 })
   })
 })

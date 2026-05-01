@@ -37,7 +37,8 @@ import {
     hasObjectMaskApplied,
     isActiveSelectionObject,
     hasParentZoneBinding,
-    isCardLikeForZoneBinding
+    isCardLikeForZoneBinding,
+    countFabricObjectsAndImages
 } from '~/utils/fabricObjectClassifiers'
 import {
     isCanvasContextError,
@@ -147,7 +148,8 @@ import {
     getCanvasLoadCacheToken,
     decodeContaboUrls,
     removeImageObjectsDeep,
-    getPreferredProductImageFromCardJson
+    getPreferredProductImageFromCardJson,
+    countCanvasJsonObjectsAndImages
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -5344,73 +5346,8 @@ const handleOpenPageHistoryEvent = () => {
     void openHistoryModal()
 }
 
-const countCanvasJsonObjectsAndImages = (canvasData: any): { objects: number; images: number } => {
-    const visited = new Set<any>()
-    let objects = 0
-    let images = 0
-
-    const walk = (node: any) => {
-        if (!node) return
-        if (visited.has(node)) return
-        if (typeof node === 'object') visited.add(node)
-
-        if (Array.isArray(node)) {
-            node.forEach(walk)
-            return
-        }
-
-        if (typeof node !== 'object') return
-
-        const t = String((node as any).type || '').toLowerCase()
-        if (t) objects++
-        if (t === 'image') images++
-
-        const children = (node as any).objects
-        if (Array.isArray(children)) walk(children)
-
-        const clip = (node as any).clipPath
-        if (clip && typeof clip === 'object') walk(clip)
-    }
-
-    walk(canvasData)
-    return { objects, images }
-}
-
-const countFabricObjectsAndImages = (fabricCanvas: any): { objects: number; images: number } => {
-    let objects = 0
-    let images = 0
-    const visited = new Set<any>()
-
-    const walk = (obj: any) => {
-        if (!obj) return
-        if (visited.has(obj)) return
-        visited.add(obj)
-
-        const t = String(obj.type || '').toLowerCase()
-        if (t) objects++
-        if (t === 'image') images++
-
-        if (typeof obj.getObjects === 'function') {
-            try {
-                const kids = obj.getObjects() || []
-                kids.forEach(walk)
-            } catch {
-                // ignore
-            }
-        }
-        const clip = (obj as any).clipPath
-        if (clip && typeof clip === 'object') walk(clip)
-    }
-
-    try {
-        const top = fabricCanvas?.getObjects?.() || []
-        top.forEach(walk)
-    } catch {
-        // ignore
-    }
-
-    return { objects, images }
-}
+// countCanvasJsonObjectsAndImages extraido para utils/canvasJsonClassifiers.ts.
+// countFabricObjectsAndImages extraido para utils/fabricObjectClassifiers.ts.
 
 function sanitizeFabricJsonTreeForLoad(
     root: any,

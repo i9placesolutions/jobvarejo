@@ -27,7 +27,8 @@ import {
   getCanvasLoadCacheToken,
   decodeContaboUrls,
   removeImageObjectsDeep,
-  getPreferredProductImageFromCardJson
+  getPreferredProductImageFromCardJson,
+  countCanvasJsonObjectsAndImages
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -1052,5 +1053,46 @@ describe('getPreferredProductImageFromCardJson', () => {
     expect(getPreferredProductImageFromCardJson({
       objects: [{ type: 'image', name: 'price_bg_image' }]
     })).toBeNull()
+  })
+})
+
+describe('countCanvasJsonObjectsAndImages', () => {
+  it('null/undefined: { 0, 0 }', () => {
+    expect(countCanvasJsonObjectsAndImages(null)).toEqual({ objects: 0, images: 0 })
+    expect(countCanvasJsonObjectsAndImages(undefined)).toEqual({ objects: 0, images: 0 })
+  })
+
+  it('canvas vazio: 0 objetos', () => {
+    expect(countCanvasJsonObjectsAndImages({ objects: [] })).toEqual({ objects: 0, images: 0 })
+  })
+
+  it('canvas root sem type: 0 mas conta filhos', () => {
+    expect(countCanvasJsonObjectsAndImages({
+      objects: [{ type: 'rect' }, { type: 'image' }, { type: 'text' }]
+    })).toEqual({ objects: 3, images: 1 })
+  })
+
+  it('groups aninhados sao contados (DFS)', () => {
+    expect(countCanvasJsonObjectsAndImages({
+      objects: [
+        { type: 'group', objects: [
+          { type: 'rect' },
+          { type: 'image' },
+          { type: 'group', objects: [{ type: 'image' }] }
+        ]}
+      ]
+    })).toEqual({ objects: 5, images: 2 })
+  })
+
+  it('clipPath conta como objeto', () => {
+    expect(countCanvasJsonObjectsAndImages({
+      objects: [{ type: 'rect', clipPath: { type: 'rect' } }]
+    })).toEqual({ objects: 2, images: 0 })
+  })
+
+  it('referencia circular nao causa loop infinito', () => {
+    const a: any = { type: 'group', objects: [] }
+    a.objects.push(a)
+    expect(countCanvasJsonObjectsAndImages({ objects: [a] })).toEqual({ objects: 1, images: 0 })
   })
 })

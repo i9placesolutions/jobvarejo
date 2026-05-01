@@ -359,6 +359,45 @@ export const getPreferredProductImageFromCardJson = (card: any): any | null => {
 }
 
 /**
+ * Conta total de objetos e imagens em um canvasData JSON.
+ *
+ * Walks recursivo (DFS) em `objects` e `clipPath`, com proteção contra
+ * referencias circulares via WeakSet visited. Conta TODOS os nodos com
+ * `type` (incluindo groups) — entao o total cresce com profundidade.
+ */
+export const countCanvasJsonObjectsAndImages = (canvasData: any): { objects: number; images: number } => {
+    const visited = new Set<any>()
+    let objects = 0
+    let images = 0
+
+    const walk = (node: any) => {
+        if (!node) return
+        if (visited.has(node)) return
+        if (typeof node === 'object') visited.add(node)
+
+        if (Array.isArray(node)) {
+            node.forEach(walk)
+            return
+        }
+
+        if (typeof node !== 'object') return
+
+        const t = String((node as any).type || '').toLowerCase()
+        if (t) objects++
+        if (t === 'image') images++
+
+        const children = (node as any).objects
+        if (Array.isArray(children)) walk(children)
+
+        const clip = (node as any).clipPath
+        if (clip && typeof clip === 'object') walk(clip)
+    }
+
+    walk(canvasData)
+    return { objects, images }
+}
+
+/**
  * Clone defensivo de canvasData antes de loadFromJSON. Tenta
  * structuredClone, depois JSON, e como ultima saida retorna o original
  * (caller deve copiar com cuidado para nao mutar shared state).

@@ -62,6 +62,50 @@ export const isActiveSelectionObject = (obj: any): boolean =>
     String(obj?.type || '').toLowerCase() === 'activeselection'
 
 /**
+ * Conta total de objetos e imagens em um Fabric Canvas runtime.
+ *
+ * Walks recursivo via `getObjects()` + `clipPath`, com proteção contra
+ * referencias circulares via Set visited. Conta TODOS os nodos com
+ * `type` (incluindo groups). Erros em getObjects sao silenciosamente
+ * ignorados — contagem parcial e' aceitavel para metricas.
+ */
+export const countFabricObjectsAndImages = (fabricCanvas: any): { objects: number; images: number } => {
+    let objects = 0
+    let images = 0
+    const visited = new Set<any>()
+
+    const walk = (obj: any) => {
+        if (!obj) return
+        if (visited.has(obj)) return
+        visited.add(obj)
+
+        const t = String(obj.type || '').toLowerCase()
+        if (t) objects++
+        if (t === 'image') images++
+
+        if (typeof obj.getObjects === 'function') {
+            try {
+                const kids = obj.getObjects() || []
+                kids.forEach(walk)
+            } catch {
+                // ignore
+            }
+        }
+        const clip = (obj as any).clipPath
+        if (clip && typeof clip === 'object') walk(clip)
+    }
+
+    try {
+        const top = fabricCanvas?.getObjects?.() || []
+        top.forEach(walk)
+    } catch {
+        // ignore
+    }
+
+    return { objects, images }
+}
+
+/**
  * Detecta se um objeto tem binding direto a uma zona via parentZoneId.
  * Util para filtrar cards que ja estao "presos" a uma zona durante
  * fluxos de relayout/contenção.

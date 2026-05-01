@@ -10,6 +10,8 @@ import { makeId } from './makeId'
 import { isTextStyleObject } from './editorSelectionSnapshot'
 import { isLikelyProductCard } from './fabricObjectClassifiers'
 import { isValidClipPath } from './canvasValidation'
+import { isControlLikeObject } from './controlObjectClassifiers'
+import { isUserGuideObject } from './userGuideHelpers'
 
 /**
  * Adiciona um objeto a um group Fabric com fallback compatibilidade
@@ -284,6 +286,50 @@ export const resetDuplicatedObjectRuntime = (root: any): void => {
         } catch {
             // ignore product-card specific cleanup failures
         }
+    }
+}
+
+/**
+ * Garante que o objeto tem `_customId` (identidade persistente como
+ * camada). NO-OP em:
+ *  - objetos null/nao-object
+ *  - objetos que ja tem _customId
+ *  - control-like (path nodes, bezier handles, drag guides)
+ *  - user guides (persistidas por `id`, nunca devem virar camadas)
+ *
+ * Quando aplicavel, atribui um novo id via makeId().
+ */
+export const ensureObjectPersistentId = (obj: any): void => {
+    if (!obj || typeof obj !== 'object') return
+    if (obj._customId) return
+    if (isControlLikeObject(obj)) return
+    try { if (isUserGuideObject(obj)) return } catch { /* ignore */ }
+    obj._customId = makeId()
+}
+
+/**
+ * Garante flags persistentes para objetos que sao "content" do projeto
+ * (frame/smart object/product card/zone/priceGroup/etc):
+ *  1. ensureObjectPersistentId — atribui _customId se faltando
+ *  2. Se for content explicito mas tem excludeFromExport=true, remove
+ *     a flag (corrige estado inconsistente apos legacy/migration)
+ */
+export const ensurePersistentContentFlags = (obj: any): void => {
+    if (!obj || typeof obj !== 'object') return
+    ensureObjectPersistentId(obj)
+    const name = String(obj.name || '')
+    const isPersistentContent =
+        !!obj.isFrame ||
+        !!obj.isSmartObject ||
+        !!obj.isProductCard ||
+        !!obj.isGridZone ||
+        !!obj.isProductZone ||
+        !!obj.parentZoneId ||
+        name === 'gridZone' ||
+        name === 'productZoneContainer' ||
+        name.startsWith('product-card')
+    if (isPersistentContent && obj.excludeFromExport) {
+        obj.excludeFromExport = false
     }
 }
 
