@@ -3,7 +3,8 @@ import {
   getPasteHttpStatus,
   getPasteRetryAfterMs,
   isPasteRateLimitError,
-  isTransientPasteError
+  isTransientPasteError,
+  isTransientParseError
 } from '~/utils/pasteListErrorHelpers'
 
 describe('getPasteHttpStatus', () => {
@@ -142,5 +143,49 @@ describe('isTransientPasteError', () => {
     expect(isTransientPasteError({ statusMessage: 'failed to fetch' })).toBe(true)
     expect(isTransientPasteError({ cause: { message: 'load failed' } })).toBe(true)
     expect(isTransientPasteError({ data: { message: 'networkerror' } })).toBe(true)
+  })
+})
+
+describe('isTransientParseError', () => {
+  it('408 Request Timeout → true', () => {
+    expect(isTransientParseError({ statusCode: 408 })).toBe(true)
+  })
+
+  it('502/503/504 → true', () => {
+    expect(isTransientParseError({ statusCode: 502 })).toBe(true)
+    expect(isTransientParseError({ statusCode: 503 })).toBe(true)
+    expect(isTransientParseError({ statusCode: 504 })).toBe(true)
+  })
+
+  it('500/501/4xx (exceto 408) → false', () => {
+    expect(isTransientParseError({ statusCode: 500 })).toBe(false)
+    expect(isTransientParseError({ statusCode: 400 })).toBe(false)
+    expect(isTransientParseError({ statusCode: 404 })).toBe(false)
+    expect(isTransientParseError({ statusCode: 429 })).toBe(false)
+  })
+
+  it('mensagem com "timeout" em qualquer status → true', () => {
+    expect(isTransientParseError({ message: 'Request timeout' })).toBe(true)
+    expect(isTransientParseError({ statusCode: 200, message: 'TIMEOUT' })).toBe(true)
+  })
+
+  it('mensagem com "network" em qualquer status → true', () => {
+    expect(isTransientParseError({ message: 'Network error' })).toBe(true)
+    expect(isTransientParseError({ statusMessage: 'NETWORK CHANGED' })).toBe(true)
+  })
+
+  it('mensagem com "failed to fetch" / "load failed" → true', () => {
+    expect(isTransientParseError({ message: 'Failed to fetch' })).toBe(true)
+    expect(isTransientParseError({ message: 'Load failed' })).toBe(true)
+  })
+
+  it('mensagem desconhecida + status nao-transient → false', () => {
+    expect(isTransientParseError({ statusCode: 400, message: 'Bad request' })).toBe(false)
+    expect(isTransientParseError({ message: 'Some random error' })).toBe(false)
+  })
+
+  it('null/undefined/empty → false', () => {
+    expect(isTransientParseError(null)).toBe(false)
+    expect(isTransientParseError({})).toBe(false)
   })
 })

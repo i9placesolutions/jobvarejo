@@ -119,7 +119,8 @@ import {
     getPasteHttpStatus,
     getPasteRetryAfterMs,
     isPasteRateLimitError,
-    isTransientPasteError
+    isTransientPasteError,
+    isTransientParseError
 } from '~/utils/pasteListErrorHelpers'
 import {
     DEBOUNCED_GLOBAL_STYLE_PROPS,
@@ -25604,12 +25605,9 @@ const openReviewModalWithProducts = (productsWithImages: any[]) => {
     showProductReviewModal.value = true;
 };
 
-const _isTransientParseError = (err: any): boolean => {
-    const status = Number(err?.status || err?.statusCode || err?.data?.statusCode || 0);
-    if (status === 408 || status === 502 || status === 503 || status === 504) return true;
-    const msg = String(err?.message || err?.statusMessage || '').toLowerCase();
-    return msg.includes('timeout') || msg.includes('network') || msg.includes('failed to fetch') || msg.includes('load failed');
-};
+// _isTransientParseError extraido para utils/pasteListErrorHelpers.ts
+// (renomeado para isTransientParseError, sem prefixo de "private").
+const _isTransientParseError = isTransientParseError;
 
 const _fetchParseWithRetry = async <T = any>(body: any, maxAttempts = 2): Promise<T> => {
     const headers = await getApiAuthHeaders();

@@ -87,3 +87,23 @@ export const isTransientPasteError = (err: any): boolean => {
     }
     return status === 502 || status === 503 || status === 504
 }
+
+/**
+ * Detecta um erro transiente em chamadas para o endpoint de parse-products
+ * (similar a isTransientPasteError mas com regras mais permissivas):
+ *  - 408 Request Timeout, 502, 503, 504
+ *  - mensagem com "timeout", "network", "failed to fetch", "load failed"
+ *    em qualquer status
+ *
+ * Mais permissivo que isTransientPasteError porque o parse-products tem
+ * latencia variavel maior (LLM calls) e merece mais retry attempts.
+ */
+export const isTransientParseError = (err: any): boolean => {
+    const status = getPasteHttpStatus(err)
+    if (status === 408 || status === 502 || status === 503 || status === 504) return true
+    const msg = String(err?.message || err?.statusMessage || '').toLowerCase()
+    return msg.includes('timeout')
+        || msg.includes('network')
+        || msg.includes('failed to fetch')
+        || msg.includes('load failed')
+}
