@@ -24,6 +24,27 @@ export const SCROLLBAR_IGNORED_IDS: ReadonlySet<string> = new Set([
 export const SCROLLBAR_PADDING = 100
 
 /**
+ * Intervalo padrao em ms entre passes de sanitize do stack do canvas
+ * acionados por scrollbar bounds.
+ */
+export const SCROLLBAR_SANITIZE_INTERVAL_MS = 1200
+
+/**
+ * Calcula intervalo adaptativo de sanitize baseado em objectCount.
+ * Projetos grandes pagam mais para sanitizar — usamos intervalo maior
+ * para nao gastar CPU repetidamente.
+ *  - > 600 objetos: 5000ms
+ *  - > 250: 2500ms
+ *  - <= 250: SCROLLBAR_SANITIZE_INTERVAL_MS (1200ms default)
+ */
+export const getScrollbarSanitizeIntervalMs = (objectCount: number): number => {
+    const n = Number(objectCount) || 0
+    if (n > 600) return 5000
+    if (n > 250) return 2500
+    return SCROLLBAR_SANITIZE_INTERVAL_MS
+}
+
+/**
  * Detecta se um objeto Fabric deve ser considerado no calculo dos
  * scrollbar bounds:
  *  - precisa ser fabric.Object valido

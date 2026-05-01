@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   SCROLLBAR_IGNORED_IDS,
   SCROLLBAR_PADDING,
-  isScrollbarRelevantObject
+  SCROLLBAR_SANITIZE_INTERVAL_MS,
+  isScrollbarRelevantObject,
+  getScrollbarSanitizeIntervalMs
 } from '~/utils/scrollbarHelpers'
 
 const fabricObj = (overrides: any = {}) => ({
@@ -52,5 +54,44 @@ describe('isScrollbarRelevantObject', () => {
   it('aceita objeto com id customizado nao ignorado', () => {
     expect(isScrollbarRelevantObject(fabricObj({ id: 'rect-1' }))).toBe(true)
     expect(isScrollbarRelevantObject(fabricObj({ id: 'guide-user-1' }))).toBe(true)
+  })
+})
+
+describe('SCROLLBAR_SANITIZE_INTERVAL_MS', () => {
+  it('e 1200ms', () => {
+    expect(SCROLLBAR_SANITIZE_INTERVAL_MS).toBe(1200)
+  })
+})
+
+describe('getScrollbarSanitizeIntervalMs', () => {
+  it('<= 250 objetos: SCROLLBAR_SANITIZE_INTERVAL_MS', () => {
+    expect(getScrollbarSanitizeIntervalMs(0)).toBe(1200)
+    expect(getScrollbarSanitizeIntervalMs(100)).toBe(1200)
+    expect(getScrollbarSanitizeIntervalMs(250)).toBe(1200)
+  })
+
+  it('251..600: 2500ms', () => {
+    expect(getScrollbarSanitizeIntervalMs(251)).toBe(2500)
+    expect(getScrollbarSanitizeIntervalMs(400)).toBe(2500)
+    expect(getScrollbarSanitizeIntervalMs(600)).toBe(2500)
+  })
+
+  it('> 600: 5000ms', () => {
+    expect(getScrollbarSanitizeIntervalMs(601)).toBe(5000)
+    expect(getScrollbarSanitizeIntervalMs(1000)).toBe(5000)
+    expect(getScrollbarSanitizeIntervalMs(5000)).toBe(5000)
+  })
+
+  it('NaN/null/negativo: 1200 (MIN)', () => {
+    expect(getScrollbarSanitizeIntervalMs(NaN)).toBe(1200)
+    expect(getScrollbarSanitizeIntervalMs(null as any)).toBe(1200)
+    expect(getScrollbarSanitizeIntervalMs(-100)).toBe(1200)
+  })
+
+  it('escala monotonica crescente', () => {
+    expect(getScrollbarSanitizeIntervalMs(250))
+      .toBeLessThanOrEqual(getScrollbarSanitizeIntervalMs(300))
+    expect(getScrollbarSanitizeIntervalMs(600))
+      .toBeLessThanOrEqual(getScrollbarSanitizeIntervalMs(700))
   })
 })

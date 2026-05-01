@@ -81,7 +81,9 @@ import { parseViewSettings, serializeViewSettings } from '~/utils/viewSettings'
 import {
     SCROLLBAR_IGNORED_IDS,
     SCROLLBAR_PADDING,
-    isScrollbarRelevantObject
+    SCROLLBAR_SANITIZE_INTERVAL_MS,
+    isScrollbarRelevantObject,
+    getScrollbarSanitizeIntervalMs
 } from '~/utils/scrollbarHelpers'
 import {
     getCanvasObjectsRefreshIntervalMs,
@@ -6148,7 +6150,7 @@ type ScrollbarContentBounds = {
 let scrollbarBoundsDirty = true
 let scrollbarBoundsCache: ScrollbarContentBounds | null = null
 let lastScrollbarSanitizeAt = 0
-const SCROLLBAR_SANITIZE_INTERVAL_MS = 1200
+// SCROLLBAR_SANITIZE_INTERVAL_MS extraido para utils/scrollbarHelpers.ts.
 
 const invalidateScrollbarBounds = () => {
     scrollbarBoundsDirty = true
@@ -6173,10 +6175,7 @@ const getScrollbarContentBounds = (): ScrollbarContentBounds => {
     if (scrollbarBoundsDirty && canvasInstance) {
         const now = Date.now()
         const objectCount = Number(canvasInstance?.getObjects?.()?.length || 0)
-        const adaptiveSanitizeInterval =
-            objectCount > 600 ? 5000 :
-            objectCount > 250 ? 2500 :
-            SCROLLBAR_SANITIZE_INTERVAL_MS
+        const adaptiveSanitizeInterval = getScrollbarSanitizeIntervalMs(objectCount)
         if (now - lastScrollbarSanitizeAt > adaptiveSanitizeInterval) {
             sanitizeCanvasObjectStack(canvasInstance, 'scrollbar-bounds')
             lastScrollbarSanitizeAt = now
