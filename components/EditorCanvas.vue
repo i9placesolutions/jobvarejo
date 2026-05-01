@@ -226,7 +226,8 @@ import {
 import {
     templateSnapshotHasAtacStructure,
     shouldForceCanonicalAtacForTemplateJson,
-    shouldUseAtacVariantSnapshotsForTemplate
+    shouldUseAtacVariantSnapshotsForTemplate,
+    shouldPreserveManualTemplateVisual as shouldPreserveManualTemplateVisualHelper
 } from '~/utils/templateSnapshotHelpers'
 import {
     getSpecialConditionFromProduct,
@@ -30678,30 +30679,10 @@ function ensureRedBurstPriceGroupVisibility(priceGroup: any): boolean {
 // reviveRedBurstJsonNode + sanitizeRedBurstTemplateGroupJson extraidos
 // para utils/redBurstTemplateRevive.ts.
 
-function shouldPreserveManualTemplateVisual(priceGroup: any): boolean {
-    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;
-    if ((priceGroup as any).__preserveManualLayout === true || (priceGroup as any).__isCustomTemplate === true) return true;
-    if ((priceGroup as any).__forceAtacarejoCanonical === true) return false;
-
-    if (isRedBurstPriceGroup(priceGroup)) return true;
-
-    const all = collectObjectsDeep(priceGroup);
-    if (!all.length) return false;
-
-    const hasAtacStructure = !!findByName(all, 'atac_retail_bg');
-    if (hasAtacStructure) return false;
-
-    if (findByName(all, 'price_header_bg') || findByName(all, 'price_header_text')) return true;
-
-    const hasTemplateMetrics = all.some((obj: any) => (
-        Number.isFinite(Number((obj as any)?.__originalLeft)) ||
-        Number.isFinite(Number((obj as any)?.__originalTop)) ||
-        Number.isFinite(Number((obj as any)?.__originalFontSize)) ||
-        Number.isFinite(Number((obj as any)?.__originalWidth)) ||
-        Number.isFinite(Number((obj as any)?.__originalHeight))
-    ));
-    return hasTemplateMetrics;
-}
+// shouldPreserveManualTemplateVisual extraido para utils/templateSnapshotHelpers.ts.
+// Wrapper local injeta isRedBurstPriceGroup (evita dependencia circular).
+const shouldPreserveManualTemplateVisual = (priceGroup: any): boolean =>
+    shouldPreserveManualTemplateVisualHelper(priceGroup, isRedBurstPriceGroup)
 
 const restoreMissingManualTemplateFlags = (priceGroup: any): boolean => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;

@@ -8,6 +8,8 @@
  * Cobertura: tests/utils/templateSnapshotHelpers.test.ts
  */
 
+import { collectObjectsDeep, findByName } from './fabricObjectClassifiers'
+
 /**
  * Detecta se um snapshot (JSON ou objeto Fabric) contem um node com
  * name 'atac_retail_bg' em qualquer profundidade. Tradicionalmente
@@ -61,4 +63,49 @@ export const shouldForceCanonicalAtacForTemplateJson = (snapshot: any): boolean 
  */
 export const shouldUseAtacVariantSnapshotsForTemplate = (_snapshot: any): boolean => {
     return false
+}
+
+/**
+ * Decide se um priceGroup tem layout "manual" customizado que deve
+ * ser preservado durante re-renders/syncs (em vez de regenerar o
+ * layout default).
+ *
+ * Heuristicas em ordem (primeira que casa decide):
+ *  1. Flag explicita `__preserveManualLayout=true` ou `__isCustomTemplate=true` → true
+ *  2. Flag explicita `__forceAtacarejoCanonical=true` → false (forca layout atac default)
+ *  3. Tem estrutura Red Burst (via `isRedBurstCheck` injetado) → true
+ *  4. Tem node `atac_retail_bg` (estrutura atacarejo padrao) → false
+ *  5. Tem `price_header_bg` ou `price_header_text` → true (custom header)
+ *  6. Algum filho tem `__originalLeft/Top/FontSize/Width/Height` finitos → true
+ *  7. Default → false
+ *
+ * Caller injeta `isRedBurstCheck` para evitar dependencia circular
+ * entre `templateSnapshotHelpers` e `redBurstTemplateRevive`.
+ */
+export const shouldPreserveManualTemplateVisual = (
+    priceGroup: any,
+    isRedBurstCheck: (g: any) => boolean
+): boolean => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false
+    if ((priceGroup as any).__preserveManualLayout === true || (priceGroup as any).__isCustomTemplate === true) return true
+    if ((priceGroup as any).__forceAtacarejoCanonical === true) return false
+
+    if (isRedBurstCheck(priceGroup)) return true
+
+    const all = collectObjectsDeep(priceGroup)
+    if (!all.length) return false
+
+    const hasAtacStructure = !!findByName(all, 'atac_retail_bg')
+    if (hasAtacStructure) return false
+
+    if (findByName(all, 'price_header_bg') || findByName(all, 'price_header_text')) return true
+
+    const hasTemplateMetrics = all.some((obj: any) => (
+        Number.isFinite(Number((obj as any)?.__originalLeft)) ||
+        Number.isFinite(Number((obj as any)?.__originalTop)) ||
+        Number.isFinite(Number((obj as any)?.__originalFontSize)) ||
+        Number.isFinite(Number((obj as any)?.__originalWidth)) ||
+        Number.isFinite(Number((obj as any)?.__originalHeight))
+    ))
+    return hasTemplateMetrics
 }

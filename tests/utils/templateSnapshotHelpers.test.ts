@@ -2,8 +2,82 @@ import { describe, it, expect } from 'vitest'
 import {
   templateSnapshotHasAtacStructure,
   shouldForceCanonicalAtacForTemplateJson,
-  shouldUseAtacVariantSnapshotsForTemplate
+  shouldUseAtacVariantSnapshotsForTemplate,
+  shouldPreserveManualTemplateVisual
 } from '~/utils/templateSnapshotHelpers'
+
+describe('shouldPreserveManualTemplateVisual', () => {
+  const noRedBurst = () => false
+  const makeGroup = (children: any[], extra: any = {}) => ({
+    type: 'group',
+    getObjects: () => children,
+    ...extra
+  })
+
+  it('null/non-group: false', () => {
+    expect(shouldPreserveManualTemplateVisual(null, noRedBurst)).toBe(false)
+    expect(shouldPreserveManualTemplateVisual({}, noRedBurst)).toBe(false)
+  })
+
+  it('__preserveManualLayout=true: true imediato', () => {
+    const g = makeGroup([], { __preserveManualLayout: true })
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(true)
+  })
+
+  it('__isCustomTemplate=true: true imediato', () => {
+    const g = makeGroup([], { __isCustomTemplate: true })
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(true)
+  })
+
+  it('__forceAtacarejoCanonical=true: false (forca atac)', () => {
+    const g = makeGroup([{ name: 'price_header_bg' }], { __forceAtacarejoCanonical: true })
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(false)
+  })
+
+  it('isRedBurstCheck=true: true (manual)', () => {
+    const g = makeGroup([])
+    expect(shouldPreserveManualTemplateVisual(g, () => true)).toBe(true)
+  })
+
+  it('children vazios: false', () => {
+    expect(shouldPreserveManualTemplateVisual(makeGroup([]), noRedBurst)).toBe(false)
+  })
+
+  it('atac_retail_bg presente: false (atac default)', () => {
+    const g = makeGroup([{ name: 'atac_retail_bg' }])
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(false)
+  })
+
+  it('price_header_bg presente: true (custom header)', () => {
+    const g = makeGroup([{ name: 'price_header_bg' }])
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(true)
+  })
+
+  it('price_header_text presente: true', () => {
+    const g = makeGroup([{ name: 'price_header_text' }])
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(true)
+  })
+
+  it('crianca com __originalLeft finito: true', () => {
+    const g = makeGroup([{ name: 'priceInteger', __originalLeft: 10 }])
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(true)
+  })
+
+  it('crianca com __originalFontSize: true', () => {
+    const g = makeGroup([{ __originalFontSize: 32 }])
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(true)
+  })
+
+  it('children sem flags + sem header + sem metrics: false', () => {
+    const g = makeGroup([{ name: 'priceInteger' }])
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(false)
+  })
+
+  it('atac_retail_bg + __preserveManualLayout=true: __preserve vence (true)', () => {
+    const g = makeGroup([{ name: 'atac_retail_bg' }], { __preserveManualLayout: true })
+    expect(shouldPreserveManualTemplateVisual(g, noRedBurst)).toBe(true)
+  })
+})
 
 describe('templateSnapshotHasAtacStructure', () => {
   it('null/non-object → false', () => {
