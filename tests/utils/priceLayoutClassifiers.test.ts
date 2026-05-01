@@ -9,7 +9,9 @@ import {
   isFiniteLayoutNumber,
   getCardHostForPriceGroup,
   getCardSizeForPriceGroup,
-  hasCorruptedPriceLayout
+  hasCorruptedPriceLayout,
+  getPriceGroupFromAny,
+  getCardGroupFromAny
 } from '~/utils/priceLayoutClassifiers'
 
 describe('PRICE_LAYOUT_NODE_EXACT / PREFIXES', () => {
@@ -416,5 +418,93 @@ describe('hasCorruptedPriceLayout', () => {
     expect(hasCorruptedPriceLayout(makeGroup({}, [
       validNode({ type: 'textbox', fontSize: 0 })
     ]))).toBe(true)
+  })
+})
+
+describe('getPriceGroupFromAny', () => {
+  const makeGroup = (props: any, kids: any[] = []) => ({
+    type: 'group',
+    getObjects: () => kids,
+    ...props
+  })
+
+  it('null/undefined: null', () => {
+    expect(getPriceGroupFromAny(null)).toBe(null)
+    expect(getPriceGroupFromAny(undefined)).toBe(null)
+  })
+
+  it('direct: group com name=priceGroup retorna ele mesmo', () => {
+    const pg = makeGroup({ name: 'priceGroup' }, [
+      { type: 'rect' }, { type: 'text' }
+    ])
+    expect(getPriceGroupFromAny(pg)).toBe(pg)
+  })
+
+  it('walk-up: child de priceGroup retorna o grupo pai', () => {
+    const pg = makeGroup({ name: 'priceGroup' }, [])
+    const child = { type: 'text', group: pg }
+    expect(getPriceGroupFromAny(child)).toBe(pg)
+  })
+
+  it('walk-down: card group retorna priceGroup interno', () => {
+    const pg = makeGroup({ name: 'priceGroup' }, [
+      { type: 'rect' }, { type: 'text' }
+    ])
+    const card = makeGroup({ isProductCard: true }, [pg])
+    expect(getPriceGroupFromAny(card)).toBe(pg)
+  })
+
+  it('heuristica: group sem name mas com rect+text e' + ' detectado e renomeado', () => {
+    const pg = makeGroup({}, [
+      { type: 'rect' }, { type: 'text' }
+    ])
+    const result = getPriceGroupFromAny(pg)
+    expect(result).toBe(pg)
+    expect(pg.name).toBe('priceGroup')
+  })
+
+  it('group nao-priceGroup-like: null', () => {
+    const g = makeGroup({}, [])
+    expect(getPriceGroupFromAny(g)).toBe(null)
+  })
+
+  it('object simples (nao group): null', () => {
+    expect(getPriceGroupFromAny({ type: 'rect' })).toBe(null)
+    expect(getPriceGroupFromAny({ type: 'text' })).toBe(null)
+  })
+})
+
+describe('getCardGroupFromAny', () => {
+  it('null/undefined: null', () => {
+    expect(getCardGroupFromAny(null)).toBe(null)
+    expect(getCardGroupFromAny(undefined)).toBe(null)
+  })
+
+  it('direct smartObject: retorna ele mesmo', () => {
+    const card = { type: 'group', isSmartObject: true }
+    expect(getCardGroupFromAny(card)).toBe(card)
+  })
+
+  it('direct productCard: retorna ele mesmo', () => {
+    const card = { type: 'group', isProductCard: true }
+    expect(getCardGroupFromAny(card)).toBe(card)
+  })
+
+  it('walk-up: child de card group retorna o card', () => {
+    const card = { type: 'group', isProductCard: true }
+    const child = { type: 'rect', group: card }
+    expect(getCardGroupFromAny(child)).toBe(card)
+  })
+
+  it('group sem flags: null', () => {
+    const g = { type: 'group' }
+    expect(getCardGroupFromAny(g)).toBe(null)
+  })
+
+  it('walk-up via 2 niveis aninhados', () => {
+    const card = { type: 'group', isProductCard: true }
+    const middle = { type: 'group', group: card }
+    const leaf = { type: 'rect', group: middle }
+    expect(getCardGroupFromAny(leaf)).toBe(card)
   })
 })

@@ -262,7 +262,9 @@ import {
     isFiniteLayoutNumber,
     getCardHostForPriceGroup,
     getCardSizeForPriceGroup,
-    hasCorruptedPriceLayout
+    hasCorruptedPriceLayout,
+    getPriceGroupFromAny,
+    getCardGroupFromAny
 } from '~/utils/priceLayoutClassifiers'
 import {
     isObjectShownForBounds,
@@ -32214,96 +32216,8 @@ function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
     return { pillW, pillH };
 }
 
-function getPriceGroupFromAny(obj: any): any | null {
-    if (!obj) return null;
-
-    // Helper: Check if a group looks like a priceGroup by its structure (heuristic).
-    // PriceGroups typically contain: a rect (pill background), 1-4 text elements (price digits),
-    // and optionally a circle/ellipse (currency symbol).
-    const looksLikePriceGroup = (g: any): boolean => {
-        if (!g || g.type !== 'group' || typeof g.getObjects !== 'function') return false;
-        if (isCardContainerLikeGroup(g)) return false;
-        const kids = g.getObjects() || [];
-        if (kids.length < 2 || kids.length > 10) return false;
-
-        // Prefer deterministic signals from named template nodes when available.
-        if (kids.some((k: any) => isPriceLayoutNode(k))) return true;
-        
-        let hasRect = false;
-        let textCount = 0;
-        let hasCircleOrEllipse = false;
-        
-        for (const k of kids) {
-            const t = String(k?.type || '').toLowerCase();
-            if (t === 'rect') hasRect = true;
-            if (t === 'text' || t === 'i-text' || t === 'itext' || t === 'textbox') textCount++;
-            if (t === 'circle' || t === 'ellipse') hasCircleOrEllipse = true;
-        }
-        
-        // Heuristic: a priceGroup has at least a rect and some text, or circle/ellipse for currency
-        return hasRect && (textCount >= 1 || hasCircleOrEllipse);
-    };
-
-    // Direct selection (group by name)
-    if (obj.type === 'group' && obj.name === 'priceGroup') {
-        if (!isMisnamedProductCardGroup(obj)) return obj;
-    }
-    
-    // Heuristic fallback for direct selection when name is missing
-    if (obj.type === 'group' && !obj.name && looksLikePriceGroup(obj)) {
-        // Repair the name for future operations
-        obj.name = 'priceGroup';
-        return obj;
-    }
-
-    // If user selected a child inside the price group, walk up the group chain.
-    let cur: any = obj;
-    while (cur && cur.group) {
-        if (cur.group.type === 'group' && cur.group.name === 'priceGroup') {
-            if (!isMisnamedProductCardGroup(cur.group)) return cur.group;
-        }
-        // Heuristic fallback
-        if (cur.group.type === 'group' && !cur.group.name && looksLikePriceGroup(cur.group)) {
-            cur.group.name = 'priceGroup';
-            return cur.group;
-        }
-        cur = cur.group;
-    }
-
-    // If a full card (or any group) is selected, grab its internal price group (deep).
-    if (obj.type === 'group' && typeof obj.getObjects === 'function') {
-        const queue: any[] = [...(obj.getObjects() || [])];
-        while (queue.length) {
-            const cur = queue.shift();
-            if (!cur) continue;
-            if (cur.type === 'group' && cur.name === 'priceGroup') {
-                if (!isMisnamedProductCardGroup(cur)) return cur;
-            }
-            // Heuristic fallback for nested groups
-            if (cur.type === 'group' && !cur.name && looksLikePriceGroup(cur)) {
-                cur.name = 'priceGroup';
-                return cur;
-            }
-            if (cur.type === 'group' && typeof cur.getObjects === 'function') {
-                const kids = cur.getObjects() || [];
-                for (const k of kids) queue.push(k);
-            }
-        }
-    }
-
-    return null;
-}
-
-function getCardGroupFromAny(obj: any): any | null {
-    if (!obj) return null;
-    if (obj.type === 'group' && (obj.isSmartObject || obj.isProductCard)) return obj;
-    let cur: any = obj;
-    while (cur && cur.group) {
-        if (cur.group.type === 'group' && (cur.group.isSmartObject || cur.group.isProductCard)) return cur.group;
-        cur = cur.group;
-    }
-    return null;
-}
+// getPriceGroupFromAny + getCardGroupFromAny extraidos para
+// utils/priceLayoutClassifiers.ts.
 
 const enlivenObjectsAsync = (objectsJson: any[]) => {
     if (!fabric?.util?.enlivenObjects) return Promise.resolve([]);

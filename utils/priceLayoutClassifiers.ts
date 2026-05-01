@@ -198,3 +198,114 @@ export const makePriceLayoutKeyBuilder = (): (obj: any) => string => {
         return `${base}#${idx}`
     }
 }
+
+/**
+ * Helper: heuristica para detectar se um group "parece" um priceGroup
+ * mesmo que nao tenha `name === 'priceGroup'`. Usa estrutura: pelo
+ * menos um rect (background) + pelo menos 1 text ou circle/ellipse
+ * (currency).
+ *
+ * Tambem aceita se algum filho passa `isPriceLayoutNode` (sinal forte).
+ *
+ * Rejeita se o group e' um card container (`isCardContainerLikeGroup`).
+ *
+ * Pure: sem efeito colateral.
+ */
+const looksLikePriceGroup = (g: any): boolean => {
+    if (!g || g.type !== 'group' || typeof g.getObjects !== 'function') return false
+    if (isCardContainerLikeGroup(g)) return false
+    const kids = g.getObjects() || []
+    if (kids.length < 2 || kids.length > 10) return false
+
+    if (kids.some((k: any) => isPriceLayoutNode(k))) return true
+
+    let hasRect = false
+    let textCount = 0
+    let hasCircleOrEllipse = false
+
+    for (const k of kids) {
+        const t = String(k?.type || '').toLowerCase()
+        if (t === 'rect') hasRect = true
+        if (t === 'text' || t === 'i-text' || t === 'itext' || t === 'textbox') textCount++
+        if (t === 'circle' || t === 'ellipse') hasCircleOrEllipse = true
+    }
+
+    return hasRect && (textCount >= 1 || hasCircleOrEllipse)
+}
+
+/**
+ * Encontra o priceGroup associado a `obj`, percorrendo:
+ *  1. Direct: obj e' um group com name === 'priceGroup'
+ *  2. Heuristic direct: obj e' um group sem name mas com estrutura de priceGroup
+ *     (e' renomeado para 'priceGroup' como side-effect — repair)
+ *  3. Walk-up: percorre obj.group ate achar um priceGroup (com mesmo repair)
+ *  4. Walk-down: se obj for um card group, BFS ate achar o priceGroup interno
+ *
+ * Retorna null se nao encontrar.
+ *
+ * SIDE EFFECT: pode setar `name = 'priceGroup'` em groups misnomeados —
+ * facilita operacoes futuras pelas duas partes (caller e a heuristica).
+ */
+export const getPriceGroupFromAny = (obj: any): any | null => {
+    if (!obj) return null
+
+    if (obj.type === 'group' && obj.name === 'priceGroup') {
+        if (!isMisnamedProductCardGroup(obj)) return obj
+    }
+
+    if (obj.type === 'group' && !obj.name && looksLikePriceGroup(obj)) {
+        obj.name = 'priceGroup'
+        return obj
+    }
+
+    let cur: any = obj
+    while (cur && cur.group) {
+        if (cur.group.type === 'group' && cur.group.name === 'priceGroup') {
+            if (!isMisnamedProductCardGroup(cur.group)) return cur.group
+        }
+        if (cur.group.type === 'group' && !cur.group.name && looksLikePriceGroup(cur.group)) {
+            cur.group.name = 'priceGroup'
+            return cur.group
+        }
+        cur = cur.group
+    }
+
+    if (obj.type === 'group' && typeof obj.getObjects === 'function') {
+        const queue: any[] = [...(obj.getObjects() || [])]
+        while (queue.length) {
+            const node = queue.shift()
+            if (!node) continue
+            if (node.type === 'group' && node.name === 'priceGroup') {
+                if (!isMisnamedProductCardGroup(node)) return node
+            }
+            if (node.type === 'group' && !node.name && looksLikePriceGroup(node)) {
+                node.name = 'priceGroup'
+                return node
+            }
+            if (node.type === 'group' && typeof node.getObjects === 'function') {
+                const kids = node.getObjects() || []
+                for (const k of kids) queue.push(k)
+            }
+        }
+    }
+
+    return null
+}
+
+/**
+ * Encontra o card group (smartObject ou productCard) associado a `obj`:
+ *  - Direct: `obj` ja e' um card group
+ *  - Walk-up: percorre `obj.group` ate achar um
+ *
+ * Retorna null se nao encontrar.
+ */
+export const getCardGroupFromAny = (obj: any): any | null => {
+    if (!obj) return null
+    if (obj.type === 'group' && (obj.isSmartObject || obj.isProductCard)) return obj
+    let cur: any = obj
+    while (cur && cur.group) {
+        if (cur.group.type === 'group' && (cur.group.isSmartObject || cur.group.isProductCard)) return cur.group
+        cur = cur.group
+    }
+    return null
+}
