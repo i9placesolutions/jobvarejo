@@ -336,6 +336,107 @@ export const isRenderablePriceGroupTemplateImageNode = (node: any): boolean => {
 }
 
 /**
+ * Clone defensivo de canvasData antes de loadFromJSON. Tenta
+ * structuredClone, depois JSON, e como ultima saida retorna o original
+ * (caller deve copiar com cuidado para nao mutar shared state).
+ */
+export const cloneCanvasDataForLoad = (canvasData: any): any => {
+    try {
+        if (typeof structuredClone === 'function') {
+            return structuredClone(canvasData)
+        }
+        return JSON.parse(JSON.stringify(canvasData))
+    } catch {
+        return canvasData
+    }
+}
+
+/**
+ * Gera um token estavel para cache de canvasData preparado para load.
+ * Combina savedAt + objectCount + version. Diferente significa "preparar
+ * de novo"; igual significa "reusar o resultado em cache".
+ *
+ * Aceita savedAt em varias localizacoes (raiz ou meta.savedAt) por
+ * compatibilidade com formatos legados.
+ */
+export const getCanvasLoadCacheToken = (canvasData: any): string => {
+    if (!canvasData || typeof canvasData !== 'object') return 'empty'
+
+    const root = canvasData as Record<string, any>
+    const directSavedAt = [
+        root.__savedAt,
+        root._savedAt,
+        root.savedAt,
+        root.updatedAt
+    ].map((value) => Number(value)).find((value) => Number.isFinite(value) && value > 0) || 0
+    const metaSavedAt = Number(root?.meta?.savedAt)
+    const savedAt = directSavedAt || (Number.isFinite(metaSavedAt) && metaSavedAt > 0 ? metaSavedAt : 0)
+    const objectCount = Array.isArray(root.objects) ? root.objects.length : 0
+    const version = String(root.version || '')
+
+    return `${savedAt}:${objectCount}:${version}`
+}
+
+/**
+ * Decodifica %3A em URLs da Contabo (bucket "tenant%3Abucket" → "tenant:bucket").
+ *
+ * O Fabric/Vue as vezes serializa com encoding URI no path; o backend
+ * Contabo aceita ambos mas as imagens podem nao carregar em alguns
+ * navegadores se o path estiver duplamente encoded. Este pre-processo
+ * normaliza para a forma decoded.
+ *
+ * Retorna copia profunda — nao muta o input.
+ */
+export const decodeContaboUrls = (canvasData: any): any => {
+    const cloned = JSON.parse(JSON.stringify(canvasData))
+    if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned
+
+    let count = 0
+    const processObject = (obj: any): void => {
+        if (!obj) return
+        const objType = (obj.type || '').toLowerCase()
+        if (objType === 'image' && typeof obj.src === 'string' && obj.src.includes('contabostorage.com')) {
+            if (obj.src.includes('%3A')) {
+                try {
+                    const urlObj = new URL(obj.src)
+                    urlObj.pathname = decodeURIComponent(urlObj.pathname)
+                    obj.src = urlObj.toString()
+                    count++
+                } catch {
+                    obj.src = obj.src.replace(/\/([^\/]+)%3A([^\/]+)\//, (_match: string, tenant: string, bucket: string) => {
+                        return `/${tenant}:${bucket}/`
+                    })
+                    count++
+                }
+            }
+        }
+        if (obj.objects && Array.isArray(obj.objects)) {
+            obj.objects.forEach((child: any) => processObject(child))
+        }
+    }
+
+    cloned.objects.forEach((obj: any) => processObject(obj))
+    return cloned
+}
+
+/**
+ * Remove recursivamente todos os objetos do tipo 'image' da arvore JSON.
+ * Util para gerar previews ou validar canvas sem peso de imagens.
+ *
+ * Operacao MUTATIVA — modifica o `node` recebido. Caller deve passar
+ * uma copia se quiser preservar o original.
+ */
+export const removeImageObjectsDeep = (node: any): any => {
+    if (!node || typeof node !== 'object') return node
+    if (Array.isArray(node.objects)) {
+        node.objects = node.objects
+            .filter((child: any) => String(child?.type || '').toLowerCase() !== 'image')
+            .map((child: any) => removeImageObjectsDeep(child))
+    }
+    return node
+}
+
+/**
  * Detecta se um src de imagem e' candidato a "deferred load" — uma URL
  * remota que vale a pena adiar o carregamento ate o frame ficar visivel.
  *

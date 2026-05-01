@@ -22,7 +22,11 @@ import {
   isPriceGroupVisualShellNode,
   isDeferredProductImageCandidateSrc,
   isProductCardImageSelectionCandidateJson,
-  normalizePreparedCanvasLoadCacheKey
+  normalizePreparedCanvasLoadCacheKey,
+  cloneCanvasDataForLoad,
+  getCanvasLoadCacheToken,
+  decodeContaboUrls,
+  removeImageObjectsDeep
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -828,5 +832,184 @@ describe('normalizePreparedCanvasLoadCacheKey', () => {
     expect(normalizePreparedCanvasLoadCacheKey(null)).toBe('')
     expect(normalizePreparedCanvasLoadCacheKey(undefined)).toBe('')
     expect(normalizePreparedCanvasLoadCacheKey('   ')).toBe('')
+  })
+})
+
+describe('cloneCanvasDataForLoad', () => {
+  it('clone profundo via structuredClone', () => {
+    const original = { objects: [{ id: 'a' }, { id: 'b' }], version: '1' }
+    const cloned = cloneCanvasDataForLoad(original)
+    expect(cloned).toEqual(original)
+    expect(cloned).not.toBe(original)
+    cloned.objects[0].id = 'modified'
+    expect(original.objects[0].id).toBe('a') // intacto
+  })
+
+  it('aceita primitivos sem quebrar', () => {
+    expect(cloneCanvasDataForLoad(null)).toBeNull()
+    expect(cloneCanvasDataForLoad('str')).toBe('str')
+    expect(cloneCanvasDataForLoad(42)).toBe(42)
+  })
+})
+
+describe('getCanvasLoadCacheToken', () => {
+  it('"empty" para input invalido', () => {
+    expect(getCanvasLoadCacheToken(null)).toBe('empty')
+    expect(getCanvasLoadCacheToken(undefined)).toBe('empty')
+    expect(getCanvasLoadCacheToken('str')).toBe('empty')
+  })
+
+  it('combina savedAt + objectCount + version', () => {
+    expect(getCanvasLoadCacheToken({
+      __savedAt: 1234,
+      objects: [{}, {}, {}],
+      version: '5.2.0'
+    })).toBe('1234:3:5.2.0')
+  })
+
+  it('aceita savedAt em multiplas chaves (alias)', () => {
+    expect(getCanvasLoadCacheToken({ _savedAt: 100, version: '1' })).toBe('100:0:1')
+    expect(getCanvasLoadCacheToken({ savedAt: 200, version: '1' })).toBe('200:0:1')
+    expect(getCanvasLoadCacheToken({ updatedAt: 300, version: '1' })).toBe('300:0:1')
+  })
+
+  it('cai para meta.savedAt como fallback', () => {
+    expect(getCanvasLoadCacheToken({
+      meta: { savedAt: 999 },
+      version: '1'
+    })).toBe('999:0:1')
+  })
+
+  it('directSavedAt tem prioridade sobre meta', () => {
+    expect(getCanvasLoadCacheToken({
+      __savedAt: 100,
+      meta: { savedAt: 999 },
+      version: '1'
+    })).toBe('100:0:1')
+  })
+
+  it('savedAt invalido vira 0', () => {
+    expect(getCanvasLoadCacheToken({
+      __savedAt: 'not-a-number',
+      objects: [],
+      version: ''
+    })).toBe('0:0:')
+  })
+
+  it('mesmo input gera mesmo token (estabilidade)', () => {
+    const data = { __savedAt: 100, objects: [{}], version: '1' }
+    expect(getCanvasLoadCacheToken(data)).toBe(getCanvasLoadCacheToken(data))
+  })
+
+  it('input diferente gera token diferente', () => {
+    expect(getCanvasLoadCacheToken({ __savedAt: 100, objects: [], version: '1' }))
+      .not.toBe(getCanvasLoadCacheToken({ __savedAt: 200, objects: [], version: '1' }))
+  })
+})
+
+describe('decodeContaboUrls', () => {
+  it('decodifica %3A em src de imagem Contabo', () => {
+    const input = {
+      objects: [
+        { type: 'image', src: 'https://eu2.contabostorage.com/tenant%3Abucket/key.png' }
+      ]
+    }
+    const out = decodeContaboUrls(input)
+    expect(out.objects[0].src).toContain('tenant:bucket')
+    expect(out.objects[0].src).not.toContain('%3A')
+  })
+
+  it('preserva URLs nao-Contabo', () => {
+    const input = {
+      objects: [
+        { type: 'image', src: 'https://example.com/x%3Ay.png' }
+      ]
+    }
+    const out = decodeContaboUrls(input)
+    expect(out.objects[0].src).toBe('https://example.com/x%3Ay.png')
+  })
+
+  it('preserva URLs Contabo sem %3A', () => {
+    const input = {
+      objects: [
+        { type: 'image', src: 'https://eu2.contabostorage.com/already-decoded/key.png' }
+      ]
+    }
+    expect(decodeContaboUrls(input).objects[0].src).toBe('https://eu2.contabostorage.com/already-decoded/key.png')
+  })
+
+  it('desce em groups aninhados', () => {
+    const input = {
+      objects: [{
+        type: 'group',
+        objects: [
+          { type: 'image', src: 'https://eu2.contabostorage.com/t%3Ab/k.png' }
+        ]
+      }]
+    }
+    const out = decodeContaboUrls(input)
+    expect(out.objects[0].objects[0].src).toContain('t:b')
+  })
+
+  it('retorna copia (nao muta input)', () => {
+    const input = {
+      objects: [
+        { type: 'image', src: 'https://eu2.contabostorage.com/x%3Ay/k.png' }
+      ]
+    }
+    const originalSrc = input.objects[0].src
+    decodeContaboUrls(input)
+    expect(input.objects[0].src).toBe(originalSrc)
+  })
+
+  it('canvasData sem objects retorna copia', () => {
+    expect(decodeContaboUrls({ version: '1' })).toEqual({ version: '1' })
+  })
+})
+
+describe('removeImageObjectsDeep', () => {
+  it('remove imagens do nivel raiz', () => {
+    const node: any = {
+      objects: [
+        { type: 'rect' },
+        { type: 'image' },
+        { type: 'text' }
+      ]
+    }
+    removeImageObjectsDeep(node)
+    expect(node.objects).toHaveLength(2)
+    expect(node.objects.every((o: any) => o.type !== 'image')).toBe(true)
+  })
+
+  it('remove imagens em groups aninhados', () => {
+    const node: any = {
+      objects: [{
+        type: 'group',
+        objects: [
+          { type: 'image' },
+          { type: 'rect' }
+        ]
+      }]
+    }
+    removeImageObjectsDeep(node)
+    expect(node.objects[0].objects).toHaveLength(1)
+    expect(node.objects[0].objects[0].type).toBe('rect')
+  })
+
+  it('aceita primitivos/null sem quebrar', () => {
+    expect(removeImageObjectsDeep(null)).toBeNull()
+    expect(removeImageObjectsDeep('str')).toBe('str')
+    expect(removeImageObjectsDeep(42)).toBe(42)
+  })
+
+  it('case insensitive (IMAGE tambem e removido)', () => {
+    const node: any = { objects: [{ type: 'IMAGE' }, { type: 'rect' }] }
+    removeImageObjectsDeep(node)
+    expect(node.objects).toHaveLength(1)
+  })
+
+  it('node sem objects nao quebra', () => {
+    const node: any = { type: 'rect' }
+    expect(removeImageObjectsDeep(node)).toBe(node)
   })
 })

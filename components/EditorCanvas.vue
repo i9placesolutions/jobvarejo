@@ -107,7 +107,11 @@ import {
     isPriceGroupVisualShellNode,
     isDeferredProductImageCandidateSrc,
     isProductCardImageSelectionCandidateJson,
-    normalizePreparedCanvasLoadCacheKey
+    normalizePreparedCanvasLoadCacheKey,
+    cloneCanvasDataForLoad,
+    getCanvasLoadCacheToken,
+    decodeContaboUrls,
+    removeImageObjectsDeep
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -11577,42 +11581,7 @@ const generatePresignedUrl = async (urlOrKey: string): Promise<string | null> =>
  * A Contabo retorna erro 500 quando o bucket name tem %3A em vez de :.
  * Formato: https://endpoint/tenant%3Abucket/key -> https://endpoint/tenant:bucket/key
  */
-const decodeContaboUrls = (canvasData: any): any => {
-    const cloned = JSON.parse(JSON.stringify(canvasData));
-    if (!cloned?.objects || !Array.isArray(cloned.objects)) return cloned;
-
-    let count = 0;
-    const processObject = (obj: any): void => {
-        if (!obj) return;
-        const objType = (obj.type || '').toLowerCase();
-        if (objType === 'image' && typeof obj.src === 'string' && obj.src.includes('contabostorage.com')) {
-            // Check if URL has encoded colon in bucket name
-            if (obj.src.includes('%3A')) {
-                try {
-                    const urlObj = new URL(obj.src);
-                    // Decode only the pathname (bucket/key), not query params
-                    urlObj.pathname = decodeURIComponent(urlObj.pathname);
-                    obj.src = urlObj.toString();
-                    count++;
-                } catch (e) {
-                    // Fallback: simple replace for the bucket portion only
-                    // Match pattern: /tenant%3Abucket/ and decode it
-                    obj.src = obj.src.replace(/\/([^\/]+)%3A([^\/]+)\//, (match: string, tenant: string, bucket: string) => {
-                        return `/${tenant}:${bucket}/`;
-                    });
-                    count++;
-                }
-            }
-        }
-        if (obj.objects && Array.isArray(obj.objects)) {
-            obj.objects.forEach((child: any) => processObject(child));
-        }
-    };
-
-    cloned.objects.forEach((obj: any) => processObject(obj));
-    if (count > 0) console.log(`🔧 Decodificado ${count} URL(s) da Contabo (%3A -> :)`);
-    return cloned;
-};
+// decodeContaboUrls extraido para utils/canvasJsonClassifiers.ts.
 
 /**
  * Extrai bucket e key de uma URL da Contabo.
@@ -11703,16 +11672,7 @@ const extractWasabiBucketAndKey = (url: string): { bucket: string | null; key: s
  * Isso evita problemas com URLs presignadas, encoding de caracteres especiais e CORS.
  * O proxy busca a imagem diretamente do S3 no backend, sem problemas de assinatura.
  */
-const cloneCanvasDataForLoad = (canvasData: any): any => {
-    try {
-        if (typeof structuredClone === 'function') {
-            return structuredClone(canvasData);
-        }
-        return JSON.parse(JSON.stringify(canvasData));
-    } catch {
-        return canvasData;
-    }
-};
+// cloneCanvasDataForLoad extraido para utils/canvasJsonClassifiers.ts.
 
 type PreparedCanvasLoadCacheEntry = {
     token: string;
@@ -11808,23 +11768,7 @@ const prepareCanvasDataForLoadEntry = (
     }
 };
 
-const getCanvasLoadCacheToken = (canvasData: any): string => {
-    if (!canvasData || typeof canvasData !== 'object') return 'empty';
-
-    const root = canvasData as Record<string, any>;
-    const directSavedAt = [
-        root.__savedAt,
-        root._savedAt,
-        root.savedAt,
-        root.updatedAt
-    ].map((value) => Number(value)).find((value) => Number.isFinite(value) && value > 0) || 0;
-    const metaSavedAt = Number(root?.meta?.savedAt);
-    const savedAt = directSavedAt || (Number.isFinite(metaSavedAt) && metaSavedAt > 0 ? metaSavedAt : 0);
-    const objectCount = Array.isArray(root.objects) ? root.objects.length : 0;
-    const version = String(root.version || '');
-
-    return `${savedAt}:${objectCount}:${version}`;
-};
+// getCanvasLoadCacheToken extraido para utils/canvasJsonClassifiers.ts.
 
 // walkCanvasObjects / getJsonGroupChildren / isStandalonePriceGroupJson /
 // isLikelyProductCardJson / getCardBaseSizeForContainmentJson foram
@@ -12138,15 +12082,7 @@ const replaceContaboImagesWithPlaceholder = (canvasData: any, opts: { clone?: bo
     return cloned;
 };
 
-const removeImageObjectsDeep = (node: any): any => {
-    if (!node || typeof node !== 'object') return node;
-    if (Array.isArray(node.objects)) {
-        node.objects = node.objects
-            .filter((child: any) => String(child?.type || '').toLowerCase() !== 'image')
-            .map((child: any) => removeImageObjectsDeep(child));
-    }
-    return node;
-};
+// removeImageObjectsDeep extraido para utils/canvasJsonClassifiers.ts.
 
 	const setupHistory = () => {
 	    if (!canvas.value) return;
