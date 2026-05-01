@@ -61,6 +61,7 @@ import {
     getSelectedObjectExportFileBaseName
 } from '~/utils/exportSelectionHelpers'
 import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
+import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import {
     stripAccents,
     normalizeLimitText,
@@ -2877,28 +2878,7 @@ const getTargetVectorPath = (): any | null => {
 // isPathCloseCommand e isVectorPathClosed extraidos para
 // utils/fabricObjectClassifiers.ts.
 
-const buildPathStringFromPenData = (pathData: any[], closed = false): string => {
-    if (!Array.isArray(pathData) || pathData.length === 0) return '';
-    let pathString = '';
-    pathData.forEach((point: any, index: number) => {
-        if (index === 0) {
-            pathString += `M ${point.x} ${point.y}`;
-        } else {
-            const prevPoint = pathData[index - 1];
-            if (prevPoint && point?.handles?.in) {
-                const cp1x = prevPoint?.handles?.out?.x ?? prevPoint.x;
-                const cp1y = prevPoint?.handles?.out?.y ?? prevPoint.y;
-                const cp2x = point.handles.in.x;
-                const cp2y = point.handles.in.y;
-                pathString += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${point.x} ${point.y}`;
-            } else {
-                pathString += ` L ${point.x} ${point.y}`;
-            }
-        }
-    });
-    if (closed && pathData.length > 2) pathString += ' Z';
-    return pathString;
-};
+// buildPathStringFromPenData extraido para utils/pathHelpers.ts.
 
 const createVectorPathFromPenData = (
     pathData: any[],
