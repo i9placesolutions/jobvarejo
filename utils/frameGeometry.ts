@@ -327,6 +327,67 @@ export const isObjectMostlyInsideFrame = (obj: any, frame: any, minOverlapRatio 
 }
 
 /**
+ * Encontra o frame mais "interno" (menor area) que contem o objeto
+ * `obj` na lista `frames`. Pure: dado obj + frames + thresholds.
+ *
+ * Regras de match:
+ *  - obj.isFrame: frames nao podem aninhar — retorna null
+ *  - center inside frame bbox → match
+ *  - overlap >= minOverlapRatio do area do obj → match (fallback)
+ *
+ * Quando ha multiplos frames-hit, escolhe o de menor area (frame mais
+ * interno em aninhamento).
+ *
+ * minOverlapRatio default 0.6.
+ */
+export const findFrameUnderObjectInList = (
+    obj: any,
+    frames: any[],
+    minOverlapRatio: number = 0.6
+): any | null => {
+    if (!obj) return null
+    if (obj.isFrame) return null
+    if (!Array.isArray(frames) || !frames.length) return null
+
+    const objBounds = typeof obj.getBoundingRect === 'function' ? obj.getBoundingRect(true) : null
+    const objArea = objBounds ? Math.max(1, objBounds.width * objBounds.height) : 1
+    const center = typeof obj.getCenterPoint === 'function'
+        ? obj.getCenterPoint()
+        : (objBounds ? { x: objBounds.left + (objBounds.width / 2), y: objBounds.top + (objBounds.height / 2) } : null)
+
+    const hits = frames.filter((f: any) => {
+        if (f === obj) return false
+        const fb = typeof f.getBoundingRect === 'function' ? f.getBoundingRect(true) : null
+        if (!fb) return false
+
+        const centerInside = !!(center &&
+            center.x >= fb.left &&
+            center.x <= (fb.left + fb.width) &&
+            center.y >= fb.top &&
+            center.y <= (fb.top + fb.height))
+        if (centerInside) return true
+
+        if (!objBounds) return false
+        const ix = Math.max(0, Math.min(objBounds.left + objBounds.width, fb.left + fb.width) - Math.max(objBounds.left, fb.left))
+        const iy = Math.max(0, Math.min(objBounds.top + objBounds.height, fb.top + fb.height) - Math.max(objBounds.top, fb.top))
+        const overlapArea = ix * iy
+        const overlapRatio = overlapArea / objArea
+        return overlapRatio >= minOverlapRatio
+    })
+
+    if (!hits.length) return null
+
+    hits.sort((a: any, b: any) => {
+        const aw = typeof a.getScaledWidth === 'function' ? Number(a.getScaledWidth()) : Number(a.width || 0)
+        const ah = typeof a.getScaledHeight === 'function' ? Number(a.getScaledHeight()) : Number(a.height || 0)
+        const bw = typeof b.getScaledWidth === 'function' ? Number(b.getScaledWidth()) : Number(b.width || 0)
+        const bh = typeof b.getScaledHeight === 'function' ? Number(b.getScaledHeight()) : Number(b.height || 0)
+        return (aw * ah) - (bw * bh)
+    })
+    return hits[0]
+}
+
+/**
  * Normaliza props de runtime de um objeto Frame: garante _customId,
  * isFrame=true, clipContent boolean (default true) e layerName.
  *

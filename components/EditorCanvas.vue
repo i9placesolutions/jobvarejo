@@ -230,7 +230,8 @@ import {
     serializeFrameLabelMetric,
     buildFrameLabelViewportSignature,
     buildFrameLabelSelectionSignature,
-    normalizeFrameRuntimeProps
+    normalizeFrameRuntimeProps,
+    findFrameUnderObjectInList
 } from '~/utils/frameGeometry'
 import {
     TRANSIENT_CONTROL_NAMES,
@@ -1641,47 +1642,11 @@ const getOrCreateFrameClipRect = (frame: any) => {
     return clip;
 };
 
+// Wrapper local: injeta os frames atuais (excluindo o proprio obj) no
+// helper puro findFrameUnderObjectInList.
 const findFrameUnderObject = (obj: any) => {
-    if (!canvas.value || !obj) return null;
-    // Frames NUNCA podem ser filhos de outros frames
-    if (obj.isFrame) return null;
-
-    const frames = getAllFrames().filter((f: any) => f !== obj);
-    if (!frames.length) return null;
-
-    const objBounds = obj.getBoundingRect ? obj.getBoundingRect(true) : null;
-    const objArea = objBounds ? Math.max(1, objBounds.width * objBounds.height) : 1;
-    const center = typeof obj.getCenterPoint === 'function'
-        ? obj.getCenterPoint()
-        : (objBounds ? { x: objBounds.left + (objBounds.width / 2), y: objBounds.top + (objBounds.height / 2) } : null);
-
-    // STRICT RULE:
-    // - Prefer center-inside to avoid accidental parenting when only touching frame edge.
-    // - Fallback to substantial overlap for large objects.
-    const hits = frames.filter((f: any) => {
-        const fb = f.getBoundingRect ? f.getBoundingRect(true) : null;
-        if (!fb) return false;
-
-        const centerInside = !!(center &&
-            center.x >= fb.left &&
-            center.x <= (fb.left + fb.width) &&
-            center.y >= fb.top &&
-            center.y <= (fb.top + fb.height));
-        if (centerInside) return true;
-
-        if (!objBounds) return false;
-        const ix = Math.max(0, Math.min(objBounds.left + objBounds.width, fb.left + fb.width) - Math.max(objBounds.left, fb.left));
-        const iy = Math.max(0, Math.min(objBounds.top + objBounds.height, fb.top + fb.height) - Math.max(objBounds.top, fb.top));
-        const overlapArea = ix * iy;
-        const overlapRatio = overlapArea / objArea;
-        return overlapRatio >= 0.6;
-    });
-
-    if (!hits.length) return null;
-
-    // Prefer the smallest frame (innermost) when nested.
-    hits.sort((a: any, b: any) => (a.getScaledWidth() * a.getScaledHeight()) - (b.getScaledWidth() * b.getScaledHeight()));
-    return hits[0];
+    if (!canvas.value) return null;
+    return findFrameUnderObjectInList(obj, getAllFrames());
 };
 
 const syncObjectFrameClip = (obj: any) => {

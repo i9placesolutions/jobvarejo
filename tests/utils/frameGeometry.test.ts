@@ -12,7 +12,8 @@ import {
   serializeFrameLabelMetric,
   buildFrameLabelViewportSignature,
   buildFrameLabelSelectionSignature,
-  normalizeFrameRuntimeProps
+  normalizeFrameRuntimeProps,
+  findFrameUnderObjectInList
 } from '~/utils/frameGeometry'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -463,5 +464,91 @@ describe('normalizeFrameRuntimeProps', () => {
     expect(result).toBe(f)
     expect(f.isFrame).toBe(true)
     expect(f._customId).toBeDefined()
+  })
+})
+
+describe('findFrameUnderObjectInList', () => {
+  const makeFrame = (left: number, top: number, w: number, h: number) => ({
+    getBoundingRect: () => ({ left, top, width: w, height: h }),
+    getScaledWidth: () => w,
+    getScaledHeight: () => h
+  })
+
+  const makeObj = (left: number, top: number, w: number, h: number) => ({
+    getBoundingRect: () => ({ left, top, width: w, height: h }),
+    getCenterPoint: () => ({ x: left + w / 2, y: top + h / 2 })
+  })
+
+  it('null/undefined obj → null', () => {
+    expect(findFrameUnderObjectInList(null, [])).toBeNull()
+    expect(findFrameUnderObjectInList(undefined, [])).toBeNull()
+  })
+
+  it('obj.isFrame: nao aninhar (retorna null)', () => {
+    const frame = makeFrame(0, 0, 100, 100)
+    expect(findFrameUnderObjectInList({ isFrame: true }, [frame])).toBeNull()
+  })
+
+  it('frames vazio → null', () => {
+    expect(findFrameUnderObjectInList(makeObj(50, 50, 10, 10), [])).toBeNull()
+  })
+
+  it('encontra frame que contem o centro', () => {
+    const frame = makeFrame(0, 0, 100, 100)
+    const obj = makeObj(40, 40, 20, 20)
+    expect(findFrameUnderObjectInList(obj, [frame])).toBe(frame)
+  })
+
+  it('com overlap >= 60%: aceita mesmo sem centro inside', () => {
+    // obj 100x100 com left=80 → 20x100 overlap = 2000 / area=10000 = 20%, NAO bate
+    // obj 100x100 com left=50 → 50x100 overlap = 5000 / area=10000 = 50%, NAO bate
+    // obj 100x100 com left=30 → 70x100 = 7000 / 10000 = 70%, BATE
+    const frame = makeFrame(0, 0, 100, 100)
+    const obj = {
+      getBoundingRect: () => ({ left: 30, top: 0, width: 100, height: 100 }),
+      getCenterPoint: () => ({ x: 80, y: 50 }) // dentro do frame
+    }
+    expect(findFrameUnderObjectInList(obj, [frame])).toBe(frame)
+  })
+
+  it('overlap < 60%: rejeita', () => {
+    const frame = makeFrame(0, 0, 100, 100)
+    // obj 200x200, left=80, top=80 → overlap 20x20 = 400 / area=40000 = 1%
+    const obj = {
+      getBoundingRect: () => ({ left: 80, top: 80, width: 200, height: 200 }),
+      getCenterPoint: () => ({ x: 180, y: 180 }) // fora
+    }
+    expect(findFrameUnderObjectInList(obj, [frame])).toBeNull()
+  })
+
+  it('escolhe frame menor (mais interno) entre nested', () => {
+    const outer = makeFrame(0, 0, 200, 200)
+    const inner = makeFrame(50, 50, 50, 50)
+    const obj = makeObj(60, 60, 20, 20)
+    expect(findFrameUnderObjectInList(obj, [outer, inner])).toBe(inner)
+  })
+
+  it('exclui o proprio obj se aparecer na lista', () => {
+    const frame = makeFrame(0, 0, 100, 100)
+    const obj = { ...makeFrame(0, 0, 100, 100), getCenterPoint: () => ({ x: 50, y: 50 }) }
+    expect(findFrameUnderObjectInList(obj, [obj, frame])).toBe(frame)
+  })
+
+  it('minOverlapRatio customizado', () => {
+    const frame = makeFrame(0, 0, 100, 100)
+    // obj com 40% overlap (left=60, w=100 → 40x100 / 100x100 = 40%)
+    const obj = {
+      getBoundingRect: () => ({ left: 60, top: 0, width: 100, height: 100 }),
+      getCenterPoint: () => ({ x: 110, y: 50 }) // fora
+    }
+    expect(findFrameUnderObjectInList(obj, [frame], 0.6)).toBeNull()
+    expect(findFrameUnderObjectInList(obj, [frame], 0.3)).toBe(frame)
+  })
+
+  it('frame sem getBoundingRect: ignorado', () => {
+    const goodFrame = makeFrame(0, 0, 100, 100)
+    const badFrame = {} as any
+    const obj = makeObj(40, 40, 20, 20)
+    expect(findFrameUnderObjectInList(obj, [badFrame, goodFrame])).toBe(goodFrame)
   })
 })
