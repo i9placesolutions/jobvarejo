@@ -4,6 +4,7 @@ import {
   isLikelyProductZone,
   isStandalonePriceGroup,
   isLikelyProductCard,
+  isProductCardContainer,
   isTextLikeObject,
   collectObjectsDeep,
   findByName,
@@ -269,6 +270,36 @@ describe('findByName', () => {
 
   it('lista vazia retorna undefined', () => {
     expect(findByName([], 'a')).toBeUndefined()
+  })
+})
+
+describe('isProductCardContainer', () => {
+  it('rejeita null/nao-group', () => {
+    expect(isProductCardContainer(null)).toBe(false)
+    expect(isProductCardContainer({ type: 'rect' })).toBe(false)
+  })
+
+  it('aceita por flag isSmartObject/isProductCard', () => {
+    expect(isProductCardContainer(makeGroup({ isSmartObject: true }))).toBe(true)
+    expect(isProductCardContainer(makeGroup({ isProductCard: true }))).toBe(true)
+  })
+
+  it('aceita por prefixo "product-card" no name', () => {
+    expect(isProductCardContainer(makeGroup({ name: 'product-card-1' }))).toBe(true)
+    expect(isProductCardContainer(makeGroup({ name: 'product-card-abc' }))).toBe(true)
+  })
+
+  it('cai em isLikelyProductCard como fallback', () => {
+    // group com offerBackground passa em isLikelyProductCard
+    const card = makeGroup({}, [
+      makeRect({ name: 'offerBackground' }),
+      makeText({ name: 'smart_title' })
+    ])
+    expect(isProductCardContainer(card)).toBe(true)
+  })
+
+  it('rejeita group nao-card sem flag', () => {
+    expect(isProductCardContainer(makeGroup({}, []))).toBe(false)
   })
 })
 

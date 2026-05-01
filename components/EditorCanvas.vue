@@ -26,6 +26,7 @@ import {
     isLikelyProductZone,
     isStandalonePriceGroup,
     isLikelyProductCard,
+    isProductCardContainer,
     isTextLikeObject,
     collectObjectsDeep,
     findByName,
@@ -38,7 +39,7 @@ import {
     getObjectVerticalBoundsLocal,
     measureContentBoundsLocal
 } from '~/utils/fabricMeasure'
-import { setText, setVisible } from '~/utils/fabricObjectOps'
+import { setText, setVisible, assignNewCustomIdsDeep } from '~/utils/fabricObjectOps'
 import {
     walkCanvasObjects,
     getJsonGroupChildren,
@@ -14498,25 +14499,8 @@ const DUPLICATE_CLONE_PROPS = Array.from(new Set([
 
 const isActiveSelectionObject = (obj: any) => String(obj?.type || '').toLowerCase() === 'activeselection';
 
-const isProductCardContainer = (group: any) => {
-    if (!group) return false;
-    if (String(group.type || '').toLowerCase() !== 'group') return false;
-    return !!(
-        group.isSmartObject ||
-        group.isProductCard ||
-        String(group.name || '').startsWith('product-card') ||
-        isLikelyProductCard(group)
-    );
-};
-
-const assignNewCustomIdsDeep = (obj: any) => {
-    if (!obj || typeof obj !== 'object') return;
-    (obj as any).__duplicateSourceCustomId = String((obj as any)._customId || '').trim();
-    obj._customId = makeId();
-    if (typeof obj.getObjects === 'function') {
-        (obj.getObjects() || []).forEach((child: any) => assignNewCustomIdsDeep(child));
-    }
-};
+// isProductCardContainer extraido para utils/fabricObjectClassifiers.ts.
+// assignNewCustomIdsDeep extraido para utils/fabricObjectOps.ts.
 
 const remapDuplicatedSelectionBindings = (
     clones: any[],

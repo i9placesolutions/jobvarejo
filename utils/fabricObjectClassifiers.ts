@@ -94,6 +94,26 @@ export const isStandalonePriceGroup = (obj: any): boolean => {
 }
 
 /**
+ * Detecta se um group e' um "container de card de produto" — qualquer
+ * group com flag explicita (isSmartObject/isProductCard), prefixo "product-card"
+ * no name, ou que passe na heuristica de isLikelyProductCard.
+ *
+ * Mais permissivo que isLikelyProductCard: aceita ate cards "vazios"
+ * com so a flag, util em loops de seleção que nao querem reanalisar
+ * a estrutura interna toda hora.
+ */
+export const isProductCardContainer = (group: any): boolean => {
+    if (!group) return false
+    if (String(group.type || '').toLowerCase() !== 'group') return false
+    return !!(
+        group.isSmartObject ||
+        group.isProductCard ||
+        String(group.name || '').startsWith('product-card') ||
+        isLikelyProductCard(group)
+    )
+}
+
+/**
  * Detecta um card de produto. Combina sinais fortes (offerBackground,
  * priceGroup embutido, smartGridId, _cardWidth/_cardHeight) com heuristica
  * mais permissiva para cards montados manualmente. A funcao precisa ser

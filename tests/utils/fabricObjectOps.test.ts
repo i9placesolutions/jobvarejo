@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { setText, setVisible } from '~/utils/fabricObjectOps'
+import { setText, setVisible, assignNewCustomIdsDeep } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
   const calls: Array<{ k: any; v?: any }> = []
@@ -127,5 +127,72 @@ describe('setVisible', () => {
     setVisible(t, true)  // restaura
     expect(t.scaleX).toBe(1.3)
     expect(t.scaleY).toBe(0.9)
+  })
+})
+
+describe('assignNewCustomIdsDeep', () => {
+  const group = (overrides: any = {}, children: any[] = []) => ({
+    type: 'group',
+    _customId: 'orig-' + Math.random(),
+    getObjects: () => children,
+    ...overrides
+  })
+
+  it('null/undefined nao quebra', () => {
+    expect(() => assignNewCustomIdsDeep(null)).not.toThrow()
+    expect(() => assignNewCustomIdsDeep(undefined)).not.toThrow()
+  })
+
+  it('atribui novo _customId e preserva o anterior em __duplicateSourceCustomId', () => {
+    const obj: any = { _customId: 'old-id' }
+    assignNewCustomIdsDeep(obj)
+    expect(obj.__duplicateSourceCustomId).toBe('old-id')
+    expect(obj._customId).not.toBe('old-id')
+    expect(typeof obj._customId).toBe('string')
+    expect(obj._customId.length).toBeGreaterThan(0)
+  })
+
+  it('desce recursivamente em getObjects()', () => {
+    const leaf = { _customId: 'leaf-old' }
+    const inner = group({ _customId: 'inner-old' }, [leaf])
+    const root = group({ _customId: 'root-old' }, [inner])
+    assignNewCustomIdsDeep(root)
+    expect(root._customId).not.toBe('root-old')
+    expect(inner._customId).not.toBe('inner-old')
+    expect(leaf._customId).not.toBe('leaf-old')
+    expect(root.__duplicateSourceCustomId).toBe('root-old')
+    expect(inner.__duplicateSourceCustomId).toBe('inner-old')
+    expect(leaf.__duplicateSourceCustomId).toBe('leaf-old')
+  })
+
+  it('IDs gerados sao unicos entre chamadas', () => {
+    const a: any = {}
+    const b: any = {}
+    const c: any = {}
+    assignNewCustomIdsDeep(a)
+    assignNewCustomIdsDeep(b)
+    assignNewCustomIdsDeep(c)
+    expect(a._customId).not.toBe(b._customId)
+    expect(b._customId).not.toBe(c._customId)
+    expect(a._customId).not.toBe(c._customId)
+  })
+
+  it('REGRESSAO: nao desce em objetos sem getObjects (Fabric leafs)', () => {
+    // Um text/rect nao deve causar erro mesmo sem getObjects
+    const leaf: any = { type: 'rect', _customId: 'rect-1' }
+    expect(() => assignNewCustomIdsDeep(leaf)).not.toThrow()
+    expect(leaf._customId).not.toBe('rect-1')
+  })
+
+  it('lida com getObjects que retorna null', () => {
+    const g: any = { getObjects: () => null, _customId: 'g1' }
+    expect(() => assignNewCustomIdsDeep(g)).not.toThrow()
+  })
+
+  it('preserva campos nao relacionados', () => {
+    const obj: any = { _customId: 'old', text: 'hello', other: 42 }
+    assignNewCustomIdsDeep(obj)
+    expect(obj.text).toBe('hello')
+    expect(obj.other).toBe(42)
   })
 })

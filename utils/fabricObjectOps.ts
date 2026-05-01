@@ -6,6 +6,29 @@
  * Cobertura: tests/utils/fabricObjectOps.test.ts
  */
 
+import { makeId } from './makeId'
+
+/**
+ * Atribui novos `_customId`s recursivamente em todos os descendentes do
+ * objeto (Fabric Group). Usado apos clone/duplicate para garantir que
+ * cada copia tenha identidade unica.
+ *
+ * Preserva o id original em `__duplicateSourceCustomId` para que callers
+ * possam construir mapeamentos antigo→novo (necessario para remap de
+ * `parentZoneId`, `_zoneSlot.zoneId`, etc).
+ *
+ * Recursao desce somente em objetos com `getObjects()` — outros tipos
+ * nao tem hierarquia interna a regenerar.
+ */
+export const assignNewCustomIdsDeep = (obj: any): void => {
+    if (!obj || typeof obj !== 'object') return
+    ;(obj as any).__duplicateSourceCustomId = String((obj as any)._customId || '').trim()
+    obj._customId = makeId()
+    if (typeof obj.getObjects === 'function') {
+        ;(obj.getObjects() || []).forEach((child: any) => assignNewCustomIdsDeep(child))
+    }
+}
+
 /**
  * Atualiza o `text` de um objeto Fabric e reinicializa as dimensoes
  * para que o bbox/largura sejam recomputados imediatamente.
