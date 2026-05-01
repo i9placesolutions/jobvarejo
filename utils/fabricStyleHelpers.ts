@@ -76,6 +76,50 @@ export const computeLinearGradientCoords = (
 }
 
 /**
+ * Constante k = 1 - 0.5522847498 para aproximacao Bezier de arco
+ * quadrante. Usada por path SVG e _render patches.
+ */
+export const BEZIER_ARC_K = 1 - 0.5522847498
+
+/**
+ * Constroi um SVG path string para um retangulo arredondado centrado
+ * em (0, 0), com cantos individuais (tl/tr/br/bl). Cada raio e clampado
+ * em [0, w/2] e [0, h/2] via clampCornerRadii.
+ *
+ * O path usa `M`/`L`/`C`/`Z` e omite os comandos `C` quando o raio
+ * correspondente e zero (canto reto).
+ *
+ * Pure: nao depende de fabric, refs reativos ou estado global.
+ *
+ * Util para fabric.Path como clipPath de objetos arredondados.
+ */
+export const buildRoundedRectSvgPath = (
+    width: number,
+    height: number,
+    radii: any
+): string => {
+    const w = Number(width) || 0
+    const h = Number(height) || 0
+    const x = -w / 2
+    const y = -h / 2
+    const k = BEZIER_ARC_K
+    const r = clampCornerRadii(radii, w, h)
+    const parts = [
+        `M ${x + r.tl} ${y}`,
+        `L ${x + w - r.tr} ${y}`,
+        r.tr ? `C ${x + w - k * r.tr} ${y} ${x + w} ${y + k * r.tr} ${x + w} ${y + r.tr}` : '',
+        `L ${x + w} ${y + h - r.br}`,
+        r.br ? `C ${x + w} ${y + h - k * r.br} ${x + w - k * r.br} ${y + h} ${x + w - r.br} ${y + h}` : '',
+        `L ${x + r.bl} ${y + h}`,
+        r.bl ? `C ${x + k * r.bl} ${y + h} ${x} ${y + h - k * r.bl} ${x} ${y + h - r.bl}` : '',
+        `L ${x} ${y + r.tl}`,
+        r.tl ? `C ${x} ${y + k * r.tl} ${x + k * r.tl} ${y} ${x + r.tl} ${y}` : '',
+        'Z'
+    ].filter(Boolean)
+    return parts.join(' ')
+}
+
+/**
  * Snapshot do shadow de um text object para backup/restore. Retorna
  * null se shadow ausente; senao normaliza os 4 campos com defaults
  * seguros.

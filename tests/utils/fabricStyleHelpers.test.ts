@@ -7,7 +7,9 @@ import {
   toggleStroke,
   applyRectCornerRadiiPatch,
   snapshotTextShadow,
-  computeLinearGradientCoords
+  computeLinearGradientCoords,
+  buildRoundedRectSvgPath,
+  BEZIER_ARC_K
 } from '~/utils/fabricStyleHelpers'
 
 describe('isRectObject', () => {
@@ -414,5 +416,69 @@ describe('computeLinearGradientCoords', () => {
     expect(approx(c.x2, 200)).toBe(true) // 100 + 100
     expect(approx(c.y1, 25)).toBe(true)
     expect(approx(c.y2, 25)).toBe(true)
+  })
+})
+
+describe('BEZIER_ARC_K', () => {
+  it('e a aproximacao classica de quadrante (1 - 0.5522847498)', () => {
+    expect(BEZIER_ARC_K).toBeCloseTo(0.4477152502, 9)
+  })
+})
+
+describe('buildRoundedRectSvgPath', () => {
+  it('w/h=0 produz path degenerado mas valido (todos pontos em 0)', () => {
+    const path = buildRoundedRectSvgPath(0, 0, null)
+    expect(path).toContain('M ')
+    expect(path).toMatch(/Z$/)
+  })
+
+  it('sem radii (raios=0): apenas M/L/Z, sem comandos C', () => {
+    const path = buildRoundedRectSvgPath(100, 50, null)
+    expect(path).not.toContain(' C ')
+    expect(path).toMatch(/^M /)
+    expect(path).toMatch(/Z$/)
+    // 4 cantos: M + 4xL + Z
+    const segments = path.split(' ').filter(s => /^[MLCZ]$/.test(s))
+    expect(segments).toEqual(['M', 'L', 'L', 'L', 'L', 'Z'])
+  })
+
+  it('com radii uniformes: 4 comandos C', () => {
+    const path = buildRoundedRectSvgPath(100, 50, { tl: 10, tr: 10, br: 10, bl: 10 })
+    const cCount = (path.match(/ C /g) || []).length
+    expect(cCount).toBe(4)
+  })
+
+  it('canto unico (apenas tl): 1 comando C', () => {
+    const path = buildRoundedRectSvgPath(100, 50, { tl: 10 })
+    const cCount = (path.match(/ C /g) || []).length
+    expect(cCount).toBe(1)
+  })
+
+  it('comeca em (-w/2 + tl, -h/2) — canto superior esquerdo apos arco', () => {
+    const path = buildRoundedRectSvgPath(100, 50, { tl: 10 })
+    // M -40 -25 (porque -50 + 10 = -40)
+    expect(path).toMatch(/^M -40 -25 /)
+  })
+
+  it('clampa raios > min(w,h)/2', () => {
+    // w=20, h=20, raio 100 deve ser clampado em 10
+    const path = buildRoundedRectSvgPath(20, 20, { tl: 100, tr: 100, br: 100, bl: 100 })
+    // Inicia em M (-10 + 10) = 0, -10
+    expect(path).toMatch(/^M 0 -10 /)
+  })
+
+  it('aceita radii nulo/undefined → todos zero', () => {
+    const a = buildRoundedRectSvgPath(50, 30, null)
+    const b = buildRoundedRectSvgPath(50, 30, undefined)
+    const c = buildRoundedRectSvgPath(50, 30, {})
+    expect(a).toBe(b)
+    expect(a).toBe(c)
+    expect(a).not.toContain(' C ')
+  })
+
+  it('w/h NaN viram 0 (defesa)', () => {
+    const path = buildRoundedRectSvgPath(NaN as any, NaN as any, null)
+    expect(path).toContain('M ')
+    expect(path).toMatch(/Z$/)
   })
 })

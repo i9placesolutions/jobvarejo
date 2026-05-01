@@ -142,7 +142,8 @@ import {
     toggleStroke,
     applyRectCornerRadiiPatch,
     snapshotTextShadow,
-    computeLinearGradientCoords
+    computeLinearGradientCoords,
+    buildRoundedRectSvgPath
 } from '~/utils/fabricStyleHelpers'
 import {
     getFrameBounds,
@@ -1522,34 +1523,6 @@ const getAllFrames = () => {
 
 const getOrCreateFrameClipRect = (frame: any) => {
     if (!frame || !fabric) return null;
-    const kRectLocal = 1 - 0.5522847498;
-    const clampR = (n: any, w: number, h: number) => {
-        const v = Math.max(0, Number(n || 0));
-        return Math.min(v, w / 2, h / 2);
-    };
-
-    const buildCornerPath = (w: number, h: number, radii: any) => {
-        const x = -w / 2;
-        const y = -h / 2;
-        const tl = clampR(radii?.tl, w, h);
-        const tr = clampR(radii?.tr, w, h);
-        const br = clampR(radii?.br, w, h);
-        const bl = clampR(radii?.bl, w, h);
-
-        const parts = [
-            `M ${x + tl} ${y}`,
-            `L ${x + w - tr} ${y}`,
-            tr ? `C ${x + w - kRectLocal * tr} ${y} ${x + w} ${y + kRectLocal * tr} ${x + w} ${y + tr}` : '',
-            `L ${x + w} ${y + h - br}`,
-            br ? `C ${x + w} ${y + h - kRectLocal * br} ${x + w - kRectLocal * br} ${y + h} ${x + w - br} ${y + h}` : '',
-            `L ${x + bl} ${y + h}`,
-            bl ? `C ${x + kRectLocal * bl} ${y + h} ${x} ${y + h - kRectLocal * bl} ${x} ${y + h - bl}` : '',
-            `L ${x} ${y + tl}`,
-            tl ? `C ${x} ${y + kRectLocal * tl} ${x + kRectLocal * tl} ${y} ${x + tl} ${y}` : '',
-            'Z'
-        ].filter(Boolean);
-        return parts.join(' ');
-    };
 
     const hasCornerRadii = !!(frame.cornerRadii && typeof frame.cornerRadii === 'object');
     const wantPathClip = hasCornerRadii;
@@ -1559,7 +1532,7 @@ const getOrCreateFrameClipRect = (frame: any) => {
     // We need to calculate the offset from the object to the frame
 
     const clip = wantPathClip
-        ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), {
+        ? new fabric.Path(buildRoundedRectSvgPath(frame.width, frame.height, frame.cornerRadii), {
             originX: 'center',
             originY: 'center',
             left: 0,
@@ -1663,32 +1636,6 @@ const syncObjectFrameClip = (obj: any) => {
 
     const hasCornerRadii = !!(frame?.cornerRadii && typeof frame.cornerRadii === 'object');
     const wantPathClip = hasCornerRadii;
-    const kRectLocal = 1 - 0.5522847498;
-    const clampR = (n: any, w: number, h: number) => {
-        const v = Math.max(0, Number(n || 0));
-        return Math.min(v, w / 2, h / 2);
-    };
-    const buildCornerPath = (w: number, h: number, radii: any) => {
-        const x = -w / 2;
-        const y = -h / 2;
-        const tl = clampR(radii?.tl, w, h);
-        const tr = clampR(radii?.tr, w, h);
-        const br = clampR(radii?.br, w, h);
-        const bl = clampR(radii?.bl, w, h);
-        const parts = [
-            `M ${x + tl} ${y}`,
-            `L ${x + w - tr} ${y}`,
-            tr ? `C ${x + w - kRectLocal * tr} ${y} ${x + w} ${y + kRectLocal * tr} ${x + w} ${y + tr}` : '',
-            `L ${x + w} ${y + h - br}`,
-            br ? `C ${x + w} ${y + h - kRectLocal * br} ${x + w - kRectLocal * br} ${y + h} ${x + w - br} ${y + h}` : '',
-            `L ${x + bl} ${y + h}`,
-            bl ? `C ${x + kRectLocal * bl} ${y + h} ${x} ${y + h - kRectLocal * bl} ${x} ${y + h - bl}` : '',
-            `L ${x} ${y + tl}`,
-            tl ? `C ${x} ${y + kRectLocal * tl} ${x + kRectLocal * tl} ${y} ${x + tl} ${y}` : '',
-            'Z'
-        ].filter(Boolean);
-        return parts.join(' ');
-    };
     const upsertFrameClip = (
         existingClip: any,
         transform: { left: number; top: number; scaleX: number; scaleY: number; angle: number; skewX?: number; skewY?: number },
@@ -1722,7 +1669,7 @@ const syncObjectFrameClip = (obj: any) => {
             clip.set(clipProps);
         } else {
             clip = wantPathClip
-                ? new fabric.Path(buildCornerPath(frame.width, frame.height, frame.cornerRadii), clipProps)
+                ? new fabric.Path(buildRoundedRectSvgPath(frame.width, frame.height, frame.cornerRadii), clipProps)
                 : new fabric.Rect({
                     ...clipProps,
                     width: frame.width,
