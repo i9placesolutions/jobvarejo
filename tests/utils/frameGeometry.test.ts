@@ -14,7 +14,8 @@ import {
   buildFrameLabelSelectionSignature,
   normalizeFrameRuntimeProps,
   findFrameUnderObjectInList,
-  prepareJsonObjectsForLazyFrameLoad
+  prepareJsonObjectsForLazyFrameLoad,
+  computeFrameLabels
 } from '~/utils/frameGeometry'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -640,5 +641,214 @@ describe('prepareJsonObjectsForLazyFrameLoad', () => {
     const cb = { type: 'text', parentFrameId: 'b' }
     const r = prepareJsonObjectsForLazyFrameLoad([a, b, cb, c])
     expect(r.objects.map((o: any) => o._customId)).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('computeFrameLabels', () => {
+  // identityTransform: passa as coords inalteradas (zoom 1, sem translate)
+  const identityTransform = (p: { x: number; y: number }) => ({ x: p.x, y: p.y })
+  const fmtInt = (n: number) => `${Math.round(n)}`
+
+  const makeFrame = (overrides: any = {}) => ({
+    visible: true,
+    width: 100, height: 100,
+    scaleX: 1, scaleY: 1,
+    _customId: 'frame-1',
+    layerName: 'My Frame',
+    getBoundingRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+    getCenterPoint: () => ({ x: 50, y: 50 }),
+    ...overrides
+  })
+
+  it('lista vazia: array vazio', () => {
+    expect(computeFrameLabels({
+      frames: [],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })).toEqual([])
+  })
+
+  it('frame visivel: gera label completo', () => {
+    const frame = makeFrame()
+    const labels = computeFrameLabels({
+      frames: [frame],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    expect(labels).toHaveLength(1)
+    expect(labels[0].id).toBe('frame-1')
+    expect(labels[0].name).toBe('My Frame')
+    expect(labels[0].dims).toBe('100 × 100')
+    expect(labels[0].isSelected).toBe(false)
+    expect(labels[0].frameRef).toBe(frame)
+  })
+
+  it('frame invisivel: pulado', () => {
+    const labels = computeFrameLabels({
+      frames: [makeFrame({ visible: false })],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    expect(labels).toEqual([])
+  })
+
+  it('frame fora do viewport (com margem): culled', () => {
+    const farFrame = makeFrame({
+      getBoundingRect: () => ({ left: 10000, top: 10000, width: 100, height: 100 })
+    })
+    const labels = computeFrameLabels({
+      frames: [farFrame],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: { left: 0, top: 0, right: 800, bottom: 600 },
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    expect(labels).toEqual([])
+  })
+
+  it('frame parcialmente fora mas dentro da margem: incluido', () => {
+    const edgeFrame = makeFrame({
+      getBoundingRect: () => ({ left: 700, top: 0, width: 200, height: 100 })
+    })
+    const labels = computeFrameLabels({
+      frames: [edgeFrame],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: { left: 0, top: 0, right: 800, bottom: 600 },
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    expect(labels).toHaveLength(1)
+  })
+
+  it('label.x e y clampados em >= 4', () => {
+    const frame = makeFrame({
+      getBoundingRect: () => ({ left: -10, top: -10, width: 100, height: 100 })
+    })
+    const labels = computeFrameLabels({
+      frames: [frame],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    expect(labels[0].x).toBe(4) // Math.max(4, -10) = 4
+    expect(labels[0].y).toBe(4) // Math.max(4, -10 - 22) = 4
+  })
+
+  it('isSelected=true quando activeObj === frame', () => {
+    const frame = makeFrame()
+    const labels = computeFrameLabels({
+      frames: [frame],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: frame,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    expect(labels[0].isSelected).toBe(true)
+  })
+
+  it('name fallback chain: layerName > name > "Frame"', () => {
+    expect(computeFrameLabels({
+      frames: [makeFrame({ layerName: '', name: 'fallback' })],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })[0].name).toBe('fallback')
+
+    expect(computeFrameLabels({
+      frames: [makeFrame({ layerName: '', name: '' })],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })[0].name).toBe('Frame')
+  })
+
+  it('frame sem getBoundingRect: pulado silenciosamente', () => {
+    const labels = computeFrameLabels({
+      frames: [{ visible: true } as any],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    expect(labels).toEqual([])
+  })
+
+  it('getBoundingRect que joga erro: pulado via try/catch', () => {
+    const broken = makeFrame({
+      getBoundingRect: () => { throw new Error('boom') }
+    })
+    const labels = computeFrameLabels({
+      frames: [broken],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    expect(labels).toEqual([])
+  })
+
+  it('multiplos frames: array com todos', () => {
+    const f1 = makeFrame({ _customId: 'f1' })
+    const f2 = makeFrame({ _customId: 'f2' })
+    const labels = computeFrameLabels({
+      frames: [f1, f2],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    expect(labels).toHaveLength(2)
+    expect(labels[0].id).toBe('f1')
+    expect(labels[1].id).toBe('f2')
+  })
+
+  it('formatDimension recebe width/height escalados (w*scaleX, h*scaleY)', () => {
+    const frame = makeFrame({
+      width: 100, height: 200, scaleX: 1.5, scaleY: 0.5
+    })
+    const labels = computeFrameLabels({
+      frames: [frame],
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      viewportBounds: null,
+      zoom: 1,
+      activeObj: null,
+      transformPoint: identityTransform,
+      formatDimension: fmtInt
+    })
+    // 100 * 1.5 = 150, 200 * 0.5 = 100
+    expect(labels[0].dims).toBe('150 × 100')
   })
 })

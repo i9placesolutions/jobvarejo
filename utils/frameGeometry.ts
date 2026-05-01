@@ -327,6 +327,103 @@ export const isObjectMostlyInsideFrame = (obj: any, frame: any, minOverlapRatio 
 }
 
 /**
+ * Estrutura de um label de frame renderizado (badge de nome + dimensoes
+ * sobre o frame). Coordenadas ja em screen space (apos transformPoint).
+ */
+export type FrameLabel = {
+    id: string
+    name: string
+    x: number
+    y: number
+    dimX: number
+    dimY: number
+    dims: string
+    isSelected: boolean
+    frameRef: any
+}
+
+export type ComputeFrameLabelsInput = {
+    frames: ReadonlyArray<any>
+    viewportTransform: number[]
+    viewportBounds: { left: number; top: number; right: number; bottom: number } | null
+    zoom: number
+    activeObj: any | null
+    transformPoint: (p: { x: number; y: number }, m: number[]) => { x: number; y: number }
+    formatDimension: (n: number) => string
+}
+
+/**
+ * Calcula as labels de frames a partir dos dados pre-resolvidos
+ * pelo caller. Pure: nao acessa canvas/refs/fabric global.
+ *
+ * Para cada frame visivel:
+ *  - skip se invisivel
+ *  - skip se totalmente fora do viewport (com margem worldMargin)
+ *  - posiciona badge de nome em top-left (clampado em x>=4, y>=4)
+ *  - posiciona badge de dimensoes em center-bottom
+ *  - dims formatado como "WxH" via formatDimension callback
+ *
+ * worldMargin: margem em pixels do mundo (default Math.max(48, 140/zoom))
+ * para nao culling de frames quase no viewport.
+ *
+ * Try/catch absorve erros em frames com getBoundingRect quebrado.
+ */
+export const computeFrameLabels = (input: ComputeFrameLabelsInput): FrameLabel[] => {
+    const {
+        frames,
+        viewportTransform,
+        viewportBounds,
+        zoom,
+        activeObj,
+        transformPoint,
+        formatDimension
+    } = input
+    const worldMargin = Math.max(48, 140 / Math.max(zoom, 0.01))
+    const labels: FrameLabel[] = []
+    for (const frame of (frames || [])) {
+        if (frame?.visible === false) continue
+        try {
+            const bounds = typeof frame.getBoundingRect === 'function'
+                ? frame.getBoundingRect(true, true)
+                : null
+            if (!bounds) continue
+            if (viewportBounds) {
+                const boundsRight = Number(bounds.left || 0) + Number(bounds.width || 0)
+                const boundsBottom = Number(bounds.top || 0) + Number(bounds.height || 0)
+                if (
+                    boundsRight < viewportBounds.left - worldMargin ||
+                    Number(bounds.left || 0) > viewportBounds.right + worldMargin ||
+                    boundsBottom < viewportBounds.top - worldMargin ||
+                    Number(bounds.top || 0) > viewportBounds.bottom + worldMargin
+                ) {
+                    continue
+                }
+            }
+            const pTl = transformPoint({ x: bounds.left, y: bounds.top }, viewportTransform)
+            const w = Number(frame.width || 0) * Number(frame.scaleX || 1)
+            const h = Number(frame.height || 0) * Number(frame.scaleY || 1)
+            const center = typeof frame.getCenterPoint === 'function' ? frame.getCenterPoint() : null
+            if (!center) continue
+            const pBc = transformPoint({ x: center.x, y: center.y + (h / 2) }, viewportTransform)
+            labels.push({
+                id: frame._customId || '',
+                name: (frame.layerName || frame.name || 'Frame').toString(),
+                x: Math.max(4, pTl.x),
+                y: Math.max(4, pTl.y - 22),
+                dimX: pBc.x,
+                dimY: pBc.y + 8,
+                dims: `${formatDimension(w)} × ${formatDimension(h)}`,
+                isSelected: activeObj === frame,
+                frameRef: frame
+            })
+        } catch {
+            // skip invalid frame
+        }
+    }
+    return labels
+}
+
+/**
  * Resultado de prepareJsonObjectsForLazyFrameLoad: contem o JSON
  * preparado (subset de objects) + um Map de filhos diferidos (por
  * frameId) para criacao posterior quando o frame ficar visivel.

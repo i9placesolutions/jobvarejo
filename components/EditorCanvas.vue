@@ -281,7 +281,8 @@ import {
     buildFrameLabelSelectionSignature,
     normalizeFrameRuntimeProps,
     findFrameUnderObjectInList,
-    prepareJsonObjectsForLazyFrameLoad
+    prepareJsonObjectsForLazyFrameLoad,
+    computeFrameLabels
 } from '~/utils/frameGeometry'
 import {
     TRANSIENT_CONTROL_NAMES,
@@ -5842,51 +5843,16 @@ const updateFrameLabels = () => {
         resetFrameLabelLayoutState();
         return;
     }
-    const activeObj = canvas.value.getActiveObject();
-    const viewportBounds = getViewportBounds();
-    const worldMargin = Math.max(48, 140 / Math.max(zoomVal, 0.01));
-    const fmt = formatDisplayNumber;
-    const labels: typeof frameLabels.value = [];
-    for (const frame of frames) {
-        if (frame?.visible === false) continue;
-        try {
-            const bounds = typeof frame.getBoundingRect === 'function'
-                ? frame.getBoundingRect(true, true)
-                : frame.getBoundingRect();
-            if (viewportBounds) {
-                const boundsRight = Number(bounds?.left || 0) + Number(bounds?.width || 0);
-                const boundsBottom = Number(bounds?.top || 0) + Number(bounds?.height || 0);
-                if (
-                    boundsRight < viewportBounds.left - worldMargin ||
-                    Number(bounds?.left || 0) > viewportBounds.right + worldMargin ||
-                    boundsBottom < viewportBounds.top - worldMargin ||
-                    Number(bounds?.top || 0) > viewportBounds.bottom + worldMargin
-                ) {
-                    continue;
-                }
-            }
-            const p_tl = fabric.util.transformPoint({ x: bounds.left, y: bounds.top }, vpt);
-            // Dimensões reais do frame
-            const w = frame.width * (frame.scaleX || 1);
-            const h = frame.height * (frame.scaleY || 1);
-            // Posição do badge de dimensões (center-bottom do frame)
-            const center = frame.getCenterPoint();
-            const p_bc_raw = { x: center.x, y: center.y + (h / 2) };
-            const p_bc = fabric.util.transformPoint(p_bc_raw, vpt);
-            labels.push({
-                id: frame._customId || '',
-                name: (frame.layerName || frame.name || 'Frame').toString(),
-                x: Math.max(4, p_tl.x),
-                y: Math.max(4, p_tl.y - 22),
-                dimX: p_bc.x,
-                dimY: p_bc.y + 8,
-                dims: `${fmt(w)} × ${fmt(h)}`,
-                isSelected: activeObj === frame,
-                frameRef: frame,
-            });
-        } catch { /* skip invalid frame */ }
-    }
-    frameLabels.value = labels;
+    // Delegacao para o helper puro computeFrameLabels (utils/frameGeometry.ts).
+    frameLabels.value = computeFrameLabels({
+        frames,
+        viewportTransform: vpt,
+        viewportBounds: getViewportBounds(),
+        zoom: zoomVal,
+        activeObj: canvas.value.getActiveObject(),
+        transformPoint: fabric.util.transformPoint,
+        formatDimension: formatDisplayNumber
+    });
     commitFrameLabelLayoutState();
 };
 
