@@ -6,7 +6,10 @@ import {
   BUILTIN_LABEL_TEMPLATE_IDS,
   BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
   BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
-  BUILTIN_RED_BURST_LABEL_TEMPLATE_ID
+  BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
+  LABEL_TEMPLATE_EXTRA_PROPS,
+  MANUAL_TEMPLATE_STABLE_PROPS,
+  MANUAL_TEMPLATE_DERIVED_PROPS
 } from '~/utils/labelTemplateHelpers'
 
 describe('getLabelTemplateTimestamp', () => {
@@ -135,5 +138,72 @@ describe('isBuiltInLabelTemplateId', () => {
 
   it('case-sensitive (IDs sao em snake_case)', () => {
     expect(isBuiltInLabelTemplateId('TPL_DEFAULT')).toBe(false)
+  })
+})
+
+describe('LABEL_TEMPLATE_EXTRA_PROPS', () => {
+  it('contem props identidade + custom flags', () => {
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('_customId')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('name')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('fontFamily')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('charSpacing')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__preserveManualLayout')
+  })
+
+  it('contem manual template flags (__manual*)', () => {
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__manualTemplateBaseW')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__manualTemplateBaseH')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__manualGapSingle')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__manualScaleX')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__manualScaleY')
+  })
+
+  it('contem original* (snapshot pre-resize)', () => {
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalWidth')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalHeight')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalFontSize')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalScaleX')
+  })
+
+  it('contem corner radii custom', () => {
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__cornerTL')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__cornerTR')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__cornerBL')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__cornerBR')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalCornerTL')
+  })
+
+  it('todas as strings unicas', () => {
+    expect(new Set(LABEL_TEMPLATE_EXTRA_PROPS).size).toBe(LABEL_TEMPLATE_EXTRA_PROPS.length)
+  })
+})
+
+describe('MANUAL_TEMPLATE_STABLE_PROPS', () => {
+  it('contem apenas BaseW/BaseH', () => {
+    expect(MANUAL_TEMPLATE_STABLE_PROPS).toEqual([
+      '__manualTemplateBaseW',
+      '__manualTemplateBaseH'
+    ])
+  })
+})
+
+describe('MANUAL_TEMPLATE_DERIVED_PROPS', () => {
+  it('contem gaps + anchors', () => {
+    expect(MANUAL_TEMPLATE_DERIVED_PROPS).toContain('__manualGapSingle')
+    expect(MANUAL_TEMPLATE_DERIVED_PROPS).toContain('__manualGapRetail')
+    expect(MANUAL_TEMPLATE_DERIVED_PROPS).toContain('__manualGapWholesale')
+    expect(MANUAL_TEMPLATE_DERIVED_PROPS).toContain('__manualSingleAnchors')
+  })
+
+  it('NAO contem stable props (sao disjuntos)', () => {
+    expect(MANUAL_TEMPLATE_DERIVED_PROPS).not.toContain('__manualTemplateBaseW')
+    expect(MANUAL_TEMPLATE_DERIVED_PROPS).not.toContain('__manualTemplateBaseH')
+  })
+
+  it('STABLE e DERIVED sao disjuntos', () => {
+    const stable = new Set(MANUAL_TEMPLATE_STABLE_PROPS)
+    const derived = new Set(MANUAL_TEMPLATE_DERIVED_PROPS)
+    for (const prop of stable) expect(derived.has(prop)).toBe(false)
+    for (const prop of derived) expect(stable.has(prop)).toBe(false)
   })
 })

@@ -77,3 +77,78 @@ export const shouldUseIncomingTemplateSnapshot = (prev: any, incoming: any): boo
 
     return true
 }
+
+/**
+ * Lista de props extras que devem ser persistidas em label templates
+ * (alem das props padrao do Fabric). Inclui customId, name, fontFamily,
+ * charSpacing, e todos os flags de manual template (`__preserveManualLayout`,
+ * `__atacValueVariants`, etc).
+ */
+export const LABEL_TEMPLATE_EXTRA_PROPS: ReadonlyArray<string> = [
+    '_customId',
+    'name',
+    'fontFamily',
+    'visible',
+    'charSpacing',
+    '__preserveManualLayout',
+    '__forceAtacarejoCanonical',
+    '__atacValueVariants',
+    '__atacVariantGroups',
+    '__fontScale',
+    '__yOffsetRatio',
+    '__manualScaleX',
+    '__manualScaleY',
+    '__strokeWidth',
+    '__roundness',
+    '__originalWidth',
+    '__originalHeight',
+    '__originalFontSize',
+    '__originalLeft',
+    '__originalTop',
+    '__originalOriginX',
+    '__originalOriginY',
+    '__originalScaleX',
+    '__originalScaleY',
+    '__originalRadius',
+    '__originalRx',
+    '__originalRy',
+    '__originalStrokeWidth',
+    '__shadowBlur',
+    '__originalFill',
+    '__manualTemplateBaseW',
+    '__manualTemplateBaseH',
+    '__manualGapSingle',
+    '__manualGapRetail',
+    '__manualGapWholesale',
+    '__manualSingleAnchors',
+    '__cornerTL',
+    '__cornerTR',
+    '__cornerBL',
+    '__cornerBR',
+    '__originalCornerTL',
+    '__originalCornerTR',
+    '__originalCornerBL',
+    '__originalCornerBR'
+]
+
+/**
+ * Props base de manual template — sao "estaveis" (nao derivam de
+ * outros valores) e portanto persistidas as-is. Usado pelo pipeline
+ * de save para identificar quais props NAO recalcular ao restaurar.
+ */
+export const MANUAL_TEMPLATE_STABLE_PROPS: ReadonlyArray<string> = [
+    '__manualTemplateBaseW',
+    '__manualTemplateBaseH'
+]
+
+/**
+ * Props derivadas de manual template — sao calculadas a partir de
+ * STABLE_PROPS + estado da etiqueta no momento do save. Removidas
+ * antes de salvar para evitar drift entre cache e estado real.
+ */
+export const MANUAL_TEMPLATE_DERIVED_PROPS: ReadonlyArray<string> = [
+    '__manualGapSingle',
+    '__manualGapRetail',
+    '__manualGapWholesale',
+    '__manualSingleAnchors'
+]

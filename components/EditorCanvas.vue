@@ -305,7 +305,10 @@ import {
     BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
     BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID,
     BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID,
-    BUILTIN_LABEL_TEMPLATE_IDS
+    BUILTIN_LABEL_TEMPLATE_IDS,
+    LABEL_TEMPLATE_EXTRA_PROPS,
+    MANUAL_TEMPLATE_STABLE_PROPS,
+    MANUAL_TEMPLATE_DERIVED_PROPS
 } from '~/utils/labelTemplateHelpers'
 import {
     walkCanvasObjects,
@@ -1010,9 +1013,8 @@ const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
 const BUILTIN_ATACAREJO_SEED_VERSION = 4
 const BUILTIN_RED_BURST_SEED_VERSION = 2
 const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
-const LABEL_TEMPLATE_EXTRA_PROPS = ['_customId', 'name', 'fontFamily', 'visible', 'charSpacing', '__preserveManualLayout', '__forceAtacarejoCanonical', '__atacValueVariants', '__atacVariantGroups', '__fontScale', '__yOffsetRatio', '__manualScaleX', '__manualScaleY', '__strokeWidth', '__roundness', '__originalWidth', '__originalHeight', '__originalFontSize', '__originalLeft', '__originalTop', '__originalOriginX', '__originalOriginY', '__originalScaleX', '__originalScaleY', '__originalRadius', '__originalRx', '__originalRy', '__originalStrokeWidth', '__shadowBlur', '__originalFill', '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors', '__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR', '__originalCornerTL', '__originalCornerTR', '__originalCornerBL', '__originalCornerBR']
-const MANUAL_TEMPLATE_STABLE_PROPS = ['__manualTemplateBaseW', '__manualTemplateBaseH'] as const;
-const MANUAL_TEMPLATE_DERIVED_PROPS = ['__manualGapSingle', '__manualGapRetail', '__manualGapWholesale', '__manualSingleAnchors'] as const;
+// LABEL_TEMPLATE_EXTRA_PROPS, MANUAL_TEMPLATE_STABLE_PROPS,
+// MANUAL_TEMPLATE_DERIVED_PROPS extraidos para utils/labelTemplateHelpers.ts.
 const autoHealedLabelTemplateIds = new Set<string>()
 
 // getLabelTemplateTimestamp extraido para utils/labelTemplateHelpers.ts.
