@@ -41,6 +41,12 @@ import {
 } from '~/utils/fabricMeasure'
 import { setText, setVisible, assignNewCustomIdsDeep } from '~/utils/fabricObjectOps'
 import {
+    isRectObject,
+    clampCornerRadii,
+    isTransparentPaint,
+    toggleFill
+} from '~/utils/fabricStyleHelpers'
+import {
     walkCanvasObjects,
     getJsonGroupChildren,
     isStandalonePriceGroupJson,
@@ -2299,20 +2305,7 @@ const moveFrameDescendants = (frame: any, dx: number, dy: number, descendants?: 
 };
 
 // --- Shape Utilities (Figma-ish) ---
-const isRectObject = (obj: any) => String(obj?.type || '').toLowerCase() === 'rect';
-
-const clampCornerRadii = (radii: any, w: number, h: number) => {
-    const clamp = (n: any) => {
-        const v = Math.max(0, Number(n || 0));
-        return Math.min(v, w / 2, h / 2);
-    };
-    return {
-        tl: clamp(radii?.tl),
-        tr: clamp(radii?.tr),
-        br: clamp(radii?.br),
-        bl: clamp(radii?.bl)
-    };
-};
+// isRectObject e clampCornerRadii foram extraidos para utils/fabricStyleHelpers.ts.
 
 // Per-corner rounding by patching Fabric's Rect `_render` (keeps Rect behavior + resizing).
 const applyRectCornerRadiiPatch = (rect: any) => {
@@ -2360,25 +2353,7 @@ const applyRectCornerRadiiPatch = (rect: any) => {
     rect.dirty = true;
 };
 
-const isTransparentPaint = (v: any) => {
-    if (v == null) return true;
-    if (v === '' || v === 'transparent') return true;
-    if (typeof v !== 'string') return false;
-    return v.startsWith('rgba') && v.replace(/\s/g, '').endsWith(',0)');
-};
-
-const toggleFill = (obj: any, enabled: boolean) => {
-    if (!obj) return;
-    (obj as any).__fillEnabled = !!enabled;
-    if (enabled) {
-        const prev = (obj as any).__fillBackup;
-        const next = !isTransparentPaint(prev) ? prev : (!isTransparentPaint(obj.fill) ? obj.fill : '#ffffff');
-        obj.set?.('fill', next);
-    } else {
-        (obj as any).__fillBackup = obj.fill;
-        obj.set?.('fill', 'rgba(0,0,0,0)');
-    }
-};
+// isTransparentPaint e toggleFill extraidos para utils/fabricStyleHelpers.ts.
 
 const toggleStroke = (obj: any, enabled: boolean) => {
     if (!obj) return;
