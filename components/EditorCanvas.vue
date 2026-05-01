@@ -191,7 +191,8 @@ import {
     ensureObjectPersistentId,
     ensurePersistentContentFlags,
     isObjectMaskCandidate,
-    stripPersistentIdsRecursive
+    stripPersistentIdsRecursive,
+    findNearestMaskSourceBelowTarget as findNearestMaskSourceBelowTargetHelper
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -21435,25 +21436,15 @@ const applyObjectMaskFromSelection = async (selection: any): Promise<number> => 
     return appliedTargets.length;
 };
 
+// Wrapper local que injeta canvas.value e isObjectMaskCandidate no
+// helper puro extraido (utils/fabricObjectOps.ts).
 const findNearestMaskSourceBelowTarget = (target: any): any | null => {
-    if (!canvas.value || !target) return null;
-    const objects = canvas.value.getObjects();
-    const targetIndex = objects.indexOf(target);
-    if (targetIndex <= 0) return null;
-
-    const targetFrameId = String((target as any)?.parentFrameId || '').trim();
-
-    for (let i = targetIndex - 1; i >= 0; i--) {
-        const candidate = objects[i];
-        if (!candidate || candidate === target) continue;
-
-        const candidateFrameId = String((candidate as any)?.parentFrameId || '').trim();
-        if (candidateFrameId !== targetFrameId) continue;
-        if (!isObjectMaskCandidate(candidate)) continue;
-        return candidate;
-    }
-
-    return null;
+    if (!canvas.value) return null;
+    return findNearestMaskSourceBelowTargetHelper(
+        canvas.value.getObjects(),
+        target,
+        isObjectMaskCandidate
+    );
 };
 
 const applyObjectMaskFromSingleTarget = async (target: any): Promise<boolean> => {

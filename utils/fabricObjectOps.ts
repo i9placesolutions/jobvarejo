@@ -455,6 +455,39 @@ export const isObjectMaskCandidate = (obj: any): boolean => {
 }
 
 /**
+ * Encontra o vizinho de baixo (no z-order) que pode ser usado como
+ * mascara para um target. Pure: recebe array de objetos + target +
+ * predicate isCandidate, varre de target.indexOf - 1 ate 0,
+ * retornando o primeiro candidato no MESMO frame (parentFrameId).
+ *
+ * Retorna null se target nao esta no array, esta no topo (idx <= 0)
+ * ou nao ha candidato abaixo no mesmo frame.
+ */
+export const findNearestMaskSourceBelowTarget = (
+    objects: any[],
+    target: any,
+    isCandidate: (obj: any) => boolean
+): any | null => {
+    if (!Array.isArray(objects) || !target) return null
+    const targetIndex = objects.indexOf(target)
+    if (targetIndex <= 0) return null
+
+    const targetFrameId = String((target as any)?.parentFrameId || '').trim()
+
+    for (let i = targetIndex - 1; i >= 0; i--) {
+        const candidate = objects[i]
+        if (!candidate || candidate === target) continue
+
+        const candidateFrameId = String((candidate as any)?.parentFrameId || '').trim()
+        if (candidateFrameId !== targetFrameId) continue
+        if (!isCandidate(candidate)) continue
+        return candidate
+    }
+
+    return null
+}
+
+/**
  * Remove `_customId` e `id` do nodo e descendentes recursivamente,
  * incluindo clipPath aninhado. Usado quando um objeto e clonado para
  * uso como mascara/decoracao para evitar colisao de IDs persistentes

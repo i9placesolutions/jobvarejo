@@ -10,7 +10,8 @@ import {
   ensureObjectPersistentId,
   ensurePersistentContentFlags,
   isObjectMaskCandidate,
-  stripPersistentIdsRecursive
+  stripPersistentIdsRecursive,
+  findNearestMaskSourceBelowTarget
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -801,5 +802,72 @@ describe('stripPersistentIdsRecursive', () => {
     const root: any = { _customId: 'r1' }
     expect(() => stripPersistentIdsRecursive(root)).not.toThrow()
     expect(root._customId).toBeUndefined()
+  })
+})
+
+describe('findNearestMaskSourceBelowTarget', () => {
+  const isCandidate = (obj: any) => !!obj?.maskOk
+
+  it('null/undefined target → null', () => {
+    expect(findNearestMaskSourceBelowTarget([], null, isCandidate)).toBeNull()
+    expect(findNearestMaskSourceBelowTarget(null as any, {}, isCandidate)).toBeNull()
+  })
+
+  it('target nao no array → null', () => {
+    const a = { id: 'a' }
+    const b = { id: 'b' }
+    expect(findNearestMaskSourceBelowTarget([a, b], { id: 'c' }, isCandidate)).toBeNull()
+  })
+
+  it('target no topo (idx 0): null', () => {
+    const target = { id: 'top', maskOk: true }
+    expect(findNearestMaskSourceBelowTarget([target], target, isCandidate)).toBeNull()
+  })
+
+  it('encontra o candidato imediatamente abaixo', () => {
+    const a = { id: 'a', maskOk: true }
+    const b = { id: 'b', maskOk: true }
+    const target = { id: 'target' }
+    expect(findNearestMaskSourceBelowTarget([a, b, target], target, isCandidate))
+      .toBe(b)
+  })
+
+  it('pula objetos que nao sao candidatos', () => {
+    const a = { id: 'a', maskOk: true }
+    const b = { id: 'b', maskOk: false }
+    const target = { id: 'target' }
+    expect(findNearestMaskSourceBelowTarget([a, b, target], target, isCandidate))
+      .toBe(a)
+  })
+
+  it('soh aceita candidatos do mesmo parentFrameId', () => {
+    const a = { id: 'a', maskOk: true, parentFrameId: 'F1' }
+    const b = { id: 'b', maskOk: true, parentFrameId: 'F2' }
+    const target = { id: 'target', parentFrameId: 'F1' }
+    expect(findNearestMaskSourceBelowTarget([a, b, target], target, isCandidate))
+      .toBe(a)  // pulou b (frame diferente)
+  })
+
+  it('target sem parentFrameId compara com "" (free)', () => {
+    const a = { id: 'a', maskOk: true } // sem parentFrameId
+    const b = { id: 'b', maskOk: true, parentFrameId: 'F1' }
+    const target = { id: 'target' }
+    expect(findNearestMaskSourceBelowTarget([a, b, target], target, isCandidate))
+      .toBe(a)
+  })
+
+  it('nenhum candidato no mesmo frame: null', () => {
+    const a = { id: 'a', maskOk: true, parentFrameId: 'F2' }
+    const target = { id: 'target', parentFrameId: 'F1' }
+    expect(findNearestMaskSourceBelowTarget([a, target], target, isCandidate))
+      .toBeNull()
+  })
+
+  it('ignora target dentro do array (continua varrendo)', () => {
+    const a = { id: 'a', maskOk: true }
+    const target = { id: 'target' }
+    const dup = target  // mesma ref
+    expect(findNearestMaskSourceBelowTarget([a, dup, target], target, isCandidate))
+      .toBe(a)
   })
 })
