@@ -97,7 +97,8 @@ import {
     SCROLLBAR_PADDING,
     SCROLLBAR_SANITIZE_INTERVAL_MS,
     isScrollbarRelevantObject,
-    getScrollbarSanitizeIntervalMs
+    getScrollbarSanitizeIntervalMs,
+    computeAggregatedRelevantBounds
 } from '~/utils/scrollbarHelpers'
 import {
     getCanvasObjectsRefreshIntervalMs,
@@ -6088,31 +6089,10 @@ const getScrollbarContentBounds = (): ScrollbarContentBounds => {
         }
     }
     const objects = canvasInstance?.getObjects?.() || []
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    let hasRelevantObjects = false
+    const aggregated = computeAggregatedRelevantBounds(objects, isScrollbarRelevantObject)
+    let { minX, minY, maxX, maxY } = aggregated
 
-    for (const obj of objects) {
-        if (!isScrollbarRelevantObject(obj)) continue
-        if (typeof obj.getBoundingRect !== 'function') continue
-        hasRelevantObjects = true
-        const bounds = obj.getBoundingRect(true, true)
-        if (!bounds || !Number.isFinite(bounds.left) || !Number.isFinite(bounds.top) || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) {
-            continue
-        }
-        const oMinX = bounds.left
-        const oMinY = bounds.top
-        const oMaxX = bounds.left + bounds.width
-        const oMaxY = bounds.top + bounds.height
-        if (oMinX < minX) minX = oMinX
-        if (oMinY < minY) minY = oMinY
-        if (oMaxX > maxX) maxX = oMaxX
-        if (oMaxY > maxY) maxY = oMaxY
-    }
-
-    if (!hasRelevantObjects) {
+    if (!aggregated.hasAny) {
         minX = 0
         minY = 0
         maxX = pageWidth

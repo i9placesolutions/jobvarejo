@@ -4,7 +4,8 @@ import {
   SCROLLBAR_PADDING,
   SCROLLBAR_SANITIZE_INTERVAL_MS,
   isScrollbarRelevantObject,
-  getScrollbarSanitizeIntervalMs
+  getScrollbarSanitizeIntervalMs,
+  computeAggregatedRelevantBounds
 } from '~/utils/scrollbarHelpers'
 
 const fabricObj = (overrides: any = {}) => ({
@@ -93,5 +94,93 @@ describe('getScrollbarSanitizeIntervalMs', () => {
       .toBeLessThanOrEqual(getScrollbarSanitizeIntervalMs(300))
     expect(getScrollbarSanitizeIntervalMs(600))
       .toBeLessThanOrEqual(getScrollbarSanitizeIntervalMs(700))
+  })
+})
+
+describe('computeAggregatedRelevantBounds', () => {
+  const isRelevant = (obj: any) => !!obj?.relevant
+
+  const makeObj = (left: number, top: number, width: number, height: number, overrides: any = {}) => ({
+    relevant: true,
+    getBoundingRect: () => ({ left, top, width, height }),
+    ...overrides
+  })
+
+  it('lista vazia: hasAny=false, valores em Infinity', () => {
+    const r = computeAggregatedRelevantBounds([], isRelevant)
+    expect(r.hasAny).toBe(false)
+    expect(r.minX).toBe(Infinity)
+    expect(r.minY).toBe(Infinity)
+    expect(r.maxX).toBe(-Infinity)
+    expect(r.maxY).toBe(-Infinity)
+  })
+
+  it('null/undefined input: hasAny=false', () => {
+    expect(computeAggregatedRelevantBounds(null as any, isRelevant).hasAny).toBe(false)
+    expect(computeAggregatedRelevantBounds(undefined as any, isRelevant).hasAny).toBe(false)
+  })
+
+  it('objetos nao-relevant ignorados', () => {
+    const r = computeAggregatedRelevantBounds(
+      [{ relevant: false, getBoundingRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) }],
+      isRelevant
+    )
+    expect(r.hasAny).toBe(false)
+  })
+
+  it('objeto sem getBoundingRect ignorado', () => {
+    const r = computeAggregatedRelevantBounds(
+      [{ relevant: true }],
+      isRelevant
+    )
+    expect(r.hasAny).toBe(false)
+  })
+
+  it('1 objeto: bounds = bounds do objeto', () => {
+    const r = computeAggregatedRelevantBounds([makeObj(10, 20, 100, 50)], isRelevant)
+    expect(r.hasAny).toBe(true)
+    expect(r.minX).toBe(10)
+    expect(r.minY).toBe(20)
+    expect(r.maxX).toBe(110)
+    expect(r.maxY).toBe(70)
+  })
+
+  it('multiplos objetos: union dos bbox', () => {
+    const r = computeAggregatedRelevantBounds([
+      makeObj(0, 0, 100, 100),
+      makeObj(200, 50, 50, 150)
+    ], isRelevant)
+    expect(r.minX).toBe(0)
+    expect(r.minY).toBe(0)
+    expect(r.maxX).toBe(250)
+    expect(r.maxY).toBe(200)
+  })
+
+  it('bounds com NaN/Infinity ignorados (mas hasAny continua false se foram os unicos)', () => {
+    const obj = {
+      relevant: true,
+      getBoundingRect: () => ({ left: NaN, top: 0, width: 100, height: 100 })
+    }
+    const r = computeAggregatedRelevantBounds([obj], isRelevant)
+    expect(r.hasAny).toBe(false)
+  })
+
+  it('mistura validos + invalidos: valores invalidos pulados', () => {
+    const r = computeAggregatedRelevantBounds([
+      makeObj(0, 0, 100, 100),
+      { relevant: true, getBoundingRect: () => ({ left: NaN, top: 0, width: 999, height: 999 }) },
+      makeObj(200, 0, 50, 50)
+    ], isRelevant)
+    expect(r.hasAny).toBe(true)
+    expect(r.maxX).toBe(250)  // 999 nao foi considerado
+  })
+
+  it('bounds sem getBoundingRect retornando null e ignorado', () => {
+    const obj = {
+      relevant: true,
+      getBoundingRect: () => null
+    }
+    const r = computeAggregatedRelevantBounds([obj], isRelevant)
+    expect(r.hasAny).toBe(false)
   })
 })
