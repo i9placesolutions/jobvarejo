@@ -40,6 +40,10 @@ import {
     isValidClipPath
 } from '~/utils/canvasValidation'
 import {
+    getPreferredProductImageFromGroup,
+    getImageTrimmedDimensions
+} from '~/utils/fabricImageHelpers'
+import {
     isObjectShownForBounds,
     getObjectHorizontalBoundsLocal,
     measureHorizontalBoundsLocal,
@@ -352,17 +356,7 @@ const findImageTargetInSelection = (obj: any): { img: any; parent: any | null } 
     return null
 }
 
-const getPreferredProductImageFromGroup = (group: any): any | null => {
-    if (!group || typeof group.getObjects !== 'function') return null;
-    const list = group.getObjects() || [];
-    const preferred = list.find((o: any) => {
-        if (String(o?.type || '').toLowerCase() !== 'image') return false;
-        const n = String(o?.name || '').trim();
-        return n === 'smart_image' || n === 'product_image' || n === 'productImage';
-    });
-    if (preferred) return preferred;
-    return list.find((o: any) => String(o?.type || '').toLowerCase() === 'image') || null;
-};
+// getPreferredProductImageFromGroup extraido para utils/fabricImageHelpers.ts.
 
 const resolveSelectedProductCardContext = (active: any): { card: any | null; image: any | null } => {
     if (!active) return { card: null, image: null };
@@ -2295,17 +2289,7 @@ const detectImageTrimBounds = (fabricImg: any): { left: number; top: number; wid
     }
 };
 
-const getImageTrimmedDimensions = (img: any) => {
-    const currentWidth = Math.max(1, Number(img?.width || 0) || 1);
-    const currentHeight = Math.max(1, Number(img?.height || 0) || 1);
-    const hasCrop = Number(img?.cropX ?? 0) > 0 || Number(img?.cropY ?? 0) > 0;
-    if (hasCrop) {
-        return { width: currentWidth, height: currentHeight };
-    }
-    const naturalWidth = Math.max(1, Number(img?.getElement?.()?.naturalWidth || 0) || currentWidth);
-    const naturalHeight = Math.max(1, Number(img?.getElement?.()?.naturalHeight || 0) || currentHeight);
-    return { width: naturalWidth, height: naturalHeight };
-};
+// getImageTrimmedDimensions extraido para utils/fabricImageHelpers.ts.
 
 const applyAutoTrimToProductImage = (img: any) => {
     if (!img) return null;

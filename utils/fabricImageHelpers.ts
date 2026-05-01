@@ -1,0 +1,52 @@
+/**
+ * Helpers puros relacionados a imagens em groups Fabric.
+ *
+ * Operam apenas no objeto duck-typed (precisam de getObjects/getElement,
+ * crop/width/height/type/name). Sem dependencia de canvas, refs reativos
+ * ou estado global.
+ *
+ * Cobertura: tests/utils/fabricImageHelpers.test.ts
+ */
+
+/**
+ * Busca a imagem "preferida" dentro de um group (tipicamente um card
+ * de produto). Prioriza nomes conhecidos do engine (smart_image,
+ * product_image, productImage) e cai para a primeira imagem qualquer.
+ *
+ * Retorna null se group nao for groupable ou nao contiver imagens.
+ */
+export const getPreferredProductImageFromGroup = (group: any): any | null => {
+    if (!group || typeof group.getObjects !== 'function') return null
+    const list = group.getObjects() || []
+    const preferred = list.find((o: any) => {
+        if (String(o?.type || '').toLowerCase() !== 'image') return false
+        const n = String(o?.name || '').trim()
+        return n === 'smart_image' || n === 'product_image' || n === 'productImage'
+    })
+    if (preferred) return preferred
+    return list.find((o: any) => String(o?.type || '').toLowerCase() === 'image') || null
+}
+
+/**
+ * Calcula dimensoes "uteis" de uma imagem Fabric considerando se ja
+ * existe um crop aplicado:
+ *  - se ha cropX/cropY > 0 (crop ativo): usa width/height correntes do
+ *    objeto (que ja' refletem a area visivel pos-crop)
+ *  - senao: cai para naturalWidth/naturalHeight da `getElement()` quando
+ *    disponivel (HTMLImageElement subjacente), com fallback para width
+ *    /height correntes
+ *
+ * Sempre retorna numeros >= 1 para evitar divisao por zero em downstream
+ * (ex: fitProductImageIntoSlot).
+ */
+export const getImageTrimmedDimensions = (img: any): { width: number; height: number } => {
+    const currentWidth = Math.max(1, Number(img?.width || 0) || 1)
+    const currentHeight = Math.max(1, Number(img?.height || 0) || 1)
+    const hasCrop = Number(img?.cropX ?? 0) > 0 || Number(img?.cropY ?? 0) > 0
+    if (hasCrop) {
+        return { width: currentWidth, height: currentHeight }
+    }
+    const naturalWidth = Math.max(1, Number(img?.getElement?.()?.naturalWidth || 0) || currentWidth)
+    const naturalHeight = Math.max(1, Number(img?.getElement?.()?.naturalHeight || 0) || currentHeight)
+    return { width: naturalWidth, height: naturalHeight }
+}
