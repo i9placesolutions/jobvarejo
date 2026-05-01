@@ -77,6 +77,7 @@ import {
     getFrameLabelUpdateIntervalMs as getFrameLabelUpdateIntervalMsHelper,
     CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS
 } from '~/utils/refreshThrottle'
+import { getHistoryRestoreKey } from '~/utils/pageHistoryHelpers'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
 import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import {
@@ -5168,14 +5169,8 @@ const recoverLatestNonEmptyForActivePage = async () => {
     }
 }
 
-type PageHistoryItem = {
-    source: 'version' | 'history' | 'current'
-    key: string
-    versionId?: string | null
-    lastModified: string
-    size?: number | null
-    objectCount?: number | null
-}
+// type PageHistoryItem extraido para utils/pageHistoryHelpers.ts.
+type PageHistoryItem = import('~/utils/pageHistoryHelpers').PageHistoryItem;
 
 const showHistoryModal = ref(false)
 const historyLoading = ref(false)
@@ -5271,7 +5266,7 @@ const restoreFromHistoryItem = async (item: PageHistoryItem) => {
         restoringHistoryKey.value = ''
     }
 }
-const getHistoryRestoreKey = (item: PageHistoryItem) => `${item.source}:${item.key}:${item.versionId || ''}`
+// getHistoryRestoreKey extraido para utils/pageHistoryHelpers.ts.
 const handleOpenPageHistoryEvent = () => {
     if (!canRecoverLatestNonEmpty.value) return
     void openHistoryModal()
