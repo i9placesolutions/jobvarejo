@@ -4626,7 +4626,8 @@ import {
     isDefaultProductZoneName,
     BASE_PRODUCT_ZONE_NAME,
     getNextProductZoneIndexName,
-    ensureZoneNamesDistinct
+    ensureZoneNamesDistinct,
+    buildProductSlicesForZones as buildProductSlicesForZonesHelper
 } from '~/utils/product-zone-helpers'
 import { DEFAULT_GLOBAL_STYLES, DEFAULT_PRODUCT_ZONE } from '~/types/product-zone'
 import type { ProductZone, GlobalStyles } from '~/types/product-zone'
@@ -24591,56 +24592,10 @@ const importProductsToMultipleFrames = async (products: any[], opts?: ProductImp
     }
 }
 
-const buildProductSlicesForZones = (products: any[], zones: any[], mode: 'replace' | 'append'): any[][] => {
-    const slices = zones.map(() => [] as any[])
-    if (!Array.isArray(products) || products.length === 0 || zones.length === 0) return slices
-    if (zones.length === 1) {
-        slices[0] = products.slice()
-        return slices
-    }
-
-    const existingCounts = zones.map((zone: any) => {
-        try {
-            return getZoneChildren(zone).length
-        } catch {
-            return 0
-        }
-    })
-    const totalExisting = existingCounts.reduce((sum, count) => sum + Math.max(0, count), 0)
-
-    let allocations: number[]
-    if (mode === 'replace' && totalExisting > 0) {
-        allocations = existingCounts.map((count) => Math.max(0, count))
-        let allocated = allocations.reduce((sum, count) => sum + count, 0)
-        while (allocated > products.length) {
-            for (let i = allocations.length - 1; i >= 0 && allocated > products.length; i -= 1) {
-                const current = allocations[i] ?? 0
-                if (current <= 0) continue
-                allocations[i] = current - 1
-                allocated -= 1
-            }
-        }
-        let cursor = 0
-        while (allocated < products.length) {
-            const index = cursor % allocations.length
-            allocations[index] = (allocations[index] ?? 0) + 1
-            allocated += 1
-            cursor += 1
-        }
-    } else {
-        const base = Math.floor(products.length / zones.length)
-        const remainder = products.length % zones.length
-        allocations = zones.map((_, index) => base + (index < remainder ? 1 : 0))
-    }
-
-    let cursor = 0
-    allocations.forEach((count, index) => {
-        const nextCount = Math.max(0, count)
-        slices[index] = products.slice(cursor, cursor + nextCount)
-        cursor += nextCount
-    })
-    return slices
-}
+// buildProductSlicesForZones extraido para utils/product-zone-helpers.ts.
+// Wrapper local injeta getZoneChildren (que requer canvas).
+const buildProductSlicesForZones = (products: any[], zones: any[], mode: 'replace' | 'append'): any[][] =>
+    buildProductSlicesForZonesHelper(products, zones, mode, (zone: any) => getZoneChildren(zone).length)
 
 const clearProductZoneCards = (zone: any) => {
     if (!canvas.value || !zone || !isLikelyProductZone(zone)) return

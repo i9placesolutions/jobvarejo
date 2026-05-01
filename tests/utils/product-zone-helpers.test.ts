@@ -9,8 +9,101 @@ import {
   isDefaultProductZoneName,
   BASE_PRODUCT_ZONE_NAME,
   getNextProductZoneIndexName,
-  ensureZoneNamesDistinct
+  ensureZoneNamesDistinct,
+  buildProductSlicesForZones
 } from '~/utils/product-zone-helpers'
+
+describe('buildProductSlicesForZones', () => {
+  const constCount = (n: number) => () => n
+
+  it('zonas vazias: arrays vazios', () => {
+    expect(buildProductSlicesForZones([], [], 'append', constCount(0))).toEqual([])
+  })
+
+  it('produtos vazios: arrays vazios mas com tamanho de zonas', () => {
+    expect(buildProductSlicesForZones([], [{}, {}], 'append', constCount(0))).toEqual([[], []])
+  })
+
+  it('1 zona: todos os produtos vao na zona', () => {
+    const products = [{ id: 1 }, { id: 2 }, { id: 3 }]
+    expect(buildProductSlicesForZones(products, [{}], 'append', constCount(0))).toEqual([products])
+  })
+
+  it('append distribui igual com remainder nas primeiras', () => {
+    const products = [1, 2, 3, 4, 5]
+    const result = buildProductSlicesForZones(products as any[], [{}, {}], 'append', constCount(0))
+    expect(result[0]?.length).toBe(3) // base 2 + 1 remainder
+    expect(result[1]?.length).toBe(2)
+  })
+
+  it('replace + zonas com counts existentes: respeita allocacoes', () => {
+    const products = [1, 2, 3, 4, 5, 6]
+    const counts = [2, 4]
+    const getCount = (zone: any) => {
+      const idx = zone.idx
+      return counts[idx]!
+    }
+    const result = buildProductSlicesForZones(
+      products as any[],
+      [{ idx: 0 }, { idx: 1 }],
+      'replace',
+      getCount
+    )
+    expect(result[0]?.length).toBe(2)
+    expect(result[1]?.length).toBe(4)
+  })
+
+  it('replace + total existing > products: encolhe das ultimas zonas', () => {
+    const products = [1, 2, 3]
+    const counts = [3, 3]
+    const getCount = (zone: any) => counts[zone.idx]!
+    const result = buildProductSlicesForZones(
+      products as any[],
+      [{ idx: 0 }, { idx: 1 }],
+      'replace',
+      getCount
+    )
+    expect(result[0]?.length! + result[1]?.length!).toBe(3)
+  })
+
+  it('replace + total existing < products: cresce em round-robin', () => {
+    const products = [1, 2, 3, 4, 5, 6]
+    const counts = [1, 1]
+    const getCount = (zone: any) => counts[zone.idx]!
+    const result = buildProductSlicesForZones(
+      products as any[],
+      [{ idx: 0 }, { idx: 1 }],
+      'replace',
+      getCount
+    )
+    expect(result[0]?.length! + result[1]?.length!).toBe(6)
+  })
+
+  it('replace + totalExisting=0: cai para distribuicao igual', () => {
+    const products = [1, 2, 3, 4]
+    const result = buildProductSlicesForZones(
+      products as any[],
+      [{}, {}],
+      'replace',
+      constCount(0)
+    )
+    expect(result[0]?.length).toBe(2)
+    expect(result[1]?.length).toBe(2)
+  })
+
+  it('getZoneChildCount com erro: trata como 0', () => {
+    const products = [1, 2, 3]
+    const getCount = (_zone: any): number => { throw new Error('boom') }
+    const result = buildProductSlicesForZones(
+      products as any[],
+      [{}, {}],
+      'append',
+      getCount
+    )
+    // append com zonas sem children: distribuicao igual
+    expect(result[0]?.length! + result[1]?.length!).toBe(3)
+  })
+})
 
 describe('parsePrice — entrada heterogenea de fontes diversas', () => {
   it('retorna 0 para null/undefined/string vazia', () => {

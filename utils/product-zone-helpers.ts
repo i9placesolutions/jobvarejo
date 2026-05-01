@@ -829,3 +829,70 @@ export const getNextProductZoneIndexName = (existingZoneNames: ReadonlyArray<str
     while (used.has(index)) index += 1
     return `${BASE_PRODUCT_ZONE_NAME} ${index}`
 }
+
+/**
+ * Distribui um array de produtos entre N zonas. Comportamento:
+ *  - 0 zonas / 0 produtos: arrays vazios
+ *  - 1 zona: todos os produtos vao na zona 0
+ *  - mode='replace' + totalExisting > 0: respeita allocacoes proporcionais
+ *    aos counts atuais de cada zona, ajustando para o total exato de produtos
+ *  - caso contrario: distribuicao igual (base + remainder pras primeiras zonas)
+ *
+ * `getZoneChildCount` e' injetado para evitar dependencia direta de
+ * canvas/Fabric (caller passa funcao que conta filhos da zona).
+ */
+export const buildProductSlicesForZones = (
+    products: any[],
+    zones: any[],
+    mode: 'replace' | 'append',
+    getZoneChildCount: (zone: any) => number
+): any[][] => {
+    const slices = zones.map(() => [] as any[])
+    if (!Array.isArray(products) || products.length === 0 || zones.length === 0) return slices
+    if (zones.length === 1) {
+        slices[0] = products.slice()
+        return slices
+    }
+
+    const existingCounts = zones.map((zone: any) => {
+        try {
+            return getZoneChildCount(zone)
+        } catch {
+            return 0
+        }
+    })
+    const totalExisting = existingCounts.reduce((sum, count) => sum + Math.max(0, count), 0)
+
+    let allocations: number[]
+    if (mode === 'replace' && totalExisting > 0) {
+        allocations = existingCounts.map((count) => Math.max(0, count))
+        let allocated = allocations.reduce((sum, count) => sum + count, 0)
+        while (allocated > products.length) {
+            for (let i = allocations.length - 1; i >= 0 && allocated > products.length; i -= 1) {
+                const current = allocations[i] ?? 0
+                if (current <= 0) continue
+                allocations[i] = current - 1
+                allocated -= 1
+            }
+        }
+        let cursor = 0
+        while (allocated < products.length) {
+            const index = cursor % allocations.length
+            allocations[index] = (allocations[index] ?? 0) + 1
+            allocated += 1
+            cursor += 1
+        }
+    } else {
+        const base = Math.floor(products.length / zones.length)
+        const remainder = products.length % zones.length
+        allocations = zones.map((_, index) => base + (index < remainder ? 1 : 0))
+    }
+
+    let cursor = 0
+    allocations.forEach((count, index) => {
+        const nextCount = Math.max(0, count)
+        slices[index] = products.slice(cursor, cursor + nextCount)
+        cursor += nextCount
+    })
+    return slices
+}
