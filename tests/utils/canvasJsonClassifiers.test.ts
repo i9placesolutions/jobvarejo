@@ -26,7 +26,8 @@ import {
   cloneCanvasDataForLoad,
   getCanvasLoadCacheToken,
   decodeContaboUrls,
-  removeImageObjectsDeep
+  removeImageObjectsDeep,
+  getPreferredProductImageFromCardJson
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -1011,5 +1012,45 @@ describe('removeImageObjectsDeep', () => {
   it('node sem objects nao quebra', () => {
     const node: any = { type: 'rect' }
     expect(removeImageObjectsDeep(node)).toBe(node)
+  })
+})
+
+describe('getPreferredProductImageFromCardJson', () => {
+  it('null/sem objects retorna null', () => {
+    expect(getPreferredProductImageFromCardJson(null)).toBeNull()
+    expect(getPreferredProductImageFromCardJson({})).toBeNull()
+    expect(getPreferredProductImageFromCardJson({ objects: [] })).toBeNull()
+  })
+
+  it('prioriza smart_image', () => {
+    const smart = { type: 'image', name: 'smart_image' }
+    const random = { type: 'image', name: 'random' }
+    const card = { objects: [random, smart] }
+    expect(getPreferredProductImageFromCardJson(card)).toBe(smart)
+  })
+
+  it('prioriza product_image quando nao tem smart_image', () => {
+    const prod = { type: 'image', name: 'product_image' }
+    const random = { type: 'image', name: 'foo' }
+    expect(getPreferredProductImageFromCardJson({ objects: [random, prod] })).toBe(prod)
+  })
+
+  it('prioriza smartType=product-image em data', () => {
+    const smart = { type: 'image', data: { smartType: 'product-image' } }
+    const random = { type: 'image', name: 'foo' }
+    expect(getPreferredProductImageFromCardJson({ objects: [random, smart] })).toBe(smart)
+  })
+
+  it('fallback: primeira imagem candidata qualquer', () => {
+    const generic = { type: 'image', name: 'random' }
+    expect(getPreferredProductImageFromCardJson({ objects: [
+      { type: 'rect' }, generic
+    ] })).toBe(generic)
+  })
+
+  it('rejeita imagens estruturais (price_bg_image)', () => {
+    expect(getPreferredProductImageFromCardJson({
+      objects: [{ type: 'image', name: 'price_bg_image' }]
+    })).toBeNull()
   })
 })

@@ -4,7 +4,8 @@ import {
   getObjectHorizontalBoundsLocal,
   measureHorizontalBoundsLocal,
   getObjectVerticalBoundsLocal,
-  measureContentBoundsLocal
+  measureContentBoundsLocal,
+  getObjectCenterInParentPlane
 } from '~/utils/fabricMeasure'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -169,5 +170,53 @@ describe('measureContentBoundsLocal — bbox 2D combinado', () => {
     ])
     expect(r?.width).toBeGreaterThanOrEqual(0)
     expect(r?.height).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('getObjectCenterInParentPlane', () => {
+  it('null retorna { 0, 0 }', () => {
+    expect(getObjectCenterInParentPlane(null)).toEqual({ x: 0, y: 0 })
+    expect(getObjectCenterInParentPlane(undefined)).toEqual({ x: 0, y: 0 })
+  })
+
+  it('prioriza getRelativeCenterPoint quando disponivel', () => {
+    const o = {
+      getRelativeCenterPoint: () => ({ x: 50, y: 75 }),
+      // dados secundarios que NAO devem ser usados
+      left: 999, top: 999, width: 100, height: 100
+    }
+    expect(getObjectCenterInParentPlane(o)).toEqual({ x: 50, y: 75 })
+  })
+
+  it('fallback derivado de left/top + origem (originX=left default)', () => {
+    expect(getObjectCenterInParentPlane({
+      left: 0, top: 0, width: 100, height: 50
+    })).toEqual({ x: 50, y: 25 })
+  })
+
+  it('originX=center: cx = left literal', () => {
+    expect(getObjectCenterInParentPlane({
+      left: 100, top: 100, width: 50, height: 50,
+      originX: 'center', originY: 'center'
+    })).toEqual({ x: 100, y: 100 })
+  })
+
+  it('originX=right: cx = left - width/2', () => {
+    expect(getObjectCenterInParentPlane({
+      left: 100, top: 0, width: 50, height: 50, originX: 'right', originY: 'top'
+    })).toEqual({ x: 75, y: 25 })
+  })
+
+  it('getRelativeCenterPoint que joga erro cai no fallback', () => {
+    expect(getObjectCenterInParentPlane({
+      getRelativeCenterPoint: () => { throw new Error('boom') },
+      left: 0, top: 0, width: 100, height: 50
+    })).toEqual({ x: 50, y: 25 })
+  })
+
+  it('aplica abs em scale negativo', () => {
+    expect(getObjectCenterInParentPlane({
+      left: 0, top: 0, width: 100, height: 100, scaleX: -1, scaleY: -1
+    })).toEqual({ x: 50, y: 50 })
   })
 })

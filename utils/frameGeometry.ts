@@ -168,6 +168,27 @@ export const isObjectIntersectingFrame = (obj: any, frame: any): boolean => {
 }
 
 /**
+ * Gera nome amigavel para frame em export. Prioridade:
+ *  1. layerName especifico (NAO generico tipo "FRAME"/"FRAMER N")
+ *  2. runtime name (se diferente)
+ *  3. layerName generico
+ *  4. fallback "Frame N+1"
+ */
+export const getFrameDisplayNameForExport = (frame: any, index: number): string => {
+    const layerName = String(frame?.layerName || '').trim()
+    const runtimeName = String(frame?.name || '').trim()
+    const isGenericLayerName =
+        !layerName ||
+        /^FRAMER(?:\s+\d+)?$/i.test(layerName) ||
+        /^FRAME(?:\s+\d+)?$/i.test(layerName)
+
+    if (!isGenericLayerName) return layerName
+    if (runtimeName) return runtimeName
+    if (layerName) return layerName
+    return `Frame ${index + 1}`
+}
+
+/**
  * Gap default em pixels entre frames quando geramos um novo frame
  * proximo a um frame de referencia. Mantem visual de "pagina" separada.
  */

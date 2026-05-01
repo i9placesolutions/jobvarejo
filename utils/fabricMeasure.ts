@@ -77,6 +77,57 @@ export const getObjectVerticalBoundsLocal = (obj: any): VerticalBounds | null =>
 }
 
 /**
+ * Calcula o centro de um objeto Fabric no plano do PARENT (group/canvas),
+ * com 3 caminhos:
+ *  1. `getRelativeCenterPoint()` (preferido para objetos em group)
+ *  2. derivacao de left/top + origem (fallback puro, sem Fabric)
+ *  3. `getCenterPoint()` (top-level, ultimo recurso)
+ *
+ * Sempre retorna `{ x: 0, y: 0 }` em caso de falha total ou null obj —
+ * caller pode confiar que sempre tem ponto valido.
+ */
+export const getObjectCenterInParentPlane = (obj: any): { x: number; y: number } => {
+    if (!obj) return { x: 0, y: 0 }
+
+    try {
+        if (typeof obj.getRelativeCenterPoint === 'function') {
+            const p = obj.getRelativeCenterPoint()
+            if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) {
+                return { x: Number(p.x), y: Number(p.y) }
+            }
+        }
+    } catch {
+        // fallback below
+    }
+
+    const w = Math.abs((Number(obj.width) || 0) * (Number(obj.scaleX) || 1))
+    const h = Math.abs((Number(obj.height) || 0) * (Number(obj.scaleY) || 1))
+    const ox = String(obj.originX || 'left')
+    const oy = String(obj.originY || 'top')
+    let cx = Number(obj.left || 0)
+    let cy = Number(obj.top || 0)
+    if (ox === 'left') cx += w / 2
+    else if (ox === 'right') cx -= w / 2
+    if (oy === 'top') cy += h / 2
+    else if (oy === 'bottom') cy -= h / 2
+
+    if (Number.isFinite(cx) && Number.isFinite(cy)) return { x: cx, y: cy }
+
+    try {
+        if (typeof obj.getCenterPoint === 'function') {
+            const p = obj.getCenterPoint()
+            if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) {
+                return { x: Number(p.x), y: Number(p.y) }
+            }
+        }
+    } catch {
+        // ignore
+    }
+
+    return { x: 0, y: 0 }
+}
+
+/**
  * Bbox completo (uniao 2D) de um conjunto de objetos. Retorna null se
  * nao houver objetos medivel em ambos os eixos.
  */

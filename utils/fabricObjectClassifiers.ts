@@ -62,6 +62,46 @@ export const isActiveSelectionObject = (obj: any): boolean =>
     String(obj?.type || '').toLowerCase() === 'activeselection'
 
 /**
+ * Detecta se um objeto tem binding direto a uma zona via parentZoneId.
+ * Util para filtrar cards que ja estao "presos" a uma zona durante
+ * fluxos de relayout/contenção.
+ */
+export const hasParentZoneBinding = (obj: any): boolean => {
+    return String((obj as any)?.parentZoneId || '').trim().length > 0
+}
+
+/**
+ * Heuristica para "card-like" durante reparo de bindings zone↔card.
+ * Mais permissiva que isLikelyProductCard: aceita por flag, prefixo,
+ * legacy size (_cardWidth/_cardHeight), legacy grid signals (smartGridId/
+ * priceMode), parentZoneId direto, ou _zoneSlot.zoneId.
+ *
+ * Usado por repairLooseZoneCardBindings para encontrar cards que
+ * perderam o binding e re-vincular contra a zona apropriada.
+ */
+export const isCardLikeForZoneBinding = (obj: any): boolean => {
+    if (!obj || obj.excludeFromExport || obj.isFrame) return false
+    if (obj.type !== 'group') return false
+    const hasLegacyCardSize =
+        Number.isFinite(Number((obj as any)?._cardWidth)) &&
+        Number((obj as any)?._cardWidth) > 0 &&
+        Number.isFinite(Number((obj as any)?._cardHeight)) &&
+        Number((obj as any)?._cardHeight) > 0
+    const hasLegacyGridSignals =
+        String((obj as any)?.smartGridId || '').trim().length > 0 ||
+        String((obj as any)?.priceMode || '').trim().length > 0
+    return !!(
+        obj.isSmartObject ||
+        obj.isProductCard ||
+        String(obj.name || '').startsWith('product-card') ||
+        hasLegacyCardSize ||
+        hasLegacyGridSignals ||
+        String((obj as any)?.parentZoneId || '').trim().length > 0 ||
+        String((obj as any)?._zoneSlot?.zoneId || '').trim().length > 0
+    )
+}
+
+/**
  * Detecta se o objeto E' o priceGroup ou esta DENTRO dele (filho direto).
  * Usado em pipelines de export/seleção que precisam tratar o conjunto da
  * etiqueta como uma unidade (ex: ocultar parts, transformar grupo todo).

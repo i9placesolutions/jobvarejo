@@ -336,6 +336,29 @@ export const isRenderablePriceGroupTemplateImageNode = (node: any): boolean => {
 }
 
 /**
+ * Versao JSON de getPreferredProductImageFromGroup. Busca entre
+ * `card.objects` a imagem candidata a "Replace Image", priorizando
+ * smartType=product-image e nomes conhecidos antes do primeiro
+ * candidato qualquer.
+ */
+export const getPreferredProductImageFromCardJson = (card: any): any | null => {
+    const children = getJsonGroupChildren(card)
+        .filter((child: any) => isProductCardImageSelectionCandidateJson(child))
+    if (!children.length) return null
+
+    const primary = children.find((child: any) => {
+        const smartType = String((child as any)?.data?.smartType || '').toLowerCase()
+        const name = String((child as any)?.name || '').toLowerCase()
+        return smartType === 'product-image' ||
+            name === 'smart_image' ||
+            name === 'product_image' ||
+            name === 'productimage'
+    })
+
+    return primary || children[0] || null
+}
+
+/**
  * Clone defensivo de canvasData antes de loadFromJSON. Tenta
  * structuredClone, depois JSON, e como ultima saida retorna o original
  * (caller deve copiar com cuidado para nao mutar shared state).

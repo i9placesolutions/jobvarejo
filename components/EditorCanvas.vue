@@ -34,7 +34,9 @@ import {
     isPathCloseCommand,
     isVectorPathClosed,
     hasObjectMaskApplied,
-    isActiveSelectionObject
+    isActiveSelectionObject,
+    hasParentZoneBinding,
+    isCardLikeForZoneBinding
 } from '~/utils/fabricObjectClassifiers'
 import {
     isCanvasContextError,
@@ -67,7 +69,8 @@ import {
     getObjectHorizontalBoundsLocal,
     measureHorizontalBoundsLocal,
     getObjectVerticalBoundsLocal,
-    measureContentBoundsLocal
+    measureContentBoundsLocal,
+    getObjectCenterInParentPlane
 } from '~/utils/fabricMeasure'
 import { setText, setVisible, assignNewCustomIdsDeep } from '~/utils/fabricObjectOps'
 import {
@@ -85,7 +88,8 @@ import {
     isObjectIntersectingFrame,
     isObjectMostlyInsideFrame,
     getFrameSpawnPosition,
-    FRAME_SPAWN_GAP
+    FRAME_SPAWN_GAP,
+    getFrameDisplayNameForExport
 } from '~/utils/frameGeometry'
 import {
     getLabelTemplateTimestamp,
@@ -118,7 +122,8 @@ import {
     cloneCanvasDataForLoad,
     getCanvasLoadCacheToken,
     decodeContaboUrls,
-    removeImageObjectsDeep
+    removeImageObjectsDeep,
+    getPreferredProductImageFromCardJson
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -8435,19 +8440,7 @@ const makeExportBatchBaseName = () => {
     return `export-${safePage}-${formatExportTimestampToken()}`
 }
 
-const getFrameDisplayNameForExport = (frame: any, index: number) => {
-    const layerName = String(frame?.layerName || '').trim();
-    const runtimeName = String(frame?.name || '').trim();
-    const isGenericLayerName =
-        !layerName ||
-        /^FRAMER(?:\s+\d+)?$/i.test(layerName) ||
-        /^FRAME(?:\s+\d+)?$/i.test(layerName);
-
-    if (!isGenericLayerName) return layerName;
-    if (runtimeName) return runtimeName;
-    if (layerName) return layerName;
-    return `Frame ${index + 1}`;
-};
+// getFrameDisplayNameForExport extraido para utils/frameGeometry.ts.
 
 const availableFramesForExport = computed(() => {
     const _activePage = Number(project.activePageIndex || 0);
@@ -9471,53 +9464,8 @@ const invalidateContainmentZoneCache = () => {
     containmentZoneByIdCache = null;
 };
 
-const hasParentZoneBinding = (obj: any) => {
-    return String((obj as any)?.parentZoneId || '').trim().length > 0;
-};
-
-const getObjectCenterInParentPlane = (obj: any): { x: number; y: number } => {
-    if (!obj) return { x: 0, y: 0 };
-
-    // Preferred for grouped objects: center in parent/group coordinate plane.
-    try {
-        if (typeof obj.getRelativeCenterPoint === 'function') {
-            const p = obj.getRelativeCenterPoint();
-            if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) {
-                return { x: Number(p.x), y: Number(p.y) };
-            }
-        }
-    } catch {
-        // fallback below
-    }
-
-    // Fallback: derive center from local left/top + origin.
-    const w = Math.abs((Number(obj.width) || 0) * (Number(obj.scaleX) || 1));
-    const h = Math.abs((Number(obj.height) || 0) * (Number(obj.scaleY) || 1));
-    const ox = String(obj.originX || 'left');
-    const oy = String(obj.originY || 'top');
-    let cx = Number(obj.left || 0);
-    let cy = Number(obj.top || 0);
-    if (ox === 'left') cx += w / 2;
-    else if (ox === 'right') cx -= w / 2;
-    if (oy === 'top') cy += h / 2;
-    else if (oy === 'bottom') cy -= h / 2;
-
-    if (Number.isFinite(cx) && Number.isFinite(cy)) return { x: cx, y: cy };
-
-    // Final fallback for top-level objects.
-    try {
-        if (typeof obj.getCenterPoint === 'function') {
-            const p = obj.getCenterPoint();
-            if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) {
-                return { x: Number(p.x), y: Number(p.y) };
-            }
-        }
-    } catch {
-        // ignore
-    }
-
-    return { x: 0, y: 0 };
-};
+// hasParentZoneBinding extraido para utils/fabricObjectClassifiers.ts.
+// getObjectCenterInParentPlane extraido para utils/fabricMeasure.ts.
 
 const setObjectCenterInParentPlane = (obj: any, cx: number, cy: number) => {
     if (!obj) return;
@@ -9560,27 +9508,7 @@ const findContainmentZoneById = (zoneId: any) => {
     )) || null;
 };
 
-const isCardLikeForZoneBinding = (obj: any) => {
-    if (!obj || obj.excludeFromExport || obj.isFrame) return false;
-    if (obj.type !== 'group') return false;
-    const hasLegacyCardSize =
-        Number.isFinite(Number((obj as any)?._cardWidth)) &&
-        Number((obj as any)?._cardWidth) > 0 &&
-        Number.isFinite(Number((obj as any)?._cardHeight)) &&
-        Number((obj as any)?._cardHeight) > 0;
-    const hasLegacyGridSignals =
-        String((obj as any)?.smartGridId || '').trim().length > 0 ||
-        String((obj as any)?.priceMode || '').trim().length > 0;
-    return !!(
-        obj.isSmartObject ||
-        obj.isProductCard ||
-        String(obj.name || '').startsWith('product-card') ||
-        hasLegacyCardSize ||
-        hasLegacyGridSignals ||
-        String((obj as any)?.parentZoneId || '').trim().length > 0 ||
-        String((obj as any)?._zoneSlot?.zoneId || '').trim().length > 0
-    );
-};
+// isCardLikeForZoneBinding extraido para utils/fabricObjectClassifiers.ts.
 
 const repairLooseZoneCardBindings = () => {
     if (!canvas.value) return;
@@ -11791,18 +11719,7 @@ const DEFERRED_PRODUCT_IMAGE_LOAD_MAX = 72;
 // isDeferredProductImageCandidateSrc + isProductCardImageSelectionCandidateJson
 // extraidos para utils/canvasJsonClassifiers.ts.
 
-const getPreferredProductImageFromCardJson = (card: any): any | null => {
-    const children = getJsonGroupChildren(card).filter((child: any) => isProductCardImageSelectionCandidateJson(child));
-    if (!children.length) return null;
-
-    const primary = children.find((child: any) => {
-        const smartType = String((child as any)?.data?.smartType || '').toLowerCase();
-        const name = String((child as any)?.name || '').toLowerCase();
-        return smartType === 'product-image' || name === 'smart_image' || name === 'product_image' || name === 'productimage';
-    });
-
-    return primary || children[0] || null;
-};
+// getPreferredProductImageFromCardJson extraido para utils/canvasJsonClassifiers.ts.
 
 const buildProgressiveProductCardImageLoadPayload = (
     canvasData: any,

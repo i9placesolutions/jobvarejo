@@ -7,7 +7,8 @@ import {
   isObjectIntersectingFrame,
   isObjectMostlyInsideFrame,
   getFrameSpawnPosition,
-  FRAME_SPAWN_GAP
+  FRAME_SPAWN_GAP,
+  getFrameDisplayNameForExport
 } from '~/utils/frameGeometry'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -262,5 +263,25 @@ describe('getFrameSpawnPosition', () => {
       getCenterPoint: () => ({ x: 0, y: 0 })
     }
     expect(getFrameSpawnPosition(broken, 100, 100)).toEqual({ left: 50, top: 50 })
+  })
+})
+
+describe('getFrameDisplayNameForExport', () => {
+  it('layerName especifico vence', () => {
+    expect(getFrameDisplayNameForExport({ layerName: 'Capa', name: 'foo' }, 0)).toBe('Capa')
+  })
+
+  it('layerName generico ("FRAMER N") cai para runtime name', () => {
+    expect(getFrameDisplayNameForExport({ layerName: 'FRAMER 1', name: 'Capa' }, 0)).toBe('Capa')
+    expect(getFrameDisplayNameForExport({ layerName: 'FRAME', name: 'Verso' }, 0)).toBe('Verso')
+  })
+
+  it('sem layerName e sem name: cai para "Frame N+1"', () => {
+    expect(getFrameDisplayNameForExport({}, 0)).toBe('Frame 1')
+    expect(getFrameDisplayNameForExport(null, 4)).toBe('Frame 5')
+  })
+
+  it('layerName generico mas runtimeName vazio: usa layerName', () => {
+    expect(getFrameDisplayNameForExport({ layerName: 'FRAMER 2' }, 0)).toBe('FRAMER 2')
   })
 })

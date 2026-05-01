@@ -12,7 +12,9 @@ import {
   isPathCloseCommand,
   isVectorPathClosed,
   hasObjectMaskApplied,
-  isActiveSelectionObject
+  isActiveSelectionObject,
+  hasParentZoneBinding,
+  isCardLikeForZoneBinding
 } from '~/utils/fabricObjectClassifiers'
 
 // Helpers de mock — todos seguem duck typing de Fabric.
@@ -430,5 +432,62 @@ describe('isActiveSelectionObject', () => {
     expect(isActiveSelectionObject({ type: 'rect' })).toBe(false)
     expect(isActiveSelectionObject(null)).toBe(false)
     expect(isActiveSelectionObject({})).toBe(false)
+  })
+})
+
+describe('hasParentZoneBinding', () => {
+  it('aceita parentZoneId nao-vazio', () => {
+    expect(hasParentZoneBinding({ parentZoneId: 'zone-1' })).toBe(true)
+    expect(hasParentZoneBinding({ parentZoneId: '  zone-1  ' })).toBe(true)
+  })
+
+  it('rejeita parentZoneId vazio/whitespace/missing', () => {
+    expect(hasParentZoneBinding({ parentZoneId: '' })).toBe(false)
+    expect(hasParentZoneBinding({ parentZoneId: '   ' })).toBe(false)
+    expect(hasParentZoneBinding({})).toBe(false)
+    expect(hasParentZoneBinding(null)).toBe(false)
+  })
+})
+
+describe('isCardLikeForZoneBinding', () => {
+  it('rejeita objetos triviais e nao-grupos', () => {
+    expect(isCardLikeForZoneBinding(null)).toBe(false)
+    expect(isCardLikeForZoneBinding({ type: 'rect' })).toBe(false)
+    expect(isCardLikeForZoneBinding({ type: 'group', isFrame: true })).toBe(false)
+    expect(isCardLikeForZoneBinding({ type: 'group', excludeFromExport: true })).toBe(false)
+  })
+
+  it('aceita por flag isSmartObject/isProductCard', () => {
+    expect(isCardLikeForZoneBinding({ type: 'group', isSmartObject: true })).toBe(true)
+    expect(isCardLikeForZoneBinding({ type: 'group', isProductCard: true })).toBe(true)
+  })
+
+  it('aceita por prefixo "product-card" no name', () => {
+    expect(isCardLikeForZoneBinding({ type: 'group', name: 'product-card-1' })).toBe(true)
+  })
+
+  it('aceita por _cardWidth/_cardHeight legacy', () => {
+    expect(isCardLikeForZoneBinding({
+      type: 'group',
+      _cardWidth: 100,
+      _cardHeight: 200
+    })).toBe(true)
+  })
+
+  it('aceita por smartGridId / priceMode legacy', () => {
+    expect(isCardLikeForZoneBinding({ type: 'group', smartGridId: 'g1' })).toBe(true)
+    expect(isCardLikeForZoneBinding({ type: 'group', priceMode: 'unit' })).toBe(true)
+  })
+
+  it('aceita por parentZoneId / _zoneSlot.zoneId direto', () => {
+    expect(isCardLikeForZoneBinding({ type: 'group', parentZoneId: 'z1' })).toBe(true)
+    expect(isCardLikeForZoneBinding({
+      type: 'group',
+      _zoneSlot: { zoneId: 'z1' }
+    })).toBe(true)
+  })
+
+  it('rejeita group sem nenhum sinal', () => {
+    expect(isCardLikeForZoneBinding({ type: 'group' })).toBe(false)
   })
 })
