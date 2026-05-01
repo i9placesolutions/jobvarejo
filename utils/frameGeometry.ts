@@ -168,6 +168,20 @@ export const isObjectIntersectingFrame = (obj: any, frame: any): boolean => {
 }
 
 /**
+ * Serializa uma metrica numerica de frame label (viewport transform,
+ * zoom, dimensoes) para string com 3 casas decimais. Retorna '0'
+ * para valores nao-finitos.
+ *
+ * Usado para gerar "fingerprint" estavel de viewport e detectar
+ * mudancas que requerem re-render dos labels de frame.
+ */
+export const serializeFrameLabelMetric = (value: any): string => {
+    const numeric = Number(value)
+    if (!Number.isFinite(numeric)) return '0'
+    return numeric.toFixed(3)
+}
+
+/**
  * Gera nome amigavel para frame em export. Prioridade:
  *  1. layerName especifico (NAO generico tipo "FRAME"/"FRAMER N")
  *  2. runtime name (se diferente)

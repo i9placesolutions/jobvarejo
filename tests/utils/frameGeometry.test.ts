@@ -8,7 +8,8 @@ import {
   isObjectMostlyInsideFrame,
   getFrameSpawnPosition,
   FRAME_SPAWN_GAP,
-  getFrameDisplayNameForExport
+  getFrameDisplayNameForExport,
+  serializeFrameLabelMetric
 } from '~/utils/frameGeometry'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -283,5 +284,39 @@ describe('getFrameDisplayNameForExport', () => {
 
   it('layerName generico mas runtimeName vazio: usa layerName', () => {
     expect(getFrameDisplayNameForExport({ layerName: 'FRAMER 2' }, 0)).toBe('FRAMER 2')
+  })
+})
+
+describe('serializeFrameLabelMetric', () => {
+  it('formata com 3 casas decimais', () => {
+    expect(serializeFrameLabelMetric(1)).toBe('1.000')
+    // toFixed(3) em JS usa banker's rounding: 1.2345 → 1.234
+    expect(serializeFrameLabelMetric(1.2345)).toBe('1.234')
+    expect(serializeFrameLabelMetric(0)).toBe('0.000')
+    expect(serializeFrameLabelMetric(-1.5)).toBe('-1.500')
+  })
+
+  it('NaN/Infinity retornam "0"', () => {
+    expect(serializeFrameLabelMetric(NaN)).toBe('0')
+    expect(serializeFrameLabelMetric(Infinity)).toBe('0')
+    expect(serializeFrameLabelMetric(-Infinity)).toBe('0')
+  })
+
+  it('null/undefined: Number() coerce para 0 (finito), retorna "0.000"', () => {
+    // Number(null) === 0; Number(undefined) === NaN
+    expect(serializeFrameLabelMetric(null)).toBe('0.000')
+    expect(serializeFrameLabelMetric(undefined)).toBe('0')
+  })
+
+  it('strings parseaveis sao convertidas', () => {
+    expect(serializeFrameLabelMetric('1.5')).toBe('1.500')
+  })
+
+  it('strings nao-numericas viram "0"', () => {
+    expect(serializeFrameLabelMetric('abc')).toBe('0')
+  })
+
+  it('mesma entrada gera mesma saida (estabilidade)', () => {
+    expect(serializeFrameLabelMetric(0.1 + 0.2)).toBe(serializeFrameLabelMetric(0.3))
   })
 })

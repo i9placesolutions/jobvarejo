@@ -93,8 +93,13 @@ import {
     isObjectMostlyInsideFrame,
     getFrameSpawnPosition,
     FRAME_SPAWN_GAP,
-    getFrameDisplayNameForExport
+    getFrameDisplayNameForExport,
+    serializeFrameLabelMetric
 } from '~/utils/frameGeometry'
+import {
+    TRANSIENT_CONTROL_NAMES,
+    isControlLikeObject
+} from '~/utils/controlObjectClassifiers'
 import {
     getLabelTemplateTimestamp,
     shouldUseIncomingTemplateSnapshot
@@ -6256,11 +6261,7 @@ let lastKnownFrameLabelCount = 0;
 let frameLabelsDirty = true;
 let lastFrameLabelViewportSignature = '';
 let lastFrameLabelSelectionSignature = '';
-const serializeFrameLabelMetric = (value: any) => {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return '0';
-    return numeric.toFixed(3);
-};
+// serializeFrameLabelMetric extraido para utils/frameGeometry.ts.
 const markFrameLabelsDirty = () => {
     frameLabelsDirty = true;
 };
@@ -8574,7 +8575,7 @@ let applyingZoneUpdateCount = 0; // Counter to prevent double state save when up
 
 const makeCanvasObjectId = () => makeId();
 const makeProductInstanceId = () => `item_${makeId()}`;
-const TRANSIENT_CONTROL_NAMES = new Set(['path_node', 'bezier_handle', 'control_point', 'handle_line']);
+// TRANSIENT_CONTROL_NAMES extraido para utils/controlObjectClassifiers.ts.
 
 // clonePlainMetadata extraido para utils/canvasJsonClassifiers.ts.
 
@@ -8635,15 +8636,7 @@ const normalizeProductCardIdentity = (
     };
 };
 
-const isControlLikeObject = (obj: any) => {
-    if (!obj || typeof obj !== 'object') return false;
-    const name = String(obj.name || '');
-    const id = String(obj.id || '');
-    if (TRANSIENT_CONTROL_NAMES.has(name)) return true;
-    if (id === 'guide-vertical' || id === 'guide-horizontal') return true;
-    if (obj.data && (obj.data.parentPath || obj.data.parentObj)) return true;
-    return false;
-};
+// isControlLikeObject extraido para utils/controlObjectClassifiers.ts.
 
 const ensureObjectPersistentId = (obj: any) => {
     if (!obj || typeof obj !== 'object') return;
