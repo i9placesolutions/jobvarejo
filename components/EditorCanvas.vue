@@ -141,7 +141,8 @@ import {
     toggleFill,
     toggleStroke,
     applyRectCornerRadiiPatch,
-    snapshotTextShadow
+    snapshotTextShadow,
+    computeLinearGradientCoords
 } from '~/utils/fabricStyleHelpers'
 import {
     getFrameBounds,
@@ -21187,30 +21188,21 @@ const resolveActiveTextObjectForInspectorAction = (active: any) => {
     return null;
 };
 
+// Wrapper local que extrai dimensoes do target Fabric e injeta
+// no helper puro computeLinearGradientCoords + instancia Gradient.
 const buildLinearGradientFill = (
     target: any,
     colorStops: ReadonlyArray<{ offset: number; color: string }>,
     angleDeg: number = 90
 ) => {
-    const width = Math.max(1, Number(target?.width || target?.getScaledWidth?.() || 1));
-    const height = Math.max(1, Number(target?.height || target?.getScaledHeight?.() || 1));
-    const halfW = width / 2;
-    const halfH = height / 2;
-    const radius = Math.max(width, height) / 2;
-    const rad = (Number(angleDeg || 0) * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
+    const width = Number(target?.width || target?.getScaledWidth?.() || 1)
+    const height = Number(target?.height || target?.getScaledHeight?.() || 1)
     return new fabric.Gradient({
         type: 'linear',
-        coords: {
-            x1: halfW - cos * radius,
-            y1: halfH - sin * radius,
-            x2: halfW + cos * radius,
-            y2: halfH + sin * radius
-        },
+        coords: computeLinearGradientCoords(width, height, angleDeg),
         colorStops
-    });
-};
+    })
+}
 
 const applyTextGradientPreset = (textObj: any, preset: 'gold' | 'sunset' = 'gold') => {
     const presets = {

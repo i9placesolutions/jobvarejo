@@ -43,6 +43,39 @@ export const clampCornerRadii = (radii: any, w: number, h: number): CornerRadii 
 }
 
 /**
+ * Calcula as coordenadas de gradient linear cobrindo o objeto inteiro
+ * em um angulo dado (em graus). Pure: recebe `width`, `height`, `angleDeg`
+ * e retorna os 4 pontos `{ x1, y1, x2, y2 }` para usar em fabric.Gradient.
+ *
+ *  - angle 0: gradient horizontal direita-esquerda
+ *  - angle 90: gradient vertical baixo-cima
+ *  - radius = metade da maior dimensao (cobertura completa)
+ *
+ * O caller (componente) instancia `new fabric.Gradient({ coords, colorStops })`
+ * usando essas coords.
+ */
+export const computeLinearGradientCoords = (
+    width: number,
+    height: number,
+    angleDeg: number = 90
+): { x1: number; y1: number; x2: number; y2: number } => {
+    const w = Math.max(1, Number(width) || 1)
+    const h = Math.max(1, Number(height) || 1)
+    const halfW = w / 2
+    const halfH = h / 2
+    const radius = Math.max(w, h) / 2
+    const rad = (Number(angleDeg || 0) * Math.PI) / 180
+    const cos = Math.cos(rad)
+    const sin = Math.sin(rad)
+    return {
+        x1: halfW - cos * radius,
+        y1: halfH - sin * radius,
+        x2: halfW + cos * radius,
+        y2: halfH + sin * radius
+    }
+}
+
+/**
  * Snapshot do shadow de um text object para backup/restore. Retorna
  * null se shadow ausente; senao normaliza os 4 campos com defaults
  * seguros.

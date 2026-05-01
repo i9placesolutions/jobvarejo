@@ -6,7 +6,8 @@ import {
   toggleFill,
   toggleStroke,
   applyRectCornerRadiiPatch,
-  snapshotTextShadow
+  snapshotTextShadow,
+  computeLinearGradientCoords
 } from '~/utils/fabricStyleHelpers'
 
 describe('isRectObject', () => {
@@ -339,5 +340,79 @@ describe('snapshotTextShadow', () => {
       offsetX: 0,
       offsetY: 0
     })
+  })
+})
+
+describe('computeLinearGradientCoords', () => {
+  const approx = (a: number, b: number, eps = 1e-9) => Math.abs(a - b) < eps
+
+  it('retorna 4 numeros finitos', () => {
+    const c = computeLinearGradientCoords(100, 50, 90)
+    expect(Number.isFinite(c.x1)).toBe(true)
+    expect(Number.isFinite(c.y1)).toBe(true)
+    expect(Number.isFinite(c.x2)).toBe(true)
+    expect(Number.isFinite(c.y2)).toBe(true)
+  })
+
+  it('angle 0: gradient horizontal (eixo X varia, Y constante = h/2)', () => {
+    const c = computeLinearGradientCoords(100, 60, 0)
+    expect(approx(c.y1, 30)).toBe(true)
+    expect(approx(c.y2, 30)).toBe(true)
+    // x1 = 50 - 1*50 = 0; x2 = 50 + 1*50 = 100 (radius=max(100,60)/2=50)
+    expect(approx(c.x1, 0)).toBe(true)
+    expect(approx(c.x2, 100)).toBe(true)
+  })
+
+  it('angle 90: gradient vertical (eixo Y varia, X constante = w/2)', () => {
+    const c = computeLinearGradientCoords(100, 60, 90)
+    expect(approx(c.x1, 50)).toBe(true)
+    expect(approx(c.x2, 50)).toBe(true)
+    // sin(90)=1, radius=50: y1 = 30 - 50 = -20, y2 = 30 + 50 = 80
+    expect(approx(c.y1, -20)).toBe(true)
+    expect(approx(c.y2, 80)).toBe(true)
+  })
+
+  it('angle 180: inverte x1/x2 vs angle 0', () => {
+    const c = computeLinearGradientCoords(100, 60, 180)
+    expect(approx(c.y1, 30)).toBe(true)
+    expect(approx(c.y2, 30)).toBe(true)
+    // cos(180)=-1, radius=50: x1 = 50 - (-1)*50 = 100; x2 = 50 + (-1)*50 = 0
+    expect(approx(c.x1, 100)).toBe(true)
+    expect(approx(c.x2, 0)).toBe(true)
+  })
+
+  it('angle default 90 (sem argumento)', () => {
+    const a = computeLinearGradientCoords(100, 50)
+    const b = computeLinearGradientCoords(100, 50, 90)
+    expect(a).toEqual(b)
+  })
+
+  it('width/height invalidos viram 1 (defesa)', () => {
+    const c1 = computeLinearGradientCoords(0, 0, 90)
+    expect(Number.isFinite(c1.x1)).toBe(true)
+    expect(Number.isFinite(c1.y1)).toBe(true)
+    const c2 = computeLinearGradientCoords(NaN as any, NaN as any, 90)
+    expect(Number.isFinite(c2.x1)).toBe(true)
+    expect(Number.isFinite(c2.y2)).toBe(true)
+    // Com w=h=1, halfW=halfH=0.5, radius=0.5
+    expect(approx(c1.x1, 0.5)).toBe(true)
+    expect(approx(c1.y1, 0)).toBe(true)
+    expect(approx(c1.y2, 1)).toBe(true)
+  })
+
+  it('angle NaN/null tratado como 0', () => {
+    const c = computeLinearGradientCoords(100, 60, NaN as any)
+    // NaN || 0 → 0, mesmo resultado que angle 0
+    const ref = computeLinearGradientCoords(100, 60, 0)
+    expect(c).toEqual(ref)
+  })
+
+  it('radius cobre a maior dimensao (square ou wide)', () => {
+    // wide: w=200, h=50, radius = max/2 = 100
+    const c = computeLinearGradientCoords(200, 50, 0)
+    expect(approx(c.x1, 0)).toBe(true)   // 100 - 100
+    expect(approx(c.x2, 200)).toBe(true) // 100 + 100
+    expect(approx(c.y1, 25)).toBe(true)
+    expect(approx(c.y2, 25)).toBe(true)
   })
 })
