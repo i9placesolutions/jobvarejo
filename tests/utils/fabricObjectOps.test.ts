@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
-import { setText, setVisible, assignNewCustomIdsDeep } from '~/utils/fabricObjectOps'
+import {
+  setText,
+  setVisible,
+  assignNewCustomIdsDeep,
+  resetDuplicatedObjectRuntime
+} from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
   const calls: Array<{ k: any; v?: any }> = []
@@ -194,5 +199,119 @@ describe('assignNewCustomIdsDeep', () => {
     assignNewCustomIdsDeep(obj)
     expect(obj.text).toBe('hello')
     expect(obj.other).toBe(42)
+  })
+})
+
+describe('resetDuplicatedObjectRuntime', () => {
+  const makeNode = (overrides: any = {}, children?: any[]) => {
+    const calls: Array<{ k: any; v?: any }> = []
+    const o: any = {
+      type: 'i-text',
+      _activeObjects: ['stale1'],
+      _activeObject: { id: 'stale' },
+      __corner: 'tr',
+      isEditing: true,
+      exitEditingCount: 0,
+      setCoordsCount: 0,
+      initDimensionsCount: 0,
+      ...overrides
+    }
+    o.set = (k: any, v?: any) => {
+      if (typeof k === 'string') {
+        calls.push({ k, v })
+        ;(o as any)[k] = v
+      } else {
+        Object.entries(k).forEach(([key, val]) => {
+          calls.push({ k: key, v: val })
+          ;(o as any)[key] = val
+        })
+      }
+    }
+    o.exitEditing = () => { o.exitEditingCount += 1; o.isEditing = false }
+    o.setCoords = () => { o.setCoordsCount += 1 }
+    o.initDimensions = () => { o.initDimensionsCount += 1 }
+    if (children) {
+      o.getObjects = () => children
+    }
+    o._calls = calls
+    return o
+  }
+
+  it('null/undefined nao quebra', () => {
+    expect(() => resetDuplicatedObjectRuntime(null)).not.toThrow()
+    expect(() => resetDuplicatedObjectRuntime(undefined)).not.toThrow()
+  })
+
+  it('limpa _activeObjects, _activeObject e __corner', () => {
+    const o = makeNode()
+    resetDuplicatedObjectRuntime(o)
+    expect(o._activeObjects).toEqual([])
+    expect(o._activeObject).toBeUndefined()
+    expect(o.__corner).toBeUndefined()
+  })
+
+  it('chama exitEditing quando isEditing=true', () => {
+    const o = makeNode({ isEditing: true })
+    resetDuplicatedObjectRuntime(o)
+    expect(o.exitEditingCount).toBe(1)
+  })
+
+  it('aplica selectable/evented/hasControls/hasBorders no root', () => {
+    const o = makeNode()
+    resetDuplicatedObjectRuntime(o)
+    expect(o.selectable).toBe(true)
+    expect(o.evented).toBe(true)
+    expect(o.hasControls).toBe(true)
+    expect(o.hasBorders).toBe(true)
+    expect(o.objectCaching).toBe(false)
+    expect(o.noScaleCache).toBe(false)
+    expect(o.statefullCache).toBe(false)
+    expect(o.dirty).toBe(true)
+  })
+
+  it('NAO marca selectable/evented em filhos (so root)', () => {
+    const child = makeNode({ type: 'rect' })
+    delete (child as any).selectable
+    delete (child as any).evented
+    const root = makeNode({}, [child])
+    resetDuplicatedObjectRuntime(root)
+    expect(root.selectable).toBe(true)
+    // child recebeu objectCaching=false mas nao selectable
+    expect(child.objectCaching).toBe(false)
+    expect(child.selectable).toBeUndefined()
+  })
+
+  it('chama initDimensions em texto', () => {
+    const o = makeNode({ type: 'i-text' })
+    resetDuplicatedObjectRuntime(o)
+    expect(o.initDimensionsCount).toBe(1)
+  })
+
+  it('chama setCoords em todos os nodes', () => {
+    const child = makeNode({ type: 'rect' })
+    const root = makeNode({}, [child])
+    resetDuplicatedObjectRuntime(root)
+    expect(root.setCoordsCount).toBeGreaterThan(0)
+    expect(child.setCoordsCount).toBeGreaterThan(0)
+  })
+
+  it('product card: aplica subTargetCheck e desabilita selecao em offerBackground', () => {
+    const bg = makeNode({ type: 'rect', name: 'offerBackground' })
+    const text = makeNode({ type: 'i-text', name: 'smart_title' })
+    const card = makeNode({
+      type: 'group',
+      isProductCard: true
+    }, [bg, text])
+    resetDuplicatedObjectRuntime(card)
+    expect(card.subTargetCheck).toBe(true)
+    expect(card.interactive).toBe(true)
+    expect(bg.selectable).toBe(false) // background NAO selecionavel
+    expect(text.selectable).toBe(true) // texto pode selecionar
+  })
+
+  it('REGRESSAO: exitEditing que joga erro nao quebra', () => {
+    const o = makeNode({ isEditing: true })
+    o.exitEditing = () => { throw new Error('boom') }
+    expect(() => resetDuplicatedObjectRuntime(o)).not.toThrow()
   })
 })

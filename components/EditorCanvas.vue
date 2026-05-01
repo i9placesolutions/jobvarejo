@@ -76,7 +76,12 @@ import {
     getObjectAbsoluteCenter,
     computeCentersBoundingCenter
 } from '~/utils/fabricMeasure'
-import { setText, setVisible, assignNewCustomIdsDeep } from '~/utils/fabricObjectOps'
+import {
+    setText,
+    setVisible,
+    assignNewCustomIdsDeep,
+    resetDuplicatedObjectRuntime
+} from '~/utils/fabricObjectOps'
 import {
     isRectObject,
     clampCornerRadii,
@@ -14210,90 +14215,7 @@ const cloneFabricObjectSafely = async (
     return isUsableFabricObjectClone(cloned) ? cloned : null;
 };
 
-const resetDuplicatedObjectRuntime = (root: any) => {
-    const visit = (node: any, isRoot = false) => {
-        if (!node || typeof node !== 'object') return;
-
-        try {
-            if (Array.isArray((node as any)._activeObjects)) {
-                (node as any)._activeObjects = [];
-            }
-            if ((node as any)._activeObject) {
-                delete (node as any)._activeObject;
-            }
-            if ((node as any).__corner) {
-                delete (node as any).__corner;
-            }
-            if ((node as any).isEditing && typeof (node as any).exitEditing === 'function') {
-                try { (node as any).exitEditing(); } catch {}
-            }
-        } catch {
-            // ignore runtime cleanup failures
-        }
-
-        if (typeof (node as any).set === 'function') {
-            const nextState: Record<string, any> = {
-                objectCaching: false,
-                noScaleCache: false,
-                statefullCache: false,
-                dirty: true
-            };
-            if (isRoot) {
-                nextState.selectable = true;
-                nextState.evented = true;
-                nextState.hasControls = true;
-                nextState.hasBorders = true;
-            }
-            try { (node as any).set(nextState); } catch {}
-        }
-
-        if (isTextStyleObject(node) && typeof (node as any).initDimensions === 'function') {
-            try { (node as any).initDimensions(); } catch {}
-        }
-
-        if (typeof (node as any).getObjects === 'function') {
-            try {
-                ((node as any).getObjects() || []).forEach((child: any) => visit(child, false));
-            } catch {
-                // ignore child traversal failures
-            }
-        }
-        if ((node as any).clipPath && typeof (node as any).clipPath === 'object') {
-            visit((node as any).clipPath, false);
-        }
-
-        try { (node as any).setCoords?.(); } catch {}
-    };
-
-    visit(root, true);
-
-    if (
-        root &&
-        String((root as any)?.type || '').toLowerCase() === 'group' &&
-        ((root as any).isSmartObject || (root as any).isProductCard || isLikelyProductCard(root))
-    ) {
-        try {
-            (root as any).set({ subTargetCheck: true, interactive: true, dirty: true });
-            ((root as any).getObjects?.() || []).forEach((child: any) => {
-                const isBackground = child?.name === 'offerBackground' || child?.name === 'price_bg';
-                child?.set?.({
-                    selectable: !isBackground,
-                    evented: !isBackground,
-                    hasControls: !isBackground,
-                    hasBorders: !isBackground,
-                    objectCaching: false,
-                    noScaleCache: false,
-                    statefullCache: false,
-                    dirty: true
-                });
-                child?.setCoords?.();
-            });
-            (root as any).setCoords?.();
-        } catch {
-            // ignore product-card specific cleanup failures
-        }
-    }
-};
+// resetDuplicatedObjectRuntime extraido para utils/fabricObjectOps.ts.
 
 const findProductCardParentGroup = (obj: any) => {
     if (!obj || !canvas.value) return null;

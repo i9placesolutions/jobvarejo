@@ -7,6 +7,110 @@
  */
 
 import { makeId } from './makeId'
+import { isTextStyleObject } from './editorSelectionSnapshot'
+import { isLikelyProductCard } from './fabricObjectClassifiers'
+
+/**
+ * Reseta estado de runtime de um objeto Fabric clonado/duplicado:
+ * - Limpa _activeObjects/_activeObject (selecao stale do original)
+ * - Remove __corner (cache de manipulador hover)
+ * - Sai de modo isEditing (texto ainda editando)
+ * - Desabilita caching (objectCaching/noScaleCache/statefullCache)
+ * - Marca como selectable/evented/hasControls (no root)
+ * - Reinicializa text dimensions se for texto
+ * - Recursao em getObjects() e clipPath
+ * - setCoords no fim
+ *
+ * Para product cards: alem disso aplica subTargetCheck e desabilita
+ * selecao individual de offerBackground/price_bg.
+ *
+ * Usado apos paste/duplicate/import — o root vem com estado de runtime
+ * (selecao, edit, cache) que precisa ser limpo antes de reusar.
+ */
+export const resetDuplicatedObjectRuntime = (root: any): void => {
+    const visit = (node: any, isRoot = false) => {
+        if (!node || typeof node !== 'object') return
+
+        try {
+            if (Array.isArray((node as any)._activeObjects)) {
+                ;(node as any)._activeObjects = []
+            }
+            if ((node as any)._activeObject) {
+                delete (node as any)._activeObject
+            }
+            if ((node as any).__corner) {
+                delete (node as any).__corner
+            }
+            if ((node as any).isEditing && typeof (node as any).exitEditing === 'function') {
+                try { (node as any).exitEditing() } catch { /* ignore */ }
+            }
+        } catch {
+            // ignore runtime cleanup failures
+        }
+
+        if (typeof (node as any).set === 'function') {
+            const nextState: Record<string, any> = {
+                objectCaching: false,
+                noScaleCache: false,
+                statefullCache: false,
+                dirty: true
+            }
+            if (isRoot) {
+                nextState.selectable = true
+                nextState.evented = true
+                nextState.hasControls = true
+                nextState.hasBorders = true
+            }
+            try { (node as any).set(nextState) } catch { /* ignore */ }
+        }
+
+        if (isTextStyleObject(node) && typeof (node as any).initDimensions === 'function') {
+            try { (node as any).initDimensions() } catch { /* ignore */ }
+        }
+
+        if (typeof (node as any).getObjects === 'function') {
+            try {
+                ;((node as any).getObjects() || []).forEach((child: any) => visit(child, false))
+            } catch {
+                // ignore child traversal failures
+            }
+        }
+        if ((node as any).clipPath && typeof (node as any).clipPath === 'object') {
+            visit((node as any).clipPath, false)
+        }
+
+        try { (node as any).setCoords?.() } catch { /* ignore */ }
+    }
+
+    visit(root, true)
+
+    if (
+        root &&
+        String((root as any)?.type || '').toLowerCase() === 'group' &&
+        ((root as any).isSmartObject || (root as any).isProductCard || isLikelyProductCard(root))
+    ) {
+        try {
+            ;(root as any).set({ subTargetCheck: true, interactive: true, dirty: true })
+            ;((root as any).getObjects?.() || []).forEach((child: any) => {
+                const isBackground = child?.name === 'offerBackground' || child?.name === 'price_bg'
+                child?.set?.({
+                    selectable: !isBackground,
+                    evented: !isBackground,
+                    hasControls: !isBackground,
+                    hasBorders: !isBackground,
+                    objectCaching: false,
+                    noScaleCache: false,
+                    statefullCache: false,
+                    dirty: true
+                })
+                child?.setCoords?.()
+            })
+            ;(root as any).setCoords?.()
+        } catch {
+            // ignore product-card specific cleanup failures
+        }
+    }
+}
 
 /**
  * Atribui novos `_customId`s recursivamente em todos os descendentes do
