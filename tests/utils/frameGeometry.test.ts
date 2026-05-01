@@ -9,7 +9,9 @@ import {
   getFrameSpawnPosition,
   FRAME_SPAWN_GAP,
   getFrameDisplayNameForExport,
-  serializeFrameLabelMetric
+  serializeFrameLabelMetric,
+  buildFrameLabelViewportSignature,
+  buildFrameLabelSelectionSignature
 } from '~/utils/frameGeometry'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -318,5 +320,103 @@ describe('serializeFrameLabelMetric', () => {
 
   it('mesma entrada gera mesma saida (estabilidade)', () => {
     expect(serializeFrameLabelMetric(0.1 + 0.2)).toBe(serializeFrameLabelMetric(0.3))
+  })
+})
+
+describe('buildFrameLabelViewportSignature', () => {
+  it('combina vpt[0..5] + zoom + width + height', () => {
+    const sig = buildFrameLabelViewportSignature({
+      viewportTransform: [1, 0, 0, 1, 100, 50],
+      width: 800,
+      height: 600,
+      zoom: 1.5
+    })
+    expect(sig).toContain('100')
+    expect(sig).toContain('50')
+    expect(sig).toContain('1.500')
+    expect(sig).toContain('800')
+    expect(sig).toContain('600')
+  })
+
+  it('mesma entrada → mesma assinatura', () => {
+    const input = {
+      viewportTransform: [1, 0, 0, 1, 100, 50],
+      width: 800,
+      height: 600,
+      zoom: 1
+    }
+    expect(buildFrameLabelViewportSignature(input))
+      .toBe(buildFrameLabelViewportSignature(input))
+  })
+
+  it('viewportTransform null cai para identidade', () => {
+    const sig = buildFrameLabelViewportSignature({
+      viewportTransform: null as any,
+      width: 100,
+      height: 100,
+      zoom: 1
+    })
+    // identity = [1,0,0,1,0,0]
+    expect(sig).toContain('1.000')
+  })
+
+  it('mudanca em vpt detectada', () => {
+    const a = buildFrameLabelViewportSignature({
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      width: 800, height: 600, zoom: 1
+    })
+    const b = buildFrameLabelViewportSignature({
+      viewportTransform: [1, 0, 0, 1, 100, 0],
+      width: 800, height: 600, zoom: 1
+    })
+    expect(a).not.toBe(b)
+  })
+})
+
+describe('buildFrameLabelSelectionSignature', () => {
+  it('null/undefined → "selection:none"', () => {
+    expect(buildFrameLabelSelectionSignature(null)).toBe('selection:none')
+    expect(buildFrameLabelSelectionSignature(undefined)).toBe('selection:none')
+  })
+
+  it('activeSelection com ids → "selection:multi:<ids ordenados>"', () => {
+    const sig = buildFrameLabelSelectionSignature({
+      type: 'activeSelection',
+      getObjects: () => [
+        { _customId: 'b' },
+        { _customId: 'a' },
+        { _customId: 'c' }
+      ]
+    })
+    expect(sig).toBe('selection:multi:a,b,c')
+  })
+
+  it('activeSelection vazia → "selection:multi:none"', () => {
+    expect(buildFrameLabelSelectionSignature({
+      type: 'activeSelection',
+      getObjects: () => []
+    })).toBe('selection:multi:none')
+  })
+
+  it('objeto unico → "selection:<type>:<id>:object"', () => {
+    expect(buildFrameLabelSelectionSignature({
+      type: 'rect',
+      _customId: 'r1'
+    })).toBe('selection:rect:r1:object')
+  })
+
+  it('objeto unico com isFrame → :frame', () => {
+    expect(buildFrameLabelSelectionSignature({
+      type: 'rect',
+      _customId: 'r1',
+      isFrame: true
+    })).toBe('selection:rect:r1:frame')
+  })
+
+  it('fallback id from .id quando _customId ausente', () => {
+    expect(buildFrameLabelSelectionSignature({
+      type: 'i-text',
+      id: 'text-1'
+    })).toBe('selection:i-text:text-1:object')
   })
 })

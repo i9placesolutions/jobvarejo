@@ -131,7 +131,9 @@ import {
     getFrameSpawnPosition,
     FRAME_SPAWN_GAP,
     getFrameDisplayNameForExport,
-    serializeFrameLabelMetric
+    serializeFrameLabelMetric,
+    buildFrameLabelViewportSignature,
+    buildFrameLabelSelectionSignature
 } from '~/utils/frameGeometry'
 import {
     TRANSIENT_CONTROL_NAMES,
@@ -5888,38 +5890,22 @@ let lastFrameLabelSelectionSignature = '';
 const markFrameLabelsDirty = () => {
     frameLabelsDirty = true;
 };
+// Wrappers locais que injetam canvas.value nos helpers puros
+// (utils/frameGeometry.ts).
 const captureFrameLabelViewportSignature = () => {
-    if (!canvas.value) return 'canvas:none';
-    const vpt = canvas.value.viewportTransform || [1, 0, 0, 1, 0, 0];
-    const width = Number(canvas.value.getWidth?.() || canvas.value.width || 0);
-    const height = Number(canvas.value.getHeight?.() || canvas.value.height || 0);
-    const zoom = Number(canvas.value.getZoom?.() || 1);
-    return [
-        serializeFrameLabelMetric(vpt[0]),
-        serializeFrameLabelMetric(vpt[1]),
-        serializeFrameLabelMetric(vpt[2]),
-        serializeFrameLabelMetric(vpt[3]),
-        serializeFrameLabelMetric(vpt[4]),
-        serializeFrameLabelMetric(vpt[5]),
-        serializeFrameLabelMetric(zoom),
-        String(width),
-        String(height)
-    ].join('|');
-};
+    if (!canvas.value) return 'canvas:none'
+    const c = canvas.value
+    return buildFrameLabelViewportSignature({
+        viewportTransform: c.viewportTransform || [1, 0, 0, 1, 0, 0],
+        width: Number(c.getWidth?.() || c.width || 0),
+        height: Number(c.getHeight?.() || c.height || 0),
+        zoom: Number(c.getZoom?.() || 1)
+    })
+}
 const captureFrameLabelSelectionSignature = () => {
-    if (!canvas.value || typeof canvas.value.getActiveObject !== 'function') return 'selection:none';
-    const active = canvas.value.getActiveObject();
-    if (!active) return 'selection:none';
-    if (active.type === 'activeSelection' && typeof active.getObjects === 'function') {
-        const ids = (active.getObjects() || [])
-            .map((entry: any) => String(entry?._customId || entry?.id || ''))
-            .filter(Boolean)
-            .sort();
-        return ids.length ? `selection:multi:${ids.join(',')}` : 'selection:multi:none';
-    }
-    const id = String(active?._customId || active?.id || '');
-    return `selection:${String(active?.type || 'unknown')}:${id}:${active?.isFrame ? 'frame' : 'object'}`;
-};
+    if (!canvas.value || typeof canvas.value.getActiveObject !== 'function') return 'selection:none'
+    return buildFrameLabelSelectionSignature(canvas.value.getActiveObject())
+}
 const shouldScheduleFrameLabelUpdate = () => {
     if (frameLabelsDirty) return true;
     return (

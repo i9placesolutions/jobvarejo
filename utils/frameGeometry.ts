@@ -167,6 +167,62 @@ export const isObjectIntersectingFrame = (obj: any, frame: any): boolean => {
     return overlapArea > 0
 }
 
+export type ViewportSignatureInput = {
+    viewportTransform: number[]
+    width: number
+    height: number
+    zoom: number
+}
+
+/**
+ * Constroi assinatura de viewport para deteccao de mudancas relevantes
+ * que requerem re-render dos labels de frame. Combina os 6 valores do
+ * viewportTransform + zoom + width + height em string estavel.
+ *
+ * Cada valor passa por `serializeFrameLabelMetric` (3 casas, fallback 0).
+ * Mudancas sub-pixel sao ignoradas — render so ocorre quando ha
+ * diferenca real perceptivel.
+ */
+export const buildFrameLabelViewportSignature = (input: ViewportSignatureInput): string => {
+    const vpt = input.viewportTransform || [1, 0, 0, 1, 0, 0]
+    const width = Number(input.width) || 0
+    const height = Number(input.height) || 0
+    const zoom = Number(input.zoom) || 1
+    return [
+        serializeFrameLabelMetric(vpt[0]),
+        serializeFrameLabelMetric(vpt[1]),
+        serializeFrameLabelMetric(vpt[2]),
+        serializeFrameLabelMetric(vpt[3]),
+        serializeFrameLabelMetric(vpt[4]),
+        serializeFrameLabelMetric(vpt[5]),
+        serializeFrameLabelMetric(zoom),
+        String(width),
+        String(height)
+    ].join('|')
+}
+
+/**
+ * Constroi assinatura da selecao para deteccao de mudancas relevantes.
+ *
+ *  - sem selecao → 'selection:none'
+ *  - activeSelection → 'selection:multi:<ids ordenados>'
+ *  - objeto unico → 'selection:<type>:<id>:<frame|object>'
+ *
+ * Recebe o objeto ativo ja resolvido (caller obtem de canvas.getActiveObject()).
+ */
+export const buildFrameLabelSelectionSignature = (active: any): string => {
+    if (!active) return 'selection:none'
+    if (active.type === 'activeSelection' && typeof active.getObjects === 'function') {
+        const ids = (active.getObjects() || [])
+            .map((entry: any) => String(entry?._customId || entry?.id || ''))
+            .filter(Boolean)
+            .sort()
+        return ids.length ? `selection:multi:${ids.join(',')}` : 'selection:multi:none'
+    }
+    const id = String(active?._customId || active?.id || '')
+    return `selection:${String(active?.type || 'unknown')}:${id}:${active?.isFrame ? 'frame' : 'object'}`
+}
+
 /**
  * Serializa uma metrica numerica de frame label (viewport transform,
  * zoom, dimensoes) para string com 3 casas decimais. Retorna '0'
