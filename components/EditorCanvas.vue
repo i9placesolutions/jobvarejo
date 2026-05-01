@@ -140,7 +140,9 @@ import {
     DEBOUNCED_GLOBAL_STYLE_PROPS,
     isDebouncedGlobalStyleProp,
     LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
-    isLightweightGlobalStyleProp
+    isLightweightGlobalStyleProp,
+    ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS,
+    allowsUndefinedGlobalStyleProp
 } from '~/utils/globalStylePropClassifiers'
 import {
     clamp,
@@ -154,7 +156,10 @@ import {
     parseTemplateColorRgba,
     isTransparentLikeTemplateColor
 } from '~/utils/colorHelpers'
-import { resolveZoneUpdatesPayload } from '~/utils/zoneUpdatesPayload'
+import {
+    resolveZoneUpdatesPayload,
+    resolveScalarUpdatePayload
+} from '~/utils/zoneUpdatesPayload'
 import {
     computeExportPreflightCounts,
     buildExportPreflightWarnings
@@ -28398,29 +28403,9 @@ const handleSyncZoneGaps = async (padding: number, meta?: ZoneUpdateTargetMeta) 
     });
 };
 
-const ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS = new Set<string>([
-    'splashTemplateId',
-    'priceTextColor',
-    'priceCurrencyColor',
-    'priceFontWeight'
-]);
-
-const resolveGlobalStyleUpdatePayload = (propOrPayload: any, val: any): { prop: string; value: any } | null => {
-    if (typeof propOrPayload === 'string' && propOrPayload.trim()) {
-        return { prop: propOrPayload, value: val };
-    }
-    if (propOrPayload && typeof propOrPayload === 'object' && !Array.isArray(propOrPayload)) {
-        const payload = propOrPayload as Record<string, any>;
-        if (typeof payload.prop === 'string' && payload.prop.trim()) {
-            return { prop: payload.prop, value: payload.value };
-        }
-        const keys = Object.keys(payload);
-        if (keys.length === 1 && keys[0]) {
-            return { prop: keys[0], value: payload[keys[0]] };
-        }
-    }
-    return null;
-};
+// ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS extraido para utils/globalStylePropClassifiers.ts.
+// resolveGlobalStyleUpdatePayload extraido para utils/zoneUpdatesPayload.ts (renomeado para resolveScalarUpdatePayload).
+const resolveGlobalStyleUpdatePayload = resolveScalarUpdatePayload;
 
 const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, any>, val?: any, meta?: ZoneUpdateTargetMeta) => {
     if (!canvas.value) return;

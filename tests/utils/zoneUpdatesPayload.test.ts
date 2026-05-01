@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { resolveZoneUpdatesPayload } from '~/utils/zoneUpdatesPayload'
+import {
+  resolveZoneUpdatesPayload,
+  resolveScalarUpdatePayload
+} from '~/utils/zoneUpdatesPayload'
 
 describe('resolveZoneUpdatesPayload', () => {
   it('forma 1: (prop, value) → { prop: value }', () => {
@@ -56,5 +59,56 @@ describe('resolveZoneUpdatesPayload', () => {
 
   it('value undefined em forma 1 → { prop: undefined }', () => {
     expect(resolveZoneUpdatesPayload('foo', undefined)).toEqual({ foo: undefined })
+  })
+})
+
+describe('resolveScalarUpdatePayload', () => {
+  it('forma 1: (prop, value) → { prop, value }', () => {
+    expect(resolveScalarUpdatePayload('cardColor', '#fff'))
+      .toEqual({ prop: 'cardColor', value: '#fff' })
+  })
+
+  it('forma 2: payload com prop/value wrapper', () => {
+    expect(resolveScalarUpdatePayload({ prop: 'cardColor', value: '#fff' }, undefined))
+      .toEqual({ prop: 'cardColor', value: '#fff' })
+  })
+
+  it('forma 3 (1 chave): { key: value } → { prop: key, value }', () => {
+    expect(resolveScalarUpdatePayload({ cardColor: '#fff' }, undefined))
+      .toEqual({ prop: 'cardColor', value: '#fff' })
+  })
+
+  it('payload com multiplas chaves: null (escalar exige 1)', () => {
+    expect(resolveScalarUpdatePayload({ a: 1, b: 2 }, undefined)).toBeNull()
+  })
+
+  it('string vazia/whitespace → null', () => {
+    expect(resolveScalarUpdatePayload('', 99)).toBeNull()
+    expect(resolveScalarUpdatePayload('   ', 99)).toBeNull()
+  })
+
+  it('payload com prop vazio E multiplas chaves → null', () => {
+    expect(resolveScalarUpdatePayload({ prop: '', other: 1 }, undefined))
+      .toBeNull()
+  })
+
+  it('payload com prop vazio E uma unica chave: usa essa chave', () => {
+    expect(resolveScalarUpdatePayload({ prop: '' }, undefined))
+      .toEqual({ prop: 'prop', value: '' })
+  })
+
+  it('null/undefined/numero → null', () => {
+    expect(resolveScalarUpdatePayload(null, 'x')).toBeNull()
+    expect(resolveScalarUpdatePayload(undefined, 'x')).toBeNull()
+    expect(resolveScalarUpdatePayload(42, 'x')).toBeNull()
+  })
+
+  it('arrays → null', () => {
+    expect(resolveScalarUpdatePayload([1, 2, 3], undefined)).toBeNull()
+  })
+
+  it('value undefined em forma 1 e preservado', () => {
+    expect(resolveScalarUpdatePayload('foo', undefined))
+      .toEqual({ prop: 'foo', value: undefined })
   })
 })

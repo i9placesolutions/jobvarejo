@@ -3,7 +3,9 @@ import {
   DEBOUNCED_GLOBAL_STYLE_PROPS,
   isDebouncedGlobalStyleProp,
   LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
-  isLightweightGlobalStyleProp
+  isLightweightGlobalStyleProp,
+  ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS,
+  allowsUndefinedGlobalStyleProp
 } from '~/utils/globalStylePropClassifiers'
 
 describe('DEBOUNCED_GLOBAL_STYLE_PROPS', () => {
@@ -94,5 +96,41 @@ describe('isLightweightGlobalStyleProp', () => {
     expect(isLightweightGlobalStyleProp(undefined)).toBe(false)
     expect(isLightweightGlobalStyleProp('')).toBe(false)
     expect(isLightweightGlobalStyleProp('   ')).toBe(false)
+  })
+})
+
+describe('ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS', () => {
+  it('contem props que aceitam undefined', () => {
+    expect(ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS.has('splashTemplateId')).toBe(true)
+    expect(ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS.has('priceTextColor')).toBe(true)
+    expect(ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS.has('priceCurrencyColor')).toBe(true)
+    expect(ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS.has('priceFontWeight')).toBe(true)
+  })
+
+  it('NAO contem props que requerem valor concreto', () => {
+    expect(ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS.has('cardColor')).toBe(false)
+    expect(ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS.has('cardBorderRadius')).toBe(false)
+  })
+})
+
+describe('allowsUndefinedGlobalStyleProp', () => {
+  it('detecta props que aceitam undefined', () => {
+    expect(allowsUndefinedGlobalStyleProp('splashTemplateId')).toBe(true)
+    expect(allowsUndefinedGlobalStyleProp('priceTextColor')).toBe(true)
+  })
+
+  it('rejeita props que requerem valor', () => {
+    expect(allowsUndefinedGlobalStyleProp('cardColor')).toBe(false)
+    expect(allowsUndefinedGlobalStyleProp('unknown')).toBe(false)
+  })
+
+  it('null/undefined/empty → false', () => {
+    expect(allowsUndefinedGlobalStyleProp(null)).toBe(false)
+    expect(allowsUndefinedGlobalStyleProp(undefined)).toBe(false)
+    expect(allowsUndefinedGlobalStyleProp('')).toBe(false)
+  })
+
+  it('trim aplicado', () => {
+    expect(allowsUndefinedGlobalStyleProp('  splashTemplateId  ')).toBe(true)
   })
 })

@@ -82,3 +82,21 @@ export const LIGHTWEIGHT_GLOBAL_STYLE_PROPS = new Set<string>([
  */
 export const isLightweightGlobalStyleProp = (prop: any): boolean =>
     LIGHTWEIGHT_GLOBAL_STYLE_PROPS.has(String(prop || '').trim())
+
+/**
+ * Conjunto de props de globalStyles que podem ter valor `undefined`
+ * (significa "nao especificado, usar default da zona/template"). A
+ * maioria das outras props requer valor concreto (cor, fonte, etc).
+ */
+export const ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS = new Set<string>([
+    'splashTemplateId',
+    'priceTextColor',
+    'priceCurrencyColor',
+    'priceFontWeight'
+])
+
+/**
+ * Detecta se uma prop de globalStyles aceita valor undefined.
+ */
+export const allowsUndefinedGlobalStyleProp = (prop: any): boolean =>
+    ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS.has(String(prop || '').trim())
