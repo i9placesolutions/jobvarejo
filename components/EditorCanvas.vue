@@ -26952,6 +26952,18 @@ const addGridZone = () => {
     canvas.value.add(group);
     getResolvedZoneFrameId(group);
     canvas.value.setActiveObject(group);
+
+    // Forca refresh do snapshot e do alvo de import para a zona recem-criada.
+    // Sem isso, o painel de propriedades e o smart import continuavam apontando
+    // para a zona anterior (era a causa de "so altera a primeira zona" mesmo
+    // depois de adicionar uma nova): o setActiveObject acima nem sempre
+    // dispara selection:created em Fabric v7 quando o foco ja estava em outro
+    // canvas object, deixando selectedObjectRef stale ate o usuario clicar
+    // manualmente na zona nova.
+    targetGridZone.value = group;
+    targetGridZones.value = [group];
+    updateSelection();
+
     safeRequestRenderAll();
     saveCurrentState({ allowEmptyOverwrite: true, reason: 'add-grid-zone' });
     flushPersistenceNow('add-grid-zone');
