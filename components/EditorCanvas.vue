@@ -79,6 +79,11 @@ import {
 } from '~/utils/perfHelpers'
 import { parseViewSettings, serializeViewSettings } from '~/utils/viewSettings'
 import {
+    SCROLLBAR_IGNORED_IDS,
+    SCROLLBAR_PADDING,
+    isScrollbarRelevantObject
+} from '~/utils/scrollbarHelpers'
+import {
     getCanvasObjectsRefreshIntervalMs,
     getFrameLabelUpdateIntervalMs as getFrameLabelUpdateIntervalMsHelper,
     CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS
@@ -6129,8 +6134,7 @@ const handleFrameLabelMouseDown = (label: typeof frameLabels.value[0], e: MouseE
 // Virtual Scrollbars State
 const scrollV = ref({ top: 0, height: 0, visible: false })
 const scrollH = ref({ left: 0, width: 0, visible: false })
-const SCROLLBAR_PADDING = 100
-const SCROLLBAR_IGNORED_IDS = new Set(['artboard-bg', 'guide-vertical', 'guide-horizontal'])
+// SCROLLBAR_PADDING + SCROLLBAR_IGNORED_IDS extraidos para utils/scrollbarHelpers.ts.
 
 type ScrollbarContentBounds = {
     minX: number;
@@ -6150,12 +6154,7 @@ const invalidateScrollbarBounds = () => {
     scrollbarBoundsDirty = true
 }
 
-const isScrollbarRelevantObject = (obj: any): boolean => {
-    if (!isValidFabricCanvasObject(obj)) return false
-    if (obj.excludeFromExport) return false
-    if (SCROLLBAR_IGNORED_IDS.has(String(obj.id || ''))) return false
-    return true
-}
+// isScrollbarRelevantObject extraido para utils/scrollbarHelpers.ts.
 
 const getScrollbarContentBounds = (): ScrollbarContentBounds => {
     const pageWidth = activePage.value?.width || 1080
