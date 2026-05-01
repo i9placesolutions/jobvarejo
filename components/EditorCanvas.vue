@@ -130,6 +130,7 @@ import {
     isLightweightGlobalStyleProp
 } from '~/utils/globalStylePropClassifiers'
 import { clamp, toFinite, formatDisplayNumber } from '~/utils/mathHelpers'
+import { normalizeHexColor } from '~/utils/colorHelpers'
 import {
     getSpecialConditionFromProduct,
     getAvailablePrices
@@ -27202,31 +27203,6 @@ function normalizeGlobalStyles(styles?: Partial<GlobalStyles> | null): GlobalSty
         splashOffsetY: DEFAULT_GLOBAL_STYLES.splashOffsetY ?? 0,
         priceFontSize: DEFAULT_GLOBAL_STYLES.priceFontSize ?? 60,
         splashStrokeWidth: DEFAULT_GLOBAL_STYLES.splashStrokeWidth ?? 0
-    };
-
-    const normalizeHexColor = (
-        value: any,
-        fallback: string,
-        opts: { allowTransparent?: boolean; allowUndefined?: boolean } = {}
-    ): string | undefined => {
-        if (value === undefined || value === null || value === '') {
-            return opts.allowUndefined ? undefined : fallback;
-        }
-        const raw = String(value).trim();
-        if (!raw) return opts.allowUndefined ? undefined : fallback;
-        if (opts.allowTransparent && raw.toLowerCase() === 'transparent') return 'transparent';
-
-        const prefixed = raw.startsWith('#') ? raw : `#${raw}`;
-        const short = /^#([0-9a-f]{3})$/i.exec(prefixed);
-        if (short) {
-            const shortToken = String(short[1] || '');
-            const expanded = shortToken.split('').map((ch) => ch + ch).join('').toLowerCase();
-            return `#${expanded}`;
-        }
-        if (/^#[0-9a-f]{6}$/i.test(prefixed)) {
-            return prefixed.toLowerCase();
-        }
-        return opts.allowUndefined ? undefined : fallback;
     };
 
     const normalized: GlobalStyles = {
