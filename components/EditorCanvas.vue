@@ -162,7 +162,8 @@ import {
     decodeContaboUrls,
     removeImageObjectsDeep,
     getPreferredProductImageFromCardJson,
-    countCanvasJsonObjectsAndImages
+    countCanvasJsonObjectsAndImages,
+    buildPreparedCanvasDataCacheKey
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -5762,17 +5763,9 @@ const scheduleIdleWork = (work: () => void, timeoutMs = 2200) => {
     window.setTimeout(work, Math.min(1200, timeoutMs));
 }
 
-const getPreparedCanvasDataCacheKey = (page: any): string | null => {
-    const path = String(page?.canvasDataPath || '').trim()
-    if (path) return `path:${path}`
-
-    const pageId = String(page?.id || '').trim()
-    if (!pageId) return null
-
-    const projectId = String(project.id || '').trim()
-    if (projectId) return `project:${projectId}:page:${pageId}`
-    return `page:${pageId}`
-}
+// Wrapper local que injeta o projectId atual no helper puro extraido.
+const getPreparedCanvasDataCacheKey = (page: any): string | null =>
+    buildPreparedCanvasDataCacheKey(page, project.id)
 
 let preparedCanvasPrewarmRunId = 0
 

@@ -28,7 +28,8 @@ import {
   decodeContaboUrls,
   removeImageObjectsDeep,
   getPreferredProductImageFromCardJson,
-  countCanvasJsonObjectsAndImages
+  countCanvasJsonObjectsAndImages,
+  buildPreparedCanvasDataCacheKey
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -1094,5 +1095,49 @@ describe('countCanvasJsonObjectsAndImages', () => {
     const a: any = { type: 'group', objects: [] }
     a.objects.push(a)
     expect(countCanvasJsonObjectsAndImages({ objects: [a] })).toEqual({ objects: 1, images: 0 })
+  })
+})
+
+describe('buildPreparedCanvasDataCacheKey', () => {
+  it('canvasDataPath tem prioridade absoluta', () => {
+    expect(buildPreparedCanvasDataCacheKey({
+      canvasDataPath: '/storage/abc/page1.json',
+      id: 'page-1'
+    }, 'proj-1')).toBe('path:/storage/abc/page1.json')
+  })
+
+  it('sem path: project + page id', () => {
+    expect(buildPreparedCanvasDataCacheKey({ id: 'page-1' }, 'proj-1'))
+      .toBe('project:proj-1:page:page-1')
+  })
+
+  it('sem projectId: apenas page id', () => {
+    expect(buildPreparedCanvasDataCacheKey({ id: 'page-1' }))
+      .toBe('page:page-1')
+    expect(buildPreparedCanvasDataCacheKey({ id: 'page-1' }, ''))
+      .toBe('page:page-1')
+    expect(buildPreparedCanvasDataCacheKey({ id: 'page-1' }, null))
+      .toBe('page:page-1')
+  })
+
+  it('sem nada disponivel: null', () => {
+    expect(buildPreparedCanvasDataCacheKey(null)).toBeNull()
+    expect(buildPreparedCanvasDataCacheKey({})).toBeNull()
+    expect(buildPreparedCanvasDataCacheKey({ id: '' })).toBeNull()
+    expect(buildPreparedCanvasDataCacheKey({ id: '   ' })).toBeNull()
+  })
+
+  it('aplica trim em todos os campos', () => {
+    expect(buildPreparedCanvasDataCacheKey({
+      canvasDataPath: '  /path  '
+    })).toBe('path:/path')
+    expect(buildPreparedCanvasDataCacheKey({ id: '  page-1  ' }, '  proj-1  '))
+      .toBe('project:proj-1:page:page-1')
+  })
+
+  it('mesma entrada gera mesma chave (estabilidade)', () => {
+    const page = { id: 'p1' }
+    expect(buildPreparedCanvasDataCacheKey(page, 'proj-1'))
+      .toBe(buildPreparedCanvasDataCacheKey(page, 'proj-1'))
   })
 })

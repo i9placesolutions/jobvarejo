@@ -544,6 +544,30 @@ export const normalizePreparedCanvasLoadCacheKey = (value?: string | null): stri
     String(value || '').trim()
 
 /**
+ * Constroi a chave de cache para o canvasData preparado de uma pagina.
+ *
+ * Prioridade:
+ *  1. `page.canvasDataPath` (path estavel no storage) → `path:<value>`
+ *  2. project + page id → `project:<projId>:page:<pageId>`
+ *  3. apenas page id → `page:<pageId>`
+ *  4. nada disponivel → null
+ *
+ * Recebe `projectId` como parametro injetado (vez de ler de
+ * estado global) para que a funcao continue pura e testavel.
+ */
+export const buildPreparedCanvasDataCacheKey = (page: any, projectId?: string | null): string | null => {
+    const path = String(page?.canvasDataPath || '').trim()
+    if (path) return `path:${path}`
+
+    const pageId = String(page?.id || '').trim()
+    if (!pageId) return null
+
+    const projId = String(projectId || '').trim()
+    if (projId) return `project:${projId}:page:${pageId}`
+    return `page:${pageId}`
+}
+
+/**
  * Detecta um nodo "shell" visual do price group — qualquer elemento
  * que NAO e' texto, NAO e' group e NAO e' o background de moeda
  * (price_currency_bg, intencionalmente oculto em alguns templates).
