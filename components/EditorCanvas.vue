@@ -67,7 +67,14 @@ import {
     isExportableSelectionObject,
     getSelectedObjectExportFileBaseName
 } from '~/utils/exportSelectionHelpers'
-import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
+import {
+    normalizeClipboardPoint,
+    CLIPBOARD_CLONE_PROPS,
+    CLIPBOARD_SERIALIZE_PROPS,
+    CROSS_TAB_CLIPBOARD_STORAGE_KEY,
+    CROSS_TAB_CLIPBOARD_MAX_AGE_MS,
+    CROSS_TAB_CLIPBOARD_MAX_BYTES
+} from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
@@ -13255,35 +13262,9 @@ const duplicateActiveObjectWithContext = async (
 
 // Local (in-app) clipboard for Fabric objects. We keep it on `window` so it survives
 // page switches inside the editor and allows copying from one page and pasting into another.
-const CLIPBOARD_CLONE_PROPS: string[] = Array.from(new Set([
-    ...((Array.isArray(CANVAS_CUSTOM_PROPS) ? (CANVAS_CUSTOM_PROPS as unknown as string[]) : []) as string[]),
-    'opacity',
-    'flipX',
-    'flipY',
-    'clipPath',
-    'filters',
-    'originX',
-    'originY',
-    'angle',
-    'scaleX',
-    'scaleY',
-    'skewX',
-    'skewY'
-]));
-
-const CLIPBOARD_SERIALIZE_PROPS: string[] = Array.from(new Set([
-    ...CLIPBOARD_CLONE_PROPS,
-    '_clipboardCenterX',
-    '_clipboardCenterY',
-    '_clipboardSourceCustomId',
-    '_sourceGroupId',
-    '_sourceLeft',
-    '_sourceTop'
-]));
-
-const CROSS_TAB_CLIPBOARD_STORAGE_KEY = 'jobvarejo:editor:fabric-clipboard:v2';
-const CROSS_TAB_CLIPBOARD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const CROSS_TAB_CLIPBOARD_MAX_BYTES = 2_000_000;
+// CLIPBOARD_CLONE_PROPS, CLIPBOARD_SERIALIZE_PROPS,
+// CROSS_TAB_CLIPBOARD_STORAGE_KEY, CROSS_TAB_CLIPBOARD_MAX_AGE_MS,
+// CROSS_TAB_CLIPBOARD_MAX_BYTES extraidos para utils/clipboardHelpers.ts.
 
 // normalizeClipboardPoint extraido para utils/clipboardHelpers.ts.
 
