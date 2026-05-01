@@ -143,6 +143,10 @@ import {
     getCardLimitText
 } from '~/utils/productCardLookup'
 import {
+    stableHash32,
+    getZoneHighlightPredicate
+} from '~/utils/zoneHighlightHelpers'
+import {
     PRICE_LAYOUT_NODE_PREFIXES,
     PRICE_LAYOUT_NODE_EXACT,
     isPriceLayoutNode,
@@ -38133,70 +38137,8 @@ const normalizeGroupRects = (group: any) => {
     });
 };
 
-const stableHash32 = (s: string): number => {
-    // FNV-1a 32-bit hash (stable across sessions).
-    let h = 0x811c9dc5;
-    for (let i = 0; i < s.length; i++) {
-        h ^= s.charCodeAt(i);
-        h = Math.imul(h, 0x01000193);
-    }
-    return h >>> 0;
-};
-
-const getZoneHighlightPredicate = (zone: any, cards: any[]) => {
-    const count = Array.isArray(cards) ? cards.length : 0;
-    const rawCount = Number((zone as any)?.highlightCount ?? 0);
-    const want = Math.max(0, Math.min(count, Math.round(Number.isFinite(rawCount) ? rawCount : 0)));
-    const rawMult = Number((zone as any)?.highlightHeight ?? 1);
-    const mult = Math.max(1, Math.min(4, Number.isFinite(rawMult) ? rawMult : 1));
-    const pos = String((zone as any)?.highlightPos ?? 'first').toLowerCase();
-
-    if (!want || mult <= 1) {
-        return { count: 0, mult: 1, isHighlighted: (_card: any, _index: number) => false };
-    }
-
-    // Random = stable per-zone/per-card identity (does NOT reshuffle every relayout).
-    if (pos === 'random') {
-        const zoneId = String((zone as any)?._customId ?? 'zone');
-        const scored = cards.map((c: any, idx: number) => {
-            const id = String(c?._customId ?? c?.id ?? idx);
-            return { id, score: stableHash32(`${zoneId}:${id}`) };
-        });
-        scored.sort((a, b) => a.score - b.score);
-        const picked = scored.slice(0, want);
-        const idSet = new Set<string>(picked.map(p => p.id));
-        return {
-            count: want,
-            mult,
-            isHighlighted: (card: any, index: number) => idSet.has(String(card?._customId ?? card?.id ?? index))
-        };
-    }
-
-    if (pos === 'center') {
-        const start = Math.max(0, Math.floor((count - want) / 2));
-        const end = Math.min(count, start + want);
-        return {
-            count: want,
-            mult,
-            isHighlighted: (_card: any, index: number) => index >= start && index < end
-        };
-    }
-
-    if (pos === 'last' || pos === 'bottom') {
-        return {
-            count: want,
-            mult,
-            isHighlighted: (_card: any, index: number) => index >= (count - want)
-        };
-    }
-
-    // Default = first/top
-    return {
-        count: want,
-        mult,
-        isHighlighted: (_card: any, index: number) => index < want
-    };
-};
+// stableHash32 e getZoneHighlightPredicate extraidos para
+// utils/zoneHighlightHelpers.ts.
 
 type RecalculateZoneLayoutOptions = {
     save?: boolean;
