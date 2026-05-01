@@ -3,6 +3,24 @@ import { blobFromDataLikeUrl } from './browserBlob'
 export type ExportImageFormat = 'png' | 'jpg'
 export type ExportQualityPreset = 'print-300' | 'ultra-600'
 
+/**
+ * Normaliza string vinda da UI para um ExportImageFormat valido.
+ * Aceita "jpeg" ou "jpg" como sinonimos para 'jpg'; qualquer outro
+ * valor cai no default 'png'.
+ */
+export const normalizeExportImageFormat = (format: any): ExportImageFormat => (
+    String(format) === 'jpeg' || String(format) === 'jpg' ? 'jpg' : 'png'
+)
+
+/**
+ * Normaliza string vinda da UI para um ExportQualityPreset valido.
+ * Apenas 'print-300' e reconhecido; qualquer outro valor cai em
+ * 'ultra-600' (default de alta qualidade).
+ */
+export const normalizeExportQualityPreset = (value: any): ExportQualityPreset => (
+    String(value) === 'print-300' ? 'print-300' : 'ultra-600'
+)
+
 const EXPORT_MAX_CANVAS_DIMENSION = 16384
 const EXPORT_MAX_CANVAS_AREA = 140_000_000
 const PDF_BASE_DPI = 300

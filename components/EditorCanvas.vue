@@ -238,6 +238,8 @@ import {
     getRequestedMultiplier,
     getSafeMultiplier,
     sanitizeExportFileToken,
+    normalizeExportImageFormat,
+    normalizeExportQualityPreset,
     type ExportImageFormat,
     type ExportQualityPreset
 } from '~/utils/editorExportPipeline'
@@ -22982,13 +22984,8 @@ const exportAllFrames = async (format: 'png' | 'jpg' = 'png', scale: number = 1,
     return exports;
 }
 
-const normalizeExportImageFormat = (format: string): ExportImageFormat => (
-    format === 'jpeg' || format === 'jpg' ? 'jpg' : 'png'
-)
-
-const normalizeExportQualityPreset = (value: string): ExportQualityPreset => (
-    value === 'print-300' ? 'print-300' : 'ultra-600'
-)
+// normalizeExportImageFormat e normalizeExportQualityPreset extraidos para
+// utils/editorExportPipeline.ts (versao pura, recebe `any`).
 
 type ScopedBlobExport = {
     blob: Blob

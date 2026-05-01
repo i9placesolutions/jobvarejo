@@ -189,7 +189,7 @@ export const applyRectCornerRadiiPatch = (rect: any): void => {
         const h = this.height
         const x = -w / 2
         const y = -h / 2
-        const k = 1 - 0.5522847498
+        const k = BEZIER_ARC_K
         const r = clampCornerRadii(this.cornerRadii, w, h)
 
         ctx.beginPath()
