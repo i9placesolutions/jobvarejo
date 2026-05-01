@@ -5,6 +5,7 @@ import {
   compareMissingProductImageRecoveryCandidates,
   getMissingProductImageRecoveryBatchLimit,
   measureMissingProductImageRecoveryPriority,
+  computeMissingProductImageRecoveryViewportRect,
   type MissingProductImageRecoveryCandidate
 } from '~/utils/missingProductImageRecovery'
 
@@ -239,5 +240,65 @@ describe('measureMissingProductImageRecoveryPriority', () => {
     const r = measureMissingProductImageRecoveryPriority(card, viewport, null)
     expect(r.selected).toBe(false)
     expect(r.distanceSq).toBe(Number.MAX_SAFE_INTEGER)
+  })
+})
+
+describe('computeMissingProductImageRecoveryViewportRect', () => {
+  it('canvas dimensoes zero: null', () => {
+    expect(computeMissingProductImageRecoveryViewportRect([1, 0, 0, 1, 0, 0], 0, 600, 1))
+      .toBeNull()
+    expect(computeMissingProductImageRecoveryViewportRect([1, 0, 0, 1, 0, 0], 800, 0, 1))
+      .toBeNull()
+  })
+
+  it('vpt identidade + zoom 1: bounds = [0, 0, w, h]', () => {
+    const r = computeMissingProductImageRecoveryViewportRect([1, 0, 0, 1, 0, 0], 800, 600, 1)
+    expect(r?.left === 0 || Object.is(r?.left, -0)).toBe(true)
+    expect(r?.top === 0 || Object.is(r?.top, -0)).toBe(true)
+    expect(r?.right).toBe(800)
+    expect(r?.bottom).toBe(600)
+    expect(r?.centerX).toBe(400)
+    expect(r?.centerY).toBe(300)
+  })
+
+  it('zoom 2x: viewport ve metade do mundo', () => {
+    const r = computeMissingProductImageRecoveryViewportRect([1, 0, 0, 1, 0, 0], 800, 600, 2)
+    expect(r?.right).toBe(400)
+    expect(r?.bottom).toBe(300)
+    expect(r?.centerX).toBe(200)
+    expect(r?.centerY).toBe(150)
+  })
+
+  it('translate positivo no vpt: usuario panou pra esquerda no mundo', () => {
+    // vpt[4]=200 → left_world = -200/1 = -200
+    const r = computeMissingProductImageRecoveryViewportRect([1, 0, 0, 1, 200, 100], 800, 600, 1)
+    expect(r?.left).toBe(-200)
+    expect(r?.top).toBe(-100)
+    expect(r?.right).toBe(600)
+    expect(r?.bottom).toBe(500)
+  })
+
+  it('zoom 0: cai em 1 via Number(0)||1, NAO clampa em 0.0001', () => {
+    // Documentado: Number(0) || 1 vira 1, depois Math.max(0.0001, 1) = 1
+    const r = computeMissingProductImageRecoveryViewportRect([1, 0, 0, 1, 0, 0], 800, 600, 0)
+    expect(r?.right).toBe(800)
+  })
+
+  it('zoom 0.00001: clampado em 0.0001 (evita div/0)', () => {
+    // 0.00001 e' truthy mas menor que 0.0001 → Math.max clampa
+    const r = computeMissingProductImageRecoveryViewportRect([1, 0, 0, 1, 0, 0], 800, 600, 0.00001)
+    // width = 800 / 0.0001 = 8_000_000
+    expect(r?.right).toBe(8_000_000)
+  })
+
+  it('vpt invalido (null) usa identidade', () => {
+    const r = computeMissingProductImageRecoveryViewportRect(null, 800, 600, 1)
+    expect(r?.right).toBe(800)
+    expect(r?.bottom).toBe(600)
+  })
+
+  it('vpt array short usa identidade', () => {
+    const r = computeMissingProductImageRecoveryViewportRect([1, 0, 0, 1] as any, 800, 600, 1)
+    expect(r?.right).toBe(800)
   })
 })

@@ -59,6 +59,49 @@ export const MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH = 8
 export const MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH = 16
 
 /**
+ * Calcula o viewport rect em coordenadas do mundo a partir do
+ * viewportTransform + dimensoes raw + zoom. Diferente de
+ * computeViewportBoundsInWorld (em fabricMeasure), este nao precisa
+ * de invertTransform/transformPoint do Fabric — usa formula direta:
+ *
+ *   width_world = width_screen / zoom
+ *   left_world = -vpt[4] / zoom
+ *
+ * Pure: nao depende de fabric.util.
+ *
+ * Retorna null se canvas/dimensoes invalidos. zoom clampado em
+ * 0.0001 minimo (evita divisao por zero).
+ */
+export const computeMissingProductImageRecoveryViewportRect = (
+    viewportTransform: number[] | null | undefined,
+    canvasWidth: number,
+    canvasHeight: number,
+    zoom: number
+): MissingProductImageRecoveryViewportRect | null => {
+    const vpt = Array.isArray(viewportTransform) && viewportTransform.length >= 6
+        ? viewportTransform
+        : [1, 0, 0, 1, 0, 0]
+    const z = Math.max(0.0001, Number(zoom) || 1)
+    const cw = Number(canvasWidth) || 0
+    const ch = Number(canvasHeight) || 0
+    if (!cw || !ch) return null
+    const width = cw / z
+    const height = ch / z
+    const left = -Number(vpt[4] || 0) / z
+    const top = -Number(vpt[5] || 0) / z
+    const right = left + width
+    const bottom = top + height
+    return {
+        left,
+        top,
+        right,
+        bottom,
+        centerX: left + (width / 2),
+        centerY: top + (height / 2)
+    }
+}
+
+/**
  * Calcula a prioridade de recovery de um card. Recebe:
  *  - card duck-typed (precisa de getBoundingRect)
  *  - viewportRect (calculado via computeViewportBoundsInWorld)

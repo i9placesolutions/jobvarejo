@@ -152,6 +152,7 @@ import {
     compareMissingProductImageRecoveryCandidates,
     getMissingProductImageRecoveryBatchLimit,
     measureMissingProductImageRecoveryPriority,
+    computeMissingProductImageRecoveryViewportRect,
     type RecoveryLookupResult,
     type MissingProductImageRecoveryViewportRect,
     type MissingProductImageRecoveryPriority,
@@ -24013,25 +24014,16 @@ const fetchRecoveryImageUrlFromAssets = async (term: string): Promise<RecoveryLo
     }
 };
 
+// Wrapper local: usa o helper puro computeMissingProductImageRecoveryViewportRect.
 const getMissingProductImageRecoveryViewportRect = (): MissingProductImageRecoveryViewportRect | null => {
     const c = canvas.value;
     if (!c) return null;
-    const vpt = c.viewportTransform || [1, 0, 0, 1, 0, 0];
-    const zoom = Math.max(0.0001, Number(c.getZoom?.() || 1) || 1);
-    const width = Number(c.getWidth?.() || 0) / zoom;
-    const height = Number(c.getHeight?.() || 0) / zoom;
-    const left = -Number(vpt[4] || 0) / zoom;
-    const top = -Number(vpt[5] || 0) / zoom;
-    const right = left + width;
-    const bottom = top + height;
-    return {
-        left,
-        top,
-        right,
-        bottom,
-        centerX: left + (width / 2),
-        centerY: top + (height / 2)
-    };
+    return computeMissingProductImageRecoveryViewportRect(
+        c.viewportTransform,
+        c.getWidth?.() || 0,
+        c.getHeight?.() || 0,
+        c.getZoom?.() || 1
+    );
 };
 
 const getMissingProductImageRecoveryActiveCard = (): any | null => {
