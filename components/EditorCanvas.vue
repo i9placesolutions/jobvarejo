@@ -127,6 +127,11 @@ import { isCollaboratorsCacheValid } from '~/utils/collaboratorsCache'
 import { splitTextIntoChunks } from '~/utils/textChunking'
 import { reviveRedBurstObjectNode, sanitizeRedBurstTemplateGroupJson } from '~/utils/redBurstTemplateRevive'
 import {
+    extractWeightTokenForHeader,
+    normalizeHeaderWeightToken,
+    inferHeaderPartsFromProduct
+} from '~/utils/priceTagHeaderHelpers'
+import {
     SCROLLBAR_IGNORED_IDS,
     SCROLLBAR_PADDING,
     SCROLLBAR_SANITIZE_INTERVAL_MS,
@@ -32906,76 +32911,8 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
     }
 }
 
-function extractWeightTokenForHeader(product: any): string {
-    const nameRaw = String(product?.name || '').toUpperCase();
-    const weightRaw = String(product?.weight || '').toUpperCase();
-    const probe = `${nameRaw} ${weightRaw}`;
-    const match = probe.match(/(\d+\s*[Xx×]\s*\d+(?:[.,]\d+)?\s*(?:KG|KGS|G|GR|GRS|MG|ML|MLS|L|LT|LTS|UN)\b|\d+(?:[.,]\d+)?\s*(?:KG|KGS|G|GR|GRS|MG|ML|MLS|L|LT|LTS|UN)\b)/i);
-    if (!match) return '';
-    return String(match[1] || '')
-        .toUpperCase()
-        .replace(/\s*[Xx×]\s*/g, 'X')
-        .replace(/\s+/g, '')
-        .replace(/GRS?\b/g, 'G')
-        .replace(/KGS\b/g, 'KG')
-        .replace(/MLS\b/g, 'ML')
-        .replace(/LTS\b/g, 'L');
-}
-
-function normalizeHeaderWeightToken(value: string): string {
-    return String(value || '')
-        .toUpperCase()
-        .replace(/\s+/g, '')
-        .replace(/GRS?\b/g, 'G')
-        .replace(/KGS\b/g, 'KG')
-        .replace(/MLS\b/g, 'ML')
-        .replace(/LTS\b/g, 'L');
-}
-
-function inferHeaderPartsFromProduct(
-    product: any,
-    fallback?: string,
-    opts: { preferFullNameWithWeight?: boolean; splitUnitIntoDedicatedField?: boolean } = {}
-): { title: string; unit: string } {
-    const fallbackText = String(fallback || 'OFERTA').trim() || 'OFERTA';
-    const rawName = String(product?.name || '').replace(/\s+/g, ' ').trim();
-    const { cleanedName } = extractLimitFromName(rawName);
-    const inferredUnit = inferUnitLabelFromProduct(product);
-    const unit = inferredUnit === 'KG' ? 'KG' : (inferredUnit === 'UN' ? 'UN' : '');
-    const splitUnitIntoDedicatedField = opts.splitUnitIntoDedicatedField !== false;
-
-    let title = String(cleanedName || fallbackText).toUpperCase();
-    title = title
-        .replace(/\bR\$\s*[\d\.,]+\b/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    const weightToken = extractWeightTokenForHeader(product);
-    if (opts.preferFullNameWithWeight && weightToken && !normalizeHeaderWeightToken(title).includes(normalizeHeaderWeightToken(weightToken))) {
-        title = `${title} ${weightToken}`.replace(/\s+/g, ' ').trim();
-    }
-    if (opts.preferFullNameWithWeight && !weightToken && unit === 'KG' && !/\bKG\b/i.test(title)) {
-        title = `${title} KG`.replace(/\s+/g, ' ').trim();
-    }
-
-    // If the template uses a dedicated unit field, avoid duplicate unit suffix in title.
-    if (splitUnitIntoDedicatedField && unit && new RegExp(`\\b${unit}\\b$`, 'i').test(title)) {
-        title = title.replace(new RegExp(`\\b${unit}\\b$`, 'i'), '').trim();
-    }
-
-    if (!title) title = fallbackText.toUpperCase();
-    const maxLen = opts.preferFullNameWithWeight ? 36 : 26;
-    if (title.length > maxLen) {
-        if (opts.preferFullNameWithWeight && weightToken && maxLen > weightToken.length + 6) {
-            const prefixMax = maxLen - (weightToken.length + 1);
-            const withoutWeight = title.replace(weightToken, '').replace(/\s+/g, ' ').trim();
-            title = `${withoutWeight.slice(0, prefixMax).trim()} ${weightToken}`.trim();
-        } else {
-            title = `${title.slice(0, maxLen).trim()}...`;
-        }
-    }
-    return { title, unit: splitUnitIntoDedicatedField ? unit : '' };
-}
+// extractWeightTokenForHeader, normalizeHeaderWeightToken e
+// inferHeaderPartsFromProduct extraidos para utils/priceTagHeaderHelpers.ts.
 
 function inferUnitFromCard(card: any): string | undefined {
     if (!card) return '';
