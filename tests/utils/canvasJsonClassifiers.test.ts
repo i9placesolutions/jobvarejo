@@ -33,7 +33,9 @@ import {
   getLegacyProductCardImageRepairMode,
   collectContaboImageNodes,
   isPotentiallyBrokenRemoteImageSrc,
-  replaceContaboImagesWithPlaceholder
+  replaceContaboImagesWithPlaceholder,
+  isLikelyPlaceholderImageSrc,
+  CANVAS_IMAGE_PLACEHOLDER_DATA_URL
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -1321,5 +1323,33 @@ describe('replaceContaboImagesWithPlaceholder', () => {
     }
     const result = replaceContaboImagesWithPlaceholder(data)
     expect(result.objects[0].objects[0].src).not.toContain('contabostorage.com')
+  })
+})
+
+describe('isLikelyPlaceholderImageSrc', () => {
+  it('null/undefined/empty → true', () => {
+    expect(isLikelyPlaceholderImageSrc(null)).toBe(true)
+    expect(isLikelyPlaceholderImageSrc(undefined)).toBe(true)
+    expect(isLikelyPlaceholderImageSrc('')).toBe(true)
+    expect(isLikelyPlaceholderImageSrc('   ')).toBe(true)
+  })
+
+  it('exatamente igual ao placeholder padrao → true', () => {
+    expect(isLikelyPlaceholderImageSrc(CANVAS_IMAGE_PLACEHOLDER_DATA_URL)).toBe(true)
+  })
+
+  it('placeholder com whitespace ao redor → true (trim aplicado)', () => {
+    expect(isLikelyPlaceholderImageSrc(`  ${CANVAS_IMAGE_PLACEHOLDER_DATA_URL}  `)).toBe(true)
+  })
+
+  it('URL real → false', () => {
+    expect(isLikelyPlaceholderImageSrc('https://example.com/image.png')).toBe(false)
+    expect(isLikelyPlaceholderImageSrc('blob:abc123')).toBe(false)
+    expect(isLikelyPlaceholderImageSrc('data:image/png;base64,differentdata')).toBe(false)
+  })
+
+  it('numero/objeto → stringificado e comparado', () => {
+    expect(isLikelyPlaceholderImageSrc(0 as any)).toBe(true)  // String(0||'')=String('')='' → trim '' → true
+    expect(isLikelyPlaceholderImageSrc({} as any)).toBe(false)  // '[object Object]' nao bate
   })
 })

@@ -226,7 +226,8 @@ import {
     getLegacyProductCardImageRepairMode as getLegacyProductCardImageRepairModeHelper,
     collectContaboImageNodes,
     isPotentiallyBrokenRemoteImageSrc,
-    replaceContaboImagesWithPlaceholder
+    replaceContaboImagesWithPlaceholder,
+    isLikelyPlaceholderImageSrc
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -24190,11 +24191,7 @@ const replaceImageByCustomId = async (
 let missingProductImageRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
 let isRecoveringMissingProductImages = false;
 
-const isLikelyPlaceholderImageSrc = (src: string): boolean => {
-    const value = String(src || '').trim();
-    if (!value) return true;
-    return value === PLACEHOLDER_IMAGE_DATA_URL;
-};
+// isLikelyPlaceholderImageSrc extraido para utils/canvasJsonClassifiers.ts.
 
 // getImageSourceFromObject extraido para utils/fabricImageHelpers.ts.
 

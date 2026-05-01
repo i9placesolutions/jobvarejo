@@ -15,8 +15,23 @@
 // Inlineado aqui para que este modulo pure permaneca livre da
 // dependencia transitiva de Nuxt (`#imports`) que canvasAssetUrls
 // puxa, e portanto continue testavel em ambiente Node puro (vitest).
-const CANVAS_IMAGE_PLACEHOLDER_DATA_URL =
+export const CANVAS_IMAGE_PLACEHOLDER_DATA_URL =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
+/**
+ * Detecta uma src "placeholder" que deve ser tratada como vazia:
+ *  - vazia/null/undefined
+ *  - exatamente igual ao placeholder padrao do canvas
+ *
+ * Util para decidir se um image object esta com conteudo real ou
+ * apenas mostrando um stub temporario (durante carregamento ou
+ * apos blob expirar).
+ */
+export const isLikelyPlaceholderImageSrc = (src: any): boolean => {
+    const value = String(src || '').trim()
+    if (!value) return true
+    return value === CANVAS_IMAGE_PLACEHOLDER_DATA_URL
+}
 
 /**
  * DFS no JSON do canvas. Visitor recebe cada nodo (root.objects + descendentes
