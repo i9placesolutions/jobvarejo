@@ -266,3 +266,10 @@ export const DUPLICATE_CLONE_PROPS: ReadonlyArray<string> = Array.from(new Set([
     'subTargetCheck',
     'interactive'
 ]))
+
+/**
+ * Offset (em pixels world) aplicado por padrao ao duplicar objetos.
+ * O clone aparece deslocado em (DUPLICATE_OFFSET, DUPLICATE_OFFSET) do
+ * original — torna obvio que e' uma copia e nao mascara o source.
+ */
+export const DUPLICATE_OFFSET = 20

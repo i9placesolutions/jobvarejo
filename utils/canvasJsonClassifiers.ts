@@ -11,6 +11,27 @@
  * Funcoes 100% puras. Cobertura: tests/utils/canvasJsonClassifiers.test.ts
  */
 
+/**
+ * Limite de entradas no LRU cache de pre-loaded canvas data por chave.
+ * 24 = balanco entre hit-rate (pages tipicamente <= 24 abertas) e memoria.
+ */
+export const PREPARED_CANVAS_LOAD_CACHE_LIMIT = 24
+
+/**
+ * Quando o canvas tem >= esse numero de imagens de produto, o loader
+ * passa a usar deferred-load: carrega as primeiras DEFERRED_PRODUCT_IMAGE_LOAD_MAX
+ * imediatamente e adia o resto. Evita stress de IO/memoria em projetos
+ * com muitas paginas/produtos.
+ */
+export const DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD = 24
+
+/**
+ * Numero maximo de imagens de produto a carregar imediatamente em modo
+ * deferred. As demais sao carregadas on-demand quando o usuario navega
+ * para a regiao do canvas que as exibe.
+ */
+export const DEFERRED_PRODUCT_IMAGE_LOAD_MAX = 72
+
 // Espelho da constante exportada por utils/canvasAssetUrls.ts.
 // Inlineado aqui para que este modulo pure permaneca livre da
 // dependencia transitiva de Nuxt (`#imports`) que canvasAssetUrls

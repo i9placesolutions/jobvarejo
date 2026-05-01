@@ -79,7 +79,7 @@ import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
 import { scheduleIdleWork } from '~/utils/idleSchedule'
-import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS } from '~/utils/canvasCustomProps'
+import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS, DUPLICATE_OFFSET } from '~/utils/canvasCustomProps'
 import {
     GUIDE_COLOR,
     GUIDE_STROKE_WIDTH,
@@ -169,7 +169,8 @@ import {
     LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
     isLightweightGlobalStyleProp,
     ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS,
-    allowsUndefinedGlobalStyleProp
+    allowsUndefinedGlobalStyleProp,
+    INSPECTOR_TRANSFORM_PROPS
 } from '~/utils/globalStylePropClassifiers'
 import {
     clamp,
@@ -380,7 +381,10 @@ import {
     replaceContaboImagesWithPlaceholder,
     isLikelyPlaceholderImageSrc,
     restoreNamesFromJson,
-    collectTemplateJsonNodesDeep
+    collectTemplateJsonNodesDeep,
+    PREPARED_CANVAS_LOAD_CACHE_LIMIT,
+    DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD,
+    DEFERRED_PRODUCT_IMAGE_LOAD_MAX
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -10398,7 +10402,7 @@ type PrepareCanvasDataForLoadOptions = {
 
 const preparedCanvasDataLoadCache = new WeakMap<object, PreparedCanvasLoadCacheEntry>();
 const preparedCanvasDataLoadCacheByKey = new Map<string, PreparedCanvasLoadCacheEntry>();
-const PREPARED_CANVAS_LOAD_CACHE_LIMIT = 24;
+// PREPARED_CANVAS_LOAD_CACHE_LIMIT extraida para utils/canvasJsonClassifiers.ts.
 
 // normalizePreparedCanvasLoadCacheKey extraido para utils/canvasJsonClassifiers.ts.
 
@@ -10484,8 +10488,8 @@ const prepareCanvasDataForLoadEntry = (
 // setJsonObjectCenterInParentPlane / collectJsonDescendantsWithParent
 // foram extraidos para utils/canvasJsonClassifiers.ts.
 
-const DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD = 24;
-const DEFERRED_PRODUCT_IMAGE_LOAD_MAX = 72;
+// DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD/MAX extraidos para
+// utils/canvasJsonClassifiers.ts.
 
 // isDeferredProductImageCandidateSrc + isProductCardImageSelectionCandidateJson
 // extraidos para utils/canvasJsonClassifiers.ts.
@@ -12717,8 +12721,7 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
     return rootClone;
 };
 
-const DUPLICATE_OFFSET = 20;
-// DUPLICATE_CLONE_PROPS extraido para utils/canvasCustomProps.ts.
+// DUPLICATE_OFFSET, DUPLICATE_CLONE_PROPS extraidos para utils/canvasCustomProps.ts.
 
 // isActiveSelectionObject extraido para utils/fabricObjectClassifiers.ts.
 
@@ -19193,15 +19196,7 @@ const centerSelectionInContainer = (mode: 'h' | 'v' | 'both') => {
     triggerRef(selectedObjectRef);
 };
 
-const INSPECTOR_TRANSFORM_PROPS = new Set([
-    'left',
-    'top',
-    'width',
-    'height',
-    'scaleX',
-    'scaleY',
-    'angle'
-]);
+// INSPECTOR_TRANSFORM_PROPS extraida para utils/globalStylePropClassifiers.ts.
 
 const resolveInspectorSnapshotTarget = (active: any) => {
     if (!active || active.type === 'activeSelection') return active;

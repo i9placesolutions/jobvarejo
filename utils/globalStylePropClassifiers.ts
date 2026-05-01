@@ -100,3 +100,21 @@ export const ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS = new Set<string>([
  */
 export const allowsUndefinedGlobalStyleProp = (prop: any): boolean =>
     ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS.has(String(prop || '').trim())
+
+/**
+ * Conjunto de props "transform" usadas pelo Inspector — sao geometricas
+ * (posicao, dimensoes, escala, rotacao) e gatilham snapshot/refresh do
+ * Inspector mas NAO sao globalStyles propriamente.
+ *
+ * Usado para classificar mudancas em PropertiesPanel (via watchers) que
+ * devem reaplicar o snapshot do objeto selecionado.
+ */
+export const INSPECTOR_TRANSFORM_PROPS = new Set<string>([
+    'left',
+    'top',
+    'width',
+    'height',
+    'scaleX',
+    'scaleY',
+    'angle'
+])

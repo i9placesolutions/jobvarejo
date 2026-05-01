@@ -37,8 +37,26 @@ import {
   isLikelyPlaceholderImageSrc,
   CANVAS_IMAGE_PLACEHOLDER_DATA_URL,
   restoreNamesFromJson,
-  collectTemplateJsonNodesDeep
+  collectTemplateJsonNodesDeep,
+  PREPARED_CANVAS_LOAD_CACHE_LIMIT,
+  DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD,
+  DEFERRED_PRODUCT_IMAGE_LOAD_MAX
 } from '~/utils/canvasJsonClassifiers'
+
+describe('PREPARED_CANVAS_LOAD_CACHE_LIMIT', () => {
+  it('e numero positivo (LRU cap)', () => {
+    expect(PREPARED_CANVAS_LOAD_CACHE_LIMIT).toBe(24)
+    expect(PREPARED_CANVAS_LOAD_CACHE_LIMIT).toBeGreaterThan(0)
+  })
+})
+
+describe('DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD / MAX', () => {
+  it('threshold = 24, max = 72 (max maior que threshold)', () => {
+    expect(DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD).toBe(24)
+    expect(DEFERRED_PRODUCT_IMAGE_LOAD_MAX).toBe(72)
+    expect(DEFERRED_PRODUCT_IMAGE_LOAD_MAX).toBeGreaterThanOrEqual(DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD)
+  })
+})
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
 const node = (overrides: any = {}, children?: any[]) => ({

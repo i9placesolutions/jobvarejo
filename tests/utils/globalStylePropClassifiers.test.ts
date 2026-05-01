@@ -5,8 +5,27 @@ import {
   LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
   isLightweightGlobalStyleProp,
   ALLOW_UNDEFINED_GLOBAL_STYLE_PROPS,
-  allowsUndefinedGlobalStyleProp
+  allowsUndefinedGlobalStyleProp,
+  INSPECTOR_TRANSFORM_PROPS
 } from '~/utils/globalStylePropClassifiers'
+
+describe('INSPECTOR_TRANSFORM_PROPS', () => {
+  it('contem 7 props geometricas', () => {
+    expect(INSPECTOR_TRANSFORM_PROPS.size).toBe(7)
+    expect(INSPECTOR_TRANSFORM_PROPS.has('left')).toBe(true)
+    expect(INSPECTOR_TRANSFORM_PROPS.has('top')).toBe(true)
+    expect(INSPECTOR_TRANSFORM_PROPS.has('width')).toBe(true)
+    expect(INSPECTOR_TRANSFORM_PROPS.has('height')).toBe(true)
+    expect(INSPECTOR_TRANSFORM_PROPS.has('scaleX')).toBe(true)
+    expect(INSPECTOR_TRANSFORM_PROPS.has('scaleY')).toBe(true)
+    expect(INSPECTOR_TRANSFORM_PROPS.has('angle')).toBe(true)
+  })
+
+  it('NAO contem props de cor/font', () => {
+    expect(INSPECTOR_TRANSFORM_PROPS.has('fill')).toBe(false)
+    expect(INSPECTOR_TRANSFORM_PROPS.has('fontFamily')).toBe(false)
+  })
+})
 
 describe('DEBOUNCED_GLOBAL_STYLE_PROPS', () => {
   it('contem props de slider/range esperadas', () => {

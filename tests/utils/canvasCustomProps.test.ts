@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS } from '~/utils/canvasCustomProps'
+import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS, DUPLICATE_OFFSET } from '~/utils/canvasCustomProps'
+
+describe('DUPLICATE_OFFSET', () => {
+  it('= 20px (offset visual default ao duplicar)', () => {
+    expect(DUPLICATE_OFFSET).toBe(20)
+    expect(DUPLICATE_OFFSET).toBeGreaterThan(0)
+  })
+})
 
 describe('CANVAS_CUSTOM_PROPS', () => {
   it('e um array nao-vazio', () => {
