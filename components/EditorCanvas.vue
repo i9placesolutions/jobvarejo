@@ -340,7 +340,8 @@ import {
     LABEL_TEMPLATES_JSON_KEY,
     BUILTIN_ATACAREJO_SEED_VERSION,
     BUILTIN_RED_BURST_SEED_VERSION,
-    LABEL_TEMPLATE_PREVIEW_RENDER_VERSION
+    LABEL_TEMPLATE_PREVIEW_RENDER_VERSION,
+    MANUAL_SINGLE_ANCHOR_VERSION
 } from '~/utils/labelTemplateHelpers'
 import {
     walkCanvasObjects,
@@ -29177,7 +29178,7 @@ const normalizeManualPriceChain = (group: any, cacheKey: string, integer: any, d
     });
 };
 
-const MANUAL_SINGLE_ANCHOR_VERSION = 2;
+// MANUAL_SINGLE_ANCHOR_VERSION extraida para utils/labelTemplateHelpers.ts.
 
 const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean } = {}) => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;

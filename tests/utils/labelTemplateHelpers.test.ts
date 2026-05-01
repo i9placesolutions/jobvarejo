@@ -13,7 +13,8 @@ import {
   LABEL_TEMPLATES_JSON_KEY,
   BUILTIN_ATACAREJO_SEED_VERSION,
   BUILTIN_RED_BURST_SEED_VERSION,
-  LABEL_TEMPLATE_PREVIEW_RENDER_VERSION
+  LABEL_TEMPLATE_PREVIEW_RENDER_VERSION,
+  MANUAL_SINGLE_ANCHOR_VERSION
 } from '~/utils/labelTemplateHelpers'
 
 describe('getLabelTemplateTimestamp', () => {
@@ -234,5 +235,13 @@ describe('label template version constants', () => {
 
   it('JSON_KEY usa prefixo __ (evita colisao com props normais)', () => {
     expect(LABEL_TEMPLATES_JSON_KEY).toMatch(/^__/)
+  })
+})
+
+describe('MANUAL_SINGLE_ANCHOR_VERSION', () => {
+  it('e numero positivo (versao do snapshot dos anchors)', () => {
+    expect(typeof MANUAL_SINGLE_ANCHOR_VERSION).toBe('number')
+    expect(MANUAL_SINGLE_ANCHOR_VERSION).toBeGreaterThan(0)
+    expect(MANUAL_SINGLE_ANCHOR_VERSION).toBe(2)
   })
 })

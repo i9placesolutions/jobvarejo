@@ -108,6 +108,15 @@ export const BUILTIN_RED_BURST_SEED_VERSION = 2
 export const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
 
 /**
+ * Versao do snapshot dos manual-single-anchors (offsets cached para
+ * posicionar elementos do single-price layout). Cached em
+ * `priceGroup.__manualSingleAnchors.__version`. Quando essa constante
+ * avanca, caches antigos sao invalidados — forca recomputacao com a
+ * nova logica/coordenadas.
+ */
+export const MANUAL_SINGLE_ANCHOR_VERSION = 2
+
+/**
  * Lista de props extras que devem ser persistidas em label templates
  * (alem das props padrao do Fabric). Inclui customId, name, fontFamily,
  * charSpacing, e todos os flags de manual template (`__preserveManualLayout`,
