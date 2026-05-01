@@ -71,6 +71,7 @@ import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
+import { scheduleIdleWork } from '~/utils/idleSchedule'
 import {
     isTrackableImageSrc,
     collectTrackableImageSrcCounts
@@ -5641,34 +5642,10 @@ const scheduleIdleStatePersistence = (opts: any, timeoutMs = 2200) => {
         saveCurrentState(nextOpts)
     }
 
-    if (typeof window === 'undefined') {
-        run();
-        return;
-    }
-
-    const ric = (window as any).requestIdleCallback;
-    if (typeof ric === 'function') {
-        ric(() => run(), { timeout: timeoutMs });
-        return;
-    }
-
-    window.setTimeout(run, Math.min(1200, timeoutMs));
+    scheduleIdleWork(run, timeoutMs);
 }
 
-const scheduleIdleWork = (work: () => void, timeoutMs = 2200) => {
-    if (typeof window === 'undefined') {
-        work();
-        return;
-    }
-
-    const ric = (window as any).requestIdleCallback;
-    if (typeof ric === 'function') {
-        ric(() => work(), { timeout: timeoutMs });
-        return;
-    }
-
-    window.setTimeout(work, Math.min(1200, timeoutMs));
-}
+// scheduleIdleWork extraido para utils/idleSchedule.ts.
 
 // Wrapper local que injeta o projectId atual no helper puro extraido.
 const getPreparedCanvasDataCacheKey = (page: any): string | null =>
