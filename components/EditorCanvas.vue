@@ -85,7 +85,8 @@ import {
     assignNewCustomIdsDeep,
     resetDuplicatedObjectRuntime,
     clearInvalidClipPath,
-    applyObjectVisibility
+    applyObjectVisibility,
+    safeAddWithUpdate
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -3711,41 +3712,7 @@ const handleInteraction = () => {
     // Scrollbars and Properties panel will update on 'mouse:up' or 'object:modified'
 };
 
-const safeAddWithUpdate = (group: any, object?: any) => {
-    if (!group) return;
-    
-    // CRITICAL: Validate object is a proper Fabric object before adding
-    if (object) {
-        const isValid = object && typeof object === 'object' && typeof object.setCoords === 'function';
-        if (!isValid) {
-            console.error('❌ [safeAddWithUpdate] Tentativa de adicionar objeto inválido ao grupo!', {
-                objectType: typeof object,
-                objectValue: object,
-                hasSetCoords: typeof object?.setCoords === 'function',
-                groupId: group._customId || group.id
-            });
-            return; // BLOCK invalid objects
-        }
-    }
-    
-    if (typeof group.addWithUpdate === 'function') {
-        if (object) group.addWithUpdate(object);
-        else group.addWithUpdate();
-        return;
-    }
-    if (object && typeof group.add === 'function') {
-        group.add(object);
-    }
-    // Fabric v7+: groups use LayoutManager; `triggerLayout()` replaces `addWithUpdate/_calcBounds`.
-    if (typeof group.triggerLayout === 'function') {
-        group.triggerLayout();
-    } else {
-        if (typeof group._calcBounds === 'function') group._calcBounds();
-        if (typeof group._updateObjectsCoords === 'function') group._updateObjectsCoords();
-    }
-    if (typeof group.setCoords === 'function') group.setCoords();
-    group.dirty = true;
-};
+// safeAddWithUpdate extraido para utils/fabricObjectOps.ts.
 
 const groupLocalToCanvasPoint = (group: any, x: number, y: number): { x: number; y: number } => {
     try {

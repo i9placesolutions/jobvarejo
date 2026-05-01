@@ -5,7 +5,8 @@ import {
   assignNewCustomIdsDeep,
   resetDuplicatedObjectRuntime,
   clearInvalidClipPath,
-  applyObjectVisibility
+  applyObjectVisibility,
+  safeAddWithUpdate
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -508,5 +509,97 @@ describe('applyObjectVisibility', () => {
     applyObjectVisibility(o, false)
     expect(o.dirty).toBe(true)
     expect(o.setCoordsCount).toBe(1)
+  })
+})
+
+describe('safeAddWithUpdate', () => {
+  const makeGroup = (overrides: any = {}) => {
+    const g: any = {
+      _customId: 'g1',
+      addWithUpdateCount: 0,
+      triggerLayoutCount: 0,
+      setCoordsCount: 0,
+      ...overrides
+    }
+    if (!overrides.addWithUpdate && overrides.addWithUpdate !== false) {
+      g.addWithUpdate = (obj?: any) => {
+        g.addWithUpdateCount += 1
+        if (obj) g.lastAdded = obj
+      }
+    }
+    g.add = (obj: any) => { g.addedObj = obj }
+    g.triggerLayout = () => { g.triggerLayoutCount += 1 }
+    g.setCoords = () => { g.setCoordsCount += 1 }
+    return g
+  }
+
+  const makeObj = (overrides: any = {}) => ({
+    setCoords: () => {},
+    ...overrides
+  })
+
+  it('null group nao quebra', () => {
+    expect(() => safeAddWithUpdate(null)).not.toThrow()
+    expect(() => safeAddWithUpdate(undefined, makeObj())).not.toThrow()
+  })
+
+  it('Fabric v6: usa addWithUpdate quando disponivel', () => {
+    const g = makeGroup()
+    const o = makeObj()
+    safeAddWithUpdate(g, o)
+    expect(g.addWithUpdateCount).toBe(1)
+    expect(g.lastAdded).toBe(o)
+  })
+
+  it('addWithUpdate sem object: chama recalculo do group', () => {
+    const g = makeGroup()
+    safeAddWithUpdate(g)
+    expect(g.addWithUpdateCount).toBe(1)
+    expect(g.lastAdded).toBeUndefined()
+  })
+
+  it('Fabric v7+: usa add + triggerLayout', () => {
+    const g: any = {
+      _customId: 'g1',
+      add: () => { g.addCount = (g.addCount || 0) + 1 },
+      triggerLayout: () => { g.triggerLayoutCount = (g.triggerLayoutCount || 0) + 1 },
+      setCoords: () => { g.setCoordsCount = (g.setCoordsCount || 0) + 1 }
+    }
+    safeAddWithUpdate(g, makeObj())
+    expect(g.addCount).toBe(1)
+    expect(g.triggerLayoutCount).toBe(1)
+    expect(g.setCoordsCount).toBe(1)
+    expect(g.dirty).toBe(true)
+  })
+
+  it('fallback _calcBounds quando triggerLayout nao disponivel', () => {
+    const g: any = {
+      _customId: 'g1',
+      add: () => { g.addCount = (g.addCount || 0) + 1 },
+      _calcBounds: () => { g.boundsCount = (g.boundsCount || 0) + 1 },
+      _updateObjectsCoords: () => { g.coordsCount = (g.coordsCount || 0) + 1 },
+      setCoords: () => {}
+    }
+    safeAddWithUpdate(g, makeObj())
+    expect(g.boundsCount).toBe(1)
+    expect(g.coordsCount).toBe(1)
+  })
+
+  it('REGRESSAO: bloqueia objeto sem setCoords (impossivel adicionar)', () => {
+    const g = makeGroup()
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {})
+    safeAddWithUpdate(g, { type: 'broken' })
+    expect(g.addWithUpdateCount).toBe(0) // bloqueado
+    expect(consoleErr).toHaveBeenCalled()
+    consoleErr.mockRestore()
+  })
+
+  it('REGRESSAO: bloqueia primitivos como object', () => {
+    const g = makeGroup()
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {})
+    safeAddWithUpdate(g, 'str' as any)
+    safeAddWithUpdate(g, 42 as any)
+    expect(g.addWithUpdateCount).toBe(0)
+    consoleErr.mockRestore()
   })
 })

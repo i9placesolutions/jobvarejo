@@ -12,6 +12,53 @@ import { isLikelyProductCard } from './fabricObjectClassifiers'
 import { isValidClipPath } from './canvasValidation'
 
 /**
+ * Adiciona um objeto a um group Fabric com fallback compatibilidade
+ * v6/v7. Em Fabric v7+, addWithUpdate foi removido em favor de
+ * LayoutManager + triggerLayout(). Esta funcao tenta na ordem:
+ *   1. group.addWithUpdate(object) (Fabric v6 ou compat shim)
+ *   2. group.add(object) + group.triggerLayout() (Fabric v7+)
+ *   3. fallback _calcBounds + _updateObjectsCoords (Fabric internals)
+ *
+ * Tambem valida que `object` tem setCoords antes de adicionar — bloqueia
+ * objetos invalidos que quebrariam o canvas em runtime.
+ *
+ * Sem object: chama apenas a operacao de "update" do group (recalcular
+ * bounds apos modificacoes manuais nos children).
+ */
+export const safeAddWithUpdate = (group: any, object?: any): void => {
+    if (!group) return
+
+    if (object) {
+        const isValid = object && typeof object === 'object' && typeof object.setCoords === 'function'
+        if (!isValid) {
+            console.error('[safeAddWithUpdate] Objeto invalido bloqueado', {
+                objectType: typeof object,
+                hasSetCoords: typeof object?.setCoords === 'function',
+                groupId: group._customId || group.id
+            })
+            return
+        }
+    }
+
+    if (typeof group.addWithUpdate === 'function') {
+        if (object) group.addWithUpdate(object)
+        else group.addWithUpdate()
+        return
+    }
+    if (object && typeof group.add === 'function') {
+        group.add(object)
+    }
+    if (typeof group.triggerLayout === 'function') {
+        group.triggerLayout()
+    } else {
+        if (typeof group._calcBounds === 'function') group._calcBounds()
+        if (typeof group._updateObjectsCoords === 'function') group._updateObjectsCoords()
+    }
+    if (typeof group.setCoords === 'function') group.setCoords()
+    group.dirty = true
+}
+
+/**
  * Aplica visibilidade a um objeto Fabric, salvando estado evented/
  * selectable em backups (`__prevEventedBeforeEyeToggle`/
  * `__prevSelectableBeforeEyeToggle`) ao esconder, e restaurando ao mostrar.
