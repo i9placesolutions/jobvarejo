@@ -33,7 +33,8 @@ import {
     isPriceGroupOrPriceChild,
     isPathCloseCommand,
     isVectorPathClosed,
-    hasObjectMaskApplied
+    hasObjectMaskApplied,
+    isActiveSelectionObject
 } from '~/utils/fabricObjectClassifiers'
 import {
     isCanvasContextError,
@@ -55,6 +56,12 @@ import {
     isExportableSelectionObject,
     getSelectedObjectExportFileBaseName
 } from '~/utils/exportSelectionHelpers'
+import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
+import {
+    stripAccents,
+    normalizeLimitText,
+    normalizeSpecialCondition
+} from '~/utils/productTextNormalize'
 import {
     isObjectShownForBounds,
     getObjectHorizontalBoundsLocal,
@@ -14114,7 +14121,7 @@ const DUPLICATE_CLONE_PROPS = Array.from(new Set([
     'interactive',
 ]));
 
-const isActiveSelectionObject = (obj: any) => String(obj?.type || '').toLowerCase() === 'activeselection';
+// isActiveSelectionObject extraido para utils/fabricObjectClassifiers.ts.
 
 // isProductCardContainer extraido para utils/fabricObjectClassifiers.ts.
 // assignNewCustomIdsDeep extraido para utils/fabricObjectOps.ts.
@@ -14804,14 +14811,7 @@ const CROSS_TAB_CLIPBOARD_STORAGE_KEY = 'jobvarejo:editor:fabric-clipboard:v2';
 const CROSS_TAB_CLIPBOARD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CROSS_TAB_CLIPBOARD_MAX_BYTES = 2_000_000;
 
-const normalizeClipboardPoint = (point: any): { x: number; y: number } => {
-    const x = Number(point?.x);
-    const y = Number(point?.y);
-    return {
-        x: Number.isFinite(x) ? x : 0,
-        y: Number.isFinite(y) ? y : 0
-    };
-};
+// normalizeClipboardPoint extraido para utils/clipboardHelpers.ts.
 
 const serializeRuntimeClipboardForCrossTab = (runtimeClipboard: any): string | null => {
     if (!runtimeClipboard || runtimeClipboard.kind !== 'fabric-items-v2' || !Array.isArray(runtimeClipboard.items)) return null;
@@ -26013,25 +26013,8 @@ const extractLimitFromName = (rawName: any): { cleanedName: string; extractedLim
     return { cleanedName: cleanedName || name, extractedLimit: extractedLimit || null };
 };
 
-const normalizeLimitText = (raw: any): string | null => {
-    const s0 = String(raw ?? '').trim();
-    if (!s0) return null;
-    let s = s0.toUpperCase().replace(/\s+/g, ' ').trim();
-    if (s === 'LIMITE') return null;
-    if (!s.startsWith('LIMITE')) s = `LIMITE ${s}`.trim();
-    // "3UN" -> "3 UN"
-    s = s.replace(/(\d)(UN|KG)\b/g, '$1 $2');
-    return s;
-};
-
-const stripAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-const normalizeSpecialCondition = (raw: any): string | null => {
-    const txt = String(raw ?? '').replace(/\s+/g, ' ').trim();
-    if (!txt) return null;
-    const cleaned = txt.replace(/^[\-:;,.\s]+/, '').replace(/[\-:;,.\s]+$/, '').trim();
-    return cleaned || null;
-};
+// normalizeLimitText / stripAccents / normalizeSpecialCondition
+// extraidos para utils/productTextNormalize.ts.
 
 const getSpecialConditionFromProduct = (product: any): string | null => {
     if (!product || typeof product !== 'object') return null;

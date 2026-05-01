@@ -56,6 +56,12 @@ export const isLikelyProductZone = (obj: any): boolean => {
 }
 
 /**
+ * Detecta um active selection (selecao multipla provisoria do Fabric).
+ */
+export const isActiveSelectionObject = (obj: any): boolean =>
+    String(obj?.type || '').toLowerCase() === 'activeselection'
+
+/**
  * Detecta se o objeto E' o priceGroup ou esta DENTRO dele (filho direto).
  * Usado em pipelines de export/seleção que precisam tratar o conjunto da
  * etiqueta como uma unidade (ex: ocultar parts, transformar grupo todo).

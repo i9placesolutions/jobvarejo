@@ -11,7 +11,8 @@ import {
   isPriceGroupOrPriceChild,
   isPathCloseCommand,
   isVectorPathClosed,
-  hasObjectMaskApplied
+  hasObjectMaskApplied,
+  isActiveSelectionObject
 } from '~/utils/fabricObjectClassifiers'
 
 // Helpers de mock — todos seguem duck typing de Fabric.
@@ -414,5 +415,20 @@ describe('hasObjectMaskApplied', () => {
     expect(hasObjectMaskApplied(null)).toBe(false)
     expect(hasObjectMaskApplied(undefined)).toBe(false)
     expect(hasObjectMaskApplied('foo')).toBe(false)
+  })
+})
+
+describe('isActiveSelectionObject', () => {
+  it('aceita type=activeSelection (case insensitive)', () => {
+    expect(isActiveSelectionObject({ type: 'activeSelection' })).toBe(true)
+    expect(isActiveSelectionObject({ type: 'activeselection' })).toBe(true)
+    expect(isActiveSelectionObject({ type: 'ACTIVESELECTION' })).toBe(true)
+  })
+
+  it('rejeita outros tipos', () => {
+    expect(isActiveSelectionObject({ type: 'group' })).toBe(false)
+    expect(isActiveSelectionObject({ type: 'rect' })).toBe(false)
+    expect(isActiveSelectionObject(null)).toBe(false)
+    expect(isActiveSelectionObject({})).toBe(false)
   })
 })
