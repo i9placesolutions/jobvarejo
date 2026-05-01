@@ -404,7 +404,8 @@ import {
     DEFERRED_PRODUCT_IMAGE_LOAD_MAX,
     repairHiddenPriceGroupTexts,
     sanitizeFabricJsonTreeForLoad,
-    buildProgressiveProductCardImageLoadPayload
+    buildProgressiveProductCardImageLoadPayload,
+    normalizeLegacyProductCardImageTransformsInCanvasData
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -10278,100 +10279,8 @@ const prepareCanvasDataForLoadEntry = (
 
 // buildProgressiveProductCardImageLoadPayload extraido para utils/canvasJsonClassifiers.ts.
 
-const normalizeLegacyProductCardImageTransformsInCanvasData = (
-    canvasData: any
-): { cardsScanned: number; imagesScanned: number; imagesRepaired: number; needsPostLoadRepair: boolean } => {
-    const rootObjects = Array.isArray(canvasData?.objects) ? canvasData.objects : [];
-    if (!rootObjects.length) {
-        return { cardsScanned: 0, imagesScanned: 0, imagesRepaired: 0, needsPostLoadRepair: false };
-    }
-
-    let cardsScanned = 0;
-    let imagesScanned = 0;
-    let imagesRepaired = 0;
-    let needsPostLoadRepair = false;
-
-    rootObjects.forEach((card: any) => {
-        if (!isLikelyProductCardJson(card)) return;
-
-        cardsScanned += 1;
-        const cardBase = getCardBaseSizeForContainmentJson(card);
-        const descendants = collectJsonDescendantsWithParent(card);
-
-        descendants.forEach(({ node, parent }) => {
-            if (String(node?.type || '').toLowerCase() !== 'image') return;
-
-            imagesScanned += 1;
-            let changed = false;
-
-            let nextScaleX = Number(node.scaleX ?? 1);
-            let nextScaleY = Number(node.scaleY ?? 1);
-            if (!Number.isFinite(nextScaleX) || nextScaleX === 0) {
-                nextScaleX = 1;
-                changed = true;
-            }
-            if (!Number.isFinite(nextScaleY) || nextScaleY === 0) {
-                nextScaleY = 1;
-                changed = true;
-            }
-            if (nextScaleX < 0 || nextScaleY < 0) {
-                nextScaleX = Math.abs(nextScaleX) || 1;
-                nextScaleY = Math.abs(nextScaleY) || 1;
-                changed = true;
-            }
-
-            if (node.flipX || node.flipY) changed = true;
-            if (node.lockScalingFlip !== true) changed = true;
-            if (node.lockSkewingX !== true || node.lockSkewingY !== true) changed = true;
-
-            const rawWidth = Number(node.width ?? 0);
-            const rawHeight = Number(node.height ?? 0);
-            const hasValidIntrinsicSize = Number.isFinite(rawWidth) && rawWidth > 0 && Number.isFinite(rawHeight) && rawHeight > 0;
-            if (!hasValidIntrinsicSize) {
-                needsPostLoadRepair = true;
-            }
-
-            if (parent === card && cardBase && hasValidIntrinsicSize) {
-                const imageSize = getJsonObjectSize(node, { scaleX: nextScaleX, scaleY: nextScaleY });
-                const center = getJsonObjectCenterInParentPlane(node, { scaleX: nextScaleX, scaleY: nextScaleY });
-                if (imageSize && center) {
-                    const cardLeft = -(cardBase.w / 2);
-                    const cardTop = -(cardBase.h / 2);
-                    const cardRight = cardBase.w / 2;
-                    const cardBottom = cardBase.h / 2;
-                    const minCx = Math.min(cardLeft + (imageSize.width / 2), cardRight - (imageSize.width / 2));
-                    const maxCx = Math.max(cardLeft + (imageSize.width / 2), cardRight - (imageSize.width / 2));
-                    const minCy = Math.min(cardTop + (imageSize.height / 2), cardBottom - (imageSize.height / 2));
-                    const maxCy = Math.max(cardTop + (imageSize.height / 2), cardBottom - (imageSize.height / 2));
-                    const constrainedCx = Math.min(maxCx, Math.max(minCx, center.x));
-                    const constrainedCy = Math.min(maxCy, Math.max(minCy, center.y));
-                    if (Math.abs(constrainedCx - center.x) > 0.001 || Math.abs(constrainedCy - center.y) > 0.001) {
-                        if (setJsonObjectCenterInParentPlane(node, constrainedCx, constrainedCy, { scaleX: nextScaleX, scaleY: nextScaleY })) {
-                            changed = true;
-                        } else {
-                            needsPostLoadRepair = true;
-                        }
-                    }
-                } else {
-                    needsPostLoadRepair = true;
-                }
-            }
-
-            if (changed) {
-                node.scaleX = nextScaleX;
-                node.scaleY = nextScaleY;
-                node.flipX = false;
-                node.flipY = false;
-                node.lockScalingFlip = true;
-                node.lockSkewingX = true;
-                node.lockSkewingY = true;
-                imagesRepaired += 1;
-            }
-        });
-    });
-
-    return { cardsScanned, imagesScanned, imagesRepaired, needsPostLoadRepair };
-};
+// normalizeLegacyProductCardImageTransformsInCanvasData extraido para
+// utils/canvasJsonClassifiers.ts.
 
 // mapLimit extraido para utils/asyncHelpers.ts.
 
