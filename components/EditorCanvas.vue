@@ -116,6 +116,12 @@ import {
     uniqueImageSearchHints
 } from '~/utils/productTextNormalize'
 import {
+    getPasteHttpStatus,
+    getPasteRetryAfterMs,
+    isPasteRateLimitError,
+    isTransientPasteError
+} from '~/utils/pasteListErrorHelpers'
+import {
     isObjectShownForBounds,
     getObjectHorizontalBoundsLocal,
     measureHorizontalBoundsLocal,
@@ -25567,53 +25573,7 @@ const handleImportProductList = () => {
 // normalizeImageSearchText, normalizeImageSearchKey, dedupeImageSearchTokens
 // e uniqueImageSearchHints extraidos para utils/productTextNormalize.ts.
 
-// Paste List Handlers — shared helpers
-const getPasteHttpStatus = (err: any): number => {
-    const status = Number(
-        err?.statusCode ??
-        err?.status ??
-        err?.response?.status ??
-        err?.data?.statusCode
-    );
-    return Number.isFinite(status) ? status : 0;
-};
-const getPasteRetryAfterMs = (err: any): number => {
-    const headers = err?.response?.headers;
-    let raw: any = undefined;
-    try {
-        if (headers && typeof headers.get === 'function') {
-            raw = headers.get('Retry-After') ?? headers.get('retry-after');
-        } else if (headers && typeof headers === 'object') {
-            raw = (headers as any)['retry-after'] ?? (headers as any)['Retry-After'];
-        }
-    } catch {
-        raw = undefined;
-    }
-    const seconds = Number(String(raw ?? '').trim());
-    if (!Number.isFinite(seconds) || seconds <= 0) return 0;
-    return Math.max(500, Math.round(seconds * 1000));
-};
-const isPasteRateLimitError = (err: any): boolean => getPasteHttpStatus(err) === 429;
-const isTransientPasteError = (err: any): boolean => {
-    const status = getPasteHttpStatus(err);
-    if (status === 0) {
-        const msg = String(
-            err?.message ||
-            err?.statusMessage ||
-            err?.data?.message ||
-            err?.cause?.message ||
-            ''
-        ).toLowerCase();
-        return (
-            msg.includes('failed to fetch') ||
-            msg.includes('network changed') ||
-            msg.includes('networkerror') ||
-            msg.includes('<no response>') ||
-            msg.includes('load failed')
-        );
-    }
-    return status === 502 || status === 503 || status === 504;
-};
+// Paste List Handlers — shared helpers extraidos para utils/pasteListErrorHelpers.ts.
 
 const openReviewModalWithProducts = (productsWithImages: any[]) => {
     reviewProducts.value = productsWithImages;
