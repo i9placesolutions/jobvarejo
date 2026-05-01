@@ -129,7 +129,9 @@ import { reviveRedBurstObjectNode, sanitizeRedBurstTemplateGroupJson } from '~/u
 import {
     extractWeightTokenForHeader,
     normalizeHeaderWeightToken,
-    inferHeaderPartsFromProduct
+    inferHeaderPartsFromProduct,
+    inferUnitFromCard as inferUnitFromCardHelper,
+    inferHeaderPartsForPriceTemplate as inferHeaderPartsForPriceTemplateHelper
 } from '~/utils/priceTagHeaderHelpers'
 import {
     SCROLLBAR_IGNORED_IDS,
@@ -32914,70 +32916,19 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
 // extractWeightTokenForHeader, normalizeHeaderWeightToken e
 // inferHeaderPartsFromProduct extraidos para utils/priceTagHeaderHelpers.ts.
 
-function inferUnitFromCard(card: any): string | undefined {
-    if (!card) return '';
-    // Prefer explicit metadata (new cards store it on the group).
-    const meta = (card as any).unitLabel ?? (card as any).unit ?? (card as any).packUnit ?? '';
-    if (String(meta || '').trim().length) return normalizeUnitForLabel(meta);
+// inferUnitFromCard extraido para utils/priceTagHeaderHelpers.ts.
+// Wrapper local injeta getCardTitleText para encontrar o title node.
+const inferUnitFromCard = (card: any): string | undefined =>
+    inferUnitFromCardHelper(card, getCardTitleText)
 
-    // Fallback: if the title mentions KG anywhere, treat as KG (gramatura stays in the name).
-    if (typeof card.getObjects === 'function') {
-        const title = card.getObjects().find((o: any) => o?.name === 'smart_title' || o?.name === 'title');
-        const text = String(title?.text || '');
-        if (/\bkg\b/i.test(text)) return 'KG';
-    }
-    return '';
-}
-
-function inferHeaderPartsForPriceTemplate(
+// inferHeaderPartsForPriceTemplate extraido para utils/priceTagHeaderHelpers.ts.
+// Wrapper local injeta getCardTitleText.
+const inferHeaderPartsForPriceTemplate = (
     card: any,
     fallback?: string,
     opts: { preferFullNameWithWeight?: boolean; splitUnitIntoDedicatedField?: boolean } = {}
-): { title: string; unit: string } {
-    const fallbackText = String(fallback || 'OFERTA').trim() || 'OFERTA';
-    const productData = (card as any)?._productData || {};
-    const titleObj = getCardTitleText(card);
-    const rawFromCard = String(titleObj?.text || '').replace(/\s+/g, ' ').trim();
-    const titleRaw = String(productData?.name || rawFromCard).replace(/\s+/g, ' ').trim();
-
-    const inferredUnit = inferUnitFromCard(card);
-    const unit = inferredUnit === 'KG' ? 'KG' : (inferredUnit === 'UN' ? 'UN' : '');
-    const splitUnitIntoDedicatedField = opts.splitUnitIntoDedicatedField !== false;
-    const weightToken = extractWeightTokenForHeader({
-        name: productData?.name || titleRaw,
-        weight: productData?.weight || ''
-    });
-
-    let title = titleRaw ? titleRaw.toUpperCase() : fallbackText.toUpperCase();
-    title = title
-        .replace(/\bR\$\s*[\d\.,]+\b/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    if (opts.preferFullNameWithWeight && weightToken && !normalizeHeaderWeightToken(title).includes(normalizeHeaderWeightToken(weightToken))) {
-        title = `${title} ${weightToken}`.replace(/\s+/g, ' ').trim();
-    }
-    if (opts.preferFullNameWithWeight && !weightToken && unit === 'KG' && !/\bKG\b/i.test(title)) {
-        title = `${title} KG`.replace(/\s+/g, ' ').trim();
-    }
-    if (splitUnitIntoDedicatedField) {
-        title = title.replace(/\b(KG|UN)\b$/i, '').trim();
-    }
-
-    if (!title) title = fallbackText.toUpperCase();
-    const maxLen = opts.preferFullNameWithWeight ? 36 : 22;
-    if (title.length > maxLen) {
-        if (opts.preferFullNameWithWeight && weightToken && maxLen > weightToken.length + 6) {
-            const prefixMax = maxLen - (weightToken.length + 1);
-            const withoutWeight = title.replace(weightToken, '').replace(/\s+/g, ' ').trim();
-            title = `${withoutWeight.slice(0, prefixMax).trim()} ${weightToken}`.trim();
-        } else {
-            title = `${title.slice(0, maxLen).trim()}...`;
-        }
-    }
-
-    return { title, unit: splitUnitIntoDedicatedField ? unit : '' };
-}
+): { title: string; unit: string } =>
+    inferHeaderPartsForPriceTemplateHelper(card, getCardTitleText, fallback, opts)
 
 async function renderLabelTemplatePreview(tpl: LabelTemplate): Promise<string | undefined> {
     if (!fabric) return undefined;

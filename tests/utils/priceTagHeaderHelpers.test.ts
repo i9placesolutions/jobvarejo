@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   extractWeightTokenForHeader,
   normalizeHeaderWeightToken,
-  inferHeaderPartsFromProduct
+  inferHeaderPartsFromProduct,
+  inferUnitFromCard,
+  inferHeaderPartsForPriceTemplate
 } from '~/utils/priceTagHeaderHelpers'
 
 describe('extractWeightTokenForHeader', () => {
@@ -168,5 +170,87 @@ describe('inferHeaderPartsFromProduct', () => {
   it('unit retornado como "" se nao detectado', () => {
     const result = inferHeaderPartsFromProduct({ name: 'BANANA' })
     expect(result.unit).toBe('')
+  })
+})
+
+describe('inferUnitFromCard', () => {
+  it('null/undefined: vazio', () => {
+    expect(inferUnitFromCard(null, () => null)).toBe('')
+    expect(inferUnitFromCard(undefined, () => null)).toBe('')
+  })
+
+  it('respeita unitLabel explicito', () => {
+    const card = { unitLabel: 'KG' }
+    expect(inferUnitFromCard(card, () => null)).toBe('KG')
+  })
+
+  it('respeita unit explicito', () => {
+    const card = { unit: 'UN' }
+    expect(inferUnitFromCard(card, () => null)).toBe('UN')
+  })
+
+  it('respeita packUnit explicito', () => {
+    const card = { packUnit: 'KG' }
+    expect(inferUnitFromCard(card, () => null)).toBe('KG')
+  })
+
+  it('fallback: title com KG -> KG', () => {
+    const card = {}
+    const findTitle = () => ({ text: 'ARROZ KG' })
+    expect(inferUnitFromCard(card, findTitle)).toBe('KG')
+  })
+
+  it('fallback: title sem KG -> ""', () => {
+    const card = {}
+    const findTitle = () => ({ text: 'BANANA' })
+    expect(inferUnitFromCard(card, findTitle)).toBe('')
+  })
+
+  it('priority: explicit > title scan', () => {
+    const card = { unit: 'UN' }
+    const findTitle = () => ({ text: 'ALGO KG' })
+    // unit=UN deve vencer title KG scan
+    expect(inferUnitFromCard(card, findTitle)).toBe('UN')
+  })
+
+  it('whitespace-only meta: cai para title scan', () => {
+    const card = { unitLabel: '   ' }
+    const findTitle = () => ({ text: 'ARROZ KG' })
+    expect(inferUnitFromCard(card, findTitle)).toBe('KG')
+  })
+})
+
+describe('inferHeaderPartsForPriceTemplate', () => {
+  const findTitle = (c: any) => c?._title
+
+  it('produto basico via _productData', () => {
+    const card = { _productData: { name: 'arroz tipo 1' } }
+    const result = inferHeaderPartsForPriceTemplate(card, findTitle)
+    expect(result.title).toBe('ARROZ TIPO 1')
+  })
+
+  it('fallback: usa text do title quando productData ausente', () => {
+    const card = { _title: { text: 'PROMO' } }
+    const result = inferHeaderPartsForPriceTemplate(card, findTitle)
+    expect(result.title).toBe('PROMO')
+  })
+
+  it('card vazio: usa fallback', () => {
+    const result = inferHeaderPartsForPriceTemplate({}, findTitle, 'COMBO')
+    expect(result.title).toBe('COMBO')
+  })
+
+  it('maxLen 22 (mais conservador que produto)', () => {
+    const longName = 'PRODUTO LONGO COM VARIOS CARACTERES NO NOME'
+    const card = { _productData: { name: longName } }
+    const result = inferHeaderPartsForPriceTemplate(card, findTitle)
+    expect(result.title.length).toBeLessThanOrEqual(22 + 3)
+  })
+
+  it('preferFullNameWithWeight: maxLen 36', () => {
+    const longName = 'PRODUTO LONGO COM NOME GRANDE TAMANHO'
+    const card = { _productData: { name: longName, weight: '1KG' } }
+    const result = inferHeaderPartsForPriceTemplate(card, findTitle, 'OFERTA', { preferFullNameWithWeight: true })
+    expect(result.title.length).toBeLessThanOrEqual(36 + 3)
   })
 })
