@@ -11,7 +11,10 @@ import {
   getCardSizeForPriceGroup,
   hasCorruptedPriceLayout,
   getPriceGroupFromAny,
-  getCardGroupFromAny
+  getCardGroupFromAny,
+  getSinglePriceBackgroundCandidate,
+  getSinglePriceBackgroundImageCandidate,
+  getSinglePriceCurrencyTextCandidate
 } from '~/utils/priceLayoutClassifiers'
 
 describe('PRICE_LAYOUT_NODE_EXACT / PREFIXES', () => {
@@ -506,5 +509,103 @@ describe('getCardGroupFromAny', () => {
     const middle = { type: 'group', group: card }
     const leaf = { type: 'rect', group: middle }
     expect(getCardGroupFromAny(leaf)).toBe(card)
+  })
+})
+
+describe('getSinglePriceBackgroundCandidate', () => {
+  it('lista vazia: null', () => {
+    expect(getSinglePriceBackgroundCandidate([])).toBe(null)
+  })
+
+  it('por nome: price_bg vence', () => {
+    const objs = [{ name: 'price_bg', type: 'rect' }, { name: 'splash_image', type: 'image' }]
+    expect(getSinglePriceBackgroundCandidate(objs)).toBe(objs[0])
+  })
+
+  it('por nome: price_bg_image como fallback', () => {
+    const objs = [{ name: 'price_bg_image', type: 'image' }]
+    expect(getSinglePriceBackgroundCandidate(objs)).toBe(objs[0])
+  })
+
+  it('por nome: splash_image como ultimo fallback', () => {
+    const objs = [{ name: 'splash_image', type: 'image' }]
+    expect(getSinglePriceBackgroundCandidate(objs)).toBe(objs[0])
+  })
+
+  it('fallback por area: maior image vence', () => {
+    const small = { type: 'image', width: 50, height: 50 }
+    const big = { type: 'image', width: 200, height: 200 }
+    expect(getSinglePriceBackgroundCandidate([small, big])).toBe(big)
+  })
+
+  it('rejeita price_currency_bg / priceSymbolBg', () => {
+    const objs = [{ name: 'price_currency_bg', type: 'rect' }]
+    expect(getSinglePriceBackgroundCandidate(objs)).toBe(null)
+  })
+
+  it('rejeita price_header_bg', () => {
+    const objs = [{ name: 'price_header_bg', type: 'rect' }]
+    expect(getSinglePriceBackgroundCandidate(objs)).toBe(null)
+  })
+
+  it('rejeita prefixos atac_/retail_/wholesale_', () => {
+    expect(getSinglePriceBackgroundCandidate([{ name: 'atac_retail_bg', type: 'rect' }])).toBe(null)
+    expect(getSinglePriceBackgroundCandidate([{ name: 'retail_bg', type: 'rect' }])).toBe(null)
+    expect(getSinglePriceBackgroundCandidate([{ name: 'wholesale_bg', type: 'rect' }])).toBe(null)
+  })
+
+  it('aceita rect sem nome', () => {
+    const r = { type: 'rect', width: 100, height: 100 }
+    expect(getSinglePriceBackgroundCandidate([r])).toBe(r)
+  })
+})
+
+describe('getSinglePriceBackgroundImageCandidate', () => {
+  it('SO aceita type=image (rejeita rect)', () => {
+    const r = { type: 'rect', width: 100, height: 100 }
+    expect(getSinglePriceBackgroundImageCandidate([r])).toBe(null)
+  })
+
+  it('por nome: price_bg_image (so se for type image)', () => {
+    const named = { name: 'price_bg_image', type: 'image' }
+    expect(getSinglePriceBackgroundImageCandidate([named])).toBe(named)
+  })
+
+  it('nome canonico mas type !== image: cai no fallback', () => {
+    const objs: any[] = [
+      { name: 'price_bg_image', type: 'rect' }, // ignorado pelo named (nao e image)
+      { name: 'foo', type: 'image', width: 100, height: 100 }
+    ]
+    expect(getSinglePriceBackgroundImageCandidate(objs)).toBe(objs[1])
+  })
+
+  it('lista vazia: null', () => {
+    expect(getSinglePriceBackgroundImageCandidate([])).toBe(null)
+  })
+})
+
+describe('getSinglePriceCurrencyTextCandidate', () => {
+  it('price_currency_text vence', () => {
+    const objs = [
+      { name: 'price_currency' },
+      { name: 'price_currency_text' },
+      { name: 'priceSymbol' }
+    ]
+    expect(getSinglePriceCurrencyTextCandidate(objs)).toBe(objs[1])
+  })
+
+  it('priceSymbol como fallback', () => {
+    const objs = [{ name: 'priceSymbol' }]
+    expect(getSinglePriceCurrencyTextCandidate(objs)).toBe(objs[0])
+  })
+
+  it('price_currency como ultimo fallback', () => {
+    const objs = [{ name: 'price_currency' }]
+    expect(getSinglePriceCurrencyTextCandidate(objs)).toBe(objs[0])
+  })
+
+  it('lista sem candidatos: undefined (findByName returns undefined)', () => {
+    // findByName retorna undefined quando nao acha; chained || passa undefined
+    expect(getSinglePriceCurrencyTextCandidate([{ name: 'foo' }])).toBeUndefined()
   })
 })

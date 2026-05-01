@@ -10,7 +10,7 @@
  * Cobertura: tests/utils/priceLayoutClassifiers.test.ts
  */
 
-import { collectObjectsDeep } from './fabricObjectClassifiers'
+import { collectObjectsDeep, findByName } from './fabricObjectClassifiers'
 
 /**
  * Prefixos de nome que identificam um nodo de price layout. Cada
@@ -309,3 +309,86 @@ export const getCardGroupFromAny = (obj: any): any | null => {
     }
     return null
 }
+
+/**
+ * Encontra o candidato a "background" de um single-price layout entre
+ * `objects`. Estrategia:
+ *  1. Por nome canonico: `price_bg`, `price_bg_image`, `splash_image`
+ *  2. Fallback: maior `image` ou `rect` por area (excluindo currency_bg,
+ *     header_bg e nodes com prefixo atac_/retail_/wholesale_)
+ *
+ * Retorna o objeto Fabric encontrado ou null.
+ */
+export const getSinglePriceBackgroundCandidate = (objects: any[]): any | null => {
+    const named =
+        findByName(objects, 'price_bg') ||
+        findByName(objects, 'price_bg_image') ||
+        findByName(objects, 'splash_image')
+    if (named) return named
+
+    const candidates = (objects || []).filter((obj: any) => {
+        if (!obj || typeof obj !== 'object') return false
+        const type = String(obj?.type || '').toLowerCase()
+        if (type !== 'image' && type !== 'rect') return false
+        const name = String(obj?.name || '')
+        if (name === 'price_currency_bg' || name === 'priceSymbolBg') return false
+        if (name === 'price_header_bg') return false
+        if (name.startsWith('atac_') || name.startsWith('retail_') || name.startsWith('wholesale_')) return false
+        return true
+    })
+    if (!candidates.length) return null
+
+    const getArea = (obj: any) => {
+        const width = Number(obj?.width || 0)
+        const height = Number(obj?.height || 0)
+        const scaleX = Math.abs(Number(obj?.scaleX ?? (String(obj?.type || '').toLowerCase() === 'image' ? 1 : 0))) || 1
+        const scaleY = Math.abs(Number(obj?.scaleY ?? (String(obj?.type || '').toLowerCase() === 'image' ? 1 : 0))) || 1
+        const effectiveArea = width * height * scaleX * scaleY
+        if (Number.isFinite(effectiveArea) && effectiveArea > 0) return effectiveArea
+        return Math.max(1, width) * Math.max(1, height)
+    }
+
+    return candidates.sort((a: any, b: any) => getArea(b) - getArea(a))[0] || null
+}
+
+/**
+ * Versao restritiva de `getSinglePriceBackgroundCandidate` — aceita
+ * SOMENTE imagens (nao rect). Usado quando o layout exige fundo
+ * raster (e.g. splash_image stripped detection).
+ */
+export const getSinglePriceBackgroundImageCandidate = (objects: any[]): any | null => {
+    const named =
+        findByName(objects, 'price_bg_image') ||
+        findByName(objects, 'splash_image')
+    if (named && String(named?.type || '').toLowerCase() === 'image') return named
+
+    const candidates = (objects || []).filter((obj: any) => {
+        if (!obj || typeof obj !== 'object') return false
+        if (String(obj?.type || '').toLowerCase() !== 'image') return false
+        const name = String(obj?.name || '')
+        if (name === 'price_currency_bg' || name === 'priceSymbolBg') return false
+        if (name === 'price_header_bg') return false
+        if (name.startsWith('atac_') || name.startsWith('retail_') || name.startsWith('wholesale_')) return false
+        return true
+    })
+
+    const getArea = (obj: any) => {
+        const width = Number(obj?.width || 0)
+        const height = Number(obj?.height || 0)
+        const scaleX = Math.abs(Number(obj?.scaleX ?? 1)) || 1
+        const scaleY = Math.abs(Number(obj?.scaleY ?? 1)) || 1
+        return Math.max(1, width) * Math.max(1, height) * scaleX * scaleY
+    }
+
+    return candidates.sort((a: any, b: any) => getArea(b) - getArea(a))[0] || null
+}
+
+/**
+ * Encontra o text node do simbolo de moeda (R$) em single-price layout.
+ * Ordem de preferencia:
+ *   `price_currency_text` → `priceSymbol` → `price_currency`
+ */
+export const getSinglePriceCurrencyTextCandidate = (objects: any[]): any | null =>
+    findByName(objects, 'price_currency_text') ||
+    findByName(objects, 'priceSymbol') ||
+    findByName(objects, 'price_currency')
