@@ -64,6 +64,7 @@ import {
 } from '~/utils/exportSelectionHelpers'
 import { normalizeClipboardPoint } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
+import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
 import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import {
@@ -4411,44 +4412,8 @@ const setupAltDragDuplicate = () => {
     });
 };
 
-type ArrangeMode = 'bring-to-front' | 'bring-forward' | 'send-backward' | 'send-to-back';
-
-const computeArrangedOrder = (list: any[], selected: Set<any>, mode: ArrangeMode) => {
-    const arr = list.slice();
-    if (arr.length < 2) return arr;
-
-    if (mode === 'bring-to-front') {
-        const nonSel = arr.filter(o => !selected.has(o));
-        const sel = arr.filter(o => selected.has(o));
-        return [...nonSel, ...sel];
-    }
-    if (mode === 'send-to-back') {
-        const nonSel = arr.filter(o => !selected.has(o));
-        const sel = arr.filter(o => selected.has(o));
-        return [...sel, ...nonSel];
-    }
-    if (mode === 'bring-forward') {
-        const out = arr.slice();
-        for (let i = out.length - 2; i >= 0; i--) {
-            if (selected.has(out[i]) && !selected.has(out[i + 1])) {
-                const tmp = out[i];
-                out[i] = out[i + 1];
-                out[i + 1] = tmp;
-            }
-        }
-        return out;
-    }
-    // send-backward
-    const out = arr.slice();
-    for (let i = 1; i < out.length; i++) {
-        if (selected.has(out[i]) && !selected.has(out[i - 1])) {
-            const tmp = out[i];
-            out[i] = out[i - 1];
-            out[i - 1] = tmp;
-        }
-    }
-    return out;
-};
+// type ArrangeMode + computeArrangedOrder extraidos para utils/arrangeOrder.ts.
+type ArrangeMode = import('~/utils/arrangeOrder').ArrangeMode;
 
 const applyArrangedOrder = (container: any, newOrder: any[]) => {
     if (!container || !Array.isArray(newOrder)) return;
