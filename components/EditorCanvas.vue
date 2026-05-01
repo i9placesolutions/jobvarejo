@@ -176,7 +176,8 @@ import {
     removeImageObjectsDeep,
     getPreferredProductImageFromCardJson,
     countCanvasJsonObjectsAndImages,
-    buildPreparedCanvasDataCacheKey
+    buildPreparedCanvasDataCacheKey,
+    getLegacyProductCardImageRepairMode as getLegacyProductCardImageRepairModeHelper
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
@@ -5817,13 +5818,12 @@ const schedulePreparedCanvasDataPrewarm = (activePageId?: string | null) => {
     scheduleIdleWork(pump, 1400)
 }
 
+// Wrapper local: extrai stats do cache entry e delega para helper puro
+// em utils/canvasJsonClassifiers.ts.
 const getLegacyProductCardImageRepairMode = (
     entry: PreparedCanvasLoadCacheEntry | null | undefined
-): 'auto' | 'force' | 'skip' => {
-    const stats = entry?.legacyProductCardImageRepair
-    if (!stats) return 'auto'
-    return stats.needsPostLoadRepair ? 'force' : 'skip'
-}
+): 'auto' | 'force' | 'skip' =>
+    getLegacyProductCardImageRepairModeHelper(entry?.legacyProductCardImageRepair)
 
 const syncPreparedCanvasStateToPage = (
     page: any,

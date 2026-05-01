@@ -544,6 +544,37 @@ export const normalizePreparedCanvasLoadCacheKey = (value?: string | null): stri
     String(value || '').trim()
 
 /**
+ * Estatisticas de "reparo de imagens em cards de produto legacy" geradas
+ * durante prepareCanvasDataForLoad. Carregadas no cache de prepared data.
+ */
+export type LegacyProductCardImageRepairStats = {
+    cardsScanned: number
+    imagesScanned: number
+    imagesRepaired: number
+    needsPostLoadRepair: boolean
+}
+
+/**
+ * Tipo de "modo de reparo" decidido apos analise das stats:
+ *  - 'auto': sem dados de reparo (sera decidido em runtime)
+ *  - 'force': stats indicam que precisa rodar reparo apos load
+ *  - 'skip': reparo ja foi feito (no-op em runtime)
+ */
+export type LegacyRepairMode = 'auto' | 'force' | 'skip'
+
+/**
+ * Decide o modo de reparo a partir das estatisticas guardadas no cache
+ * de prepared canvas data. Retorna 'auto' quando nao ha dados (pre-warm
+ * incompleto).
+ */
+export const getLegacyProductCardImageRepairMode = (
+    stats: LegacyProductCardImageRepairStats | null | undefined
+): LegacyRepairMode => {
+    if (!stats) return 'auto'
+    return stats.needsPostLoadRepair ? 'force' : 'skip'
+}
+
+/**
  * Constroi a chave de cache para o canvasData preparado de uma pagina.
  *
  * Prioridade:

@@ -29,7 +29,8 @@ import {
   removeImageObjectsDeep,
   getPreferredProductImageFromCardJson,
   countCanvasJsonObjectsAndImages,
-  buildPreparedCanvasDataCacheKey
+  buildPreparedCanvasDataCacheKey,
+  getLegacyProductCardImageRepairMode
 } from '~/utils/canvasJsonClassifiers'
 
 // Mocks JSON-style: nodos com `objects` em vez de getObjects().
@@ -1139,5 +1140,39 @@ describe('buildPreparedCanvasDataCacheKey', () => {
     const page = { id: 'p1' }
     expect(buildPreparedCanvasDataCacheKey(page, 'proj-1'))
       .toBe(buildPreparedCanvasDataCacheKey(page, 'proj-1'))
+  })
+})
+
+describe('getLegacyProductCardImageRepairMode', () => {
+  it('null/undefined retornam "auto" (sem dados)', () => {
+    expect(getLegacyProductCardImageRepairMode(null)).toBe('auto')
+    expect(getLegacyProductCardImageRepairMode(undefined)).toBe('auto')
+  })
+
+  it('needsPostLoadRepair=true → force', () => {
+    expect(getLegacyProductCardImageRepairMode({
+      cardsScanned: 5,
+      imagesScanned: 5,
+      imagesRepaired: 2,
+      needsPostLoadRepair: true
+    })).toBe('force')
+  })
+
+  it('needsPostLoadRepair=false → skip', () => {
+    expect(getLegacyProductCardImageRepairMode({
+      cardsScanned: 5,
+      imagesScanned: 5,
+      imagesRepaired: 0,
+      needsPostLoadRepair: false
+    })).toBe('skip')
+  })
+
+  it('stats minimo: 0 cards/0 imagens com needsPostLoadRepair=false → skip', () => {
+    expect(getLegacyProductCardImageRepairMode({
+      cardsScanned: 0,
+      imagesScanned: 0,
+      imagesRepaired: 0,
+      needsPostLoadRepair: false
+    })).toBe('skip')
   })
 })
