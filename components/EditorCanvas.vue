@@ -270,7 +270,8 @@ import {
     getCardGroupFromAny,
     getSinglePriceBackgroundCandidate,
     getSinglePriceBackgroundImageCandidate,
-    getSinglePriceCurrencyTextCandidate
+    getSinglePriceCurrencyTextCandidate,
+    isLikelyPriceGroupObject as isLikelyPriceGroupObjectHelper
 } from '~/utils/priceLayoutClassifiers'
 import {
     isObjectShownForBounds,
@@ -30828,15 +30829,10 @@ const priceGroupAtacarejoProbeCache = new WeakMap<any, { childCount: number; has
 // isCardContainerLikeGroup e isMisnamedProductCardGroup extraidos para
 // utils/priceLayoutClassifiers.ts.
 
-const isLikelyPriceGroupObject = (group: any) => {
-    if (!group || String(group?.type || '').toLowerCase() !== 'group') return false;
-    if (isMisnamedProductCardGroup(group)) return false;
-    if (String(group?.name || '') === 'priceGroup') return true;
-    if (isCardContainerLikeGroup(group)) return false;
-    if (shouldPreserveManualTemplateVisual(group)) return true;
-    if (typeof group.getObjects !== 'function') return false;
-    return (group.getObjects() || []).some((child: any) => isPriceLayoutNode(child));
-};
+// isLikelyPriceGroupObject extraido para utils/priceLayoutClassifiers.ts.
+// Wrapper local injeta shouldPreserveManualTemplateVisual.
+const isLikelyPriceGroupObject = (group: any): boolean =>
+    isLikelyPriceGroupObjectHelper(group, shouldPreserveManualTemplateVisual)
 
 // makePriceLayoutKeyBuilder extraido para utils/priceLayoutClassifiers.ts.
 

@@ -392,3 +392,29 @@ export const getSinglePriceCurrencyTextCandidate = (objects: any[]): any | null 
     findByName(objects, 'price_currency_text') ||
     findByName(objects, 'priceSymbol') ||
     findByName(objects, 'price_currency')
+
+/**
+ * Detecta se um group "parece" ser um priceGroup. Combina checagens:
+ *  1. Tipo deve ser group → caso contrario, false
+ *  2. NAO pode ser misnamed product card group
+ *  3. Se o nome e' exatamente 'priceGroup': true
+ *  4. NAO pode ser um card container
+ *  5. Se passa `shouldPreserveManualTemplateVisualCheck` (manual layout): true
+ *  6. Tem getObjects + algum filho e' priceLayoutNode: true
+ *  7. Caso contrario: false
+ *
+ * `shouldPreserveManualTemplateVisualCheck` injetado para evitar
+ * dependencia direta de `templateSnapshotHelpers`.
+ */
+export const isLikelyPriceGroupObject = (
+    group: any,
+    shouldPreserveManualTemplateVisualCheck: (g: any) => boolean
+): boolean => {
+    if (!group || String(group?.type || '').toLowerCase() !== 'group') return false
+    if (isMisnamedProductCardGroup(group)) return false
+    if (String(group?.name || '') === 'priceGroup') return true
+    if (isCardContainerLikeGroup(group)) return false
+    if (shouldPreserveManualTemplateVisualCheck(group)) return true
+    if (typeof group.getObjects !== 'function') return false
+    return (group.getObjects() || []).some((child: any) => isPriceLayoutNode(child))
+}

@@ -14,8 +14,59 @@ import {
   getCardGroupFromAny,
   getSinglePriceBackgroundCandidate,
   getSinglePriceBackgroundImageCandidate,
-  getSinglePriceCurrencyTextCandidate
+  getSinglePriceCurrencyTextCandidate,
+  isLikelyPriceGroupObject
 } from '~/utils/priceLayoutClassifiers'
+
+describe('isLikelyPriceGroupObject', () => {
+  const noPreserve = () => false
+
+  it('non-group: false', () => {
+    expect(isLikelyPriceGroupObject({ type: 'rect' }, noPreserve)).toBe(false)
+    expect(isLikelyPriceGroupObject(null, noPreserve)).toBe(false)
+  })
+
+  it('name=priceGroup mas nao misnamed: true', () => {
+    const g = { type: 'group', name: 'priceGroup', getObjects: () => [] }
+    expect(isLikelyPriceGroupObject(g, noPreserve)).toBe(true)
+  })
+
+  it('name=priceGroup mas misnamed (parece card): false', () => {
+    const g = {
+      type: 'group',
+      name: 'priceGroup',
+      isSmartObject: true,
+      getObjects: () => []
+    }
+    expect(isLikelyPriceGroupObject(g, noPreserve)).toBe(false)
+  })
+
+  it('card container (isProductCard): false', () => {
+    const g = { type: 'group', isProductCard: true, getObjects: () => [] }
+    expect(isLikelyPriceGroupObject(g, noPreserve)).toBe(false)
+  })
+
+  it('manual layout preservado: true', () => {
+    const g = { type: 'group', getObjects: () => [] }
+    expect(isLikelyPriceGroupObject(g, () => true)).toBe(true)
+  })
+
+  it('group sem name mas com priceLayoutNode child: true', () => {
+    const g = {
+      type: 'group',
+      getObjects: () => [{ name: 'priceInteger' }]
+    }
+    expect(isLikelyPriceGroupObject(g, noPreserve)).toBe(true)
+  })
+
+  it('group sem name e sem priceLayoutNode child: false', () => {
+    const g = {
+      type: 'group',
+      getObjects: () => [{ name: 'random' }]
+    }
+    expect(isLikelyPriceGroupObject(g, noPreserve)).toBe(false)
+  })
+})
 
 describe('PRICE_LAYOUT_NODE_EXACT / PREFIXES', () => {
   it('exact set contem nomes canonicos', () => {
