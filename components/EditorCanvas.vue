@@ -72,6 +72,7 @@ import {
     VIEWPORT_CULL_PADDING
 } from '~/utils/viewportCulling'
 import { getEditorPerfNow, roundEditorPerf } from '~/utils/perfHelpers'
+import { parseViewSettings, serializeViewSettings } from '~/utils/viewSettings'
 import {
     getCanvasObjectsRefreshIntervalMs,
     getFrameLabelUpdateIntervalMs as getFrameLabelUpdateIntervalMsHelper,
@@ -7356,29 +7357,26 @@ const gridSize = ref(20)
 const VIEW_SETTINGS_KEY = 'editor:viewSettings:v1'
 let viewSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
 
+// Wrappers locais que aplicam parse/serialize do helper puro
+// (utils/viewSettings.ts) na storage e refs reativas.
 const loadViewSettings = () => {
     if (!import.meta.client) return
     try {
-        const raw = localStorage.getItem(VIEW_SETTINGS_KEY)
-        if (!raw) return
-        const data = JSON.parse(raw || '{}') || {}
-        if (typeof data.viewShowGrid === 'boolean') viewShowGrid.value = data.viewShowGrid
-        if (typeof data.viewShowRulers === 'boolean') viewShowRulers.value = data.viewShowRulers
-        if (typeof data.viewShowGuides === 'boolean') viewShowGuides.value = data.viewShowGuides
-        if (typeof data.snapToObjects === 'boolean') snapToObjects.value = data.snapToObjects
-        if (typeof data.snapToGuides === 'boolean') snapToGuides.value = data.snapToGuides
-        if (typeof data.snapToGrid === 'boolean') snapToGrid.value = data.snapToGrid
-        const gs = Number(data.gridSize)
-        if (Number.isFinite(gs) && gs > 0) gridSize.value = Math.round(gs)
-    } catch {
-        // ignore
-    }
+        const parsed = parseViewSettings(localStorage.getItem(VIEW_SETTINGS_KEY))
+        if (parsed.viewShowGrid !== undefined) viewShowGrid.value = parsed.viewShowGrid
+        if (parsed.viewShowRulers !== undefined) viewShowRulers.value = parsed.viewShowRulers
+        if (parsed.viewShowGuides !== undefined) viewShowGuides.value = parsed.viewShowGuides
+        if (parsed.snapToObjects !== undefined) snapToObjects.value = parsed.snapToObjects
+        if (parsed.snapToGuides !== undefined) snapToGuides.value = parsed.snapToGuides
+        if (parsed.snapToGrid !== undefined) snapToGrid.value = parsed.snapToGrid
+        if (parsed.gridSize !== undefined) gridSize.value = parsed.gridSize
+    } catch { /* ignore */ }
 }
 
 const persistViewSettings = () => {
     if (!import.meta.client) return
     try {
-        const data = {
+        localStorage.setItem(VIEW_SETTINGS_KEY, serializeViewSettings({
             viewShowGrid: viewShowGrid.value,
             viewShowRulers: viewShowRulers.value,
             viewShowGuides: viewShowGuides.value,
@@ -7386,11 +7384,8 @@ const persistViewSettings = () => {
             snapToGuides: snapToGuides.value,
             snapToGrid: snapToGrid.value,
             gridSize: gridSize.value
-        }
-        localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify(data))
-    } catch {
-        // ignore
-    }
+        }))
+    } catch { /* ignore */ }
 }
 
 const toggleGrid = () => {
