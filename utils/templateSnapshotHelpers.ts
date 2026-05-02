@@ -109,3 +109,54 @@ export const shouldPreserveManualTemplateVisual = (
     ))
     return hasTemplateMetrics
 }
+
+/**
+ * Restaura flags `__preserveManualLayout` / `__isCustomTemplate` /
+ * `__manualTemplateBaseW/H` em um priceGroup quando faltarem.
+ *
+ * Roda APENAS se `shouldPreserveCheck` retorna true (ja e' manual).
+ * Calcula baseW/baseH a partir de width*scaleX (raw) ou getScaledWidth/scaleX
+ * como fallback.
+ *
+ * Mutates o priceGroup. Retorna `true` se algo foi alterado.
+ */
+export const restoreMissingManualTemplateFlags = (
+    priceGroup: any,
+    shouldPreserveCheck: (g: any) => boolean
+): boolean => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false
+    if (!shouldPreserveCheck(priceGroup)) return false
+
+    let changed = false
+    if ((priceGroup as any).__preserveManualLayout !== true) {
+        (priceGroup as any).__preserveManualLayout = true
+        changed = true
+    }
+    if ((priceGroup as any).__isCustomTemplate !== true) {
+        (priceGroup as any).__isCustomTemplate = true
+        changed = true
+    }
+
+    const hasBaseW = Number.isFinite(Number((priceGroup as any).__manualTemplateBaseW))
+    const hasBaseH = Number.isFinite(Number((priceGroup as any).__manualTemplateBaseH))
+    if (!hasBaseW || !hasBaseH) {
+        const rawW = Number(priceGroup.width || 0)
+        const rawH = Number(priceGroup.height || 0)
+        const sx = Math.abs(Number(priceGroup.scaleX ?? 1)) || 1
+        const sy = Math.abs(Number(priceGroup.scaleY ?? 1)) || 1
+        const scaledW = Number(priceGroup.getScaledWidth?.() || 0)
+        const scaledH = Number(priceGroup.getScaledHeight?.() || 0)
+        const baseW = rawW > 0 ? rawW : (scaledW > 0 ? (scaledW / sx) : 0)
+        const baseH = rawH > 0 ? rawH : (scaledH > 0 ? (scaledH / sy) : 0)
+        if (!hasBaseW && Number.isFinite(baseW) && baseW > 0) {
+            (priceGroup as any).__manualTemplateBaseW = baseW
+            changed = true
+        }
+        if (!hasBaseH && Number.isFinite(baseH) && baseH > 0) {
+            (priceGroup as any).__manualTemplateBaseH = baseH
+            changed = true
+        }
+    }
+
+    return changed
+}

@@ -228,7 +228,8 @@ import {
     templateSnapshotHasAtacStructure,
     shouldForceCanonicalAtacForTemplateJson,
     shouldUseAtacVariantSnapshotsForTemplate,
-    shouldPreserveManualTemplateVisual as shouldPreserveManualTemplateVisualHelper
+    shouldPreserveManualTemplateVisual as shouldPreserveManualTemplateVisualHelper,
+    restoreMissingManualTemplateFlags as restoreMissingManualTemplateFlagsHelper
 } from '~/utils/templateSnapshotHelpers'
 import {
     getSpecialConditionFromProduct,
@@ -30075,43 +30076,10 @@ function ensureRedBurstPriceGroupVisibility(priceGroup: any): boolean {
 const shouldPreserveManualTemplateVisual = (priceGroup: any): boolean =>
     shouldPreserveManualTemplateVisualHelper(priceGroup, isRedBurstPriceGroup)
 
-const restoreMissingManualTemplateFlags = (priceGroup: any): boolean => {
-    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;
-    if (!shouldPreserveManualTemplateVisual(priceGroup)) return false;
-
-    let changed = false;
-    if ((priceGroup as any).__preserveManualLayout !== true) {
-        (priceGroup as any).__preserveManualLayout = true;
-        changed = true;
-    }
-    if ((priceGroup as any).__isCustomTemplate !== true) {
-        (priceGroup as any).__isCustomTemplate = true;
-        changed = true;
-    }
-
-    const hasBaseW = Number.isFinite(Number((priceGroup as any).__manualTemplateBaseW));
-    const hasBaseH = Number.isFinite(Number((priceGroup as any).__manualTemplateBaseH));
-    if (!hasBaseW || !hasBaseH) {
-        const rawW = Number(priceGroup.width || 0);
-        const rawH = Number(priceGroup.height || 0);
-        const sx = Math.abs(Number(priceGroup.scaleX ?? 1)) || 1;
-        const sy = Math.abs(Number(priceGroup.scaleY ?? 1)) || 1;
-        const scaledW = Number(priceGroup.getScaledWidth?.() || 0);
-        const scaledH = Number(priceGroup.getScaledHeight?.() || 0);
-        const baseW = rawW > 0 ? rawW : (scaledW > 0 ? (scaledW / sx) : 0);
-        const baseH = rawH > 0 ? rawH : (scaledH > 0 ? (scaledH / sy) : 0);
-        if (!hasBaseW && Number.isFinite(baseW) && baseW > 0) {
-            (priceGroup as any).__manualTemplateBaseW = baseW;
-            changed = true;
-        }
-        if (!hasBaseH && Number.isFinite(baseH) && baseH > 0) {
-            (priceGroup as any).__manualTemplateBaseH = baseH;
-            changed = true;
-        }
-    }
-
-    return changed;
-};
+// restoreMissingManualTemplateFlags extraido para utils/templateSnapshotHelpers.ts.
+// Wrapper local injeta shouldPreserveManualTemplateVisual.
+const restoreMissingManualTemplateFlags = (priceGroup: any): boolean =>
+    restoreMissingManualTemplateFlagsHelper(priceGroup, shouldPreserveManualTemplateVisual)
 
 const restoreMissingManualTemplateFlagsInCanvas = (canvasInstance: any, reason: string = 'unknown') => {
     if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return 0;

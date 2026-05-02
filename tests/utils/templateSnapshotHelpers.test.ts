@@ -3,8 +3,91 @@ import {
   templateSnapshotHasAtacStructure,
   shouldForceCanonicalAtacForTemplateJson,
   shouldUseAtacVariantSnapshotsForTemplate,
-  shouldPreserveManualTemplateVisual
+  shouldPreserveManualTemplateVisual,
+  restoreMissingManualTemplateFlags
 } from '~/utils/templateSnapshotHelpers'
+
+describe('restoreMissingManualTemplateFlags', () => {
+  const alwaysPreserve = () => true
+  const neverPreserve = () => false
+
+  it('null/non-group: false', () => {
+    expect(restoreMissingManualTemplateFlags(null, alwaysPreserve)).toBe(false)
+    expect(restoreMissingManualTemplateFlags({}, alwaysPreserve)).toBe(false)
+  })
+
+  it('shouldPreserve=false: false (skip)', () => {
+    const pg: any = { getObjects: () => [] }
+    expect(restoreMissingManualTemplateFlags(pg, neverPreserve)).toBe(false)
+  })
+
+  it('seta __preserveManualLayout/__isCustomTemplate quando ausentes', () => {
+    const pg: any = { getObjects: () => [], width: 200, height: 100, scaleX: 1, scaleY: 1 }
+    const result = restoreMissingManualTemplateFlags(pg, alwaysPreserve)
+    expect(result).toBe(true)
+    expect(pg.__preserveManualLayout).toBe(true)
+    expect(pg.__isCustomTemplate).toBe(true)
+  })
+
+  it('preserva flags ja definidas como true', () => {
+    const pg: any = {
+      getObjects: () => [],
+      width: 200,
+      height: 100,
+      scaleX: 1,
+      scaleY: 1,
+      __preserveManualLayout: true,
+      __isCustomTemplate: true,
+      __manualTemplateBaseW: 200,
+      __manualTemplateBaseH: 100
+    }
+    const result = restoreMissingManualTemplateFlags(pg, alwaysPreserve)
+    expect(result).toBe(false) // nada para mudar
+  })
+
+  it('grava __manualTemplateBaseW/H usando width/height raw', () => {
+    const pg: any = {
+      getObjects: () => [],
+      width: 250,
+      height: 80,
+      scaleX: 1,
+      scaleY: 1
+    }
+    restoreMissingManualTemplateFlags(pg, alwaysPreserve)
+    expect(pg.__manualTemplateBaseW).toBe(250)
+    expect(pg.__manualTemplateBaseH).toBe(80)
+  })
+
+  it('fallback: width=0, usa scaledWidth/scaleX', () => {
+    const pg: any = {
+      getObjects: () => [],
+      width: 0,
+      height: 0,
+      scaleX: 2,
+      scaleY: 2,
+      getScaledWidth: () => 400,
+      getScaledHeight: () => 200
+    }
+    restoreMissingManualTemplateFlags(pg, alwaysPreserve)
+    expect(pg.__manualTemplateBaseW).toBe(200) // 400/2
+    expect(pg.__manualTemplateBaseH).toBe(100) // 200/2
+  })
+
+  it('preserva BaseW/H quando ja existem (mesmo tendo width raw)', () => {
+    const pg: any = {
+      getObjects: () => [],
+      width: 999,
+      height: 999,
+      scaleX: 1,
+      scaleY: 1,
+      __manualTemplateBaseW: 200,
+      __manualTemplateBaseH: 100
+    }
+    restoreMissingManualTemplateFlags(pg, alwaysPreserve)
+    expect(pg.__manualTemplateBaseW).toBe(200)
+    expect(pg.__manualTemplateBaseH).toBe(100)
+  })
+})
 
 describe('shouldPreserveManualTemplateVisual', () => {
   const noRedBurst = () => false
