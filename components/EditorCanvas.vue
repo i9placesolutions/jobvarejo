@@ -231,7 +231,8 @@ import {
     shouldPreserveManualTemplateVisual as shouldPreserveManualTemplateVisualHelper,
     restoreMissingManualTemplateFlags as restoreMissingManualTemplateFlagsHelper,
     restoreMissingManualTemplateFlagsInCanvas as restoreMissingManualTemplateFlagsInCanvasHelper,
-    pickRenderableTemplateGroupJson as pickRenderableTemplateGroupJsonHelper
+    pickRenderableTemplateGroupJson as pickRenderableTemplateGroupJsonHelper,
+    seedManualTemplateOriginalMetrics
 } from '~/utils/templateSnapshotHelpers'
 import {
     getSpecialConditionFromProduct,
@@ -31477,70 +31478,7 @@ const enlivenObjectsAsync = (objectsJson: any[]) => {
     });
 };
 
-const seedManualTemplateOriginalMetrics = (group: any) => {
-    if (!group || typeof group.getObjects !== 'function') return;
-    const all = collectObjectsDeep(group);
-    const clampScale = (raw: any, fallback: any, min = 0.08, max = 3.2) => {
-        const fb = Number(fallback);
-        const safeFallback = Number.isFinite(fb) && Math.abs(fb) > 0 ? fb : 1;
-        const n = Number(raw);
-        if (!Number.isFinite(n) || n === 0) return safeFallback;
-        const sign = n < 0 ? -1 : 1;
-        const mag = Math.min(max, Math.max(min, Math.abs(n)));
-        return sign * mag;
-    };
-    all.forEach((obj: any) => {
-        if (!obj) return;
-
-        const asNum = (v: any) => {
-            const n = Number(v);
-            return Number.isFinite(n) ? n : undefined;
-        };
-
-        if (asNum(obj.__originalLeft) == null) obj.__originalLeft = asNum(obj.left) ?? 0;
-        if (asNum(obj.__originalTop) == null) obj.__originalTop = asNum(obj.top) ?? 0;
-        if (!obj.__originalOriginX) obj.__originalOriginX = obj.originX ?? 'center';
-        if (!obj.__originalOriginY) obj.__originalOriginY = obj.originY ?? 'center';
-        obj.__originalScaleX = clampScale(
-            asNum(obj.__originalScaleX),
-            asNum(obj.scaleX) ?? 1
-        );
-        obj.__originalScaleY = clampScale(
-            asNum(obj.__originalScaleY),
-            asNum(obj.scaleY) ?? 1
-        );
-        if (asNum(obj.__originalStrokeWidth) == null) obj.__originalStrokeWidth = asNum(obj.strokeWidth) ?? 0;
-
-        if (isTextLikeObject(obj)) {
-            if (typeof obj.initDimensions === 'function') obj.initDimensions();
-            if (asNum(obj.__originalFontSize) == null) obj.__originalFontSize = asNum(obj.fontSize) ?? 14;
-            if (typeof obj.__originalFontFamily !== 'string' && typeof obj.fontFamily === 'string') {
-                obj.__originalFontFamily = obj.fontFamily;
-            }
-            if (asNum(obj.__originalWidth) == null) {
-                const w = asNum(obj.width) ?? asNum(obj.getScaledWidth?.());
-                obj.__originalWidth = Math.max(1, w ?? 1);
-            }
-            if (asNum(obj.__originalHeight) == null) {
-                const h = asNum(obj.height) ?? asNum(obj.getScaledHeight?.());
-                obj.__originalHeight = Math.max(1, h ?? (asNum(obj.fontSize) ?? 14));
-            }
-            return;
-        }
-
-        if (obj.type === 'rect') {
-            if (asNum(obj.__originalWidth) == null) obj.__originalWidth = Math.max(1, asNum(obj.width) ?? 1);
-            if (asNum(obj.__originalHeight) == null) obj.__originalHeight = Math.max(1, asNum(obj.height) ?? 1);
-            if (asNum(obj.__originalRx) == null) obj.__originalRx = asNum(obj.rx) ?? 0;
-            if (asNum(obj.__originalRy) == null) obj.__originalRy = asNum(obj.ry) ?? 0;
-            return;
-        }
-
-        if (obj.type === 'circle' && asNum(obj.__originalRadius) == null) {
-            obj.__originalRadius = Math.max(1, asNum(obj.radius) ?? 1);
-        }
-    });
-};
+// seedManualTemplateOriginalMetrics extraido para utils/templateSnapshotHelpers.ts.
 
 // collectTemplateJsonNodes / isTemplateGroupJsonRenderable /
 // isAtacarejoTemplateGroupJson / isRedBurstTemplateGroupJson foram

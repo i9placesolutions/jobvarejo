@@ -5,7 +5,8 @@ import {
   shouldUseAtacVariantSnapshotsForTemplate,
   shouldPreserveManualTemplateVisual,
   restoreMissingManualTemplateFlags,
-  pickRenderableTemplateGroupJson
+  pickRenderableTemplateGroupJson,
+  seedManualTemplateOriginalMetrics
 } from '~/utils/templateSnapshotHelpers'
 
 describe('pickRenderableTemplateGroupJson', () => {
@@ -331,5 +332,93 @@ describe('shouldUseAtacVariantSnapshotsForTemplate', () => {
     expect(shouldUseAtacVariantSnapshotsForTemplate({
       name: 'atac_retail_bg', __forceAtacarejoCanonical: true
     })).toBe(false)
+  })
+})
+
+describe('seedManualTemplateOriginalMetrics', () => {
+  const mkChild = (props: any) => ({
+    left: 0, top: 0, scaleX: 1, scaleY: 1, type: 'rect', ...props
+  })
+  const mkGroup = (children: any[]) => ({
+    type: 'group',
+    getObjects: () => children
+  })
+
+  it('null/non-group: no-op', () => {
+    expect(() => seedManualTemplateOriginalMetrics(null)).not.toThrow()
+    expect(() => seedManualTemplateOriginalMetrics({})).not.toThrow()
+  })
+
+  it('seta __originalLeft/Top/OriginX/OriginY se ausentes', () => {
+    const c = mkChild({ left: 10, top: 20, originX: 'left', originY: 'top' })
+    seedManualTemplateOriginalMetrics(mkGroup([c]))
+    expect(c.__originalLeft).toBe(10)
+    expect(c.__originalTop).toBe(20)
+    expect(c.__originalOriginX).toBe('left')
+    expect(c.__originalOriginY).toBe('top')
+  })
+
+  it('preserva __originalLeft existente', () => {
+    const c = mkChild({ left: 10, top: 20, __originalLeft: 5, __originalTop: 7 })
+    seedManualTemplateOriginalMetrics(mkGroup([c]))
+    expect(c.__originalLeft).toBe(5)
+    expect(c.__originalTop).toBe(7)
+  })
+
+  it('clamp scaleX para [0.08, 3.2] quando __originalScaleX existe e e fora do range', () => {
+    const c = mkChild({ scaleX: 1, scaleY: 1, __originalScaleX: 10, __originalScaleY: 0.01 })
+    seedManualTemplateOriginalMetrics(mkGroup([c]))
+    expect(c.__originalScaleX).toBe(3.2)
+    expect(c.__originalScaleY).toBe(0.08)
+  })
+
+  it('quando __originalScaleX ausente: usa fallback (scaleX) sem clamp', () => {
+    const c = mkChild({ scaleX: 10, scaleY: 0.01 })
+    seedManualTemplateOriginalMetrics(mkGroup([c]))
+    // fallback bypassa clamp — comportamento atual
+    expect(c.__originalScaleX).toBe(10)
+    expect(c.__originalScaleY).toBe(0.01)
+  })
+
+  it('text node: seta fontSize/Family/Width/Height', () => {
+    const c = mkChild({
+      type: 'text',
+      fontSize: 24,
+      fontFamily: 'Arial',
+      width: 100,
+      height: 40
+    })
+    seedManualTemplateOriginalMetrics(mkGroup([c]))
+    expect(c.__originalFontSize).toBe(24)
+    expect(c.__originalFontFamily).toBe('Arial')
+    expect(c.__originalWidth).toBe(100)
+    expect(c.__originalHeight).toBe(40)
+  })
+
+  it('rect: seta width/height/rx/ry', () => {
+    const c = mkChild({
+      type: 'rect',
+      width: 200,
+      height: 80,
+      rx: 10,
+      ry: 5
+    })
+    seedManualTemplateOriginalMetrics(mkGroup([c]))
+    expect(c.__originalWidth).toBe(200)
+    expect(c.__originalHeight).toBe(80)
+    expect(c.__originalRx).toBe(10)
+    expect(c.__originalRy).toBe(5)
+  })
+
+  it('circle: seta radius', () => {
+    const c = mkChild({ type: 'circle', radius: 25 })
+    seedManualTemplateOriginalMetrics(mkGroup([c]))
+    expect(c.__originalRadius).toBe(25)
+  })
+
+  it('default fontSize 14 para text sem fontSize', () => {
+    const c = mkChild({ type: 'text' })
+    seedManualTemplateOriginalMetrics(mkGroup([c]))
+    expect(c.__originalFontSize).toBe(14)
   })
 })
