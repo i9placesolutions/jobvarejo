@@ -231,7 +231,10 @@ import {
     finiteZoneSnapshotNumber,
     firstDefinedZoneSnapshotValue,
     buildZoneCardStateSnapshot as buildZoneCardStateSnapshotHelper,
-    buildZoneStateSnapshot as buildZoneStateSnapshotHelper
+    buildZoneStateSnapshot as buildZoneStateSnapshotHelper,
+    getZoneSnapshotCards,
+    buildProductFromZoneSnapshotCard,
+    buildLabelTemplateFromZoneSnapshot as buildLabelTemplateFromZoneSnapshotHelper
 } from '~/utils/zoneSnapshotHelpers'
 import {
     templateSnapshotHasAtacStructure,
@@ -25388,70 +25391,10 @@ const buildZoneStateSnapshot = (zone: any, zoneCards: any[]) =>
         serializePriceGroupForTemplate
     )
 
-const getZoneSnapshotCards = (zone: any): any[] => {
-    const snapshot = zone?._zoneStateSnapshot;
-    if (!snapshot || typeof snapshot !== 'object' || Number(snapshot.version || 0) !== 1) return [];
-    return Array.isArray(snapshot.cards) ? snapshot.cards.filter((card: any) => card && typeof card === 'object') : [];
-}
-
-const buildProductFromZoneSnapshotCard = (cardSnapshot: any) => {
-    const productData = cardSnapshot?.productData && typeof cardSnapshot.productData === 'object'
-        ? clonePlainForZoneSnapshot(cardSnapshot.productData)
-        : {};
-    const product = cardSnapshot?.product && typeof cardSnapshot.product === 'object'
-        ? cardSnapshot.product
-        : {};
-    const imageUrl = firstDefinedZoneSnapshotValue(product?.imageUrl, productData?.imageUrl, productData?.image, productData?.image_wasabi_key);
-
-    return {
-        ...productData,
-        name: String(firstDefinedZoneSnapshotValue(productData?.name, product?.name, product?.titleText) || '').trim(),
-        description: firstDefinedZoneSnapshotValue(productData?.description, product?.description),
-        imageUrl,
-        image: firstDefinedZoneSnapshotValue(productData?.image, imageUrl),
-        image_wasabi_key: firstDefinedZoneSnapshotValue(productData?.image_wasabi_key, imageUrl),
-        priceMode: firstDefinedZoneSnapshotValue(productData?.priceMode, product?.priceMode),
-        price: firstDefinedZoneSnapshotValue(productData?.price, product?.price),
-        pricePack: firstDefinedZoneSnapshotValue(productData?.pricePack, product?.pricePack),
-        priceUnit: firstDefinedZoneSnapshotValue(productData?.priceUnit, product?.priceUnit),
-        priceSpecial: firstDefinedZoneSnapshotValue(productData?.priceSpecial, product?.priceSpecial),
-        priceSpecialUnit: firstDefinedZoneSnapshotValue(productData?.priceSpecialUnit, product?.priceSpecialUnit),
-        priceWholesale: firstDefinedZoneSnapshotValue(productData?.priceWholesale, product?.priceWholesale),
-        wholesaleTrigger: firstDefinedZoneSnapshotValue(productData?.wholesaleTrigger, product?.wholesaleTrigger),
-        wholesaleTriggerUnit: firstDefinedZoneSnapshotValue(productData?.wholesaleTriggerUnit, product?.wholesaleTriggerUnit),
-        packQuantity: firstDefinedZoneSnapshotValue(productData?.packQuantity, product?.packQuantity),
-        packUnit: firstDefinedZoneSnapshotValue(productData?.packUnit, product?.packUnit),
-        packageLabel: firstDefinedZoneSnapshotValue(productData?.packageLabel, product?.packageLabel),
-        specialCondition: firstDefinedZoneSnapshotValue(productData?.specialCondition, product?.specialCondition),
-        unit: firstDefinedZoneSnapshotValue(productData?.unit, product?.unit),
-        unitLabel: firstDefinedZoneSnapshotValue(productData?.unitLabel, product?.unitLabel),
-        limit: firstDefinedZoneSnapshotValue(productData?.limit, product?.limit)
-    };
-}
-
-const buildLabelTemplateFromZoneSnapshot = (zone: any, cardSnapshot?: any): any | undefined => {
-    const cardPriceGroup = cardSnapshot?.priceGroup && typeof cardSnapshot.priceGroup === 'object'
-        ? cardSnapshot.priceGroup
-        : null;
-    if (cardPriceGroup) {
-        return {
-            id: `zone-card-snapshot-${String(cardSnapshot?.id || makeId()).trim() || makeId()}`,
-            name: 'Etiqueta recuperada',
-            group: clonePlainForZoneSnapshot(cardPriceGroup)
-        };
-    }
-
-    const stateSnapshot = zone?._zoneStateSnapshot;
-    const zoneTemplate = stateSnapshot?.labelTemplate?.snapshot && typeof stateSnapshot.labelTemplate.snapshot === 'object'
-        ? stateSnapshot.labelTemplate.snapshot
-        : zone?._zoneTemplateSnapshot;
-    if (!zoneTemplate || typeof zoneTemplate !== 'object') return undefined;
-    return {
-        id: String(stateSnapshot?.labelTemplate?.id || zone?._zoneTemplateSnapshotId || 'zone-snapshot-template'),
-        name: 'Etiqueta da zona',
-        group: clonePlainForZoneSnapshot(zoneTemplate)
-    };
-}
+// getZoneSnapshotCards + buildProductFromZoneSnapshotCard + buildLabelTemplateFromZoneSnapshot
+// extraidos para utils/zoneSnapshotHelpers.ts.
+const buildLabelTemplateFromZoneSnapshot = (zone: any, cardSnapshot?: any): any | undefined =>
+    buildLabelTemplateFromZoneSnapshotHelper(zone, cardSnapshot, makeId)
 
 const restoreZoneCardsFromStateSnapshot = async (zone: any, reason = 'rehydrate') => {
     if (!canvas.value || !zone || !isLikelyProductZone(zone)) return 0;

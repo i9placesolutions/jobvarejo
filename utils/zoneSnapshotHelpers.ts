@@ -215,3 +215,95 @@ export const buildZoneStateSnapshot = (
         )
     }
 }
+
+/**
+ * Encontra todos os cards de um zone state snapshot (validando version=1).
+ * Retorna array vazio se snapshot e' invalido/ausente.
+ */
+export const getZoneSnapshotCards = (zone: any): any[] => {
+    const snapshot = zone?._zoneStateSnapshot
+    if (!snapshot || typeof snapshot !== 'object' || Number(snapshot.version || 0) !== 1) return []
+    return Array.isArray(snapshot.cards) ? snapshot.cards.filter((card: any) => card && typeof card === 'object') : []
+}
+
+/**
+ * Reconstroi o objeto productData a partir de um cardSnapshot. Mescla:
+ *  - cardSnapshot.productData (clone plain)
+ *  - cardSnapshot.product (campos top-level: name, description, imageUrl, prices)
+ *
+ * Prefere productData.* sobre product.* (mais especifico). Sintetiza
+ * `image` e `image_wasabi_key` a partir do imageUrl resolvido.
+ */
+export const buildProductFromZoneSnapshotCard = (cardSnapshot: any): any => {
+    const productData = cardSnapshot?.productData && typeof cardSnapshot.productData === 'object'
+        ? clonePlainForZoneSnapshot(cardSnapshot.productData)
+        : {}
+    const product = cardSnapshot?.product && typeof cardSnapshot.product === 'object'
+        ? cardSnapshot.product
+        : {}
+    const imageUrl = firstDefinedZoneSnapshotValue(product?.imageUrl, productData?.imageUrl, productData?.image, productData?.image_wasabi_key)
+
+    return {
+        ...productData,
+        name: String(firstDefinedZoneSnapshotValue(productData?.name, product?.name, product?.titleText) || '').trim(),
+        description: firstDefinedZoneSnapshotValue(productData?.description, product?.description),
+        imageUrl,
+        image: firstDefinedZoneSnapshotValue(productData?.image, imageUrl),
+        image_wasabi_key: firstDefinedZoneSnapshotValue(productData?.image_wasabi_key, imageUrl),
+        priceMode: firstDefinedZoneSnapshotValue(productData?.priceMode, product?.priceMode),
+        price: firstDefinedZoneSnapshotValue(productData?.price, product?.price),
+        pricePack: firstDefinedZoneSnapshotValue(productData?.pricePack, product?.pricePack),
+        priceUnit: firstDefinedZoneSnapshotValue(productData?.priceUnit, product?.priceUnit),
+        priceSpecial: firstDefinedZoneSnapshotValue(productData?.priceSpecial, product?.priceSpecial),
+        priceSpecialUnit: firstDefinedZoneSnapshotValue(productData?.priceSpecialUnit, product?.priceSpecialUnit),
+        priceWholesale: firstDefinedZoneSnapshotValue(productData?.priceWholesale, product?.priceWholesale),
+        wholesaleTrigger: firstDefinedZoneSnapshotValue(productData?.wholesaleTrigger, product?.wholesaleTrigger),
+        wholesaleTriggerUnit: firstDefinedZoneSnapshotValue(productData?.wholesaleTriggerUnit, product?.wholesaleTriggerUnit),
+        packQuantity: firstDefinedZoneSnapshotValue(productData?.packQuantity, product?.packQuantity),
+        packUnit: firstDefinedZoneSnapshotValue(productData?.packUnit, product?.packUnit),
+        packageLabel: firstDefinedZoneSnapshotValue(productData?.packageLabel, product?.packageLabel),
+        specialCondition: firstDefinedZoneSnapshotValue(productData?.specialCondition, product?.specialCondition),
+        unit: firstDefinedZoneSnapshotValue(productData?.unit, product?.unit),
+        unitLabel: firstDefinedZoneSnapshotValue(productData?.unitLabel, product?.unitLabel),
+        limit: firstDefinedZoneSnapshotValue(productData?.limit, product?.limit)
+    }
+}
+
+/**
+ * Reconstroi um label template a partir de um zone+cardSnapshot.
+ * Prioriza:
+ *  1. cardSnapshot.priceGroup (template especifico do card)
+ *  2. zone._zoneStateSnapshot.labelTemplate.snapshot
+ *  3. zone._zoneTemplateSnapshot
+ *
+ * Retorna `undefined` se nenhum template valido encontrado.
+ *
+ * Caller injeta `makeNewId` (tipicamente `makeId`) para gerar fallback id.
+ */
+export const buildLabelTemplateFromZoneSnapshot = (
+    zone: any,
+    cardSnapshot: any,
+    makeNewId: () => string
+): any | undefined => {
+    const cardPriceGroup = cardSnapshot?.priceGroup && typeof cardSnapshot.priceGroup === 'object'
+        ? cardSnapshot.priceGroup
+        : null
+    if (cardPriceGroup) {
+        return {
+            id: `zone-card-snapshot-${String(cardSnapshot?.id || makeNewId()).trim() || makeNewId()}`,
+            name: 'Etiqueta recuperada',
+            group: clonePlainForZoneSnapshot(cardPriceGroup)
+        }
+    }
+
+    const stateSnapshot = zone?._zoneStateSnapshot
+    const zoneTemplate = stateSnapshot?.labelTemplate?.snapshot && typeof stateSnapshot.labelTemplate.snapshot === 'object'
+        ? stateSnapshot.labelTemplate.snapshot
+        : zone?._zoneTemplateSnapshot
+    if (!zoneTemplate || typeof zoneTemplate !== 'object') return undefined
+    return {
+        id: String(stateSnapshot?.labelTemplate?.id || zone?._zoneTemplateSnapshotId || 'zone-snapshot-template'),
+        name: 'Etiqueta da zona',
+        group: clonePlainForZoneSnapshot(zoneTemplate)
+    }
+}
