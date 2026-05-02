@@ -341,3 +341,36 @@ export const getZoneCardDiagnosticsPayload = (
         }
     })
 }
+
+/**
+ * Walk em todos os objetos do canvas e aplica `syncZoneMetadata`
+ * em cada zone (filtrado por `isProductZone`). Skip zones com erro
+ * (log via `onError`).
+ *
+ * Mutates as zones via `syncZoneMetadata`. Retorna o numero de zones
+ * processadas com sucesso.
+ *
+ * Caller injeta:
+ *  - `isProductZone` (isLikelyProductZone)
+ *  - `syncZoneMetadata` (syncZoneDerivedMetadata wrapper)
+ */
+export const syncAllZoneStateSnapshots = (
+    canvasInstance: any,
+    isProductZone: (obj: any) => boolean,
+    syncZoneMetadata: (zone: any) => void,
+    onError?: (zone: any, err: unknown) => void
+): number => {
+    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return 0
+    const objects = canvasInstance.getObjects?.() || []
+    let processed = 0
+    objects.forEach((obj: any) => {
+        if (!isProductZone(obj)) return
+        try {
+            syncZoneMetadata(obj)
+            processed++
+        } catch (err) {
+            if (onError) onError(obj, err)
+        }
+    })
+    return processed
+}

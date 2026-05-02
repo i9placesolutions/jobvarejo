@@ -237,7 +237,8 @@ import {
     getZoneSnapshotCards,
     buildProductFromZoneSnapshotCard,
     buildLabelTemplateFromZoneSnapshot as buildLabelTemplateFromZoneSnapshotHelper,
-    getZoneCardDiagnosticsPayload as getZoneCardDiagnosticsPayloadHelper
+    getZoneCardDiagnosticsPayload as getZoneCardDiagnosticsPayloadHelper,
+    syncAllZoneStateSnapshots as syncAllZoneStateSnapshotsHelper
 } from '~/utils/zoneSnapshotHelpers'
 import {
     templateSnapshotHasAtacStructure,
@@ -25463,17 +25464,17 @@ const scheduleZoneSnapshotRecovery = (zones: any[], reason = 'rehydrate') => {
     }, 900);
 }
 
+// syncAllZoneStateSnapshots extraido para utils/zoneSnapshotHelpers.ts.
+// Wrapper local injeta isLikelyProductZone + syncZoneDerivedMetadata + log.
 function syncAllZoneStateSnapshots(canvasInstance: any, reason = 'unknown') {
-    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return;
-    const objects = canvasInstance.getObjects?.() || [];
-    objects.forEach((obj: any) => {
-        if (!isLikelyProductZone(obj)) return;
-        try {
-            syncZoneDerivedMetadata(obj, undefined, { updateStateSnapshot: true });
-        } catch (err) {
-            console.warn(`[zoneStateSnapshot] Falha ao sincronizar snapshot da zona (${reason}):`, err);
+    syncAllZoneStateSnapshotsHelper(
+        canvasInstance,
+        isLikelyProductZone,
+        (zone: any) => syncZoneDerivedMetadata(zone, undefined, { updateStateSnapshot: true }),
+        (_zone: any, err: unknown) => {
+            console.warn(`[zoneStateSnapshot] Falha ao sincronizar snapshot da zona (${reason}):`, err)
         }
-    });
+    )
 }
 
 const syncZoneDerivedMetadata = (
