@@ -292,7 +292,8 @@ import {
     getSinglePriceCurrencyTextCandidate,
     isLikelyPriceGroupObject as isLikelyPriceGroupObjectHelper,
     repairAtacarejoTextNames,
-    hasCollapsedSinglePriceTemplateGeometry as hasCollapsedSinglePriceTemplateGeometryHelper
+    hasCollapsedSinglePriceTemplateGeometry as hasCollapsedSinglePriceTemplateGeometryHelper,
+    getSinglePriceCurrencyCircleCandidate as getSinglePriceCurrencyCircleCandidateHelper
 } from '~/utils/priceLayoutClassifiers'
 import {
     isObjectShownForBounds,
@@ -27218,71 +27219,15 @@ const normalizePriceGroupPlacementInCard = (
 // getSinglePriceBackgroundCandidate, getSinglePriceBackgroundImageCandidate
 // e getSinglePriceCurrencyTextCandidate extraidos para utils/priceLayoutClassifiers.ts.
 
-const getSinglePriceCurrencyCircleCandidate = (objects: any[], currencyTextOverride?: any): any | null => {
-    const named = findByName(objects, 'price_currency_bg') || findByName(objects, 'priceSymbolBg');
-    if (named) return named;
-
-    const currencyText = currencyTextOverride || getSinglePriceCurrencyTextCandidate(objects);
-    if (!currencyText) return null;
-
-    const currencyBounds = measureContentBoundsLocal([currencyText]);
-    if (!currencyBounds) return null;
-
-    const currencyCenterX = (currencyBounds.left + currencyBounds.right) / 2;
-    const currencyCenterY = (currencyBounds.top + currencyBounds.bottom) / 2;
-    const currencyArea = Math.max(1, currencyBounds.width * currencyBounds.height);
-    const bg = getSinglePriceBackgroundCandidate(objects);
-    const bgBounds = bg ? measureContentBoundsLocal([bg]) : null;
-    const bgArea = bgBounds ? Math.max(1, bgBounds.width * bgBounds.height) : Number.POSITIVE_INFINITY;
-
-    const candidates = (objects || [])
-        .map((obj: any) => {
-            if (!obj || obj === currencyText || !isObjectShownForBounds(obj)) return null;
-            if (isTextLikeObject(obj)) return null;
-
-            const type = String(obj?.type || '').toLowerCase();
-            if (type !== 'circle' && type !== 'ellipse' && type !== 'rect') return null;
-
-            const name = String(obj?.name || '');
-            if (name === 'price_bg' || name === 'price_bg_image' || name === 'splash_image' || name === 'price_header_bg') return null;
-            if (name.startsWith('atac_') || name.startsWith('retail_') || name.startsWith('wholesale_')) return null;
-
-            const bounds = measureContentBoundsLocal([obj]);
-            if (!bounds) return null;
-
-            const area = Math.max(1, bounds.width * bounds.height);
-            const aspectRatio = Math.min(bounds.width, bounds.height) / Math.max(bounds.width, bounds.height);
-            if (!Number.isFinite(area) || area < 64) return null;
-            if (!Number.isFinite(aspectRatio) || aspectRatio < 0.72) return null;
-            if (Number.isFinite(bgArea) && bgArea > 0 && area >= (bgArea * 0.45)) return null;
-
-            const centerX = (bounds.left + bounds.right) / 2;
-            const centerY = (bounds.top + bounds.bottom) / 2;
-            const overlapW = Math.max(0, Math.min(currencyBounds.right, bounds.right) - Math.max(currencyBounds.left, bounds.left));
-            const overlapH = Math.max(0, Math.min(currencyBounds.bottom, bounds.bottom) - Math.max(currencyBounds.top, bounds.top));
-            const overlapRatio = (overlapW * overlapH) / currencyArea;
-            const containsCenter =
-                currencyCenterX >= bounds.left &&
-                currencyCenterX <= bounds.right &&
-                currencyCenterY >= bounds.top &&
-                currencyCenterY <= bounds.bottom;
-            const distance = Math.hypot(centerX - currencyCenterX, centerY - currencyCenterY);
-            const maxDistance = Math.max(bounds.width, bounds.height) * 0.75;
-            if (!containsCenter && overlapRatio < 0.15 && distance > maxDistance) return null;
-
-            const score =
-                (containsCenter ? 1000 : 0) +
-                (overlapRatio * 500) +
-                (aspectRatio * 100) -
-                distance;
-
-            return { obj, score };
-        })
-        .filter(Boolean)
-        .sort((a: any, b: any) => Number(b.score || 0) - Number(a.score || 0));
-
-    return candidates[0]?.obj || null;
-};
+// getSinglePriceCurrencyCircleCandidate extraido para utils/priceLayoutClassifiers.ts.
+const getSinglePriceCurrencyCircleCandidate = (objects: any[], currencyTextOverride?: any): any | null =>
+    getSinglePriceCurrencyCircleCandidateHelper(
+        objects,
+        currencyTextOverride,
+        measureContentBoundsLocal,
+        isObjectShownForBounds,
+        isTextLikeObject
+    )
 
 const ensureSinglePriceCurrencyCircleAnchor = (priceGroup: any, objects?: any[]): any | null => {
     const all = Array.isArray(objects)
