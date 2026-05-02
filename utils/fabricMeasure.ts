@@ -396,3 +396,56 @@ export const resolvePriceGroupVisibleBoundsLocal = (priceGroup: any): ContentBou
         height
     }
 }
+
+/**
+ * Extrai snapshot da placement (posicao + ratios) do priceGroup dentro
+ * de um card. Usado para preservar o posicionamento original ao
+ * recriar/atualizar templates.
+ *
+ * Retorna `{left, top, leftRatio, topRatio, bottomGapRatio, originX,
+ * originY, angle, cardW, cardH}` ou null se o card nao tem priceGroup.
+ *
+ * `findPriceGroup` injetado (tipicamente getPriceGroupFromAny).
+ */
+export const getPriceGroupPlacementSnapshotFromCard = (
+    card: any,
+    findPriceGroup: (c: any) => any
+): {
+    left: number
+    top: number
+    leftRatio: number
+    topRatio: number
+    bottomGapRatio: number | null
+    originX: 'center'
+    originY: 'center'
+    angle: number
+    cardW: number
+    cardH: number
+} | null => {
+    const priceGroup = findPriceGroup(card)
+    if (!priceGroup) return null
+
+    const cardW = Math.abs(Number((card as any)?._cardWidth ?? card?.width ?? card?.getScaledWidth?.() ?? 0) || 0)
+    const cardH = Math.abs(Number((card as any)?._cardHeight ?? card?.height ?? card?.getScaledHeight?.() ?? 0) || 0)
+    const bounds = resolvePriceGroupVisibleBoundsLocal(priceGroup)
+    const groupScaleY = Math.abs(Number(priceGroup.scaleY ?? 1)) || 1
+    const scaledBottom = Number(bounds?.bottom ?? 0) * groupScaleY
+    const halfCardW = cardW / 2
+    const halfCardH = cardH / 2
+    const left = Number.isFinite(Number(priceGroup.left)) ? Number(priceGroup.left) : 0
+    const top = Number.isFinite(Number(priceGroup.top)) ? Number(priceGroup.top) : 0
+    const bottomGap = cardH > 0 ? Math.max(0, halfCardH - (top + scaledBottom)) : null
+
+    return {
+        left,
+        top,
+        leftRatio: cardW > 0 ? (left / halfCardW) : 0,
+        topRatio: cardH > 0 ? (top / halfCardH) : 0,
+        bottomGapRatio: cardH > 0 && bottomGap !== null ? (bottomGap / cardH) : null,
+        originX: 'center',
+        originY: 'center',
+        angle: Number.isFinite(Number(priceGroup.angle)) ? Number(priceGroup.angle) : 0,
+        cardW,
+        cardH
+    }
+}
