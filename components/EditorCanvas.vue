@@ -7,8 +7,8 @@ import { useResponsive } from '~/composables/useResponsive'
 import { useFigmaCrop } from '~/composables/useFigmaCrop'
 import { useProductZone } from '~/composables/useProductZone'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
-import { useEditorSnapping } from '~/composables/useEditorSnapping'
-import { useEditorAltDragDuplicate } from '~/composables/useEditorAltDragDuplicate'
+import { useEditorSnapping, type EditorSnappingApi } from '~/composables/useEditorSnapping'
+import { useEditorAltDragDuplicate, type EditorAltDragDuplicateApi } from '~/composables/useEditorAltDragDuplicate'
 import { toWasabiDirectUrl, toWasabiProxyUrl } from '~/utils/storageProxy'
 import { finalizeSerializedCanvasJson } from '~/utils/editorCanvasSerialize'
 import { prepareCanvasForSerialization } from '~/utils/editorCanvasPreSerialize'
@@ -615,50 +615,8 @@ let globalEscKeyHandler: ((e: KeyboardEvent) => void) | null = null
 let resetAllDeepSelectPriceGroupsRef: (() => void) | null = null
 let globalKeyUpHandler: ((e: KeyboardEvent) => void) | null = null
 let teardownReactivity: (() => void) | null = null
-const editorAltDragDuplicate = useEditorAltDragDuplicate({
-    get canvasInstance() { return canvas.value },
-    get fabric() { return fabric },
-    makeId,
-    isPenMode,
-    isNodeEditing,
-    isDrawing,
-    isLikelyProductZone,
-    isLikelyProductCard,
-    isProductCardContainer,
-    safeRequestRenderAll,
-    shouldApplyContainmentConstraints,
-    applyContainmentConstraints,
-    getFrameDescendants,
-    syncObjectFrameClip,
-    saveCurrentState,
-    refreshSelectedRef,
-    flushZoneRelayoutOnDrop,
-    getZoneMetrics,
-    getZoneGlobalStyles
-})
-const editorSnapping = useEditorSnapping({
-    get canvasInstance() { return canvas.value },
-    get canvasEl() { return canvasEl.value },
-    get fabric() { return fabric },
-    snapToObjects,
-    snapToGuides,
-    snapToGrid,
-    gridSize,
-    viewShowGuides,
-    activePage,
-    userGuidesIndex,
-    isLikelyProductCard,
-    isLikelyProductZone,
-    isActiveSelectionObject,
-    getFrameDescendants,
-    syncObjectFrameClip,
-    applyContainmentConstraints,
-    shouldApplyContainmentConstraints,
-    getZoneMetrics,
-    safeRequestRenderAll,
-    refreshSelectedRef,
-    flushZoneRelayoutOnDrop
-})
+let editorAltDragDuplicate!: EditorAltDragDuplicateApi
+let editorSnapping!: EditorSnappingApi
 let domCanvasDblClickHandler: ((e: MouseEvent) => void) | null = null
 let domCanvasTouchStartHandler: ((e: TouchEvent) => void) | null = null
 let domCanvasTouchMoveHandler: ((e: TouchEvent) => void) | null = null
@@ -3789,6 +3747,17 @@ const { isMobile, isTablet } = useResponsive()
 type MobilePanel = 'tools' | 'layers' | 'properties' | 'pages' | 'uploads' | 'more'
 const mobilePanel = ref<MobilePanel | null>(null)
 const mobileNavRef = ref<InstanceType<typeof import('./EditorMobileNav.vue').default> | null>(null)
+const isMobilePanel = (value: unknown): value is MobilePanel => (
+    value === 'tools' ||
+    value === 'layers' ||
+    value === 'properties' ||
+    value === 'pages' ||
+    value === 'uploads' ||
+    value === 'more'
+)
+const openMobilePanel = (panel: unknown) => {
+    mobilePanel.value = isMobilePanel(panel) ? panel : null
+}
 
 // ── Mobile template helpers (avoids Volar TS errors in large file) ──
 const triggerCopyShortcut = () => {
@@ -7679,7 +7648,7 @@ onMounted(async () => {
 		            'crossOrigin',
                     '__originalSrc'
 	        ];
-	        const addCustomProps = (Ctor: any, props: string[]) => {
+	        const addCustomProps = (Ctor: any, props: ReadonlyArray<string>) => {
 	            if (!Ctor) return;
 	            const cur = Array.isArray(Ctor.customProperties) ? Ctor.customProperties : [];
 	            Ctor.customProperties = Array.from(new Set([...cur, ...props]));
@@ -11292,7 +11261,7 @@ const remapDuplicatedSelectionBindings = (
 
 const cloneFabricObjectSafely = async (
     original: any,
-    cloneProps: string[],
+    cloneProps: ReadonlyArray<string>,
     logPrefix = 'duplicate'
 ) => {
     if (!original) return null;
@@ -32473,6 +32442,53 @@ const getZoneMetrics = (zone: any) => {
     };
 }
 
+editorAltDragDuplicate = useEditorAltDragDuplicate({
+    get canvasInstance() { return canvas.value },
+    get fabric() { return fabric },
+    makeId,
+    isPenMode,
+    isNodeEditing,
+    isDrawing,
+    isLikelyProductZone,
+    isLikelyProductCard,
+    isProductCardContainer,
+    safeRequestRenderAll,
+    shouldApplyContainmentConstraints,
+    applyContainmentConstraints,
+    getFrameDescendants,
+    syncObjectFrameClip,
+    saveCurrentState,
+    refreshSelectedRef,
+    refreshCanvasObjects,
+    flushZoneRelayoutOnDrop,
+    getZoneMetrics,
+    getZoneGlobalStyles,
+    remapDuplicatedSelectionBindings
+})
+editorSnapping = useEditorSnapping({
+    get canvasInstance() { return canvas.value },
+    get canvasEl() { return canvasEl.value },
+    get fabric() { return fabric },
+    snapToObjects,
+    snapToGuides,
+    snapToGrid,
+    gridSize,
+    viewShowGuides,
+    activePage,
+    userGuidesIndex,
+    isLikelyProductCard,
+    isLikelyProductZone,
+    isActiveSelectionObject,
+    getFrameDescendants,
+    syncObjectFrameClip,
+    applyContainmentConstraints,
+    shouldApplyContainmentConstraints,
+    getZoneMetrics,
+    safeRequestRenderAll,
+    refreshSelectedRef,
+    flushZoneRelayoutOnDrop
+})
+
 const getResolvedZoneFrameId = (zone: any): string | undefined => {
     if (!canvas.value || !zone) return undefined;
 
@@ -34673,7 +34689,7 @@ const handleRecalculateLayout = () => {
       <EditorMobileNav
         v-if="isMobile"
         ref="mobileNavRef"
-        @open-panel="mobilePanel = $event"
+        @open-panel="openMobilePanel"
       />
 
       <!-- Mobile Bottom Sheet -->

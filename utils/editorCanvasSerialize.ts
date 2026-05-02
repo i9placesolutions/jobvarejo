@@ -3,7 +3,7 @@ type FinalizeSerializedCanvasJsonOptions = {
   canvasInstance: any
   canvasCustomProps: string[]
   isValidFabricCanvasObject: (obj: any) => boolean
-  transientControlNames: Set<string>
+  transientControlNames: ReadonlySet<string>
   convertPresignedToPermanentUrl: (url: string) => string
   canvasFramesForDebug?: any[]
 }
@@ -232,7 +232,7 @@ const stripZoneClipPaths = (json: any) => {
 const restoreFramePropsAndFilterInvalid = (
   json: any,
   canvasObjs: any[],
-  transientControlNames: Set<string>,
+  transientControlNames: ReadonlySet<string>,
   canvasFramesForDebug: any[]
 ): number => {
   if (!json?.objects || !Array.isArray(json.objects)) return 0

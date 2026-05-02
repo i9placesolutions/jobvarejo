@@ -17,9 +17,11 @@ export type EditorAltDragDuplicateDeps = {
   syncObjectFrameClip: (obj: any) => void
   saveCurrentState: (opts?: any) => boolean | Promise<boolean>
   refreshSelectedRef: () => void
+  refreshCanvasObjects: () => void
   flushZoneRelayoutOnDrop: () => void
   getZoneMetrics: (zone: any) => any
   getZoneGlobalStyles: (zone: any) => any
+  remapDuplicatedSelectionBindings: (clones: any[], opts?: any) => void
 }
 
 export type EditorAltDragDuplicateApi = {
@@ -199,7 +201,7 @@ export function useEditorAltDragDuplicate(deps: EditorAltDragDuplicateDeps): Edi
         return null;
     };
 
-    canvasInstance.on('mouse:down', (opt: any) => {
+    const onMouseDown = (opt: any) => {
         const evt: MouseEvent | undefined = opt?.e;
         if (!evt || evt.button !== 0 || !evt.altKey) {
             state.armed = false;
@@ -241,9 +243,10 @@ export function useEditorAltDragDuplicate(deps: EditorAltDragDuplicateDeps): Edi
             state.pointerDownX = state.startLeft;
             state.pointerDownY = state.startTop;
         }
-    });
+    };
+    canvasInstance.on('mouse:down', onMouseDown);
 
-    canvasInstance.on('mouse:move:before', (opt: any) => {
+    const onMouseMoveBefore = (opt: any) => {
         if (!state.armed || state.cloning) return;
         if (!canvasInstance) return;
 
@@ -431,7 +434,7 @@ export function useEditorAltDragDuplicate(deps: EditorAltDragDuplicateDeps): Edi
                     canvasInstance.add(c);
                     clones.push(c);
                 }
-                remapDuplicatedSelectionBindings(clones, { reason: 'alt-drag-selection', relayout: false });
+                deps.remapDuplicatedSelectionBindings(clones, { reason: 'alt-drag-selection', relayout: false });
 
                 if (clones.length === 0 || !canvasInstance) {
                     state.activeCloneRequestId = 0;
@@ -652,9 +655,10 @@ export function useEditorAltDragDuplicate(deps: EditorAltDragDuplicateDeps): Edi
         };
 
         doClone();
-    });
+    };
+    canvasInstance.on('mouse:move:before', onMouseMoveBefore);
 
-    canvasInstance.on('mouse:up', () => {
+    const onMouseUp = () => {
         if (!state.didDuplicate || !canvasInstance) {
             state.activeCloneRequestId = 0;
             restoreOriginalLocks(state.original);
@@ -696,7 +700,7 @@ export function useEditorAltDragDuplicate(deps: EditorAltDragDuplicateDeps): Edi
         deps.safeRequestRenderAll();
 
         // Update objects list
-        refreshCanvasObjects();
+        deps.refreshCanvasObjects();
 
         // Reset state
         state.activeCloneRequestId = 0;
@@ -712,7 +716,8 @@ export function useEditorAltDragDuplicate(deps: EditorAltDragDuplicateDeps): Edi
         state.pointerDownY = 0;
 
         deps.saveCurrentState();
-    });
+    };
+    canvasInstance.on('mouse:up', onMouseUp);
 
     const teardown = () => {
       try {
