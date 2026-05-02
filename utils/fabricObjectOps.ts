@@ -741,3 +741,69 @@ export const remapOrClearBindingsRecursive = (
         remapOrClearBindingsRecursive(obj.clipPath, idMap, existingIds)
     }
 }
+
+/**
+ * Aplica a escala atual de um zone group ao seu rect interno + zera
+ * o scale do group, de forma que o rect absorva todo o tamanho. Usado
+ * apos resize de zona para evitar drift de escala em zoom.
+ *
+ * Comportamento:
+ *  - Encontra o rect interno (obj.type === 'rect')
+ *  - Calcula nextW/H = rect base * zone.scale (clampado para minSize)
+ *  - Aplica nextW/H no rect E no zone, zerando scaleX/Y
+ *  - Salva nextW/H em zone._zoneWidth/_zoneHeight (cache pos-resize)
+ *
+ * Mutates a zone + rect. Retorna `{ width, height }` ou null se zona
+ * invalida (sem rect, sem getObjects, dimensoes 0).
+ */
+export const applyZoneScaleToRect = (
+    zone: any,
+    minSize: number = 60
+): { width: number; height: number } | null => {
+    if (!zone || !zone.getObjects) return null
+    const zoneRect = zone.getObjects().find((o: any) => o.type === 'rect')
+    if (!zoneRect) return null
+
+    const rawRectW = Math.abs((zoneRect.width ?? 0) * (zoneRect.scaleX ?? 1))
+    const rawRectH = Math.abs((zoneRect.height ?? 0) * (zoneRect.scaleY ?? 1))
+    zoneRect.set({ width: rawRectW, height: rawRectH, scaleX: 1, scaleY: 1 })
+
+    const zoneScaleX = Math.abs(zone.scaleX ?? 1)
+    const zoneScaleY = Math.abs(zone.scaleY ?? 1)
+    const nextWidth = Math.max(minSize, rawRectW * zoneScaleX)
+    const nextHeight = Math.max(minSize, rawRectH * zoneScaleY)
+    if (!nextWidth || !nextHeight) return null
+
+    zoneRect.set({
+        width: nextWidth,
+        height: nextHeight,
+        scaleX: 1,
+        scaleY: 1
+    })
+
+    zone.set({
+        width: nextWidth,
+        height: nextHeight,
+        scaleX: 1,
+        scaleY: 1,
+        flipX: false,
+        flipY: false
+    })
+
+    zone.dirty = true
+    zone.setCoords()
+
+    zone._zoneWidth = nextWidth
+    zone._zoneHeight = nextHeight
+    return { width: nextWidth, height: nextHeight }
+}
+
+/**
+ * Detecta se uma zone tem scale != 1 e aplica `applyZoneScaleToRect`
+ * para normalizar. No-op se a zone ja esta em scale=1.
+ */
+export const normalizeZoneScale = (zone: any): void => {
+    if (!zone || !zone.getObjects) return
+    if (zone.scaleX === 1 && zone.scaleY === 1) return
+    applyZoneScaleToRect(zone)
+}

@@ -319,7 +319,9 @@ import {
     recalcAllTextMetrics,
     OBJECT_MASK_MIN_SELECTION,
     regenerateCustomIdsRecursive as regenerateCustomIdsRecursiveHelper,
-    remapOrClearBindingsRecursive
+    remapOrClearBindingsRecursive,
+    applyZoneScaleToRect,
+    normalizeZoneScale
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -35079,62 +35081,7 @@ const moveZoneChildren = (zone: any, dx: number, dy: number, children?: any[]) =
     });
 }
 
-const normalizeZoneScale = (zone: any) => {
-    if (!zone || !zone.getObjects) return;
-    if (zone.scaleX === 1 && zone.scaleY === 1) return;
-    applyZoneScaleToRect(zone);
-}
-
-const applyZoneScaleToRect = (zone: any, minSize = 60) => {
-    if (!zone || !zone.getObjects) return null;
-    const zoneRect = zone.getObjects().find((o: any) => o.type === 'rect');
-    if (!zoneRect) return null;
-
-    // Normalizar rect para scale=1 antes de calcular dimensões finais.
-    // Evita duplicar escala quando rect já absorveu scale de iterações anteriores.
-    const rawRectW = Math.abs((zoneRect.width ?? 0) * (zoneRect.scaleX ?? 1));
-    const rawRectH = Math.abs((zoneRect.height ?? 0) * (zoneRect.scaleY ?? 1));
-    zoneRect.set({ width: rawRectW, height: rawRectH, scaleX: 1, scaleY: 1 });
-
-    const zoneScaleX = Math.abs(zone.scaleX ?? 1);
-    const zoneScaleY = Math.abs(zone.scaleY ?? 1);
-    const nextWidth = Math.max(minSize, rawRectW * zoneScaleX);
-    const nextHeight = Math.max(minSize, rawRectH * zoneScaleY);
-    if (!nextWidth || !nextHeight) return null;
-
-    // FIX: capture zone center BEFORE resetting scale, so we can detect if
-    // safeAddWithUpdate shifts the group origin and compensate child cards.
-    const prevLeft = zone.left ?? 0
-    const prevTop = zone.top ?? 0
-
-    zoneRect.set({
-        width: nextWidth,
-        height: nextHeight,
-        scaleX: 1,
-        scaleY: 1
-    });
-
-    // FIX: Sync group dimensions to match rect. LayoutManager is permanently
-    // disabled on zones, so safeAddWithUpdate/triggerLayout won't recalculate
-    // the group bounding box. We must set width/height explicitly.
-    zone.set({
-        width: nextWidth,
-        height: nextHeight,
-        scaleX: 1,
-        scaleY: 1,
-        flipX: false,
-        flipY: false
-    });
-
-    // Não usar safeAddWithUpdate — triggerLayout recalcula bounds do grupo
-    // e desloca zone.left/top, quebrando posição dos cards.
-    zone.dirty = true;
-    zone.setCoords();
-
-    zone._zoneWidth = nextWidth;
-    zone._zoneHeight = nextHeight;
-    return { width: nextWidth, height: nextHeight };
-}
+// normalizeZoneScale + applyZoneScaleToRect extraidos para utils/fabricObjectOps.ts.
 
 // normalizeRectScale e normalizeGroupRects extraidos para utils/fabricObjectOps.ts.
 
