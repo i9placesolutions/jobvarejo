@@ -86,3 +86,60 @@ export const getCardLimitText = (card: any): any | null => {
         String(o?.data?.smartType || '') === 'product-limit'
     ) || null
 }
+
+/**
+ * Resolve `{ card, image }` a partir de um objeto Fabric ativo:
+ *  - Se ativo e' um card container: card=ativo, image=preferred
+ *  - Se ativo e' uma image dentro de card: card=parent, image=ativo
+ *  - Se ativo tem outro card parent: usa parent + preferred dele
+ *  - ActiveSelection: busca em members o primeiro card encontrado
+ *  - Caso contrario: { card: null, image: null }
+ *
+ * Caller injeta:
+ *  - `isCardContainerCheck`: predicate para detectar card container
+ *  - `getPreferredImage`: helper para encontrar image preferred de um card
+ *  - `findCardParentGroup`: walk-up para encontrar card pai de um obj
+ */
+export const resolveSelectedProductCardContext = (
+    active: any,
+    isCardContainerCheck: (obj: any) => boolean,
+    getPreferredImage: (group: any) => any | null,
+    findCardParentGroup: (obj: any) => any | null
+): { card: any | null; image: any | null } => {
+    if (!active) return { card: null, image: null }
+
+    if (isCardContainerCheck(active)) {
+        return { card: active, image: getPreferredImage(active) }
+    }
+
+    const t = String(active.type || '').toLowerCase()
+    if (t === 'image') {
+        const parentCard = findCardParentGroup(active)
+        return { card: parentCard, image: active }
+    }
+
+    const directParentCard = findCardParentGroup(active)
+    if (directParentCard) {
+        return {
+            card: directParentCard,
+            image: t === 'image' ? active : getPreferredImage(directParentCard)
+        }
+    }
+
+    if (t === 'activeselection' && typeof active.getObjects === 'function') {
+        const list = active.getObjects() || []
+        for (const member of list) {
+            if (isCardContainerCheck(member)) {
+                return { card: member, image: getPreferredImage(member) }
+            }
+            const card = findCardParentGroup(member)
+            if (card) {
+                const mt = String(member?.type || '').toLowerCase()
+                const image = mt === 'image' ? member : getPreferredImage(card)
+                return { card, image }
+            }
+        }
+    }
+
+    return { card: null, image: null }
+}

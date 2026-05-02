@@ -2,8 +2,78 @@ import { describe, it, expect } from 'vitest'
 import {
   getCardBackgroundRect,
   getCardTitleText,
-  getCardLimitText
+  getCardLimitText,
+  resolveSelectedProductCardContext
 } from '~/utils/productCardLookup'
+
+describe('resolveSelectedProductCardContext', () => {
+  const isCard = (o: any) => o?.isProductCard === true
+  const getPreferredImage = (group: any) => group?._preferredImage || null
+  const findParent = (o: any) => o?.parent || null
+
+  it('null active: { null, null }', () => {
+    expect(resolveSelectedProductCardContext(null, isCard, getPreferredImage, findParent))
+      .toEqual({ card: null, image: null })
+  })
+
+  it('active e card: card=active, image=preferred', () => {
+    const img = { type: 'image' }
+    const card = { isProductCard: true, _preferredImage: img }
+    expect(resolveSelectedProductCardContext(card, isCard, getPreferredImage, findParent))
+      .toEqual({ card, image: img })
+  })
+
+  it('active e image dentro de card: card=parent, image=active', () => {
+    const card = { isProductCard: true }
+    const img = { type: 'image', parent: card }
+    expect(resolveSelectedProductCardContext(img, isCard, getPreferredImage, findParent))
+      .toEqual({ card, image: img })
+  })
+
+  it('active sem parent card: { null, null }', () => {
+    const obj = { type: 'rect' }
+    expect(resolveSelectedProductCardContext(obj, isCard, getPreferredImage, findParent))
+      .toEqual({ card: null, image: null })
+  })
+
+  it('active type rect com card parent: usa preferred image do card', () => {
+    const img = { type: 'image' }
+    const card = { isProductCard: true, _preferredImage: img }
+    const obj = { type: 'rect', parent: card }
+    expect(resolveSelectedProductCardContext(obj, isCard, getPreferredImage, findParent))
+      .toEqual({ card, image: img })
+  })
+
+  it('activeSelection: encontra primeiro card em members', () => {
+    const card = { isProductCard: true }
+    const sel = {
+      type: 'activeSelection',
+      getObjects: () => [{ type: 'rect' }, card]
+    }
+    expect(resolveSelectedProductCardContext(sel, isCard, getPreferredImage, findParent))
+      .toEqual({ card, image: null })
+  })
+
+  it('activeSelection: members com parent card', () => {
+    const card = { isProductCard: true }
+    const member = { type: 'rect', parent: card }
+    const sel = {
+      type: 'activeSelection',
+      getObjects: () => [member]
+    }
+    const result = resolveSelectedProductCardContext(sel, isCard, getPreferredImage, findParent)
+    expect(result.card).toBe(card)
+  })
+
+  it('activeSelection sem cards: { null, null }', () => {
+    const sel = {
+      type: 'activeSelection',
+      getObjects: () => [{ type: 'rect' }]
+    }
+    expect(resolveSelectedProductCardContext(sel, isCard, getPreferredImage, findParent))
+      .toEqual({ card: null, image: null })
+  })
+})
 
 const card = (children: any[]) => ({
   type: 'group',

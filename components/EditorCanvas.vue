@@ -245,7 +245,8 @@ import {
 import {
     getCardBackgroundRect,
     getCardTitleText,
-    getCardLimitText
+    getCardLimitText,
+    resolveSelectedProductCardContext as resolveSelectedProductCardContextHelper
 } from '~/utils/productCardLookup'
 import { buildCardRecoverySearchPayload } from '~/utils/cardRecoveryPayload'
 import {
@@ -680,41 +681,15 @@ const filteredProductImageUploads = computed(() => {
 
 // getPreferredProductImageFromGroup extraido para utils/fabricImageHelpers.ts.
 
-const resolveSelectedProductCardContext = (active: any): { card: any | null; image: any | null } => {
-    if (!active) return { card: null, image: null };
-
-    if (isProductCardContainer(active)) {
-        return { card: active, image: getPreferredProductImageFromGroup(active) };
-    }
-
-    const t = String(active.type || '').toLowerCase();
-    if (t === 'image') {
-        const parentCard = findProductCardParentGroup(active);
-        return { card: parentCard, image: active };
-    }
-
-    const directParentCard = findProductCardParentGroup(active);
-    if (directParentCard) {
-        return { card: directParentCard, image: t === 'image' ? active : getPreferredProductImageFromGroup(directParentCard) };
-    }
-
-    if (t === 'activeselection' && typeof active.getObjects === 'function') {
-        const list = active.getObjects() || [];
-        for (const member of list) {
-            if (isProductCardContainer(member)) {
-                return { card: member, image: getPreferredProductImageFromGroup(member) };
-            }
-            const card = findProductCardParentGroup(member);
-            if (card) {
-                const mt = String(member?.type || '').toLowerCase();
-                const image = mt === 'image' ? member : getPreferredProductImageFromGroup(card);
-                return { card, image };
-            }
-        }
-    }
-
-    return { card: null, image: null };
-};
+// resolveSelectedProductCardContext extraido para utils/productCardLookup.ts.
+// Wrapper local injeta isProductCardContainer, getPreferredProductImageFromGroup, findProductCardParentGroup.
+const resolveSelectedProductCardContext = (active: any): { card: any | null; image: any | null } =>
+    resolveSelectedProductCardContextHelper(
+        active,
+        isProductCardContainer,
+        getPreferredProductImageFromGroup,
+        findProductCardParentGroup
+    )
 
 /**
  * Safe wrapper for requestRenderAll that uses the coalesced render scheduler.
