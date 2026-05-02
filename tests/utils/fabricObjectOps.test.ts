@@ -15,7 +15,9 @@ import {
   clearObjectMaskMetadata,
   normalizeRectScale,
   normalizeGroupRects,
-  recalcAllTextMetrics
+  recalcAllTextMetrics,
+  regenerateCustomIdsRecursive,
+  remapOrClearBindingsRecursive
 } from '~/utils/fabricObjectOps'
 
 const makeText = (overrides: any = {}) => {
@@ -1160,5 +1162,121 @@ describe('recalcAllTextMetrics', () => {
   it('text sem initDimensions (Fabric antigo): nao crasha', () => {
     const t: any = { type: 'text', set(_k: string, _v: any) {}, setCoords() {} }
     expect(() => recalcAllTextMetrics(t)).not.toThrow()
+  })
+})
+
+describe('regenerateCustomIdsRecursive', () => {
+  let counter = 0
+  const makeId = () => `gen-${counter++}`
+
+  it('null/non-object: no-op', () => {
+    const idMap = new Map<string, string>()
+    expect(() => regenerateCustomIdsRecursive(null, idMap, makeId)).not.toThrow()
+    expect(idMap.size).toBe(0)
+  })
+
+  it('seta novo _customId e popula idMap quando havia prev', () => {
+    counter = 100
+    const obj: any = { type: 'rect', _customId: 'old-id' }
+    const idMap = new Map<string, string>()
+    regenerateCustomIdsRecursive(obj, idMap, makeId)
+    expect(obj._customId).toMatch(/^gen-\d+$/)
+    expect(idMap.get('old-id')).toBe(obj._customId)
+  })
+
+  it('NAO popula idMap quando prev e' + ' vazio (mas seta novo id)', () => {
+    counter = 200
+    const obj: any = { type: 'rect' }
+    const idMap = new Map<string, string>()
+    regenerateCustomIdsRecursive(obj, idMap, makeId)
+    expect(obj._customId).toBeTruthy()
+    expect(idMap.size).toBe(0)
+  })
+
+  it('recursivo em getObjects', () => {
+    counter = 300
+    const child: any = { type: 'rect', _customId: 'child-id' }
+    const root: any = { type: 'group', _customId: 'root-id', getObjects: () => [child] }
+    const idMap = new Map<string, string>()
+    regenerateCustomIdsRecursive(root, idMap, makeId)
+    expect(idMap.get('root-id')).toBeTruthy()
+    expect(idMap.get('child-id')).toBeTruthy()
+    expect(root._customId).not.toBe('root-id')
+    expect(child._customId).not.toBe('child-id')
+  })
+
+  it('skip user guides (isUserGuide=true)', () => {
+    counter = 400
+    const guide: any = { type: 'line', isUserGuide: true, _customId: 'guide-id' }
+    const idMap = new Map<string, string>()
+    regenerateCustomIdsRecursive(guide, idMap, makeId)
+    expect(guide._customId).toBe('guide-id') // nao mudou
+    expect(idMap.size).toBe(0)
+  })
+
+  it('recursivo em clipPath', () => {
+    counter = 500
+    const clip: any = { type: 'rect', _customId: 'clip-id' }
+    const obj: any = { type: 'image', _customId: 'img-id', clipPath: clip }
+    const idMap = new Map<string, string>()
+    regenerateCustomIdsRecursive(obj, idMap, makeId)
+    expect(idMap.get('clip-id')).toBeTruthy()
+    expect(idMap.get('img-id')).toBeTruthy()
+  })
+})
+
+describe('remapOrClearBindingsRecursive', () => {
+  it('null/non-object: no-op', () => {
+    const idMap = new Map<string, string>()
+    const existingIds = new Set<string>()
+    expect(() => remapOrClearBindingsRecursive(null, idMap, existingIds)).not.toThrow()
+  })
+
+  it('parentFrameId remapeado via idMap', () => {
+    const obj: any = { parentFrameId: 'old-frame' }
+    const idMap = new Map([['old-frame', 'new-frame']])
+    remapOrClearBindingsRecursive(obj, idMap, new Set())
+    expect(obj.parentFrameId).toBe('new-frame')
+  })
+
+  it('parentZoneId mantido se existe em existingIds', () => {
+    const obj: any = { parentZoneId: 'zone-1' }
+    remapOrClearBindingsRecursive(obj, new Map(), new Set(['zone-1']))
+    expect(obj.parentZoneId).toBe('zone-1')
+  })
+
+  it('parentFrameId removido se nao em idMap nem existingIds', () => {
+    const obj: any = { parentFrameId: 'orphan' }
+    remapOrClearBindingsRecursive(obj, new Map(), new Set())
+    expect(obj.parentFrameId).toBeUndefined()
+  })
+
+  it('_zoneSlot.zoneId remapeado, mantem outras props', () => {
+    const obj: any = { _zoneSlot: { zoneId: 'old-zone', x: 10 } }
+    const idMap = new Map([['old-zone', 'new-zone']])
+    remapOrClearBindingsRecursive(obj, idMap, new Set())
+    expect(obj._zoneSlot.zoneId).toBe('new-zone')
+    expect(obj._zoneSlot.x).toBe(10)
+  })
+
+  it('_zoneSlot zerado se zoneId orfao', () => {
+    const obj: any = { _zoneSlot: { zoneId: 'orphan', x: 10 } }
+    remapOrClearBindingsRecursive(obj, new Map(), new Set())
+    expect(obj._zoneSlot).toBe(null)
+  })
+
+  it('objectMaskSourceId remapeado', () => {
+    const obj: any = { objectMaskSourceId: 'old-mask' }
+    const idMap = new Map([['old-mask', 'new-mask']])
+    remapOrClearBindingsRecursive(obj, idMap, new Set())
+    expect(obj.objectMaskSourceId).toBe('new-mask')
+  })
+
+  it('recursivo em getObjects', () => {
+    const child: any = { parentFrameId: 'old' }
+    const root: any = { getObjects: () => [child] }
+    const idMap = new Map([['old', 'new']])
+    remapOrClearBindingsRecursive(root, idMap, new Set())
+    expect(child.parentFrameId).toBe('new')
   })
 })

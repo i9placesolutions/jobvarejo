@@ -312,7 +312,9 @@ import {
     normalizeRectScale,
     normalizeGroupRects,
     recalcAllTextMetrics,
-    OBJECT_MASK_MIN_SELECTION
+    OBJECT_MASK_MIN_SELECTION,
+    regenerateCustomIdsRecursive as regenerateCustomIdsRecursiveHelper,
+    remapOrClearBindingsRecursive
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -12855,72 +12857,10 @@ const hydrateRuntimeClipboardFromCrossTabPayload = async (payload: any): Promise
 
 // getObjectAbsoluteCenter + computeCentersBoundingCenter extraidos para utils/fabricMeasure.ts.
 
-const regenerateCustomIdsRecursive = (root: any, idMap: Map<string, string>) => {
-    if (!root || typeof root !== 'object') return;
-    // Skip user guides/artboard/control-like objects (shouldn't be on clipboard anyway).
-    try { if (isUserGuideObject(root)) return; } catch {}
-    if (isControlLikeObject(root)) return;
-
-    const prev = String((root as any)._customId || '').trim();
-    const next = makeCanvasObjectId();
-    if (prev) idMap.set(prev, next);
-    (root as any)._customId = next;
-
-    if (typeof root.getObjects === 'function') {
-        try {
-            const kids = root.getObjects() || [];
-            kids.forEach((child: any) => regenerateCustomIdsRecursive(child, idMap));
-        } catch { /* ignore */ }
-    }
-    if (root.clipPath && typeof root.clipPath === 'object') {
-        regenerateCustomIdsRecursive(root.clipPath, idMap);
-    }
-};
-
-const remapOrClearBindingsRecursive = (root: any, idMap: Map<string, string>, existingIds: Set<string>) => {
-    if (!root || typeof root !== 'object') return;
-    const obj: any = root;
-
-    const remapId = (id: any) => {
-        const raw = String(id || '').trim();
-        if (!raw) return '';
-        const mapped = idMap.get(raw);
-        if (mapped) return mapped;
-        if (existingIds.has(raw)) return raw;
-        return '';
-    };
-
-    if (obj.parentFrameId) {
-        const next = remapId(obj.parentFrameId);
-        if (next) obj.parentFrameId = next;
-        else delete obj.parentFrameId;
-    }
-    if (obj.parentZoneId) {
-        const next = remapId(obj.parentZoneId);
-        if (next) obj.parentZoneId = next;
-        else delete obj.parentZoneId;
-    }
-    if (obj._zoneSlot && typeof obj._zoneSlot === 'object') {
-        const next = remapId(obj._zoneSlot.zoneId);
-        if (next) obj._zoneSlot = { ...obj._zoneSlot, zoneId: next };
-        else obj._zoneSlot = null;
-    }
-    if (obj.objectMaskSourceId) {
-        const next = remapId(obj.objectMaskSourceId);
-        if (next) obj.objectMaskSourceId = next;
-        else delete obj.objectMaskSourceId;
-    }
-
-    if (typeof obj.getObjects === 'function') {
-        try {
-            const kids = obj.getObjects() || [];
-            kids.forEach((child: any) => remapOrClearBindingsRecursive(child, idMap, existingIds));
-        } catch { /* ignore */ }
-    }
-    if (obj.clipPath && typeof obj.clipPath === 'object') {
-        remapOrClearBindingsRecursive(obj.clipPath, idMap, existingIds);
-    }
-};
+// regenerateCustomIdsRecursive + remapOrClearBindingsRecursive extraidos
+// para utils/fabricObjectOps.ts. Wrapper local injeta makeCanvasObjectId.
+const regenerateCustomIdsRecursive = (root: any, idMap: Map<string, string>) =>
+    regenerateCustomIdsRecursiveHelper(root, idMap, makeCanvasObjectId)
 
 const reapplyRuntimeVisualPatchesTree = (root: any) => {
     const patchNode = (node: any) => {

@@ -643,3 +643,101 @@ export const normalizeGroupRects = (group: any): void => {
         }
     })
 }
+
+/**
+ * Regenera `_customId` recursivamente em uma arvore de objetos Fabric
+ * (usado por clone/duplicate). Cada novo id e' adicionado a `idMap`
+ * (prevId → newId) para que callers remapeiem referencias depois.
+ *
+ * Skips:
+ *  - user guides (isUserGuideObject)
+ *  - control-like (isControlLikeObject)
+ *
+ * Recursivo em getObjects() e clipPath.
+ *
+ * `makeNewId` injetado (tipicamente `makeId()`).
+ */
+export const regenerateCustomIdsRecursive = (
+    root: any,
+    idMap: Map<string, string>,
+    makeNewId: () => string
+): void => {
+    if (!root || typeof root !== 'object') return
+    try { if (isUserGuideObject(root)) return } catch {}
+    if (isControlLikeObject(root)) return
+
+    const prev = String((root as any)._customId || '').trim()
+    const next = makeNewId()
+    if (prev) idMap.set(prev, next)
+    ;(root as any)._customId = next
+
+    if (typeof root.getObjects === 'function') {
+        try {
+            const kids = root.getObjects() || []
+            kids.forEach((child: any) => regenerateCustomIdsRecursive(child, idMap, makeNewId))
+        } catch { /* ignore */ }
+    }
+    if (root.clipPath && typeof root.clipPath === 'object') {
+        regenerateCustomIdsRecursive(root.clipPath, idMap, makeNewId)
+    }
+}
+
+/**
+ * Remapeia ou limpa bindings (parentFrameId, parentZoneId, _zoneSlot.zoneId,
+ * objectMaskSourceId) recursivamente em uma arvore Fabric.
+ *
+ * Para cada id encontrado em uma binding:
+ *  - Se esta em `idMap`: usa o novo id mapeado
+ *  - Se esta em `existingIds` (existe no canvas): mantem
+ *  - Caso contrario: deleta a binding (objeto orfao)
+ *
+ * Recursivo em getObjects() e clipPath. Mutates a arvore in place.
+ */
+export const remapOrClearBindingsRecursive = (
+    root: any,
+    idMap: Map<string, string>,
+    existingIds: Set<string>
+): void => {
+    if (!root || typeof root !== 'object') return
+    const obj: any = root
+
+    const remapId = (id: any) => {
+        const raw = String(id || '').trim()
+        if (!raw) return ''
+        const mapped = idMap.get(raw)
+        if (mapped) return mapped
+        if (existingIds.has(raw)) return raw
+        return ''
+    }
+
+    if (obj.parentFrameId) {
+        const next = remapId(obj.parentFrameId)
+        if (next) obj.parentFrameId = next
+        else delete obj.parentFrameId
+    }
+    if (obj.parentZoneId) {
+        const next = remapId(obj.parentZoneId)
+        if (next) obj.parentZoneId = next
+        else delete obj.parentZoneId
+    }
+    if (obj._zoneSlot && typeof obj._zoneSlot === 'object') {
+        const next = remapId(obj._zoneSlot.zoneId)
+        if (next) obj._zoneSlot = { ...obj._zoneSlot, zoneId: next }
+        else obj._zoneSlot = null
+    }
+    if (obj.objectMaskSourceId) {
+        const next = remapId(obj.objectMaskSourceId)
+        if (next) obj.objectMaskSourceId = next
+        else delete obj.objectMaskSourceId
+    }
+
+    if (typeof obj.getObjects === 'function') {
+        try {
+            const kids = obj.getObjects() || []
+            kids.forEach((child: any) => remapOrClearBindingsRecursive(child, idMap, existingIds))
+        } catch { /* ignore */ }
+    }
+    if (obj.clipPath && typeof obj.clipPath === 'object') {
+        remapOrClearBindingsRecursive(obj.clipPath, idMap, existingIds)
+    }
+}
