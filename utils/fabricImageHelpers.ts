@@ -166,3 +166,110 @@ export const fitImageIntoSlot = (
     })
     img.setCoords?.()
 }
+
+/**
+ * Detecta se uma imagem (HTMLImageElement ou HTMLCanvasElement) tem
+ * algum pixel transparente (alpha < 250). Usa sampling reduzida (256px
+ * max) para performance.
+ *
+ * Retorna false em caso de erro ou imagem invalida.
+ */
+export const imageHasTransparency = (img: HTMLImageElement | HTMLCanvasElement): boolean => {
+    try {
+        const oc = document.createElement('canvas')
+        const w = (img as any).naturalWidth || img.width
+        const h = (img as any).naturalHeight || img.height
+        if (!w || !h) return false
+        const maxDim = 256
+        const scale = Math.min(1, maxDim / Math.max(w, h))
+        oc.width = Math.ceil(w * scale)
+        oc.height = Math.ceil(h * scale)
+        const octx = oc.getContext('2d', { willReadFrequently: true })
+        if (!octx) return false
+        octx.drawImage(img, 0, 0, oc.width, oc.height)
+        const data = octx.getImageData(0, 0, oc.width, oc.height).data
+        for (let i = 3; i < data.length; i += 4) {
+            if (data[i]! < 250) return true
+        }
+        return false
+    } catch { return false }
+}
+
+/**
+ * Detecta os bounds do conteudo visivel de uma imagem Fabric (alpha > 0),
+ * cortando whitespace e transparencia.
+ *
+ * Retorna `{ left, top, width, height }` em pixels da imagem original
+ * (nao samplada). Retorna null se:
+ *  - imagem nao tem element
+ *  - dimensoes < 2px
+ *  - contexto 2d nao disponivel
+ *  - bounds detectados cobrem a imagem inteira (no-op)
+ *
+ * Usa sampling 512px max para performance.
+ */
+export const detectImageTrimBounds = (
+    fabricImg: any
+): { left: number; top: number; width: number; height: number } | null => {
+    try {
+        const el = fabricImg?.getElement?.() || fabricImg?._element
+        if (!el) return null
+        const w = (el as any).naturalWidth || el.width || fabricImg.width
+        const h = (el as any).naturalHeight || el.height || fabricImg.height
+        if (!w || !h || w < 2 || h < 2) return null
+
+        const maxDim = 512
+        const scale = Math.min(1, maxDim / Math.max(w, h))
+        const sw = Math.max(1, Math.ceil(w * scale))
+        const sh = Math.max(1, Math.ceil(h * scale))
+
+        const oc = document.createElement('canvas')
+        oc.width = sw
+        oc.height = sh
+        const ctx = oc.getContext('2d', { willReadFrequently: true })
+        if (!ctx) return null
+
+        ctx.clearRect(0, 0, sw, sh)
+        ctx.drawImage(el, 0, 0, sw, sh)
+        const data = ctx.getImageData(0, 0, sw, sh).data
+
+        const isContent = (i: number) => data[i + 3]! > 0
+
+        let minX = sw
+        let minY = sh
+        let maxX = -1
+        let maxY = -1
+        for (let y = 0; y < sh; y++) {
+            for (let x = 0; x < sw; x++) {
+                const i = (y * sw + x) * 4
+                if (!isContent(i)) continue
+                if (x < minX) minX = x
+                if (x > maxX) maxX = x
+                if (y < minY) minY = y
+                if (y > maxY) maxY = y
+            }
+        }
+
+        if (maxX < minX || maxY < minY) return null
+
+        const finalLeft = Math.max(0, Math.floor(minX / scale))
+        const finalTop = Math.max(0, Math.floor(minY / scale))
+        const finalRight = Math.min(w, Math.ceil((maxX + 1) / scale))
+        const finalBottom = Math.min(h, Math.ceil((maxY + 1) / scale))
+        const finalWidth = Math.max(1, finalRight - finalLeft)
+        const finalHeight = Math.max(1, finalBottom - finalTop)
+
+        if (finalLeft === 0 && finalTop === 0 && finalWidth >= w && finalHeight >= h) {
+            return null
+        }
+
+        return {
+            left: finalLeft,
+            top: finalTop,
+            width: finalWidth,
+            height: finalHeight
+        }
+    } catch {
+        return null
+    }
+}
