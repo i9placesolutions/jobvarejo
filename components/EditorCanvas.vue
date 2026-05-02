@@ -5959,6 +5959,7 @@ const productImportExistingCount = ref(0)
 const productReviewInitialImportMode = ref<'replace' | 'append'>('replace')
 const targetGridZone = ref<any>(null) // Reference to the Grid Zone that was double-clicked
 const targetGridZones = ref<any[]>([])
+const activeProductZoneId = ref<string | null>(null)
 const isConfirmingProductImport = ref(false)
 
 type ImportTargetMode = 'zone' | 'multi-frame'
@@ -5977,6 +5978,32 @@ type ProductImportOptions = {
     cardsPerFrame?: 1
     imageMatchMode?: ImageMatchMode
     imageConcurrency?: number
+}
+
+const getProductZoneId = (zone: any): string => String((zone as any)?._customId || (zone as any)?.id || '').trim()
+
+const findProductZoneById = (zoneIdRaw: any): any | null => {
+    if (!canvas.value) return null
+    const zoneId = String(zoneIdRaw || '').trim()
+    if (!zoneId) return null
+    return (canvas.value.getObjects?.() || []).find((obj: any) =>
+        isLikelyProductZone(obj) && getProductZoneId(obj) === zoneId
+    ) || null
+}
+
+const setActiveProductZone = (zone: any, opts: { syncImportTarget?: boolean } = {}) => {
+    if (!zone || !isLikelyProductZone(zone)) {
+        activeProductZoneId.value = null
+        return
+    }
+    ensureZoneSanity(zone)
+    const zoneId = getProductZoneId(zone)
+    activeProductZoneId.value = zoneId || null
+    if (opts.syncImportTarget && zoneId) {
+        const refreshed = findProductZoneById(zoneId) || zone
+        targetGridZone.value = refreshed
+        targetGridZones.value = [refreshed]
+    }
 }
 
 type SmartGridRunOptions = {
@@ -6018,7 +6045,7 @@ const resolveZoneForProductImport = (target: any): any | null => resolveZoneForP
 
 const resolveImportTargetZone = (): any | null => resolveImportTargetZoneHelper({
     canvas: canvas.value,
-    targetGridZone: targetGridZone.value,
+    targetGridZone: findProductZoneById(activeProductZoneId.value) || targetGridZone.value,
     selectedObjectSnapshot: selectedObjectRef.value,
     isLikelyProductZone,
     resolveZoneForProductImport
@@ -6056,6 +6083,9 @@ const resolveRelatedImportZones = (primaryZone: any): any[] => {
 }
 
 const getImportTargetZones = (): any[] => {
+    const activeZone = findProductZoneById(activeProductZoneId.value)
+    if (activeZone && isLikelyProductZone(activeZone)) return [activeZone]
+
     const stored = Array.isArray(targetGridZones.value) ? targetGridZones.value : []
     const zones = stored
         .map((zone: any) => {
@@ -6112,6 +6142,7 @@ const openProductReviewForZone = (zone: any, opts: { mode?: 'replace' | 'append'
         setTargetZone: (nextZone) => {
             targetGridZone.value = nextZone
             targetGridZones.value = resolveRelatedImportZones(nextZone)
+            setActiveProductZone(nextZone)
         },
         setExistingCount: (count) => {
             const zones = targetGridZones.value.length ? targetGridZones.value : [targetGridZone.value].filter(Boolean)
@@ -14309,6 +14340,12 @@ const updateSelection = () => {
     });
     if (!payload) return;
     const { active, selectionUiState, floatingPos } = payload;
+    const selectedZone = active ? resolveZoneForProductImport(active) : null;
+    if (selectedZone && isLikelyProductZone(selectedZone)) {
+        setActiveProductZone(selectedZone, { syncImportTarget: !showProductReviewModal.value && !isConfirmingProductImport.value });
+    } else if (!showProductReviewModal.value && !isConfirmingProductImport.value) {
+        activeProductZoneId.value = null;
+    }
     // Ensure selectedId is never undefined - always null if no active object
     selectedObjectId.value = selectionUiState.selectedObjectId;
     selectedObjectIds.value = Array.isArray(selectionUiState.selectedObjectIds)
@@ -21938,9 +21975,11 @@ const openReviewModalWithProducts = (productsWithImages: any[]) => {
         if (resolvedZone && isLikelyProductZone(resolvedZone)) {
             targetGridZone.value = resolvedZone;
             targetGridZones.value = resolveRelatedImportZones(resolvedZone);
+            setActiveProductZone(resolvedZone);
         } else {
             targetGridZone.value = null;
             targetGridZones.value = [];
+            activeProductZoneId.value = null;
         }
     }
 
@@ -22485,7 +22524,7 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
         } else {
             // Recover the real zone object from canvas state (prevents "solto" cards on stale refs).
             const zones = getImportTargetZones()
-            const zone = zones[0] || resolveImportTargetZone()
+            const zone = findProductZoneById(activeProductZoneId.value) || zones[0] || resolveImportTargetZone()
             console.log('[DEBUG confirmProductImport] resolved zones:', zones.map((z: any) => z._customId), 'final zone:', zone?._customId);
             if (!zone) {
                 console.warn('[confirmProductImport] Could not resolve target product zone. Import aborted to avoid detached cards.')
@@ -22493,9 +22532,11 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
                 return
             }
             targetGridZone.value = zone
+            setActiveProductZone(zone)
 
-            if (zones.length > 1) {
-                await importProductsToMultipleZones(products, zones, opts)
+            const targetZones = [zone]
+            if (targetZones.length > 1) {
+                await importProductsToMultipleZones(products, targetZones, opts)
             } else {
                 // Add to canvas using the products received from the modal (with edits applied)
                 const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace'
@@ -22699,6 +22740,8 @@ const addGridZone = () => {
             );
         if (zoneForFrame) {
             canvas.value.setActiveObject(zoneForFrame);
+            setActiveProductZone(zoneForFrame, { syncImportTarget: true });
+            updateSelection();
             safeRequestRenderAll();
             notifyEditorInfo('Este frame já possui uma zona de produtos.');
             return;
@@ -22823,6 +22866,7 @@ const addGridZone = () => {
     // manualmente na zona nova.
     targetGridZone.value = group;
     targetGridZones.value = [group];
+    setActiveProductZone(group);
     updateSelection();
 
     safeRequestRenderAll();
