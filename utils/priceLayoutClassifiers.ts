@@ -418,3 +418,83 @@ export const isLikelyPriceGroupObject = (
     if (typeof group.getObjects !== 'function') return false
     return (group.getObjects() || []).some((child: any) => isPriceLayoutNode(child))
 }
+
+/**
+ * Repara nomes de texts em um group atacarejo quando Fabric v7 droppou
+ * os names durante deserializacao. Funciona em 2 fases:
+ *
+ *  1. Particiona os text nodes em "retail" vs "wholesale" pela posicao
+ *     vertical (acima/abaixo do midpoint dos backgrounds)
+ *  2. Para cada particao, identifica currency/integer/decimal/unit/pack
+ *     pelo conteudo do texto (regex) e atribui o name correspondente
+ *     (`retail_currency_text`, etc).
+ *
+ * Sem-op se nao ha `atac_retail_bg` no array (nao e' atacarejo).
+ *
+ * Mutates os texts in place. Sem retorno.
+ */
+export const repairAtacarejoTextNames = (all: any[]): void => {
+    const retailBg = findByName(all, 'atac_retail_bg')
+    const wholesaleBg = findByName(all, 'atac_wholesale_bg')
+    if (!retailBg) return
+
+    const texts = all.filter((o: any) => {
+        if (!o || typeof o.set !== 'function') return false
+        const t = String(o?.type || '').toLowerCase()
+        if (t !== 'text' && t !== 'i-text' && t !== 'textbox') return false
+        const n = String(o?.name || '')
+        if (n.startsWith('retail_') || n.startsWith('wholesale_') || n === 'wholesale_banner_text') return false
+        return true
+    })
+    if (!texts.length) return
+
+    const getBgCenter = (bg: any) => {
+        if (!bg) return null
+        const oy = String(bg.originY || 'center')
+        const h = (bg.height ?? 0) * (bg.scaleY ?? 1)
+        const top = bg.top ?? 0
+        if (oy === 'center') return top
+        if (oy === 'top') return top + h / 2
+        return top - h / 2
+    }
+
+    const retailCY = getBgCenter(retailBg)
+    const wholesaleCY = getBgCenter(wholesaleBg)
+
+    const assignNames = (tierTexts: any[], prefix: 'retail' | 'wholesale') => {
+        let currency: any = null
+        let integer: any = null
+        let decimal: any = null
+        let unit: any = null
+        let pack: any = null
+
+        if (findByName(all, `${prefix}_integer_text`)) return
+
+        for (const t of tierTexts) {
+            const txt = String(t?.text || '').trim()
+            if (!txt) continue
+            if (!currency && /^R?\$$/i.test(txt)) { currency = t; continue }
+            if (!decimal && /^,\d{1,2}$/.test(txt)) { decimal = t; continue }
+            if (!integer && /^\d{1,5}$/.test(txt)) { integer = t; continue }
+            if (!unit && /^[\/]?(?:UN[D.]?|KG|LT|ML|G|GR|PCT)\.?$/i.test(txt)) { unit = t; continue }
+            if (!pack && txt.length > 5 && /\d/.test(txt)) { pack = t; continue }
+        }
+
+        const shouldRename = (obj: any) => !obj.name || String(obj.name).startsWith('price_')
+        if (currency && shouldRename(currency)) currency.name = `${prefix}_currency_text`
+        if (integer && shouldRename(integer)) integer.name = `${prefix}_integer_text`
+        if (decimal && shouldRename(decimal)) decimal.name = `${prefix}_decimal_text`
+        if (unit && shouldRename(unit)) unit.name = `${prefix}_unit_text`
+        if (pack && shouldRename(pack)) pack.name = `${prefix}_pack_line_text`
+    }
+
+    if (retailCY !== null && wholesaleCY !== null) {
+        const mid = (retailCY + wholesaleCY) / 2
+        const retailTexts = texts.filter((t: any) => (t.top ?? 0) <= mid)
+        const wholesaleTexts = texts.filter((t: any) => (t.top ?? 0) > mid)
+        assignNames(retailTexts, 'retail')
+        assignNames(wholesaleTexts, 'wholesale')
+    } else if (retailCY !== null) {
+        assignNames(texts, 'retail')
+    }
+}
